@@ -57,8 +57,19 @@ proposed-design:
     readiness, so the epic's dependency graph is an input to
     scheduling, not only a view.
 
-    Heddle is the single writer of task status on the board: instance
-    state mirrors to the task's column, and nothing else moves cards.
+    The epic task's own status is the operator's control lever. Moving
+    an epic to `in-progress` starts it: the reconciler promotes the
+    epic's children from `backlog` to `todo` — including children
+    added later — and dispatches them as readiness allows, with
+    sequencing carried by dependency edges. Moving an epic out of
+    `in-progress` pauses it: no new dispatches for its children, while
+    in-flight instances run to their next wait state and hold. The
+    reconciler advances the epic itself to `uat` when its last non-UAT
+    child completes and to `done` when UAT is accepted.
+
+    Heddle is the single writer of child-task status on the board:
+    instance state mirrors to the task's column, and nothing else
+    moves those cards.
     Agents create follow-up tasks and findings through MCP tools;
     Heddle applies the writes, so new child tasks are visible to the
     reconciler the moment they exist. The reconciler also enforces
