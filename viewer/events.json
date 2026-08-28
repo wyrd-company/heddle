@@ -1,0 +1,772 @@
+[
+ {
+  "type": "workflow:start",
+  "payload": {
+   "blueprintId": "task-lifecycle",
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "workflow:resume",
+  "payload": {
+   "blueprintId": "task-lifecycle",
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "implement",
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "implemented",
+   "op": "set",
+   "value": true,
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "implement",
+   "result": {
+    "output": {
+     "changeSet": "cs-001"
+    }
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.implement",
+   "op": "set",
+   "value": {
+    "changeSet": "cs-001"
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "implement",
+   "op": "set",
+   "value": {
+    "changeSet": "cs-001"
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_inputs.review",
+   "op": "set",
+   "value": {
+    "changeSet": "cs-001"
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "implement",
+   "key": "_inputs.review",
+   "op": "set",
+   "value": {
+    "changeSet": "cs-001"
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "review",
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5",
+   "input": {
+    "changeSet": "cs-001"
+   },
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingNodeIds",
+   "op": "set",
+   "value": [
+    "review"
+   ],
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingDetails",
+   "op": "set",
+   "value": {
+    "review": {
+     "reason": "external_event"
+    }
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "review",
+   "result": {},
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.review",
+   "op": "set",
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "review",
+   "op": "set",
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5"
+  }
+ },
+ {
+  "type": "node:skipped",
+  "payload": {
+   "nodeId": "review",
+   "edge": {
+    "source": "review",
+    "target": "merge",
+    "condition": "result.output.approved"
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "node:skipped",
+  "payload": {
+   "nodeId": "review",
+   "edge": {
+    "source": "review",
+    "target": "remediate",
+    "condition": "result.output.rejected"
+   },
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "workflow:finish",
+  "payload": {
+   "blueprintId": "task-lifecycle",
+   "executionId": "e4df1ff8-18dd-48e6-ae40-d0f43055cdd5",
+   "status": "awaiting"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingNodeIds",
+   "op": "delete",
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingDetails",
+   "op": "delete",
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "remediate",
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df",
+   "input": {
+    "reviewer": "reviewer-1",
+    "decision": "reject",
+    "approved": false,
+    "rejected": true
+   },
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "remediations",
+   "op": "set",
+   "value": 1,
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "remediate",
+   "result": {
+    "output": {
+     "round": 1
+    }
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.remediate",
+   "op": "set",
+   "value": {
+    "round": 1
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "remediate",
+   "op": "set",
+   "value": {
+    "round": 1
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_inputs.review",
+   "op": "set",
+   "value": {
+    "round": 1
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "remediate",
+   "key": "_inputs.review",
+   "op": "set",
+   "value": {
+    "round": 1
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "review",
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df",
+   "input": {
+    "round": 1
+   },
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingNodeIds",
+   "op": "set",
+   "value": [
+    "review"
+   ],
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingDetails",
+   "op": "set",
+   "value": {
+    "review": {
+     "reason": "external_event"
+    }
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "review",
+   "result": {},
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.review",
+   "op": "set",
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "review",
+   "op": "set",
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df"
+  }
+ },
+ {
+  "type": "node:skipped",
+  "payload": {
+   "nodeId": "review",
+   "edge": {
+    "source": "review",
+    "target": "merge",
+    "condition": "result.output.approved"
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "node:skipped",
+  "payload": {
+   "nodeId": "review",
+   "edge": {
+    "source": "review",
+    "target": "remediate",
+    "condition": "result.output.rejected"
+   },
+   "executionId": "a1dbaf99-db60-4a6b-af15-c14bc68302df",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingNodeIds",
+   "op": "delete",
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingDetails",
+   "op": "delete",
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "remediate",
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608",
+   "input": {
+    "reviewer": "reviewer-1",
+    "decision": "reject",
+    "approved": false,
+    "rejected": true
+   },
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "remediations",
+   "op": "set",
+   "value": 2,
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "remediate",
+   "result": {
+    "output": {
+     "round": 2
+    }
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.remediate",
+   "op": "set",
+   "value": {
+    "round": 2
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "remediate",
+   "op": "set",
+   "value": {
+    "round": 2
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_inputs.review",
+   "op": "set",
+   "value": {
+    "round": 2
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "remediate",
+   "key": "_inputs.review",
+   "op": "set",
+   "value": {
+    "round": 2
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "review",
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608",
+   "input": {
+    "round": 2
+   },
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingNodeIds",
+   "op": "set",
+   "value": [
+    "review"
+   ],
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingDetails",
+   "op": "set",
+   "value": {
+    "review": {
+     "reason": "external_event"
+    }
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "review",
+   "result": {},
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.review",
+   "op": "set",
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "review",
+   "op": "set",
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608"
+  }
+ },
+ {
+  "type": "node:skipped",
+  "payload": {
+   "nodeId": "review",
+   "edge": {
+    "source": "review",
+    "target": "merge",
+    "condition": "result.output.approved"
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "node:skipped",
+  "payload": {
+   "nodeId": "review",
+   "edge": {
+    "source": "review",
+    "target": "remediate",
+    "condition": "result.output.rejected"
+   },
+   "executionId": "93c2c5ac-0fc1-4a1e-9d93-e1e9a76d7608",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingNodeIds",
+   "op": "delete",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_awaitingDetails",
+   "op": "delete",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "merge",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b",
+   "input": {
+    "reviewer": "alice",
+    "decision": "approve",
+    "approved": true,
+    "rejected": false
+   },
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "merged",
+   "op": "set",
+   "value": true,
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "merge",
+   "result": {
+    "output": "merged"
+   },
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.merge",
+   "op": "set",
+   "value": "merged",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "merge",
+   "op": "set",
+   "value": "merged",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_inputs.retrospective",
+   "op": "set",
+   "value": "merged",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "merge",
+   "key": "_inputs.retrospective",
+   "op": "set",
+   "value": "merged",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "retrospective",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b",
+   "input": "merged",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "retrospective",
+   "result": {
+    "output": "retro-notes"
+   },
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.retrospective",
+   "op": "set",
+   "value": "retro-notes",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "retrospective",
+   "op": "set",
+   "value": "retro-notes",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_inputs.done",
+   "op": "set",
+   "value": "retro-notes",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "retrospective",
+   "key": "_inputs.done",
+   "op": "set",
+   "value": "retro-notes",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "node:start",
+  "payload": {
+   "nodeId": "done",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b",
+   "input": "retro-notes",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "node:finish",
+  "payload": {
+   "nodeId": "done",
+   "result": {
+    "output": "done"
+   },
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b",
+   "blueprintId": "task-lifecycle"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "_outputs.done",
+   "op": "set",
+   "value": "done",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ },
+ {
+  "type": "context:change",
+  "payload": {
+   "sourceNode": "unknown",
+   "key": "done",
+   "op": "set",
+   "value": "done",
+   "executionId": "0ca4ce1d-445c-4ab3-9801-8713059b6b0b"
+  }
+ }
+]
