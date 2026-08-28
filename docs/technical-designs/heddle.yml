@@ -1,0 +1,171 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  references:
+    - flowcraft-gate
+    - t3-headless
+objective: >
+  Heddle is a workflow service that runs software tasks through their
+  delivery lifecycle. Deterministic machinery performs every mechanical
+  step and state transition; language-model agents are started only at
+  the points that require judgment, each in a short, focused session.
+  A human operator supervises through a live visual console and is
+  engaged only when a decision requires them.
+proposed-design:
+  high-level-overview: >
+    Heddle runs one workflow instance per task. A lifecycle blueprint —
+    a declarative, versioned graph of stages — defines how instances of
+    a given task type move from start to done. An epic-level reconciler
+    continuously compares the kanban board against running instances and
+    starts, escalates, or completes work so the set of instances always
+    matches the set of ready tasks. Agent sessions execute on T3 Code
+    over its HTTP dispatch API, one session per judgment stage, each
+    bootstrapped from a deterministically assembled handoff. Agents
+    report outcomes back through Heddle's MCP tools, which advance the
+    instance. A vendored tldraw canvas renders every instance live from
+    the persisted event log, and the same canvas hosts the operator's
+    attention queue. All instance state persists in SQLite on a bind
+    mount, so instances survive process restarts and container rebuilds.
+  task-lifecycles: >
+    A lifecycle is a flowcraft blueprint: a serializable JSON graph of
+    nodes and edges interpreted by the flowcraft runtime. Judgment
+    stages are wait nodes; an instance parked at a wait node costs
+    nothing and persists indefinitely. Resumes route through condition
+    edges keyed on the disposition supplied by the resuming caller
+    (for review: approve, reject, escalate), and cycle re-entry nodes
+    declare `joinStrategy: any` so loops such as review → remediate →
+    review traverse repeatedly. After every resume, Heddle asserts that
+    the instance landed in an expected state and raises attention when
+    it did not. Node execution is at-least-once, so every node effect
+    is idempotent.
+
+    Each task type maps to a blueprint. The standard delivery lifecycle
+    is implement → review → remediate loop → merge → retrospective →
+    finalize; other task types select shorter or different blueprints
+    (a trivial task type omits retrospective). Blueprints are schema'd
+    artifacts in this repository. An instance records the git blob hash
+    of the blueprint it started from and runs that version to
+    completion. The operator can rebase a running instance onto a newer
+    blueprint version at a named state; the rebase validates that the
+    target state exists and raises attention when it does not.
+  epic-reconciliation: >
+    The reconciler is a control loop over the kanban board. Each pass
+    it computes the delta between board state and instance state and
+    acts on it: a ready task with satisfied dependencies and no
+    instance gets one started; an instance past its stage's staleness
+    threshold raises attention; when every non-UAT child of an epic is
+    done, the epic's UAT stage opens. Task dependency edges gate
+    readiness, so the epic's dependency graph is an input to
+    scheduling, not only a view.
+
+    Heddle is the single writer of task status on the board: instance
+    state mirrors to the task's column, and nothing else moves cards.
+    Agents create follow-up tasks and findings through MCP tools;
+    Heddle applies the writes, so new child tasks are visible to the
+    reconciler the moment they exist. The reconciler also enforces
+    pacing gates: work-in-progress limits and provider usage-window
+    budgets are dispatch preconditions, so sessions start only when
+    capacity exists.
+  agent-sessions: >
+    Sessions run on T3 Code, driven headlessly over plain HTTP:
+    `POST /api/orchestration/dispatch` carries every command, and
+    bearer tokens come from T3's pairing and RFC 8693 token exchange.
+    Heddle prepares each session itself: it creates the git worktree
+    under `/workspaces/worktrees/{repository}/{worktree}`, creates the
+    thread, and sends a bare `thread.turn.start` — three deterministic
+    steps it owns end to end. Provider, model, and runtime mode are
+    per-stage configuration; Heddle pins runtime modes known to work
+    with each driver and CLI version and verifies them as dispatch
+    preconditions. Mid-turn steering is a second `thread.turn.start`
+    on the same thread.
+
+    Sessions are short and stage-scoped. Nothing carries between
+    stages except the handoff: a deterministically assembled bootstrap
+    containing the task contract, the outputs of prior stages (a
+    remediation session receives the review's findings, never the
+    review session's transcript), the stage's instantiated todo list,
+    and a pointer to the stage's skill. Because the handoff is data on
+    the instance, retrying a stage cold means replaying the same
+    bootstrap into a fresh session.
+  workflow-mcp: >
+    Heddle exposes its actions to agents as a stateless
+    streamable-HTTP MCP server, the one integration surface every
+    agent harness supports through ordinary configuration. The tool
+    suite includes `advance` (disposition the current stage),
+    `get_task_context`, `report_blocked`, `escalate`, follow-up and
+    finding creation, and a todo suite (list, check, add) that
+    replaces each harness's built-in todo tools, which are disabled
+    per harness. `advance` presents only the dispositions valid for
+    the instance's current state, generated from the blueprint's
+    outgoing edges with per-disposition descriptions — the tool schema
+    itself guides the agent to a legal transition. Every session's
+    bootstrap carries a correlation token minted by the reconciler,
+    binding the session to its instance so a caller can advance only
+    its own work, and `advance` is idempotent per instance and stage,
+    so a retried call cannot double-transition.
+  observation: >
+    Two channels report on running work, split by who holds the truth.
+    Semantic outcomes — the verdict of a review, the completion of an
+    implementation — come from agents through `advance`. Liveness comes
+    from polling T3's `GET /api/orchestration/shell` snapshot and
+    deriving each thread's phase (running, completed, waiting for
+    approval, failed) with the same derivation T3's own clients use.
+    A session that ends, fails, or stalls without advancing is a
+    designed-for transition: after its threshold, the instance moves
+    to an attention state and notifies the operator. Pending T3
+    approvals and user-input requests surface through the same poll
+    into the attention queue. Interrupts Heddle issues are recorded as
+    facts on the instance at the moment of issue, so instance state
+    never depends on reconstructing intent from session state.
+  mechanical-nodes: >
+    Every step with a single correct outcome executes as a
+    deterministic blueprint node running real code: creating the
+    worktree and branch, taking the gitpr review snapshot, merging to
+    the epic branch on approval, deleting merged branches and
+    worktrees, mirroring board status, and filing records. The merge
+    node enforces the review contract mechanically: snapshots are
+    immutable and verdicts binary, an approved snapshot merges from
+    its exact head without a merge commit, and any drift between
+    snapshot and branch head routes the instance back to remediation.
+    A mechanical node that cannot complete — a merge conflict, a dirty
+    worktree — moves the instance to attention rather than retrying an
+    agent into the failure.
+  human-console: >
+    The live canvas is also the operator's console. An attention queue
+    lists every instance awaiting a human: adjudications, escalations,
+    stale work, UAT, and pending T3 approvals. Each entry offers the
+    dispositions valid for its state, and the buttons call the same
+    actions the MCP tools call — humans and agents disposition through
+    one contract. Pushover notifications deep-link to the entry. The
+    operator can equally disposition conversationally: any agent
+    session configured with Heddle's MCP server can act on their
+    behalf. T3's own UI remains the surface for conversational
+    participation in live sessions.
+  viewer: >
+    The canvas is built from the vendored `@flowcraft/tldraw`
+    primitives — `EventBus`, `useExecutionBridge`, `FlowcraftSync`,
+    `blueprintToCanvas` — fed by Heddle's event stream rather than an
+    in-tab runtime. Replaying an instance's persisted event log
+    renders its exact history; tailing the log renders it live. The
+    same components edit blueprints: canvas changes round-trip to the
+    blueprint JSON, so the diagram the operator edits is the artifact
+    the interpreter runs.
+  persistence-and-recovery: >
+    Instance state (serialized flowcraft context, handoffs, todo
+    state, correlation tokens) and the append-only event history live
+    in SQLite on a workspace bind mount. Advancing an instance loads
+    its context, resumes, asserts the post-state, and persists — each
+    step is an ordinary process invocation, so the service holds no
+    instance state in memory that matters. After a crash or container
+    rebuild, startup replays event history to reconstruct instances,
+    and the reconciler compares recovered instances against live T3
+    threads: a stage whose session no longer exists is retried cold by
+    replaying its bootstrap.
+  deployment: >
+    Heddle installs as a devcontainer feature in each workspace
+    container, following the t3code-server pattern: an s6-supervised
+    service, a caddy route with a workspace DNS name serving the
+    console and the MCP endpoint, and its state directory bind-mounted
+    from a workspace-specific host path so state outlives rebuilds.
+    One Heddle instance serves one workspace — its board, its
+    worktrees, its T3 server — and each workspace container is a
+    complete, self-contained installation.
