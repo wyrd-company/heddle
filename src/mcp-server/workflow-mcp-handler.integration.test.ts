@@ -309,6 +309,33 @@ describe("workflow MCP HTTP server", () => {
     ).rejects.toThrow();
   });
 
+  it("rejects a handoff document carrying a different correlation token", async () => {
+    const fixture = await makeFixture();
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const stored = record.state.handoffs[0];
+    if (
+      typeof stored !== "object" ||
+      stored === null ||
+      Array.isArray(stored) ||
+      typeof stored["handoff"] !== "string"
+    ) {
+      throw new Error("alpha handoff fixture is invalid");
+    }
+    const handoff = JSON.parse(stored["handoff"]) as {
+      correlationToken: string;
+    };
+    handoff.correlationToken = "token-mismatch";
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [{ ...stored, handoff: JSON.stringify(handoff) }],
+    });
+
+    await expect(
+      connect(fixture.url, fixture.alphaToken, "mismatched-client"),
+    ).rejects.toThrow();
+  });
+
   it("rejects a correlation token that matches more than one instance", async () => {
     const fixture = await makeFixture();
     const beta = fixture.persistence.getInstance("instance-beta");
@@ -366,6 +393,12 @@ describe("workflow MCP HTTP server", () => {
     expect(JSON.stringify(alphaTools.tools[0]?.inputSchema)).toContain(
       "Return the sample for another preparation",
     );
+    await expect(
+      alpha.callTool({
+        name: "advance",
+        arguments: { disposition: "archive" },
+      }),
+    ).resolves.toMatchObject({ isError: true });
   });
 
   it("binds task context and blocked reports to the token's instance", async () => {
@@ -459,6 +492,14 @@ describe("workflow MCP HTTP server", () => {
     };
 
     const first = await alpha.callTool(input);
+    const retryClient = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "retry-client",
+    );
+    await expect(retryClient.listTools()).resolves.toMatchObject({
+      tools: [{ name: "advance" }, { name: "get_task_context" }],
+    });
     const second = await alpha.callTool(input);
 
     expect(second.structuredContent).toEqual(first.structuredContent);
