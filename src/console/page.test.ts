@@ -81,6 +81,31 @@ describe("console page state", () => {
       /\.graph-canvas \{[^}]*position: relative;[^}]*\}/,
     );
   });
+
+  it("binds bounded node height to row spacing and edge anchors", () => {
+    const geometryHeight = /const graphNodeHeight = ([0-9]+);/.exec(
+      consoleClient,
+    )?.[1];
+    const renderedHeight =
+      /\.graph-node \{[^}]*height: ([0-9]+)px;[^}]*\}/.exec(consoleStyles)?.[1];
+
+    expect(geometryHeight).toBe("126");
+    expect(renderedHeight).toBe(geometryHeight);
+    expect(consoleStyles).toMatch(
+      /\.graph-node \{[^}]*box-sizing: border-box;[^}]*overflow: hidden;[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.graph-node-title \{[^}]*-webkit-line-clamp: 3;[^}]*overflow: hidden;[^}]*\}/,
+    );
+    expect(consoleClient).toContain(
+      "node.row * (graphNodeHeight + graphRowGap)",
+    );
+    expect(consoleClient).toContain(
+      "const startY = from.y + graphNodeHeight / 2",
+    );
+    expect(consoleClient).toContain("const endY = to.y + graphNodeHeight / 2");
+    expect(consoleClient).toContain('link.setAttribute("title", node.title)');
+  });
 });
 
 describe("console page accessibility", () => {

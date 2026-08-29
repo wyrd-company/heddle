@@ -361,8 +361,12 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .graph-node {
   position: absolute;
   width: 220px;
-  min-height: 96px;
+  height: 126px;
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 12px 13px 11px 17px;
+  display: flex;
+  flex-direction: column;
   color: var(--ink);
   background: var(--paper-raised);
   border: 2px solid var(--rule-dark);
@@ -380,8 +384,8 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .graph-node[data-treatment="blocked"] { border-color: #5f4305; background-image: repeating-linear-gradient(135deg, transparent 0 9px, rgba(116, 84, 10, 0.08) 9px 11px); }
 .graph-node[data-treatment="blocked"]::before { background: #8b6511; }
 .graph-node-id { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.11em; }
-.graph-node-title { display: block; font-family: Georgia, serif; font-size: 16px; line-height: 1.18; }
-.graph-node-state { display: block; margin-top: 10px; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.graph-node-title { display: -webkit-box; font-family: Georgia, serif; font-size: 16px; line-height: 1.18; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.graph-node-state { display: block; margin-top: auto; padding-top: 10px; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .graph-node[data-treatment="attention"] .graph-node-state { color: var(--signal); }
 .graph-node[data-treatment="blocked"] .graph-node-state { color: #684a08; }
 
@@ -568,7 +572,7 @@ const renderProjection = (projection) => {
 };
 
 const graphNodeWidth = 220;
-const graphNodeHeight = 96;
+const graphNodeHeight = 126;
 const graphColumnGap = 90;
 const graphRowGap = 30;
 const graphPadding = 28;
@@ -638,6 +642,7 @@ const renderDependencyGraph = (graph) => {
     link.style.left = position.x + "px";
     link.style.top = position.y + "px";
     link.setAttribute("aria-label", "Task #" + node.id + ", " + node.title + ", " + node.treatment + ". Open lifecycle view");
+    link.setAttribute("title", node.title);
     link.append(text("span", "TASK #" + node.id, "graph-node-id"));
     link.append(text("strong", node.title, "graph-node-title"));
     link.append(text("span", node.treatment, "graph-node-state"));

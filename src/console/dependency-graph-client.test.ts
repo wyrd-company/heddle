@@ -82,6 +82,48 @@ describe("console client request ownership", () => {
     expect(harness.status.textContent).toBe("Lifecycle view for task #11");
   });
 
+  it("keeps ordinary long titles in non-overlapping graph rows", async () => {
+    const longTitle =
+      "Prepare complete shelf labels for all retained inventory records and the supporting archive";
+    const harness = await clientHarness(
+      [rootTask, { ...childTask, title: longTitle }],
+      "http://console.test/?view=dependencies&scope=epic%3A10",
+      {
+        edges: [],
+        nodes: [
+          {
+            id: 10,
+            layer: 0,
+            priority: "medium",
+            row: 0,
+            status: "in-progress",
+            title: longTitle,
+            treatment: "running",
+          },
+          {
+            id: 11,
+            layer: 0,
+            priority: "medium",
+            row: 1,
+            status: "in-progress",
+            title: longTitle,
+            treatment: "running",
+          },
+        ],
+      },
+    );
+
+    const links = harness.graphCanvas.children.filter(
+      ({ tagName }) => tagName === "a",
+    );
+    expect(links.map(({ style }) => style.top)).toEqual(["28px", "184px"]);
+    expect(links.map((link) => link.getAttribute("title"))).toEqual([
+      longTitle,
+      longTitle,
+    ]);
+    expect(links[1]?.getAttribute("aria-label")).toContain(longTitle);
+  });
+
   it("fails closed for unknown views and non-task lifecycle scopes", async () => {
     const unknownView = await clientHarness(
       [rootTask, childTask],

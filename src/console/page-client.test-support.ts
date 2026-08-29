@@ -110,6 +110,19 @@ export interface BrowserResponse {
   text(): Promise<string>;
 }
 
+export interface GraphFixture {
+  edges: Array<{ from: number; to: number; trace: boolean }>;
+  nodes: Array<{
+    id: number;
+    layer: number;
+    priority: string;
+    row: number;
+    status: string;
+    title: string;
+    treatment: string;
+  }>;
+}
+
 export const response = (
   body: unknown,
   { ok = true, status = 200 }: { ok?: boolean; status?: number } = {},
@@ -180,6 +193,7 @@ export const projection = (tasks: unknown[]) => ({
 export const clientHarness = async (
   initialTasks = [rootTask, childTask],
   initialUrl = "http://console.test/?scope=all",
+  initialGraph?: GraphFixture,
 ) => {
   const board = new FakeElement("div");
   const graph = new FakeElement("section");
@@ -210,7 +224,7 @@ export const clientHarness = async (
       );
       const heldResponse = graphResponses.get(requestedScope!);
       if (heldResponse !== undefined) return heldResponse;
-      const graph = {
+      const graph = initialGraph ?? {
         edges: [{ from: 10, to: 11, trace: true }],
         nodes: [
           {
