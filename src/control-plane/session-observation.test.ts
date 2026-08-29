@@ -135,7 +135,9 @@ class MemoryT3 implements SessionObservationT3Client {
   readonly commands: T3DispatchCommand[] = [];
   readonly approvalAnswers: unknown[] = [];
   readonly userInputAnswers: unknown[] = [];
+  beforeApprovalResponse?: () => void;
   beforeDispatch?: (command: T3DispatchCommand) => void;
+  beforeUserInputResponse?: () => void;
   shell: T3ShellSnapshot = {
     threads: [
       {
@@ -172,6 +174,7 @@ class MemoryT3 implements SessionObservationT3Client {
     decision: "accept" | "reject",
     commandId?: string,
   ) {
+    this.beforeApprovalResponse?.();
     this.approvalAnswers.push({ commandId, decision, requestId, threadId });
     const thread = this.shell.threads[0];
     if (thread) thread.hasPendingApprovals = false;
@@ -184,6 +187,7 @@ class MemoryT3 implements SessionObservationT3Client {
     answers: Record<string, string | string[]>,
     commandId?: string,
   ) {
+    this.beforeUserInputResponse?.();
     this.userInputAnswers.push({ answers, commandId, requestId, threadId });
     const thread = this.shell.threads[0];
     if (thread) thread.hasPendingUserInput = false;
@@ -390,6 +394,16 @@ describe("SessionObserver operator actions", () => {
         sessionObservationEventTypes.sessionStopIssued,
       );
     };
+    test.t3.beforeApprovalResponse = () => {
+      expect(test.persistence.events.at(-1)?.type).toBe(
+        sessionObservationEventTypes.questionDispositionIssued,
+      );
+    };
+    test.t3.beforeUserInputResponse = () => {
+      expect(test.persistence.events.at(-1)?.type).toBe(
+        sessionObservationEventTypes.questionDispositionIssued,
+      );
+    };
 
     await test.observer.stop({
       ...target,
@@ -477,6 +491,12 @@ describe("SessionObserver terminal visibility", () => {
   it("archives an eligible lifecycle-terminal thread once across replay", async () => {
     const test = fixture();
     makeTerminal(test);
+    test.t3.beforeDispatch = ({ type }) => {
+      if (type !== "thread.archive") return;
+      expect(test.persistence.events.at(-1)?.type).toBe(
+        sessionObservationEventTypes.archiveIssued,
+      );
+    };
 
     await expect(test.observer.observe(target)).resolves.toMatchObject({
       archiveDispatched: true,
