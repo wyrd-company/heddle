@@ -143,4 +143,30 @@ describe("DispatchPacingGate validation", () => {
       "provider-a windowStartedAt must be a non-negative safe integer",
     );
   });
+
+  it("rejects a provider window whose end is not a safe timestamp", async () => {
+    const gate = new DispatchPacingGate(
+      configuration(),
+      new UsageStub({
+        "provider-a": {
+          used: 80,
+          windowStartedAt: Number.MAX_SAFE_INTEGER,
+        },
+      }),
+      () => 2_000,
+    );
+
+    await expect(
+      gate.evaluate(
+        {
+          kind: "task",
+          provider: "provider-a",
+          sessionId: "session-a",
+        },
+        [],
+      ),
+    ).rejects.toThrow(
+      "provider-a window end must be a non-negative safe integer",
+    );
+  });
 });

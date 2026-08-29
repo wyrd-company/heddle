@@ -150,6 +150,7 @@ export class DispatchPacingGate implements DispatchPacingEvaluator {
       usage.windowStartedAt,
     );
     const retryAt = usage.windowStartedAt + PROVIDER_USAGE_WINDOW_MS;
+    requireNonNegativeInteger(`${request.provider} window end`, retryAt);
     if (usage.used >= budget.usageLimit && this.now() < retryAt) {
       return {
         deferral: {
