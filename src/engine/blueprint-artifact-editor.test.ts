@@ -11,14 +11,14 @@ import {
   rename,
   rm,
   symlink,
-  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout } from "node:timers";
 import { promisify } from "node:util";
 
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SqlitePersistence } from "../persistence/index.js";
@@ -456,23 +456,38 @@ describe("blueprint artifact editor", () => {
         "rev-parse",
         "--path-format=absolute",
         "--git-path",
-        "heddle/blueprint-writer.lock",
+        "heddle/blueprint-writer-lease.sqlite",
       ],
       { cwd: setup.repositoryRoot },
     );
     const leasePath = stdout.trim();
-    await mkdir(leasePath, { recursive: true });
-    await writeFile(join(leasePath, "owner"), "crashed-writer");
-    const staleTime = new Date(Date.now() - 60_000);
-    await utimes(leasePath, staleTime, staleTime);
+    await mkdir(dirname(leasePath), { recursive: true });
+    const leaseDatabase = new Database(leasePath);
+    leaseDatabase.exec(`
+      CREATE TABLE blueprint_writer_lease (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        token TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      )
+    `);
+    leaseDatabase
+      .prepare(
+        "INSERT INTO blueprint_writer_lease (singleton, token, expires_at) VALUES (1, ?, ?)",
+      )
+      .run("crashed-writer", Date.now() - 60_000);
+    leaseDatabase.close();
     const replacement = `${loaded.serialized.trimEnd()} \n`;
 
     await store.replace(artifactPath, loaded.blobHash, replacement);
 
     expect(await readFile(setup.path, "utf8")).toBe(replacement);
-    await expect(
-      readFile(join(leasePath, "owner"), "utf8"),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    const recoveredDatabase = new Database(leasePath, { readonly: true });
+    expect(
+      recoveredDatabase
+        .prepare("SELECT COUNT(*) AS count FROM blueprint_writer_lease")
+        .get(),
+    ).toEqual({ count: 0 });
+    recoveredDatabase.close();
   });
 
   it("rejects an invalid expected blob hash without replacing the artifact", async () => {
