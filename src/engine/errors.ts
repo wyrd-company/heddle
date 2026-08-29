@@ -45,3 +45,27 @@ export class TransitionConflictError extends Error {
     this.name = "TransitionConflictError";
   }
 }
+
+export class RebaseTargetNotFoundError extends Error {
+  constructor(
+    public readonly instanceId: string,
+    public readonly targetState: string,
+  ) {
+    super(
+      `Lifecycle state ${JSON.stringify(targetState)} does not exist in the current blueprint for instance ${JSON.stringify(instanceId)}`,
+    );
+    this.name = "RebaseTargetNotFoundError";
+  }
+}
+
+export class RebaseTargetNotAwaitableError extends Error {
+  constructor(
+    public readonly instanceId: string,
+    public readonly targetState: string,
+  ) {
+    super(
+      `Lifecycle state ${JSON.stringify(targetState)} is not an awaiting state for instance ${JSON.stringify(instanceId)}`,
+    );
+    this.name = "RebaseTargetNotAwaitableError";
+  }
+}

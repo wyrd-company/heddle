@@ -35,6 +35,7 @@ import {
   resumeOperationFingerprint,
   writeLifecycleContext,
 } from "./lifecycle-state.js";
+import { rebaseLifecycle } from "./lifecycle-rebase.js";
 import type {
   CompletedLifecycleOperation,
   ExpectedLandings,
@@ -44,6 +45,7 @@ import type {
   LifecycleEngineOptions,
   LifecycleSnapshot,
   PendingTransition,
+  RebaseLifecycleInput,
   ResumeLifecycleInput,
   StartLifecycleInput,
 } from "./types.js";
@@ -201,6 +203,22 @@ export class LifecycleEngine {
       record,
       blueprint,
       expectedLanding(blueprint, [edge.target]),
+    );
+  }
+
+  async rebase(input: RebaseLifecycleInput): Promise<LifecycleSnapshot> {
+    const { blueprint, record } = await rebaseLifecycle(
+      {
+        blueprintStore: this.blueprintStore,
+        effects: this.effects,
+        persistence: this.persistence,
+      },
+      input,
+    );
+    return this.snapshot(
+      input.instanceId,
+      readLifecycleContext(record),
+      blueprint,
     );
   }
 

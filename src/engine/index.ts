@@ -6,6 +6,8 @@
 export {
   BlueprintValidationError,
   InvalidDispositionError,
+  RebaseTargetNotAwaitableError,
+  RebaseTargetNotFoundError,
   TransitionConflictError,
   UnexpectedLandingError,
 } from "./errors.js";
@@ -32,6 +34,7 @@ export type {
   LifecyclePersistence,
   LifecycleSnapshot,
   PendingTransition,
+  RebaseLifecycleInput,
   ResumeLifecycleInput,
   StartLifecycleInput,
 } from "./types.js";

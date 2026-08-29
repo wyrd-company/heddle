@@ -85,6 +85,11 @@ export interface ResumeLifecycleInput {
   output?: Record<string, JsonValue>;
 }
 
+export interface RebaseLifecycleInput {
+  instanceId: string;
+  targetState: string;
+}
+
 export interface LifecycleSnapshot {
   awaitingNodeIds: string[];
   blueprintBlobHash: string;

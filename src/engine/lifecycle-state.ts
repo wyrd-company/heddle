@@ -17,6 +17,7 @@ import type {
   LifecyclePersistence,
   ResumeLifecycleInput,
   StartLifecycleInput,
+  LifecycleBlueprint,
 } from "./types.js";
 
 const asJsonValue = (value: unknown): JsonValue => value as JsonValue;
@@ -99,6 +100,55 @@ export const completedOperationForTransition = (
   Object.values(context.completedOperations).find(
     (operation) => operation.transitionId === transitionId,
   );
+
+const predecessorIds = (
+  blueprint: LifecycleBlueprint,
+  targetState: string,
+): Set<string> => {
+  const predecessors = new Set<string>();
+  const pending = [targetState];
+  while (pending.length > 0) {
+    const target = pending.pop();
+    if (target === undefined) continue;
+    for (const { source } of blueprint.edges.filter(
+      ({ target: edgeTarget }) => edgeTarget === target,
+    )) {
+      if (source === targetState || predecessors.has(source)) continue;
+      predecessors.add(source);
+      pending.push(source);
+    }
+  }
+  return predecessors;
+};
+
+export const serializedContextForRebase = (
+  serializedContext: string,
+  previousBlueprint: LifecycleBlueprint,
+  nextBlueprint: LifecycleBlueprint,
+  targetState: string,
+): string => {
+  const previous = JSON.parse(serializedContext) as Record<string, unknown>;
+  const rebased = { ...previous };
+  const nodeIds = new Set([
+    ...previousBlueprint.nodes.map(({ id }) => id),
+    ...nextBlueprint.nodes.map(({ id }) => id),
+  ]);
+  for (const nodeId of nodeIds) {
+    delete rebased[`_outputs.${nodeId}`];
+    delete rebased[nodeId];
+  }
+  for (const nodeId of predecessorIds(nextBlueprint, targetState)) {
+    const output = previous[`_outputs.${nodeId}`] ?? null;
+    rebased[`_outputs.${nodeId}`] = output;
+    rebased[nodeId] = previous[nodeId] ?? output;
+  }
+  delete rebased._executionId;
+  rebased._awaitingNodeIds = [targetState];
+  rebased._awaitingDetails = {
+    [targetState]: { reason: "external_event" },
+  };
+  return JSON.stringify(rebased);
+};
 
 const withCompletedOperation = (
   completedOperations: Record<string, CompletedLifecycleOperation>,
