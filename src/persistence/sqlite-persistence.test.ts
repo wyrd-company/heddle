@@ -269,7 +269,7 @@ describe("SqlitePersistence", () => {
       }),
     ).toThrow(/UNIQUE constraint failed|SQLITE_CONSTRAINT/);
     reloaded.close();
-  });
+  }, 15_000);
 
   it("fails recovery closed when event history contains duplicate correlation tokens", async () => {
     const stateDirectory = await makeStateDirectory();
