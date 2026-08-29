@@ -60,6 +60,8 @@ optional header, selection mode, option labels, and descriptions; T3 option
 labels are the submitted answer values. Stale, terminal, and lifecycle
 adjudication entries remain informational. Missing or inconsistent runtime,
 request, question, or durable identity fails closed.
+Pushover deep links use the same runtime-derived task scope; notification
+routing does not parse instance names.
 
 Subagent spawn, liveness, and stop steering use the same SQLite instance store,
 global correlation-token catalog, pacing evaluator, stage-session bootstrap,

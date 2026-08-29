@@ -392,7 +392,8 @@ proposed-design:
     the recorded T3 question to the console prompt, preserve optional headers and
     option metadata, and submit option labels. The action port delegates to the
     existing escalation coordinator and session observer; the viewer owns no
-    disposition or queue state.
+    disposition or queue state. Pushover deep links use the same runtime-derived
+    task scope instead of parsing instance identity.
   viewer: >
     The canvas is built from the vendored `@flowcraft/tldraw`
     primitives — `EventBus`, `useExecutionBridge`, `FlowcraftSync`,
