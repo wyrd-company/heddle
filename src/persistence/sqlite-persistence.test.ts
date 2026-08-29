@@ -89,7 +89,7 @@ describe("SqlitePersistence", () => {
     });
     persistence.createInstance("record-a", initialState);
 
-    expect(() => persistence.createInstance("", initialState)).toThrow(
+    expect(() => persistence.createInstance(" ", initialState)).toThrow(
       /instanceId/,
     );
     expect(() => persistence.createInstance("record-a", initialState)).toThrow(
@@ -198,6 +198,12 @@ describe("SqlitePersistence", () => {
     await once(child.stdout!, "data");
     child.kill("SIGKILL");
     await once(child, "exit");
+
+    const interruptedProjection = new Database(
+      join(stateDirectory, "heddle-state.sqlite"),
+    );
+    interruptedProjection.exec("DELETE FROM heddle_instances");
+    interruptedProjection.close();
 
     const recovered = new SqlitePersistence({ stateDirectory });
     expect(recovered.getInstance("record-a")).toEqual({
