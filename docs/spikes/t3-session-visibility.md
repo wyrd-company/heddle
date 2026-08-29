@@ -36,9 +36,13 @@ also carries active development of the sidebar behavior, so Heddle must treat
 these private, unversioned contracts as version-pinned. The running s6 server on
 `:3773`, the global `t3`, and `/home/vscode/.t3` were not touched.
 
-No live server check was necessary. The HTTP request schema, orchestration
-decider, projection queries, and web/mobile list partitions state the relevant
-behavior without an environment-dependent observation.
+The create/archive path was also executed against an isolated T3 0.0.36 server
+on `127.0.0.1:3802` with a fresh base directory and a generic scratch Git
+repository. `project.create`, `thread.create`, and `thread.archive` returned
+sequences 1, 2, and 3. The shell snapshot showed the exact supplied title and
+`archivedAt:null` after creation, then omitted the thread after archive. The
+server was stopped after the check. The source contracts and client list
+partitions supply the remaining behavior that does not require a browser.
 
 ## Creation and title behavior
 
