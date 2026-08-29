@@ -146,18 +146,30 @@ describe("deployed Heddle service", () => {
   it("uses one production owner for scheduling, board, state, and shutdown", async () => {
     const fixture = await prepareProductionFixture();
     directory = fixture.root;
+    const t3 = new SyntheticT3();
     production = createProductionComposition({
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
       },
       pushoverTransport: { send: async () => undefined },
-      t3: new SyntheticT3(),
+      t3,
     });
     await expect(
       startHeddleServerFromEnvironment(
         { HEDDLE_HOST: "127.0.0.1", HEDDLE_PORT: "0" },
         { board, production },
+      ),
+    ).rejects.toThrow(
+      "A production composition owns its board and console state boundaries",
+    );
+    await expect(
+      startHeddleServerFromEnvironment(
+        { HEDDLE_HOST: "127.0.0.1", HEDDLE_PORT: "0" },
+        {
+          consoleActions: { execute: async () => undefined },
+          production,
+        },
       ),
     ).rejects.toThrow(
       "A production composition owns its board and console state boundaries",
@@ -173,6 +185,47 @@ describe("deployed Heddle service", () => {
     await expect(response.json()).resolves.toMatchObject([
       { instanceId: `task-${fixture.taskId}`, taskId: fixture.taskId },
     ]);
+    const runtime = production.persistence.listReconcilerRuntime()[0]!;
+    await production.attention.raise({
+      attentionId: "approval-attention",
+      instanceId: runtime.instanceId,
+      kind: "approval",
+      message: "Approval required",
+      requestId: "approval-one",
+      sessionKey: runtime.sessionKey!,
+      threadId: runtime.threadId!,
+    });
+    const attentionResponse = await globalThis.fetch(
+      `http://127.0.0.1:${service.port}/api/attention`,
+    );
+    const attention = (await attentionResponse.json()) as Array<{
+      actions: Array<{ actionId: string }>;
+      attentionId: string;
+      fingerprint: string;
+    }>;
+    const entry = attention[0]!;
+    const action = entry.actions[0]!;
+    const actionResponse = await globalThis.fetch(
+      `http://127.0.0.1:${service.port}/api/attention/${entry.attentionId}/actions/${action.actionId}`,
+      {
+        body: JSON.stringify({ fingerprint: entry.fingerprint }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+    expect(actionResponse.status).toBe(204);
+    expect(t3.approvalResponses).toEqual([
+      {
+        decision: "accept",
+        requestId: "approval-one",
+        threadId: runtime.threadId,
+      },
+    ]);
+    await expect(
+      globalThis
+        .fetch(`http://127.0.0.1:${service.port}/api/attention`)
+        .then((result) => result.json()),
+    ).resolves.toEqual([]);
     const lifecycle = await globalThis.fetch(
       `http://127.0.0.1:${service.port}/api/lifecycle?task=${fixture.taskId}&after=0`,
     );

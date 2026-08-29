@@ -66,6 +66,7 @@ export const initializePersistenceSchema = (
       effect_kind TEXT NOT NULL,
       stable_id TEXT NOT NULL,
       state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+      payload_json TEXT NOT NULL DEFAULT 'null',
       recorded_at TEXT NOT NULL,
       completed_at TEXT,
       PRIMARY KEY (effect_kind, stable_id)
@@ -89,6 +90,14 @@ export const initializePersistenceSchema = (
     .all() as Array<{ name: string }>;
   if (!attentionColumns.some(({ name }) => name === "resolved_at")) {
     database.exec("ALTER TABLE heddle_attention ADD COLUMN resolved_at TEXT");
+  }
+  const effectColumns = database
+    .prepare("PRAGMA table_info(heddle_completed_effects)")
+    .all() as Array<{ name: string }>;
+  if (!effectColumns.some(({ name }) => name === "payload_json")) {
+    database.exec(
+      "ALTER TABLE heddle_completed_effects ADD COLUMN payload_json TEXT NOT NULL DEFAULT 'null'",
+    );
   }
 };
 

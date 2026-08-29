@@ -6,7 +6,10 @@
 import { resolve } from "node:path";
 
 import { KanbanBoardAdapter } from "../board-adapter/index.js";
-import type { ConsoleStateSource } from "../console/index.js";
+import type {
+  ConsoleAttentionActionPort,
+  ConsoleStateSource,
+} from "../console/index.js";
 import {
   createMechanicalNodeEffects,
   SessionObserver,
@@ -46,6 +49,7 @@ import {
   createProductionSubagentCoordinator,
   productionSessionTargets,
 } from "./subagent-composition.js";
+import { ProductionAttentionActions } from "./attention-actions.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -65,6 +69,7 @@ export type ProductionComposition = {
   attention: DurableAttentionQueue;
   board: KanbanBoardAdapter;
   close(): Promise<void>;
+  consoleActions: ConsoleAttentionActionPort;
   consoleState: ConsoleStateSource;
   escalation: EscalationCoordinator;
   lifecycle: LifecycleEngine;
@@ -178,6 +183,12 @@ export const createProductionComposition = (
       t3,
     });
     subagents = coordinator;
+    const consoleActions = new ProductionAttentionActions(
+      persistence,
+      attention,
+      escalation,
+      observer,
+    );
     const reconciler = new Reconciler({
       attention,
       board,
@@ -214,6 +225,7 @@ export const createProductionComposition = (
     return {
       attention,
       board,
+      consoleActions,
       consoleState: new ProductionConsoleState(
         persistence,
         attention,

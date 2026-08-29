@@ -362,18 +362,37 @@ export class SqlitePersistence {
     );
   }
 
-  recordEffectIntent(effectKind: string, stableId: string): boolean {
+  recordEffectIntent(
+    effectKind: string,
+    stableId: string,
+    payload: JsonValue = null,
+  ): boolean {
     this.assertStableId("effectKind", effectKind);
     this.assertStableId("stableId", stableId);
-    return (
+    const payloadJson = serialize(payload);
+    const inserted =
       this.database
         .prepare(
           `INSERT OR IGNORE INTO heddle_completed_effects
-             (effect_kind, stable_id, state, recorded_at, completed_at)
-           VALUES (?, ?, 'pending', ?, NULL)`,
+             (effect_kind, stable_id, state, payload_json, recorded_at, completed_at)
+           VALUES (?, ?, 'pending', ?, ?, NULL)`,
         )
-        .run(effectKind, stableId, new Date().toISOString()).changes > 0
-    );
+        .run(effectKind, stableId, payloadJson, new Date().toISOString())
+        .changes > 0;
+    if (inserted) return true;
+    const prior = this.database
+      .prepare(
+        `SELECT payload_json AS payloadJson
+         FROM heddle_completed_effects
+         WHERE effect_kind = ? AND stable_id = ?`,
+      )
+      .get(effectKind, stableId) as { payloadJson: string } | undefined;
+    if (prior?.payloadJson !== payloadJson) {
+      throw new Error(
+        `Effect ${JSON.stringify([effectKind, stableId])} changed durable identity`,
+      );
+    }
+    return false;
   }
 
   recordEffectCompleted(effectKind: string, stableId: string): boolean {

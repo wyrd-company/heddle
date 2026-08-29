@@ -196,7 +196,9 @@ export const startHeddleServerFromEnvironment = async (
   const port = configuredPort(environment);
   if (
     composition.production !== undefined &&
-    (composition.board !== undefined || composition.consoleState !== undefined)
+    (composition.board !== undefined ||
+      composition.consoleActions !== undefined ||
+      composition.consoleState !== undefined)
   ) {
     throw new Error(
       "A production composition owns its board and console state boundaries",
@@ -223,9 +225,14 @@ export const startHeddleServerFromEnvironment = async (
       persistence,
     });
   const consoleServer = createConsoleServer({
-    ...(composition.consoleActions === undefined
+    ...(composition.consoleActions === undefined &&
+    composition.production === undefined
       ? {}
-      : { actions: composition.consoleActions }),
+      : {
+          actions:
+            composition.production?.consoleActions ??
+            composition.consoleActions!,
+        }),
     board,
     blueprintEditor: composition.blueprintEditor,
     state:

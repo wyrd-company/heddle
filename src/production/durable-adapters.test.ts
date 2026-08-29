@@ -117,7 +117,15 @@ describe("durable production adapters", () => {
         attention_id TEXT PRIMARY KEY,
         payload_json TEXT NOT NULL,
         recorded_at TEXT NOT NULL
-      )
+      );
+      CREATE TABLE heddle_completed_effects (
+        effect_kind TEXT NOT NULL,
+        stable_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+        recorded_at TEXT NOT NULL,
+        completed_at TEXT,
+        PRIMARY KEY (effect_kind, stable_id)
+      );
     `);
     database.close();
 
@@ -132,6 +140,16 @@ describe("durable production adapters", () => {
     });
     expect(queue.resolve("task-23:session:choice")).toBe(true);
     expect(queue.list()).toEqual([]);
+    expect(
+      persistence.recordEffectIntent("sample-effect", "sample-id", {
+        action: "first",
+      }),
+    ).toBe(true);
+    expect(() =>
+      persistence.recordEffectIntent("sample-effect", "sample-id", {
+        action: "second",
+      }),
+    ).toThrow("changed durable identity");
     persistence.close();
   });
 

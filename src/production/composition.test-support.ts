@@ -19,9 +19,19 @@ import type { ProductionT3Client } from "./composition.js";
 export const execute = promisify(execFile);
 
 export class SyntheticT3 implements ProductionT3Client {
+  readonly approvalResponses: Array<{
+    decision: "accept" | "reject";
+    requestId: string;
+    threadId: string;
+  }> = [];
   readonly commands: T3DispatchCommand[] = [];
   readonly timeouts: HarnessToolTimeoutLaunchInput[] = [];
   readonly threads = new Set<string>();
+  readonly userInputResponses: Array<{
+    answers: Record<string, string | string[]>;
+    requestId: string;
+    threadId: string;
+  }> = [];
 
   async applyHarnessToolTimeout(
     input: HarnessToolTimeoutLaunchInput,
@@ -51,11 +61,21 @@ export class SyntheticT3 implements ProductionT3Client {
     return { thread: { activities: [] } };
   }
 
-  async respondToApproval() {
+  async respondToApproval(
+    threadId: string,
+    requestId: string,
+    decision: "accept" | "reject",
+  ) {
+    this.approvalResponses.push({ decision, requestId, threadId });
     return { sequence: 1 };
   }
 
-  async respondToUserInput() {
+  async respondToUserInput(
+    threadId: string,
+    requestId: string,
+    answers: Record<string, string | string[]>,
+  ) {
+    this.userInputResponses.push({ answers, requestId, threadId });
     return { sequence: 1 };
   }
 }
