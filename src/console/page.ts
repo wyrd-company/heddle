@@ -277,6 +277,7 @@ export const consoleClient = `const boardElement = document.querySelector("#boar
 const scopeElement = document.querySelector("#scope");
 const statusElement = document.querySelector("#console-status");
 const attentionElement = document.querySelector("#attention-count");
+let loadGeneration = 0;
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
 
@@ -401,6 +402,7 @@ const renderLoadFailure = (error) => {
 };
 
 async function load() {
+  const generation = ++loadGeneration;
   statusElement.dataset.error = "false";
   statusElement.textContent = "Loading board…";
   const requestedScope = scopeFromUrl();
@@ -410,12 +412,14 @@ async function load() {
       fetchJson("/api/projection?scope=" + encodeURIComponent(requestedScope)),
       fetchJson("/api/attention"),
     ]);
+    if (generation !== loadGeneration) return;
     addScopeOptions(board.tasks, requestedScope);
     renderProjection(projection);
     attentionElement.textContent = String(attention.length);
     statusElement.textContent = projection.columns.reduce((count, column) => count + column.tasks.length, 0) + " visible records";
     updateDwells();
   } catch (error) {
+    if (generation !== loadGeneration) return;
     renderLoadFailure(error);
   }
 }
