@@ -75,9 +75,17 @@
       "additionalProperties": false,
       "required": ["apiUrl", "applicationToken", "consoleBaseUrl", "userKey"],
       "properties": {
-        "apiUrl": { "type": "string", "format": "uri" },
+        "apiUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
         "applicationToken": { "type": "string", "minLength": 1 },
-        "consoleBaseUrl": { "type": "string", "format": "uri" },
+        "consoleBaseUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
         "userKey": { "type": "string", "minLength": 1 }
       }
     },
@@ -119,7 +127,11 @@
       "required": ["accessToken", "baseUrl"],
       "properties": {
         "accessToken": { "type": "string", "minLength": 1 },
-        "baseUrl": { "type": "string", "format": "uri" }
+        "baseUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        }
       }
     }
   }

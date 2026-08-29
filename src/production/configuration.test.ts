@@ -99,4 +99,49 @@ describe("production configuration", () => {
       "pacing.defaultProvider must equal session.driver",
     );
   });
+
+  it.each([
+    {
+      name: "t3.baseUrl",
+      mutate: (configuration: ProductionConfiguration) => ({
+        ...configuration,
+        t3: { ...configuration.t3, baseUrl: "local-t3" },
+      }),
+    },
+    {
+      name: "pushover.apiUrl",
+      mutate: (configuration: ProductionConfiguration) => ({
+        ...configuration,
+        pushover: { ...configuration.pushover, apiUrl: "local-notifier" },
+      }),
+    },
+    {
+      name: "pushover.consoleBaseUrl",
+      mutate: (configuration: ProductionConfiguration) => ({
+        ...configuration,
+        pushover: {
+          ...configuration.pushover,
+          consoleBaseUrl: "local-console",
+        },
+      }),
+    },
+  ])(
+    "rejects non-HTTP $name through both configuration boundaries",
+    async ({ mutate, name }) => {
+      const schema = JSON.parse(
+        await readFile("schemas/production-configuration.json", "utf8"),
+      );
+      const invalid = mutate(fixture());
+      const validate = new Ajv2020({
+        allErrors: true,
+        formats: { uri: true },
+        strict: false,
+      }).compile(schema);
+
+      expect(validate(invalid)).toBe(false);
+      expect(() => validateProductionConfiguration(invalid)).toThrow(
+        `${name} must be an HTTP URL`,
+      );
+    },
+  );
 });

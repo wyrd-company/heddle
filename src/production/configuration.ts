@@ -3,6 +3,8 @@
 //   implements: heddle
 // ---
 
+import { URL } from "node:url";
+
 import type { PacingConfiguration } from "../pacing/index.js";
 
 export type ProductionSessionConfiguration = {
@@ -51,6 +53,18 @@ const requireNonEmpty = (name: string, value: string): void => {
   if (value.trim() === "") throw new TypeError(`${name} must not be empty`);
 };
 
+const requireHttpUrl = (name: string, value: string): void => {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new TypeError(`${name} must be an HTTP URL`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new TypeError(`${name} must be an HTTP URL`);
+  }
+};
+
 const requirePositiveInteger = (name: string, value: number): void => {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new TypeError(`${name} must be a positive safe integer`);
@@ -72,7 +86,7 @@ export const validateProductionConfiguration = (
     configuration.stopTimeoutMilliseconds,
   );
   requireNonEmpty("projectId", configuration.projectId);
-  requireNonEmpty("t3.baseUrl", configuration.t3.baseUrl);
+  requireHttpUrl("t3.baseUrl", configuration.t3.baseUrl);
   requireNonEmpty("t3.accessToken", configuration.t3.accessToken);
   for (const [stage, threshold] of Object.entries(
     configuration.stageThresholds,
@@ -93,12 +107,12 @@ export const validateProductionConfiguration = (
       "pacing.defaultProvider must equal session.driver for the configured session provider",
     );
   }
-  requireNonEmpty("pushover.apiUrl", configuration.pushover.apiUrl);
+  requireHttpUrl("pushover.apiUrl", configuration.pushover.apiUrl);
   requireNonEmpty(
     "pushover.applicationToken",
     configuration.pushover.applicationToken,
   );
-  requireNonEmpty(
+  requireHttpUrl(
     "pushover.consoleBaseUrl",
     configuration.pushover.consoleBaseUrl,
   );
