@@ -347,6 +347,41 @@ describe("delivery mechanical nodes", () => {
     );
   });
 
+  it("refuses cleanup when an approved snapshot is absent from the base", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await git(
+      fixture.sourcePath,
+      "update-ref",
+      "refs/heads/main",
+      snapshot.baseHead,
+      snapshot.sourceHead,
+    );
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow();
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+  });
+
+  it("refuses cleanup for an open snapshot even when its head is integrated", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await git(
+      fixture.sourcePath,
+      "update-ref",
+      "refs/heads/main",
+      snapshot.sourceHead,
+      snapshot.baseHead,
+    );
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/not approved/);
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+  });
+
   it("rejects path traversal before running a mechanical command", async () => {
     const fixture = await makeChange();
     let commands = 0;
