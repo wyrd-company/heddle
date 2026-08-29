@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "description": "Workflow service for software delivery tasks",
   "private": true,
+  "bin": {
+    "heddle-cursor-agent": "bin/heddle-cursor-agent.mjs"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "test": "vitest run --config vitest.config.ts",
-    "lint": "eslint src eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src",
-    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src"
+    "lint": "eslint src bin eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src bin",
+    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src bin"
   },
   "keywords": [],
   "author": "",

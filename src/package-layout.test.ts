@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 type PackageManifest = {
+  bin?: Record<string, string>;
   license: string;
   name: string;
 };
@@ -40,5 +41,16 @@ describe("package separation", () => {
       "Working directory for every relative path and reproduction command:\n" +
         "`spikes/flowcraft-gate` from the repository root.",
     );
+  });
+
+  it("packages the maintained Cursor API-key wrapper", async () => {
+    const production = await readManifest("package.json");
+
+    expect(production.bin).toEqual({
+      "heddle-cursor-agent": "bin/heddle-cursor-agent.mjs",
+    });
+    await expect(
+      readFile("bin/heddle-cursor-agent.mjs", "utf8"),
+    ).resolves.toContain("cursor-acp-authenticate-shim.mjs");
   });
 });

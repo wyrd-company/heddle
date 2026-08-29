@@ -6,9 +6,9 @@
 
 import type { Buffer } from "node:buffer";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -18,6 +18,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { T3ControlPlaneClient } from "./t3-control-plane-client.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
+const cursorWrapper = resolve("bin/heddle-cursor-agent.mjs");
+const cursorFixture = resolve("src/control-plane/fixtures/cursor-agent.mjs");
 const exec = promisify(execFile);
 const execChecked = (
   file: string,
@@ -62,13 +64,25 @@ describe.skipIf(!t3Binary)(
     let scratch = "";
     let server: ChildProcess | undefined;
     let client: T3ControlPlaneClient;
+    let projectId = "";
     let projectPath = "";
+    let cursorRequestLog = "";
 
     beforeAll(async () => {
       scratch = await mkdtemp(join(tmpdir(), "heddle-t3-control-plane-"));
       const home = join(scratch, "t3-home");
+      cursorRequestLog = join(scratch, "cursor-requests.jsonl");
       projectPath = join(scratch, "project");
       await mkdir(home, { recursive: true });
+      await mkdir(join(home, "userdata"), { recursive: true });
+      await writeFile(
+        join(home, "userdata", "settings.json"),
+        JSON.stringify({
+          providers: {
+            cursor: { enabled: true, binaryPath: cursorWrapper },
+          },
+        }),
+      );
       await mkdir(projectPath, { recursive: true });
       await execChecked("git", ["init", "--quiet", "--initial-branch=main"], {
         cwd: projectPath,
@@ -106,7 +120,15 @@ describe.skipIf(!t3Binary)(
           projectPath,
         ],
         {
-          env: { ...process.env, NO_COLOR: "1", T3CODE_HOME: home },
+          env: {
+            ...process.env,
+            HEDDLE_CURSOR_AGENT_BINARY: cursorFixture,
+            HEDDLE_CURSOR_API_KEY: "isolated-api-key",
+            HEDDLE_CURSOR_EXPECTED_API_KEY: "isolated-api-key",
+            HEDDLE_CURSOR_TEST_REQUEST_LOG: cursorRequestLog,
+            NO_COLOR: "1",
+            T3CODE_HOME: home,
+          },
           stdio: ["ignore", "pipe", "pipe"],
         },
       );
@@ -125,6 +147,15 @@ describe.skipIf(!t3Binary)(
         pairingToken,
         "heddle-t3-client-integration",
       );
+      projectId = globalThis.crypto.randomUUID();
+      await client.dispatch({
+        type: "project.create",
+        commandId: globalThis.crypto.randomUUID(),
+        projectId,
+        title: "Integration Project",
+        workspaceRoot: projectPath,
+        createdAt: new Date().toISOString(),
+      });
     }, 20_000);
 
     afterAll(async () => {
@@ -139,7 +170,6 @@ describe.skipIf(!t3Binary)(
     });
 
     it("authenticates, dispatches, and polls a shell observation", async () => {
-      const projectId = globalThis.crypto.randomUUID();
       const threadId = globalThis.crypto.randomUUID();
       const worktreePath = join(scratch, "thread-worktree");
       await execChecked(
@@ -155,17 +185,6 @@ describe.skipIf(!t3Binary)(
         ],
         { cwd: projectPath },
       );
-
-      await expect(
-        client.dispatch({
-          type: "project.create",
-          commandId: globalThis.crypto.randomUUID(),
-          projectId,
-          title: "Integration Project",
-          workspaceRoot: projectPath,
-          createdAt: new Date().toISOString(),
-        }),
-      ).resolves.toMatchObject({ sequence: expect.any(Number) });
 
       await expect(
         client.dispatch({
@@ -190,5 +209,89 @@ describe.skipIf(!t3Binary)(
       });
       await observations.return(undefined);
     });
+
+    it("starts a Cursor session through the packaged API-key wrapper and shim", async () => {
+      const threadId = globalThis.crypto.randomUUID();
+      const worktreePath = join(scratch, "cursor-thread-worktree");
+      await execChecked(
+        "git",
+        [
+          "worktree",
+          "add",
+          "--quiet",
+          "-b",
+          "integration/cursor-thread",
+          worktreePath,
+          "main",
+        ],
+        { cwd: projectPath },
+      );
+      await client.dispatch({
+        type: "thread.create",
+        commandId: globalThis.crypto.randomUUID(),
+        threadId,
+        projectId,
+        title: "Cursor Integration Thread",
+        modelSelection: { instanceId: "cursor", model: "default" },
+        runtimeMode: "auto",
+        interactionMode: "default",
+        branch: "integration/cursor-thread",
+        worktreePath,
+        createdAt: new Date().toISOString(),
+      });
+
+      await client.dispatch(
+        {
+          type: "thread.turn.start",
+          commandId: globalThis.crypto.randomUUID(),
+          threadId,
+          message: {
+            messageId: globalThis.crypto.randomUUID(),
+            role: "user",
+            text: "Finish without changing files.",
+            attachments: [],
+          },
+          modelSelection: { instanceId: "cursor", model: "default" },
+          runtimeMode: "auto",
+          interactionMode: "default",
+          createdAt: new Date().toISOString(),
+        },
+        {
+          driver: "cursor",
+          cliVersion: "2026.08.11-e8db854",
+          lifecycle: "independent",
+        },
+      );
+
+      let completed = false;
+      let lastObservation: Awaited<ReturnType<typeof client.observeThread>>;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const observation = await client.observeThread(threadId);
+        lastObservation = observation;
+        if (observation.phase === "completed") {
+          completed = true;
+          break;
+        }
+        await delay(100);
+      }
+      const requests = (await readFile(cursorRequestLog, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as { method?: string });
+      expect(
+        completed,
+        JSON.stringify({ lastObservation, requests }, undefined, 2),
+      ).toBe(true);
+      expect(requests).toContainEqual({
+        apiKeyInjected: true,
+        arguments: ["acp"],
+      });
+      expect(requests.some(({ method }) => method === "session/new")).toBe(
+        true,
+      );
+      expect(requests.some(({ method }) => method === "authenticate")).toBe(
+        false,
+      );
+    }, 20_000);
   },
 );
