@@ -137,6 +137,32 @@ describe("T3ControlPlaneClient preconditions", () => {
     ).rejects.toThrow("Dispatch 'thread.approval.respond' requires requestId");
   });
 
+  it("blocks provider dispatch before contacting T3 and names the reason", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const client = new T3ControlPlaneClient({
+      baseUrl: "http://t3.test",
+      accessToken: "access-token",
+      fetch,
+    });
+
+    await expect(
+      client.dispatch(
+        {
+          type: "thread.turn.start",
+          commandId: "command-1",
+          threadId: "thread-1",
+          runtimeMode: "auto",
+        },
+        {
+          driver: "cursor",
+          cliVersion: "2026.08.11-e8db854",
+          lifecycle: "assistive",
+        },
+      ),
+    ).rejects.toMatchObject({ reason: "provider-question-tool-unavailable" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("requires the shell to report the requested response kind as pending", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

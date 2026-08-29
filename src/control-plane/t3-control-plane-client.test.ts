@@ -119,11 +119,19 @@ describe("T3ControlPlaneClient", () => {
     });
 
     await expect(
-      client.dispatch({
-        type: "thread.turn.start",
-        commandId: "command-1",
-        threadId: "missing-thread",
-      }),
+      client.dispatch(
+        {
+          type: "thread.turn.start",
+          commandId: "command-1",
+          threadId: "missing-thread",
+          runtimeMode: "auto-accept-edits",
+        },
+        {
+          driver: "claudeAgent",
+          cliVersion: "2.1.250",
+          lifecycle: "independent",
+        },
+      ),
     ).rejects.toThrow(
       new T3PreconditionError(
         "Cannot dispatch 'thread.turn.start': thread 'missing-thread' does not exist",

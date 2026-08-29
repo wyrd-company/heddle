@@ -9,12 +9,27 @@ import {
   type T3AwarenessPhase,
   type T3ShellThread,
 } from "./t3-agent-awareness.js";
+import {
+  assertT3ProviderDispatchPreconditions,
+  t3ProviderPreconditions,
+  type T3ProviderDispatchContext,
+  type T3ProviderPreconditionTable,
+} from "./t3-provider-preconditions.js";
 
 export {
   resolveT3AwarenessPhase,
   type T3AwarenessPhase,
   type T3ShellThread,
 } from "./t3-agent-awareness.js";
+export {
+  t3ProviderPreconditions,
+  T3ProviderPreconditionError,
+  type T3ProviderDispatchContext,
+  type T3ProviderPreconditionReason,
+  type T3ProviderPreconditionTable,
+  type T3ProviderVersionPreconditions,
+  type T3SessionLifecycle,
+} from "./t3-provider-preconditions.js";
 
 export type T3ShellSnapshot = {
   threads: T3ShellThread[];
@@ -78,6 +93,7 @@ export type T3ControlPlaneClientOptions = {
   baseUrl: string;
   accessToken?: string;
   fetch?: typeof globalThis.fetch;
+  providerPreconditions?: T3ProviderPreconditionTable;
 };
 
 type FetchRequestInit = NonNullable<Parameters<typeof globalThis.fetch>[1]>;
@@ -86,12 +102,15 @@ type FetchAbortSignal = NonNullable<FetchRequestInit["signal"]>;
 export class T3ControlPlaneClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #providerPreconditions: T3ProviderPreconditionTable;
   #accessToken?: string;
 
   constructor(options: T3ControlPlaneClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, "");
     this.#accessToken = options.accessToken;
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#providerPreconditions =
+      options.providerPreconditions ?? t3ProviderPreconditions;
   }
 
   async exchangePairingToken(
@@ -173,8 +192,20 @@ export class T3ControlPlaneClient {
 
   async dispatch<T extends { sequence: number } = { sequence: number }>(
     command: T3DispatchCommand,
+    providerContext?: T3ProviderDispatchContext,
   ): Promise<T> {
     this.#requireAccessToken(`dispatch '${command.type}'`);
+    if (command.type === "thread.turn.start") {
+      if (!command.threadId)
+        throw new T3PreconditionError(
+          "Dispatch 'thread.turn.start' requires threadId",
+        );
+      assertT3ProviderDispatchPreconditions(
+        this.#providerPreconditions,
+        providerContext,
+        command.runtimeMode,
+      );
+    }
     await this.#checkDispatchPreconditions(command);
     return this.#request<T>("/api/orchestration/dispatch", {
       method: "POST",
