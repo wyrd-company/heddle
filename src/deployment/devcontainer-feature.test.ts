@@ -61,6 +61,9 @@ describe("Heddle devcontainer feature", () => {
     expect(readme).toContain(`supports T3 \`${versions.t3}\``);
     expect(qualification).toContain('t3Binary === "/usr/local/bin/t3"');
     expect(qualification).toContain('t3Binary === "/home/vscode/.t3"');
+    expect(qualification).toContain(
+      'installedPackage !== "/usr/local/lib/node_modules/heddle"',
+    );
     expect(qualification).toContain("port === 3773");
     expect(qualification).toContain(
       "dist/control-plane/t3-control-plane-client.js",

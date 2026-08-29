@@ -35,7 +35,7 @@ if (
 ) {
   throw new Error(`Refusing forbidden T3 path: ${t3Binary}`);
 }
-if (!installedPackage.startsWith(`/usr/local/lib/node_modules/heddle${sep}`)) {
+if (installedPackage !== "/usr/local/lib/node_modules/heddle") {
   throw new Error(`Refusing non-deployed Heddle package: ${installedPackage}`);
 }
 
