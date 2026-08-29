@@ -10,6 +10,10 @@ import { SqliteHistoryAdapter } from "@flowcraft/sqlite-history";
 import Database from "better-sqlite3";
 
 import {
+  createSqliteFlowcraftHistory,
+  type SqliteFlowcraftHistory,
+} from "./sqlite-flowcraft-history.js";
+import {
   initializePersistenceSchema,
   protectFlowcraftHistory,
 } from "./sqlite-schema.js";
@@ -48,11 +52,7 @@ const parseEvent = (row: EventRow): PersistedEvent => ({
   type: row.type,
 });
 
-export interface FlowcraftHistory {
-  append: SqliteHistoryAdapter["store"];
-  replay: SqliteHistoryAdapter["retrieve"];
-  replayMultiple: SqliteHistoryAdapter["retrieveMultiple"];
-}
+export type FlowcraftHistory = SqliteFlowcraftHistory;
 
 export class SqlitePersistence {
   readonly databasePath: string;
@@ -78,13 +78,10 @@ export class SqlitePersistence {
       walMode: true,
     });
     protectFlowcraftHistory(this.database);
-    const adapter = this.flowcraftHistoryAdapter;
-    const flowcraftHistory: FlowcraftHistory = {
-      append: (event, executionId) => adapter.store(event, executionId),
-      replay: (executionId) => adapter.retrieve(executionId),
-      replayMultiple: (executionIds) => adapter.retrieveMultiple(executionIds),
-    };
-    this.flowcraftHistory = Object.freeze(flowcraftHistory);
+    this.flowcraftHistory = createSqliteFlowcraftHistory(
+      this.database,
+      this.flowcraftHistoryAdapter,
+    );
     this.recoverInstances();
   }
 

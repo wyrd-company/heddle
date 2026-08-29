@@ -32,6 +32,40 @@ const initialState: InstanceState = {
   todoState: [{ complete: false, text: "item-a" }],
 };
 
+const adversarialFlowcraftIndex = "idx_events_execution_timestamp_id_desc";
+const equalTimestamp = "2026-01-01 00:00:00";
+
+const addAdversarialFlowcraftIndex = (database: Database.Database): void => {
+  database.exec(`
+    CREATE INDEX ${adversarialFlowcraftIndex}
+    ON events(execution_id, timestamp, id DESC)
+  `);
+};
+
+const insertFlowcraftEvent = (
+  database: Database.Database,
+  executionId: string,
+  value: number,
+): void => {
+  database
+    .prepare(
+      `INSERT INTO events
+         (execution_id, event_type, event_payload, timestamp, created_at)
+       VALUES (?, 'sample:observed', ?, ?, ?)`,
+    )
+    .run(
+      executionId,
+      JSON.stringify({ value }),
+      equalTimestamp,
+      equalTimestamp,
+    );
+};
+
+const payloadValues = (
+  events: Awaited<ReturnType<SqlitePersistence["flowcraftHistory"]["replay"]>>,
+): number[] =>
+  events.map(({ payload }) => (payload as { value: number }).value);
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories
@@ -234,6 +268,7 @@ describe("SqlitePersistence", () => {
     const stateDirectory = await makeStateDirectory();
     const persistence = new SqlitePersistence({ stateDirectory });
 
+    expect(Object.isFrozen(persistence.flowcraftHistory)).toBe(true);
     expect("clear" in persistence.flowcraftHistory).toBe(false);
 
     await persistence.flowcraftHistory.append(
@@ -261,5 +296,94 @@ describe("SqlitePersistence", () => {
     ).toThrow(/append-only/);
     expect(() => database.exec("DELETE FROM events")).toThrow(/append-only/);
     database.close();
+  });
+
+  it("replays equal-timestamp Flowcraft events in durable append order", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const database = new Database(persistence.databasePath);
+    addAdversarialFlowcraftIndex(database);
+    insertFlowcraftEvent(database, "group-a", 1);
+    insertFlowcraftEvent(database, "group-a", 2);
+
+    const legacyQuery = `
+      SELECT event_type, event_payload
+      FROM events
+      WHERE execution_id = ?
+      ORDER BY timestamp ASC
+    `;
+    const plan = database
+      .prepare(`EXPLAIN QUERY PLAN ${legacyQuery}`)
+      .all("group-a") as Array<{ detail: string }>;
+    expect(plan.map(({ detail }) => detail).join(" ")).toContain(
+      adversarialFlowcraftIndex,
+    );
+    const incidentalOrder = database
+      .prepare(legacyQuery)
+      .all("group-a") as Array<{
+      event_payload: string;
+    }>;
+    expect(
+      incidentalOrder.map(
+        ({ event_payload }) =>
+          (JSON.parse(event_payload) as { value: number }).value,
+      ),
+    ).toEqual([2, 1]);
+
+    expect(
+      payloadValues(await persistence.flowcraftHistory.replay("group-a")),
+    ).toEqual([1, 2]);
+    database.close();
+    persistence.close();
+  });
+
+  it("replays multiple equal-timestamp Flowcraft executions in durable append order", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const database = new Database(persistence.databasePath);
+    addAdversarialFlowcraftIndex(database);
+    insertFlowcraftEvent(database, "group-b", 1);
+    insertFlowcraftEvent(database, "group-a", 1);
+    insertFlowcraftEvent(database, "group-b", 2);
+    insertFlowcraftEvent(database, "group-a", 2);
+
+    const legacyQuery = `
+      SELECT execution_id, event_type, event_payload
+      FROM events
+      WHERE execution_id IN (?, ?)
+      ORDER BY execution_id, timestamp ASC
+    `;
+    const plan = database
+      .prepare(`EXPLAIN QUERY PLAN ${legacyQuery}`)
+      .all("group-a", "group-b") as Array<{ detail: string }>;
+    expect(plan.map(({ detail }) => detail).join(" ")).toContain(
+      adversarialFlowcraftIndex,
+    );
+    const incidentalOrder = database
+      .prepare(legacyQuery)
+      .all("group-a", "group-b") as Array<{
+      event_payload: string;
+      execution_id: string;
+    }>;
+    expect(
+      incidentalOrder.map(({ event_payload, execution_id }) => [
+        execution_id,
+        (JSON.parse(event_payload) as { value: number }).value,
+      ]),
+    ).toEqual([
+      ["group-a", 2],
+      ["group-a", 1],
+      ["group-b", 2],
+      ["group-b", 1],
+    ]);
+
+    const replayed = await persistence.flowcraftHistory.replayMultiple([
+      "group-a",
+      "group-b",
+    ]);
+    expect(payloadValues(replayed.get("group-a") ?? [])).toEqual([1, 2]);
+    expect(payloadValues(replayed.get("group-b") ?? [])).toEqual([1, 2]);
+    database.close();
+    persistence.close();
   });
 });
