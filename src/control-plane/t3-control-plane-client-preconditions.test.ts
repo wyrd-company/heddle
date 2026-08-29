@@ -166,9 +166,7 @@ describe("T3ControlPlaneClient preconditions", () => {
   it("rejects cross-driver provider context before contacting T3", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse({ threads: [{ id: "thread-1" }] }),
-      )
+      .mockResolvedValueOnce(jsonResponse({ threads: [{ id: "thread-1" }] }))
       .mockResolvedValueOnce(jsonResponse({ sequence: 1 }));
     const client = new T3ControlPlaneClient({
       baseUrl: "http://t3.test",
