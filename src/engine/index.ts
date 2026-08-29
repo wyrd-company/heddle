@@ -21,6 +21,7 @@ export type {
   LifecycleEffect,
   LifecycleEffectInput,
   LifecycleEngineOptions,
+  LifecycleNode,
   LifecyclePersistence,
   LifecycleSnapshot,
   PendingTransition,

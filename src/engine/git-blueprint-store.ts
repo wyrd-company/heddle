@@ -4,7 +4,14 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  extname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { promisify } from "node:util";
 
 import type { LifecycleBlueprint } from "./types.js";
@@ -12,8 +19,27 @@ import { BlueprintValidationError } from "./errors.js";
 
 const execFileAsync = promisify(execFile);
 const gitObjectId = /^[0-9a-f]{40,64}$/;
+const artifactIdPattern = /^[a-z]+(?:-[a-z]+)*$/;
 
-const parseBlueprint = (serialized: string): LifecycleBlueprint => {
+const artifactIdFromPath = (path: string): string => {
+  if (extname(path) !== ".json") {
+    throw new BlueprintValidationError(
+      "Blueprint artifact path must end in .json",
+    );
+  }
+  const artifactId = basename(path, ".json");
+  if (!artifactIdPattern.test(artifactId)) {
+    throw new BlueprintValidationError(
+      "Blueprint artifact filename must be a kebab ID",
+    );
+  }
+  return artifactId;
+};
+
+const parseBlueprint = (
+  serialized: string,
+  artifactId: string,
+): LifecycleBlueprint => {
   let value: unknown;
   try {
     value = JSON.parse(serialized);
@@ -25,18 +51,21 @@ const parseBlueprint = (serialized: string): LifecycleBlueprint => {
   if (
     typeof value !== "object" ||
     value === null ||
-    !("id" in value) ||
-    typeof value.id !== "string" ||
     !("nodes" in value) ||
     !Array.isArray(value.nodes) ||
     !("edges" in value) ||
     !Array.isArray(value.edges)
   ) {
     throw new BlueprintValidationError(
-      "Blueprint must contain a string id and node and edge arrays",
+      "Blueprint must contain node and edge arrays",
     );
   }
-  return value as LifecycleBlueprint;
+  if ("id" in value) {
+    throw new BlueprintValidationError(
+      "Blueprint artifact ID must come from its filename, not an id field",
+    );
+  }
+  return { ...value, id: artifactId } as LifecycleBlueprint;
 };
 
 export class GitBlueprintStore {
@@ -61,7 +90,10 @@ export class GitBlueprintStore {
     );
     return {
       blobHash,
-      blueprint: await this.read(blobHash),
+      blueprint: await this.read(
+        blobHash,
+        relative(this.repositoryRoot, repositoryPath),
+      ),
       path: relative(this.repositoryRoot, repositoryPath),
     };
   }
@@ -70,7 +102,7 @@ export class GitBlueprintStore {
     return relative(this.repositoryRoot, this.resolveRepositoryPath(path));
   }
 
-  async read(blobHash: string): Promise<LifecycleBlueprint> {
+  async read(blobHash: string, path: string): Promise<LifecycleBlueprint> {
     if (!gitObjectId.test(blobHash)) {
       throw new BlueprintValidationError("Invalid blueprint git blob hash");
     }
@@ -79,7 +111,7 @@ export class GitBlueprintStore {
       ["cat-file", "blob", blobHash],
       { cwd: this.repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
     );
-    return parseBlueprint(stdout);
+    return parseBlueprint(stdout, artifactIdFromPath(path));
   }
 
   private resolveRepositoryPath(path: string): string {

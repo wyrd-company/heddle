@@ -84,9 +84,11 @@ export const makeFixture = async (
   await execFileAsync("git", ["init", "--quiet"], { cwd: repositoryRoot });
   await mkdir(join(repositoryRoot, "blueprints"));
   const blueprintPath = "blueprints/sample.json";
+  const artifact = { ...blueprint } as Partial<LifecycleBlueprint>;
+  delete artifact.id;
   await writeFile(
     join(repositoryRoot, blueprintPath),
-    JSON.stringify(blueprint),
+    JSON.stringify(artifact),
   );
   const persistence = new SqlitePersistence({
     stateDirectory: join(repositoryRoot, "state"),

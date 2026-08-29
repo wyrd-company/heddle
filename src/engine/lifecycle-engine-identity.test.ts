@@ -191,7 +191,10 @@ describe("LifecycleEngine identity", () => {
     const secondPath = "blueprints/second.json";
     await writeFile(
       join(fixture.repositoryRoot, secondPath),
-      JSON.stringify(secondBlueprint),
+      JSON.stringify({
+        edges: secondBlueprint.edges,
+        nodes: secondBlueprint.nodes,
+      }),
     );
 
     await fixture.engine.start({

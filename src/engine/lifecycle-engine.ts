@@ -73,6 +73,7 @@ export class LifecycleEngine {
       }
       const blueprint = await this.blueprintStore.read(
         context.blueprintBlobHash,
+        context.blueprintPath,
       );
       validateBlueprint(blueprint, this.effects);
       return this.execute(existing, blueprint, startLanding(blueprint));
@@ -122,7 +123,10 @@ export class LifecycleEngine {
     }
     record = flushPendingAttentions(this.persistence, input.instanceId);
     let context = readLifecycleContext(record);
-    const blueprint = await this.blueprintStore.read(context.blueprintBlobHash);
+    const blueprint = await this.blueprintStore.read(
+      context.blueprintBlobHash,
+      context.blueprintPath,
+    );
     validateBlueprint(blueprint, this.effects);
     const requestFingerprint = resumeOperationFingerprint(input);
     if (Object.hasOwn(context.completedOperations, input.operationId)) {

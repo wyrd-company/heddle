@@ -24,9 +24,14 @@ export interface LifecycleEdge extends EdgeDefinition {
   disposition?: string;
 }
 
+export interface LifecycleNode extends NodeDefinition {
+  "todo-template"?: string;
+  tools?: string[];
+}
+
 export interface LifecycleBlueprint extends WorkflowBlueprint {
   edges: LifecycleEdge[];
-  nodes: NodeDefinition[];
+  nodes: LifecycleNode[];
 }
 
 export interface LifecycleEffectInput {
