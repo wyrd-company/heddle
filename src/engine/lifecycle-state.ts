@@ -89,6 +89,15 @@ export const resumeOperationFingerprint = (
     output: input.output ?? {},
   });
 
+const withCompletedOperation = (
+  completedOperations: Record<string, CompletedLifecycleOperation>,
+  operationId: string,
+  operation: CompletedLifecycleOperation,
+): Record<string, CompletedLifecycleOperation> => ({
+  ...completedOperations,
+  [operationId]: operation,
+});
+
 export const persistExecution = (
   persistence: LifecyclePersistence,
   instanceId: string,
@@ -124,31 +133,33 @@ export const persistExecution = (
       pendingOperation.requestFingerprint !== null &&
       completion !== undefined
     ) {
-      completedOperations = {
-        ...completedOperations,
-        [pendingOperation.operationId]: {
+      completedOperations = withCompletedOperation(
+        completedOperations,
+        pendingOperation.operationId,
+        {
           awaitingNodeIds: [...completion.awaitingNodeIds],
           executionIds: [...executionIds],
           requestFingerprint: pendingOperation.requestFingerprint,
           status: completion.status,
           transitionId: pendingTransitionId,
         },
-      };
+      );
     } else if (executionId !== undefined) {
       const completedEntry = Object.entries(completedOperations).find(
         ([, operation]) => operation.transitionId === pendingTransitionId,
       ) as [string, CompletedLifecycleOperation] | undefined;
       if (completedEntry !== undefined) {
         const [operationId, operation] = completedEntry;
-        completedOperations = {
-          ...completedOperations,
-          [operationId]: {
+        completedOperations = withCompletedOperation(
+          completedOperations,
+          operationId,
+          {
             ...operation,
             executionIds: operation.executionIds.includes(executionId)
               ? operation.executionIds
               : [...operation.executionIds, executionId],
           },
-        };
+        );
       }
     }
     if (

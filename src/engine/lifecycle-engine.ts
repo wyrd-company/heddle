@@ -122,11 +122,8 @@ export class LifecycleEngine {
     validateBlueprint(blueprint, this.effects);
     const requestFingerprint = resumeOperationFingerprint(input);
     if (Object.hasOwn(context.completedOperations, input.operationId)) {
-      const completed = context.completedOperations[input.operationId];
-      if (
-        completed === undefined ||
-        completed.requestFingerprint !== requestFingerprint
-      ) {
+      const completed = context.completedOperations[input.operationId]!;
+      if (completed.requestFingerprint !== requestFingerprint) {
         throw new TransitionConflictError(input.instanceId);
       }
       return this.snapshot(
