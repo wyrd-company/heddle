@@ -24,7 +24,7 @@ describe("resolveT3AwarenessPhase", () => {
   it.each<[string, Partial<T3ShellThread>, string]>([
     [
       "prioritizes approval",
-      { hasPendingApprovals: true },
+      { hasPendingApprovals: true, hasPendingUserInput: true },
       "waiting_for_approval",
     ],
     [
