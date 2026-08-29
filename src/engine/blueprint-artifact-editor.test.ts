@@ -106,12 +106,22 @@ describe("blueprint artifact editor", () => {
         ),
     );
     const loaded = await setup.editor.load(artifactId);
+    const reorderedNodes = loaded.blueprint.nodes.map(
+      ({ id, ...properties }) => ({ ...properties, id }),
+    );
+    const reorderedEdges = loaded.blueprint.edges.map(
+      ({ source, target, ...properties }) => ({
+        ...properties,
+        source,
+        target,
+      }),
+    );
 
     const saved = await setup.editor.save({
       artifactId,
-      edges: loaded.blueprint.edges,
+      edges: reorderedEdges,
       expectedBlobHash: loaded.blobHash,
-      nodes: loaded.blueprint.nodes,
+      nodes: reorderedNodes,
       positions: {
         finish: { x: 540, y: 80 },
         inspect: { x: 270, y: 180 },

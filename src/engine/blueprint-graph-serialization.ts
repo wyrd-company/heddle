@@ -3,6 +3,8 @@
 //   implements: heddle
 // ---
 
+import { isDeepStrictEqual } from "node:util";
+
 import { BlueprintValidationError } from "./errors.js";
 
 const scanStringEnd = (source: string, start: number): number => {
@@ -130,7 +132,7 @@ export const preserveUnchangedGraphBytes = (
       const originalItem = originals.get(candidateKeys[itemIndex]);
       if (
         originalItem !== undefined &&
-        JSON.stringify(originalItem.value) === JSON.stringify(item.value)
+        isDeepStrictEqual(originalItem.value, item.value)
       ) {
         replacements.push({
           end: item.end,
