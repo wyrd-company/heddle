@@ -114,13 +114,16 @@ describe("ensureWorktree", () => {
   });
 
   it("rejects path traversal names", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+    scratchDirectories.push(scratch);
     await expect(
       ensureWorktree({
         baseRef: "main",
         branch: "task/prepare",
         repositoryName: "../outside",
-        repositoryRoot: "/workspaces/sample-repository",
+        repositoryRoot: join(scratch, "source"),
         worktreeName: "task-prepare",
+        worktreesRoot: join(scratch, "worktrees"),
       }),
     ).rejects.toThrow(/safe path segment/);
   });
