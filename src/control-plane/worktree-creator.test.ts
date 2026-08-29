@@ -108,6 +108,38 @@ describe("ensureWorktree", () => {
     ).rejects.toThrow();
   });
 
+  it("treats a valid option-shaped base ref as a revision operand", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+    scratchDirectories.push(scratch);
+    const repositoryRoot = join(scratch, "source");
+    const worktreesRoot = join(scratch, "worktrees");
+    await initializeRepository(repositoryRoot);
+    await exec("git", ["update-ref", "refs/tags/--no-checkout", "HEAD"], {
+      cwd: repositoryRoot,
+    });
+    const expectedHead = (
+      await exec("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot })
+    ).stdout;
+    await exec(
+      "git",
+      ["commit", "--allow-empty", "--quiet", "-m", "later change"],
+      { cwd: repositoryRoot },
+    );
+
+    const created = await ensureWorktree({
+      baseRef: "--no-checkout",
+      branch: "task/prepare",
+      repositoryName: "sample-repository",
+      repositoryRoot,
+      worktreeName: "task-prepare",
+      worktreesRoot,
+    });
+
+    expect(
+      (await exec("git", ["rev-parse", "HEAD"], { cwd: created.path })).stdout,
+    ).toBe(expectedHead);
+  });
+
   it("rejects an unrelated repository at the owned path", async () => {
     const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
     scratchDirectories.push(scratch);

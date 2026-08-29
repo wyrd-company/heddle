@@ -48,19 +48,22 @@ const assertPathSegment = (label: string, value: string): void => {
   }
 };
 
-const assertCommitRef = async (
+const resolveCommitRef = async (
   repositoryRoot: string,
   baseRef: string,
   git: GitRunner,
-): Promise<void> => {
+): Promise<string> => {
   try {
-    await git(repositoryRoot, [
+    const commit = await git(repositoryRoot, [
       "rev-parse",
       "--verify",
       "--quiet",
       "--end-of-options",
       `${baseRef}^{commit}`,
     ]);
+    const normalizedCommit = commit.trim();
+    if (normalizedCommit === "") throw new Error("empty commit");
+    return normalizedCommit;
   } catch {
     throw new TypeError(`baseRef '${baseRef}' must resolve to a commit`);
   }
@@ -116,7 +119,11 @@ export const ensureWorktree = async (
   if (input.baseRef.trim() === "")
     throw new TypeError("baseRef must not be empty");
 
-  await assertCommitRef(input.repositoryRoot, input.baseRef, git);
+  const baseCommit = await resolveCommitRef(
+    input.repositoryRoot,
+    input.baseRef,
+    git,
+  );
 
   const path = join(
     input.worktreesRoot ?? "/workspaces/worktrees",
@@ -151,7 +158,7 @@ export const ensureWorktree = async (
         input.branch,
         "--",
         path,
-        input.baseRef,
+        baseCommit,
       ];
   let created = true;
   try {
