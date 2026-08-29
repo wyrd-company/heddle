@@ -262,12 +262,9 @@ describe("LifecycleEngine", () => {
     joinFixture.persistence.close();
   });
 
-  it("raises attention when Flowcraft silently completes before the expected wait", async () => {
+  it("raises attention when Flowcraft silently completes before the terminal effect", async () => {
     const blueprint = sampleBlueprint();
-    blueprint.nodes.push(
-      { id: "gate", uses: "gate" },
-      { id: "confirm", uses: "wait" },
-    );
+    blueprint.nodes.push({ id: "gate", uses: "gate" });
     const acceptEdge = blueprint.edges.find(
       ({ disposition }) => disposition === "accept",
     );
@@ -275,15 +272,8 @@ describe("LifecycleEngine", () => {
     acceptEdge.target = "gate";
     blueprint.edges.push({
       source: "gate",
-      target: "confirm",
-      condition: "result.output.continue",
-    });
-    blueprint.edges.push({
-      source: "confirm",
       target: "serve",
-      disposition: "finish",
-      description: "Finish the sample",
-      condition: "result.output.dispositions.finish",
+      condition: "result.output.continue",
     });
     const fixture = await makeFixture(blueprint, {
       gate: async () => ({ effect: "gate" }),
@@ -309,7 +299,7 @@ describe("LifecycleEngine", () => {
     expect(attention).toHaveLength(1);
     expect(attention[0]?.payload).toMatchObject({
       actualStatus: "completed",
-      expectedAwaitingNodeIds: ["confirm"],
+      expectedTerminalNodeIds: ["serve"],
     });
     expect(
       fixture.persistence.getInstance("sample-a")?.state.flowcraftContext,
