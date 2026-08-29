@@ -198,6 +198,65 @@ describe("stage session cold retry guards", () => {
     expect(memory.record.state.handoffs[0]?.["handoff"]).toBe(result.handoff);
   });
 
+  it("rejects an old-stage handoff when todo instantiation crosses a lifecycle advance", async () => {
+    const memory = memoryStore({
+      ...initialState(),
+      flowcraftContext: { awaitingNodeIds: ["prepare"] },
+    });
+    let advanced = false;
+    const instantiateAcrossAdvance: typeof instantiateTodoList = async (
+      instantiateInput,
+    ) => {
+      const current = memory.record;
+      advanced =
+        memory.store.compareAndSwapInstance(
+          current.instanceId,
+          current.version,
+          {
+            ...current.state,
+            flowcraftContext: { awaitingNodeIds: ["next"] },
+          },
+        ) !== undefined;
+      return instantiateTodoList(instantiateInput);
+    };
+    const resolveAwaitingStage: NonNullable<
+      SessionBootstrapDependencies["resolveWorkflowMcpStageContract"]
+    > = async (bootstrapInput, record) => {
+      const context = record.state.flowcraftContext as {
+        awaitingNodeIds: string[];
+      };
+      if (context.awaitingNodeIds[0] !== bootstrapInput.handoff.stage.name) {
+        throw new Error(
+          "Stage session bootstrap does not match the awaiting lifecycle stage",
+        );
+      }
+      return workflowMcp;
+    };
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(input, {
+        persistence: memory.store,
+        instantiateTodoList: instantiateAcrossAdvance,
+        resolveWorkflowMcpStageContract: resolveAwaitingStage,
+        t3: { dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+        mintCorrelationToken: () => "correlation-token",
+      }),
+    ).rejects.toThrow("does not match the awaiting lifecycle stage");
+
+    expect(advanced).toBe(true);
+    expect(memory.record.state.flowcraftContext).toEqual({
+      awaitingNodeIds: ["next"],
+    });
+    expect(memory.record.state.handoffs).toHaveLength(0);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the stored handoff token disagrees", async () => {
     const memory = memoryStore({
       ...initialState(),

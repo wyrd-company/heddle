@@ -221,16 +221,16 @@ const ensureStoredHandoff = async (
       return existing.handoff;
     }
 
-    const workflowMcp = await resolveStageContract(input, current);
+    const templateContract = await resolveStageContract(input, current);
     await ensureStageTodoList(
       store,
       {
         instanceId: input.instanceId,
         repositoryRoot: input.worktree.repositoryRoot,
         sessionKey: input.sessionKey,
-        stage: workflowMcp.stage,
+        stage: templateContract.stage,
         taskContract: input.handoff.taskContract,
-        templateId: workflowMcp.todoTemplate,
+        templateId: templateContract.todoTemplate,
       },
       instantiate,
     );
@@ -245,6 +245,7 @@ const ensureStoredHandoff = async (
     ) {
       continue;
     }
+    const workflowMcp = await resolveStageContract(input, refreshed);
     const { list: todoList, state: todoState } = stageTodoList(
       refreshed,
       input.sessionKey,
