@@ -20,3 +20,25 @@ together. Other spike support scripts remain in `scripts/spike`.
 
 The canonical per-workspace scheduler and adapter configuration is documented
 in [Production composition](docs/operators/production-composition.md).
+
+## Validation
+
+`task test` builds the service, runs the unit and integration tests, and then
+runs the checked-in console browser qualification. Use `task test:unit` for the
+non-browser suite or `task browser:qualification` for the browser suite alone.
+`task ci` runs the complete repository test and lint path.
+
+The browser qualification uses deterministic generic fixtures and an isolated
+`agent-browser` session. It covers the board, dependency graph, lifecycle view,
+and attention overlay at desktop, mobile, and the 679/690/740/800/801-pixel
+boundary widths. It checks WCAG A/AA axe results, computed accessible names,
+visible keyboard focus, board and graph scrolling, authorized actions,
+dependency geometry, lifecycle event tails, attention deep links, and browser
+console, runtime, and network activity. Named live mutants must independently
+kill the prohibited-ARIA, name, focusability, keyboard, contrast, incomplete
+result, node-height, spacing, and edge-anchor guards.
+
+All audited views require zero axe violations. Attention focus audits require
+zero incomplete results. Tldraw lifecycle-node overlap and horizontally clipped
+mobile board headers are the only accepted incomplete results; the suite bounds
+each affected target and verifies its effective foreground/background contrast.

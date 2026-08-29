@@ -16,10 +16,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
+    "browser:qualification": "node scripts/browser/qualify-console.mjs",
     "build": "tsc --project tsconfig.json && tsc --project tsconfig.viewer.json && vite build",
     "test": "vitest run --config vitest.config.ts",
-    "lint": "eslint src bin scripts/deployment eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment",
-    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment"
+    "lint": "eslint src bin scripts/deployment scripts/browser eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment scripts/browser",
+    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment scripts/browser"
   },
   "keywords": [],
   "author": "",
@@ -36,6 +37,7 @@
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "agent-browser": "0.34.0",
     "eslint": "^9.34.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",

@@ -2,23 +2,48 @@ version: "3"
 
 tasks:
   build:
+    desc: Build the service and console viewer
     cmds:
       - npm run build
 
-  test:
+  test:unit:
+    desc: Run the unit and integration tests
+    deps: [build]
     cmds:
       - npm test
 
+  browser:qualification:
+    desc: Qualify console accessibility in a real browser
+    deps: [build]
+    cmds:
+      - npm run browser:qualification
+
+  test:
+    desc: Run the repository test path
+    deps: [build]
+    cmds:
+      - npm test
+      - npm run browser:qualification
+
   lint:
+    desc: Check source and artifact formatting
     cmds:
       - npm run lint
 
+  ci:
+    desc: Run the continuous integration gate
+    cmds:
+      - task: test
+      - task: lint
+
   deployment:package:
+    desc: Qualify the packaged deployment artifact
     deps: [build]
     cmds:
       - scripts/deployment/package-feature.sh
 
   deployment:qualification:
+    desc: Qualify the deployment feature
     deps: [build]
     cmds:
       - scripts/deployment/qualify-feature.sh
