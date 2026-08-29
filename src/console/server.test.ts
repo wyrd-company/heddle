@@ -156,6 +156,13 @@ describe("console server", () => {
     expect(clientSource).toContain("const requestedScope = scopeFromUrl();");
     expect(clientSource).toContain("if (isEpic(task)) {");
     expect(clientSource).toContain('stage.className = "stage-readout"');
+    expect(clientSource).toContain(
+      'await fetchJson("/api/epics/" + task.id + "/in-progress", {',
+    );
+    expect(clientSource).toContain(
+      "body: JSON.stringify({ inProgress: target })",
+    );
+    expect(clientSource).toContain('method: "PUT"');
     await expect(boardResponse.json()).resolves.toMatchObject({
       statuses: ["todo", "in-progress", "done"],
       tasks: expect.arrayContaining([expect.objectContaining({ id: 52 })]),
