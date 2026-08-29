@@ -1,0 +1,228 @@
+// ---
+// relationships:
+//   verifies: heddle
+// ---
+
+import { describe, expect, it } from "vitest";
+
+import { DispatchPacingGate, PROVIDER_USAGE_WINDOW_MS } from "./index.js";
+import type {
+  PacingConfiguration,
+  ProviderUsageSource,
+  ProviderUsageWindow,
+} from "./types.js";
+
+class UsageStub implements ProviderUsageSource {
+  readonly reads: string[] = [];
+
+  public constructor(
+    private readonly windows: Record<string, ProviderUsageWindow>,
+  ) {}
+
+  async readFiveHourWindow(provider: string): Promise<ProviderUsageWindow> {
+    this.reads.push(provider);
+    const window = this.windows[provider];
+    if (window === undefined) throw new Error(`No usage for ${provider}`);
+    return { ...window };
+  }
+}
+
+const configuration = (
+  overrides: Partial<PacingConfiguration> = {},
+): PacingConfiguration => ({
+  defaultProvider: "provider-a",
+  maxConcurrentSessions: 2,
+  providerBudgets: { "provider-a": { usageLimit: 80 } },
+  subagents: { maxDepth: 2, maxFanOut: 2 },
+  ...overrides,
+});
+
+describe("DispatchPacingGate", () => {
+  it("defers at the shared WIP limit and dispatches after capacity is freed", async () => {
+    const usage = new UsageStub({
+      "provider-a": { used: 10, windowStartedAt: 1_000 },
+    });
+    const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+    const request = {
+      kind: "task" as const,
+      provider: "provider-a",
+      sessionId: "session-c",
+    };
+    const active = [
+      { depth: 0, provider: "provider-a", sessionId: "session-a" },
+      { depth: 0, provider: "provider-b", sessionId: "session-b" },
+    ];
+
+    await expect(gate.evaluate(request, active)).resolves.toEqual({
+      deferral: {
+        activeSessions: 2,
+        limit: 2,
+        reason: "work-in-progress-limit",
+      },
+      kind: "defer",
+    });
+    expect(usage.reads).toEqual([]);
+    await expect(gate.evaluate(request, active.slice(1))).resolves.toEqual({
+      kind: "dispatch",
+    });
+  });
+
+  it("defers exhausted provider usage until the five-hour window opens", async () => {
+    const windowStartedAt = 10_000;
+    const usage = new UsageStub({
+      "provider-a": { used: 80, windowStartedAt },
+    });
+    let now = windowStartedAt + 1;
+    const gate = new DispatchPacingGate(configuration(), usage, () => now);
+    const request = {
+      kind: "task" as const,
+      provider: "provider-a",
+      sessionId: "session-a",
+    };
+
+    await expect(gate.evaluate(request, [])).resolves.toEqual({
+      deferral: {
+        limit: 80,
+        provider: "provider-a",
+        reason: "provider-usage-window",
+        retryAt: windowStartedAt + PROVIDER_USAGE_WINDOW_MS,
+        used: 80,
+      },
+      kind: "defer",
+    });
+
+    now = windowStartedAt + PROVIDER_USAGE_WINDOW_MS;
+    await expect(gate.evaluate(request, [])).resolves.toEqual({
+      kind: "dispatch",
+    });
+    expect(usage.reads).toEqual(["provider-a", "provider-a"]);
+  });
+
+  it("enforces subagent depth and fan-out before shared capacity", async () => {
+    const usage = new UsageStub({
+      "provider-a": { used: 0, windowStartedAt: 1_000 },
+    });
+    const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+    const active = [
+      {
+        depth: 1,
+        parentSessionId: "parent-a",
+        provider: "provider-a",
+        sessionId: "child-a",
+      },
+      {
+        depth: 1,
+        parentSessionId: "parent-a",
+        provider: "provider-a",
+        sessionId: "child-b",
+      },
+    ];
+
+    await expect(
+      gate.evaluate(
+        {
+          depth: 3,
+          kind: "subagent",
+          parentSessionId: "parent-a",
+          provider: "provider-a",
+          sessionId: "child-c",
+        },
+        active,
+      ),
+    ).resolves.toEqual({
+      deferral: {
+        limit: 2,
+        reason: "subagent-depth-limit",
+        requestedDepth: 3,
+      },
+      kind: "defer",
+    });
+
+    await expect(
+      gate.evaluate(
+        {
+          depth: 2,
+          kind: "subagent",
+          parentSessionId: "parent-a",
+          provider: "provider-a",
+          sessionId: "child-c",
+        },
+        active,
+      ),
+    ).resolves.toEqual({
+      deferral: {
+        activeChildren: 2,
+        limit: 2,
+        parentSessionId: "parent-a",
+        reason: "subagent-fan-out-limit",
+      },
+      kind: "defer",
+    });
+
+    await expect(
+      gate.evaluate(
+        {
+          depth: 2,
+          kind: "subagent",
+          parentSessionId: "parent-a",
+          provider: "provider-a",
+          sessionId: "child-c",
+        },
+        active.slice(1),
+      ),
+    ).resolves.toEqual({ kind: "dispatch" });
+  });
+
+  it("makes subagents draw from the same WIP and provider budgets", async () => {
+    const usage = new UsageStub({
+      "provider-a": { used: 80, windowStartedAt: 1_000 },
+    });
+    const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+    const request = {
+      depth: 1,
+      kind: "subagent" as const,
+      parentSessionId: "parent-a",
+      provider: "provider-a",
+      sessionId: "child-a",
+    };
+
+    await expect(
+      gate.evaluate(request, [
+        { depth: 0, provider: "provider-a", sessionId: "session-a" },
+        { depth: 0, provider: "provider-b", sessionId: "session-b" },
+      ]),
+    ).resolves.toMatchObject({
+      deferral: { reason: "work-in-progress-limit" },
+      kind: "defer",
+    });
+    await expect(gate.evaluate(request, [])).resolves.toMatchObject({
+      deferral: { reason: "provider-usage-window" },
+      kind: "defer",
+    });
+  });
+
+  it("rejects invalid configuration and provider observations", async () => {
+    const usage = new UsageStub({
+      "provider-a": { used: -1, windowStartedAt: 1_000 },
+    });
+    expect(
+      () =>
+        new DispatchPacingGate(
+          configuration({ maxConcurrentSessions: -1 }),
+          usage,
+        ),
+    ).toThrow("maxConcurrentSessions must be a non-negative safe integer");
+
+    const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+    await expect(
+      gate.evaluate(
+        {
+          kind: "task",
+          provider: "provider-a",
+          sessionId: "session-a",
+        },
+        [],
+      ),
+    ).rejects.toThrow("provider-a usage must be a non-negative safe integer");
+  });
+});
