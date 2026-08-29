@@ -1,0 +1,14 @@
+version: "3"
+
+tasks:
+  build:
+    cmds:
+      - npm run build
+
+  test:
+    cmds:
+      - npm test
+
+  lint:
+    cmds:
+      - npm run lint

@@ -1,14 +1,20 @@
 {
-  "name": "spike-flowcraft-gate",
+  "name": "heddle",
   "version": "1.0.0",
-  "description": "Orchestration service",
-  "main": "index.js",
+  "description": "Workflow service for software delivery tasks",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "eslint src eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src",
+    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src",
+    "spike:viewer": "vite"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@flowcraft/sqlite-history": "^1.0.0-alpha.1",
@@ -22,6 +28,15 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.1.1",
-    "vite": "^8.2.2"
+    "@types/node": "^24.10.1",
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "@typescript-eslint/parser": "^8.41.0",
+    "eslint": "^9.34.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "vite": "^8.2.2",
+    "vitest": "^3.2.4"
   }
 }
