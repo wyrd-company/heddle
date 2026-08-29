@@ -229,6 +229,13 @@ describe("abandoned activation todo state", () => {
           sessionKey: "mismatched-stage",
           workflowMcp,
         },
+        {
+          correlationToken: "stored-token",
+          handoff: document("document-token"),
+          kind: "stage-handoff",
+          sessionKey: "mismatched-token",
+          workflowMcp,
+        },
       ],
       todoState: {
         format: "heddle.todo-state",
@@ -236,6 +243,7 @@ describe("abandoned activation todo state", () => {
           list("missing-contract"),
           list("invalid-document"),
           list("mismatched-stage"),
+          list("mismatched-token"),
         ],
         version: 1,
       },
@@ -267,6 +275,7 @@ describe("abandoned activation todo state", () => {
       "missing-contract",
       "invalid-document",
       "mismatched-stage",
+      "mismatched-token",
       "prepare-1",
     ]);
   });
