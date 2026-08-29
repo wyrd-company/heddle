@@ -416,6 +416,75 @@ describe("delivery mechanical nodes", () => {
     ).resolves.toMatchObject({ merged: true });
   });
 
+  it("approves the exact merge when the base branch is not checked out", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await git(fixture.sourcePath, "switch", "--detach");
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).resolves.toMatchObject({ merged: true });
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).resolves.toMatchObject({ alreadyMerged: true });
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      snapshot.sourceHead + "\n",
+    );
+    expect(
+      await git(
+        fixture.sourcePath,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/gitpr/index/approved",
+      ),
+    ).toContain(snapshot.snapshotId);
+    expect(
+      await git(fixture.sourcePath, "worktree", "list", "--porcelain"),
+    ).not.toContain(`${fixture.change.worktreeName}.merge-base`);
+  });
+
+  it("removes an approval worktree on replay after approval was recorded", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const approvalWorktreePath = join(
+      fixture.change.worktreesRoot!,
+      fixture.change.repositoryName,
+      `${fixture.change.worktreeName}.merge-base`,
+    );
+    await git(fixture.sourcePath, "switch", "--detach");
+    let interrupted = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (
+        !interrupted &&
+        executable === "git" &&
+        arguments_[0] === "worktree" &&
+        arguments_[1] === "remove" &&
+        arguments_.at(-1) === approvalWorktreePath
+      ) {
+        interrupted = true;
+        throw new Error("simulated approval cleanup interruption");
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
+    ).rejects.toThrow(/approval cleanup interruption/);
+    await expect(lstat(approvalWorktreePath)).resolves.toBeDefined();
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).resolves.toMatchObject({ alreadyMerged: true });
+    await expect(lstat(approvalWorktreePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("fails a conflicting merge and preserves both branch heads", async () => {
     const fixture = await prepareCommittedChange();
     await writeFile(join(fixture.sourcePath, "inventory.txt"), "replacement\n");

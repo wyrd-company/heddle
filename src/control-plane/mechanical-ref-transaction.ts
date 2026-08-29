@@ -5,7 +5,14 @@
 
 import { spawn } from "node:child_process";
 
-import { runMechanicalGit, type CommandRunner } from "./review-snapshot.js";
+import { ensureWorktree } from "./worktree-creator.js";
+import {
+  assertCleanMechanicalWorktree,
+  mechanicalWorktreePath,
+  runMechanicalGit,
+  type CommandRunner,
+  type MechanicalChangeContext,
+} from "./review-snapshot.js";
 
 export const assertMechanicalBranchRefs = async (
   command: CommandRunner,
@@ -48,6 +55,64 @@ export const mechanicalWorktreesForBranch = async (
       return actualBranch === branchRef ? path : undefined;
     })
     .filter((path): path is string => path !== undefined);
+};
+
+const mechanicalApprovalWorktreePath = (
+  change: MechanicalChangeContext,
+): string =>
+  mechanicalWorktreePath({
+    ...change,
+    worktreeName: `${change.worktreeName}.merge-base`,
+  });
+
+export const provisionMechanicalApprovalWorktree = async (
+  command: CommandRunner,
+  change: MechanicalChangeContext,
+  baseWorktrees: string[],
+  mergedHead: string,
+): Promise<{ baseWorktrees: string[]; ownsApprovalWorktree: boolean }> => {
+  const approvalWorktreePath = mechanicalApprovalWorktreePath(change);
+  if (baseWorktrees.length > 0) {
+    return {
+      baseWorktrees,
+      ownsApprovalWorktree: baseWorktrees.includes(approvalWorktreePath),
+    };
+  }
+  await ensureWorktree(
+    {
+      baseRef: mergedHead,
+      branch: change.baseBranch,
+      repositoryName: change.repositoryName,
+      repositoryRoot: change.repositoryRoot,
+      worktreeName: `${change.worktreeName}.merge-base`,
+      worktreesRoot: change.worktreesRoot,
+    },
+    (cwd, arguments_) => runMechanicalGit(command, cwd, arguments_),
+  );
+  return {
+    baseWorktrees: [approvalWorktreePath],
+    ownsApprovalWorktree: true,
+  };
+};
+
+export const removeMechanicalApprovalWorktree = async (
+  command: CommandRunner,
+  change: MechanicalChangeContext,
+): Promise<void> => {
+  const path = mechanicalApprovalWorktreePath(change);
+  const baseWorktrees = await mechanicalWorktreesForBranch(
+    command,
+    change.repositoryRoot,
+    change.baseBranch,
+  );
+  if (!baseWorktrees.includes(path)) return;
+  await assertCleanMechanicalWorktree(command, path);
+  await runMechanicalGit(command, change.repositoryRoot, [
+    "worktree",
+    "remove",
+    "--",
+    path,
+  ]);
 };
 
 export const synchronizeMechanicalBaseWorktree = async (

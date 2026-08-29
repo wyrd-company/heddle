@@ -9,6 +9,8 @@ import type { JsonValue } from "../persistence/index.js";
 import {
   assertMechanicalBranchRefs,
   mechanicalWorktreesForBranch,
+  provisionMechanicalApprovalWorktree,
+  removeMechanicalApprovalWorktree,
   runMechanicalRefTransaction,
   synchronizeMechanicalBaseWorktree,
   withMechanicalRefLease,
@@ -70,6 +72,7 @@ export const mergeReviewSnapshot = async (
       snapshot.sourceHead,
       baseHead,
     ]);
+    await removeMechanicalApprovalWorktree(command, change);
     return {
       alreadyMerged: true,
       dispositions: { merged: true, remediate: false },
@@ -111,7 +114,7 @@ export const mergeReviewSnapshot = async (
     change.baseBranch,
     change.branch,
   ]);
-  const baseWorktrees = await mechanicalWorktreesForBranch(
+  let baseWorktrees = await mechanicalWorktreesForBranch(
     command,
     change.repositoryRoot,
     change.baseBranch,
@@ -157,6 +160,13 @@ export const mergeReviewSnapshot = async (
       if (currentBaseHead !== snapshot.sourceHead) throw error;
     }
   }
+  const approvalWorktree = await provisionMechanicalApprovalWorktree(
+    command,
+    change,
+    baseWorktrees,
+    snapshot.sourceHead,
+  );
+  baseWorktrees = approvalWorktree.baseWorktrees;
   await Promise.all(
     baseWorktrees.map((path) =>
       synchronizeMechanicalBaseWorktree(
@@ -168,12 +178,33 @@ export const mergeReviewSnapshot = async (
     ),
   );
   try {
-    await withMechanicalRefLease(
-      change.repositoryRoot,
-      `refs/heads/${change.baseBranch}`,
-      snapshot.sourceHead,
-      () => command(change.repositoryRoot, "gitpr", ["merge", snapshotId]),
-    );
+    let approvalError: unknown;
+    try {
+      await withMechanicalRefLease(
+        change.repositoryRoot,
+        `refs/heads/${change.baseBranch}`,
+        snapshot.sourceHead,
+        () => command(change.repositoryRoot, "gitpr", ["merge", snapshotId]),
+      );
+    } catch (error) {
+      approvalError = error;
+    }
+    let cleanupError: unknown;
+    if (approvalWorktree.ownsApprovalWorktree) {
+      try {
+        await removeMechanicalApprovalWorktree(command, change);
+      } catch (error) {
+        cleanupError = error;
+      }
+    }
+    if (approvalError !== undefined && cleanupError !== undefined) {
+      throw new AggregateError(
+        [approvalError, cleanupError],
+        "Snapshot approval failed and its base worktree could not be removed",
+      );
+    }
+    if (approvalError !== undefined) throw approvalError;
+    if (cleanupError !== undefined) throw cleanupError;
   } catch (error) {
     const currentBaseHead = await resolveMechanicalBranchHead(
       command,
