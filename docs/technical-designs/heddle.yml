@@ -38,12 +38,11 @@ proposed-design:
     it did not. Node execution is at-least-once, so every node effect
     is idempotent.
 
-    A task's `class` front-matter selects its lifecycle through a
-    mapping in Heddle's configuration — one schema'd artifact
-    answering which class runs which blueprint. A task can override
-    the mapping with an explicit `lifecycle` front-matter property
-    naming a blueprint by artifact ID. A class with no mapping
-    raises attention; the reconciler never guesses a lifecycle.
+    Each task names its lifecycle: a `lifecycle` property on the
+    task — front matter where the board stores it, a `lifecycle:`
+    tag otherwise — selects the blueprint by artifact ID, set when
+    the task is authored. The reconciler starts no instance for a
+    task without one; it raises attention instead of guessing.
     The standard delivery lifecycle
     is implement → review → remediate loop → merge → retrospective →
     finalize; other lifecycles are shorter or different blueprints
