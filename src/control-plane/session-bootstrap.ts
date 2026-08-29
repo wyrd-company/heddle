@@ -5,6 +5,10 @@
 // ---
 
 import type { JsonValue } from "../persistence/index.js";
+import type { InstanceRecord } from "../persistence/index.js";
+import { GitBlueprintStore } from "../engine/index.js";
+import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
+import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
 import {
   ensureCorrelationToken,
   type InstanceStateStore,
@@ -23,7 +27,8 @@ import {
   type WorktreeInput,
 } from "./worktree-creator.js";
 
-type StoredStageHandoff = {
+type StoredStageHandoffCandidate = {
+  [key: string]: JsonValue;
   correlationToken: string;
   handoff: string;
   kind: "stage-handoff";
@@ -63,8 +68,14 @@ export type SessionBootstrapDependencies = {
   nextId?: () => string;
   now?: () => string;
   persistence: InstanceStateStore;
+  resolveWorkflowMcpStageContract?: WorkflowMcpStageContractResolver;
   t3: SessionT3Client;
 };
+
+export type WorkflowMcpStageContractResolver = (
+  input: SessionBootstrapInput,
+  record: InstanceRecord,
+) => Promise<WorkflowMcpStageContract>;
 
 export type SessionSteeringInput = {
   interactionMode: string;
@@ -80,7 +91,9 @@ export type SessionSteeringDependencies = {
   t3: SessionT3Client;
 };
 
-const isStoredHandoff = (value: JsonValue): value is StoredStageHandoff =>
+const isStoredHandoff = (
+  value: JsonValue,
+): value is StoredStageHandoffCandidate =>
   typeof value === "object" &&
   value !== null &&
   !Array.isArray(value) &&
@@ -89,11 +102,67 @@ const isStoredHandoff = (value: JsonValue): value is StoredStageHandoff =>
   typeof value["correlationToken"] === "string" &&
   typeof value["handoff"] === "string";
 
-const ensureStoredHandoff = (
+const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
+  async (input, record) => {
+    const context = record.state.flowcraftContext;
+    if (
+      typeof context !== "object" ||
+      context === null ||
+      Array.isArray(context) ||
+      typeof context["blueprintBlobHash"] !== "string" ||
+      typeof context["blueprintPath"] !== "string" ||
+      !Array.isArray(context["awaitingNodeIds"]) ||
+      context["awaitingNodeIds"].length !== 1 ||
+      context["awaitingNodeIds"][0] !== input.handoff.stage.name
+    ) {
+      throw new Error(
+        "Stage session bootstrap does not match the awaiting lifecycle stage",
+      );
+    }
+    const blueprint = await new GitBlueprintStore(
+      input.worktree.repositoryRoot,
+    ).read(context["blueprintBlobHash"], context["blueprintPath"]);
+    const stage = blueprint.nodes.find(
+      ({ id }) => id === input.handoff.stage.name,
+    );
+    if (stage?.uses !== "wait" || !Array.isArray(stage.tools)) {
+      throw new Error(
+        "Stage session bootstrap requires a wait-stage tool declaration",
+      );
+    }
+    const dispositions = blueprint.edges
+      .filter(
+        ({ disposition, source }) =>
+          source === stage.id && disposition !== undefined,
+      )
+      .map(({ description, disposition }) => {
+        if (
+          disposition === undefined ||
+          description === undefined ||
+          description.trim() === ""
+        ) {
+          throw new Error(
+            "Stage session bootstrap requires a description for every disposition",
+          );
+        }
+        return { description, name: disposition };
+      })
+      .sort((left, right) => left.name.localeCompare(right.name));
+    return {
+      blueprintBlobHash: context["blueprintBlobHash"],
+      blueprintPath: context["blueprintPath"],
+      dispositions,
+      stage: stage.id,
+      tools: [...stage.tools],
+    };
+  };
+
+const ensureStoredHandoff = async (
   store: InstanceStateStore,
   input: SessionBootstrapInput,
   correlationToken: string,
-): string => {
+  resolveStageContract: WorkflowMcpStageContractResolver,
+): Promise<string> => {
   while (true) {
     const current = store.getInstance(input.instanceId);
     if (current === undefined) {
@@ -108,6 +177,20 @@ const ensureStoredHandoff = (
           `Stored handoff and correlation token disagree for '${input.sessionKey}'`,
         );
       }
+      const workflowMcp = existing["workflowMcp"];
+      if (
+        workflowMcp === undefined ||
+        !isWorkflowMcpStageContract(workflowMcp)
+      ) {
+        throw new Error(
+          `Stored handoff has no valid workflow MCP contract for '${input.sessionKey}'`,
+        );
+      }
+      if (workflowMcp.stage !== input.handoff.stage.name) {
+        throw new Error(
+          `Stored handoff and workflow MCP stage disagree for '${input.sessionKey}'`,
+        );
+      }
       return existing.handoff;
     }
 
@@ -116,11 +199,13 @@ const ensureStoredHandoff = (
       correlationToken,
       todoList: current.state.todoState,
     });
-    const stored: StoredStageHandoff = {
+    const workflowMcp = await resolveStageContract(input, current);
+    const stored: StoredStageHandoffCandidate = {
       correlationToken,
       handoff,
       kind: "stage-handoff",
       sessionKey: input.sessionKey,
+      workflowMcp,
     };
     const claimed = store.compareAndSwapInstance(
       input.instanceId,
@@ -148,10 +233,12 @@ export const bootstrapStageSession = async (
     input.sessionKey,
     dependencies.mintCorrelationToken,
   );
-  const handoff = ensureStoredHandoff(
+  const handoff = await ensureStoredHandoff(
     dependencies.persistence,
     input,
     correlationToken,
+    dependencies.resolveWorkflowMcpStageContract ??
+      resolveWorkflowMcpStageContract,
   );
   const threadId = nextId();
 

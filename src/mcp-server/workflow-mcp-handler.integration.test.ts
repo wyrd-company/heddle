@@ -3,11 +3,13 @@
 //   verifies: heddle
 // ---
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { env } from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
 import { promisify } from "node:util";
 
 import {
@@ -17,7 +19,7 @@ import {
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { assembleStageHandoff } from "../control-plane/index.js";
+import { bootstrapStageSession } from "../control-plane/index.js";
 import {
   LifecycleEngine,
   type LifecycleBlueprint,
@@ -30,6 +32,10 @@ const execFileAsync = promisify(execFile);
 const temporaryDirectories: string[] = [];
 const httpServers: HttpServer[] = [];
 const clients: Client[] = [];
+const claudeHarnessTest =
+  env["HEDDLE_MCP_CLAUDE_INTEGRATION"] === "1" ? it : it.skip;
+const codexHarnessTest =
+  env["HEDDLE_MCP_CODEX_INTEGRATION"] === "1" ? it : it.skip;
 
 type HttpObservation = {
   contentType: string | null;
@@ -37,6 +43,40 @@ type HttpObservation = {
   sessionId: string | null;
   status: number;
 };
+
+const runHarness = (
+  command: string,
+  arguments_: string[],
+  options: {
+    cwd: string;
+    env?: Record<string, string | undefined>;
+    timeout: number;
+  },
+): Promise<{ stderr: string; stdout: string }> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, arguments_, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    let stdout = "";
+    child.stderr.setEncoding("utf8");
+    child.stdout.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    const timeout = setTimeout(() => child.kill("SIGTERM"), options.timeout);
+    child.once("error", reject);
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) resolve({ stderr, stdout });
+      else reject(new Error(`${command} exited ${code}: ${stderr}`));
+    });
+  });
 
 const blueprint = (
   tools: string[],
@@ -86,30 +126,6 @@ const writeBlueprint = async (
   delete artifact.id;
   await writeFile(join(repositoryRoot, path), JSON.stringify(artifact));
   return path;
-};
-
-const storedHandoff = (
-  sessionKey: string,
-  token: string,
-  taskContract: Record<string, string | number>,
-) => {
-  const handoff = assembleStageHandoff({
-    correlationToken: token,
-    skillPointer: "skills/sample.md",
-    stage: {
-      kind: "standard",
-      name: "assess",
-      priorStageOutputs: [],
-    },
-    taskContract,
-    todoList: null,
-  });
-  return {
-    correlationToken: token,
-    handoff,
-    kind: "stage-handoff" as const,
-    sessionKey,
-  };
 };
 
 const listen = async (
@@ -197,13 +213,8 @@ const makeFixture = async () => {
     blueprintPath: alphaPath,
     instanceId: "instance-alpha",
     state: {
-      correlationTokens: { "stage-alpha": alphaToken },
-      handoffs: [
-        storedHandoff("stage-alpha", alphaToken, {
-          id: 11,
-          title: "Prepare a sample",
-        }),
-      ],
+      correlationTokens: {},
+      handoffs: [],
       todoState: null,
     },
   });
@@ -211,21 +222,71 @@ const makeFixture = async () => {
     blueprintPath: betaPath,
     instanceId: "instance-beta",
     state: {
-      correlationTokens: { "stage-beta": betaToken },
-      handoffs: [
-        storedHandoff("stage-beta", betaToken, {
-          id: 12,
-          title: "Assess a sample",
-        }),
-      ],
+      correlationTokens: {},
+      handoffs: [],
       todoState: null,
     },
+  });
+  const bootstrap = async (
+    instanceId: string,
+    sessionKey: string,
+    token: string,
+    taskContract: Record<string, string | number>,
+  ) =>
+    bootstrapStageSession(
+      {
+        handoff: {
+          skillPointer: "skills/sample.md",
+          stage: {
+            kind: "standard",
+            name: "assess",
+            priorStageOutputs: [],
+          },
+          taskContract,
+        },
+        instanceId,
+        interactionMode: "default",
+        modelSelection: { instanceId: "sample", model: "default" },
+        projectId: "sample-project",
+        providerContext: {
+          cliVersion: "1.0.0",
+          driver: "sample",
+          lifecycle: "independent",
+        },
+        runtimeMode: "default",
+        sessionKey,
+        title: "Sample session",
+        worktree: {
+          baseRef: "main",
+          branch: "sample/session",
+          repositoryName: "sample-repository",
+          repositoryRoot,
+          worktreeName: "sample-session",
+        },
+      },
+      {
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: repositoryRoot,
+        }),
+        mintCorrelationToken: () => token,
+        persistence,
+        t3: { dispatch: async () => ({ sequence: 1 }) },
+      },
+    );
+  await bootstrap("instance-alpha", "stage-alpha", alphaToken, {
+    id: 11,
+    title: "Prepare a sample",
+  });
+  await bootstrap("instance-beta", "stage-beta", betaToken, {
+    id: 12,
+    title: "Assess a sample",
   });
 
   const handler = createWorkflowMcpHttpHandler({
     lifecycle,
     persistence,
-    repositoryRoot,
   });
   const url = await listen(handler);
   return {
@@ -310,10 +371,10 @@ describe("workflow MCP HTTP server", () => {
     await response.body?.cancel();
   });
 
-  it("connects Claude Code and Codex without an MCP session", async () => {
+  it("connects independent protocol clients without an MCP session", async () => {
     const fixture = await makeFixture();
 
-    for (const clientName of ["claude-code", "codex"]) {
+    for (const clientName of ["sample-client-a", "sample-client-b"]) {
       const observations: HttpObservation[] = [];
       const client = await connect(
         fixture.url,
@@ -339,6 +400,75 @@ describe("workflow MCP HTTP server", () => {
     }
   });
 
+  claudeHarnessTest(
+    "discovers and calls get_task_context through Claude Code",
+    async () => {
+      const fixture = await makeFixture();
+      const mcpConfig = JSON.stringify({
+        mcpServers: {
+          heddle: {
+            headers: { Authorization: `Bearer ${fixture.alphaToken}` },
+            type: "http",
+            url: fixture.url.href,
+          },
+        },
+      });
+      const { stdout } = await execFileAsync(
+        "claude",
+        [
+          "--no-session-persistence",
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--mcp-config",
+          mcpConfig,
+          "--strict-mcp-config",
+          "--allowedTools",
+          "mcp__heddle__get_task_context",
+          "-p",
+          "Call heddle get_task_context exactly once. Return only its task title.",
+        ],
+        { cwd: fixture.repositoryRoot, timeout: 120_000 },
+      );
+
+      expect(stdout).toContain("get_task_context");
+      expect(stdout).toContain("Prepare a sample");
+    },
+    130_000,
+  );
+
+  codexHarnessTest(
+    "discovers and calls get_task_context through Codex",
+    async () => {
+      const fixture = await makeFixture();
+      const { stderr, stdout } = await runHarness(
+        "codex",
+        [
+          "exec",
+          "--ephemeral",
+          "--json",
+          "--dangerously-bypass-approvals-and-sandbox",
+          "-C",
+          fixture.repositoryRoot,
+          "-c",
+          `mcp_servers.heddle.url=${JSON.stringify(fixture.url.href)}`,
+          "-c",
+          'mcp_servers.heddle.bearer_token_env_var="HEDDLE_MCP_TOKEN"',
+          "Call heddle get_task_context exactly once. Return only its task title.",
+        ],
+        {
+          cwd: fixture.repositoryRoot,
+          env: { ...env, HEDDLE_MCP_TOKEN: fixture.alphaToken },
+          timeout: 20_000,
+        },
+      );
+
+      expect(stdout, stderr).toContain("get_task_context");
+      expect(stdout).toContain("Prepare a sample");
+    },
+    30_000,
+  );
+
   it("rejects a token handoff that names a different workflow stage", async () => {
     const fixture = await makeFixture();
     const record = fixture.persistence.getInstance("instance-alpha");
@@ -359,6 +489,36 @@ describe("workflow MCP HTTP server", () => {
     fixture.persistence.updateInstance("instance-alpha", {
       ...record.state,
       handoffs: [{ ...stored, handoff: JSON.stringify(handoff) }],
+    });
+
+    await expect(
+      connect(fixture.url, fixture.alphaToken, "mismatched-client"),
+    ).rejects.toThrow();
+  });
+
+  it("rejects a static MCP contract that names a different workflow stage", async () => {
+    const fixture = await makeFixture();
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const stored = record.state.handoffs[0];
+    if (
+      typeof stored !== "object" ||
+      stored === null ||
+      Array.isArray(stored) ||
+      typeof stored["workflowMcp"] !== "object" ||
+      stored["workflowMcp"] === null ||
+      Array.isArray(stored["workflowMcp"])
+    ) {
+      throw new Error("alpha MCP contract fixture is invalid");
+    }
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [
+        {
+          ...stored,
+          workflowMcp: { ...stored["workflowMcp"], stage: "inspect" },
+        },
+      ],
     });
 
     await expect(
@@ -468,7 +628,7 @@ describe("workflow MCP HTTP server", () => {
     ).resolves.toMatchObject({ isError: true });
   });
 
-  it("reads stage tools and dispositions from the rebased pinned blueprint", async () => {
+  it("keeps the bootstrap-time tool contract static after lifecycle rebase", async () => {
     const fixture = await makeFixture();
     await writeBlueprint(
       fixture.repositoryRoot,
@@ -489,9 +649,12 @@ describe("workflow MCP HTTP server", () => {
 
     expect(tools.tools.map(({ name }) => name)).toEqual([
       "advance",
-      "report_blocked",
+      "get_task_context",
     ]);
     expect(JSON.stringify(tools.tools[0]?.inputSchema)).toContain(
+      "Accept the prepared sample",
+    );
+    expect(JSON.stringify(tools.tools[0]?.inputSchema)).not.toContain(
       "Accept the rebased sample",
     );
   });

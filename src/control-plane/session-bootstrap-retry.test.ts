@@ -46,6 +46,16 @@ const initialState = (): InstanceState => ({
   todoState: [{ complete: false, text: "Count items" }],
 });
 
+const workflowMcp = {
+  blueprintBlobHash: "a".repeat(40),
+  blueprintPath: "blueprints/sample-process.json",
+  dispositions: [{ description: "Finish the preparation", name: "complete" }],
+  stage: "prepare",
+  tools: ["advance", "get_task_context"],
+};
+
+const resolveWorkflowMcpStageContract = async () => workflowMcp;
+
 const memoryStore = (state = initialState()) => {
   let record: InstanceRecord = {
     instanceId: "instance-1",
@@ -88,6 +98,7 @@ describe("stage session cold retry guards", () => {
     let failFirstTurn = true;
     const dependencies: SessionBootstrapDependencies = {
       persistence: memory.store,
+      resolveWorkflowMcpStageContract,
       t3: {
         dispatch: async (command) => {
           commands.push(command);
@@ -132,6 +143,7 @@ describe("stage session cold retry guards", () => {
           handoff: "stored handoff",
           kind: "stage-handoff",
           sessionKey: "prepare-1",
+          workflowMcp,
         },
       ],
     });
@@ -140,6 +152,7 @@ describe("stage session cold retry guards", () => {
     await expect(
       bootstrapStageSession(input, {
         persistence: memory.store,
+        resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
@@ -149,6 +162,69 @@ describe("stage session cold retry guards", () => {
       }),
     ).rejects.toThrow(/disagree/);
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a stored handoff has no static MCP contract", async () => {
+    const memory = memoryStore({
+      ...initialState(),
+      correlationTokens: { "prepare-1": "token-1" },
+      handoffs: [
+        {
+          correlationToken: "token-1",
+          handoff: "stored handoff",
+          kind: "stage-handoff",
+          sessionKey: "prepare-1",
+        },
+      ],
+    });
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(input, {
+        persistence: memory.store,
+        resolveWorkflowMcpStageContract,
+        t3: { dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+      }),
+    ).rejects.toThrow(/no valid workflow MCP contract/);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(memory.record.state.handoffs).toHaveLength(1);
+  });
+
+  it("fails closed when a stored MCP contract names another stage", async () => {
+    const memory = memoryStore({
+      ...initialState(),
+      correlationTokens: { "prepare-1": "token-1" },
+      handoffs: [
+        {
+          correlationToken: "token-1",
+          handoff: "stored handoff",
+          kind: "stage-handoff",
+          sessionKey: "prepare-1",
+          workflowMcp: { ...workflowMcp, stage: "inspect" },
+        },
+      ],
+    });
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(input, {
+        persistence: memory.store,
+        resolveWorkflowMcpStageContract,
+        t3: { dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+      }),
+    ).rejects.toThrow(/workflow MCP stage disagree/);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(memory.record.state.handoffs).toHaveLength(1);
   });
 
   it("does not contact T3 when worktree preparation fails", async () => {

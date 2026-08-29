@@ -5,11 +5,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/server";
 
-import type {
-  LifecycleBlueprint,
-  LifecycleNode,
-  LifecycleSnapshot,
-} from "../engine/index.js";
+import type { LifecycleSnapshot } from "../engine/index.js";
 import type {
   InstanceRecord,
   JsonValue,
@@ -36,18 +32,27 @@ export interface WorkflowMcpLifecycle {
 }
 
 export interface WorkflowMcpDisposition {
+  [key: string]: JsonValue;
   description: string;
   name: string;
 }
 
 export interface WorkflowMcpSessionBinding {
-  blueprint: LifecycleBlueprint;
   dispositions: WorkflowMcpDisposition[];
   instance: InstanceRecord;
   sessionKey: string;
-  stage: LifecycleNode;
+  stage: { id: string; tools: string[] };
   taskContext: JsonValue;
   token: string;
+}
+
+export interface WorkflowMcpStageContract {
+  [key: string]: JsonValue;
+  blueprintBlobHash: string;
+  blueprintPath: string;
+  dispositions: WorkflowMcpDisposition[];
+  stage: string;
+  tools: string[];
 }
 
 export interface WorkflowMcpToolContext {
@@ -64,7 +69,6 @@ export interface WorkflowMcpToolContributor {
 export interface WorkflowMcpHandlerOptions {
   lifecycle: WorkflowMcpLifecycle;
   persistence: WorkflowMcpPersistence;
-  repositoryRoot: string;
   tools?: readonly WorkflowMcpToolContributor[];
 }
 
@@ -75,10 +79,12 @@ export interface CorrelationTokenMatch {
 }
 
 export type StoredStageHandoff = {
+  [key: string]: JsonValue;
   correlationToken: string;
   handoff: string;
   kind: "stage-handoff";
   sessionKey: string;
+  workflowMcp: WorkflowMcpStageContract;
 };
 
 export type StageHandoffDocument = {

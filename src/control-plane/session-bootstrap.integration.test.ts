@@ -193,7 +193,19 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
           worktreesRoot: join(scratch, "worktrees"),
         },
       },
-      { persistence, t3: client },
+      {
+        persistence,
+        resolveWorkflowMcpStageContract: async () => ({
+          blueprintBlobHash: "a".repeat(40),
+          blueprintPath: "blueprints/sample-process.json",
+          dispositions: [
+            { description: "Finish the preparation", name: "complete" },
+          ],
+          stage: "prepare",
+          tools: ["advance", "get_task_context"],
+        }),
+        t3: client,
+      },
     );
 
     let running = false;

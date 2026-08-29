@@ -1,0 +1,32 @@
+// ---
+// relationships:
+//   implements: heddle
+// ---
+
+import type { JsonValue } from "../persistence/index.js";
+import type {
+  WorkflowMcpDisposition,
+  WorkflowMcpStageContract,
+} from "./types.js";
+
+const isDisposition = (value: JsonValue): value is WorkflowMcpDisposition =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  typeof value["name"] === "string" &&
+  typeof value["description"] === "string" &&
+  value["description"].trim() !== "";
+
+export const isWorkflowMcpStageContract = (
+  value: JsonValue,
+): value is WorkflowMcpStageContract =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  typeof value["blueprintBlobHash"] === "string" &&
+  typeof value["blueprintPath"] === "string" &&
+  typeof value["stage"] === "string" &&
+  Array.isArray(value["tools"]) &&
+  value["tools"].every((tool) => typeof tool === "string") &&
+  Array.isArray(value["dispositions"]) &&
+  value["dispositions"].every(isDisposition);

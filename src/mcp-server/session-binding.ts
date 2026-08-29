@@ -6,7 +6,6 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 
-import { GitBlueprintStore } from "../engine/index.js";
 import type { JsonValue } from "../persistence/index.js";
 import type {
   CorrelationTokenMatch,
@@ -15,6 +14,7 @@ import type {
   WorkflowMcpPersistence,
   WorkflowMcpSessionBinding,
 } from "./types.js";
+import { isWorkflowMcpStageContract } from "./stage-contract.js";
 import { advanceOperationId } from "./operations.js";
 
 export class CorrelationTokenError extends Error {
@@ -40,7 +40,9 @@ const isStoredStageHandoff = (value: JsonValue): value is StoredStageHandoff =>
   value["kind"] === "stage-handoff" &&
   typeof value["sessionKey"] === "string" &&
   typeof value["correlationToken"] === "string" &&
-  typeof value["handoff"] === "string";
+  typeof value["handoff"] === "string" &&
+  value["workflowMcp"] !== undefined &&
+  isWorkflowMcpStageContract(value["workflowMcp"]);
 
 const parseHandoff = (
   serialized: string,
@@ -82,14 +84,7 @@ export const bearerCorrelationToken = (
 };
 
 export class WorkflowMcpSessionResolver {
-  private readonly blueprintStore: GitBlueprintStore;
-
-  constructor(
-    private readonly persistence: WorkflowMcpPersistence,
-    repositoryRoot: string,
-  ) {
-    this.blueprintStore = new GitBlueprintStore(repositoryRoot);
-  }
+  constructor(private readonly persistence: WorkflowMcpPersistence) {}
 
   authenticate(token: string): CorrelationTokenMatch {
     const matches: CorrelationTokenMatch[] = [];
@@ -141,34 +136,16 @@ export class WorkflowMcpSessionResolver {
     if (!isCurrentStage && !isCompletedStage) {
       throw new CorrelationTokenError();
     }
-    const blueprint = await this.blueprintStore.read(
-      context["blueprintBlobHash"],
-      context["blueprintPath"],
-    );
-    const stage = blueprint.nodes.find(({ id }) => id === handoff.stage.name);
-    if (stage?.uses !== "wait" || !Array.isArray(stage.tools)) {
+    const stageContract = storedHandoffs[0]!.workflowMcp;
+    if (stageContract.stage !== handoff.stage.name) {
       throw new CorrelationTokenError();
     }
-    const dispositions = blueprint.edges
-      .filter(
-        ({ source, disposition }) =>
-          source === stage.id && disposition !== undefined,
-      )
-      .map(({ disposition, description }) => {
-        if (description?.trim() === "") throw new CorrelationTokenError();
-        if (description === undefined || disposition === undefined) {
-          throw new CorrelationTokenError();
-        }
-        return { description, name: disposition };
-      })
-      .sort((left, right) => left.name.localeCompare(right.name));
 
     return {
-      blueprint,
-      dispositions,
+      dispositions: stageContract.dispositions,
       instance: match.instance,
       sessionKey: match.sessionKey,
-      stage,
+      stage: { id: stageContract.stage, tools: stageContract.tools },
       taskContext: handoff.taskContract,
       token,
     };

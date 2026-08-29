@@ -27,6 +27,14 @@ const initialState = (): InstanceState => ({
   todoState: [{ complete: false, text: "Count items" }],
 });
 
+const resolveWorkflowMcpStageContract = async () => ({
+  blueprintBlobHash: "a".repeat(40),
+  blueprintPath: "blueprints/sample-process.json",
+  dispositions: [{ description: "Finish the preparation", name: "complete" }],
+  stage: "prepare",
+  tools: ["advance", "get_task_context"],
+});
+
 const scratchDirectories: string[] = [];
 
 afterEach(async () => {
@@ -64,6 +72,7 @@ describe("stage session bootstrap", () => {
           return record;
         },
       },
+      resolveWorkflowMcpStageContract,
       t3: {
         dispatch: async (command) => {
           commands.push(command);
@@ -184,6 +193,7 @@ describe("stage session bootstrap", () => {
     persistence.createInstance("instance-1", initialState());
     const dependencies: SessionBootstrapDependencies = {
       persistence,
+      resolveWorkflowMcpStageContract,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({
         branch,
@@ -239,6 +249,7 @@ describe("stage session bootstrap", () => {
         handoff: result.handoff,
         kind: "stage-handoff",
         sessionKey: "prepare-1",
+        workflowMcp: await resolveWorkflowMcpStageContract(),
       }),
     );
     persistence.close();

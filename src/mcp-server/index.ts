@@ -4,6 +4,7 @@
 // ---
 
 export { workflowMcpCoreTools } from "./core-tools.js";
+export { isWorkflowMcpStageContract } from "./stage-contract.js";
 export {
   bearerCorrelationToken,
   CorrelationTokenError,
@@ -20,6 +21,7 @@ export type {
   WorkflowMcpLifecycle,
   WorkflowMcpPersistence,
   WorkflowMcpSessionBinding,
+  WorkflowMcpStageContract,
   WorkflowMcpToolContext,
   WorkflowMcpToolContributor,
 } from "./types.js";

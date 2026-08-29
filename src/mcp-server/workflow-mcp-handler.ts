@@ -65,10 +65,7 @@ const contributorsByName = (
 export const createWorkflowMcpHttpHandler = (
   options: WorkflowMcpHandlerOptions,
 ): WorkflowMcpHttpHandler => {
-  const resolver = new WorkflowMcpSessionResolver(
-    options.persistence,
-    options.repositoryRoot,
-  );
+  const resolver = new WorkflowMcpSessionResolver(options.persistence);
   const contributors = contributorsByName(options.tools ?? []);
   const serverForBinding = (binding: WorkflowMcpSessionBinding): McpServer => {
     const server = new McpServer({ name: "heddle", version: "1.0.0" });
