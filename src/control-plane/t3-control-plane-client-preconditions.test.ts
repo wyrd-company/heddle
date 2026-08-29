@@ -96,7 +96,13 @@ describe("T3ControlPlaneClient preconditions", () => {
     );
   });
 
-  it("requires a thread id for a thread command", async () => {
+  it.each([
+    "thread.turn.start",
+    "thread.turn.interrupt",
+    "thread.session.stop",
+    "thread.approval.respond",
+    "thread.user-input.respond",
+  ])("requires a thread id for %s", async (commandType) => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const client = new T3ControlPlaneClient({
       baseUrl: "http://t3.test",
@@ -105,8 +111,8 @@ describe("T3ControlPlaneClient preconditions", () => {
     });
 
     await expect(
-      client.dispatch({ type: "thread.turn.start", commandId: "command-1" }),
-    ).rejects.toThrow("Dispatch 'thread.turn.start' requires threadId");
+      client.dispatch({ type: commandType, commandId: "command-1" }),
+    ).rejects.toThrow(`Dispatch '${commandType}' requires threadId`);
     expect(fetch).not.toHaveBeenCalled();
   });
 
