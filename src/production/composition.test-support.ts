@@ -112,6 +112,11 @@ export const prepareProductionFixture =
     await writeFile(
       join(repositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
+        $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+        relationships: {
+          implements: "heddle",
+          uses: ["sample-stage"],
+        },
         edges: [
           {
             condition: "result.output.dispositions.complete",
