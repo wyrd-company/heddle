@@ -103,8 +103,44 @@ describe("DispatchPacingGate", () => {
     const usage = new UsageStub({
       "provider-a": { used: 0, windowStartedAt: 1_000 },
     });
-    const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+    const gate = new DispatchPacingGate(
+      configuration({ maxConcurrentSessions: 10 }),
+      usage,
+      () => 2_000,
+    );
+    const depthLimited = [
+      {
+        depth: 2,
+        provider: "provider-a",
+        sessionId: "parent-a",
+      },
+    ];
+
+    await expect(
+      gate.evaluate(
+        {
+          kind: "subagent",
+          parentSessionId: "parent-a",
+          provider: "provider-a",
+          sessionId: "child-c",
+        },
+        depthLimited,
+      ),
+    ).resolves.toEqual({
+      deferral: {
+        limit: 2,
+        reason: "subagent-depth-limit",
+        requestedDepth: 3,
+      },
+      kind: "defer",
+    });
+
     const active = [
+      {
+        depth: 0,
+        provider: "provider-a",
+        sessionId: "parent-a",
+      },
       {
         depth: 1,
         parentSessionId: "parent-a",
@@ -122,27 +158,6 @@ describe("DispatchPacingGate", () => {
     await expect(
       gate.evaluate(
         {
-          depth: 3,
-          kind: "subagent",
-          parentSessionId: "parent-a",
-          provider: "provider-a",
-          sessionId: "child-c",
-        },
-        active,
-      ),
-    ).resolves.toEqual({
-      deferral: {
-        limit: 2,
-        reason: "subagent-depth-limit",
-        requestedDepth: 3,
-      },
-      kind: "defer",
-    });
-
-    await expect(
-      gate.evaluate(
-        {
-          depth: 2,
           kind: "subagent",
           parentSessionId: "parent-a",
           provider: "provider-a",
@@ -163,13 +178,12 @@ describe("DispatchPacingGate", () => {
     await expect(
       gate.evaluate(
         {
-          depth: 2,
           kind: "subagent",
           parentSessionId: "parent-a",
           provider: "provider-a",
           sessionId: "child-c",
         },
-        active.slice(1),
+        active.slice(0, 2),
       ),
     ).resolves.toEqual({ kind: "dispatch" });
   });
@@ -180,7 +194,6 @@ describe("DispatchPacingGate", () => {
     });
     const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
     const request = {
-      depth: 1,
       kind: "subagent" as const,
       parentSessionId: "parent-a",
       provider: "provider-a",
@@ -189,17 +202,43 @@ describe("DispatchPacingGate", () => {
 
     await expect(
       gate.evaluate(request, [
-        { depth: 0, provider: "provider-a", sessionId: "session-a" },
-        { depth: 0, provider: "provider-b", sessionId: "session-b" },
+        { depth: 0, provider: "provider-a", sessionId: "parent-a" },
+        { depth: 0, provider: "provider-b", sessionId: "session-a" },
       ]),
     ).resolves.toMatchObject({
       deferral: { reason: "work-in-progress-limit" },
       kind: "defer",
     });
-    await expect(gate.evaluate(request, [])).resolves.toMatchObject({
+    await expect(
+      gate.evaluate(request, [
+        { depth: 0, provider: "provider-a", sessionId: "parent-a" },
+      ]),
+    ).resolves.toMatchObject({
       deferral: { reason: "provider-usage-window" },
       kind: "defer",
     });
+  });
+
+  it("derives depth only from an active parent session", async () => {
+    const usage = new UsageStub({
+      "provider-a": { used: 0, windowStartedAt: 1_000 },
+    });
+    const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+    const request = {
+      kind: "subagent" as const,
+      parentSessionId: "parent-a",
+      provider: "provider-a",
+      sessionId: "child-a",
+    };
+
+    await expect(gate.evaluate(request, [])).rejects.toThrow(
+      "Active parent session parent-a is required",
+    );
+    await expect(
+      gate.evaluate(request, [
+        { depth: -1, provider: "provider-a", sessionId: "parent-a" },
+      ]),
+    ).rejects.toThrow("parent depth must be a non-negative safe integer");
   });
 
   it("rejects invalid configuration and provider observations", async () => {

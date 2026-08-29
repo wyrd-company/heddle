@@ -43,7 +43,6 @@ export type PacingDispatchRequest =
       sessionId: string;
     }
   | {
-      depth: number;
       kind: "subagent";
       parentSessionId: string;
       provider: string;

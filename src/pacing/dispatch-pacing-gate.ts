@@ -56,7 +56,6 @@ const validateRequest = (request: PacingDispatchRequest): void => {
   requireNonEmpty("provider", request.provider);
   if (request.kind === "subagent") {
     requireNonEmpty("parentSessionId", request.parentSessionId);
-    requireNonNegativeInteger("depth", request.depth);
   }
 };
 
@@ -87,12 +86,22 @@ export class DispatchPacingGate implements DispatchPacingEvaluator {
     validateRequest(request);
 
     if (request.kind === "subagent") {
-      if (request.depth > this.configuration.subagents.maxDepth) {
+      const parent = activeSessions.find(
+        ({ sessionId }) => sessionId === request.parentSessionId,
+      );
+      if (parent === undefined) {
+        throw new TypeError(
+          `Active parent session ${request.parentSessionId} is required`,
+        );
+      }
+      requireNonNegativeInteger("parent depth", parent.depth);
+      const requestedDepth = parent.depth + 1;
+      if (requestedDepth > this.configuration.subagents.maxDepth) {
         return {
           deferral: {
             limit: this.configuration.subagents.maxDepth,
             reason: "subagent-depth-limit",
-            requestedDepth: request.depth,
+            requestedDepth,
           },
           kind: "defer",
         };
