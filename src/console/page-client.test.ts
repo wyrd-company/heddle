@@ -455,6 +455,7 @@ describe("console client request ownership", () => {
     harness.navigateUrl(
       "http://console.test/?view=dependencies&scope=epic%3A10",
     );
+    await delay(0);
     harness.navigateUrl("http://console.test/?view=lifecycle&scope=task%3A11");
     await vi.waitFor(() =>
       expect(harness.status.textContent).toBe("Lifecycle view for task #11"),
