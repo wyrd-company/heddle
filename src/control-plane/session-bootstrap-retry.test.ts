@@ -146,7 +146,9 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(
         { ...input, parentSessionKey: "missing-parent", sessionKey: "child" },
         {
+          instantiateTodoList,
           persistence: memory.store,
+          resolveWorkflowMcpStageContract,
           t3: { dispatch },
           ensureWorktree: async ({ branch }) => ({
             branch,
