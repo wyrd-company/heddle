@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
+import { createConsoleAttention } from "./attention-contract.js";
 import { createConsoleServer } from "./server.js";
 import { ConsoleLifecycleUnavailableError } from "./types.js";
 import type {
@@ -57,12 +58,14 @@ class FixtureBoard implements ConsoleBoard {
 
 class FixtureState implements ConsoleStateSource {
   readonly attention: ConsoleAttention[] = [
-    {
+    createConsoleAttention({
+      actions: [],
       attentionId: "attention-1",
       kind: "stale-instance",
       message: "A record has waited for inspection",
+      scope: "task:52",
       taskId: 52,
-    },
+    }),
   ];
   readonly events: ConsoleEvent[] = [
     {

@@ -30,11 +30,76 @@ export interface ConsoleEvent {
 }
 
 export interface ConsoleAttention {
+  actions: ConsoleAttentionAction[];
   attentionId: string;
+  fingerprint: string;
   instanceId?: string;
   kind: string;
   message: string;
+  scope: ConsoleAttentionScope;
   taskId?: number;
+}
+
+export type ConsoleAttentionScope = "all" | `epic:${number}` | `task:${number}`;
+
+export type ConsoleAttentionQuestion = {
+  id: string;
+  multiSelect: boolean;
+  options: Array<{
+    description?: string;
+    label: string;
+    value: string;
+  }>;
+  prompt: string;
+};
+
+export type ConsoleAttentionActionInput =
+  | { kind: "none" }
+  | { kind: "questions"; questions: ConsoleAttentionQuestion[] };
+
+export type ConsoleAttentionActionContract =
+  | {
+      escalationId: string;
+      instanceId: string;
+      kind: "escalation.answer";
+      ownerSessionKey: string;
+    }
+  | {
+      decision: "accept" | "reject";
+      instanceId: string;
+      kind: "t3.approval.respond";
+      requestId: string;
+      sessionKey: string;
+      threadId: string;
+    }
+  | {
+      instanceId: string;
+      kind: "t3.user-input.respond";
+      requestId: string;
+      sessionKey: string;
+      threadId: string;
+    };
+
+export type ConsoleAttentionAction = {
+  actionId: string;
+  contract: ConsoleAttentionActionContract;
+  input: ConsoleAttentionActionInput;
+  label: string;
+};
+
+export type ConsoleAttentionActionAnswers = Record<string, string | string[]>;
+
+export type ConsoleAttentionActionRequest = {
+  answers?: ConsoleAttentionActionAnswers;
+  fingerprint: string;
+};
+
+export interface ConsoleAttentionActionPort {
+  execute(input: {
+    action: ConsoleAttentionAction;
+    answers?: ConsoleAttentionActionAnswers;
+    attention: ConsoleAttention;
+  }): Promise<void>;
 }
 
 export interface ConsoleLifecycleEvent {

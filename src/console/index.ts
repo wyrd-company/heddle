@@ -24,8 +24,26 @@ export type {
 } from "./projection.js";
 export { createConsoleServer } from "./server.js";
 export type { ConsoleServerOptions } from "./server.js";
+export {
+  assertConsoleAttentionFingerprint,
+  consoleAttentionDeepLink,
+  consoleAttentionFingerprint,
+  createConsoleAttention,
+  ConsoleAttentionActionsUnavailableError,
+  ConsoleAttentionConflictError,
+  parseConsoleAttentionActionRequest,
+  validateConsoleAttentionCatalog,
+} from "./attention-contract.js";
 export type {
   ConsoleAttention,
+  ConsoleAttentionAction,
+  ConsoleAttentionActionAnswers,
+  ConsoleAttentionActionContract,
+  ConsoleAttentionActionInput,
+  ConsoleAttentionActionPort,
+  ConsoleAttentionActionRequest,
+  ConsoleAttentionQuestion,
+  ConsoleAttentionScope,
   ConsoleBoard,
   ConsoleEvent,
   ConsoleInstance,

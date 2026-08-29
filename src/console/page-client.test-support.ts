@@ -15,23 +15,42 @@ class FakeElement {
   readonly dataset: Record<string, string> = {};
   readonly style: Record<string, string> = {};
   private readonly attributes = new Map<string, string>();
-  private readonly listeners = new Map<string, () => void>();
+  private readonly listeners = new Map<string, (event?: unknown) => void>();
+  checked = false;
   className = "";
   disabled = false;
   draggable = false;
   hidden = false;
   href = "";
+  name = "";
+  open = false;
   textContent = "";
   type = "";
+  value = "";
 
   constructor(readonly tagName: string) {}
 
-  addEventListener(name: string, listener: () => void): void {
+  addEventListener(name: string, listener: (event?: unknown) => void): void {
     this.listeners.set(name, listener);
   }
 
   dispatch(name: string): void {
     this.listeners.get(name)?.();
+  }
+
+  close(): void {
+    this.open = false;
+    this.dispatch("close");
+  }
+
+  focus(): void {
+    this.dataset.focusedByTest = "true";
+  }
+
+  scrollIntoView(): void {}
+
+  showModal(): void {
+    this.open = true;
   }
 
   getAttribute(name: string): string | null {
@@ -209,6 +228,11 @@ export const clientHarness = async (
   scope.replaceChildren(new FakeOption("All work", "all"));
   const status = new FakeElement("p");
   const attention = new FakeElement("span");
+  const attentionToggle = new FakeElement("button");
+  const attentionOverlay = new FakeElement("dialog");
+  const attentionClose = new FakeElement("button");
+  const attentionStatus = new FakeElement("p");
+  const attentionList = new FakeElement("div");
   let locationHref = initialUrl;
   const windowListeners = new Map<string, () => void>();
   const graphResponses = new Map<string, Promise<BrowserResponse>>();
@@ -309,6 +333,11 @@ export const clientHarness = async (
       if (selector === "#scope") return scope;
       if (selector === "#console-status") return status;
       if (selector === "#attention-count") return attention;
+      if (selector === "#attention-toggle") return attentionToggle;
+      if (selector === "#attention-overlay") return attentionOverlay;
+      if (selector === "#attention-close") return attentionClose;
+      if (selector === "#attention-status") return attentionStatus;
+      if (selector === "#attention-list") return attentionList;
       if (selector === "#dependency-graph") return graph;
       if (selector === "#graph-canvas") return graphCanvas;
       if (selector === "#lifecycle-view") return lifecycle;
@@ -382,6 +411,10 @@ export const clientHarness = async (
     boardViewLink,
     cardIds,
     dependenciesViewLink,
+    attention,
+    attentionList,
+    attentionOverlay,
+    attentionStatus,
     elementsByClass: (className: string) =>
       visit(board).filter((element) => element.className === className),
     holdProjection: (name: string, held: Promise<BrowserResponse>) => {

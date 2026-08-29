@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
+import { createConsoleAttention } from "./attention-contract.js";
 import { buildDependencyGraphProjection } from "./dependency-graph.js";
 
 const task = (
@@ -46,12 +47,14 @@ describe("dependency graph projection", () => {
   it("renders the four treatments and traces a blocked chain from attention", () => {
     const graph = buildDependencyGraphProjection({
       attention: [
-        {
+        createConsoleAttention({
+          actions: [],
           attentionId: "attention-11",
           instanceId: "instance-11",
           kind: "stale-instance",
           message: "Inspection is required",
-        },
+          scope: "task:11",
+        }),
       ],
       instances: [{ instanceId: "instance-11", taskId: 11 }],
       scope: { epicId: 10, kind: "epic" },
@@ -97,13 +100,15 @@ describe("dependency graph projection", () => {
     expect(() =>
       buildDependencyGraphProjection({
         attention: [
-          {
+          createConsoleAttention({
+            actions: [],
             attentionId: "attention-11",
             instanceId: "instance-11",
             kind: "stale-instance",
             message: "Inspection is required",
+            scope: "task:12",
             taskId: 12,
-          },
+          }),
         ],
         instances: [{ instanceId: "instance-11", taskId: 11 }],
         scope: { kind: "all" },

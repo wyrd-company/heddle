@@ -22,9 +22,25 @@ export const consolePage = `<!doctype html>
       <div class="masthead-state">
         <span class="live-mark" aria-hidden="true"></span>
         <span>LIVE BOARD</span>
-        <span class="attention-count" id="attention-count" role="status" aria-label="Attention items">0</span>
+        <button class="attention-toggle" id="attention-toggle" type="button" aria-controls="attention-overlay" aria-expanded="false">
+          <span>ATTENTION</span>
+          <span class="attention-count" id="attention-count" role="status" aria-label="Attention items">0</span>
+        </button>
       </div>
     </header>
+    <dialog class="attention-overlay" id="attention-overlay" aria-labelledby="attention-title">
+      <div class="attention-sheet">
+        <header class="attention-header">
+          <div>
+            <p class="eyebrow">OPERATOR QUEUE</p>
+            <h2 id="attention-title">Attention required</h2>
+          </div>
+          <button class="attention-close" id="attention-close" type="button" aria-label="Close attention queue">CLOSE ×</button>
+        </header>
+        <p class="attention-status" id="attention-status" aria-live="polite"></p>
+        <div class="attention-list" id="attention-list"></div>
+      </div>
+    </dialog>
     <section class="control-rail" aria-label="Board controls">
       <div>
         <p class="eyebrow" id="view-eyebrow">KANBAN PROJECTION</p>
@@ -107,7 +123,7 @@ body {
   background-size: 100% 24px;
 }
 
-button, select { font: inherit; }
+button, input, select { font: inherit; }
 
 .masthead {
   min-height: 68px;
@@ -152,6 +168,25 @@ button, select { font: inherit; }
   letter-spacing: 0.08em;
 }
 
+.attention-toggle {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.attention-toggle:focus-visible, .attention-close:focus-visible, .attention-action:focus-visible {
+  outline: 2px solid var(--signal-focus);
+  outline-offset: 3px;
+}
+
 .live-mark {
   width: 8px;
   height: 8px;
@@ -168,6 +203,48 @@ button, select { font: inherit; }
   text-align: center;
   font-weight: 800;
 }
+
+.attention-overlay {
+  width: min(560px, calc(100vw - 24px));
+  height: 100dvh;
+  max-height: none;
+  margin: 0 0 0 auto;
+  padding: 0;
+  color: var(--ink);
+  background: var(--paper);
+  border: 0;
+  border-left: 5px solid var(--signal);
+  box-shadow: -12px 0 35px rgba(25, 26, 23, 0.24);
+}
+
+.attention-overlay::backdrop { background: rgba(25, 26, 23, 0.58); }
+.attention-sheet { min-height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
+.attention-header { padding: 22px 22px 18px; display: flex; align-items: start; justify-content: space-between; gap: 24px; color: var(--paper-raised); background: var(--ink); border-bottom: 4px solid var(--signal); }
+.attention-header h2 { margin: 0; font-family: Georgia, serif; font-size: 29px; font-weight: 500; }
+.attention-close { padding: 7px 0; color: #d5d3cc; background: transparent; border: 0; cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: 0.09em; }
+.attention-status { min-height: 38px; margin: 0; padding: 11px 22px; color: var(--muted); border-bottom: 1px solid var(--rule); font-size: 10px; }
+.attention-status[data-error="true"] { color: var(--signal); font-weight: 800; }
+.attention-list { padding: 14px; display: grid; align-content: start; gap: 12px; overflow-y: auto; }
+.attention-empty { margin: 20px 8px; color: var(--muted); font-family: Georgia, serif; font-size: 21px; }
+
+.attention-entry { padding: 15px; background: var(--paper-raised); border: 1px solid var(--rule-dark); box-shadow: var(--shadow); }
+.attention-entry:focus { outline: 3px solid var(--signal-focus); outline-offset: 2px; }
+.attention-entry[data-focused="true"] { border-color: var(--signal); box-shadow: 5px 5px 0 rgba(180, 51, 33, 0.22); }
+.attention-entry-meta { margin: 0 0 9px; display: flex; justify-content: space-between; gap: 12px; color: var(--signal); font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.attention-entry h3 { margin: 0; font-family: Georgia, serif; font-size: 19px; font-weight: 500; line-height: 1.25; }
+.attention-entry-message { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.attention-actions { margin-top: 14px; padding-top: 13px; display: grid; gap: 10px; border-top: 1px dotted var(--rule-dark); }
+.attention-question { min-width: 0; margin: 0; padding: 9px; display: grid; gap: 8px; border: 1px solid var(--rule); }
+.attention-question legend { padding: 0 5px; font-size: 10px; font-weight: 800; }
+.attention-option { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; color: var(--muted); font-size: 10px; }
+.attention-option input { margin-top: 2px; accent-color: var(--signal); }
+.attention-option strong, .attention-option small { display: block; }
+.attention-option strong { color: var(--ink); font-size: 10px; }
+.attention-option small { margin-top: 2px; line-height: 1.35; }
+.attention-action { width: 100%; padding: 9px 11px; color: var(--paper-raised); background: var(--ink); border: 1px solid var(--ink); cursor: pointer; text-align: left; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.attention-action:hover { background: var(--signal); border-color: var(--signal); }
+.attention-action:disabled { cursor: wait; opacity: 0.55; }
+.attention-entry[data-actionless="true"] .attention-actions { color: var(--muted); font-size: 10px; }
 
 .control-rail {
   padding: 26px clamp(18px, 3vw, 42px) 20px;
@@ -402,7 +479,8 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .lifecycle-task { margin: 0; color: var(--muted); font-size: 10px; text-align: right; }
 
 @media (max-width: 680px) {
-  .masthead-state > span:not(.attention-count):not(.live-mark) { display: none; }
+  .masthead-state > span:not(.live-mark), .attention-toggle > span:first-child { display: none; }
+  .attention-overlay { width: 100vw; max-width: none; border-left: 0; }
   .control-rail { align-items: stretch; flex-direction: column; }
   .view-controls { justify-items: stretch; }
   .view-tabs { justify-content: space-between; }
@@ -420,6 +498,11 @@ export const consoleClient = `const boardElement = document.querySelector("#boar
 const scopeElement = document.querySelector("#scope");
 const statusElement = document.querySelector("#console-status");
 const attentionElement = document.querySelector("#attention-count");
+const attentionToggleElement = document.querySelector("#attention-toggle");
+const attentionOverlayElement = document.querySelector("#attention-overlay");
+const attentionCloseElement = document.querySelector("#attention-close");
+const attentionStatusElement = document.querySelector("#attention-status");
+const attentionListElement = document.querySelector("#attention-list");
 const graphElement = document.querySelector("#dependency-graph");
 const graphCanvasElement = document.querySelector("#graph-canvas");
 const lifecycleElement = document.querySelector("#lifecycle-view");
@@ -432,6 +515,7 @@ let loadGeneration = 0;
 let lifecyclePollTimer;
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
+const attentionFromUrl = () => new URL(window.location.href).searchParams.get("attention");
 
 const viewFromUrl = () => {
   const view = new URL(window.location.href).searchParams.get("view") || "board";
@@ -468,6 +552,139 @@ const text = (tag, value, className) => {
   element.textContent = value;
   if (className) element.className = className;
   return element;
+};
+
+const openAttention = () => {
+  if (!attentionOverlayElement.open) attentionOverlayElement.showModal();
+  attentionToggleElement.setAttribute("aria-expanded", "true");
+};
+
+const closeAttention = () => {
+  if (attentionOverlayElement.open) attentionOverlayElement.close();
+  attentionToggleElement.setAttribute("aria-expanded", "false");
+};
+
+attentionToggleElement.addEventListener("click", openAttention);
+attentionCloseElement.addEventListener("click", closeAttention);
+attentionOverlayElement.addEventListener("close", () => {
+  attentionToggleElement.setAttribute("aria-expanded", "false");
+});
+
+const selectedAnswers = (questions, controls) => {
+  const answers = {};
+  for (const question of questions) {
+    const selected = controls
+      .filter(({ questionId, input }) => questionId === question.id && input.checked)
+      .map(({ input }) => input.value);
+    if (selected.length === 0) throw new Error("Select an answer for " + question.prompt);
+    answers[question.id] = question.multiSelect ? selected : selected[0];
+  }
+  return answers;
+};
+
+const performAttentionAction = async (entry, action, controls, button) => {
+  button.disabled = true;
+  attentionStatusElement.dataset.error = "false";
+  attentionStatusElement.textContent = "Applying " + action.label + "…";
+  try {
+    const body = { fingerprint: entry.fingerprint };
+    if (action.input.kind === "questions") {
+      body.answers = selectedAnswers(action.input.questions, controls);
+    }
+    await fetchJson(
+      "/api/attention/" + encodeURIComponent(entry.attentionId) + "/actions/" + encodeURIComponent(action.actionId),
+      {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+    await load();
+    attentionStatusElement.textContent = "Disposition applied";
+  } catch (error) {
+    attentionStatusElement.dataset.error = "true";
+    attentionStatusElement.textContent = error instanceof Error ? error.message : "Attention action failed";
+    button.disabled = false;
+  }
+};
+
+const createAttentionAction = (entry, action) => {
+  const container = document.createElement("section");
+  const controls = [];
+  if (action.input.kind === "questions") {
+    for (const question of action.input.questions) {
+      const fieldset = document.createElement("fieldset");
+      fieldset.className = "attention-question";
+      fieldset.append(text("legend", question.prompt));
+      for (const option of question.options) {
+        const label = document.createElement("label");
+        label.className = "attention-option";
+        const input = document.createElement("input");
+        input.type = question.multiSelect ? "checkbox" : "radio";
+        input.name = entry.attentionId + ":" + action.actionId + ":" + question.id;
+        input.value = option.value;
+        const copy = document.createElement("span");
+        copy.append(text("strong", option.label));
+        if (option.description) copy.append(text("small", option.description));
+        label.append(input, copy);
+        fieldset.append(label);
+        controls.push({ input, questionId: question.id });
+      }
+      container.append(fieldset);
+    }
+  }
+  const button = text("button", action.label + " →", "attention-action");
+  button.type = "button";
+  button.addEventListener("click", () => performAttentionAction(entry, action, controls, button));
+  container.append(button);
+  return container;
+};
+
+const renderAttention = (entries) => {
+  attentionElement.textContent = String(entries.length);
+  attentionListElement.replaceChildren();
+  attentionStatusElement.dataset.error = "false";
+  attentionStatusElement.textContent = entries.length + (entries.length === 1 ? " item requires" : " items require") + " operator attention";
+  const requested = attentionFromUrl();
+  if (entries.length === 0) {
+    attentionListElement.append(text("p", "No work is waiting for you.", "attention-empty"));
+  }
+  let focused;
+  for (const entry of entries) {
+    const article = document.createElement("article");
+    article.className = "attention-entry";
+    article.dataset.attentionId = entry.attentionId;
+    article.dataset.actionless = String(entry.actions.length === 0);
+    const meta = document.createElement("p");
+    meta.className = "attention-entry-meta";
+    meta.append(text("span", entry.kind.replaceAll("-", " ")));
+    meta.append(text("span", entry.scope));
+    article.append(meta);
+    article.append(text("h3", "Attention " + entry.attentionId));
+    article.append(text("p", entry.message, "attention-entry-message"));
+    const actions = document.createElement("div");
+    actions.className = "attention-actions";
+    if (entry.actions.length === 0) {
+      actions.append(text("p", "No direct disposition is authorized for this state."));
+    } else {
+      for (const action of entry.actions) actions.append(createAttentionAction(entry, action));
+    }
+    article.append(actions);
+    attentionListElement.append(article);
+    if (entry.attentionId === requested) focused = article;
+  }
+  if (requested !== null) {
+    openAttention();
+    if (focused) {
+      focused.dataset.focused = "true";
+      focused.setAttribute("tabindex", "-1");
+      focused.focus();
+      focused.scrollIntoView({ block: "center" });
+    } else {
+      attentionStatusElement.dataset.error = "true";
+      attentionStatusElement.textContent = "The linked attention item is no longer current";
+    }
+  }
 };
 
 const svg = (tag, attributes) => {
@@ -705,6 +922,7 @@ const renderLoadFailure = (error) => {
   boardElement.replaceChildren();
   graphCanvasElement.replaceChildren();
   lifecycleTaskElement.textContent = "";
+  attentionListElement.replaceChildren();
   statusElement.dataset.error = "true";
   statusElement.textContent = error instanceof Error ? error.message : "Console load failed";
 };
@@ -752,7 +970,7 @@ async function load() {
     addScopeOptions(board.tasks, requestedScope);
     selectView(view, requestedScope);
     if (view !== "lifecycle") window.heddleLifecycleViewer?.clear();
-    attentionElement.textContent = String(attention.length);
+    renderAttention(attention);
     if (view === "board") {
       const projection = await fetchJson("/api/projection?scope=" + encodeURIComponent(requestedScope));
       if (generation !== loadGeneration) return;

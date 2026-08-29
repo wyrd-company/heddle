@@ -18,9 +18,21 @@ import {
   ConsoleScopeError,
   parseConsoleScope,
 } from "./projection.js";
+import {
+  ConsoleAttentionActionsUnavailableError,
+  ConsoleAttentionConflictError,
+  isConsoleAttentionScope,
+  parseConsoleAttentionActionRequest,
+  validateConsoleAttentionCatalog,
+} from "./attention-contract.js";
 import { buildDependencyGraphProjection } from "./dependency-graph.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
-import type { ConsoleBoard, ConsoleStateSource } from "./types.js";
+import type {
+  ConsoleAttention,
+  ConsoleAttentionActionPort,
+  ConsoleBoard,
+  ConsoleStateSource,
+} from "./types.js";
 import { ConsoleLifecycleUnavailableError } from "./types.js";
 
 const lifecycleClient = readFileSync(
@@ -33,6 +45,7 @@ const lifecycleStyles = readFileSync(
 );
 
 export interface ConsoleServerOptions {
+  actions?: ConsoleAttentionActionPort;
   board: ConsoleBoard;
   now?: () => number;
   state: ConsoleStateSource;
@@ -105,7 +118,10 @@ const requestScope = (value: string | null) => {
   }
 };
 
-const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
+const readJsonBody = async (
+  request: IncomingMessage,
+  maximumBytes = 1024,
+): Promise<unknown> => {
   let mediaType: MIMEType;
   try {
     mediaType = new MIMEType(request.headers["content-type"] ?? "");
@@ -120,7 +136,8 @@ const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > 1024) throw new RequestError("request body is too large");
+    if (size > maximumBytes)
+      throw new RequestError("request body is too large");
     chunks.push(buffer);
   }
   try {
@@ -146,6 +163,34 @@ const requireEpicLever = (value: unknown): boolean => {
 const methodNotAllowed = (response: ServerResponse, allowed: string): void => {
   response.writeHead(405, { allow: allowed });
   response.end();
+};
+
+const decodePathSegment = (value: string, name: string): string => {
+  try {
+    const decoded = decodeURIComponent(value);
+    if (decoded.trim() === "" || decoded.length > 128) {
+      throw new RequestError(
+        `${name} must be a non-empty string of at most 128 characters`,
+      );
+    }
+    return decoded;
+  } catch (error) {
+    if (error instanceof RequestError) throw error;
+    throw new RequestError(`${name} is not valid URL encoding`);
+  }
+};
+
+const readAttention = async (
+  options: ConsoleServerOptions,
+): Promise<ConsoleAttention[]> => {
+  const attention = await options.state.listAttention();
+  validateConsoleAttentionCatalog(attention, options.actions !== undefined);
+  for (const entry of attention) {
+    if (!isConsoleAttentionScope(entry.scope)) {
+      throw new Error(`Attention '${entry.attentionId}' has an invalid scope`);
+    }
+  }
+  return attention;
 };
 
 export const createConsoleServer = (options: ConsoleServerOptions) => {
@@ -211,7 +256,65 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       if (url.pathname === "/api/attention") {
         if (request.method !== "GET") return methodNotAllowed(response, "GET");
-        json(response, 200, await options.state.listAttention());
+        json(response, 200, await readAttention(options));
+        return;
+      }
+      const attentionAction =
+        /^\/api\/attention\/([^/]+)\/actions\/([^/]+)$/.exec(url.pathname);
+      if (attentionAction !== null) {
+        if (request.method !== "POST")
+          return methodNotAllowed(response, "POST");
+        if (options.actions === undefined) {
+          throw new ConsoleAttentionActionsUnavailableError(
+            "Console attention actions are not active in this deployment composition",
+          );
+        }
+        const attentionId = decodePathSegment(
+          attentionAction[1]!,
+          "attention id",
+        );
+        const actionId = decodePathSegment(attentionAction[2]!, "action id");
+        const attention = (await readAttention(options)).find(
+          (entry) => entry.attentionId === attentionId,
+        );
+        if (attention === undefined) {
+          throw new ConsoleAttentionConflictError(
+            `Attention '${attentionId}' is no longer current`,
+          );
+        }
+        const action = attention.actions.find(
+          (candidate) => candidate.actionId === actionId,
+        );
+        if (action === undefined) {
+          throw new ConsoleAttentionConflictError(
+            `Action '${actionId}' is not offered by attention '${attentionId}'`,
+          );
+        }
+        let input;
+        try {
+          input = parseConsoleAttentionActionRequest(
+            await readJsonBody(request, 16 * 1024),
+            action,
+          );
+        } catch (error) {
+          throw new RequestError(
+            error instanceof Error
+              ? error.message
+              : "attention action input is invalid",
+          );
+        }
+        if (input.fingerprint !== attention.fingerprint) {
+          throw new ConsoleAttentionConflictError(
+            `Attention '${attentionId}' changed before action '${actionId}' executed`,
+          );
+        }
+        await options.actions.execute({
+          action,
+          attention,
+          ...(input.answers === undefined ? {} : { answers: input.answers }),
+        });
+        response.writeHead(204, { "cache-control": "no-store" });
+        response.end();
         return;
       }
       if (url.pathname === "/api/projection") {
@@ -239,7 +342,7 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
         const [tasks, instances, attention] = await Promise.all([
           options.board.readBoard(),
           options.state.listInstances(),
-          options.state.listAttention(),
+          readAttention(options),
         ]);
         json(
           response,
@@ -291,6 +394,14 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       if (error instanceof ConsoleLifecycleUnavailableError) {
         json(response, 503, { error: error.message });
+        return;
+      }
+      if (error instanceof ConsoleAttentionActionsUnavailableError) {
+        json(response, 503, { error: error.message });
+        return;
+      }
+      if (error instanceof ConsoleAttentionConflictError) {
+        json(response, 409, { error: error.message });
         return;
       }
       json(response, 500, { error: "console request failed" });

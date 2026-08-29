@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
+import { createConsoleAttention } from "./attention-contract.js";
 import { createConsoleServer } from "./server.js";
 import type { ConsoleBoard, ConsoleStateSource } from "./types.js";
 
@@ -42,12 +43,14 @@ class GraphBoard implements ConsoleBoard {
 
 const state: ConsoleStateSource = {
   listAttention: async () => [
-    {
+    createConsoleAttention({
+      actions: [],
       attentionId: "attention-31",
       kind: "stale-instance",
       message: "A record has waited for inspection",
+      scope: "task:31",
       taskId: 31,
-    },
+    }),
   ],
   listEvents: async () => [],
   listInstances: async () => [],

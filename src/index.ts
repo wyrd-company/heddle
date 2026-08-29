@@ -1,12 +1,23 @@
 export {
   buildKanbanProjection,
   console,
+  consoleAttentionDeepLink,
+  consoleAttentionFingerprint,
+  createConsoleAttention,
   createConsoleServer,
   parseConsoleScope,
   serializeConsoleScope,
 } from "./console/index.js";
 export type {
   ConsoleAttention,
+  ConsoleAttentionAction,
+  ConsoleAttentionActionAnswers,
+  ConsoleAttentionActionContract,
+  ConsoleAttentionActionInput,
+  ConsoleAttentionActionPort,
+  ConsoleAttentionActionRequest,
+  ConsoleAttentionQuestion,
+  ConsoleAttentionScope,
   ConsoleBoard,
   ConsoleEvent,
   ConsoleInstance,

@@ -14,6 +14,7 @@ import { KanbanBoardAdapter } from "../board-adapter/index.js";
 import {
   createConsoleServer,
   type ConsoleAttention,
+  type ConsoleAttentionActionPort,
   type ConsoleBoard,
   type ConsoleEvent,
   type ConsoleInstance,
@@ -36,6 +37,7 @@ export type HeddleDeploymentServer = {
 
 export interface HeddleDeploymentComposition {
   board?: ConsoleBoard;
+  consoleActions?: ConsoleAttentionActionPort;
   consoleState?: ConsoleStateSource;
 }
 
@@ -204,6 +206,9 @@ export const startHeddleServerFromEnvironment = async (
     persistence,
   });
   const consoleServer = createConsoleServer({
+    ...(composition.consoleActions === undefined
+      ? {}
+      : { actions: composition.consoleActions }),
     board,
     state:
       composition.consoleState ??
