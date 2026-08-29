@@ -175,7 +175,13 @@ describe("console page accessibility", () => {
 
   it("keeps the modal attention overlay evaluable above the lifecycle canvas", () => {
     expect(consoleStyles).toMatch(
-      /\.attention-overlay \{[^}]*z-index: 2147483647;[^}]*\}/,
+      /\.attention-overlay \{[^}]*z-index: 2147483647;[^}]*overflow: hidden;[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.attention-sheet \{[^}]*height: 100%;[^}]*min-height: 0;[^}]*grid-template-rows: auto auto minmax\(0, 1fr\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.attention-list \{[^}]*min-height: 0;[^}]*overflow-y: auto;[^}]*\}/,
     );
   });
 });

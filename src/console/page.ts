@@ -217,17 +217,18 @@ button, input, select { font: inherit; }
   border: 0;
   border-left: 5px solid var(--signal);
   box-shadow: -12px 0 35px rgba(25, 26, 23, 0.24);
+  overflow: hidden;
 }
 
 .attention-overlay::backdrop { background: rgba(25, 26, 23, 0.58); }
-.attention-sheet { min-height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
+.attention-sheet { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 .attention-header { padding: 22px 22px 18px; display: flex; align-items: start; justify-content: space-between; gap: 24px; color: var(--paper-raised); background: var(--ink); border-bottom: 4px solid var(--signal); }
 .attention-header .eyebrow { color: var(--signal-on-dark); }
 .attention-header h2 { margin: 0; font-family: Georgia, serif; font-size: 29px; font-weight: 500; }
 .attention-close { padding: 7px 0; color: #d5d3cc; background: transparent; border: 0; cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: 0.09em; }
 .attention-status { min-height: 38px; margin: 0; padding: 11px 22px; color: var(--muted); border-bottom: 1px solid var(--rule); font-size: 10px; }
 .attention-status[data-error="true"] { color: var(--signal); font-weight: 800; }
-.attention-list { padding: 14px; display: grid; align-content: start; gap: 12px; overflow-y: auto; }
+.attention-list { min-height: 0; padding: 14px; display: grid; align-content: start; gap: 12px; overflow-y: auto; }
 .attention-empty { margin: 20px 8px; color: var(--muted); font-family: Georgia, serif; font-size: 21px; }
 
 .attention-entry { padding: 15px; background: var(--paper-raised); border: 1px solid var(--rule-dark); box-shadow: var(--shadow); }
