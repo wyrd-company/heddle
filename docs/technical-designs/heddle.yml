@@ -119,10 +119,33 @@ proposed-design:
     of one task type, with placeholders for task context. Each
     blueprint stage that starts an agent session names its template;
     at bootstrap, Heddle fills the template from the task contract
-    and stores the resulting list on the instance. The todo tools
+    and stores the resulting list on the instance. The instantiated
+    list belongs to the stage's agent, which can add, edit, and
+    reorder items; the template itself never changes. The todo tools
     read and write that stored list, so progress persists across
     session retries, appears in the console, and rides the handoff
     into the next stage.
+  subagents: >
+    Delegation is a Heddle capability rather than a harness feature.
+    The MCP suite includes subagent tools: spawn starts an
+    asynchronous child T3 session, prepared the same way as a stage
+    session and configured with any provider and model, so a parent
+    on one harness delegates to models its harness does not support.
+    Spawn assigns the child a todo subtree — a node and its children
+    — and mints a correlation token scoped to that assignment, so the
+    child's writes land only inside its subtree. A node has one
+    active assignee, so two agents never race on the same work.
+
+    The shared todo list is the progress channel: the parent reads
+    the child's subtree to check progress, and a liveness tool
+    answers whether the child's session is still running,
+    distinguishing working from crashed. When the child session
+    stops, Heddle detects it through the same shell polling that
+    observes stage sessions and notifies the parent by steering a
+    message into its thread over the T3 API. Fan-out and nesting
+    depth are dispatch preconditions alongside the reconciler's
+    other pacing gates, so delegation draws from the same capacity
+    budget as all other sessions.
   observation: >
     Two channels report on running work, split by who holds the truth.
     Semantic outcomes — the verdict of a review, the completion of an
