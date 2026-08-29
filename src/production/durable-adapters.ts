@@ -3,12 +3,12 @@
 //   implements: heddle
 // ---
 
-import type { ConsoleAttention } from "../console/index.js";
 import type { EscalationAttention } from "../mcp-server/index.js";
 import type { SessionObservationAttention } from "../control-plane/index.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
 import type { ReconcilerAttention } from "../reconciler/index.js";
 import type { PushoverConfiguration } from "./configuration.js";
+import { projectProductionAttention } from "./attention-projection.js";
 
 export type DurableAttention =
   EscalationAttention | ReconcilerAttention | SessionObservationAttention;
@@ -31,41 +31,11 @@ export class DurableAttentionQueue {
     return this.persistence.resolveAttention(attentionId);
   }
 
-  list(): ConsoleAttention[] {
-    return this.persistence.listAttention().map((record) => {
-      const payload = record.payload;
-      if (
-        typeof payload !== "object" ||
-        payload === null ||
-        Array.isArray(payload) ||
-        typeof payload["attentionId"] !== "string"
-      ) {
-        throw new Error(`Attention '${record.attentionId}' is malformed`);
-      }
-      const kind =
-        typeof payload["kind"] === "string" ? payload["kind"] : "escalation";
-      const message =
-        typeof payload["message"] === "string"
-          ? payload["message"]
-          : Array.isArray(payload["questions"]) &&
-              typeof payload["questions"][0] === "object" &&
-              payload["questions"][0] !== null &&
-              !Array.isArray(payload["questions"][0]) &&
-              typeof payload["questions"][0]["prompt"] === "string"
-            ? payload["questions"][0]["prompt"]
-            : "Heddle requires attention";
-      return {
-        attentionId: payload["attentionId"],
-        kind,
-        message,
-        ...(typeof payload["instanceId"] === "string"
-          ? { instanceId: payload["instanceId"] }
-          : {}),
-        ...(typeof payload["taskId"] === "number"
-          ? { taskId: payload["taskId"] }
-          : {}),
-      };
-    });
+  list() {
+    const runtimes = this.persistence.listReconcilerRuntime();
+    return this.persistence
+      .listAttention()
+      .map((record) => projectProductionAttention(record, runtimes));
   }
 }
 
