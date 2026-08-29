@@ -81,6 +81,7 @@ const runHarness = (
 const blueprint = (
   tools: string[],
   acceptDescription: string,
+  acceptDisposition = "accept",
 ): LifecycleBlueprint => ({
   id: "sample-process",
   nodes: [
@@ -93,9 +94,9 @@ const blueprint = (
   edges: [
     { source: "prepare", target: "assess" },
     {
-      condition: "result.output.dispositions.accept",
+      condition: `result.output.dispositions.${acceptDisposition}`,
       description: acceptDescription,
-      disposition: "accept",
+      disposition: acceptDisposition,
       source: "assess",
       target: "accepted",
     },
@@ -183,7 +184,10 @@ const makeFixture = async () => {
   const alphaPath = await writeBlueprint(
     repositoryRoot,
     "alpha-sample",
-    blueprint(["advance", "get_task_context"], "Accept the prepared sample"),
+    blueprint(
+      ["advance", "get_task_context", "report_blocked"],
+      "Accept the prepared sample",
+    ),
   );
   const betaPath = await writeBlueprint(
     repositoryRoot,
@@ -385,7 +389,11 @@ describe("workflow MCP HTTP server", () => {
         observations,
       );
       await expect(client.listTools()).resolves.toMatchObject({
-        tools: [{ name: "advance" }, { name: "get_task_context" }],
+        tools: [
+          { name: "advance" },
+          { name: "get_task_context" },
+          { name: "report_blocked" },
+        ],
       });
       const successfulRequests = observations.filter(
         ({ method, status }) => method === "POST" && status === 200,
@@ -683,6 +691,7 @@ describe("workflow MCP HTTP server", () => {
     expect(alphaTools.tools.map(({ name }) => name)).toEqual([
       "advance",
       "get_task_context",
+      "report_blocked",
     ]);
     expect(betaTools.tools.map(({ name }) => name)).toEqual([
       "get_task_context",
@@ -712,35 +721,61 @@ describe("workflow MCP HTTP server", () => {
     ).resolves.toMatchObject({ isError: true });
   });
 
-  it("keeps the bootstrap-time tool contract static after lifecycle rebase", async () => {
+  it("invalidates and replaces a stage session after lifecycle rebase", async () => {
     const fixture = await makeFixture();
+    const alpha = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "pre-rebase-client",
+    );
+    expect(
+      JSON.stringify((await alpha.listTools()).tools[0]?.inputSchema),
+    ).toContain("Accept the prepared sample");
     await writeBlueprint(
       fixture.repositoryRoot,
       "alpha-sample",
-      blueprint(["advance", "report_blocked"], "Accept the rebased sample"),
+      blueprint(
+        ["advance", "report_blocked"],
+        "Approve the rebased sample",
+        "approve",
+      ),
     );
     await fixture.lifecycle.rebase({
       instanceId: "instance-alpha",
       targetState: "assess",
     });
 
-    const alpha = await connect(
+    await expect(alpha.listTools()).rejects.toThrow();
+
+    const replacementToken = "token-alpha-rebased";
+    await fixture.bootstrap(
+      "instance-alpha",
+      "stage-alpha-rebased",
+      replacementToken,
+      { id: 15, title: "Approve a sample" },
+    );
+    const replacement = await connect(
       fixture.url,
-      fixture.alphaToken,
+      replacementToken,
       "rebased-client",
     );
-    const tools = await alpha.listTools();
+    const tools = await replacement.listTools();
 
     expect(tools.tools.map(({ name }) => name)).toEqual([
       "advance",
-      "get_task_context",
+      "report_blocked",
     ]);
     expect(JSON.stringify(tools.tools[0]?.inputSchema)).toContain(
-      "Accept the prepared sample",
+      "Approve the rebased sample",
     );
-    expect(JSON.stringify(tools.tools[0]?.inputSchema)).not.toContain(
-      "Accept the rebased sample",
-    );
+    await expect(
+      replacement.callTool({
+        name: "advance",
+        arguments: { disposition: "approve" },
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: { instanceId: "instance-alpha", status: "completed" },
+    });
   });
 
   it("binds task context and blocked reports to the token's instance", async () => {
@@ -821,7 +856,7 @@ describe("workflow MCP HTTP server", () => {
     );
   });
 
-  it("replays advance idempotently for the same instance stage", async () => {
+  it("replays advance without retaining other completed-stage authority", async () => {
     const fixture = await makeFixture();
     const alpha = await connect(
       fixture.url,
@@ -839,12 +874,23 @@ describe("workflow MCP HTTP server", () => {
       fixture.alphaToken,
       "retry-client",
     );
-    await expect(retryClient.listTools()).resolves.toMatchObject({
-      tools: [{ name: "advance" }, { name: "get_task_context" }],
-    });
+    await expect(
+      retryClient.callTool({
+        name: "report_blocked",
+        arguments: { message: "A late blocked report" },
+      }),
+    ).rejects.toThrow(/Tool report_blocked not found/);
+    expect(
+      (await retryClient.listTools()).tools.map(({ name }) => name),
+    ).toEqual(["advance"]);
     const second = await alpha.callTool(input);
 
     expect(second.structuredContent).toEqual(first.structuredContent);
     expect(fixture.accepted).toHaveBeenCalledTimes(1);
+    expect(
+      fixture.persistence
+        .replayEvents("instance-alpha")
+        .some(({ type }) => type === "mcp:blocked-reported"),
+    ).toBe(false);
   });
 });

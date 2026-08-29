@@ -137,15 +137,22 @@ export class WorkflowMcpSessionResolver {
       throw new CorrelationTokenError();
     }
     const stageContract = storedHandoffs[0]!.workflowMcp;
-    if (stageContract.stage !== handoff.stage.name) {
+    if (
+      stageContract.stage !== handoff.stage.name ||
+      stageContract.blueprintBlobHash !== context["blueprintBlobHash"]
+    ) {
       throw new CorrelationTokenError();
     }
+    const tools =
+      isCompletedStage && !isCurrentStage
+        ? stageContract.tools.filter((tool) => tool === "advance")
+        : stageContract.tools;
 
     return {
       dispositions: stageContract.dispositions,
       instance: match.instance,
       sessionKey: match.sessionKey,
-      stage: { id: stageContract.stage, tools: stageContract.tools },
+      stage: { id: stageContract.stage, tools },
       taskContext: handoff.taskContract,
       token,
     };
