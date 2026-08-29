@@ -49,6 +49,33 @@ describe("durable production adapters", () => {
     secondPersistence.close();
   });
 
+  it("rejects changed payload under one stable attention ID", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-attention-identity-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    const queue = new DurableAttentionQueue(persistence);
+    await queue.raise({
+      attentionId: "task-19:session:choice",
+      code: "lifecycle-not-declared",
+      kind: "lifecycle-resolution",
+      message: "Choose a lifecycle",
+      taskId: 19,
+    });
+
+    await expect(
+      queue.raise({
+        attentionId: "task-19:session:choice",
+        code: "lifecycle-not-declared",
+        kind: "lifecycle-resolution",
+        message: "Choose a different lifecycle",
+        taskId: 19,
+      }),
+    ).rejects.toThrow(
+      'Attention "task-19:session:choice" changed durable identity',
+    );
+    expect(queue.list()).toMatchObject([{ message: "Choose a lifecycle" }]);
+    persistence.close();
+  });
+
   it("does not repeat a completed Pushover effect after restart", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-"));
     const sent: PushoverMessage[] = [];

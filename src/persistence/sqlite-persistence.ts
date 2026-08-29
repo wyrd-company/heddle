@@ -276,16 +276,29 @@ export class SqlitePersistence {
 
   raiseAttention(attentionId: string, payload: JsonValue): boolean {
     this.assertStableId("attentionId", attentionId);
-    return (
+    const payloadJson = serialize(payload);
+    const inserted =
       this.database
         .prepare(
           `INSERT OR IGNORE INTO heddle_attention
              (attention_id, payload_json, recorded_at)
            VALUES (?, ?, ?)`,
         )
-        .run(attentionId, serialize(payload), new Date().toISOString())
-        .changes > 0
-    );
+        .run(attentionId, payloadJson, new Date().toISOString()).changes > 0;
+    if (inserted) return true;
+    const prior = this.database
+      .prepare(
+        `SELECT payload_json AS payloadJson
+         FROM heddle_attention
+         WHERE attention_id = ?`,
+      )
+      .get(attentionId) as { payloadJson: string } | undefined;
+    if (prior?.payloadJson !== payloadJson) {
+      throw new Error(
+        `Attention ${JSON.stringify(attentionId)} changed durable identity`,
+      );
+    }
+    return false;
   }
 
   listAttention(): DurableAttentionRecord[] {
