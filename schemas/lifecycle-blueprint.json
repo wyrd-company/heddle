@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
   "relationships": {
     "implements": "heddle"
   },
@@ -10,7 +11,7 @@
   "required": ["$schema", "relationships", "nodes", "edges"],
   "properties": {
     "$schema": {
-      "const": "../schemas/lifecycle-blueprint.json"
+      "const": "https://wyrd.company/heddle/lifecycle-blueprint.schema.json"
     },
     "relationships": {
       "$ref": "#/$defs/relationships"

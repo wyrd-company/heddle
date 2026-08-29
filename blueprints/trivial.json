@@ -1,5 +1,5 @@
 {
-  "$schema": "../schemas/lifecycle-blueprint.json",
+  "$schema": "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
   "relationships": {
     "implements": "heddle",
     "uses": [

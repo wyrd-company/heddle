@@ -30,6 +30,25 @@ describe("lifecycle blueprint artifacts", () => {
     expect(validate(artifact), JSON.stringify(validate.errors)).toBe(true);
   });
 
+  it("binds every artifact schema declaration to the schema identity", async () => {
+    const schema = (await readJson(schemaPath)) as {
+      $id?: unknown;
+      relationships?: unknown;
+    };
+
+    expect(schema.$id).toBe(
+      "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+    );
+    expect(schema.relationships).toEqual({ implements: "heddle" });
+    expect(basename(schemaPath, extname(schemaPath))).toMatch(
+      /^[a-z]+(?:-[a-z]+)*$/,
+    );
+    for (const path of blueprintPaths) {
+      const artifact = (await readJson(path)) as { $schema?: unknown };
+      expect(artifact.$schema).toBe(schema.$id);
+    }
+  });
+
   it("derives kebab artifact IDs from filenames instead of authored fields", async () => {
     for (const path of blueprintPaths) {
       const artifact = await readJson(path);
@@ -56,6 +75,16 @@ describe("lifecycle blueprint artifacts", () => {
     if (waitNode === undefined) throw new Error("wait node fixture is missing");
     delete waitNode.tools;
     expect(validate(withoutToolSet)).toBe(false);
+
+    const withoutTodoTemplate = cloneJson(artifact);
+    const otherWaitNode = withoutTodoTemplate.nodes.find(
+      ({ uses }) => uses === "wait",
+    );
+    if (otherWaitNode === undefined) {
+      throw new Error("wait node fixture is missing");
+    }
+    delete otherWaitNode["todo-template"];
+    expect(validate(withoutTodoTemplate)).toBe(false);
 
     const withAuthoredArtifactId = { ...artifact, id: "standard-delivery" };
     expect(validate(withAuthoredArtifactId)).toBe(false);

@@ -97,7 +97,7 @@ describe("LifecycleResolver", () => {
     });
   });
 
-  it("raises attention for ambiguous or invalid lifecycle tags", async () => {
+  it("raises attention for ambiguous lifecycle tags", async () => {
     const resolver = new LifecycleResolver(cwd());
 
     await expect(
@@ -112,6 +112,11 @@ describe("LifecycleResolver", () => {
       },
       kind: "attention-required",
     });
+  });
+
+  it("raises attention for an invalid lifecycle property", async () => {
+    const resolver = new LifecycleResolver(cwd());
+
     await expect(
       resolver.resolve({ id: 106, lifecycle: "not_valid", tags: [] }),
     ).resolves.toMatchObject({
