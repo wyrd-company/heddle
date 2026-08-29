@@ -89,6 +89,14 @@ export const resumeOperationFingerprint = (
     output: input.output ?? {},
   });
 
+export const completedOperationForTransition = (
+  context: LifecycleContextRecord,
+  transitionId: string,
+): CompletedLifecycleOperation | undefined =>
+  Object.values(context.completedOperations).find(
+    (operation) => operation.transitionId === transitionId,
+  );
+
 const withCompletedOperation = (
   completedOperations: Record<string, CompletedLifecycleOperation>,
   operationId: string,

@@ -165,6 +165,94 @@ describe("LifecycleEngine concurrent execution", () => {
     fixture.persistence.close();
   });
 
+  it("returns the committed operation after a stale execution diverges", async () => {
+    const blueprint = sampleBlueprint();
+    const loopEdge = blueprint.edges.find(
+      ({ source, target }) => source === "season" && target === "taste",
+    );
+    if (loopEdge === undefined) throw new Error("Fixture loop edge is missing");
+    loopEdge.condition = "result.output.ready";
+    let attempts = 0;
+    let releaseFirst: (() => void) | undefined;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let markFirstStarted: (() => void) | undefined;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const fixture = await makeFixture(blueprint, {
+      mix: async () => ({ effect: "mix" }),
+      season: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          markFirstStarted?.();
+          await firstMayFinish;
+          return { ready: false };
+        }
+        return { ready: true };
+      },
+      serve: async () => ({ effect: "serve" }),
+    });
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+
+    const first = fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "sample-a",
+      operationId: "operation-a",
+    });
+    await firstStarted;
+    const committed = await fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "sample-a",
+      operationId: "operation-a",
+    });
+    const completed = await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "sample-a",
+      operationId: "operation-b",
+    });
+    const beforeLateCompletion =
+      fixture.persistence.getInstance("sample-a")?.state.flowcraftContext;
+    releaseFirst?.();
+    const late = await first;
+    const persisted = fixture.persistence.getInstance("sample-a");
+    const laterExecutionIds = completed.executionIds.filter(
+      (executionId) => !committed.executionIds.includes(executionId),
+    );
+
+    expect(late).toMatchObject({
+      awaitingNodeIds: ["taste"],
+      status: "awaiting",
+      validDispositions: ["accept", "adjust"],
+    });
+    expect(late.executionIds).toEqual(
+      expect.arrayContaining(committed.executionIds),
+    );
+    expect(late.executionIds).toHaveLength(committed.executionIds.length + 1);
+    expect(laterExecutionIds).toHaveLength(1);
+    expect(late.executionIds).not.toContain(laterExecutionIds[0]);
+    expect(persisted?.state.flowcraftContext).toMatchObject({
+      awaitingNodeIds: [],
+      executionIds: expect.arrayContaining([
+        ...completed.executionIds,
+        ...late.executionIds,
+      ]),
+      serializedContext: serializedContextFrom(beforeLateCompletion),
+      status: "completed",
+    });
+    expect(completed.status).toBe("completed");
+    expect(
+      fixture.persistence
+        .replayEvents("sample-a")
+        .filter(({ type }) => type === "lifecycle:attention-required"),
+    ).toEqual([]);
+    fixture.persistence.close();
+  });
+
   it("accepts the selected terminal from mutually exclusive conditions", async () => {
     const blueprint = conditionalTerminalBlueprint();
     const applied: string[] = [];

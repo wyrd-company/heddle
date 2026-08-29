@@ -27,6 +27,7 @@ import {
 } from "./flowcraft-runtime.js";
 import { GitBlueprintStore } from "./git-blueprint-store.js";
 import {
+  completedOperationForTransition,
   initialInstanceState,
   persistExecution,
   readLifecycleContext,
@@ -34,6 +35,7 @@ import {
   writeLifecycleContext,
 } from "./lifecycle-state.js";
 import type {
+  CompletedLifecycleOperation,
   ExpectedLandings,
   LifecycleBlueprint,
   LifecycleContextRecord,
@@ -128,12 +130,7 @@ export class LifecycleEngine {
       }
       return this.snapshot(
         input.instanceId,
-        {
-          ...context,
-          awaitingNodeIds: completed.awaitingNodeIds,
-          executionIds: completed.executionIds,
-          status: completed.status,
-        },
+        this.contextForCompletedOperation(context, completed),
         blueprint,
       );
     }
@@ -248,12 +245,23 @@ export class LifecycleEngine {
 
     if (!landedAsExpected(result, expected)) {
       const executionId = executionIdFrom(result.serializedContext);
-      persistExecution(
+      const nextContext = persistExecution(
         this.persistence,
         record.instanceId,
         pending.id,
         executionId,
       );
+      const completedOperation = completedOperationForTransition(
+        nextContext,
+        pending.id,
+      );
+      if (completedOperation !== undefined) {
+        return this.snapshot(
+          record.instanceId,
+          this.contextForCompletedOperation(nextContext, completedOperation),
+          blueprint,
+        );
+      }
       this.persistence.appendEvent(record.instanceId, attentionEvent, {
         actualAwaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
         actualStatus: result.status,
@@ -288,7 +296,29 @@ export class LifecycleEngine {
         status: result.status,
       },
     );
-    return this.snapshot(record.instanceId, nextContext, blueprint);
+    const completedOperation = completedOperationForTransition(
+      nextContext,
+      pending.id,
+    );
+    return this.snapshot(
+      record.instanceId,
+      completedOperation === undefined
+        ? nextContext
+        : this.contextForCompletedOperation(nextContext, completedOperation),
+      blueprint,
+    );
+  }
+
+  private contextForCompletedOperation(
+    context: LifecycleContextRecord,
+    completedOperation: CompletedLifecycleOperation,
+  ): LifecycleContextRecord {
+    return {
+      ...context,
+      awaitingNodeIds: completedOperation.awaitingNodeIds,
+      executionIds: completedOperation.executionIds,
+      status: completedOperation.status,
+    };
   }
 
   private snapshot(
