@@ -10,6 +10,8 @@ export {
 } from "./todo-template.js";
 export {
   ensureStageTodoList,
+  mutateStageTodoList,
+  stageTodoList,
   type EnsureStageTodoListInput,
   type TodoStateStore,
 } from "./stage-todo-state.js";

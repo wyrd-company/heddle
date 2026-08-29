@@ -33,6 +33,53 @@ export type EnsureStageTodoListInput = {
   templateId: string;
 };
 
+export const stageTodoList = (
+  record: InstanceRecord,
+  sessionKey: string,
+  stage: string,
+): { list: TodoList; state: TodoState } => {
+  if (!isTodoState(record.state.todoState)) {
+    throw new Error("The workflow instance has no valid todo state");
+  }
+  const list = record.state.todoState.lists.find(
+    (candidate) => candidate.sessionKey === sessionKey,
+  );
+  if (list === undefined || list.stage !== stage) {
+    throw new Error("The stage session has no bound todo list");
+  }
+  return { list, state: record.state.todoState };
+};
+
+export const mutateStageTodoList = (
+  store: TodoStateStore,
+  input: { instanceId: string; sessionKey: string; stage: string },
+  mutate: (list: TodoList) => TodoList,
+): TodoList => {
+  while (true) {
+    const current = store.getInstance(input.instanceId);
+    if (current === undefined)
+      throw new Error("The workflow instance is absent");
+    const { list, state } = stageTodoList(
+      current,
+      input.sessionKey,
+      input.stage,
+    );
+    const nextList = mutate(list);
+    const nextState: TodoState = {
+      ...state,
+      lists: state.lists.map((candidate) =>
+        candidate.sessionKey === list.sessionKey ? nextList : candidate,
+      ),
+    };
+    const claimed = store.compareAndSwapInstance(
+      current.instanceId,
+      current.version,
+      { ...current.state, todoState: nextState },
+    );
+    if (claimed !== undefined) return nextList;
+  }
+};
+
 export const ensureStageTodoList = async (
   store: TodoStateStore,
   input: EnsureStageTodoListInput,

@@ -6,8 +6,11 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import type { InstanceRecord } from "../persistence/index.js";
-import { isTodoState, type TodoList, type TodoState } from "../todo/index.js";
+import {
+  mutateStageTodoList,
+  stageTodoList,
+  type TodoList,
+} from "../todo/index.js";
 import type {
   WorkflowMcpToolContext,
   WorkflowMcpToolContributor,
@@ -18,48 +21,19 @@ const result = (value: Record<string, unknown>) => ({
   structuredContent: value,
 });
 
-const currentList = (
-  record: InstanceRecord,
-  context: WorkflowMcpToolContext,
-): { list: TodoList; state: TodoState } => {
-  if (!isTodoState(record.state.todoState)) {
-    throw new Error("The workflow instance has no valid todo state");
-  }
-  const list = record.state.todoState.lists.find(
-    ({ sessionKey }) => sessionKey === context.binding.sessionKey,
-  );
-  if (list === undefined || list.stage !== context.binding.stage.id) {
-    throw new Error("The stage session has no bound todo list");
-  }
-  return { list, state: record.state.todoState };
-};
-
 const mutateList = (
   context: WorkflowMcpToolContext,
   mutate: (list: TodoList) => TodoList,
-): TodoList => {
-  while (true) {
-    const current = context.persistence.getInstance(
-      context.binding.instance.instanceId,
-    );
-    if (current === undefined)
-      throw new Error("The workflow instance is absent");
-    const { list, state } = currentList(current, context);
-    const nextList = mutate(list);
-    const nextState: TodoState = {
-      ...state,
-      lists: state.lists.map((candidate) =>
-        candidate.sessionKey === list.sessionKey ? nextList : candidate,
-      ),
-    };
-    const claimed = context.persistence.compareAndSwapInstance(
-      current.instanceId,
-      current.version,
-      { ...current.state, todoState: nextState },
-    );
-    if (claimed !== undefined) return nextList;
-  }
-};
+): TodoList =>
+  mutateStageTodoList(
+    context.persistence,
+    {
+      instanceId: context.binding.instance.instanceId,
+      sessionKey: context.binding.sessionKey,
+      stage: context.binding.stage.id,
+    },
+    mutate,
+  );
 
 const itemIndex = (list: TodoList, id: string): number => {
   const index = list.items.findIndex((item) => item.id === id);
@@ -83,7 +57,13 @@ const registerList = (
       );
       if (record === undefined)
         throw new Error("The workflow instance is absent");
-      return result({ todoList: currentList(record, context).list });
+      return result({
+        todoList: stageTodoList(
+          record,
+          context.binding.sessionKey,
+          context.binding.stage.id,
+        ).list,
+      });
     },
   );
 };

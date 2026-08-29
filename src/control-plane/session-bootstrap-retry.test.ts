@@ -241,6 +241,42 @@ describe("stage session cold retry guards", () => {
     expect(memory.record.state.handoffs).toHaveLength(1);
   });
 
+  it("fails closed when a stored MCP contract has no todo template binding", async () => {
+    const withoutTodoTemplate = { ...workflowMcp } as Partial<
+      typeof workflowMcp
+    >;
+    delete withoutTodoTemplate.todoTemplate;
+    const memory = memoryStore({
+      ...initialState(),
+      correlationTokens: { "prepare-1": "token-1" },
+      handoffs: [
+        {
+          correlationToken: "token-1",
+          handoff: "stored handoff",
+          kind: "stage-handoff",
+          sessionKey: "prepare-1",
+          workflowMcp: withoutTodoTemplate,
+        },
+      ],
+    });
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(input, {
+        persistence: memory.store,
+        instantiateTodoList,
+        resolveWorkflowMcpStageContract,
+        t3: { dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+      }),
+    ).rejects.toThrow(/no valid workflow MCP contract/);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("does not contact T3 when worktree preparation fails", async () => {
     const memory = memoryStore();
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
