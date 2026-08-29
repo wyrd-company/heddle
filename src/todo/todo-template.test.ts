@@ -99,6 +99,28 @@ describe("todo template instantiation", () => {
     ).rejects.toThrow("invalid placeholder syntax");
   });
 
+  it("rejects a placeholder that produces empty item text", async () => {
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "heddle-todo-"));
+    temporaryDirectories.push(repositoryRoot);
+    await mkdir(join(repositoryRoot, "todo-templates"));
+    await writeFile(
+      join(repositoryRoot, "todo-templates", "sample-stage.json"),
+      JSON.stringify({
+        items: [{ id: "inspect", text: "{{task.summary}}" }],
+      }),
+    );
+
+    await expect(
+      instantiateTodoList({
+        repositoryRoot,
+        sessionKey: "inspect-one",
+        stage: "inspect",
+        taskContract: { summary: "  " },
+        templateId: "sample-stage",
+      }),
+    ).rejects.toThrow("empty item text");
+  });
+
   it("rejects duplicate item identities within one template", async () => {
     const repositoryRoot = await mkdtemp(join(tmpdir(), "heddle-todo-"));
     temporaryDirectories.push(repositoryRoot);

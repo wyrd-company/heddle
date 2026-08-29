@@ -152,6 +152,11 @@ export const instantiateTodoList = async (input: {
         `Todo template contains invalid placeholder syntax: ${input.templateId}`,
       );
     }
+    if (instantiated.trim() === "") {
+      throw new TypeError(
+        `Todo template produces empty item text: ${input.templateId}`,
+      );
+    }
     return { checked: false, id, text: instantiated };
   });
   return {
