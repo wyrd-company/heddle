@@ -31,6 +31,11 @@ describe("LifecycleEngine rebase", () => {
       initialContext: { retained: "value" },
       instanceId: "sample-a",
     });
+    await fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "sample-a",
+      operationId: "operation-before-rebase",
+    });
     const priorEvents = fixture.persistence.replayEvents("sample-a");
     const blueprint = sampleBlueprint();
     blueprint.nodes.push({
@@ -38,14 +43,14 @@ describe("LifecycleEngine rebase", () => {
       uses: "wait",
       config: { joinStrategy: "any" },
     });
-    const loopEdge = blueprint.edges.find(
-      ({ source, target }) => source === "season" && target === "taste",
+    const openingEdge = blueprint.edges.find(
+      ({ source, target }) => source === "mix" && target === "taste",
     );
-    if (loopEdge === undefined) throw new Error("loop edge is missing");
-    loopEdge.target = "inspect";
+    if (openingEdge === undefined) throw new Error("opening edge is missing");
+    openingEdge.target = "inspect";
     blueprint.edges.push({
       source: "inspect",
-      target: "serve",
+      target: "taste",
       disposition: "approve",
       description: "Approve the sample",
       condition: "result.output.dispositions.approve",
@@ -85,11 +90,28 @@ describe("LifecycleEngine rebase", () => {
       _awaitingNodeIds: ["inspect"],
       retained: "value",
     });
+    expect(JSON.parse(persisted.serializedContext)).not.toHaveProperty(
+      "_outputs.taste",
+    );
+    expect(JSON.parse(persisted.serializedContext)).not.toHaveProperty(
+      "_outputs.season",
+    );
 
-    const completed = await fixture.engine.resume({
+    const advanced = await fixture.engine.resume({
       disposition: "approve",
       instanceId: "sample-a",
-      operationId: "operation-a",
+      operationId: "operation-after-rebase",
+    });
+    expect(advanced).toMatchObject({
+      awaitingNodeIds: ["taste"],
+      blueprintBlobHash: rebased.blueprintBlobHash,
+      status: "awaiting",
+    });
+
+    const completed = await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "sample-a",
+      operationId: "operation-final",
     });
 
     expect(completed).toMatchObject({
@@ -99,6 +121,7 @@ describe("LifecycleEngine rebase", () => {
     });
     expect(fixture.invocations.map(({ effect }) => effect)).toEqual([
       "mix",
+      "season",
       "serve",
     ]);
     fixture.persistence.close();
