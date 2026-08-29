@@ -6,12 +6,7 @@
 import { resolve } from "node:path";
 
 import { KanbanBoardAdapter } from "../board-adapter/index.js";
-import type {
-  ConsoleAttention,
-  ConsoleEvent,
-  ConsoleInstance,
-  ConsoleStateSource,
-} from "../console/index.js";
+import type { ConsoleStateSource } from "../console/index.js";
 import {
   createMechanicalNodeEffects,
   SessionObserver,
@@ -44,6 +39,7 @@ import {
   type ProductionConfiguration,
 } from "./configuration.js";
 import { ProductionInstanceController } from "./instance-controller.js";
+import { ProductionConsoleState } from "./console-state.js";
 import { ProductionScheduler } from "./scheduler.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
@@ -74,47 +70,6 @@ export type ProductionComposition = {
 };
 
 const activeWorkspaces = new Set<string>();
-
-class ProductionConsoleState implements ConsoleStateSource {
-  public constructor(
-    private readonly persistence: SqlitePersistence,
-    private readonly attention: DurableAttentionQueue,
-  ) {}
-
-  async listAttention(): Promise<ConsoleAttention[]> {
-    return this.attention.list();
-  }
-
-  async listEvents(input: {
-    afterSequence: number;
-    instanceId?: string;
-  }): Promise<ConsoleEvent[]> {
-    return this.persistence
-      .listInstances()
-      .filter(
-        ({ instanceId }) =>
-          input.instanceId === undefined || instanceId === input.instanceId,
-      )
-      .flatMap(({ instanceId }) =>
-        this.persistence.replayEvents(instanceId, input.afterSequence),
-      )
-      .sort((left, right) => left.sequence - right.sequence);
-  }
-
-  async listInstances(): Promise<ConsoleInstance[]> {
-    return this.persistence.listReconcilerRuntime().map((runtime) => ({
-      ...(runtime.deferral === undefined
-        ? {}
-        : { deferral: runtime.deferral as ConsoleInstance["deferral"] }),
-      instanceId: runtime.instanceId,
-      ...(runtime.stageEnteredAt === undefined
-        ? {}
-        : { stageEnteredAt: runtime.stageEnteredAt }),
-      ...(runtime.stageId === undefined ? {} : { stageId: runtime.stageId }),
-      taskId: runtime.taskId,
-    }));
-  }
-}
 
 export const createProductionComposition = (
   options: ProductionCompositionOptions,
@@ -234,7 +189,11 @@ export const createProductionComposition = (
     return {
       attention,
       board,
-      consoleState: new ProductionConsoleState(persistence, attention),
+      consoleState: new ProductionConsoleState(
+        persistence,
+        attention,
+        configuration.repositoryRoot,
+      ),
       escalation,
       lifecycle,
       mcp,

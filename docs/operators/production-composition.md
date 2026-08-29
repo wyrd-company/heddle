@@ -42,6 +42,14 @@ recorded lifecycle execution order. A standard stage receives those prior
 outputs. A remediation stage receives the latest review findings through the
 canonical handoff assembler; review transcript data is not dispatched.
 
+The console lifecycle source is a read-only projection over this composition's
+canonical persistence. It resolves the task through the durable reconciler
+runtime and instance records, reads the blueprint from the pinned Git blob, and
+replays Flowcraft history in the execution ID order stored by the lifecycle
+context. One global cursor covers the complete ordered history. A missing
+production runtime or instance returns unavailable; it does not synthesize an
+identity or substitute working-tree blueprint content.
+
 The scheduler starts with one immediate pass and then uses the configured
 cadence. Ticks coalesce while a pass is active; passes never overlap. Stop
 cancels the owned timer, refuses new passes, drains the current pass, and fails
@@ -50,8 +58,9 @@ within the configured bound if the pass cannot drain.
 Attention and notification delivery use the stable attention ID from the
 accepted lifecycle or escalation contract. SQLite stores attention and adapter
 completion records. Reusing an attention ID with a different payload fails
-closed as a durable-identity disagreement. A restart replays an unfinished escalation route without
-adding a second attention entry or repeating a completed Pushover delivery.
+closed as a durable-identity disagreement. A restart replays an unfinished
+escalation route without adding a second attention entry or repeating a completed
+Pushover delivery.
 Pushover transport is an explicit port so qualification can use a synthetic
 transport. Routine operation uses `HttpPushoverTransport`.
 

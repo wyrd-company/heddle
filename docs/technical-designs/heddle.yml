@@ -342,9 +342,11 @@ proposed-design:
     to the entry that raised it.
 
     The lifecycle view consumes one canonical read model assembled
-    outside the viewer. It identifies the persisted instance and its
-    pinned blueprint blob and carries the raw flowcraft events grouped
-    in recorded execution order behind one monotonic cursor. An initial
+    outside the viewer from the production composition's durable reconciler
+    runtime, persisted instance, pinned Git blueprint blob, lifecycle execution
+    ID sequence, and Flowcraft histories. It identifies the persisted instance
+    and carries the raw flowcraft events grouped in recorded execution order
+    behind one monotonic cursor. An initial
     read replays the complete persisted history; later reads contain
     only a contiguous tail. The view fails closed on cursor gaps,
     overlaps, instance or blueprint identity drift, and events that name
@@ -416,4 +418,6 @@ proposed-design:
     The deployment server accepts the canonical production composition and
     shares its board, persistence, console state, MCP handler, scheduler, and
     shutdown lifetime. Supplying separate board or console authorities with a
-    production composition is rejected.
+    production composition is rejected. Its lifecycle reader projects the
+    canonical instance, pinned blueprint, and Flowcraft histories; it does not
+    own a parallel blueprint or event store.

@@ -173,6 +173,19 @@ describe("deployed Heddle service", () => {
     await expect(response.json()).resolves.toMatchObject([
       { instanceId: `task-${fixture.taskId}`, taskId: fixture.taskId },
     ]);
+    const lifecycle = await globalThis.fetch(
+      `http://127.0.0.1:${service.port}/api/lifecycle?task=${fixture.taskId}&after=0`,
+    );
+    expect(lifecycle.status).toBe(200);
+    await expect(lifecycle.json()).resolves.toMatchObject({
+      currentStageIds: ["implement"],
+      instanceId: `task-${fixture.taskId}`,
+      taskId: fixture.taskId,
+    });
+    const unavailableLifecycle = await globalThis.fetch(
+      `http://127.0.0.1:${service.port}/api/lifecycle?task=999&after=0`,
+    );
+    expect(unavailableLifecycle.status).toBe(503);
     expect(() =>
       createProductionComposition({
         configuration: fixture.configuration,
