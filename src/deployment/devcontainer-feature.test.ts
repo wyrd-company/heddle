@@ -76,9 +76,11 @@ describe("Heddle devcontainer feature", () => {
     expect(featureQualification).toContain(
       'git -C "${repository}" diff --quiet',
     );
-    expect(featureQualification).toContain(
-      '--filter "label=heddle.qualification=${qualification_label}"',
-    );
+    expect(
+      featureQualification.match(
+        /--filter "label=heddle\.qualification=\$\{qualification_label\}"/g,
+      ),
+    ).toHaveLength(2);
     expect(qualification).toContain(
       "dist/control-plane/t3-control-plane-client.js",
     );
