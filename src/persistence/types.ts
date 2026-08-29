@@ -56,6 +56,13 @@ export interface ReconcilerRuntimeRecord {
   threadId?: string;
 }
 
+export interface SessionRuntimeRecord {
+  instanceId: string;
+  sessionKey: string;
+  stageId: string;
+  threadId: string;
+}
+
 export type EventRow = {
   instance_id: string;
   payload_json: string;

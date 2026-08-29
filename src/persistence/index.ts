@@ -17,4 +17,5 @@ export type {
   PersistedEvent,
   PersistenceConfiguration,
   ReconcilerRuntimeRecord,
+  SessionRuntimeRecord,
 } from "./types.js";

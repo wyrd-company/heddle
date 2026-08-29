@@ -41,6 +41,7 @@ import type {
   PersistedEvent,
   PersistenceConfiguration,
   ReconcilerRuntimeRecord,
+  SessionRuntimeRecord,
 } from "./types.js";
 
 const databaseFilename = "heddle-state.sqlite";
@@ -415,6 +416,51 @@ export class SqlitePersistence {
         record.stageEnteredAt ?? null,
         record.sessionKey ?? null,
         record.threadId ?? null,
+      );
+  }
+
+  listSessionRuntime(): SessionRuntimeRecord[] {
+    return this.database
+      .prepare(
+        `SELECT instance_id AS instanceId, session_key AS sessionKey,
+                stage_id AS stageId, thread_id AS threadId
+         FROM heddle_session_runtime
+         ORDER BY session_key`,
+      )
+      .all() as SessionRuntimeRecord[];
+  }
+
+  writeSessionRuntime(record: SessionRuntimeRecord): void {
+    for (const [name, value] of Object.entries(record)) {
+      this.assertStableId(name, value);
+    }
+    const prior = this.database
+      .prepare(
+        `SELECT instance_id AS instanceId, session_key AS sessionKey,
+                stage_id AS stageId, thread_id AS threadId
+         FROM heddle_session_runtime
+         WHERE session_key = ?`,
+      )
+      .get(record.sessionKey) as SessionRuntimeRecord | undefined;
+    if (prior !== undefined) {
+      if (JSON.stringify(prior) !== JSON.stringify(record)) {
+        throw new Error(
+          `Session '${record.sessionKey}' changed durable identity`,
+        );
+      }
+      return;
+    }
+    this.database
+      .prepare(
+        `INSERT INTO heddle_session_runtime
+           (session_key, instance_id, stage_id, thread_id)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(
+        record.sessionKey,
+        record.instanceId,
+        record.stageId,
+        record.threadId,
       );
   }
 

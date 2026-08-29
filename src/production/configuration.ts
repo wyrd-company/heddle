@@ -88,6 +88,11 @@ export const validateProductionConfiguration = (
   for (const [name, value] of Object.entries(configuration.session)) {
     if (value !== undefined) requireNonEmpty(`session.${name}`, value);
   }
+  if (configuration.pacing.defaultProvider !== configuration.session.driver) {
+    throw new TypeError(
+      "pacing.defaultProvider must equal session.driver for the configured session provider",
+    );
+  }
   requireNonEmpty("pushover.apiUrl", configuration.pushover.apiUrl);
   requireNonEmpty(
     "pushover.applicationToken",

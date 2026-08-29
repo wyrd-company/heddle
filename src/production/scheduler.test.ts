@@ -56,4 +56,23 @@ describe("production reconciliation scheduler", () => {
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
     expect(passes).toBe(stoppedAt);
   });
+
+  it("fails within the configured bound when an owned pass cannot drain", async () => {
+    let release: (() => void) | undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const scheduler = new ProductionScheduler({
+      cadenceMilliseconds: 60_000,
+      pass: () => blocked,
+      stopTimeoutMilliseconds: 10,
+    });
+
+    const starting = scheduler.start();
+    await expect(scheduler.stop()).rejects.toThrow(
+      "Timed out draining the reconciliation pass",
+    );
+    release?.();
+    await starting;
+  });
 });

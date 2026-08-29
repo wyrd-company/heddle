@@ -66,6 +66,7 @@ export type ProductionComposition = {
   close(): Promise<void>;
   consoleState: ConsoleStateSource;
   escalation: EscalationCoordinator;
+  lifecycle: LifecycleEngine;
   mcp: WorkflowMcpHttpHandler;
   persistence: SqlitePersistence;
   scheduler: ProductionScheduler;
@@ -215,18 +216,13 @@ export const createProductionComposition = (
       onError: options.onSchedulerError,
       pass: async () => {
         await reconciler.reconcile();
-        for (const runtime of persistence!.listReconcilerRuntime()) {
-          if (
-            runtime.sessionKey !== undefined &&
-            runtime.threadId !== undefined &&
-            (runtime.state === "running" || runtime.state === "waiting")
-          ) {
-            await observer.observe({
-              instanceId: runtime.instanceId,
-              sessionKey: runtime.sessionKey,
-              threadId: runtime.threadId,
-            });
-          }
+        await instances.synchronize(await board.readBoard());
+        for (const session of persistence!.listSessionRuntime()) {
+          await observer.observe({
+            instanceId: session.instanceId,
+            sessionKey: session.sessionKey,
+            threadId: session.threadId,
+          });
         }
       },
       stopTimeoutMilliseconds: configuration.stopTimeoutMilliseconds,
@@ -242,6 +238,7 @@ export const createProductionComposition = (
       board,
       consoleState: new ProductionConsoleState(persistence, attention),
       escalation,
+      lifecycle,
       mcp,
       persistence,
       scheduler,

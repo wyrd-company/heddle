@@ -88,6 +88,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       .find(({ instanceId }) => instanceId === input.instanceId);
     const provider = input.dispatch?.provider ?? previous?.provider;
     const starting: ReconcilerRuntimeRecord = {
+      ...(previous?.state === "starting" ? previous : {}),
       boardStatus: input.task.status,
       instanceId: input.instanceId,
       ...(provider === undefined ? {} : { provider }),
@@ -130,18 +131,86 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     await this.#activate(input.task, input.instanceId, stageId, starting);
   }
 
+  async synchronize(tasks: readonly BoardTask[]): Promise<void> {
+    const tasksById = new Map(tasks.map((task) => [task.id, task]));
+    for (const runtime of this.persistence.listReconcilerRuntime()) {
+      const record = this.persistence.getInstance(runtime.instanceId);
+      if (record === undefined) continue;
+      const context = readLifecycleContext(record);
+      if (context.pendingTransition !== null) {
+        this.persistence.writeReconcilerRuntime({
+          ...runtime,
+          state: "running",
+        });
+        continue;
+      }
+      const stageId = context.awaitingNodeIds[0];
+      if (stageId === undefined) {
+        this.persistence.writeReconcilerRuntime({
+          ...runtime,
+          boardStatus: context.status === "completed" ? "done" : "in-progress",
+          state: context.status === "completed" ? "done" : "running",
+        });
+        continue;
+      }
+      if (runtime.stageId === stageId && runtime.state === "waiting") continue;
+      const task = tasksById.get(runtime.taskId);
+      if (task === undefined) {
+        throw new Error(
+          `Task ${runtime.taskId} is absent during lifecycle synchronization`,
+        );
+      }
+      const starting: ReconcilerRuntimeRecord = {
+        ...runtime,
+        state: "starting",
+      };
+      this.persistence.writeReconcilerRuntime(starting);
+      await this.#activate(task, runtime.instanceId, stageId, starting);
+    }
+  }
+
   async #activate(
     task: BoardTask,
     instanceId: string,
     stageId: string,
     starting: ReconcilerRuntimeRecord,
   ): Promise<void> {
-    const sessionKey = `${instanceId}:${stageId}`;
-    const threadId = stableUuid(`${sessionKey}:thread`);
+    const retryingIntent =
+      starting.state === "starting" &&
+      starting.stageId === stageId &&
+      starting.sessionKey !== undefined &&
+      starting.threadId !== undefined;
+    const priorSessions = this.persistence
+      .listSessionRuntime()
+      .filter(
+        (session) =>
+          session.instanceId === instanceId && session.stageId === stageId,
+      );
+    const intendedSession = retryingIntent
+      ? priorSessions.find(
+          (session) => session.sessionKey === starting.sessionKey,
+        )
+      : undefined;
+    const activation =
+      intendedSession === undefined
+        ? priorSessions.length + 1
+        : priorSessions.indexOf(intendedSession) + 1;
+    const sessionKey = retryingIntent
+      ? starting.sessionKey!
+      : `${instanceId}:${stageId}:${activation}`;
+    const threadId = retryingIntent
+      ? starting.threadId!
+      : stableUuid(`${sessionKey}:thread`);
     this.persistence.writeReconcilerRuntime({
       ...starting,
       sessionKey,
       stageEnteredAt: this.now(),
+      stageId,
+      threadId,
+    });
+    this.persistence.writeSessionRuntime({
+      instanceId,
+      sessionKey,
       stageId,
       threadId,
     });
@@ -177,7 +246,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         },
         runtimeMode: session.runtimeMode,
         sessionKey,
-        title: heddleSessionTitle(task.id, stageId),
+        title: heddleSessionTitle(task.id, `${stageId}-${activation}`),
         worktree: {
           baseRef: session.baseRef,
           branch: `heddle/task-${task.id}-${stageSlug(stageId)}`,

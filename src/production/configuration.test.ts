@@ -88,4 +88,15 @@ describe("production configuration", () => {
       "cadenceMilliseconds must be a positive safe integer",
     );
   });
+
+  it("rejects a pacing provider that the session boundary cannot dispatch", () => {
+    const invalid = {
+      ...fixture(),
+      pacing: { ...fixture().pacing, defaultProvider: "provider-b" },
+    };
+
+    expect(() => validateProductionConfiguration(invalid)).toThrow(
+      "pacing.defaultProvider must equal session.driver",
+    );
+  });
 });

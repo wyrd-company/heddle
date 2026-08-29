@@ -52,6 +52,13 @@ export const initializePersistenceSchema = (
       recorded_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_session_runtime (
+      session_key TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      stage_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL UNIQUE
+    );
+
     CREATE TABLE IF NOT EXISTS heddle_completed_effects (
       effect_kind TEXT NOT NULL,
       stable_id TEXT NOT NULL,
