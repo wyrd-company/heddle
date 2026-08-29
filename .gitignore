@@ -144,3 +144,7 @@ vite.config.ts.timestamp-*
 
 # T3 headless spike scratch state (server home, tokens, scratch repos)
 .spike-scratch/
+
+# spike: flowcraft gate
+data/
+nohup.out
