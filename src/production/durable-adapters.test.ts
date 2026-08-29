@@ -126,6 +126,9 @@ describe("durable production adapters", () => {
     await expect(notifier.send(attention)).rejects.toThrow(
       "Injected transport failure",
     );
+    expect(
+      persistence.effectIntentRecorded("pushover", attention.attentionId),
+    ).toBe(true);
     expect(persistence.effectCompleted("pushover", attention.attentionId)).toBe(
       false,
     );

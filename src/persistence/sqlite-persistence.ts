@@ -320,6 +320,19 @@ export class SqlitePersistence {
     );
   }
 
+  effectIntentRecorded(effectKind: string, stableId: string): boolean {
+    this.assertStableId("effectKind", effectKind);
+    this.assertStableId("stableId", stableId);
+    return (
+      this.database
+        .prepare(
+          `SELECT 1 FROM heddle_completed_effects
+           WHERE effect_kind = ? AND stable_id = ?`,
+        )
+        .get(effectKind, stableId) !== undefined
+    );
+  }
+
   recordEffectIntent(effectKind: string, stableId: string): boolean {
     this.assertStableId("effectKind", effectKind);
     this.assertStableId("stableId", stableId);
