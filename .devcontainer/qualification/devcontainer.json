@@ -20,6 +20,11 @@
       "source": "${localEnv:HEDDLE_QUALIFICATION_BOARD}",
       "target": "/workspaces/kanban",
       "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_KANBAN}",
+      "target": "/usr/local/bin/kanban-md",
+      "type": "bind"
     }
   ],
   "remoteUser": "vscode",

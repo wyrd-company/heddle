@@ -12,6 +12,7 @@ accepted_head="$(git rev-parse HEAD)"
 configuration="${repository}/.devcontainer/qualification/devcontainer.json"
 state_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-state.XXXXXX)"
 board_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-board.XXXXXX)"
+tools_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-tools.XXXXXX)"
 container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
@@ -28,8 +29,11 @@ cleanup() {
     done
     rm -rf "${state_directory}"
     rm -rf "${board_directory}"
+    rm -rf "${tools_directory}"
 }
 trap cleanup EXIT
+
+install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
 
 printf 'n\n' | kanban-md init \
     --dir "${board_directory}" \
@@ -64,6 +68,7 @@ up() {
     log_file="$(mktemp)"
     if ! HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+        HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         devcontainer up \
         --workspace-folder "${repository}" \
         --config "${configuration}" \
@@ -89,6 +94,7 @@ up() {
 inside() {
     HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+        HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         devcontainer exec \
         --workspace-folder "${repository}" \
         --config "${configuration}" \
@@ -104,6 +110,7 @@ up
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
 set -euo pipefail
 test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
+test "$(kanban-md --version)" = "kanban-md version 0.37.0-fork+b9fc380"
 for attempt in $(seq 1 100); do
     if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1

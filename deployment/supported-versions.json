@@ -2,5 +2,6 @@
   "relationships": {
     "references": ["t3-headless"]
   },
+  "kanbanMd": "0.37.0-fork+b9fc380",
   "t3": "0.0.36"
 }
