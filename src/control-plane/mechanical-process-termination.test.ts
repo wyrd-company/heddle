@@ -539,6 +539,7 @@ const transitionBoundaries: Array<{
   detachedBase: boolean;
   executable: string;
   expectedApprovalPathAtKill: boolean;
+  expectedBaseWorktreeCleanAtKill: boolean;
   expectedBranchAtKill: boolean;
   expectedSnapshotStatusAtKill: ReviewSnapshot["status"];
   expectedSourcePathAtKill: boolean;
@@ -551,6 +552,7 @@ const transitionBoundaries: Array<{
     detachedBase: false,
     executable: "git",
     expectedApprovalPathAtKill: false,
+    expectedBaseWorktreeCleanAtKill: false,
     expectedBranchAtKill: true,
     expectedSnapshotStatusAtKill: "open",
     expectedSourcePathAtKill: true,
@@ -563,6 +565,7 @@ const transitionBoundaries: Array<{
     detachedBase: true,
     executable: "git",
     expectedApprovalPathAtKill: true,
+    expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
     expectedSnapshotStatusAtKill: "open",
     expectedSourcePathAtKill: true,
@@ -575,6 +578,7 @@ const transitionBoundaries: Array<{
     detachedBase: true,
     executable: "gitpr",
     expectedApprovalPathAtKill: true,
+    expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
     expectedSnapshotStatusAtKill: "open",
     expectedSourcePathAtKill: true,
@@ -587,6 +591,7 @@ const transitionBoundaries: Array<{
     detachedBase: true,
     executable: "gitpr",
     expectedApprovalPathAtKill: true,
+    expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
     expectedSnapshotStatusAtKill: "approved",
     expectedSourcePathAtKill: true,
@@ -599,6 +604,7 @@ const transitionBoundaries: Array<{
     detachedBase: true,
     executable: "git",
     expectedApprovalPathAtKill: false,
+    expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
     expectedSnapshotStatusAtKill: "approved",
     expectedSourcePathAtKill: true,
@@ -611,6 +617,7 @@ const transitionBoundaries: Array<{
     detachedBase: false,
     executable: "git",
     expectedApprovalPathAtKill: false,
+    expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
     expectedSnapshotStatusAtKill: "approved",
     expectedSourcePathAtKill: false,
@@ -623,6 +630,7 @@ const transitionBoundaries: Array<{
     detachedBase: false,
     executable: "git",
     expectedApprovalPathAtKill: false,
+    expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: false,
     expectedSnapshotStatusAtKill: "approved",
     expectedSourcePathAtKill: false,
@@ -752,6 +760,9 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
       expect((await snapshotNow(fixture)).status).toBe(
         boundaryCase.expectedSnapshotStatusAtKill,
       );
+      expect(
+        (await git(fixture.repositoryRoot, "status", "--porcelain=v1")) === "",
+      ).toBe(boundaryCase.expectedBaseWorktreeCleanAtKill);
       const interruptedPersistence = new SqlitePersistence({
         stateDirectory: fixture.stateDirectory,
       });
@@ -788,6 +799,9 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
       );
       expect((await snapshotNow(fixture)).status).toBe("approved");
       expect(await pathExists(fixture.approvalWorktreePath)).toBe(false);
+      expect(
+        await git(fixture.repositoryRoot, "status", "--porcelain=v1"),
+      ).toBe("");
       expect(
         await git(fixture.repositoryRoot, "rev-list", "--merges", "main"),
       ).toBe("");
