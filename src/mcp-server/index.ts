@@ -4,6 +4,7 @@
 // ---
 
 export { workflowMcpCoreTools } from "./core-tools.js";
+export { workflowMcpTodoTools } from "./todo-tools.js";
 export { isWorkflowMcpStageContract } from "./stage-contract.js";
 export {
   bearerCorrelationToken,

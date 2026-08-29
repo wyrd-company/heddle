@@ -43,7 +43,7 @@ const initialState = (): InstanceState => ({
   correlationTokens: {},
   flowcraftContext: null,
   handoffs: [],
-  todoState: [{ complete: false, text: "Count items" }],
+  todoState: null,
 });
 
 const workflowMcp = {
@@ -51,10 +51,20 @@ const workflowMcp = {
   blueprintPath: "blueprints/sample-process.json",
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
   stage: "prepare",
+  todoTemplate: "sample-prepare",
   tools: ["advance", "get_task_context"],
 };
 
 const resolveWorkflowMcpStageContract = async () => workflowMcp;
+
+const instantiateTodoList: NonNullable<
+  SessionBootstrapDependencies["instantiateTodoList"]
+> = async ({ sessionKey, stage, templateId }) => ({
+  items: [{ checked: false, id: "orient", text: "Orient on the sample" }],
+  sessionKey,
+  stage,
+  template: templateId,
+});
 
 const memoryStore = (state = initialState()) => {
   let record: InstanceRecord = {
@@ -98,6 +108,7 @@ describe("stage session cold retry guards", () => {
     let failFirstTurn = true;
     const dependencies: SessionBootstrapDependencies = {
       persistence: memory.store,
+      instantiateTodoList,
       resolveWorkflowMcpStageContract,
       t3: {
         dispatch: async (command) => {
@@ -152,6 +163,7 @@ describe("stage session cold retry guards", () => {
     await expect(
       bootstrapStageSession(input, {
         persistence: memory.store,
+        instantiateTodoList,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -182,6 +194,7 @@ describe("stage session cold retry guards", () => {
     await expect(
       bootstrapStageSession(input, {
         persistence: memory.store,
+        instantiateTodoList,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -214,6 +227,7 @@ describe("stage session cold retry guards", () => {
     await expect(
       bootstrapStageSession(input, {
         persistence: memory.store,
+        instantiateTodoList,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({

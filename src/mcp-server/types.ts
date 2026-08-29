@@ -18,6 +18,11 @@ export interface WorkflowMcpPersistence {
     type: string,
     payload: JsonValue,
   ): PersistedEvent;
+  compareAndSwapInstance(
+    instanceId: string,
+    expectedVersion: number,
+    state: InstanceRecord["state"],
+  ): InstanceRecord | undefined;
   getInstance(instanceId: string): InstanceRecord | undefined;
   listInstances(): InstanceRecord[];
 }
@@ -52,6 +57,7 @@ export interface WorkflowMcpStageContract {
   blueprintPath: string;
   dispositions: WorkflowMcpDisposition[];
   stage: string;
+  todoTemplate: string;
   tools: string[];
 }
 

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://wyrd.company/heddle/todo-template.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "items": [
+    {
+      "id": "orient",
+      "text": "Orient on the findings for {{task.title}}"
+    },
+    {
+      "id": "remediate",
+      "text": "Remediate each accepted finding"
+    },
+    {
+      "id": "validate",
+      "text": "Validate the remediated behavior"
+    },
+    {
+      "id": "handoff",
+      "text": "Prepare the remediation handoff"
+    }
+  ]
+}

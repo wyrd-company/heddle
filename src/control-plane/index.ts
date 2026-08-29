@@ -12,8 +12,10 @@ export {
 } from "./correlation-token.js";
 export {
   bootstrapStageSession,
+  harnessConfiguration,
   steerStageSession,
   type SessionBootstrapDependencies,
+  type HarnessConfiguration,
   type SessionBootstrapInput,
   type SessionBootstrapResult,
   type SessionSteeringDependencies,

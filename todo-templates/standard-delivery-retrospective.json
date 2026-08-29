@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wyrd.company/heddle/todo-template.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "items": [
+    {
+      "id": "review",
+      "text": "Review the delivery of {{task.title}}"
+    },
+    {
+      "id": "capture",
+      "text": "Capture decisions, risks, and follow-up proposals"
+    },
+    {
+      "id": "handoff",
+      "text": "Prepare the retrospective handoff"
+    }
+  ]
+}

@@ -86,8 +86,18 @@ const blueprint = (
   id: "sample-process",
   nodes: [
     { id: "prepare", uses: "prepare" },
-    { id: "assess", uses: "wait", tools },
-    { id: "inspect", uses: "wait", tools: ["get_task_context"] },
+    {
+      id: "assess",
+      uses: "wait",
+      tools,
+      "todo-template": "sample-stage",
+    },
+    {
+      id: "inspect",
+      uses: "wait",
+      tools: ["get_task_context"],
+      "todo-template": "sample-stage",
+    },
     { id: "accepted", uses: "accepted" },
     { id: "revised", uses: "revised" },
   ],
@@ -181,11 +191,27 @@ const makeFixture = async () => {
   temporaryDirectories.push(repositoryRoot);
   await execFileAsync("git", ["init", "--quiet"], { cwd: repositoryRoot });
   await mkdir(join(repositoryRoot, "blueprints"));
+  await mkdir(join(repositoryRoot, "todo-templates"));
+  await writeFile(
+    join(repositoryRoot, "todo-templates", "sample-stage.json"),
+    JSON.stringify({
+      items: [{ id: "orient", text: "Orient on {{task.title}}" }],
+    }),
+  );
   const alphaPath = await writeBlueprint(
     repositoryRoot,
     "alpha-sample",
     blueprint(
-      ["advance", "get_task_context", "report_blocked"],
+      [
+        "advance",
+        "get_task_context",
+        "report_blocked",
+        "todo_list",
+        "todo_check",
+        "todo_add",
+        "todo_edit",
+        "todo_reorder",
+      ],
       "Accept the prepared sample",
     ),
   );
@@ -397,6 +423,11 @@ describe("workflow MCP HTTP server", () => {
           { name: "advance" },
           { name: "get_task_context" },
           { name: "report_blocked" },
+          { name: "todo_list" },
+          { name: "todo_check" },
+          { name: "todo_add" },
+          { name: "todo_edit" },
+          { name: "todo_reorder" },
         ],
       });
       const successfulRequests = observations.filter(
@@ -696,6 +727,11 @@ describe("workflow MCP HTTP server", () => {
       "advance",
       "get_task_context",
       "report_blocked",
+      "todo_list",
+      "todo_check",
+      "todo_add",
+      "todo_edit",
+      "todo_reorder",
     ]);
     expect(betaTools.tools.map(({ name }) => name)).toEqual([
       "get_task_context",
@@ -822,6 +858,85 @@ describe("workflow MCP HTTP server", () => {
     ).toBe(false);
   });
 
+  it("persists the todo tool suite and carries progress into the next stage handoff", async () => {
+    const fixture = await makeFixture();
+    const alpha = await connect(fixture.url, fixture.alphaToken, "todo-client");
+
+    await expect(
+      alpha.callTool({
+        name: "todo_check",
+        arguments: { id: "orient" },
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        todoList: { items: [{ checked: true, id: "orient" }] },
+      },
+    });
+    const added = await alpha.callTool({
+      name: "todo_add",
+      arguments: { position: 0, text: "Check the sample label" },
+    });
+    const addedId = (added.structuredContent as { id: string }).id;
+    await alpha.callTool({
+      name: "todo_edit",
+      arguments: { id: addedId, text: "Check the sample container label" },
+    });
+    await alpha.callTool({
+      name: "todo_reorder",
+      arguments: { id: addedId, position: 1 },
+    });
+
+    const recovered = new SqlitePersistence({
+      stateDirectory: join(fixture.repositoryRoot, "state"),
+    });
+    await expect(
+      (
+        await connect(fixture.url, fixture.alphaToken, "todo-retry-client")
+      ).callTool({
+        name: "todo_list",
+        arguments: {},
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        todoList: {
+          items: [
+            { checked: true, id: "orient" },
+            {
+              checked: false,
+              id: addedId,
+              text: "Check the sample container label",
+            },
+          ],
+        },
+      },
+    });
+    expect(recovered.getInstance("instance-alpha")?.state.todoState).toEqual(
+      fixture.persistence.getInstance("instance-alpha")?.state.todoState,
+    );
+    recovered.close();
+
+    await alpha.callTool({
+      name: "advance",
+      arguments: { disposition: "revise" },
+    });
+    const next = await fixture.bootstrap(
+      "instance-alpha",
+      "stage-inspect",
+      "token-inspect",
+      { id: 13, title: "Inspect a sample" },
+      "inspect",
+    );
+    const handoff = JSON.parse(next.handoff) as {
+      todoList: { lists: Array<{ sessionKey: string; items: unknown[] }> };
+    };
+    expect(handoff.todoList.lists).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sessionKey: "stage-alpha" }),
+        expect.objectContaining({ sessionKey: "stage-inspect" }),
+      ]),
+    );
+  });
+
   it("rejects instance injection and advances only the token-bound instance", async () => {
     const fixture = await makeFixture();
     const alpha = await connect(
@@ -905,6 +1020,13 @@ describe("workflow MCP HTTP server", () => {
       join(cwd(), blueprintPath),
       join(fixture.repositoryRoot, blueprintPath),
     );
+    await copyFile(
+      join(cwd(), "todo-templates/standard-delivery-review.json"),
+      join(
+        fixture.repositoryRoot,
+        "todo-templates/standard-delivery-review.json",
+      ),
+    );
     await fixture.lifecycle.start({
       blueprintPath,
       instanceId: "instance-recurring",
@@ -969,7 +1091,16 @@ describe("workflow MCP HTTP server", () => {
     );
     expect(
       (await secondReview.listTools()).tools.map(({ name }) => name),
-    ).toEqual(["advance", "get_task_context", "report_blocked"]);
+    ).toEqual([
+      "advance",
+      "get_task_context",
+      "report_blocked",
+      "todo_list",
+      "todo_check",
+      "todo_add",
+      "todo_edit",
+      "todo_reorder",
+    ]);
     const replay = await firstRetry.callTool({
       name: "advance",
       arguments: { disposition: "reject" },

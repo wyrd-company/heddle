@@ -24,7 +24,7 @@ const initialState = (): InstanceState => ({
   correlationTokens: {},
   flowcraftContext: null,
   handoffs: [],
-  todoState: [{ complete: false, text: "Count items" }],
+  todoState: null,
 });
 
 const resolveWorkflowMcpStageContract = async () => ({
@@ -32,7 +32,23 @@ const resolveWorkflowMcpStageContract = async () => ({
   blueprintPath: "blueprints/sample-process.json",
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
   stage: "prepare",
+  todoTemplate: "sample-prepare",
   tools: ["advance", "get_task_context"],
+});
+
+const instantiateTodoList: NonNullable<
+  SessionBootstrapDependencies["instantiateTodoList"]
+> = async ({ sessionKey, stage, taskContract, templateId }) => ({
+  items: [
+    {
+      checked: false,
+      id: "orient",
+      text: `Orient on ${(taskContract as { title: string }).title}`,
+    },
+  ],
+  sessionKey,
+  stage,
+  template: templateId,
 });
 
 const scratchDirectories: string[] = [];
@@ -72,6 +88,7 @@ describe("stage session bootstrap", () => {
           return record;
         },
       },
+      instantiateTodoList,
       resolveWorkflowMcpStageContract,
       t3: {
         dispatch: async (command) => {
@@ -147,6 +164,10 @@ describe("stage session bootstrap", () => {
       "prepare-1": "correlation-token",
     });
     expect(record.state.handoffs).toHaveLength(1);
+    expect(first.harnessConfiguration).toEqual({
+      claudeCode: { permissions: { deny: ["TodoWrite"] } },
+      codex: { tools: { update_plan: { enabled: false } } },
+    });
     expect(dependencies.mintCorrelationToken).toHaveBeenCalledOnce();
   });
 
@@ -193,6 +214,7 @@ describe("stage session bootstrap", () => {
     persistence.createInstance("instance-1", initialState());
     const dependencies: SessionBootstrapDependencies = {
       persistence,
+      instantiateTodoList,
       resolveWorkflowMcpStageContract,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({

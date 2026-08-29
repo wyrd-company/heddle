@@ -13,6 +13,7 @@ import {
 } from "@modelcontextprotocol/server";
 
 import { workflowMcpCoreTools } from "./core-tools.js";
+import { workflowMcpTodoTools } from "./todo-tools.js";
 import {
   bearerCorrelationToken,
   CorrelationTokenError,
@@ -51,7 +52,11 @@ const contributorsByName = (
   additional: readonly WorkflowMcpToolContributor[],
 ): Map<string, WorkflowMcpToolContributor> => {
   const contributors = new Map<string, WorkflowMcpToolContributor>();
-  for (const contributor of [...workflowMcpCoreTools(), ...additional]) {
+  for (const contributor of [
+    ...workflowMcpCoreTools(),
+    ...workflowMcpTodoTools(),
+    ...additional,
+  ]) {
     if (contributors.has(contributor.name)) {
       throw new TypeError(
         `MCP tool contributor is registered more than once: ${contributor.name}`,

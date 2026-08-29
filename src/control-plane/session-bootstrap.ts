@@ -9,6 +9,7 @@ import type { InstanceRecord } from "../persistence/index.js";
 import { GitBlueprintStore } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
+import { ensureStageTodoList, instantiateTodoList } from "../todo/index.js";
 import {
   ensureCorrelationToken,
   type InstanceStateStore,
@@ -57,13 +58,29 @@ export type SessionBootstrapInput = {
 
 export type SessionBootstrapResult = {
   correlationToken: string;
+  harnessConfiguration: HarnessConfiguration;
   handoff: string;
   threadId: string;
   worktree: PreparedWorktree;
 };
 
+export type HarnessConfiguration = {
+  claudeCode: {
+    permissions: { deny: ["TodoWrite"] };
+  };
+  codex: {
+    tools: { update_plan: { enabled: false } };
+  };
+};
+
+export const harnessConfiguration = (): HarnessConfiguration => ({
+  claudeCode: { permissions: { deny: ["TodoWrite"] } },
+  codex: { tools: { update_plan: { enabled: false } } },
+});
+
 export type SessionBootstrapDependencies = {
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
+  instantiateTodoList?: typeof instantiateTodoList;
   mintCorrelationToken?: () => string;
   nextId?: () => string;
   now?: () => string;
@@ -125,7 +142,11 @@ const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
     const stage = blueprint.nodes.find(
       ({ id }) => id === input.handoff.stage.name,
     );
-    if (stage?.uses !== "wait" || !Array.isArray(stage.tools)) {
+    if (
+      stage?.uses !== "wait" ||
+      !Array.isArray(stage.tools) ||
+      typeof stage["todo-template"] !== "string"
+    ) {
       throw new Error(
         "Stage session bootstrap requires a wait-stage tool declaration",
       );
@@ -153,6 +174,7 @@ const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
       blueprintPath: context["blueprintPath"],
       dispositions,
       stage: stage.id,
+      todoTemplate: stage["todo-template"],
       tools: [...stage.tools],
     };
   };
@@ -162,6 +184,7 @@ const ensureStoredHandoff = async (
   input: SessionBootstrapInput,
   correlationToken: string,
   resolveStageContract: WorkflowMcpStageContractResolver,
+  instantiate: typeof instantiateTodoList,
 ): Promise<string> => {
   while (true) {
     const current = store.getInstance(input.instanceId);
@@ -194,12 +217,35 @@ const ensureStoredHandoff = async (
       return existing.handoff;
     }
 
+    const workflowMcp = await resolveStageContract(input, current);
+    const todoState = await ensureStageTodoList(
+      store,
+      {
+        instanceId: input.instanceId,
+        repositoryRoot: input.worktree.repositoryRoot,
+        sessionKey: input.sessionKey,
+        stage: workflowMcp.stage,
+        taskContract: input.handoff.taskContract,
+        templateId: workflowMcp.todoTemplate,
+      },
+      instantiate,
+    );
+    const refreshed = store.getInstance(input.instanceId);
+    if (refreshed === undefined) {
+      throw new Error(`Instance does not exist: ${input.instanceId}`);
+    }
+    if (
+      refreshed.state.handoffs
+        .filter(isStoredHandoff)
+        .some(({ sessionKey }) => sessionKey === input.sessionKey)
+    ) {
+      continue;
+    }
     const handoff = assembleStageHandoff({
       ...input.handoff,
       correlationToken,
-      todoList: current.state.todoState,
+      todoList: todoState,
     });
-    const workflowMcp = await resolveStageContract(input, current);
     const stored: StoredStageHandoffCandidate = {
       correlationToken,
       handoff,
@@ -209,10 +255,10 @@ const ensureStoredHandoff = async (
     };
     const claimed = store.compareAndSwapInstance(
       input.instanceId,
-      current.version,
+      refreshed.version,
       {
-        ...current.state,
-        handoffs: [...current.state.handoffs, stored],
+        ...refreshed.state,
+        handoffs: [...refreshed.state.handoffs, stored],
       },
     );
     if (claimed !== undefined) return handoff;
@@ -239,6 +285,7 @@ export const bootstrapStageSession = async (
     correlationToken,
     dependencies.resolveWorkflowMcpStageContract ??
       resolveWorkflowMcpStageContract,
+    dependencies.instantiateTodoList ?? instantiateTodoList,
   );
   const threadId = nextId();
 
@@ -274,7 +321,13 @@ export const bootstrapStageSession = async (
     input.providerContext,
   );
 
-  return { correlationToken, handoff, threadId, worktree };
+  return {
+    correlationToken,
+    handoff,
+    harnessConfiguration: harnessConfiguration(),
+    threadId,
+    worktree,
+  };
 };
 
 export const steerStageSession = async (

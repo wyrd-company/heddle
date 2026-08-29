@@ -81,6 +81,13 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
       }),
     );
     await mkdir(projectPath, { recursive: true });
+    await mkdir(join(projectPath, "todo-templates"));
+    await writeFile(
+      join(projectPath, "todo-templates", "sample-prepare.json"),
+      JSON.stringify({
+        items: [{ id: "orient", text: "Orient on {{task.title}}" }],
+      }),
+    );
     await exec("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: projectPath,
     });
@@ -147,7 +154,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
       correlationTokens: {},
       flowcraftContext: null,
       handoffs: [],
-      todoState: [{ complete: false, text: "Count items" }],
+      todoState: null,
     });
   }, 20_000);
 
@@ -202,6 +209,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
             { description: "Finish the preparation", name: "complete" },
           ],
           stage: "prepare",
+          todoTemplate: "sample-prepare",
           tools: ["advance", "get_task_context"],
         }),
         t3: client,
