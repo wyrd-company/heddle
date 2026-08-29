@@ -266,13 +266,14 @@ const waitForEmptyProcessGroup = async (
   return processGroup(processGroupId);
 };
 
-const waitForProcessGroupSize = async (
+const waitForSettledProcessGroup = async (
   processGroupId: number,
-  expectedSize: number,
+  holdsLease: boolean,
 ): Promise<ProcessRecord[]> => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const observed = await processGroup(processGroupId);
-    if (observed.length === expectedSize) return observed;
+    const gitProcesses = observed.filter(({ command }) => command === "git");
+    if (gitProcesses.length === (holdsLease ? 1 : 0)) return observed;
     await delay(20);
   }
   return processGroup(processGroupId);
@@ -452,9 +453,9 @@ const terminateAtBoundary = async (
     const marker = await worker.waitForRecord("boundary");
     const holdsLease =
       boundary === "exact-base-leased" || boundary === "approval-recorded";
-    const topologyBeforeKill = await waitForProcessGroupSize(
+    const topologyBeforeKill = await waitForSettledProcessGroup(
       processGroupId,
-      holdsLease ? 2 : 1,
+      holdsLease,
     );
     const locksBeforeKill = await lockFilesBelow(
       join(fixture.repositoryRoot, ".git"),
@@ -689,6 +690,15 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
         ({ arguments: arguments_, command }) =>
           command === "git" && arguments_.includes("update-ref --stdin"),
       );
+      const transformProcesses = killed.topologyBeforeKill.filter(
+        ({ arguments: arguments_, command, parentPid }) =>
+          command === "esbuild" &&
+          parentPid === killed.marker.pid &&
+          arguments_.includes("/node_modules/") &&
+          arguments_.includes("esbuild --service=") &&
+          arguments_.endsWith(" --ping"),
+      );
+      expect(transformProcesses.length).toBeLessThanOrEqual(1);
       if (
         boundaryCase.boundary === "exact-base-leased" ||
         boundaryCase.boundary === "approval-recorded"
@@ -698,20 +708,16 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
           parentPid: killed.marker.pid,
         });
         expect(
-          killed.topologyBeforeKill,
-          JSON.stringify(killed.topologyBeforeKill, null, 2),
-        ).toHaveLength(2);
-        expect(
           killed.locksBeforeKill.some((path) => path.endsWith("main.lock")),
         ).toBe(true);
       } else {
         expect(leaseProcesses).toHaveLength(0);
-        expect(
-          killed.topologyBeforeKill,
-          JSON.stringify(killed.topologyBeforeKill, null, 2),
-        ).toHaveLength(1);
         expect(killed.locksBeforeKill).toEqual([]);
       }
+      expect(
+        killed.topologyBeforeKill,
+        JSON.stringify(killed.topologyBeforeKill, null, 2),
+      ).toHaveLength(1 + leaseProcesses.length + transformProcesses.length);
 
       expect(await readBranchHead(fixture.repositoryRoot, "main")).toBe(
         fixture.snapshot.sourceHead,
