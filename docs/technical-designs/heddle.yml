@@ -113,6 +113,16 @@ proposed-design:
     binding the session to its instance so a caller can advance only
     its own work, and `advance` is idempotent per instance and stage,
     so a retried call cannot double-transition.
+
+    Todo lists are instantiated from templates. A todo template is a
+    schema'd artifact in this repository: the checklist for one stage
+    of one task type, with placeholders for task context. Each
+    blueprint stage that starts an agent session names its template;
+    at bootstrap, Heddle fills the template from the task contract
+    and stores the resulting list on the instance. The todo tools
+    read and write that stored list, so progress persists across
+    session retries, appears in the console, and rides the handoff
+    into the next stage.
   observation: >
     Two channels report on running work, split by who holds the truth.
     Semantic outcomes — the verdict of a review, the completion of an
