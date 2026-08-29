@@ -547,9 +547,27 @@ describe("workflow MCP HTTP server", () => {
       handoffs: [withoutWorkflowMcp],
     });
 
-    await expect(
-      connect(fixture.url, fixture.alphaToken, "missing-contract-client"),
-    ).rejects.toThrow();
+    const response = await globalThis.fetch(fixture.url, {
+      body: JSON.stringify({
+        id: 1,
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          capabilities: {},
+          clientInfo: { name: "missing-contract-client", version: "1.0.0" },
+          protocolVersion: "2025-11-25",
+        },
+      }),
+      headers: {
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${fixture.alphaToken}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe("Bearer");
   });
 
   it("rejects bootstrap for a stage the lifecycle is not awaiting", async () => {
