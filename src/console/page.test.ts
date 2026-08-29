@@ -135,11 +135,13 @@ describe("console page accessibility", () => {
     const paperRaised = colorToken("paper-raised");
     const ink = colorToken("ink");
     const signal = colorToken("signal");
+    const signalOnDark = colorToken("signal-on-dark");
     const signalFocus = colorToken("signal-focus");
     const deferred = colorToken("deferred");
     const muted = colorToken("muted");
 
     expect(contrastRatio(signal, paper)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(signalOnDark, ink)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(muted, paper)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(muted, paperRaised)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(paperRaised, signal)).toBeGreaterThanOrEqual(4.5);
@@ -153,6 +155,9 @@ describe("console page accessibility", () => {
     );
     expect(consoleStyles).toMatch(
       /\.eyebrow, \.scope-control span \{[^}]*color: var\(--signal\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.attention-header \.eyebrow \{[^}]*color: var\(--signal-on-dark\);[^}]*\}/,
     );
     expect(consoleStyles).toMatch(
       /\.console-status \{[^}]*color: var\(--muted\);[^}]*\}/,

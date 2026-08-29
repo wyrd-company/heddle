@@ -103,6 +103,7 @@ export const consoleStyles = `:root {
   --rule: #b8b3a5;
   --rule-dark: #77746b;
   --signal: #b43321;
+  --signal-on-dark: #f08a78;
   --signal-focus: #df5a3c;
   --active: #25766e;
   --deferred: #74540a;
@@ -220,6 +221,7 @@ button, input, select { font: inherit; }
 .attention-overlay::backdrop { background: rgba(25, 26, 23, 0.58); }
 .attention-sheet { min-height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
 .attention-header { padding: 22px 22px 18px; display: flex; align-items: start; justify-content: space-between; gap: 24px; color: var(--paper-raised); background: var(--ink); border-bottom: 4px solid var(--signal); }
+.attention-header .eyebrow { color: var(--signal-on-dark); }
 .attention-header h2 { margin: 0; font-family: Georgia, serif; font-size: 29px; font-weight: 500; }
 .attention-close { padding: 7px 0; color: #d5d3cc; background: transparent; border: 0; cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: 0.09em; }
 .attention-status { min-height: 38px; margin: 0; padding: 11px 22px; color: var(--muted); border-bottom: 1px solid var(--rule); font-size: 10px; }
