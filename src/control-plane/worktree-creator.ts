@@ -61,9 +61,7 @@ const resolveCommitRef = async (
       "--end-of-options",
       `${baseRef}^{commit}`,
     ]);
-    const normalizedCommit = commit.trim();
-    if (normalizedCommit === "") throw new Error("empty commit");
-    return normalizedCommit;
+    return commit.trim();
   } catch {
     throw new TypeError(`baseRef '${baseRef}' must resolve to a commit`);
   }
