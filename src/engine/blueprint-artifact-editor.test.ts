@@ -152,6 +152,37 @@ describe("blueprint artifact editor", () => {
     expect(await readFile(setup.path)).toEqual(before);
   });
 
+  it("rejects invalid canvas positions without replacing the artifact", async () => {
+    const setup = await fixture();
+    const loaded = await setup.editor.load(artifactId);
+    const before = await readFile(setup.path);
+
+    await expect(
+      setup.editor.save({
+        artifactId,
+        edges: loaded.blueprint.edges,
+        expectedBlobHash: loaded.blobHash,
+        nodes: loaded.blueprint.nodes,
+        positions: { inspect: { x: Number.NaN, y: 80 } },
+      }),
+    ).rejects.toThrow(
+      "Blueprint canvas positions must use kebab node IDs and finite coordinates",
+    );
+
+    expect(await readFile(setup.path)).toEqual(before);
+  });
+
+  it("rejects artifact IDs that could escape the blueprint directory", async () => {
+    const setup = await fixture();
+    const before = await readFile(setup.path);
+
+    await expect(setup.editor.load("../sample-process")).rejects.toThrow(
+      "Blueprint artifact ID must be a kebab ID",
+    );
+
+    expect(await readFile(setup.path)).toEqual(before);
+  });
+
   it("applies the interpreter contract before replacing the artifact", async () => {
     const setup = await fixture();
     const loaded = await setup.editor.load(artifactId);
