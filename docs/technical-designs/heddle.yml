@@ -141,12 +141,33 @@ proposed-design:
     worktree — moves the instance to attention rather than retrying an
     agent into the failure.
   human-console: >
-    The live canvas is also the operator's console. An attention queue
-    lists every instance awaiting a human: adjudications, escalations,
-    stale work, UAT, and pending T3 approvals. Each entry offers the
-    dispositions valid for its state, and the buttons call the same
-    actions the MCP tools call — humans and agents disposition through
-    one contract. Pushover notifications deep-link to the entry. The
+    The console presents three views of the same state, at three
+    altitudes. A kanban projection answers where everything stands:
+    columns come from the board, and each in-progress card is
+    enriched with its instance's current lifecycle stage and dwell
+    time — detail the board file alone cannot carry. A dependency
+    graph answers why work is or is not moving: task edges rendered
+    with each node's status, so a blocked chain reads at a glance.
+    The lifecycle canvas answers what exactly is happening inside one
+    instance. Selecting a card or graph node opens that task's
+    canvas. Both projections are read-only renderings of board and
+    instance state; the one board write the console offers is the
+    epic status lever, because dragging child cards would contend
+    with the reconciler as their single writer. Task authoring and
+    editing remain in kanban-md.
+
+    A workspace can host several epics and standalone tasks at once,
+    so every view carries a scope filter: all work, one epic (its
+    children and its own lifecycle), or one task. The filter is part
+    of the console URL, so a pushover deep link lands already scoped
+    to the entry that raised it.
+
+    An attention queue overlays every view and lists each instance
+    awaiting a human: adjudications, escalations, stale work, UAT,
+    and pending T3 approvals. Each entry offers the dispositions
+    valid for its state, and the buttons call the same actions the
+    MCP tools call — humans and agents disposition through one
+    contract. Pushover notifications deep-link to the entry. The
     operator can equally disposition conversationally: any agent
     session configured with Heddle's MCP server can act on their
     behalf. T3's own UI remains the surface for conversational
