@@ -75,6 +75,7 @@ export interface StartLifecycleInput {
 export interface ResumeLifecycleInput {
   disposition: string;
   instanceId: string;
+  operationId: string;
   output?: Record<string, JsonValue>;
 }
 
@@ -95,18 +96,29 @@ export interface ExpectedLanding {
 
 export type ExpectedLandings = ExpectedLanding[];
 
+export interface CompletedLifecycleOperation {
+  awaitingNodeIds: string[];
+  executionIds: string[];
+  requestFingerprint: string;
+  status: WorkflowStatus;
+  transitionId: string;
+}
+
 export interface PendingTransition {
   disposition: string | null;
   id: string;
   initialContext: Record<string, JsonValue> | null;
   kind: "resume" | "start";
+  operationId: string | null;
   output: Record<string, JsonValue> | null;
+  requestFingerprint: string | null;
 }
 
 export interface LifecycleContextRecord {
   awaitingNodeIds: string[];
   blueprintBlobHash: string;
   blueprintPath: string;
+  completedOperations: Record<string, CompletedLifecycleOperation>;
   executionIds: string[];
   nextTransitionNumber: number;
   pendingTransition: PendingTransition | null;

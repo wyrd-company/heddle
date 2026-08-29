@@ -30,6 +30,7 @@ import {
   initialInstanceState,
   persistExecution,
   readLifecycleContext,
+  resumeOperationFingerprint,
   writeLifecycleContext,
 } from "./lifecycle-state.js";
 import type {
@@ -82,12 +83,15 @@ export class LifecycleEngine {
       id: `${input.instanceId}:1`,
       initialContext: input.initialContext ?? {},
       kind: "start",
+      operationId: null,
       output: null,
+      requestFingerprint: null,
     };
     const context: LifecycleContextRecord = {
       awaitingNodeIds: [],
       blueprintBlobHash: pinned.blobHash,
       blueprintPath: pinned.path,
+      completedOperations: {},
       executionIds: [],
       nextTransitionNumber: 2,
       pendingTransition,
@@ -106,6 +110,9 @@ export class LifecycleEngine {
   }
 
   async resume(input: ResumeLifecycleInput): Promise<LifecycleSnapshot> {
+    if (input.operationId.trim() === "") {
+      throw new TypeError("Resume operation ID must not be empty");
+    }
     let record = this.persistence.getInstance(input.instanceId);
     if (record === undefined) {
       throw new Error(`Instance does not exist: ${input.instanceId}`);
@@ -113,6 +120,26 @@ export class LifecycleEngine {
     let context = readLifecycleContext(record);
     const blueprint = await this.blueprintStore.read(context.blueprintBlobHash);
     validateBlueprint(blueprint, this.effects);
+    const requestFingerprint = resumeOperationFingerprint(input);
+    if (Object.hasOwn(context.completedOperations, input.operationId)) {
+      const completed = context.completedOperations[input.operationId];
+      if (
+        completed === undefined ||
+        completed.requestFingerprint !== requestFingerprint
+      ) {
+        throw new TransitionConflictError(input.instanceId);
+      }
+      return this.snapshot(
+        input.instanceId,
+        {
+          ...context,
+          awaitingNodeIds: completed.awaitingNodeIds,
+          executionIds: completed.executionIds,
+          status: completed.status,
+        },
+        blueprint,
+      );
+    }
     if (context.awaitingNodeIds.length !== 1) {
       throw new InvalidDispositionError(input.disposition, []);
     }
@@ -138,7 +165,9 @@ export class LifecycleEngine {
     if (context.pendingTransition !== null) {
       if (
         context.pendingTransition.kind !== "resume" ||
-        context.pendingTransition.disposition !== input.disposition
+        context.pendingTransition.disposition !== input.disposition ||
+        context.pendingTransition.operationId !== input.operationId ||
+        context.pendingTransition.requestFingerprint !== requestFingerprint
       ) {
         throw new TransitionConflictError(input.instanceId);
       }
@@ -148,7 +177,9 @@ export class LifecycleEngine {
         id: `${input.instanceId}:${context.nextTransitionNumber}`,
         initialContext: null,
         kind: "resume",
+        operationId: input.operationId,
         output: input.output ?? {},
+        requestFingerprint,
       };
       context = {
         ...context,

@@ -68,6 +68,7 @@ describe("LifecycleEngine", () => {
       const snapshot = await fixture.engine.resume({
         disposition: "adjust",
         instanceId: "sample-a",
+        operationId: `operation-${round}`,
         output: { round },
       });
       expect(snapshot).toMatchObject({
@@ -78,6 +79,7 @@ describe("LifecycleEngine", () => {
     const completed = await fixture.engine.resume({
       disposition: "accept",
       instanceId: "sample-a",
+      operationId: "operation-final",
     });
 
     expect(completed).toMatchObject({
@@ -113,6 +115,7 @@ describe("LifecycleEngine", () => {
     const completed = await fixture.engine.resume({
       disposition: "accept",
       instanceId: "sample-a",
+      operationId: "operation-a",
     });
 
     expect(changedHash.trim()).not.toBe(started.blueprintBlobHash);
@@ -177,10 +180,12 @@ describe("LifecycleEngine", () => {
       fixture.engine.resume({
         disposition: "adjust",
         instanceId: "sample-a",
+        operationId: "operation-adjust",
       }),
       fixture.engine.resume({
         disposition: "accept",
         instanceId: "sample-a",
+        operationId: "operation-accept",
       }),
     ]);
 
@@ -208,6 +213,7 @@ describe("LifecycleEngine", () => {
       fixture.engine.resume({
         disposition: "discard",
         instanceId: "sample-a",
+        operationId: "operation-a",
       }),
     ).rejects.toEqual(
       new InvalidDispositionError("discard", ["accept", "adjust"]),
@@ -286,6 +292,7 @@ describe("LifecycleEngine", () => {
       fixture.engine.resume({
         disposition: "accept",
         instanceId: "sample-a",
+        operationId: "operation-a",
       }),
     ).rejects.toThrow(UnexpectedLandingError);
 
@@ -334,11 +341,13 @@ describe("LifecycleEngine", () => {
       fixture.engine.resume({
         disposition: "adjust",
         instanceId: "sample-a",
+        operationId: "operation-a",
       }),
     ).rejects.toThrow(UnexpectedLandingError);
     const recovered = await fixture.engine.resume({
       disposition: "adjust",
       instanceId: "sample-a",
+      operationId: "operation-a",
     });
 
     expect(recovered.status).toBe("awaiting");

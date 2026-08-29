@@ -139,11 +139,13 @@ describe("LifecycleEngine concurrent execution", () => {
     const first = fixture.engine.resume({
       disposition: "adjust",
       instanceId: "sample-a",
+      operationId: "operation-a",
     });
     await firstStarted;
     const second = await fixture.engine.resume({
       disposition: "adjust",
       instanceId: "sample-a",
+      operationId: "operation-a",
     });
     const beforeLateCompletion =
       fixture.persistence.getInstance("sample-a")?.state.flowcraftContext;
@@ -188,6 +190,7 @@ describe("LifecycleEngine concurrent execution", () => {
     const completed = await fixture.engine.resume({
       disposition: "accept",
       instanceId: "sample-a",
+      operationId: "operation-a",
     });
 
     expect(completed.status).toBe("completed");
@@ -218,6 +221,7 @@ describe("LifecycleEngine concurrent execution", () => {
     const completed = await fixture.engine.resume({
       disposition: "accept",
       instanceId: "sample-a",
+      operationId: "operation-a",
     });
 
     expect(completed.status).toBe("completed");

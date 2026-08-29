@@ -3,14 +3,18 @@
 //   implements: heddle
 // ---
 
+import type { WorkflowStatus } from "flowcraft";
+
 import type {
   InstanceRecord,
   InstanceState,
   JsonValue,
 } from "../persistence/index.js";
 import type {
+  CompletedLifecycleOperation,
   LifecycleContextRecord,
   LifecyclePersistence,
+  ResumeLifecycleInput,
   StartLifecycleInput,
 } from "./types.js";
 
@@ -28,6 +32,10 @@ export const readLifecycleContext = (
     typeof value.blueprintBlobHash !== "string" ||
     !("blueprintPath" in value) ||
     typeof value.blueprintPath !== "string" ||
+    !("completedOperations" in value) ||
+    typeof value.completedOperations !== "object" ||
+    value.completedOperations === null ||
+    Array.isArray(value.completedOperations) ||
     !("executionIds" in value) ||
     !Array.isArray(value.executionIds) ||
     !("awaitingNodeIds" in value) ||
@@ -60,15 +68,37 @@ export const initialInstanceState = (
   todoState: input.state?.todoState ?? null,
 });
 
+const canonicalJson = (value: JsonValue): string => {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`)
+    .join(",")}}`;
+};
+
+export const resumeOperationFingerprint = (
+  input: ResumeLifecycleInput,
+): string =>
+  canonicalJson({
+    disposition: input.disposition,
+    output: input.output ?? {},
+  });
+
 export const persistExecution = (
   persistence: LifecyclePersistence,
   instanceId: string,
   pendingTransitionId: string,
   executionId: string | undefined,
-  completion?: Pick<
-    LifecycleContextRecord,
-    "awaitingNodeIds" | "serializedContext" | "status"
-  >,
+  completion?: {
+    awaitingNodeIds: string[];
+    serializedContext: string;
+    status: WorkflowStatus;
+  },
 ): LifecycleContextRecord => {
   while (true) {
     const current = persistence.getInstance(instanceId);
@@ -84,6 +114,43 @@ export const persistExecution = (
     const completesCurrentTransition =
       completion !== undefined &&
       currentContext.pendingTransition?.id === pendingTransitionId;
+    let completedOperations = { ...currentContext.completedOperations };
+    const pendingOperation = completesCurrentTransition
+      ? currentContext.pendingTransition
+      : null;
+    if (
+      pendingOperation !== null &&
+      pendingOperation.operationId !== null &&
+      pendingOperation.requestFingerprint !== null &&
+      completion !== undefined
+    ) {
+      completedOperations = {
+        ...completedOperations,
+        [pendingOperation.operationId]: {
+          awaitingNodeIds: [...completion.awaitingNodeIds],
+          executionIds: [...executionIds],
+          requestFingerprint: pendingOperation.requestFingerprint,
+          status: completion.status,
+          transitionId: pendingTransitionId,
+        },
+      };
+    } else if (executionId !== undefined) {
+      const completedEntry = Object.entries(completedOperations).find(
+        ([, operation]) => operation.transitionId === pendingTransitionId,
+      ) as [string, CompletedLifecycleOperation] | undefined;
+      if (completedEntry !== undefined) {
+        const [operationId, operation] = completedEntry;
+        completedOperations = {
+          ...completedOperations,
+          [operationId]: {
+            ...operation,
+            executionIds: operation.executionIds.includes(executionId)
+              ? operation.executionIds
+              : [...operation.executionIds, executionId],
+          },
+        };
+      }
+    }
     if (
       executionIds === currentContext.executionIds &&
       !completesCurrentTransition
@@ -92,6 +159,7 @@ export const persistExecution = (
     }
     const nextContext: LifecycleContextRecord = {
       ...currentContext,
+      completedOperations,
       executionIds,
       ...(completesCurrentTransition
         ? { ...completion, pendingTransition: null }

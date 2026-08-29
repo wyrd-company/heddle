@@ -12,6 +12,7 @@ export {
 export { GitBlueprintStore } from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
 export type {
+  CompletedLifecycleOperation,
   ExpectedLanding,
   ExpectedLandings,
   LifecycleBlueprint,

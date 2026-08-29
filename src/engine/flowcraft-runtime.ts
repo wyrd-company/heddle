@@ -111,7 +111,7 @@ export const createLifecycleRuntime = (
       return {
         output: await effect({
           context,
-          idempotencyKey: `${pending.id}:${nodeId}`,
+          idempotencyKey: JSON.stringify([pending.id, nodeId]),
           input,
           params: effectParams,
         }),

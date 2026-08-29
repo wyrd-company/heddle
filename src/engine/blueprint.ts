@@ -35,6 +35,15 @@ export const validateBlueprint = (
   blueprint: LifecycleBlueprint,
   effects: Record<string, LifecycleEffect>,
 ): void => {
+  const nodeIds = new Set<string>();
+  for (const node of blueprint.nodes) {
+    if (nodeIds.has(node.id)) {
+      throw new BlueprintValidationError(
+        `Blueprint contains duplicate node ID ${JSON.stringify(node.id)}`,
+      );
+    }
+    nodeIds.add(node.id);
+  }
   const registry: Record<string, NodeFunction | typeof WaitNode> = {
     wait: WaitNode,
   };
