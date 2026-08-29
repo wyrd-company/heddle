@@ -318,6 +318,62 @@ describe("LifecycleEngine rebase", () => {
     fixture.persistence.close();
   });
 
+  it("does not raise stale attention after a concurrent instance change", async () => {
+    const fixture = await makeFixture();
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    const pin = GitBlueprintStore.prototype.pin;
+    let markPinStarted: (() => void) | undefined;
+    const pinStarted = new Promise<void>((resolve) => {
+      markPinStarted = resolve;
+    });
+    let releasePin: (() => void) | undefined;
+    const pinMayFinish = new Promise<void>((resolve) => {
+      releasePin = resolve;
+    });
+    vi.spyOn(GitBlueprintStore.prototype, "pin").mockImplementation(
+      async function (path) {
+        markPinStarted?.();
+        await pinMayFinish;
+        return pin.call(this, path);
+      },
+    );
+    const staleRebase = fixture.engine.rebase({
+      instanceId: "sample-a",
+      targetState: "missing",
+    });
+    await pinStarted;
+
+    try {
+      await fixture.engine.resume({
+        disposition: "accept",
+        instanceId: "sample-a",
+        operationId: "operation-concurrent",
+      });
+    } finally {
+      releasePin?.();
+    }
+
+    await expect(staleRebase).rejects.toEqual(
+      new TransitionConflictError("sample-a"),
+    );
+    expect(fixture.persistence.getInstance("sample-a")?.state).toMatchObject({
+      flowcraftContext: {
+        awaitingNodeIds: [],
+        pendingTransition: null,
+        status: "completed",
+      },
+    });
+    expect(
+      fixture.persistence
+        .replayEvents("sample-a")
+        .filter(({ type }) => type === "lifecycle:attention-required"),
+    ).toEqual([]);
+    fixture.persistence.close();
+  });
+
   it("raises attention when a named node is not an awaiting state", async () => {
     const fixture = await makeFixture();
     await fixture.engine.start({

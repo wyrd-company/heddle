@@ -22,6 +22,7 @@ import {
 } from "./lifecycle-state.js";
 import type {
   LifecycleBlueprint,
+  LifecycleContextRecord,
   LifecycleEffect,
   LifecyclePersistence,
   RebaseLifecycleInput,
@@ -38,13 +39,53 @@ interface LifecycleRebaseResult {
   record: InstanceRecord;
 }
 
+type EligibleLifecycleContext = LifecycleContextRecord & {
+  pendingTransition: null;
+  serializedContext: string;
+  status: "awaiting";
+};
+
+const eligibleLifecycleContext = (
+  record: InstanceRecord,
+): EligibleLifecycleContext => {
+  const context = readLifecycleContext(record);
+  if (context.serializedContext === null) {
+    throw new TransitionConflictError(record.instanceId);
+  }
+  if (context.pendingTransition !== null) {
+    throw new TransitionConflictError(record.instanceId);
+  }
+  if (context.status !== "awaiting") {
+    throw new RebaseInstanceNotAwaitingError(record.instanceId, context.status);
+  }
+  return context as EligibleLifecycleContext;
+};
+
+const assertCurrentRebaseEligibility = (
+  persistence: LifecyclePersistence,
+  instanceId: string,
+  expectedVersion: number,
+): void => {
+  const current = persistence.getInstance(instanceId);
+  if (current === undefined || current.version !== expectedVersion) {
+    throw new TransitionConflictError(instanceId);
+  }
+  eligibleLifecycleContext(current);
+};
+
 const raiseAttention = (
   persistence: LifecyclePersistence,
   input: RebaseLifecycleInput,
+  expectedVersion: number,
   blueprintBlobHash: string,
   blueprintPath: string,
   reason: "rebase-target-missing" | "rebase-target-not-awaitable",
 ): void => {
+  assertCurrentRebaseEligibility(
+    persistence,
+    input.instanceId,
+    expectedVersion,
+  );
   const attentionId = createHash("sha256")
     .update(
       JSON.stringify([
@@ -84,16 +125,7 @@ export const rebaseLifecycle = async (
   if (record === undefined) {
     throw new Error(`Instance does not exist: ${input.instanceId}`);
   }
-  const context = readLifecycleContext(record);
-  if (context.serializedContext === null) {
-    throw new TransitionConflictError(input.instanceId);
-  }
-  if (context.pendingTransition !== null) {
-    throw new TransitionConflictError(input.instanceId);
-  }
-  if (context.status !== "awaiting") {
-    throw new RebaseInstanceNotAwaitingError(input.instanceId, context.status);
-  }
+  const context = eligibleLifecycleContext(record);
   const previousBlueprint = await blueprintStore.read(
     context.blueprintBlobHash,
     context.blueprintPath,
@@ -112,6 +144,7 @@ export const rebaseLifecycle = async (
     raiseAttention(
       persistence,
       input,
+      record.version,
       pinned.blobHash,
       pinned.path,
       "rebase-target-missing",
@@ -122,6 +155,7 @@ export const rebaseLifecycle = async (
     raiseAttention(
       persistence,
       input,
+      record.version,
       pinned.blobHash,
       pinned.path,
       "rebase-target-not-awaitable",
