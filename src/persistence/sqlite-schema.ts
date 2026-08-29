@@ -33,6 +33,32 @@ export const initializePersistenceSchema = (
     CREATE INDEX IF NOT EXISTS heddle_instance_events_instance_sequence
       ON heddle_instance_events(instance_id, sequence);
 
+    CREATE TABLE IF NOT EXISTS heddle_reconciler_runtime (
+      instance_id TEXT PRIMARY KEY,
+      task_id INTEGER NOT NULL UNIQUE,
+      board_status TEXT NOT NULL,
+      state TEXT NOT NULL,
+      provider TEXT,
+      deferral_json TEXT,
+      stage_id TEXT,
+      stage_entered_at INTEGER,
+      session_key TEXT,
+      thread_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS heddle_attention (
+      attention_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS heddle_completed_effects (
+      effect_kind TEXT NOT NULL,
+      stable_id TEXT NOT NULL,
+      completed_at TEXT NOT NULL,
+      PRIMARY KEY (effect_kind, stable_id)
+    );
+
     CREATE TRIGGER IF NOT EXISTS heddle_instance_events_no_update
     BEFORE UPDATE ON heddle_instance_events
     BEGIN

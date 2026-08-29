@@ -11,8 +11,10 @@ export type {
   InstanceRecord,
   InstanceEventClaim,
   InstanceState,
+  DurableAttentionRecord,
   JsonPrimitive,
   JsonValue,
   PersistedEvent,
   PersistenceConfiguration,
+  ReconcilerRuntimeRecord,
 } from "./types.js";

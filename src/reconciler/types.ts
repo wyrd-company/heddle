@@ -25,7 +25,7 @@ export interface ReconcilerInstance {
   provider?: string;
   stageEnteredAt?: number;
   stageId?: string;
-  state: "deferred" | "done" | "running" | "waiting";
+  state: "deferred" | "done" | "running" | "starting" | "waiting";
   taskId: number;
 }
 

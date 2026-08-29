@@ -163,7 +163,9 @@ export class Reconciler {
         isEpic(task) ||
         task.blocked ||
         task.status !== "todo" ||
-        (existing !== undefined && existing.state !== "deferred") ||
+        (existing !== undefined &&
+          existing.state !== "deferred" &&
+          existing.state !== "starting") ||
         !this.dependenciesDone(task, tasksById) ||
         !this.dispatchEnabled(task, tasksById)
       ) {

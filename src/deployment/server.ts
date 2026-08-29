@@ -28,6 +28,7 @@ import {
   type WorkflowMcpHttpHandler,
 } from "../mcp-server/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
+import type { ProductionComposition } from "../production/index.js";
 
 type DeploymentEnvironment = Record<string, string | undefined>;
 
@@ -41,6 +42,7 @@ export interface HeddleDeploymentComposition {
   consoleActions?: ConsoleAttentionActionPort;
   blueprintEditor?: ConsoleBlueprintEditor;
   consoleState?: ConsoleStateSource;
+  production?: ProductionComposition;
 }
 
 const taskInstance = /^task-([1-9][0-9]*)$/;
@@ -192,21 +194,34 @@ export const startHeddleServerFromEnvironment = async (
   composition: HeddleDeploymentComposition = {},
 ): Promise<HeddleDeploymentServer> => {
   const port = configuredPort(environment);
+  if (
+    composition.production !== undefined &&
+    (composition.board !== undefined || composition.consoleState !== undefined)
+  ) {
+    throw new Error(
+      "A production composition owns its board and console state boundaries",
+    );
+  }
   const board =
+    composition.production?.board ??
     composition.board ??
     new KanbanBoardAdapter(requiredBoardDirectory(environment));
-  const persistence = new SqlitePersistence({
-    stateDirectory: requiredStateDirectory(environment),
-  });
-  const mcp: WorkflowMcpHttpHandler = createWorkflowMcpHttpHandler({
-    lifecycle: {
-      resume: () =>
-        Promise.reject(
-          new Error("The deployed lifecycle composition is not active"),
-        ),
-    },
-    persistence,
-  });
+  const persistence =
+    composition.production?.persistence ??
+    new SqlitePersistence({
+      stateDirectory: requiredStateDirectory(environment),
+    });
+  const mcp: WorkflowMcpHttpHandler =
+    composition.production?.mcp ??
+    createWorkflowMcpHttpHandler({
+      lifecycle: {
+        resume: () =>
+          Promise.reject(
+            new Error("The deployed lifecycle composition is not active"),
+          ),
+      },
+      persistence,
+    });
   const consoleServer = createConsoleServer({
     ...(composition.consoleActions === undefined
       ? {}
@@ -215,6 +230,7 @@ export const startHeddleServerFromEnvironment = async (
     blueprintEditor: composition.blueprintEditor,
     state:
       composition.consoleState ??
+      composition.production?.consoleState ??
       new PersistenceConsoleStateSource(persistence),
   });
   const host = environment["HEDDLE_HOST"]?.trim() || "127.0.0.1";
@@ -246,13 +262,18 @@ export const startHeddleServerFromEnvironment = async (
     }
   });
   try {
+    await composition.production?.start();
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(port, host, resolve);
     });
   } catch (error) {
-    await mcp.close();
-    persistence.close();
+    if (composition.production === undefined) {
+      await mcp.close();
+      persistence.close();
+    } else {
+      await composition.production.close();
+    }
     throw error;
   }
   const address = server.address();
@@ -268,8 +289,12 @@ export const startHeddleServerFromEnvironment = async (
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
-      await mcp.close();
-      persistence.close();
+      if (composition.production === undefined) {
+        await mcp.close();
+        persistence.close();
+      } else {
+        await composition.production.close();
+      }
     },
   };
 };

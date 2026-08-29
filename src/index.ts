@@ -65,6 +65,7 @@ export {
   instanceIdForTask,
   reconciler,
 } from "./reconciler/index.js";
+export * from "./production/index.js";
 export type {
   ReconcilerAttention,
   ReconcilerAttentionQueue,

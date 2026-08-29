@@ -93,6 +93,17 @@ proposed-design:
     window time when one applies. An unchanged deferral converges without
     another write. Each reconciliation pass evaluates deferred work
     again, so released capacity starts it on a later pass.
+
+    One production composition owns reconciliation for a workspace. It
+    constructs the real board adapter, SQLite-backed instance controller,
+    lifecycle resolver and engine, session bootstrap, observation channel,
+    durable attention queue, Pushover notifier, pacing evaluator, and stage
+    thresholds. A serialized scheduler coalesces ticks while one pass runs;
+    start performs an immediate pass and stop cancels its timer and drains the
+    current pass within a configured bound. Runtime scheduling and adapter
+    completion records persist intent and replay position only. Lifecycle,
+    pacing, attention meaning, escalation identity, and session liveness remain
+    authoritative in their existing components.
   agent-sessions: >
     Sessions run on T3 Code, driven headlessly over plain HTTP:
     `POST /api/orchestration/dispatch` carries every command, and
@@ -105,6 +116,12 @@ proposed-design:
     with each driver and CLI version and verifies them as dispatch
     preconditions. Mid-turn steering is a second `thread.turn.start`
     on the same thread.
+
+    Every production thread uses the configured existing workspace
+    `projectId`. Its bounded deterministic title contains the Heddle marker,
+    complete task identity, and a stable stage discriminator. First-turn
+    dispatch omits `titleSeed`, so T3 cannot replace the Heddle title from a
+    prompt-derived seed.
 
     Sessions are short and stage-scoped. Nothing carries between
     stages except the handoff: a deterministically assembled bootstrap
@@ -220,6 +237,13 @@ proposed-design:
     across providers and independent of any harness's question
     tool.
 
+    Top-level routing composes one durable attention adapter and one Pushover
+    adapter. Both consume the escalation's stable attention ID. Adapter
+    completion is durable, so a process that stops after an effect succeeds but
+    before its route event is appended can replay the route without duplicating
+    the attention entry or notification delivery. The escalation remains
+    pending and answerable until the accepted answer event is recorded.
+
     Harness-native question tools serve assistive tasks, where the
     operator already works in T3's UI. The provider adapters map
     those tools to pending-user-input state on the thread shell,
@@ -264,6 +288,10 @@ proposed-design:
     malformed evidence fails closed. The recorded `threadId` and archive facts
     make this cleanup idempotent. Heddle does not snooze, settle, pin, or
     reorder active or operator-blocked work.
+
+    The production scheduler invokes this observer for each persisted active
+    session after reconciliation. Observation thresholds and reconciler stage
+    thresholds come from the workspace configuration and survive restart.
   mechanical-nodes: >
     Every step with a single correct outcome executes as a
     deterministic blueprint node running real code: creating the
@@ -356,6 +384,11 @@ proposed-design:
     and the reconciler compares recovered instances against live T3
     threads: a stage whose session no longer exists is retried cold by
     replaying its bootstrap.
+
+    The same database stores canonical scheduling intent, durable attention
+    entries, and stable-ID adapter completion. These records make instance
+    start, session activation, attention routing, and notification replay
+    idempotent without introducing another lifecycle or attention authority.
   deployment: >
     Heddle installs as a devcontainer feature in each workspace
     container, following the t3code-server pattern: an s6-supervised
@@ -365,3 +398,8 @@ proposed-design:
     One Heddle instance serves one workspace — its board, its
     worktrees, its T3 server — and each workspace container is a
     complete, self-contained installation.
+
+    The deployment server accepts the canonical production composition and
+    shares its board, persistence, console state, MCP handler, scheduler, and
+    shutdown lifetime. Supplying separate board or console authorities with a
+    production composition is rejected.

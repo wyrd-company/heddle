@@ -1,0 +1,126 @@
+{
+  "$id": "https://wyrd.company/heddle/production-configuration.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "relationships": { "implements": "heddle" },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "boardDirectory",
+    "cadenceMilliseconds",
+    "observationThresholds",
+    "pacing",
+    "projectId",
+    "pushover",
+    "repositoryRoot",
+    "session",
+    "stageThresholds",
+    "stateDirectory",
+    "stopTimeoutMilliseconds",
+    "t3"
+  ],
+  "properties": {
+    "boardDirectory": { "type": "string", "pattern": "^/" },
+    "cadenceMilliseconds": { "type": "integer", "minimum": 1 },
+    "observationThresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endedMilliseconds",
+        "failedMilliseconds",
+        "stalledMilliseconds"
+      ],
+      "properties": {
+        "endedMilliseconds": { "type": "integer", "minimum": 1 },
+        "failedMilliseconds": { "type": "integer", "minimum": 1 },
+        "stalledMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "pacing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultProvider",
+        "maxConcurrentSessions",
+        "providerBudgets",
+        "subagents",
+        "usageWindowHours"
+      ],
+      "properties": {
+        "defaultProvider": { "type": "string", "minLength": 1 },
+        "maxConcurrentSessions": { "type": "integer", "minimum": 0 },
+        "providerBudgets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["usageLimit"],
+            "properties": { "usageLimit": { "type": "number", "minimum": 0 } }
+          }
+        },
+        "subagents": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxDepth", "maxFanOut"],
+          "properties": {
+            "maxDepth": { "type": "integer", "minimum": 0 },
+            "maxFanOut": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "usageWindowHours": { "const": 5 }
+      }
+    },
+    "projectId": { "type": "string", "minLength": 1 },
+    "pushover": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apiUrl", "applicationToken", "consoleBaseUrl", "userKey"],
+      "properties": {
+        "apiUrl": { "type": "string", "format": "uri" },
+        "applicationToken": { "type": "string", "minLength": 1 },
+        "consoleBaseUrl": { "type": "string", "format": "uri" },
+        "userKey": { "type": "string", "minLength": 1 }
+      }
+    },
+    "repositoryRoot": { "type": "string", "pattern": "^/" },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseRef",
+        "cliVersion",
+        "driver",
+        "interactionMode",
+        "model",
+        "repositoryName",
+        "runtimeMode",
+        "skillPointer"
+      ],
+      "properties": {
+        "baseRef": { "type": "string", "minLength": 1 },
+        "cliVersion": { "type": "string", "minLength": 1 },
+        "driver": { "type": "string", "minLength": 1 },
+        "interactionMode": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "repositoryName": { "type": "string", "minLength": 1 },
+        "runtimeMode": { "type": "string", "minLength": 1 },
+        "skillPointer": { "type": "string", "minLength": 1 },
+        "worktreesRoot": { "type": "string", "pattern": "^/" }
+      }
+    },
+    "stageThresholds": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 1 }
+    },
+    "stateDirectory": { "type": "string", "pattern": "^/" },
+    "stopTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+    "t3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accessToken", "baseUrl"],
+      "properties": {
+        "accessToken": { "type": "string", "minLength": 1 },
+        "baseUrl": { "type": "string", "format": "uri" }
+      }
+    }
+  }
+}

@@ -37,6 +37,25 @@ export interface PersistenceConfiguration {
   stateDirectory: string;
 }
 
+export interface DurableAttentionRecord {
+  attentionId: string;
+  payload: JsonValue;
+  recordedAt: string;
+}
+
+export interface ReconcilerRuntimeRecord {
+  boardStatus: string;
+  deferral?: JsonValue;
+  instanceId: string;
+  provider?: string;
+  sessionKey?: string;
+  stageEnteredAt?: number;
+  stageId?: string;
+  state: "deferred" | "done" | "running" | "starting" | "waiting";
+  taskId: number;
+  threadId?: string;
+}
+
 export type EventRow = {
   instance_id: string;
   payload_json: string;

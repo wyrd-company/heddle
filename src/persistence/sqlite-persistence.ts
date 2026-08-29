@@ -32,6 +32,7 @@ import {
 } from "./sqlite-schema.js";
 import type {
   EventRow,
+  DurableAttentionRecord,
   InstanceEventClaim,
   InstanceRecord,
   InstanceRow,
@@ -39,6 +40,7 @@ import type {
   JsonValue,
   PersistedEvent,
   PersistenceConfiguration,
+  ReconcilerRuntimeRecord,
 } from "./types.js";
 
 const databaseFilename = "heddle-state.sqlite";
@@ -263,6 +265,145 @@ export class SqlitePersistence {
     return recoverInstances(this.database);
   }
 
+  hasAttention(attentionId: string): boolean {
+    return (
+      this.database
+        .prepare("SELECT 1 FROM heddle_attention WHERE attention_id = ?")
+        .get(attentionId) !== undefined
+    );
+  }
+
+  raiseAttention(attentionId: string, payload: JsonValue): boolean {
+    this.assertStableId("attentionId", attentionId);
+    return (
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO heddle_attention
+             (attention_id, payload_json, recorded_at)
+           VALUES (?, ?, ?)`,
+        )
+        .run(attentionId, serialize(payload), new Date().toISOString())
+        .changes > 0
+    );
+  }
+
+  listAttention(): DurableAttentionRecord[] {
+    const rows = this.database
+      .prepare(
+        `SELECT attention_id, payload_json, recorded_at
+         FROM heddle_attention
+         ORDER BY recorded_at, attention_id`,
+      )
+      .all() as Array<{
+      attention_id: string;
+      payload_json: string;
+      recorded_at: string;
+    }>;
+    return rows.map((row) => ({
+      attentionId: row.attention_id,
+      payload: JSON.parse(row.payload_json) as JsonValue,
+      recordedAt: row.recorded_at,
+    }));
+  }
+
+  effectCompleted(effectKind: string, stableId: string): boolean {
+    this.assertStableId("effectKind", effectKind);
+    this.assertStableId("stableId", stableId);
+    return (
+      this.database
+        .prepare(
+          `SELECT 1 FROM heddle_completed_effects
+           WHERE effect_kind = ? AND stable_id = ?`,
+        )
+        .get(effectKind, stableId) !== undefined
+    );
+  }
+
+  recordEffectCompleted(effectKind: string, stableId: string): boolean {
+    this.assertStableId("effectKind", effectKind);
+    this.assertStableId("stableId", stableId);
+    return (
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO heddle_completed_effects
+             (effect_kind, stable_id, completed_at)
+           VALUES (?, ?, ?)`,
+        )
+        .run(effectKind, stableId, new Date().toISOString()).changes > 0
+    );
+  }
+
+  listReconcilerRuntime(): ReconcilerRuntimeRecord[] {
+    const rows = this.database
+      .prepare(
+        `SELECT instance_id, task_id, board_status, state, provider,
+                deferral_json, stage_id, stage_entered_at, session_key, thread_id
+         FROM heddle_reconciler_runtime
+         ORDER BY task_id`,
+      )
+      .all() as Array<{
+      board_status: string;
+      deferral_json: string | null;
+      instance_id: string;
+      provider: string | null;
+      session_key: string | null;
+      stage_entered_at: number | null;
+      stage_id: string | null;
+      state: ReconcilerRuntimeRecord["state"];
+      task_id: number;
+      thread_id: string | null;
+    }>;
+    return rows.map((row) => ({
+      boardStatus: row.board_status,
+      ...(row.deferral_json === null
+        ? {}
+        : { deferral: JSON.parse(row.deferral_json) as JsonValue }),
+      instanceId: row.instance_id,
+      ...(row.provider === null ? {} : { provider: row.provider }),
+      ...(row.session_key === null ? {} : { sessionKey: row.session_key }),
+      ...(row.stage_entered_at === null
+        ? {}
+        : { stageEnteredAt: row.stage_entered_at }),
+      ...(row.stage_id === null ? {} : { stageId: row.stage_id }),
+      state: row.state,
+      taskId: row.task_id,
+      ...(row.thread_id === null ? {} : { threadId: row.thread_id }),
+    }));
+  }
+
+  writeReconcilerRuntime(record: ReconcilerRuntimeRecord): void {
+    this.assertInstanceId(record.instanceId);
+    this.database
+      .prepare(
+        `INSERT INTO heddle_reconciler_runtime
+           (instance_id, task_id, board_status, state, provider, deferral_json,
+            stage_id, stage_entered_at, session_key, thread_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(instance_id) DO UPDATE SET
+           task_id = excluded.task_id,
+           board_status = excluded.board_status,
+           state = excluded.state,
+           provider = excluded.provider,
+           deferral_json = excluded.deferral_json,
+           stage_id = excluded.stage_id,
+           stage_entered_at = excluded.stage_entered_at,
+           session_key = excluded.session_key,
+           thread_id = excluded.thread_id`,
+      )
+      .run(
+        record.instanceId,
+        record.taskId,
+        record.boardStatus,
+        record.state,
+        record.provider ?? null,
+        record.deferral === undefined ? null : serialize(record.deferral),
+        record.stageId ?? null,
+        record.stageEnteredAt ?? null,
+        record.sessionKey ?? null,
+        record.threadId ?? null,
+      );
+  }
+
   close(): void {
     if (this.closed) return;
     this.flowcraftHistoryAdapter.close();
@@ -274,6 +415,10 @@ export class SqlitePersistence {
     if (instanceId.trim() === "") {
       throw new TypeError("instanceId must not be empty");
     }
+  }
+
+  private assertStableId(name: string, value: string): void {
+    if (value.trim() === "") throw new TypeError(`${name} must not be empty`);
   }
 
   private assertExternalEventType(type: string): void {

@@ -64,5 +64,9 @@ export {
   type SessionObservationThresholds,
   type StopSessionInput,
 } from "./session-observation.js";
+export {
+  T3ControlPlaneClient,
+  type T3ControlPlaneClientOptions,
+} from "./t3-control-plane-client.js";
 
 export const controlPlane = "control-plane" as const;

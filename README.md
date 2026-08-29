@@ -1,3 +1,8 @@
+<!--
+relationships:
+  implements: heddle
+-->
+
 # heddle
 
 Orchestration service
@@ -10,3 +15,8 @@ to agents; `reconciler` aligns board tasks with workflow instances; and
 `console` supplies the operator interface. The independent flowcraft gate lives
 in `spikes/flowcraft-gate`, with its original package, driver, and viewer kept
 together. Other spike support scripts remain in `scripts/spike`.
+
+## Operation
+
+The canonical per-workspace scheduler and adapter configuration is documented
+in [Production composition](docs/operators/production-composition.md).
