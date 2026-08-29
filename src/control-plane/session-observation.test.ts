@@ -701,9 +701,9 @@ describe("SessionObserver terminal visibility", () => {
     },
     {
       name: "latest turn",
-      latestUserMessageAt: "2026-01-01T00:01:00.000Z",
+      latestUserMessageAt: new Date().toISOString(),
       requestedAt: "not-a-timestamp",
-      completedAt: "2026-01-01T00:01:00.000Z",
+      completedAt: new Date().toISOString(),
     },
   ])(
     "does not archive when the $name timestamp is malformed",
@@ -728,7 +728,7 @@ describe("SessionObserver terminal visibility", () => {
     makeTerminal(test);
     test.t3.shell.threads[0] = {
       id: target.threadId,
-      latestUserMessageAt: "2026-01-01T00:01:00.000Z",
+      latestUserMessageAt: new Date().toISOString(),
       latestTurn: { state: "completed" },
       session: { status: "ready" },
     };
