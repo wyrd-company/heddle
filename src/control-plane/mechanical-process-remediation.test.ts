@@ -12,6 +12,7 @@ import {
   readRepositoryRefLocks,
 } from "./mechanical-process-topology.js";
 import {
+  restartExpectingAttention,
   restartOperation,
   terminateAtBoundary,
 } from "./mechanical-process-termination-client.js";
@@ -146,6 +147,33 @@ describe(
             timeoutMilliseconds: 250,
           }),
         ).rejects.toThrow("Worker did not emit result");
+        expect(processGroupId).toBeDefined();
+        expect(await readProcessGroup(processGroupId!)).toEqual([]);
+        expect(await readRepositoryRefLocks(fixture)).toEqual([]);
+      } finally {
+        if (processGroupId !== undefined) {
+          try {
+            process.kill(-processGroupId, "SIGKILL");
+          } catch (error) {
+            expect((error as { code?: string }).code).toBe("ESRCH");
+          }
+        }
+      }
+    });
+
+    it("kills the attention restart process group and ref lease when recovery times out", async () => {
+      const fixture = await makeLifecycleAtReview(true);
+      let processGroupId: number | undefined;
+      try {
+        await expect(
+          restartExpectingAttention(fixture, mergeResume, {
+            boundary: "exact-base-leased",
+            onLaunch: (launchedProcessGroupId) => {
+              processGroupId = launchedProcessGroupId;
+            },
+            timeoutMilliseconds: 250,
+          }),
+        ).rejects.toThrow("Worker did not emit error");
         expect(processGroupId).toBeDefined();
         expect(await readProcessGroup(processGroupId!)).toEqual([]);
         expect(await readRepositoryRefLocks(fixture)).toEqual([]);

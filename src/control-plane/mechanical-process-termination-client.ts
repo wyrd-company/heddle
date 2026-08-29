@@ -269,14 +269,22 @@ export const restartOperation = async (
 export const restartExpectingAttention = async (
   fixture: LifecycleFixture,
   resume: ResumeLifecycleInput,
+  probe?: RestartProbe,
 ): Promise<ErrorRecord> => {
-  const worker = await launchWorker(fixture, resume);
+  const worker = await launchWorker(
+    fixture,
+    resume,
+    probe?.boundary,
+    probe?.timeoutMilliseconds,
+  );
+  probe?.onLaunch?.(worker.child.pid!);
   let completed = false;
   try {
     const error = await worker.waitForRecord("error");
     const exited = await withTimeout(
       worker.exit,
       "Restart worker did not exit",
+      probe?.timeoutMilliseconds,
     );
     expect(exited).toEqual({ code: 1, signal: null });
     completed = true;
