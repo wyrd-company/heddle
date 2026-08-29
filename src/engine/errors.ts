@@ -12,6 +12,18 @@ export class BlueprintValidationError extends Error {
   }
 }
 
+export class BlueprintEditConflictError extends Error {
+  constructor(
+    public readonly expectedBlobHash: string,
+    public readonly actualBlobHash: string,
+  ) {
+    super(
+      `Blueprint artifact changed since it was loaded: expected ${expectedBlobHash}, found ${actualBlobHash}`,
+    );
+    this.name = "BlueprintEditConflictError";
+  }
+}
+
 export class InvalidDispositionError extends Error {
   constructor(
     public readonly disposition: string,

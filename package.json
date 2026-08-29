@@ -10,7 +10,8 @@
   "files": [
     "assets",
     "bin",
-    "dist"
+    "dist",
+    "schemas"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,7 +36,6 @@
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "ajv": "^8.20.0",
     "eslint": "^9.34.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",
@@ -47,6 +47,7 @@
   "dependencies": {
     "@flowcraft/sqlite-history": "^1.0.0-beta.1",
     "@modelcontextprotocol/server": "^2.0.0",
+    "ajv": "^8.20.0",
     "better-sqlite3": "^12.11.1",
     "flowcraft": "2.10.1",
     "react": "^19.2.8",

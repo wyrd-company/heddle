@@ -29,4 +29,7 @@ grep -qx 'package/dist/deployment/server.js' "${contents}"
 grep -qx 'package/bin/heddle-server.mjs' "${contents}"
 grep -qx 'package/assets/console-viewer/lifecycle.js' "${contents}"
 grep -qx 'package/assets/console-viewer/lifecycle.css' "${contents}"
+grep -qx 'package/schemas/lifecycle-blueprint.json' "${contents}"
+tar -xOf "${packages[0]}" package/package.json | jq -e \
+    '.dependencies.ajv != null and .devDependencies.ajv == null' >/dev/null
 printf 'Packaged %s\n' "$(basename "${packages[0]}")"

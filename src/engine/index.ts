@@ -4,6 +4,7 @@
 // ---
 
 export {
+  BlueprintEditConflictError,
   BlueprintValidationError,
   InvalidDispositionError,
   RebaseInstanceNotAwaitingError,
@@ -12,7 +13,13 @@ export {
   TransitionConflictError,
   UnexpectedLandingError,
 } from "./errors.js";
+export {
+  BlueprintArtifactEditor,
+  type BlueprintArtifactRevision,
+  type SaveBlueprintArtifactInput,
+} from "./blueprint-artifact-editor.js";
 export { GitBlueprintStore } from "./git-blueprint-store.js";
+export type { WorkingBlueprintArtifact } from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
 export { LifecycleResolver } from "./lifecycle-resolver.js";
 export type {

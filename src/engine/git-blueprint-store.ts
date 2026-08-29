@@ -4,6 +4,8 @@
 // ---
 
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import {
   basename,
   extname,
@@ -17,6 +19,7 @@ import { promisify } from "node:util";
 import { isBlueprintArtifactId } from "./blueprint-artifact.js";
 import type { LifecycleBlueprint } from "./types.js";
 import { BlueprintValidationError } from "./errors.js";
+import { BlueprintEditConflictError } from "./errors.js";
 
 const execFileAsync = promisify(execFile);
 const gitObjectId = /^[0-9a-f]{40,64}$/;
@@ -68,6 +71,14 @@ const parseBlueprint = (
   return { ...value, id: artifactId } as LifecycleBlueprint;
 };
 
+export interface WorkingBlueprintArtifact {
+  artifact: Record<string, unknown>;
+  blobHash: string;
+  blueprint: LifecycleBlueprint;
+  path: string;
+  serialized: string;
+}
+
 export class GitBlueprintStore {
   constructor(private readonly repositoryRoot: string) {}
 
@@ -100,6 +111,61 @@ export class GitBlueprintStore {
 
   normalize(path: string): string {
     return relative(this.repositoryRoot, this.resolveRepositoryPath(path));
+  }
+
+  async inspect(path: string): Promise<WorkingBlueprintArtifact> {
+    const repositoryPath = this.resolveRepositoryPath(path);
+    const normalizedPath = relative(this.repositoryRoot, repositoryPath);
+    const serialized = await readFile(repositoryPath, "utf8");
+    const blueprint = parseBlueprint(
+      serialized,
+      artifactIdFromPath(normalizedPath),
+    );
+    const { stdout } = await execFileAsync(
+      "git",
+      ["hash-object", "--", repositoryPath],
+      { cwd: this.repositoryRoot },
+    );
+    const artifact = JSON.parse(serialized) as Record<string, unknown>;
+    return {
+      artifact,
+      blobHash: stdout.trim(),
+      blueprint,
+      path: normalizedPath,
+      serialized,
+    };
+  }
+
+  async replace(
+    path: string,
+    expectedBlobHash: string,
+    serialized: string,
+  ): Promise<WorkingBlueprintArtifact> {
+    if (!gitObjectId.test(expectedBlobHash)) {
+      throw new BlueprintValidationError(
+        "Expected blueprint git blob hash is invalid",
+      );
+    }
+    const repositoryPath = this.resolveRepositoryPath(path);
+    const current = await this.inspect(path);
+    if (current.blobHash !== expectedBlobHash) {
+      throw new BlueprintEditConflictError(expectedBlobHash, current.blobHash);
+    }
+    const temporaryPath = `${repositoryPath}.heddle-${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporaryPath, serialized, {
+        encoding: "utf8",
+        flag: "wx",
+      });
+      const latest = await this.inspect(path);
+      if (latest.blobHash !== expectedBlobHash) {
+        throw new BlueprintEditConflictError(expectedBlobHash, latest.blobHash);
+      }
+      await rename(temporaryPath, repositoryPath);
+    } finally {
+      await rm(temporaryPath, { force: true });
+    }
+    return this.inspect(path);
   }
 
   async read(blobHash: string, path: string): Promise<LifecycleBlueprint> {
