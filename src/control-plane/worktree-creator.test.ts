@@ -140,6 +140,53 @@ describe("ensureWorktree", () => {
     ).toBe(expectedHead);
   });
 
+  it("places the option terminator before worktree operands", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+    scratchDirectories.push(scratch);
+    const repositoryRoot = join(scratch, "source");
+    const worktreesRoot = join(scratch, "worktrees");
+    const preparedPath = join(
+      worktreesRoot,
+      "sample-repository",
+      "task-prepare",
+    );
+    const commit = "a".repeat(40);
+    const calls: string[][] = [];
+
+    await ensureWorktree(
+      {
+        baseRef: "integration-base",
+        branch: "task/prepare",
+        repositoryName: "sample-repository",
+        repositoryRoot,
+        worktreeName: "task-prepare",
+        worktreesRoot,
+      },
+      async (_cwd, arguments_) => {
+        calls.push(arguments_);
+        if (arguments_.includes("integration-base^{commit}")) return commit;
+        if (arguments_[0] === "show-ref") throw new Error("missing branch");
+        if (arguments_[0] === "worktree") return "";
+        if (arguments_.includes("--show-toplevel")) return preparedPath;
+        if (arguments_.includes("--git-common-dir"))
+          return join(repositoryRoot, ".git");
+        if (arguments_[0] === "symbolic-ref") return "task/prepare";
+        throw new Error(`Unexpected Git call: ${arguments_.join(" ")}`);
+      },
+    );
+
+    expect(calls.find(([command]) => command === "worktree")).toEqual([
+      "worktree",
+      "add",
+      "--quiet",
+      "-b",
+      "task/prepare",
+      "--",
+      preparedPath,
+      commit,
+    ]);
+  });
+
   it("rejects an unrelated repository at the owned path", async () => {
     const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
     scratchDirectories.push(scratch);
