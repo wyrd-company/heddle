@@ -398,6 +398,36 @@ describe("delivery mechanical nodes", () => {
     expect(commands).toBe(0);
   });
 
+  it("rejects a wrong-branch owned path without creating a snapshot", async () => {
+    const fixture = await makeChange();
+    await git(fixture.sourcePath, "branch", "task/change", "main");
+    await mkdir(join(fixture.change.worktreesRoot!, "sample-repository"), {
+      recursive: true,
+    });
+    await git(
+      fixture.sourcePath,
+      "worktree",
+      "add",
+      "--quiet",
+      "-b",
+      "task/other",
+      fixture.worktreePath,
+      "main",
+    );
+
+    await expect(ensureReviewSnapshot(fixture.change)).rejects.toThrow(
+      /uses branch/,
+    );
+    expect(
+      await git(
+        fixture.sourcePath,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/gitpr/pr",
+      ),
+    ).toBe("");
+  });
+
   it("routes real snapshot drift through the lifecycle remediation wait", async () => {
     const fixture = await makeLifecycle();
     await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");

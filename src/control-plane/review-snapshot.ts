@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { join } from "node:path";
 
 import type { JsonValue } from "../persistence/index.js";
+import { ensureWorktree } from "./worktree-creator.js";
 
 export interface MechanicalChangeContext {
   baseBranch: string;
@@ -207,6 +208,17 @@ export const ensureReviewSnapshot = async (
   command: CommandRunner = defaultMechanicalCommand,
 ): Promise<ReviewSnapshot> => {
   const path = mechanicalWorktreePath(change);
+  await ensureWorktree(
+    {
+      baseRef: change.baseBranch,
+      branch: change.branch,
+      repositoryName: change.repositoryName,
+      repositoryRoot: change.repositoryRoot,
+      worktreeName: change.worktreeName,
+      worktreesRoot: change.worktreesRoot,
+    },
+    (cwd, arguments_) => runMechanicalGit(command, cwd, arguments_),
+  );
   await assertCleanMechanicalWorktree(command, path);
   const sourceHead = await resolveMechanicalBranchHead(
     command,
