@@ -23,8 +23,8 @@ import {
   type StageHandoffInput,
 } from "./handoff-assembler.js";
 import {
-  harnessToolTimeoutConfiguration,
-  type HarnessToolTimeoutConfiguration,
+  applyHarnessToolTimeoutBeforeThread,
+  type HarnessToolTimeoutConsumer,
 } from "./harness-tool-timeout.js";
 import {
   assertParentSession,
@@ -66,7 +66,6 @@ export type SessionBootstrapResult = {
   correlationToken: string;
   harnessConfiguration: HarnessConfiguration;
   handoff: string;
-  toolTimeoutConfiguration: HarnessToolTimeoutConfiguration;
   threadId: string;
   worktree: PreparedWorktree;
 };
@@ -86,6 +85,7 @@ export const harnessConfiguration = (): HarnessConfiguration => ({
 });
 
 export type SessionBootstrapDependencies = {
+  applyHarnessToolTimeout?: HarnessToolTimeoutConsumer;
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
   instantiateTodoList?: typeof instantiateTodoList;
   mintCorrelationToken?: () => string;
@@ -312,6 +312,13 @@ export const bootstrapStageSession = async (
     dependencies.instantiateTodoList ?? instantiateTodoList,
   );
   const threadId = nextId();
+  await applyHarnessToolTimeoutBeforeThread({
+    consumer: dependencies.applyHarnessToolTimeout,
+    driver: input.providerContext.driver,
+    sessionKey: input.sessionKey,
+    threadId,
+    worktreePath: worktree.path,
+  });
 
   await dependencies.t3.dispatch({
     type: "thread.create",
@@ -350,7 +357,6 @@ export const bootstrapStageSession = async (
     handoff,
     harnessConfiguration: harnessConfiguration(),
     threadId,
-    toolTimeoutConfiguration: harnessToolTimeoutConfiguration(),
     worktree,
   };
 };

@@ -79,6 +79,175 @@ describe("stage session bootstrap", () => {
     );
   });
 
+  it.each([
+    {
+      driver: "codex",
+      expected: {
+        mcp_servers: { heddle: { tool_timeout_sec: 100_000 } },
+      },
+    },
+    {
+      driver: "claudeAgent",
+      expected: { environment: { MCP_TOOL_TIMEOUT: "100000000" } },
+    },
+  ])(
+    "applies the $driver tool timeout before creating its T3 thread",
+    async ({ driver, expected }) => {
+      let record: InstanceRecord = {
+        instanceId: "instance-launch",
+        state: initialState(),
+        version: 1,
+      };
+      const operations: string[] = [];
+      const applyHarnessToolTimeout = vi.fn(async () => {
+        operations.push("apply-tool-timeout");
+      });
+      const dispatch = vi.fn(async ({ type }: { type: string }) => {
+        operations.push(type);
+        return { sequence: operations.length };
+      });
+      const ids = [
+        "thread-launch",
+        "create-launch",
+        "turn-launch",
+        "message-launch",
+      ];
+
+      const result = await bootstrapStageSession(
+        {
+          handoff: {
+            skillPointer: "skill://prepare",
+            stage: {
+              kind: "standard",
+              name: "prepare",
+              priorStageOutputs: [],
+            },
+            taskContract: { title: "Prepare inventory" },
+          },
+          instanceId: "instance-launch",
+          interactionMode: "default",
+          modelSelection: { instanceId: driver, model: "default" },
+          projectId: "project-launch",
+          providerContext: {
+            cliVersion: "test-version",
+            driver,
+            lifecycle: "independent",
+          },
+          runtimeMode: "default",
+          sessionKey: "prepare-launch",
+          title: "Prepare inventory",
+          worktree: {
+            baseRef: "main",
+            branch: "task/prepare",
+            repositoryName: "sample-repository",
+            repositoryRoot: "/workspaces/sample-repository",
+            worktreeName: "task-prepare",
+          },
+        },
+        {
+          applyHarnessToolTimeout,
+          ensureWorktree: async ({ branch }) => ({
+            branch,
+            created: true,
+            path: "/workspaces/worktrees/sample-repository/task-prepare",
+          }),
+          instantiateTodoList,
+          nextId: () => ids.shift()!,
+          persistence: {
+            getInstance: () => record,
+            compareAndSwapInstance: (_id, version, state) => {
+              if (version !== record.version) return undefined;
+              record = { ...record, state, version: record.version + 1 };
+              return record;
+            },
+          },
+          resolveWorkflowMcpStageContract,
+          t3: { dispatch },
+        },
+      );
+
+      expect(operations).toEqual([
+        "apply-tool-timeout",
+        "thread.create",
+        "thread.turn.start",
+      ]);
+      expect(applyHarnessToolTimeout).toHaveBeenCalledWith({
+        configuration: expected,
+        driver,
+        sessionKey: "prepare-launch",
+        threadId: "thread-launch",
+        worktreePath: "/workspaces/worktrees/sample-repository/task-prepare",
+      });
+      expect(result).not.toHaveProperty("toolTimeoutConfiguration");
+    },
+  );
+
+  it.each(["codex", "claudeAgent"])(
+    "rejects $driver before thread creation without a timeout consumer",
+    async (driver) => {
+      let record: InstanceRecord = {
+        instanceId: "instance-missing-consumer",
+        state: initialState(),
+        version: 1,
+      };
+      const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+      await expect(
+        bootstrapStageSession(
+          {
+            handoff: {
+              skillPointer: "skill://prepare",
+              stage: {
+                kind: "standard",
+                name: "prepare",
+                priorStageOutputs: [],
+              },
+              taskContract: { title: "Prepare inventory" },
+            },
+            instanceId: "instance-missing-consumer",
+            interactionMode: "default",
+            modelSelection: { instanceId: driver, model: "default" },
+            projectId: "project-missing-consumer",
+            providerContext: {
+              cliVersion: "test-version",
+              driver,
+              lifecycle: "independent",
+            },
+            runtimeMode: "default",
+            sessionKey: "prepare-missing-consumer",
+            title: "Prepare inventory",
+            worktree: {
+              baseRef: "main",
+              branch: "task/prepare",
+              repositoryName: "sample-repository",
+              repositoryRoot: "/workspaces/sample-repository",
+              worktreeName: "task-prepare",
+            },
+          },
+          {
+            ensureWorktree: async ({ branch }) => ({
+              branch,
+              created: true,
+              path: "/workspaces/worktrees/sample-repository/task-prepare",
+            }),
+            instantiateTodoList,
+            persistence: {
+              getInstance: () => record,
+              compareAndSwapInstance: (_id, version, state) => {
+                if (version !== record.version) return undefined;
+                record = { ...record, state, version: record.version + 1 };
+                return record;
+              },
+            },
+            resolveWorkflowMcpStageContract,
+            t3: { dispatch },
+          },
+        ),
+      ).rejects.toThrow(/tool timeout application is required/);
+      expect(dispatch).not.toHaveBeenCalled();
+    },
+  );
+
   it("replays an identical persisted handoff into a fresh cold-retry session", async () => {
     let record: InstanceRecord = {
       instanceId: "instance-1",
@@ -184,10 +353,6 @@ describe("stage session bootstrap", () => {
     expect(first.harnessConfiguration).toEqual({
       claudeCode: { permissions: { deny: ["TodoWrite"] } },
       codex: { tools: { update_plan: { enabled: false } } },
-    });
-    expect(first.toolTimeoutConfiguration).toEqual({
-      claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } },
-      codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } },
     });
     expect(dependencies.mintCorrelationToken).toHaveBeenCalledOnce();
   });

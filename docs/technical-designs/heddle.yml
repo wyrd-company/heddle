@@ -169,7 +169,10 @@ proposed-design:
     notification, and the operator answers from the console.
     Session preparation configures the Heddle MCP server for these
     long-held calls: Codex receives `tool_timeout_sec = 100000`, and
-    Claude Code receives `MCP_TOOL_TIMEOUT=100000000` milliseconds.
+    Claude Code receives `MCP_TOOL_TIMEOUT=100000000` milliseconds. A
+    provider-specific launch-preparation port applies the setting before
+    Heddle creates the T3 thread; Codex and Claude session creation fails
+    closed when that consumer is absent.
     Because escalation rides Heddle's MCP surface, it is uniform
     across providers and independent of any harness's question
     tool.

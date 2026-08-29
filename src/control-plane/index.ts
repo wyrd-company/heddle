@@ -23,8 +23,13 @@ export {
   type SessionT3Client,
 } from "./session-bootstrap.js";
 export {
+  applyHarnessToolTimeoutBeforeThread,
   harnessToolTimeoutConfiguration,
+  harnessToolTimeoutLaunchConfiguration,
+  type HarnessToolTimeoutConsumer,
   type HarnessToolTimeoutConfiguration,
+  type HarnessToolTimeoutLaunchConfiguration,
+  type HarnessToolTimeoutLaunchInput,
 } from "./harness-tool-timeout.js";
 export {
   ensureWorktree,
