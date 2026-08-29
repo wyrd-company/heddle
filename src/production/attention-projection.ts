@@ -7,14 +7,18 @@ import {
   createConsoleAttention,
   type ConsoleAttention,
   type ConsoleAttentionAction,
-  type ConsoleAttentionQuestion,
 } from "../console/index.js";
 import type {
   DurableAttentionRecord,
   ReconcilerRuntimeRecord,
 } from "../persistence/index.js";
-
-type Payload = Record<string, unknown>;
+import {
+  escalationQuestions,
+  requiredAttentionIdentifier as requiredIdentifier,
+  requiredAttentionString as requiredString,
+  t3Questions,
+  type AttentionPayload as Payload,
+} from "./attention-question-projection.js";
 
 const recordPayload = (record: DurableAttentionRecord): Payload => {
   const payload = record.payload;
@@ -33,16 +37,11 @@ const recordPayload = (record: DurableAttentionRecord): Payload => {
   return payload;
 };
 
-const requiredString = (
-  payload: Payload,
-  field: string,
-  attentionId: string,
-): string => {
-  const value = payload[field];
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`Attention '${attentionId}' has no valid ${field}`);
+const validTaskId = (value: unknown, attentionId: string): number => {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+    throw new Error(`Attention '${attentionId}' has no valid taskId`);
   }
-  return value;
+  return value as number;
 };
 
 const taskForInstance = (
@@ -58,96 +57,7 @@ const taskForInstance = (
       `Attention '${attentionId}' does not resolve to one production task`,
     );
   }
-  return matches[0]!.taskId;
-};
-
-const escalationQuestions = (
-  value: unknown,
-  attentionId: string,
-): ConsoleAttentionQuestion[] => {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`Attention '${attentionId}' has no escalation questions`);
-  }
-  return value.map((item) => {
-    if (typeof item !== "object" || item === null || Array.isArray(item)) {
-      throw new Error(`Attention '${attentionId}' has malformed questions`);
-    }
-    const question = item as Payload;
-    const id = requiredString(question, "id", attentionId);
-    const prompt = requiredString(question, "prompt", attentionId);
-    if (!Array.isArray(question["options"]) || question["options"].length < 2) {
-      throw new Error(`Attention '${attentionId}' has malformed options`);
-    }
-    return {
-      id,
-      multiSelect: false,
-      options: question["options"].map((item) => {
-        if (typeof item !== "object" || item === null || Array.isArray(item)) {
-          throw new Error(`Attention '${attentionId}' has malformed options`);
-        }
-        const option = item as Payload;
-        return {
-          description: requiredString(option, "description", attentionId),
-          label: requiredString(option, "label", attentionId),
-          value: requiredString(option, "id", attentionId),
-        };
-      }),
-      prompt,
-    };
-  });
-};
-
-const t3Questions = (
-  value: unknown,
-  attentionId: string,
-): ConsoleAttentionQuestion[] => {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`Attention '${attentionId}' has no user-input questions`);
-  }
-  return value.map((item) => {
-    if (typeof item !== "object" || item === null || Array.isArray(item)) {
-      throw new Error(`Attention '${attentionId}' has malformed questions`);
-    }
-    const question = item as Payload;
-    if (typeof question["multiSelect"] !== "boolean") {
-      throw new Error(`Attention '${attentionId}' has malformed questions`);
-    }
-    if (!Array.isArray(question["options"]) || question["options"].length < 2) {
-      throw new Error(`Attention '${attentionId}' has malformed options`);
-    }
-    const header = question["header"];
-    if (
-      header !== undefined &&
-      (typeof header !== "string" || header.trim() === "")
-    ) {
-      throw new Error(`Attention '${attentionId}' has malformed questions`);
-    }
-    return {
-      ...(header === undefined ? {} : { header }),
-      id: requiredString(question, "id", attentionId),
-      multiSelect: question["multiSelect"],
-      options: question["options"].map((item) => {
-        if (typeof item !== "object" || item === null || Array.isArray(item)) {
-          throw new Error(`Attention '${attentionId}' has malformed options`);
-        }
-        const option = item as Payload;
-        const label = requiredString(option, "label", attentionId);
-        const description = option["description"];
-        if (
-          description !== undefined &&
-          (typeof description !== "string" || description.trim() === "")
-        ) {
-          throw new Error(`Attention '${attentionId}' has malformed options`);
-        }
-        return {
-          ...(description === undefined ? {} : { description }),
-          label,
-          value: label,
-        };
-      }),
-      prompt: requiredString(question, "question", attentionId),
-    };
-  });
+  return validTaskId(matches[0]!.taskId, attentionId);
 };
 
 const projectEscalation = (
@@ -157,13 +67,19 @@ const projectEscalation = (
   attentionId: string,
 ): ConsoleAttention => {
   const questions = escalationQuestions(payload["questions"], attentionId);
+  requiredString(payload, "openedAt", attentionId);
+  requiredIdentifier(payload, "stage", attentionId);
   const action: ConsoleAttentionAction = {
     actionId: "escalation.answer",
     contract: {
-      escalationId: requiredString(payload, "escalationId", attentionId),
+      escalationId: requiredIdentifier(payload, "escalationId", attentionId),
       instanceId,
       kind: "escalation.answer",
-      ownerSessionKey: requiredString(payload, "ownerSessionKey", attentionId),
+      ownerSessionKey: requiredIdentifier(
+        payload,
+        "ownerSessionKey",
+        attentionId,
+      ),
     },
     input: { kind: "questions", questions },
     label: "Answer escalation",
@@ -186,11 +102,11 @@ const projectSessionAttention = (
   attentionId: string,
   kind: string,
 ): ConsoleAttention => {
-  const sessionKey = requiredString(payload, "sessionKey", attentionId);
-  const threadId = requiredString(payload, "threadId", attentionId);
+  const sessionKey = requiredIdentifier(payload, "sessionKey", attentionId);
+  const threadId = requiredIdentifier(payload, "threadId", attentionId);
   const requestId =
     kind === "approval" || kind === "user-input"
-      ? requiredString(payload, "requestId", attentionId)
+      ? requiredIdentifier(payload, "requestId", attentionId)
       : undefined;
   const actions: ConsoleAttentionAction[] =
     kind === "approval"
@@ -245,7 +161,7 @@ export const projectProductionAttention = (
   const attentionId = record.attentionId;
   const kind = payload["kind"];
   if (kind === undefined) {
-    const instanceId = requiredString(payload, "instanceId", attentionId);
+    const instanceId = requiredIdentifier(payload, "instanceId", attentionId);
     return projectEscalation(
       payload,
       instanceId,
@@ -260,7 +176,7 @@ export const projectProductionAttention = (
     kind === "failed" ||
     kind === "stalled"
   ) {
-    const instanceId = requiredString(payload, "instanceId", attentionId);
+    const instanceId = requiredIdentifier(payload, "instanceId", attentionId);
     return projectSessionAttention(
       payload,
       instanceId,
@@ -270,10 +186,8 @@ export const projectProductionAttention = (
     );
   }
   if (kind === "lifecycle-resolution" || kind === "stale-instance") {
-    const taskId = payload["taskId"];
-    if (!Number.isSafeInteger(taskId) || (taskId as number) <= 0) {
-      throw new Error(`Attention '${attentionId}' has no valid taskId`);
-    }
+    const taskId = validTaskId(payload["taskId"], attentionId);
+    requiredIdentifier(payload, "code", attentionId);
     const instanceId = payload["instanceId"];
     if (instanceId !== undefined && typeof instanceId !== "string") {
       throw new Error(`Attention '${attentionId}' has no valid instanceId`);
@@ -292,8 +206,8 @@ export const projectProductionAttention = (
       ...(typeof instanceId === "string" ? { instanceId } : {}),
       kind,
       message: requiredString(payload, "message", attentionId),
-      scope: `task:${taskId as number}`,
-      taskId: taskId as number,
+      scope: `task:${taskId}`,
+      taskId,
     });
   }
   throw new Error(`Attention '${attentionId}' has an unknown kind`);

@@ -233,5 +233,47 @@ describe("production attention projection", () => {
         [],
       ),
     ).toThrow("does not resolve to one production task");
+    expect(() =>
+      projectProductionAttention(
+        record("attention-escalation", {
+          escalationId: "choice-one",
+          instanceId: "task-41",
+          ownerSessionKey: "session-one",
+          questions: [
+            {
+              id: "question-one",
+              options: [
+                { description: "First", id: "same", label: "First" },
+                { description: "Second", id: "same", label: "Second" },
+              ],
+              prompt: "Select a path",
+            },
+          ],
+          stage: "implement",
+        }),
+        [runtime],
+      ),
+    ).toThrow("repeats option 'same'");
+    expect(() =>
+      projectProductionAttention(
+        record("attention-input", {
+          instanceId: "task-41",
+          kind: "user-input",
+          message: "Input required",
+          questions: [
+            {
+              id: "question-one",
+              multiSelect: false,
+              options: [{ label: "Same" }, { label: "Same" }],
+              question: "Choose a route",
+            },
+          ],
+          requestId: "input-one",
+          sessionKey: "session-one",
+          threadId: "thread-one",
+        }),
+        [runtime],
+      ),
+    ).toThrow("repeats option 'Same'");
   });
 });

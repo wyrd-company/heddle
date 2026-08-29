@@ -5,6 +5,7 @@
 
 import {
   assertConsoleAttentionFingerprint,
+  type ConsoleAttentionAction,
   type ConsoleAttentionActionAnswers,
   type ConsoleAttentionActionPort,
 } from "../console/index.js";
@@ -30,11 +31,11 @@ const canonicalAnswers = (
       );
 
 const actionIntent = (
-  actionId: string,
+  action: ConsoleAttentionAction,
   answers: ConsoleAttentionActionAnswers | undefined,
 ): JsonValue =>
   JSON.parse(
-    JSON.stringify({ actionId, answers: canonicalAnswers(answers) ?? null }),
+    JSON.stringify({ action, answers: canonicalAnswers(answers) ?? null }),
   ) as JsonValue;
 
 const escalationAnswers = (
@@ -70,7 +71,8 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
         `Attention '${input.attention.attentionId}' does not offer action '${input.action.actionId}'`,
       );
     }
-    const intent = actionIntent(input.action.actionId, input.answers);
+    this.#validateInput(input);
+    const intent = actionIntent(input.action, input.answers);
     this.persistence.recordEffectIntent(
       effectKind,
       input.attention.attentionId,
@@ -96,6 +98,25 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     this.attention.resolve(input.attention.attentionId);
   }
 
+  #validateInput(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
+    if (input.action.contract.kind === "escalation.answer") {
+      escalationAnswers(input.answers);
+      return;
+    }
+    if (input.action.contract.kind === "t3.approval.respond") {
+      if (input.answers !== undefined) {
+        throw new TypeError("Approval actions do not accept answers");
+      }
+      return;
+    }
+    if (
+      input.answers === undefined ||
+      Object.keys(input.answers).length === 0
+    ) {
+      throw new TypeError("User-input actions require answers");
+    }
+  }
+
   async #apply(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
     const contract = input.action.contract;
     if (contract.kind === "escalation.answer") {
@@ -108,9 +129,6 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       return;
     }
     if (contract.kind === "t3.approval.respond") {
-      if (input.answers !== undefined) {
-        throw new TypeError("Approval actions do not accept answers");
-      }
       await this.observer.answerApproval(
         {
           instanceId: contract.instanceId,
@@ -123,9 +141,6 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       );
       return;
     }
-    if (input.answers === undefined) {
-      throw new TypeError("User-input actions require answers");
-    }
     await this.observer.answerUserInput(
       {
         instanceId: contract.instanceId,
@@ -133,7 +148,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
         threadId: contract.threadId,
       },
       contract.requestId,
-      input.answers,
+      input.answers!,
       input.attention.attentionId,
     );
   }

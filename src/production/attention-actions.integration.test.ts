@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createConsoleAttention } from "../console/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -197,6 +198,19 @@ describe("production attention actions", () => {
     await expect(
       composition.consoleActions.execute({
         action: attention.actions[0]!,
+        answers: { unsupported: "answer" },
+        attention,
+      }),
+    ).rejects.toThrow("Approval actions do not accept answers");
+    expect(
+      composition.persistence.effectIntentRecorded(
+        "console-attention-action",
+        attention.attentionId,
+      ),
+    ).toBe(false);
+    await expect(
+      composition.consoleActions.execute({
+        action: attention.actions[0]!,
         attention,
       }),
     ).rejects.toThrow("Injected approval failure");
@@ -207,10 +221,23 @@ describe("production attention actions", () => {
         attention.attentionId,
       ),
     ).toBe(false);
+    const changedAction = {
+      ...attention.actions[0]!,
+      contract: {
+        ...attention.actions[0]!.contract,
+        threadId: "thread-other",
+      },
+    };
+    const attentionState = globalThis.structuredClone(attention);
+    delete (attentionState as Partial<typeof attentionState>).fingerprint;
+    const changedAttention = createConsoleAttention({
+      ...attentionState,
+      actions: [changedAction, ...attention.actions.slice(1)],
+    });
     await expect(
       composition.consoleActions.execute({
-        action: attention.actions[1]!,
-        attention,
+        action: changedAction,
+        attention: changedAttention,
       }),
     ).rejects.toThrow("changed durable identity");
 
