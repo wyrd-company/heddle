@@ -90,6 +90,11 @@ const answeredFrom = (event: PersistedEvent): AnsweredEscalation => {
   });
 };
 
+type ReplayedEscalation = {
+  answered?: AnsweredEscalation;
+  opened: PendingEscalation;
+};
+
 export class EscalationHistory {
   constructor(private readonly persistence: WorkflowMcpPersistence) {}
 
@@ -177,61 +182,61 @@ export class EscalationHistory {
     ownerSessionKey: string,
     escalationId: string,
   ): { answered?: AnsweredEscalation; opened?: PendingEscalation } {
-    let opened: PendingEscalation | undefined;
-    let answered: AnsweredEscalation | undefined;
-    for (const event of this.persistence.replayEvents(instanceId)) {
-      if (event.type === escalationEventTypes.opened) {
-        const value = openedFrom(event);
-        if (
-          value.ownerSessionKey === ownerSessionKey &&
-          value.escalationId === escalationId
-        ) {
-          opened = value;
-        }
-      } else if (event.type === escalationEventTypes.answered) {
-        const value = answeredFrom(event);
-        if (
-          value.ownerSessionKey === ownerSessionKey &&
-          value.escalationId === escalationId
-        ) {
-          answered = value;
-        }
-      }
-    }
-    if (opened !== undefined && answered !== undefined) {
-      validateAnswers(opened, answered.answers);
-    }
-    return {
-      ...(answered === undefined ? {} : { answered }),
-      ...(opened === undefined ? {} : { opened }),
-    };
+    return (
+      this.#replay(instanceId).get(
+        escalationKey(instanceId, ownerSessionKey, escalationId),
+      ) ?? {}
+    );
   }
 
   pending(instanceId: string): PendingEscalation[] {
-    const opened = new Map<string, PendingEscalation>();
-    const answered = new Map<string, AnsweredEscalation>();
+    return [...this.#replay(instanceId).values()]
+      .filter(({ answered }) => answered === undefined)
+      .map(({ opened }) => opened);
+  }
+
+  #replay(instanceId: string): Map<string, ReplayedEscalation> {
+    const replayed = new Map<string, ReplayedEscalation>();
     for (const event of this.persistence.replayEvents(instanceId)) {
       if (event.type === escalationEventTypes.opened) {
-        const value = openedFrom(event);
-        opened.set(
-          escalationKey(instanceId, value.ownerSessionKey, value.escalationId),
-          value,
+        const opened = openedFrom(event);
+        const key = escalationKey(
+          instanceId,
+          opened.ownerSessionKey,
+          opened.escalationId,
         );
+        if (replayed.has(key)) {
+          throw new Error(
+            `Escalation '${opened.escalationId}' has more than one open event`,
+          );
+        }
+        replayed.set(key, { opened });
       } else if (event.type === escalationEventTypes.answered) {
-        const value = answeredFrom(event);
-        answered.set(
-          escalationKey(instanceId, value.ownerSessionKey, value.escalationId),
-          value,
+        const answered = answeredFrom(event);
+        const key = escalationKey(
+          instanceId,
+          answered.ownerSessionKey,
+          answered.escalationId,
         );
+        const prior = replayed.get(key);
+        if (prior === undefined) {
+          throw new Error(
+            `Escalation '${answered.escalationId}' answer precedes its open event`,
+          );
+        }
+        validateAnswers(prior.opened, answered.answers);
+        if (
+          prior.answered !== undefined &&
+          !sameAnswers(prior.opened, prior.answered.answers, answered.answers)
+        ) {
+          throw new Error(
+            `Escalation '${answered.escalationId}' has conflicting answer events`,
+          );
+        }
+        replayed.set(key, { ...prior, answered });
       }
     }
-    for (const [key, value] of answered) {
-      const pending = opened.get(key);
-      if (pending === undefined) continue;
-      validateAnswers(pending, value.answers);
-      opened.delete(key);
-    }
-    return [...opened.values()];
+    return replayed;
   }
 
   routeTypes(opened: PendingEscalation): Set<string> {

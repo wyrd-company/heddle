@@ -352,4 +352,77 @@ describe("workflow MCP escalation tools", () => {
       subject.coordinator.pendingEscalations("instance-invalid-answer"),
     ).toThrow(/does not name an offered option/);
   });
+
+  it("rejects an answer event that precedes its open event", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-answer-first", [
+      { sessionKey: "top", token: "token-answer-first", tools: ["escalate"] },
+    ]);
+    subject.persistence.appendEvent(
+      "instance-answer-first",
+      "mcp:escalation-answered",
+      {
+        answers: sampleEscalationAnswer,
+        escalationId: "answer-first-choice",
+        ownerSessionKey: "top",
+      },
+    );
+    subject.persistence.appendEvent(
+      "instance-answer-first",
+      "mcp:escalation-opened",
+      {
+        attentionId: "attention-answer-first",
+        escalationId: "answer-first-choice",
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: "top",
+        questions: sampleEscalationQuestions,
+        stage: "assess",
+      },
+    );
+
+    expect(() =>
+      subject.coordinator.pendingEscalations("instance-answer-first"),
+    ).toThrow(/answer precedes its open event/);
+  });
+
+  it("rejects conflicting answer events during replay", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-answer-conflict", [
+      {
+        sessionKey: "top",
+        token: "token-answer-conflict",
+        tools: ["escalate"],
+      },
+    ]);
+    subject.persistence.appendEvent(
+      "instance-answer-conflict",
+      "mcp:escalation-opened",
+      {
+        attentionId: "attention-answer-conflict",
+        escalationId: "answer-conflict-choice",
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: "top",
+        questions: sampleEscalationQuestions,
+        stage: "assess",
+      },
+    );
+    for (const answers of [
+      sampleEscalationAnswer,
+      { "delivery-window": "wait" },
+    ]) {
+      subject.persistence.appendEvent(
+        "instance-answer-conflict",
+        "mcp:escalation-answered",
+        {
+          answers,
+          escalationId: "answer-conflict-choice",
+          ownerSessionKey: "top",
+        },
+      );
+    }
+
+    expect(() =>
+      subject.coordinator.pendingEscalations("instance-answer-conflict"),
+    ).toThrow(/conflicting answer events/);
+  });
 });
