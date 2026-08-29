@@ -146,6 +146,25 @@ proposed-design:
     depth are dispatch preconditions alongside the reconciler's
     other pacing gates, so delegation draws from the same capacity
     budget as all other sessions.
+
+    Escalation is the question path. An agent that needs a decision
+    asks through its harness's native question tool; every T3
+    provider adapter maps that call to the same pending-user-input
+    state on the thread shell, holding the tool call open until
+    answered. Heddle's shell poll sees the pending question and
+    routes it by parentage: a subagent's question is steered to its
+    parent, which answers through an answer MCP tool wrapping T3's
+    user-input response, scoped by correlation token to the parent's
+    own children; a top-level session's question enters the
+    attention queue with a pushover notification, and the operator
+    answers from the console or T3's UI. Resolution is an event in
+    the thread's history, so every watching client clears the
+    prompt and shows the chosen answer regardless of who answered.
+    Because stopping or interrupting a session settles its pending
+    questions with empty answers, Heddle dispositions a pending
+    question before it stops a session, and the question tool's
+    availability is per-harness configuration verified as a
+    dispatch precondition.
   observation: >
     Two channels report on running work, split by who holds the truth.
     Semantic outcomes — the verdict of a review, the completion of an
