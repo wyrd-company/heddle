@@ -51,5 +51,18 @@ export {
   type MergeSnapshotResult,
   type ReviewSnapshot,
 } from "./mechanical-node-effects.js";
+export {
+  SessionObserver,
+  type SessionObservationAttention,
+  type SessionObservationAttentionQueue,
+  type SessionObservationEscalations,
+  type SessionObservationOptions,
+  type SessionObservationPersistence,
+  type SessionObservationResult,
+  type SessionObservationT3Client,
+  type SessionObservationTarget,
+  type SessionObservationThresholds,
+  type StopSessionInput,
+} from "./session-observation.js";
 
 export const controlPlane = "control-plane" as const;

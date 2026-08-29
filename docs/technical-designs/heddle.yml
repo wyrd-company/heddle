@@ -3,6 +3,7 @@ relationships:
   references:
     - flowcraft-gate
     - t3-headless
+    - t3-session-visibility
 objective: >
   Heddle is a workflow service that runs software tasks through their
   delivery lifecycle. Deterministic machinery performs every mechanical
@@ -216,9 +217,23 @@ proposed-design:
     designed-for transition: after its threshold, the instance moves
     to an attention state and notifies the operator. Pending T3
     approvals and user-input requests surface through the same poll
-    into the attention queue. Interrupts Heddle issues are recorded as
-    facts on the instance at the moment of issue, so instance state
-    never depends on reconstructing intent from session state.
+    into the attention queue with actions that answer the recorded T3
+    request. Heddle dispositions every pending approval and user-input
+    request before stopping a session, because stop settles unanswered
+    questions with empty answers. Interrupt, question-disposition, stop,
+    and archive commands use replayable event-before-effect records;
+    intent is durable before dispatch and a completed effect is not
+    dispatched again.
+
+    Every stage thread remains in T3's normal shell while its recorded
+    lifecycle stage is active or operator participation remains. T3
+    completion never authorizes a semantic transition or cleanup. Heddle
+    dispatches `thread.archive` only when the stage's recorded `advance`
+    operation is complete, the T3 thread is no longer active, and no
+    approval, user-input request, Heddle escalation, or canonical child
+    conversational handoff remains. The recorded `threadId` and archive
+    facts make this cleanup idempotent. Heddle does not snooze, settle,
+    pin, or reorder active or operator-blocked work.
   mechanical-nodes: >
     Every step with a single correct outcome executes as a
     deterministic blueprint node running real code: creating the

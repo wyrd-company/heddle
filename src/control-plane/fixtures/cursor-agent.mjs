@@ -47,6 +47,25 @@ const respond = (id, result) => {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 };
 
+const completePrompt = (request) => {
+  process.stdout.write(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId: request.params.sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "done" },
+        },
+      },
+    })}\n`,
+  );
+  respond(request.id, { stopReason: "end_turn" });
+};
+
+const pendingPrompts = new Map();
+
 let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
@@ -61,6 +80,13 @@ process.stdin.on("data", (chunk) => {
     }
     const request = JSON.parse(line);
     log({ id: request.id, method: request.method });
+    const pendingPrompt = pendingPrompts.get(request.id);
+    if (pendingPrompt) {
+      pendingPrompts.delete(request.id);
+      completePrompt(pendingPrompt);
+      newline = input.indexOf("\n");
+      continue;
+    }
     switch (request.method) {
       case "initialize":
         respond(request.id, {
@@ -84,25 +110,59 @@ process.stdin.on("data", (chunk) => {
         respond(request.id, { configOptions: [] });
         break;
       case "session/prompt": {
-        const completePrompt = () => {
+        const promptText = JSON.stringify(request.params.prompt ?? "");
+        if (promptText.includes("REQUEST_USER_INPUT")) {
+          const requestId = "fixture-user-input-1";
+          pendingPrompts.set(requestId, request);
           process.stdout.write(
             `${JSON.stringify({
               jsonrpc: "2.0",
-              method: "session/update",
+              id: requestId,
+              method: "cursor/ask_question",
               params: {
-                sessionId: request.params.sessionId,
-                update: {
-                  sessionUpdate: "agent_message_chunk",
-                  content: { type: "text", text: "done" },
-                },
+                toolCallId: "fixture-question-tool-call",
+                title: "Question",
+                questions: [
+                  {
+                    id: "quantity",
+                    prompt: "Which quantity?",
+                    options: [
+                      { id: "small", label: "Small" },
+                      { id: "large", label: "Large" },
+                    ],
+                  },
+                ],
               },
             })}\n`,
           );
-          respond(request.id, { stopReason: "end_turn" });
-        };
+          break;
+        }
+        if (promptText.includes("REQUEST_APPROVAL")) {
+          const requestId = "fixture-approval-1";
+          pendingPrompts.set(requestId, request);
+          process.stdout.write(
+            `${JSON.stringify({
+              jsonrpc: "2.0",
+              id: requestId,
+              method: "session/request_permission",
+              params: {
+                sessionId: request.params.sessionId,
+                toolCall: {
+                  toolCallId: "fixture-approval-tool-call",
+                  title: "Allow sample action",
+                },
+                options: [
+                  { optionId: "allow", name: "Allow", kind: "allow_once" },
+                  { optionId: "reject", name: "Reject", kind: "reject_once" },
+                ],
+              },
+            })}\n`,
+          );
+          break;
+        }
         if (Number.isFinite(promptDelayMs) && promptDelayMs > 0)
-          setTimeout(completePrompt, promptDelayMs);
-        else completePrompt();
+          setTimeout(() => completePrompt(request), promptDelayMs);
+        else completePrompt(request);
         break;
       }
       case "cursor/list_available_models":
