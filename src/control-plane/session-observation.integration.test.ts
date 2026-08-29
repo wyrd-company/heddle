@@ -14,9 +14,17 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
+import type { AddressInfo } from "node:net";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { createConsoleAttention } from "../console/attention-contract.js";
+import { createConsoleServer } from "../console/server.js";
+import type {
+  ConsoleAttention,
+  ConsoleBoard,
+  ConsoleStateSource,
+} from "../console/types.js";
 import type { InstanceState } from "../persistence/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { SessionObserver } from "./session-observation.js";
@@ -322,6 +330,106 @@ describe.skipIf(!t3Binary)(
         )?.hasPendingUserInput,
       ).toBe(false);
     }, 30_000);
+
+    it("dispatches one pinned T3 approval through its offered console action", async () => {
+      const sessionObserver = observer();
+      const approvalTarget = await createThread(
+        "sample-console-approval",
+        "REQUEST_APPROVAL",
+      );
+      const approval = await awaitAttention(
+        sessionObserver,
+        approvalTarget,
+        "approval",
+      );
+      if (approval.requestId === undefined) {
+        throw new Error("Pinned T3 approval has no request identity");
+      }
+      const entry = createConsoleAttention({
+        actions: (["accept", "reject"] as const).map((decision) => ({
+          actionId: decision,
+          contract: {
+            decision,
+            instanceId: approval.instanceId,
+            kind: "t3.approval.respond" as const,
+            requestId: approval.requestId!,
+            sessionKey: approval.sessionKey,
+            threadId: approval.threadId,
+          },
+          input: { kind: "none" as const },
+          label: decision === "accept" ? "Accept" : "Reject",
+        })),
+        attentionId: approval.attentionId,
+        instanceId: approval.instanceId,
+        kind: "approval",
+        message: approval.message,
+        scope: "task:41",
+        taskId: 41,
+      });
+      let current: ConsoleAttention[] = [entry];
+      const board: ConsoleBoard = {
+        readBoard: async () => [],
+        readBoardStatuses: async () => [],
+        setEpicInProgress: async () => undefined,
+      };
+      const state: ConsoleStateSource = {
+        listAttention: async () => current,
+        listEvents: async () => [],
+        listInstances: async () => [],
+        readLifecycle: async () => {
+          throw new Error("unexpected lifecycle read");
+        },
+      };
+      const consoleServer = createConsoleServer({
+        actions: {
+          execute: async ({ action }) => {
+            if (action.contract.kind !== "t3.approval.respond") {
+              throw new Error("unexpected console action authority");
+            }
+            await sessionObserver.answerApproval(
+              {
+                instanceId: action.contract.instanceId,
+                sessionKey: action.contract.sessionKey,
+                threadId: action.contract.threadId,
+              },
+              action.contract.requestId,
+              action.contract.decision,
+            );
+            current = [];
+          },
+        },
+        board,
+        state,
+      });
+      try {
+        await new Promise<void>((resolvePromise) =>
+          consoleServer.listen(0, "127.0.0.1", resolvePromise),
+        );
+        const port = (consoleServer.address() as AddressInfo).port;
+        const response = await globalThis.fetch(
+          `http://127.0.0.1:${port}/api/attention/${entry.attentionId}/actions/accept`,
+          {
+            body: JSON.stringify({ fingerprint: entry.fingerprint }),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          },
+        );
+
+        expect(response.status).toBe(204);
+        expect(current).toEqual([]);
+        expect(
+          (await client.getShell()).threads.find(
+            ({ id }) => id === approvalTarget.threadId,
+          )?.hasPendingApprovals,
+        ).toBe(false);
+      } finally {
+        await new Promise<void>((resolvePromise, reject) =>
+          consoleServer.close((error) =>
+            error === undefined ? resolvePromise() : reject(error),
+          ),
+        );
+      }
+    }, 20_000);
 
     it("archives only after recorded lifecycle terminality and removes the thread from the normal shell", async () => {
       const sessionObserver = observer();

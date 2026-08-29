@@ -129,6 +129,13 @@ export interface BrowserResponse {
   text(): Promise<string>;
 }
 
+export interface BrowserRequestOptions {
+  body?: unknown;
+  cache?: string;
+  headers?: Record<string, string>;
+  method?: string;
+}
+
 export interface GraphFixture {
   edges: Array<{ from: number; to: number; trace: boolean }>;
   nodes: Array<{
@@ -214,6 +221,7 @@ export const clientHarness = async (
   initialUrl = "http://console.test/?scope=all",
   initialGraph?: GraphFixture,
   initialLifecycle?: unknown,
+  initialAttention: unknown[] = [],
 ) => {
   const board = new FakeElement("div");
   const graph = new FakeElement("section");
@@ -241,13 +249,24 @@ export const clientHarness = async (
     initialLifecycle === undefined ? [] : [response(initialLifecycle)];
   const lifecycleRequests: string[] = [];
   const lifecycleSnapshots: unknown[] = [];
+  const attentionRequests: Array<{
+    input: string;
+    options?: BrowserRequestOptions;
+  }> = [];
   const timeouts: Array<() => void> = [];
 
-  const fetch = async (input: string): Promise<BrowserResponse> => {
+  const fetch = async (
+    input: string,
+    options?: BrowserRequestOptions,
+  ): Promise<BrowserResponse> => {
     if (input === "/api/board") {
       return response({ tasks: initialTasks });
     }
-    if (input === "/api/attention") return response([]);
+    if (input === "/api/attention") return response(initialAttention);
+    if (input.startsWith("/api/attention/") && options?.method === "POST") {
+      attentionRequests.push({ input, options });
+      return response(null, { status: 204 });
+    }
     if (input.startsWith("/api/lifecycle?")) {
       lifecycleRequests.push(input);
       const queued = lifecycleResponses.shift();
@@ -412,8 +431,10 @@ export const clientHarness = async (
     cardIds,
     dependenciesViewLink,
     attention,
+    attentionElements: () => visit(attentionList),
     attentionList,
     attentionOverlay,
+    attentionRequests,
     attentionStatus,
     elementsByClass: (className: string) =>
       visit(board).filter((element) => element.className === className),

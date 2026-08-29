@@ -529,6 +529,8 @@ const consoleUrl = (view, scope) => {
   const url = new URL("/", window.location.href);
   if (view !== "board") url.searchParams.set("view", view);
   url.searchParams.set("scope", scope);
+  const attention = attentionFromUrl();
+  if (attention !== null) url.searchParams.set("attention", attention);
   return url.pathname + url.search;
 };
 
