@@ -148,7 +148,7 @@ export class KanbanBoardAdapter {
       throw new Error(`epic status transition is not allowed: ${status}`);
     }
     const task = await this.readTask(taskId);
-    if (task.parent !== undefined) {
+    if (task.parent !== undefined || !task.tags.includes("type:epic")) {
       throw new Error(`task ${taskId} is not an epic task`);
     }
     await this.command("edit", String(taskId), "--status", status, "--json");

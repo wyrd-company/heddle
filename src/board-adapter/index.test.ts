@@ -178,7 +178,12 @@ next_id: 1
   });
 
   it("limits epic transitions to uat and done", async () => {
-    const collectionId = await createTask("Seasonal collection");
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
+    const standaloneId = await createTask("Repair reading-room lamp");
     const childId = await createTask(
       "Label storage crates",
       "--parent",
@@ -195,6 +200,13 @@ next_id: 1
     ).rejects.toThrow("epic status transition is not allowed");
     await expect(adapter.transitionEpicStatus(childId, "done")).rejects.toThrow(
       "is not an epic task",
+    );
+    commands = [];
+    await expect(
+      adapter.transitionEpicStatus(standaloneId, "done"),
+    ).rejects.toThrow("is not an epic task");
+    expect(commands).not.toContainEqual(
+      expect.arrayContaining(["edit", String(standaloneId)]),
     );
   });
 
