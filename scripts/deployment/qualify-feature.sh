@@ -32,17 +32,29 @@ assert_head() {
 }
 
 up() {
-    local output
-    output="$(
-        HEDDLE_QUALIFICATION_STATE="${state_directory}" \
-            devcontainer up \
-            --workspace-folder "${repository}" \
-            --config "${configuration}" \
-            --id-label "heddle.qualification=${qualification_label}" \
-            --log-format json \
-            --log-level info
-    )"
-    container_id="$(printf '%s\n' "${output}" | tail -n 1 | jq -er '.containerId')"
+    local log_file
+    local -a container_ids
+    log_file="$(mktemp)"
+    if ! HEDDLE_QUALIFICATION_STATE="${state_directory}" \
+        devcontainer up \
+        --workspace-folder "${repository}" \
+        --config "${configuration}" \
+        --id-label "heddle.qualification=${qualification_label}" \
+        --log-level info >"${log_file}" 2>&1; then
+        tail -n 100 "${log_file}" >&2
+        rm -f "${log_file}"
+        return 1
+    fi
+    rm -f "${log_file}"
+    mapfile -t container_ids < <(
+        docker ps --all --quiet \
+            --filter "label=heddle.qualification=${qualification_label}"
+    )
+    [ "${#container_ids[@]}" -eq 1 ] || {
+        echo "Expected one scratch container; found ${#container_ids[@]}." >&2
+        return 1
+    }
+    container_id="${container_ids[0]}"
     docker inspect "${container_id}" >/dev/null
 }
 
@@ -72,7 +84,7 @@ grep -q "<h1>Heddle</h1>" /tmp/heddle-console.html
 test "$(curl --silent --output /tmp/heddle-mcp.json --write-out "%{http_code}" --request POST http://127.0.0.1:4317/mcp)" = 401
 grep -q "Unauthorized" /tmp/heddle-mcp.json
 for attempt in $(seq 1 100); do
-    if curl --insecure --fail --silent https://heddle.qualification.test/ >/tmp/heddle-caddy.html; then break; fi
+    if curl --insecure --fail --silent https://heddle.localhost/ >/tmp/heddle-caddy.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1
     sleep 0.1
 done
