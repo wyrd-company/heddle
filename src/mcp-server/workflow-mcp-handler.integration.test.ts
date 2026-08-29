@@ -401,6 +401,16 @@ describe("workflow MCP HTTP server", () => {
     expect(JSON.stringify(alphaTools.tools[0]?.inputSchema)).toContain(
       "Return the sample for another preparation",
     );
+    const advanceSchema = alphaTools.tools[0]?.inputSchema as {
+      properties?: {
+        disposition?: { anyOf?: Array<{ const?: unknown }> };
+      };
+    };
+    expect(
+      advanceSchema.properties?.disposition?.anyOf?.map(
+        (option) => option.const,
+      ),
+    ).toEqual(["accept", "revise"]);
     await expect(
       alpha.callTool({
         name: "advance",
