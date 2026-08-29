@@ -49,6 +49,8 @@ const makeEngine = async (blueprintPath: (typeof blueprintPaths)[number]) => {
     effects: {
       finalize: effect("finalize"),
       merge: effect("merge"),
+      "prepare-worktree": effect("prepare-worktree"),
+      "review-snapshot": effect("review-snapshot"),
     },
     persistence,
     repositoryRoot,
@@ -76,6 +78,7 @@ describe("shipped lifecycle blueprints", () => {
       awaitingNodeIds: ["implement"],
       validDispositions: ["complete"],
     });
+    expect(fixture.effectsRun).toEqual(["prepare-worktree"]);
 
     const review = await fixture.engine.resume({
       disposition: "complete",
@@ -86,6 +89,7 @@ describe("shipped lifecycle blueprints", () => {
       awaitingNodeIds: ["review"],
       validDispositions: ["approve", "reject"],
     });
+    expect(fixture.effectsRun).toEqual(["prepare-worktree", "review-snapshot"]);
 
     const remediation = await fixture.engine.resume({
       disposition: "reject",
@@ -93,6 +97,7 @@ describe("shipped lifecycle blueprints", () => {
       operationId: "operation-b",
     });
     expect(remediation.awaitingNodeIds).toEqual(["remediate"]);
+    expect(fixture.effectsRun).toEqual(["prepare-worktree", "review-snapshot"]);
 
     const repeatedReview = await fixture.engine.resume({
       disposition: "complete",
@@ -100,6 +105,11 @@ describe("shipped lifecycle blueprints", () => {
       operationId: "operation-c",
     });
     expect(repeatedReview.awaitingNodeIds).toEqual(["review"]);
+    expect(fixture.effectsRun).toEqual([
+      "prepare-worktree",
+      "review-snapshot",
+      "review-snapshot",
+    ]);
 
     const retrospective = await fixture.engine.resume({
       disposition: "approve",
@@ -107,7 +117,12 @@ describe("shipped lifecycle blueprints", () => {
       operationId: "operation-d",
     });
     expect(retrospective.awaitingNodeIds).toEqual(["retrospective"]);
-    expect(fixture.effectsRun).toEqual(["merge"]);
+    expect(fixture.effectsRun).toEqual([
+      "prepare-worktree",
+      "review-snapshot",
+      "review-snapshot",
+      "merge",
+    ]);
 
     const completed = await fixture.engine.resume({
       disposition: "complete",
@@ -119,7 +134,13 @@ describe("shipped lifecycle blueprints", () => {
       status: "completed",
       validDispositions: [],
     });
-    expect(fixture.effectsRun).toEqual(["merge", "finalize"]);
+    expect(fixture.effectsRun).toEqual([
+      "prepare-worktree",
+      "review-snapshot",
+      "review-snapshot",
+      "merge",
+      "finalize",
+    ]);
     fixture.persistence.close();
   });
 
