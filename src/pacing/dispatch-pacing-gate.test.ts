@@ -233,6 +233,26 @@ describe("DispatchPacingGate", () => {
     expect(usage.reads).toEqual([]);
   });
 
+  it.each(["__proto__", "constructor", "hasOwnProperty", "toString"])(
+    "treats inherited provider key %s as unbudgeted",
+    async (provider) => {
+      const usage = new UsageStub({});
+      const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+
+      await expect(
+        gate.evaluate(
+          {
+            kind: "task",
+            provider,
+            sessionId: "session-a",
+          },
+          [],
+        ),
+      ).resolves.toEqual({ kind: "dispatch" });
+      expect(usage.reads).toEqual([]);
+    },
+  );
+
   it("derives depth only from an active parent session", async () => {
     const usage = new UsageStub({
       "provider-a": { used: 0, windowStartedAt: 1_000 },

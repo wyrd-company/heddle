@@ -140,7 +140,12 @@ export class DispatchPacingGate implements DispatchPacingEvaluator {
       };
     }
 
-    const budget = this.configuration.providerBudgets[request.provider];
+    const budget = Object.hasOwn(
+      this.configuration.providerBudgets,
+      request.provider,
+    )
+      ? this.configuration.providerBudgets[request.provider]
+      : undefined;
     if (budget === undefined) return { kind: "dispatch" };
 
     const usage = await this.usage.readFiveHourWindow(request.provider);
