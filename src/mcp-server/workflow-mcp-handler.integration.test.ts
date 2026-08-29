@@ -235,6 +235,7 @@ const makeFixture = async () => {
     handler,
     lifecycle,
     persistence,
+    repositoryRoot,
     url,
   };
 };
@@ -465,6 +466,34 @@ describe("workflow MCP HTTP server", () => {
         arguments: { disposition: "archive" },
       }),
     ).resolves.toMatchObject({ isError: true });
+  });
+
+  it("reads stage tools and dispositions from the rebased pinned blueprint", async () => {
+    const fixture = await makeFixture();
+    await writeBlueprint(
+      fixture.repositoryRoot,
+      "alpha-sample",
+      blueprint(["advance", "report_blocked"], "Accept the rebased sample"),
+    );
+    await fixture.lifecycle.rebase({
+      instanceId: "instance-alpha",
+      targetState: "assess",
+    });
+
+    const alpha = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "rebased-client",
+    );
+    const tools = await alpha.listTools();
+
+    expect(tools.tools.map(({ name }) => name)).toEqual([
+      "advance",
+      "report_blocked",
+    ]);
+    expect(JSON.stringify(tools.tools[0]?.inputSchema)).toContain(
+      "Accept the rebased sample",
+    );
   });
 
   it("binds task context and blocked reports to the token's instance", async () => {
