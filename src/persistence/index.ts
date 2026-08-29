@@ -3,7 +3,10 @@
 //   implements: heddle
 // ---
 
-export { SqlitePersistence } from "./sqlite-persistence.js";
+export {
+  SqlitePersistence,
+  type FlowcraftHistory,
+} from "./sqlite-persistence.js";
 export type {
   InstanceRecord,
   InstanceState,

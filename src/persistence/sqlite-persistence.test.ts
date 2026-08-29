@@ -230,11 +230,13 @@ describe("SqlitePersistence", () => {
     recovered.close();
   });
 
-  it("provides the Flowcraft SQLite history adapter on the configured database", async () => {
+  it("provides append-only Flowcraft history on the configured database", async () => {
     const stateDirectory = await makeStateDirectory();
     const persistence = new SqlitePersistence({ stateDirectory });
 
-    await persistence.flowcraftHistory.store(
+    expect("clear" in persistence.flowcraftHistory).toBe(false);
+
+    await persistence.flowcraftHistory.append(
       {
         type: "workflow:start",
         payload: { blueprintId: "sample", executionId: "execution-a" },
@@ -242,7 +244,7 @@ describe("SqlitePersistence", () => {
       "execution-a",
     );
 
-    expect(await persistence.flowcraftHistory.retrieve("execution-a")).toEqual([
+    expect(await persistence.flowcraftHistory.replay("execution-a")).toEqual([
       {
         type: "workflow:start",
         payload: { blueprintId: "sample", executionId: "execution-a" },
@@ -254,6 +256,10 @@ describe("SqlitePersistence", () => {
     expect(
       database.prepare("SELECT COUNT(*) AS count FROM events").get(),
     ).toEqual({ count: 1 });
+    expect(() =>
+      database.exec("UPDATE events SET event_type = 'changed'"),
+    ).toThrow(/append-only/);
+    expect(() => database.exec("DELETE FROM events")).toThrow(/append-only/);
     database.close();
   });
 });

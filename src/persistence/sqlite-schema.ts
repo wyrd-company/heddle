@@ -39,3 +39,19 @@ export const initializePersistenceSchema = (
     END;
   `);
 };
+
+export const protectFlowcraftHistory = (database: Database.Database): void => {
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS heddle_flowcraft_events_no_update
+    BEFORE UPDATE ON events
+    BEGIN
+      SELECT RAISE(ABORT, 'flowcraft history is append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS heddle_flowcraft_events_no_delete
+    BEFORE DELETE ON events
+    BEGIN
+      SELECT RAISE(ABORT, 'flowcraft history is append-only');
+    END;
+  `);
+};

@@ -9,7 +9,10 @@ import { join } from "node:path";
 import { SqliteHistoryAdapter } from "@flowcraft/sqlite-history";
 import Database from "better-sqlite3";
 
-import { initializePersistenceSchema } from "./sqlite-schema.js";
+import {
+  initializePersistenceSchema,
+  protectFlowcraftHistory,
+} from "./sqlite-schema.js";
 import type {
   EventRow,
   InstanceRecord,
@@ -45,11 +48,18 @@ const parseEvent = (row: EventRow): PersistedEvent => ({
   type: row.type,
 });
 
+export interface FlowcraftHistory {
+  append: SqliteHistoryAdapter["store"];
+  replay: SqliteHistoryAdapter["retrieve"];
+  replayMultiple: SqliteHistoryAdapter["retrieveMultiple"];
+}
+
 export class SqlitePersistence {
   readonly databasePath: string;
-  readonly flowcraftHistory: SqliteHistoryAdapter;
+  readonly flowcraftHistory: FlowcraftHistory;
 
   private readonly database: Database.Database;
+  private readonly flowcraftHistoryAdapter: SqliteHistoryAdapter;
   private closed = false;
 
   constructor(configuration: PersistenceConfiguration) {
@@ -63,10 +73,18 @@ export class SqlitePersistence {
     this.database.pragma("journal_mode = WAL");
     this.database.pragma("busy_timeout = 5000");
     initializePersistenceSchema(this.database);
-    this.flowcraftHistory = new SqliteHistoryAdapter({
+    this.flowcraftHistoryAdapter = new SqliteHistoryAdapter({
       databasePath: this.databasePath,
       walMode: true,
     });
+    protectFlowcraftHistory(this.database);
+    const adapter = this.flowcraftHistoryAdapter;
+    const flowcraftHistory: FlowcraftHistory = {
+      append: (event, executionId) => adapter.store(event, executionId),
+      replay: (executionId) => adapter.retrieve(executionId),
+      replayMultiple: (executionIds) => adapter.retrieveMultiple(executionIds),
+    };
+    this.flowcraftHistory = Object.freeze(flowcraftHistory);
     this.recoverInstances();
   }
 
@@ -227,7 +245,7 @@ export class SqlitePersistence {
 
   close(): void {
     if (this.closed) return;
-    this.flowcraftHistory.close();
+    this.flowcraftHistoryAdapter.close();
     this.database.close();
     this.closed = true;
   }
