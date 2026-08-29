@@ -675,7 +675,13 @@ const assertReadOnlySurface = async () => {
     const tabbableMutation = [...document.querySelectorAll(
       "#board button, #board input, #board textarea, #dependency-graph button, #dependency-graph input, #dependency-graph textarea, #lifecycle-view button, #lifecycle-view input, #lifecycle-view textarea, [contenteditable='true']",
     )].filter((element) => {
-      if (element.tabIndex < 0 || element.matches(".epic-lever")) return false;
+      if (
+        element.disabled ||
+        element.tabIndex < 0 ||
+        element.matches(".epic-lever, .blueprint-editor-actions button")
+      ) {
+        return false;
+      }
       return !element.getAttribute("title")?.startsWith("The tldraw SDK requires a license key");
     });
     return {
@@ -1118,6 +1124,19 @@ const mutationBattery = async (baseUrl) => {
         "broken attention-toggle activation was accepted",
       );
     },
+  );
+
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "read-only-console",
+    () =>
+      evaluate(`(() => {
+        const button = document.createElement("button");
+        button.textContent = "ALTER VIEW";
+        document.querySelector("#lifecycle-view").append(button);
+      })()`),
+    assertReadOnlySurface,
   );
 
   await open(`${baseUrl}/?scope=epic%3A40`);
