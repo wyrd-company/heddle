@@ -168,8 +168,12 @@ process.stdin.on("data", (chunk) => {
     await writeFile(
       target,
       `#!/usr/bin/env node
-import process from "node:process";
-process.stdout.write("x".repeat(${outputSize}));
+import { Buffer } from "node:buffer";
+import { writeSync } from "node:fs";
+const chunk = Buffer.alloc(65_536, "x");
+for (let written = 0; written < ${outputSize}; written += chunk.length) {
+  writeSync(1, chunk, 0, Math.min(chunk.length, ${outputSize} - written));
+}
 `,
       { mode: 0o755 },
     );
