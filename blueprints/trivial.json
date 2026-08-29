@@ -10,6 +10,10 @@
   },
   "nodes": [
     {
+      "id": "prepare-worktree",
+      "uses": "prepare-worktree"
+    },
+    {
       "id": "implement",
       "uses": "wait",
       "tools": [
@@ -29,6 +33,13 @@
         "answer"
       ],
       "todo-template": "standard-delivery-implement"
+    },
+    {
+      "id": "review-snapshot",
+      "uses": "review-snapshot",
+      "config": {
+        "joinStrategy": "any"
+      }
     },
     {
       "id": "review",
@@ -89,11 +100,19 @@
   ],
   "edges": [
     {
+      "source": "prepare-worktree",
+      "target": "implement"
+    },
+    {
       "source": "implement",
-      "target": "review",
+      "target": "review-snapshot",
       "condition": "result.output.dispositions.complete",
       "disposition": "complete",
-      "description": "Implementation is ready for review"
+      "description": "Implementation is ready for a review snapshot"
+    },
+    {
+      "source": "review-snapshot",
+      "target": "review"
     },
     {
       "source": "review",
@@ -111,10 +130,10 @@
     },
     {
       "source": "remediate",
-      "target": "review",
+      "target": "review-snapshot",
       "condition": "result.output.dispositions.complete",
       "disposition": "complete",
-      "description": "Remediation is ready for another review"
+      "description": "Remediation is ready for another review snapshot"
     },
     {
       "source": "merge",

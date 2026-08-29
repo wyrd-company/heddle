@@ -146,27 +146,57 @@ describe("shipped lifecycle blueprints", () => {
 
   it("runs trivial delivery to completion without retrospective", async () => {
     const fixture = await makeEngine("blueprints/trivial.json");
-    await fixture.engine.start({
+    const implementation = await fixture.engine.start({
       blueprintPath: "blueprints/trivial.json",
       instanceId: "record-b",
     });
-    await fixture.engine.resume({
+    expect(implementation.awaitingNodeIds).toEqual(["implement"]);
+    expect(fixture.effectsRun).toEqual(["prepare-worktree"]);
+
+    const review = await fixture.engine.resume({
       disposition: "complete",
       instanceId: "record-b",
       operationId: "operation-a",
     });
+    expect(review.awaitingNodeIds).toEqual(["review"]);
+    expect(fixture.effectsRun).toEqual(["prepare-worktree", "review-snapshot"]);
+
+    const remediation = await fixture.engine.resume({
+      disposition: "reject",
+      instanceId: "record-b",
+      operationId: "operation-b",
+    });
+    expect(remediation.awaitingNodeIds).toEqual(["remediate"]);
+
+    const repeatedReview = await fixture.engine.resume({
+      disposition: "complete",
+      instanceId: "record-b",
+      operationId: "operation-c",
+    });
+    expect(repeatedReview.awaitingNodeIds).toEqual(["review"]);
+    expect(fixture.effectsRun).toEqual([
+      "prepare-worktree",
+      "review-snapshot",
+      "review-snapshot",
+    ]);
 
     const completed = await fixture.engine.resume({
       disposition: "approve",
       instanceId: "record-b",
-      operationId: "operation-b",
+      operationId: "operation-d",
     });
 
     expect(completed).toMatchObject({
       awaitingNodeIds: [],
       status: "completed",
     });
-    expect(fixture.effectsRun).toEqual(["merge", "finalize"]);
+    expect(fixture.effectsRun).toEqual([
+      "prepare-worktree",
+      "review-snapshot",
+      "review-snapshot",
+      "merge",
+      "finalize",
+    ]);
     fixture.persistence.close();
   });
 
