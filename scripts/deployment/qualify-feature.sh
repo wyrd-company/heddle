@@ -14,7 +14,7 @@ state_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-state.XXXXXX)"
 board_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-board.XXXXXX)"
 container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
-kanban-md init \
+printf 'n\n' | kanban-md init \
     --dir "${board_directory}" \
     --name "Sample Board" \
     --statuses todo,in-progress,done >/dev/null
