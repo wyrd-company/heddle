@@ -50,8 +50,8 @@ const assertPathSegment = (label: string, value: string): void => {
 
 const assertBranchOperand = (branch: string): void => {
   if (branch.trim() === "") throw new TypeError("branch must not be empty");
-  if (branch.startsWith("-"))
-    throw new TypeError("branch must not be option-shaped");
+  if (branch.startsWith("-") || branch === "HEAD")
+    throw new TypeError("branch must not be an unsafe Git operand");
 };
 
 const resolveCommitRef = async (

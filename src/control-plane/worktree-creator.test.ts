@@ -39,81 +39,93 @@ afterEach(async () => {
 });
 
 describe("ensureWorktree", () => {
-  it("rejects an option-shaped branch before calling Git", async () => {
-    let gitCalls = 0;
+  it.each(["--detach", "HEAD"])(
+    "rejects unsafe branch %s before calling Git",
+    async (branch) => {
+      let gitCalls = 0;
 
-    await expect(
-      ensureWorktree(
-        {
-          baseRef: "main",
-          branch: "--detach",
-          repositoryName: "sample-repository",
-          repositoryRoot: "/workspaces/sample-repository",
-          worktreeName: "task-prepare",
-        },
-        async () => {
-          gitCalls += 1;
-          throw new Error("Git must not be called");
-        },
-      ),
-    ).rejects.toThrow(/branch/);
+      await expect(
+        ensureWorktree(
+          {
+            baseRef: "main",
+            branch,
+            repositoryName: "sample-repository",
+            repositoryRoot: "/workspaces/sample-repository",
+            worktreeName: "task-prepare",
+          },
+          async () => {
+            gitCalls += 1;
+            throw new Error("Git must not be called");
+          },
+        ),
+      ).rejects.toThrow(/branch/);
 
-    expect(gitCalls).toBe(0);
-  });
+      expect(gitCalls).toBe(0);
+    },
+  );
 
-  it("contains an option-shaped existing branch and permits a clean retry", async () => {
-    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
-    scratchDirectories.push(scratch);
-    const repositoryRoot = join(scratch, "source");
-    const worktreesRoot = join(scratch, "worktrees");
-    const ownedPath = join(worktreesRoot, "sample-repository", "task-prepare");
-    await initializeRepository(repositoryRoot);
-    await exec("git", ["update-ref", "refs/heads/--detach", "HEAD"], {
-      cwd: repositoryRoot,
-    });
-    const refsBefore = (
-      await exec("git", ["for-each-ref", "--format=%(refname)", "refs/heads"], {
-        cwd: repositoryRoot,
-      })
-    ).stdout;
-
-    await expect(
-      ensureWorktree({
-        baseRef: "main",
-        branch: "--detach",
-        repositoryName: "sample-repository",
-        repositoryRoot,
-        worktreeName: "task-prepare",
+  it.each(["--detach", "HEAD"])(
+    "contains unsafe existing branch %s and permits a clean retry",
+    async (branch) => {
+      const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+      scratchDirectories.push(scratch);
+      const repositoryRoot = join(scratch, "source");
+      const worktreesRoot = join(scratch, "worktrees");
+      const ownedPath = join(
         worktreesRoot,
-      }),
-    ).rejects.toThrow(/branch/);
-
-    await expect(lstat(ownedPath)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(
-      (
+        "sample-repository",
+        "task-prepare",
+      );
+      await initializeRepository(repositoryRoot);
+      await exec("git", ["update-ref", `refs/heads/${branch}`, "HEAD"], {
+        cwd: repositoryRoot,
+      });
+      const refsBefore = (
         await exec(
           "git",
           ["for-each-ref", "--format=%(refname)", "refs/heads"],
           { cwd: repositoryRoot },
         )
-      ).stdout,
-    ).toBe(refsBefore);
+      ).stdout;
 
-    const prepared = await ensureWorktree({
-      baseRef: "main",
-      branch: "task/prepare",
-      repositoryName: "sample-repository",
-      repositoryRoot,
-      worktreeName: "task-prepare",
-      worktreesRoot,
-    });
+      await expect(
+        ensureWorktree({
+          baseRef: "main",
+          branch,
+          repositoryName: "sample-repository",
+          repositoryRoot,
+          worktreeName: "task-prepare",
+          worktreesRoot,
+        }),
+      ).rejects.toThrow(/branch/);
 
-    expect(prepared).toEqual({
-      branch: "task/prepare",
-      created: true,
-      path: ownedPath,
-    });
-  });
+      await expect(lstat(ownedPath)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(
+        (
+          await exec(
+            "git",
+            ["for-each-ref", "--format=%(refname)", "refs/heads"],
+            { cwd: repositoryRoot },
+          )
+        ).stdout,
+      ).toBe(refsBefore);
+
+      const prepared = await ensureWorktree({
+        baseRef: "main",
+        branch: "task/prepare",
+        repositoryName: "sample-repository",
+        repositoryRoot,
+        worktreeName: "task-prepare",
+        worktreesRoot,
+      });
+
+      expect(prepared).toEqual({
+        branch: "task/prepare",
+        created: true,
+        path: ownedPath,
+      });
+    },
+  );
 
   it("creates the owned path once and reuses it on retry", async () => {
     const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
