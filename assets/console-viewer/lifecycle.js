@@ -76850,7 +76850,38 @@ var fce = class {
 	dispose() {
 		this.stopListening();
 	}
-}, pce = (e) => {
+}, pce = (e, t) => {
+	let n = new Set(t.currentStageIds), r = /* @__PURE__ */ new Map();
+	for (let e of t.events) {
+		if (typeof e.payload != "object" || e.payload === null || Array.isArray(e.payload) || typeof e.payload.nodeId != "string") continue;
+		let t = r.get(e.payload.nodeId), n = e.type === "node:start" ? "pending" : e.type === "node:finish" ? "completed" : e.type === "node:error" ? "failed" : void 0;
+		if (n === void 0) continue;
+		let i = { ...t?.nodeData };
+		if (e.type === "node:start" && (i.inputs = e.payload.input), e.type === "node:finish") {
+			let t = e.payload.result;
+			typeof t == "object" && t && !Array.isArray(t) && (i.outputs = t.output);
+		}
+		e.type === "node:error" && (i.error = e.payload.error), r.set(e.payload.nodeId, {
+			nodeData: i,
+			status: n
+		});
+	}
+	let i = [];
+	for (let { id: a } of t.blueprint.nodes) {
+		let t = e.getShape(`shape:${a}`);
+		if (t?.type !== "flowcraft-node") continue;
+		let o = r.get(a);
+		i.push({
+			...t,
+			props: {
+				...t.props,
+				nodeData: o?.nodeData,
+				status: n.has(a) ? "pending" : o?.status ?? "idle"
+			}
+		});
+	}
+	e.store.mergeRemoteChanges(() => e.store.put(i));
+}, mce = (e) => {
 	let t = /* @__PURE__ */ new Map();
 	for (let n of e) {
 		if (n.type !== "node:start" || typeof n.payload != "object" || n.payload === null || Array.isArray(n.payload) || typeof n.payload.nodeId != "string") continue;
@@ -76861,11 +76892,11 @@ var fce = class {
 		count: t,
 		nodeId: e
 	}));
-}, mce = (e) => {
+}, hce = (e) => {
 	if (e.events.forEach(({ sequence: e }, t) => {
 		if (e !== t + 1) throw Error("Lifecycle replay is not contiguous from sequence one");
 	}), e.nextSequence !== e.events.length) throw Error("Lifecycle replay cursor disagrees with event history");
-}, hce = (e, t) => {
+}, gce = (e, t) => {
 	if (e.instanceId !== t.instanceId || e.taskId !== t.taskId || e.blueprint.blobHash !== t.blueprint.blobHash) throw Error("Lifecycle tail identity disagrees with replayed history");
 	t.events.forEach(({ sequence: t }, n) => {
 		if (t !== e.nextSequence + n + 1) throw Error("Lifecycle tail is not contiguous");
@@ -76893,7 +76924,7 @@ window.heddleLifecycleViewer = {
 		X9.replace(e);
 	}
 };
-var gce = [b8], _ce = [cce, p7], vce = (e) => {
+var _ce = [b8], vce = [cce, p7], yce = (e) => {
 	let t = {};
 	return e.blueprint.nodes.forEach(({ id: e }, n) => {
 		t[e] = {
@@ -76904,47 +76935,16 @@ var gce = [b8], _ce = [cce, p7], vce = (e) => {
 }, Q9 = (e) => ({
 	payload: e.payload,
 	type: e.type
-}), yce = (e, t) => {
-	let n = new Set(t.currentStageIds), r = /* @__PURE__ */ new Map();
-	for (let e of t.events) {
-		if (typeof e.payload != "object" || e.payload === null || Array.isArray(e.payload) || typeof e.payload.nodeId != "string") continue;
-		let t = r.get(e.payload.nodeId), n = e.type === "node:start" ? "pending" : e.type === "node:finish" ? "completed" : e.type === "node:error" ? "failed" : void 0;
-		if (n === void 0) continue;
-		let i = { ...t?.nodeData };
-		if (e.type === "node:start" && (i.inputs = e.payload.input), e.type === "node:finish") {
-			let t = e.payload.result;
-			typeof t == "object" && t && !Array.isArray(t) && (i.outputs = t.output);
-		}
-		e.type === "node:error" && (i.error = e.payload.error), r.set(e.payload.nodeId, {
-			nodeData: i,
-			status: n
-		});
-	}
-	let i = [];
-	for (let { id: a } of t.blueprint.nodes) {
-		let t = `shape:${a}`, o = e.getShape(t);
-		if (o?.type !== "flowcraft-node") continue;
-		let s = r.get(a);
-		i.push({
-			...o,
-			props: {
-				...o.props,
-				nodeData: s?.nodeData,
-				status: n.has(a) ? "pending" : s?.status ?? "idle"
-			}
-		});
-	}
-	e.store.mergeRemoteChanges(() => e.store.put(i));
-};
+});
 function bce() {
 	let [e, t] = (0, _.useState)(null), [n, r] = (0, _.useState)(null), i = (0, _.useRef)(new lce()), a = (0, _.useRef)(""), o = (0, _.useRef)(null);
 	rce(e, i.current);
 	let s = (0, _.useCallback)((e) => {
-		mce(e), a.current = "", o.current = e, r(e);
+		hce(e), a.current = "", o.current = e, r(e);
 	}, []), c = (0, _.useCallback)((e) => {
 		let t = o.current;
 		if (t === null) throw Error("Lifecycle tail arrived before replay");
-		let n = hce(t, e);
+		let n = gce(t, e);
 		o.current = n, (e.events.length > 0 || t.status !== e.status || t.currentStageIds.join("\0") !== e.currentStageIds.join("\0")) && r(n);
 	}, []);
 	(0, _.useEffect)(() => {
@@ -76966,7 +76966,7 @@ function bce() {
 		if (e === null || n === null) return;
 		let t = `${n.instanceId}:${n.blueprint.blobHash}`;
 		if (a.current !== t) {
-			new fce(e).applyBlueprint(n.blueprint, vce(n));
+			new fce(e).applyBlueprint(n.blueprint, yce(n));
 			for (let e of n.events) i.current.emit(Q9(e));
 			a.current = t;
 		} else {
@@ -76979,9 +76979,9 @@ function bce() {
 				...e.getInstanceState().meta,
 				heddleSequence: n.nextSequence
 			}
-		}), yce(e, n), e.zoomToFit({ animation: { duration: 0 } });
+		}), pce(e, n), e.zoomToFit({ animation: { duration: 0 } });
 	}, [e, n]);
-	let l = (0, _.useMemo)(() => n === null ? [] : pce(n.events), [n]);
+	let l = (0, _.useMemo)(() => n === null ? [] : mce(n.events), [n]);
 	return /* @__PURE__ */ (0, V.jsxs)("div", {
 		className: "lifecycle-renderer",
 		"data-ready": n !== null,
@@ -76993,9 +76993,9 @@ function bce() {
 				className: "lifecycle-empty",
 				children: "Select a task lifecycle to render its pinned history."
 			}) : /* @__PURE__ */ (0, V.jsx)(Cy, {
-				bindingUtils: gce,
+				bindingUtils: _ce,
 				onMount: t,
-				shapeUtils: _ce
+				shapeUtils: vce
 			})
 		}), /* @__PURE__ */ (0, V.jsxs)("aside", {
 			className: "lifecycle-history",

@@ -12,5 +12,8 @@
     "rootDir": null,
     "skipLibCheck": true
   },
-  "include": ["src/console/lifecycle-viewer.tsx"]
+  "include": [
+    "src/console/lifecycle-canvas-projection.tsx",
+    "src/console/lifecycle-viewer.tsx"
+  ]
 }
