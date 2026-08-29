@@ -38,10 +38,16 @@ proposed-design:
     it did not. Node execution is at-least-once, so every node effect
     is idempotent.
 
-    Each task type maps to a blueprint. The standard delivery lifecycle
+    A task's `class` front-matter selects its lifecycle through a
+    mapping in Heddle's configuration — one schema'd artifact
+    answering which class runs which blueprint. A task can override
+    the mapping with an explicit `lifecycle` front-matter property
+    naming a blueprint by artifact ID. A class with no mapping
+    raises attention; the reconciler never guesses a lifecycle.
+    The standard delivery lifecycle
     is implement → review → remediate loop → merge → retrospective →
-    finalize; other task types select shorter or different blueprints
-    (a trivial task type omits retrospective). Blueprints are schema'd
+    finalize; other lifecycles are shorter or different blueprints
+    (a trivial lifecycle omits retrospective). Blueprints are schema'd
     artifacts in this repository. An instance records the git blob hash
     of the blueprint it started from and runs that version to
     completion. The operator can rebase a running instance onto a newer
