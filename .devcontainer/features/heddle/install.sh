@@ -72,17 +72,16 @@ env \
 printf -v quoted_state '%q' "${STATEPATH}"
 printf -v quoted_board '%q' "${BOARDPATH}"
 printf -v quoted_port '%q' "${PORT}"
+install -D -m 0755 \
+    "$(dirname "$0")/check-kanban-version.sh" \
+    /usr/local/libexec/heddle/check-kanban-version
 cat >/usr/local/bin/heddle-service <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
 state_path=${quoted_state}
 expected_kanban_version=0.37.0-fork+b9fc380
-observed_kanban_version="\$(kanban-md --version 2>/dev/null || true)"
-[[ "\${observed_kanban_version}" = *"\${expected_kanban_version}"* ]] || {
-    echo "[heddle] ERROR: kanban-md \${expected_kanban_version} must be on PATH." >&2
-    exit 1
-}
+/usr/local/libexec/heddle/check-kanban-version "\${expected_kanban_version}"
 mountpoint -q "\${state_path}" || {
     echo "[heddle] ERROR: \${state_path} must be a dedicated bind mount." >&2
     exit 1

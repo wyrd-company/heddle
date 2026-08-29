@@ -10,9 +10,10 @@ set -euo pipefail
 repository="$(git rev-parse --show-toplevel)"
 accepted_head="$(git rev-parse HEAD)"
 configuration="${repository}/.devcontainer/qualification/devcontainer.json"
-state_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-state.XXXXXX)"
-board_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-board.XXXXXX)"
-tools_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-tools.XXXXXX)"
+scratch_root="${HEDDLE_QUALIFICATION_SCRATCH_ROOT:-/workspaces/mnt}"
+state_directory=""
+board_directory=""
+tools_directory=""
 container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
@@ -27,11 +28,24 @@ cleanup() {
     for scratch_container in "${scratch_containers[@]}"; do
         docker rm --force "${scratch_container}" >/dev/null 2>&1 || true
     done
-    rm -rf "${state_directory}"
-    rm -rf "${board_directory}"
-    rm -rf "${tools_directory}"
+    [ -z "${state_directory}" ] || rm -rf "${state_directory}"
+    [ -z "${board_directory}" ] || rm -rf "${board_directory}"
+    [ -z "${tools_directory}" ] || rm -rf "${tools_directory}"
 }
 trap cleanup EXIT
+
+allocate_scratch_directory() {
+    local kind="$1"
+    if [ "${HEDDLE_QUALIFICATION_FAIL_ALLOCATION:-}" = "${kind}" ]; then
+        echo "Injected ${kind} scratch allocation failure." >&2
+        return 1
+    fi
+    mktemp -d "${scratch_root}/heddle-qualification-${kind}.XXXXXX"
+}
+
+state_directory="$(allocate_scratch_directory state)"
+board_directory="$(allocate_scratch_directory board)"
+tools_directory="$(allocate_scratch_directory tools)"
 
 install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
 

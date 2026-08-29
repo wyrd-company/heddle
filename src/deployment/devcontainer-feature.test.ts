@@ -4,11 +4,24 @@
 //   references: t3-headless
 // ---
 
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import {
+  chmod,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
 const featureDirectory = ".devcontainer/features/heddle";
+const execute = promisify(execFile);
 
 describe("Heddle devcontainer feature", () => {
   it("declares the persistent-state, port, and DNS options", async () => {
@@ -43,15 +56,77 @@ describe("Heddle devcontainer feature", () => {
     expect(installer).toContain('mountpoint -q "\\${state_path}"');
     expect(installer).toContain("expected_kanban_version=0.37.0-fork+b9fc380");
     expect(installer).toContain(
-      'observed_kanban_version="\\$(kanban-md --version',
+      '/usr/local/libexec/heddle/check-kanban-version "\\${expected_kanban_version}"',
     );
     expect(installer).toContain("export HEDDLE_BOARD_PATH=${quoted_board}");
-    expect(installer).toContain(
+    expect(installer.split("\n")).toContain(
       "touch /etc/s6-overlay/user-bundles.d/user/contents.d/heddle",
     );
     expect(installer).toContain("cat >/etc/caddy/conf.d/heddle.caddy <<EOF");
     expect(installer).toContain("reverse_proxy 127.0.0.1:${PORT}");
   });
+
+  it("requires the complete supported kanban-md version output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "heddle-kanban-version-"));
+    const fakeKanban = join(directory, "kanban-md");
+    await writeFile(
+      fakeKanban,
+      '#!/bin/sh\nprintf "%s\\n" "$KANBAN_VERSION_OUTPUT"\n',
+    );
+    await chmod(fakeKanban, 0o755);
+    const environment = {
+      ...process.env,
+      PATH: `${directory}:${process.env.PATH ?? ""}`,
+    };
+    const check = `${featureDirectory}/check-kanban-version.sh`;
+
+    try {
+      await expect(
+        execute(check, ["0.37.0-fork+b9fc380"], {
+          env: {
+            ...environment,
+            KANBAN_VERSION_OUTPUT: "kanban-md version 0.37.0-fork+b9fc380",
+          },
+        }),
+      ).resolves.toMatchObject({ stderr: "" });
+      for (const output of [
+        "wrapper kanban-md version 0.37.0-fork+b9fc380",
+        "kanban-md version 0.37.0-fork+b9fc380-extra",
+        "kanban-md version 0.37.0-fork+b9fc380 wrapped",
+      ]) {
+        await expect(
+          execute(check, ["0.37.0-fork+b9fc380"], {
+            env: { ...environment, KANBAN_VERSION_OUTPUT: output },
+          }),
+        ).rejects.toMatchObject({ code: 1 });
+      }
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it.each(["state", "board", "tools"])(
+    "cleans scratch resources when the %s allocation fails",
+    async (allocation) => {
+      const scratchRoot = await mkdtemp(
+        join(tmpdir(), "heddle-allocation-failure-"),
+      );
+      try {
+        await expect(
+          execute("bash", ["scripts/deployment/qualify-feature.sh"], {
+            env: {
+              ...process.env,
+              HEDDLE_QUALIFICATION_FAIL_ALLOCATION: allocation,
+              HEDDLE_QUALIFICATION_SCRATCH_ROOT: scratchRoot,
+            },
+          }),
+        ).rejects.toMatchObject({ code: 1 });
+        await expect(readdir(scratchRoot)).resolves.toEqual([]);
+      } finally {
+        await rm(scratchRoot, { force: true, recursive: true });
+      }
+    },
+  );
 
   it("pins qualification and documents every isolation boundary", async () => {
     const versions = JSON.parse(
