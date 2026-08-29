@@ -93,7 +93,7 @@ const childEnvironment = {
   HOME: join(scratch, "home"),
   LANG: "C.UTF-8",
   NO_COLOR: "1",
-  PATH: `${dirname(t3Binary)}:/usr/bin:/bin`,
+  PATH: `${dirname(process.execPath)}:${dirname(t3Binary)}:/usr/bin:/bin`,
   T3CODE_HOME: baseDirectory,
   T3CODE_NO_BROWSER: "1",
 };
