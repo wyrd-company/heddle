@@ -8,8 +8,11 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { RebaseTargetNotFoundError } from "./errors.js";
-import { RebaseTargetNotAwaitableError } from "./errors.js";
+import {
+  RebaseTargetNotAwaitableError,
+  RebaseTargetNotFoundError,
+  TransitionConflictError,
+} from "./errors.js";
 import {
   cleanupFixtures,
   makeFixture,
@@ -25,6 +28,7 @@ describe("LifecycleEngine rebase", () => {
     const fixture = await makeFixture();
     const started = await fixture.engine.start({
       blueprintPath: fixture.blueprintPath,
+      initialContext: { retained: "value" },
       instanceId: "sample-a",
     });
     const priorEvents = fixture.persistence.replayEvents("sample-a");
@@ -75,6 +79,12 @@ describe("LifecycleEngine rebase", () => {
         }),
       }),
     ]);
+    const persisted = fixture.persistence.getInstance("sample-a")?.state
+      .flowcraftContext as { serializedContext: string };
+    expect(JSON.parse(persisted.serializedContext)).toMatchObject({
+      _awaitingNodeIds: ["inspect"],
+      retained: "value",
+    });
 
     const completed = await fixture.engine.resume({
       disposition: "approve",
@@ -91,6 +101,49 @@ describe("LifecycleEngine rebase", () => {
       "mix",
       "serve",
     ]);
+    fixture.persistence.close();
+  });
+
+  it("does not overwrite a concurrently changed instance", async () => {
+    const fixture = await makeFixture();
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    const compareAndSwap = fixture.persistence.compareAndSwapInstance.bind(
+      fixture.persistence,
+    );
+    let injectWinner = true;
+    fixture.persistence.compareAndSwapInstance = (
+      instanceId,
+      expectedVersion,
+      state,
+    ) => {
+      if (injectWinner) {
+        injectWinner = false;
+        const current = fixture.persistence.getInstance(instanceId);
+        if (current === undefined) throw new Error("instance is missing");
+        fixture.persistence.updateInstance(instanceId, {
+          ...current.state,
+          correlationTokens: { winner: "token" },
+        });
+      }
+      return compareAndSwap(instanceId, expectedVersion, state);
+    };
+
+    await expect(
+      fixture.engine.rebase({
+        instanceId: "sample-a",
+        targetState: "taste",
+      }),
+    ).rejects.toEqual(new TransitionConflictError("sample-a"));
+
+    expect(fixture.persistence.getInstance("sample-a")?.state).toMatchObject({
+      correlationTokens: { winner: "token" },
+      flowcraftContext: {
+        awaitingNodeIds: ["taste"],
+      },
+    });
     fixture.persistence.close();
   });
 
