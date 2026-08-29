@@ -39,7 +39,8 @@ up() {
             --workspace-folder "${repository}" \
             --config "${configuration}" \
             --id-label "heddle.qualification=${qualification_label}" \
-            --log-level error
+            --log-format json \
+            --log-level info
     )"
     container_id="$(printf '%s\n' "${output}" | tail -n 1 | jq -er '.containerId')"
     docker inspect "${container_id}" >/dev/null
