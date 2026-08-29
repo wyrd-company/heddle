@@ -34,13 +34,6 @@ const stableUuid = (seed: string): string => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
 };
 
-const stageSlug = (stageId: string): string =>
-  stageId
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 32) || "stage";
-
 const deferral = (value: JsonValue | undefined): PacingDeferral | undefined =>
   value as PacingDeferral | undefined;
 
@@ -249,10 +242,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         title: heddleSessionTitle(task.id, `${stageId}-${activation}`),
         worktree: {
           baseRef: session.baseRef,
-          branch: `heddle/task-${task.id}-${stageSlug(stageId)}`,
+          branch: `heddle/task-${task.id}`,
           repositoryName: session.repositoryName,
           repositoryRoot: this.configuration.repositoryRoot,
-          worktreeName: `task-${task.id}-${stageSlug(stageId)}`,
+          worktreeName: `task-${task.id}`,
           ...(session.worktreesRoot === undefined
             ? {}
             : { worktreesRoot: session.worktreesRoot }),

@@ -102,6 +102,9 @@ describe("production lifecycle composition", () => {
     const creates = t3.commands.filter(({ type }) => type === "thread.create");
     expect(creates).toHaveLength(2);
     expect(creates[0]?.title).not.toBe(creates[1]?.title);
+    expect(creates[0]?.branch).toBe(`heddle/task-${taskId}`);
+    expect(creates[1]?.branch).toBe(creates[0]?.branch);
+    expect(creates[1]?.worktreePath).toBe(creates[0]?.worktreePath);
     expect(
       await composition.consoleState.listEvents({ afterSequence: 0 }),
     ).toEqual(

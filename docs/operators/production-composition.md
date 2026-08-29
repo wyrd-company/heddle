@@ -32,6 +32,8 @@ deterministic `Heddle · task-<id> · <stage-discriminator>` title, and no
 `titleSeed` on its first turn. Each occurrence of a wait stage has one durable
 session and thread identity. A recurring review or remediation stage receives
 a new occurrence discriminator; restart resumes an incomplete occurrence.
+All stage occurrences for one task use the same task branch and worktree so
+review, remediation, and later stages operate on the same delivery state.
 
 The scheduler starts with one immediate pass and then uses the configured
 cadence. Ticks coalesce while a pass is active; passes never overlap. Stop

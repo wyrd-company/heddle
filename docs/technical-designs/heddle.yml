@@ -124,9 +124,10 @@ proposed-design:
     complete task identity, and a stable stage-occurrence discriminator. Each
     wait-stage occurrence has one durable session and thread identity; a stage
     reached again through a lifecycle loop receives a new occurrence identity,
-    while restart resumes an incomplete occurrence. First-turn dispatch omits
-    `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived
-    seed.
+    while restart resumes an incomplete occurrence. Stage-scoped sessions for
+    one task share its task-scoped branch and worktree so each stage receives
+    the delivery state produced by prior stages. First-turn dispatch omits
+    `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived seed.
 
     Sessions are short and stage-scoped. Nothing carries between
     stages except the handoff: a deterministically assembled bootstrap
