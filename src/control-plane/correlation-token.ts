@@ -12,6 +12,7 @@ export interface InstanceStateStore {
     state: InstanceState,
   ): InstanceRecord | undefined;
   getInstance(instanceId: string): InstanceRecord | undefined;
+  listInstances(): InstanceRecord[];
 }
 
 export type CorrelationTokenResult = {

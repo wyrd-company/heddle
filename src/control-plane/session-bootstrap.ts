@@ -187,7 +187,7 @@ const ensureStoredHandoff = async (
     if (current === undefined) {
       throw new Error(`Instance does not exist: ${input.instanceId}`);
     }
-    assertParentSession(current, input);
+    assertParentSession(store, current, input);
     const existing = current.state.handoffs
       .filter(isStoredHandoff)
       .find(({ sessionKey }) => sessionKey === input.sessionKey);
@@ -296,7 +296,7 @@ export const bootstrapStageSession = async (
   if (initial === undefined) {
     throw new Error(`Instance does not exist: ${input.instanceId}`);
   }
-  assertParentSession(initial, input);
+  assertParentSession(dependencies.persistence, initial, input);
   const { token: correlationToken } = ensureCorrelationToken(
     dependencies.persistence,
     input.instanceId,

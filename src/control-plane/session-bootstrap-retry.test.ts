@@ -58,6 +58,15 @@ const workflowMcp = {
 
 const resolveWorkflowMcpStageContract = async () => workflowMcp;
 
+const handoffDocument = (token: string, stage = "prepare") =>
+  JSON.stringify({
+    correlationToken: token,
+    format: "heddle.stage-handoff",
+    stage: { name: stage },
+    taskContract: { title: "Prepare a sample" },
+    version: 1,
+  });
+
 const instantiateTodoList: NonNullable<
   SessionBootstrapDependencies["instantiateTodoList"]
 > = async ({ sessionKey, stage, templateId }) => ({
@@ -67,7 +76,10 @@ const instantiateTodoList: NonNullable<
   template: templateId,
 });
 
-const memoryStore = (state = initialState()) => {
+const memoryStore = (
+  state = initialState(),
+  otherRecords: InstanceRecord[] = [],
+) => {
   let record: InstanceRecord = {
     instanceId: "instance-1",
     state,
@@ -79,6 +91,7 @@ const memoryStore = (state = initialState()) => {
     },
     store: {
       getInstance: () => record,
+      listInstances: () => [record, ...otherRecords],
       compareAndSwapInstance: (
         _id: string,
         version: number,
@@ -92,11 +105,36 @@ const memoryStore = (state = initialState()) => {
   };
 };
 
+const expectParentRejected = async (
+  state: InstanceState,
+  otherRecords: InstanceRecord[] = [],
+) => {
+  const memory = memoryStore(state, otherRecords);
+  const dispatch = vi.fn(async () => ({ sequence: 1 }));
+  await expect(
+    bootstrapStageSession(
+      { ...input, parentSessionKey: "parent", sessionKey: "child" },
+      {
+        instantiateTodoList,
+        persistence: memory.store,
+        resolveWorkflowMcpStageContract,
+        t3: { dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+      },
+    ),
+  ).rejects.toThrow(/not bound to this instance/);
+  expect(dispatch).not.toHaveBeenCalled();
+};
+
 describe("stage session cold retry guards", () => {
   it("persists parentage only for a child of a bound session", async () => {
     const parentHandoff = {
       correlationToken: "token-parent",
-      handoff: "parent handoff",
+      handoff: handoffDocument("token-parent"),
       kind: "stage-handoff",
       sessionKey: "parent",
       workflowMcp,
@@ -135,6 +173,80 @@ describe("stage session cold retry guards", () => {
         parentSessionKey: "parent",
         sessionKey: "child",
       }),
+    );
+  });
+
+  it("rejects a parent whose stored handoff document is malformed", async () => {
+    await expectParentRejected({
+      ...initialState(),
+      correlationTokens: { parent: "token-parent" },
+      handoffs: [
+        {
+          correlationToken: "token-parent",
+          handoff: "not-json",
+          kind: "stage-handoff",
+          sessionKey: "parent",
+          workflowMcp,
+        },
+      ],
+    });
+  });
+
+  it("rejects a parent whose stored handoff token disagrees", async () => {
+    await expectParentRejected({
+      ...initialState(),
+      correlationTokens: { parent: "token-parent" },
+      handoffs: [
+        {
+          correlationToken: "token-other",
+          handoff: handoffDocument("token-other"),
+          kind: "stage-handoff",
+          sessionKey: "parent",
+          workflowMcp,
+        },
+      ],
+    });
+  });
+
+  it("rejects a parent with more than one canonical stored handoff", async () => {
+    const parentHandoff = {
+      correlationToken: "token-parent",
+      handoff: handoffDocument("token-parent"),
+      kind: "stage-handoff" as const,
+      sessionKey: "parent",
+      workflowMcp,
+    };
+    await expectParentRejected({
+      ...initialState(),
+      correlationTokens: { parent: "token-parent" },
+      handoffs: [parentHandoff, { ...parentHandoff }],
+    });
+  });
+
+  it("rejects a parent token bound in more than one instance", async () => {
+    const parentHandoff = {
+      correlationToken: "token-parent",
+      handoff: handoffDocument("token-parent"),
+      kind: "stage-handoff" as const,
+      sessionKey: "parent",
+      workflowMcp,
+    };
+    await expectParentRejected(
+      {
+        ...initialState(),
+        correlationTokens: { parent: "token-parent" },
+        handoffs: [parentHandoff],
+      },
+      [
+        {
+          instanceId: "instance-other",
+          state: {
+            ...initialState(),
+            correlationTokens: { other: "token-parent" },
+          },
+          version: 1,
+        },
+      ],
     );
   });
 
@@ -199,14 +311,14 @@ describe("stage session cold retry guards", () => {
       handoffs: [
         {
           correlationToken: "token-parent-a",
-          handoff: "parent a handoff",
+          handoff: handoffDocument("token-parent-a"),
           kind: "stage-handoff",
           sessionKey: "parent-a",
           workflowMcp,
         },
         {
           correlationToken: "token-parent-b",
-          handoff: "parent b handoff",
+          handoff: handoffDocument("token-parent-b"),
           kind: "stage-handoff",
           sessionKey: "parent-b",
           workflowMcp,
@@ -322,6 +434,7 @@ describe("stage session cold retry guards", () => {
         }
         return current;
       },
+      listInstances: memory.store.listInstances,
     };
 
     const result = await bootstrapStageSession(input, {

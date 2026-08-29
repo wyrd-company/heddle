@@ -77,6 +77,7 @@ const memoryStore = (state: InstanceState = initialState()) => {
     },
     store: {
       getInstance: () => record,
+      listInstances: () => [record],
       compareAndSwapInstance: (
         _id: string,
         version: number,

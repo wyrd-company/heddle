@@ -6,7 +6,7 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 
-import type { JsonValue } from "../persistence/index.js";
+import type { InstanceRecord, JsonValue } from "../persistence/index.js";
 import type {
   CorrelationTokenMatch,
   StageHandoffDocument,
@@ -31,6 +31,24 @@ const tokenEquals = (left: string, right: string): boolean => {
     leftBytes.length === rightBytes.length &&
     timingSafeEqual(leftBytes, rightBytes)
   );
+};
+
+export const authenticateCorrelationToken = (
+  persistence: Pick<WorkflowMcpPersistence, "listInstances">,
+  token: string,
+): CorrelationTokenMatch => {
+  const matches: CorrelationTokenMatch[] = [];
+  for (const instance of persistence.listInstances()) {
+    for (const [sessionKey, candidate] of Object.entries(
+      instance.state.correlationTokens,
+    )) {
+      if (tokenEquals(candidate, token)) {
+        matches.push({ instance, sessionKey, token });
+      }
+    }
+  }
+  if (matches.length !== 1) throw new CorrelationTokenError();
+  return matches[0]!;
 };
 
 const isStoredStageHandoff = (value: JsonValue): value is StoredStageHandoff =>
@@ -92,6 +110,19 @@ export const isAuthorityValidStoredStageHandoff = (
   }
 };
 
+export const authorityValidStoredStageHandoffsForSession = (
+  instance: InstanceRecord,
+  sessionKey: string,
+  token: string,
+): StoredStageHandoff[] =>
+  instance.state.handoffs
+    .filter(isAuthorityValidStoredStageHandoff)
+    .filter(
+      (handoff) =>
+        handoff.sessionKey === sessionKey &&
+        tokenEquals(handoff.correlationToken, token),
+    );
+
 export const bearerCorrelationToken = (
   authorization: string | null,
 ): string | undefined => {
@@ -103,29 +134,16 @@ export class WorkflowMcpSessionResolver {
   constructor(private readonly persistence: WorkflowMcpPersistence) {}
 
   authenticate(token: string): CorrelationTokenMatch {
-    const matches: CorrelationTokenMatch[] = [];
-    for (const instance of this.persistence.listInstances()) {
-      for (const [sessionKey, candidate] of Object.entries(
-        instance.state.correlationTokens,
-      )) {
-        if (tokenEquals(candidate, token)) {
-          matches.push({ instance, sessionKey, token });
-        }
-      }
-    }
-    if (matches.length !== 1) throw new CorrelationTokenError();
-    return matches[0]!;
+    return authenticateCorrelationToken(this.persistence, token);
   }
 
   async resolve(token: string): Promise<WorkflowMcpSessionBinding> {
     const match = this.authenticate(token);
-    const storedHandoffs = match.instance.state.handoffs
-      .filter(isAuthorityValidStoredStageHandoff)
-      .filter(
-        (handoff) =>
-          handoff.sessionKey === match.sessionKey &&
-          tokenEquals(handoff.correlationToken, token),
-      );
+    const storedHandoffs = authorityValidStoredStageHandoffsForSession(
+      match.instance,
+      match.sessionKey,
+      token,
+    );
     if (storedHandoffs.length !== 1) throw new CorrelationTokenError();
     const handoff = parseHandoff(storedHandoffs[0]!.handoff, token);
     const context = match.instance.state.flowcraftContext;
