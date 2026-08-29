@@ -6,6 +6,7 @@
 import type { WorkflowResult } from "flowcraft";
 
 import type { InstanceRecord } from "../persistence/index.js";
+import { attentionFor, flushPendingAttentions } from "./attention-outbox.js";
 import {
   dispositionsForNode,
   edgeForDisposition,
@@ -47,8 +48,6 @@ import type {
   StartLifecycleInput,
 } from "./types.js";
 
-const attentionEvent = "lifecycle:attention-required";
-
 export class LifecycleEngine {
   private readonly blueprintStore: GitBlueprintStore;
   private readonly effects: Record<string, LifecycleEffect>;
@@ -61,8 +60,9 @@ export class LifecycleEngine {
   }
 
   async start(input: StartLifecycleInput): Promise<LifecycleSnapshot> {
-    const existing = this.persistence.getInstance(input.instanceId);
+    let existing = this.persistence.getInstance(input.instanceId);
     if (existing !== undefined) {
+      existing = flushPendingAttentions(this.persistence, input.instanceId);
       const context = readLifecycleContext(existing);
       if (
         context.pendingTransition?.kind !== "start" ||
@@ -96,6 +96,7 @@ export class LifecycleEngine {
       completedOperations: {},
       executionIds: [],
       nextTransitionNumber: 2,
+      pendingAttentions: [],
       pendingTransition,
       serializedContext: null,
       status: "pending",
@@ -119,6 +120,7 @@ export class LifecycleEngine {
     if (record === undefined) {
       throw new Error(`Instance does not exist: ${input.instanceId}`);
     }
+    record = flushPendingAttentions(this.persistence, input.instanceId);
     let context = readLifecycleContext(record);
     const blueprint = await this.blueprintStore.read(context.blueprintBlobHash);
     validateBlueprint(blueprint, this.effects);
@@ -249,31 +251,28 @@ export class LifecycleEngine {
         ? []
         : await this.persistence.flowcraftHistory.replay(executionId);
     if (!landedAsExpected(result, expected, blueprint, executionEvents)) {
-      const nextContext = persistExecution(
+      const attention = attentionFor(
+        record.instanceId,
+        pending.id,
+        executionId,
+        result,
+        expected,
+      );
+      persistExecution(
         this.persistence,
         record.instanceId,
         pending.id,
         executionId,
+        undefined,
+        attention,
+      );
+      const nextContext = readLifecycleContext(
+        flushPendingAttentions(this.persistence, record.instanceId),
       );
       const completedOperation = completedOperationForTransition(
         nextContext,
         pending.id,
       );
-      this.persistence.appendEvent(record.instanceId, attentionEvent, {
-        actualAwaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
-        actualStatus: result.status,
-        expectedAwaitingNodeIds: [
-          ...new Set(
-            expected.flatMap(({ awaitingNodeIds }) => awaitingNodeIds),
-          ),
-        ].sort(),
-        expectedTerminalNodeIds: [
-          ...new Set(
-            expected.flatMap(({ terminalNodeIds }) => terminalNodeIds),
-          ),
-        ].sort(),
-        transitionId: pending.id,
-      });
       if (completedOperation !== undefined) {
         return this.snapshot(
           record.instanceId,

@@ -12,6 +12,7 @@ import type {
 } from "../persistence/index.js";
 import type {
   CompletedLifecycleOperation,
+  LifecycleAttention,
   LifecycleContextRecord,
   LifecyclePersistence,
   ResumeLifecycleInput,
@@ -40,6 +41,8 @@ export const readLifecycleContext = (
     !Array.isArray(value.executionIds) ||
     !("awaitingNodeIds" in value) ||
     !Array.isArray(value.awaitingNodeIds) ||
+    !("pendingAttentions" in value) ||
+    !Array.isArray(value.pendingAttentions) ||
     !("nextTransitionNumber" in value) ||
     typeof value.nextTransitionNumber !== "number"
   ) {
@@ -116,6 +119,7 @@ export const persistExecution = (
     serializedContext: string;
     status: WorkflowStatus;
   },
+  attention?: LifecycleAttention,
 ): LifecycleContextRecord => {
   while (true) {
     const current = persistence.getInstance(instanceId);
@@ -131,6 +135,13 @@ export const persistExecution = (
     const completesCurrentTransition =
       completion !== undefined &&
       currentContext.pendingTransition?.id === pendingTransitionId;
+    const pendingAttentions =
+      attention === undefined ||
+      currentContext.pendingAttentions.some(
+        ({ attentionId }) => attentionId === attention.attentionId,
+      )
+        ? currentContext.pendingAttentions
+        : [...currentContext.pendingAttentions, attention];
     let completedOperations = { ...currentContext.completedOperations };
     const pendingOperation = completesCurrentTransition
       ? currentContext.pendingTransition
@@ -172,6 +183,7 @@ export const persistExecution = (
     }
     if (
       executionIds === currentContext.executionIds &&
+      pendingAttentions === currentContext.pendingAttentions &&
       !completesCurrentTransition
     ) {
       return currentContext;
@@ -180,6 +192,7 @@ export const persistExecution = (
       ...currentContext,
       completedOperations,
       executionIds,
+      pendingAttentions,
       ...(completesCurrentTransition
         ? { ...completion, pendingTransition: null }
         : {}),

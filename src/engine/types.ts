@@ -54,6 +54,7 @@ export interface LifecyclePersistence {
   ): InstanceRecord | undefined;
   createInstance(instanceId: string, state: InstanceState): InstanceRecord;
   getInstance(instanceId: string): InstanceRecord | undefined;
+  replayEvents(instanceId: string, afterSequence?: number): PersistedEvent[];
   updateInstance(instanceId: string, state: InstanceState): InstanceRecord;
 }
 
@@ -104,6 +105,15 @@ export interface CompletedLifecycleOperation {
   transitionId: string;
 }
 
+export interface LifecycleAttention extends Record<string, JsonValue> {
+  actualAwaitingNodeIds: string[];
+  actualStatus: WorkflowStatus;
+  attentionId: string;
+  expectedAwaitingNodeIds: string[];
+  expectedTerminalNodeIds: string[];
+  transitionId: string;
+}
+
 export interface PendingTransition {
   disposition: string | null;
   id: string;
@@ -121,6 +131,7 @@ export interface LifecycleContextRecord {
   completedOperations: Record<string, CompletedLifecycleOperation>;
   executionIds: string[];
   nextTransitionNumber: number;
+  pendingAttentions: LifecycleAttention[];
   pendingTransition: PendingTransition | null;
   serializedContext: string | null;
   status: WorkflowStatus | "pending";
