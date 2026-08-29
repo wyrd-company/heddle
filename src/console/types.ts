@@ -43,6 +43,7 @@ export interface ConsoleAttention {
 export type ConsoleAttentionScope = "all" | `epic:${number}` | `task:${number}`;
 
 export type ConsoleAttentionQuestion = {
+  header?: string;
   id: string;
   multiSelect: boolean;
   options: Array<{

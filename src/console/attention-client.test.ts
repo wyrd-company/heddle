@@ -110,6 +110,7 @@ describe("global console attention overlay", () => {
             kind: "questions",
             questions: [
               {
+                header: "Batch size",
                 id: "batch-size",
                 multiSelect: false,
                 options: [
@@ -142,6 +143,9 @@ describe("global console attention overlay", () => {
     const action = elements.find(
       ({ className }) => className === "attention-action",
     );
+    expect(
+      elements.find(({ tagName }) => tagName === "legend")?.textContent,
+    ).toBe("Batch size — Which batch size should be used?");
     inputs[0]!.checked = true;
     action!.dispatch("click");
 

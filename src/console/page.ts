@@ -619,7 +619,14 @@ const createAttentionAction = (entry, action) => {
     for (const question of action.input.questions) {
       const fieldset = document.createElement("fieldset");
       fieldset.className = "attention-question";
-      fieldset.append(text("legend", question.prompt));
+      fieldset.append(
+        text(
+          "legend",
+          question.header
+            ? question.header + " — " + question.prompt
+            : question.prompt,
+        ),
+      );
       for (const option of question.options) {
         const label = document.createElement("label");
         label.className = "attention-option";
