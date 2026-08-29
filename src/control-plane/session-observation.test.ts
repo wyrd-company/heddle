@@ -634,4 +634,117 @@ describe("SessionObserver terminal visibility", () => {
     await test.observer.observe(target);
     expect(test.t3.commands).toHaveLength(0);
   });
+
+  it.each(["working", "monitoring"] as const)(
+    "does not archive while T3 background liveness is %s",
+    async (backgroundLiveness) => {
+      const test = fixture();
+      makeTerminal(test);
+      test.t3.shell.threads[0]!.backgroundLiveness = backgroundLiveness;
+
+      await test.observer.observe(target);
+
+      expect(test.t3.commands).toHaveLength(0);
+    },
+  );
+
+  it("does not archive when a stale user timestamp is strictly newer than the latest turn", async () => {
+    const test = fixture();
+    makeTerminal(test);
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestUserMessageAt: "2026-01-01T00:01:00.000Z",
+      latestTurn: {
+        state: "completed",
+        requestedAt: "2026-01-01T00:00:00.000Z",
+        startedAt: "2026-01-01T00:00:01.000Z",
+        completedAt: "2026-01-01T00:00:30.000Z",
+      },
+      session: { status: "ready" },
+    };
+
+    await test.observer.observe(target);
+
+    expect(test.t3.commands).toHaveLength(0);
+  });
+
+  it("archives when the latest user message was adopted at the latest turn timestamp", async () => {
+    const test = fixture();
+    makeTerminal(test);
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestUserMessageAt: "2026-01-01T00:01:00.000Z",
+      latestTurn: {
+        state: "completed",
+        requestedAt: "2026-01-01T00:01:00.000Z",
+        startedAt: "2026-01-01T00:01:01.000Z",
+        completedAt: "2026-01-01T00:01:30.000Z",
+      },
+      session: { status: "ready" },
+    };
+
+    await test.observer.observe(target);
+
+    expect(test.t3.commands).toEqual([
+      expect.objectContaining({
+        threadId: target.threadId,
+        type: "thread.archive",
+      }),
+    ]);
+  });
+
+  it.each([
+    {
+      name: "latest user message",
+      latestUserMessageAt: "not-a-timestamp",
+      requestedAt: "2026-01-01T00:01:00.000Z",
+    },
+    {
+      name: "latest turn",
+      latestUserMessageAt: "2026-01-01T00:01:00.000Z",
+      requestedAt: "not-a-timestamp",
+      completedAt: "2026-01-01T00:01:00.000Z",
+    },
+  ])(
+    "does not archive when the $name timestamp is malformed",
+    async ({ latestUserMessageAt, requestedAt, completedAt }) => {
+      const test = fixture();
+      makeTerminal(test);
+      test.t3.shell.threads[0] = {
+        id: target.threadId,
+        latestUserMessageAt,
+        latestTurn: { state: "completed", requestedAt, completedAt },
+        session: { status: "ready" },
+      };
+
+      await test.observer.observe(target);
+
+      expect(test.t3.commands).toHaveLength(0);
+    },
+  );
+
+  it("does not archive when a latest user message has no corresponding turn timestamps", async () => {
+    const test = fixture();
+    makeTerminal(test);
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestUserMessageAt: "2026-01-01T00:01:00.000Z",
+      latestTurn: { state: "completed" },
+      session: { status: "ready" },
+    };
+
+    await test.observer.observe(target);
+
+    expect(test.t3.commands).toHaveLength(0);
+  });
+
+  it("does not archive while T3 has an actionable proposed plan", async () => {
+    const test = fixture();
+    makeTerminal(test);
+    test.t3.shell.threads[0]!.hasActionableProposedPlan = true;
+
+    await test.observer.observe(target);
+
+    expect(test.t3.commands).toHaveLength(0);
+  });
 });

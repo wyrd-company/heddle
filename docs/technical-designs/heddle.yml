@@ -229,11 +229,14 @@ proposed-design:
     lifecycle stage is active or operator participation remains. T3
     completion never authorizes a semantic transition or cleanup. Heddle
     dispatches `thread.archive` only when the stage's recorded `advance`
-    operation is complete, the T3 thread is no longer active, and no
-    approval, user-input request, Heddle escalation, or canonical child
-    conversational handoff remains. The recorded `threadId` and archive
-    facts make this cleanup idempotent. Heddle does not snooze, settle,
-    pin, or reorder active or operator-blocked work.
+    operation is complete, the T3 thread has no foreground or background
+    liveness, and no queued turn, actionable proposed plan, approval,
+    user-input request, Heddle escalation, or canonical child conversational
+    handoff remains. Queued-turn evidence is a latest user-message timestamp
+    newer than every recorded timestamp on the latest turn; unmatched or
+    malformed evidence fails closed. The recorded `threadId` and archive facts
+    make this cleanup idempotent. Heddle does not snooze, settle, pin, or
+    reorder active or operator-blocked work.
   mechanical-nodes: >
     Every step with a single correct outcome executes as a
     deterministic blueprint node running real code: creating the

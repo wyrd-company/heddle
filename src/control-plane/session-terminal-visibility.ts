@@ -70,6 +70,25 @@ const isActive = (thread: T3ShellThread): boolean =>
   thread.session?.status === "running" ||
   thread.latestTurn?.state === "running";
 
+const hasBackgroundLiveness = (thread: T3ShellThread): boolean =>
+  thread.backgroundLiveness != null;
+
+const hasQueuedTurn = (thread: T3ShellThread): boolean => {
+  if (thread.latestUserMessageAt == null) return false;
+  const latestUserMessageAt = Date.parse(thread.latestUserMessageAt);
+  if (!Number.isFinite(latestUserMessageAt)) return true;
+  if (thread.latestTurn == null) return true;
+  const turnTimestamps = [
+    thread.latestTurn.requestedAt,
+    thread.latestTurn.startedAt,
+    thread.latestTurn.completedAt,
+  ]
+    .filter((value): value is string => value != null)
+    .map((value) => Date.parse(value));
+  if (turnTimestamps.some((value) => !Number.isFinite(value))) return true;
+  return turnTimestamps.every((value) => value < latestUserMessageAt);
+};
+
 export const archiveTerminalSession = async (
   options: SessionObservationOptions,
   target: SessionObservationTarget,
@@ -98,6 +117,9 @@ export const archiveTerminalSession = async (
   if (
     thread === undefined ||
     isActive(thread) ||
+    hasBackgroundLiveness(thread) ||
+    hasQueuedTurn(thread) ||
+    thread.hasActionableProposedPlan ||
     thread.hasPendingApprovals ||
     thread.hasPendingUserInput ||
     hasPendingEscalation(options, target) ||

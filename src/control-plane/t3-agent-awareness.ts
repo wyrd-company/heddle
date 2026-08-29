@@ -15,10 +15,18 @@ export type T3AwarenessPhase =
 
 export type T3ShellThread = {
   id: string;
+  backgroundLiveness?: "working" | "monitoring" | null;
+  hasActionableProposedPlan?: boolean;
   hasPendingApprovals?: boolean;
   hasPendingUserInput?: boolean;
+  latestUserMessageAt?: string | null;
   session?: { status?: string } | null;
-  latestTurn?: { state?: string; completedAt?: string | null } | null;
+  latestTurn?: {
+    state?: string;
+    requestedAt?: string | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+  } | null;
 };
 
 export const resolveT3AwarenessPhase = (
