@@ -25,6 +25,9 @@ const requireNonEmpty = (name: string, value: string): void => {
 
 const validateConfiguration = (configuration: PacingConfiguration): void => {
   requireNonEmpty("defaultProvider", configuration.defaultProvider);
+  if (configuration.usageWindowHours !== 5) {
+    throw new TypeError("usageWindowHours must be 5");
+  }
   requireNonNegativeInteger(
     "maxConcurrentSessions",
     configuration.maxConcurrentSessions,
@@ -59,6 +62,7 @@ const validateRequest = (request: PacingDispatchRequest): void => {
 
 export class DispatchPacingGate implements DispatchPacingEvaluator {
   private readonly configuration: PacingConfiguration;
+  public readonly defaultProvider: string;
   private readonly now: () => number;
 
   public constructor(
@@ -72,6 +76,7 @@ export class DispatchPacingGate implements DispatchPacingEvaluator {
       providerBudgets: { ...configuration.providerBudgets },
       subagents: { ...configuration.subagents },
     };
+    this.defaultProvider = configuration.defaultProvider;
     this.now = now;
   }
 

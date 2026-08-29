@@ -78,9 +78,20 @@ proposed-design:
     Agents create follow-up tasks and findings through MCP tools;
     Heddle applies the writes, so new child tasks are visible to the
     reconciler the moment they exist. The reconciler also enforces
-    pacing gates: work-in-progress limits and provider usage-window
-    budgets are dispatch preconditions, so sessions start only when
-    capacity exists.
+    pacing gates through one shared evaluator. Workspace configuration
+    declares a default provider, a total active-session limit, provider
+    budgets over fixed five-hour usage windows, and subagent fan-out and
+    nesting-depth limits. A provider usage source supplies observations
+    without coupling the evaluator to one provider mechanism. Lifecycle
+    and subagent sessions draw from the same active-session and provider
+    budgets.
+
+    A denied dispatch does not cancel or fail work. The task remains
+    ready, and its instance state records a structured deferral with the
+    applicable limit, observed usage or occupancy, and the next provider
+    window time when one applies. An unchanged deferral converges without
+    another write. Each reconciliation pass evaluates deferred work
+    again, so released capacity starts it on a later pass.
   agent-sessions: >
     Sessions run on T3 Code, driven headlessly over plain HTTP:
     `POST /api/orchestration/dispatch` carries every command, and

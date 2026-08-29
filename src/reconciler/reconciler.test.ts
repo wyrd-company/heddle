@@ -18,6 +18,7 @@ const pacing = (
       maxConcurrentSessions: 1,
       providerBudgets: { "provider-a": { usageLimit: 80 } },
       subagents: { maxDepth: 2, maxFanOut: 2 },
+      usageWindowHours: 5,
     },
     { readFiveHourWindow: async () => ({ ...usage }) },
     now,
@@ -385,5 +386,28 @@ describe("Reconciler", () => {
       ready.id,
     ]);
     expect(ready.status).toBe("todo");
+  });
+
+  it("reserves WIP capacity between ready tasks in one reconciliation pass", async () => {
+    const first = task(100, "todo", { lifecycle: "surface-cleaning" });
+    const second = task(101, "todo", { lifecycle: "label-replacement" });
+    const subject = fixture([first, second], {
+      pacing: pacing({ used: 0, windowStartedAt: 1_000 }),
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      first.id,
+    ]);
+    expect(subject.instances.instances).toContainEqual(
+      expect.objectContaining({
+        deferral: expect.objectContaining({
+          reason: "work-in-progress-limit",
+        }),
+        state: "deferred",
+        taskId: second.id,
+      }),
+    );
   });
 });

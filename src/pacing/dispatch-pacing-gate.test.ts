@@ -34,6 +34,7 @@ const configuration = (
   maxConcurrentSessions: 2,
   providerBudgets: { "provider-a": { usageLimit: 80 } },
   subagents: { maxDepth: 2, maxFanOut: 2 },
+  usageWindowHours: 5,
   ...overrides,
 });
 
@@ -212,6 +213,16 @@ describe("DispatchPacingGate", () => {
           usage,
         ),
     ).toThrow("maxConcurrentSessions must be a non-negative safe integer");
+    expect(
+      () =>
+        new DispatchPacingGate(
+          {
+            ...configuration(),
+            usageWindowHours: 4 as 5,
+          },
+          usage,
+        ),
+    ).toThrow("usageWindowHours must be 5");
 
     const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
     await expect(

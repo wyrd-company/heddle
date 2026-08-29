@@ -17,6 +17,7 @@ export interface PacingConfiguration {
     maxDepth: number;
     maxFanOut: number;
   };
+  usageWindowHours: 5;
 }
 
 export interface ProviderUsageWindow {
@@ -78,6 +79,7 @@ export type PacingDecision =
   { kind: "dispatch" } | { deferral: PacingDeferral; kind: "defer" };
 
 export interface DispatchPacingEvaluator {
+  readonly defaultProvider: string;
   evaluate(
     request: PacingDispatchRequest,
     activeSessions: readonly PacingSession[],
