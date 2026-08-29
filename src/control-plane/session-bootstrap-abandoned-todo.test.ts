@@ -58,15 +58,17 @@ const instantiateTodoList: NonNullable<
   template: templateId,
 });
 
-const memoryStore = () => {
+const initialState = (): InstanceState => ({
+  correlationTokens: {},
+  flowcraftContext: { awaitingNodeIds: ["prepare"] },
+  handoffs: [],
+  todoState: null,
+});
+
+const memoryStore = (state: InstanceState = initialState()) => {
   let record: InstanceRecord = {
     instanceId: input.instanceId,
-    state: {
-      correlationTokens: {},
-      flowcraftContext: { awaitingNodeIds: ["prepare"] },
-      handoffs: [],
-      todoState: null,
-    },
+    state,
     version: 1,
   };
   return {
@@ -187,5 +189,85 @@ describe("abandoned activation todo state", () => {
       { sessionKey: "next-1", workflowMcp: { stage: "next" } },
     ]);
     expect(dispatch).toHaveBeenCalledTimes(2);
+  });
+
+  it("excludes prior lists without a canonical stored handoff contract", async () => {
+    const list = (sessionKey: string) => ({
+      items: [{ checked: false, id: "orient", text: "Orient on the sample" }],
+      sessionKey,
+      stage: "prepare",
+      template: "sample-prepare",
+    });
+    const document = (correlationToken: string, stage = "prepare") =>
+      JSON.stringify({
+        correlationToken,
+        format: "heddle.stage-handoff",
+        stage: { name: stage },
+        taskContract: { title: "Prepare inventory" },
+        version: 1,
+      });
+    const memory = memoryStore({
+      ...initialState(),
+      handoffs: [
+        {
+          correlationToken: "missing-contract-token",
+          handoff: document("missing-contract-token"),
+          kind: "stage-handoff",
+          sessionKey: "missing-contract",
+        },
+        {
+          correlationToken: "invalid-document-token",
+          handoff: "not-json",
+          kind: "stage-handoff",
+          sessionKey: "invalid-document",
+          workflowMcp,
+        },
+        {
+          correlationToken: "mismatched-stage-token",
+          handoff: document("mismatched-stage-token", "inspect"),
+          kind: "stage-handoff",
+          sessionKey: "mismatched-stage",
+          workflowMcp,
+        },
+      ],
+      todoState: {
+        format: "heddle.todo-state",
+        lists: [
+          list("missing-contract"),
+          list("invalid-document"),
+          list("mismatched-stage"),
+        ],
+        version: 1,
+      },
+    });
+
+    const result = await bootstrapStageSession(input, {
+      persistence: memory.store,
+      instantiateTodoList,
+      resolveWorkflowMcpStageContract: async () => workflowMcp,
+      t3: { dispatch: async () => ({ sequence: 1 }) },
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: false,
+        path: "/workspaces/worktrees/sample-repository/task-prepare",
+      }),
+      mintCorrelationToken: () => "correlation-token",
+      nextId: () => globalThis.crypto.randomUUID(),
+    });
+    const handoff = JSON.parse(result.handoff) as { todoList: TodoState };
+
+    expect(handoff.todoList.lists.map(({ sessionKey }) => sessionKey)).toEqual([
+      "prepare-1",
+    ]);
+    expect(
+      (memory.record.state.todoState as TodoState).lists.map(
+        ({ sessionKey }) => sessionKey,
+      ),
+    ).toEqual([
+      "missing-contract",
+      "invalid-document",
+      "mismatched-stage",
+      "prepare-1",
+    ]);
   });
 });

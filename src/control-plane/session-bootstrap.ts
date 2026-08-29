@@ -9,6 +9,7 @@ import type { InstanceRecord } from "../persistence/index.js";
 import { GitBlueprintStore } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
+import { isAuthorityValidStoredStageHandoff } from "../mcp-server/session-binding.js";
 import {
   ensureStageTodoList,
   instantiateTodoList,
@@ -251,7 +252,7 @@ const ensureStoredHandoff = async (
       input.sessionKey,
       workflowMcp.stage,
       refreshed.state.handoffs
-        .filter(isStoredHandoff)
+        .filter(isAuthorityValidStoredStageHandoff)
         .map(({ sessionKey }) => sessionKey),
     );
     if (todoList.template !== workflowMcp.todoTemplate) {

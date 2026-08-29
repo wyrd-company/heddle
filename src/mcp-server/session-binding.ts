@@ -76,6 +76,20 @@ const parseHandoff = (
   return value as StageHandoffDocument;
 };
 
+export const isAuthorityValidStoredStageHandoff = (
+  value: JsonValue,
+): value is StoredStageHandoff => {
+  if (!isStoredStageHandoff(value)) return false;
+  try {
+    return (
+      parseHandoff(value.handoff, value.correlationToken).stage.name ===
+      value.workflowMcp.stage
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const bearerCorrelationToken = (
   authorization: string | null,
 ): string | undefined => {
@@ -104,7 +118,7 @@ export class WorkflowMcpSessionResolver {
   async resolve(token: string): Promise<WorkflowMcpSessionBinding> {
     const match = this.authenticate(token);
     const storedHandoffs = match.instance.state.handoffs
-      .filter(isStoredStageHandoff)
+      .filter(isAuthorityValidStoredStageHandoff)
       .filter(
         (handoff) =>
           handoff.sessionKey === match.sessionKey &&
