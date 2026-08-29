@@ -23,6 +23,8 @@ in-memory configuration from the operator's secret source and are not stored in
 the repository. The configured pacing `defaultProvider` must equal the session
 `driver`; this composition has one session-provider boundary and rejects a
 configuration that would pace one provider and dispatch another.
+T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
+the runtime validator and configuration schema reject other schemes.
 
 The provider-usage source and session-capable T3 adapter are explicit runtime
 ports. The T3 adapter must apply the accepted Codex or Claude MCP timeout before
@@ -47,7 +49,8 @@ within the configured bound if the pass cannot drain.
 
 Attention and notification delivery use the stable attention ID from the
 accepted lifecycle or escalation contract. SQLite stores attention and adapter
-completion records. A restart replays an unfinished escalation route without
+completion records. Reusing an attention ID with a different payload fails
+closed as a durable-identity disagreement. A restart replays an unfinished escalation route without
 adding a second attention entry or repeating a completed Pushover delivery.
 Pushover transport is an explicit port so qualification can use a synthetic
 transport. Routine operation uses `HttpPushoverTransport`.

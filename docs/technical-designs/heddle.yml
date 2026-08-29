@@ -250,6 +250,7 @@ proposed-design:
 
     Top-level routing composes one durable attention adapter and one Pushover
     adapter. Both consume the escalation's stable attention ID. Adapter
+    persistence rejects a different attention payload under the same stable ID.
     completion is durable, so a process that stops after an effect succeeds but
     before its route event is appended can replay the route without duplicating
     the attention entry or notification delivery. The escalation remains
