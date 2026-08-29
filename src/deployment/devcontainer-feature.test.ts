@@ -72,6 +72,7 @@ describe("Heddle devcontainer feature", () => {
     );
     expect(qualification).toContain("port === 3773");
     expect(qualification).toContain("dirname(process.execPath)");
+    expect(qualification).toContain("observedVersion !== expectedVersion");
     expect(featureQualification).toContain(
       'git -C "${repository}" diff --quiet',
     );
