@@ -206,6 +206,7 @@ button, input, select { font: inherit; }
 }
 
 .attention-overlay {
+  z-index: 2147483647;
   width: min(560px, calc(100vw - 24px));
   height: 100dvh;
   max-height: none;

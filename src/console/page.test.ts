@@ -172,4 +172,10 @@ describe("console page accessibility", () => {
       /\.epic-lever:hover, \.epic-lever:focus-visible \{[^}]*outline: 2px solid var\(--signal-focus\);[^}]*\}/,
     );
   });
+
+  it("keeps the modal attention overlay evaluable above the lifecycle canvas", () => {
+    expect(consoleStyles).toMatch(
+      /\.attention-overlay \{[^}]*z-index: 2147483647;[^}]*\}/,
+    );
+  });
 });
