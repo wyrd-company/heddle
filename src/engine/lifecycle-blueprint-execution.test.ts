@@ -19,7 +19,11 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqlitePersistence } from "../persistence/index.js";
-import { GitBlueprintStore, LifecycleEngine } from "./index.js";
+import {
+  GitBlueprintStore,
+  LifecycleEngine,
+  UnexpectedLandingError,
+} from "./index.js";
 import type { LifecycleEffect } from "./types.js";
 
 const executeFile = promisify(execFile);
@@ -29,7 +33,10 @@ const blueprintPaths = [
 ] as const;
 const temporaryDirectories: string[] = [];
 
-const makeEngine = async (blueprintPath: (typeof blueprintPaths)[number]) => {
+const makeEngine = async (
+  blueprintPath: (typeof blueprintPaths)[number],
+  mergeDispositions = { merged: true, remediate: false },
+) => {
   const repositoryRoot = await mkdtemp(join(tmpdir(), "blueprint-artifact-"));
   temporaryDirectories.push(repositoryRoot);
   await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
@@ -40,15 +47,18 @@ const makeEngine = async (blueprintPath: (typeof blueprintPaths)[number]) => {
   });
   const effectsRun: string[] = [];
   const effect =
-    (name: string): LifecycleEffect =>
+    (
+      name: string,
+      dispositions?: { merged: boolean; remediate: boolean },
+    ): LifecycleEffect =>
     async () => {
       effectsRun.push(name);
-      return { name };
+      return dispositions === undefined ? { name } : { dispositions, name };
     };
   const engine = new LifecycleEngine({
     effects: {
       finalize: effect("finalize"),
-      merge: effect("merge"),
+      merge: effect("merge", mergeDispositions),
       "prepare-worktree": effect("prepare-worktree"),
       "review-snapshot": effect("review-snapshot"),
     },
@@ -196,6 +206,78 @@ describe("shipped lifecycle blueprints", () => {
       "review-snapshot",
       "merge",
       "finalize",
+    ]);
+    fixture.persistence.close();
+  });
+
+  it.each(blueprintPaths)(
+    "routes merge drift in %s back to remediation",
+    async (blueprintPath) => {
+      const fixture = await makeEngine(blueprintPath, {
+        merged: false,
+        remediate: true,
+      });
+      await fixture.engine.start({
+        blueprintPath,
+        instanceId: "record-drift",
+      });
+      await fixture.engine.resume({
+        disposition: "complete",
+        instanceId: "record-drift",
+        operationId: "operation-implementation",
+      });
+
+      const remediation = await fixture.engine.resume({
+        disposition: "approve",
+        instanceId: "record-drift",
+        operationId: "operation-review",
+      });
+
+      expect(remediation).toMatchObject({
+        awaitingNodeIds: ["remediate"],
+        status: "awaiting",
+      });
+      expect(fixture.effectsRun).toEqual([
+        "prepare-worktree",
+        "review-snapshot",
+        "merge",
+      ]);
+      fixture.persistence.close();
+    },
+  );
+
+  it("raises attention when a merge result selects both exclusive routes", async () => {
+    const fixture = await makeEngine("blueprints/standard-delivery.json", {
+      merged: true,
+      remediate: true,
+    });
+    await fixture.engine.start({
+      blueprintPath: "blueprints/standard-delivery.json",
+      instanceId: "record-invalid-merge",
+    });
+    await fixture.engine.resume({
+      disposition: "complete",
+      instanceId: "record-invalid-merge",
+      operationId: "operation-implementation",
+    });
+
+    await expect(
+      fixture.engine.resume({
+        disposition: "approve",
+        instanceId: "record-invalid-merge",
+        operationId: "operation-review",
+      }),
+    ).rejects.toBeInstanceOf(UnexpectedLandingError);
+    expect(
+      fixture.persistence
+        .replayEvents("record-invalid-merge")
+        .filter(({ type }) => type === "lifecycle:attention-required"),
+    ).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          actualAwaitingNodeIds: ["remediate", "retrospective"],
+        }),
+      }),
     ]);
     fixture.persistence.close();
   });

@@ -71,3 +71,16 @@ export const combineMatchedLandings = (
   combinations.delete(keyFor(emptyLanding));
   return [...combinations.values()];
 };
+
+export const combineExclusiveLandings = (
+  groups: ExpectedLandings[],
+): ExpectedLandings => {
+  const alternatives = new Map<string, ExpectedLanding>();
+  for (const group of groups) {
+    for (const landing of group) {
+      alternatives.set(keyFor(landing), landing);
+      assertWithinLimit(alternatives.size, false);
+    }
+  }
+  return [...alternatives.values()];
+};

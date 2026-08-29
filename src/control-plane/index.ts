@@ -26,5 +26,19 @@ export {
   type PreparedWorktree,
   type WorktreeInput,
 } from "./worktree-creator.js";
+export {
+  cleanupMergedChange,
+  createMechanicalNodeEffects,
+  ensureReviewSnapshot,
+  mechanicalChangeContextKey,
+  mergeReviewSnapshot,
+  type CleanupMergedChangeResult,
+  type CommandRunner,
+  type MechanicalBoardMirror,
+  type MechanicalChangeContext,
+  type MechanicalNodeEffectOptions,
+  type MergeSnapshotResult,
+  type ReviewSnapshot,
+} from "./mechanical-node-effects.js";
 
 export const controlPlane = "control-plane" as const;

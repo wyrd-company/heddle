@@ -91,7 +91,10 @@
     },
     {
       "id": "merge",
-      "uses": "merge"
+      "uses": "merge",
+      "config": {
+        "joinStrategy": "any"
+      }
     },
     {
       "id": "finalize",
@@ -137,7 +140,17 @@
     },
     {
       "source": "merge",
-      "target": "finalize"
+      "target": "finalize",
+      "condition": "result.output.dispositions.merged",
+      "disposition": "merged",
+      "description": "Continue after merging the exact reviewed head"
+    },
+    {
+      "source": "merge",
+      "target": "remediate",
+      "condition": "result.output.dispositions.remediate",
+      "disposition": "remediate",
+      "description": "Return snapshot and branch-head drift for remediation"
     }
   ]
 }

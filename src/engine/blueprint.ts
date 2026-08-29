@@ -12,6 +12,7 @@ import {
 
 import { BlueprintValidationError } from "./errors.js";
 import {
+  combineExclusiveLandings,
   combineLandings,
   combineMatchedLandings,
 } from "./landing-combinations.js";
@@ -64,30 +65,32 @@ export const validateBlueprint = (
         `Node ${JSON.stringify(node.id)} uses reserved parameter ${internalNodeIdParameter}`,
       );
     }
-    if (node.uses !== "wait") continue;
-
     const dispositions = new Set<string>();
     const edges = outgoingEdges(blueprint, node.id);
-    if (edges.length === 0) {
+    const usesDispositionRouting = edges.some(
+      ({ disposition }) => disposition !== undefined,
+    );
+    if (node.uses === "wait" && edges.length === 0) {
       throw new BlueprintValidationError(
         `Wait node ${JSON.stringify(node.id)} has no disposition edges`,
       );
     }
+    if (node.uses !== "wait" && !usesDispositionRouting) continue;
     for (const edge of edges) {
       if (edge.action !== undefined) {
         throw new BlueprintValidationError(
-          `Wait node ${JSON.stringify(node.id)} must use condition edges, not action edges`,
+          `Disposition node ${JSON.stringify(node.id)} must use condition edges, not action edges`,
         );
       }
       const disposition = edge.disposition;
       if (disposition === undefined || !dispositionPattern.test(disposition)) {
         throw new BlueprintValidationError(
-          `Wait node ${JSON.stringify(node.id)} has an invalid disposition`,
+          `Node ${JSON.stringify(node.id)} has an invalid disposition`,
         );
       }
       if (dispositions.has(disposition)) {
         throw new BlueprintValidationError(
-          `Wait node ${JSON.stringify(node.id)} repeats disposition ${JSON.stringify(disposition)}`,
+          `Node ${JSON.stringify(node.id)} repeats disposition ${JSON.stringify(disposition)}`,
         );
       }
       dispositions.add(disposition);
@@ -104,14 +107,6 @@ export const validateBlueprint = (
     if (edge.action !== undefined) {
       throw new BlueprintValidationError(
         `Edge ${JSON.stringify(`${edge.source}->${edge.target}`)} must not use action routing`,
-      );
-    }
-    if (
-      edge.disposition !== undefined &&
-      nodesById.get(edge.source)?.uses !== "wait"
-    ) {
-      throw new BlueprintValidationError(
-        `Only wait-node edges can declare a disposition`,
       );
     }
   }
@@ -182,10 +177,21 @@ export const expectedLanding = (
     const conditionalCount = edges.filter(
       ({ condition }) => condition !== undefined,
     ).length;
+    const dispositionCount = edges.filter(
+      ({ disposition }) => disposition !== undefined,
+    ).length;
     if (conditionalCount > 0 && conditionalCount !== edges.length) {
       throw new BlueprintValidationError(
         `Node ${JSON.stringify(nodeId)} mixes conditional and unconditional edges`,
       );
+    }
+    if (dispositionCount > 0 && dispositionCount !== edges.length) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(nodeId)} mixes disposition and ordinary edges`,
+      );
+    }
+    if (dispositionCount === edges.length) {
+      return combineExclusiveLandings(groups);
     }
     return conditionalCount === edges.length
       ? combineMatchedLandings(groups)
