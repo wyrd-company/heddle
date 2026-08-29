@@ -79114,6 +79114,7 @@ function Eue() {
 		};
 	}, [c, s]), (0, v.useEffect)(() => {
 		if (e === null || n === null) return;
+		e.updateInstanceState({ isReadonly: !1 });
 		let t = `${n.instanceId}:${n.blueprint.blobHash}`;
 		if (a.current !== t) {
 			new yue(e).applyBlueprint(n.blueprint, wue(n));
@@ -79143,6 +79144,7 @@ function Eue() {
 				className: "lifecycle-empty",
 				children: "Select a task lifecycle to render its pinned history."
 			}) : /* @__PURE__ */ (0, V.jsx)(Vle, {
+				assetUrls: { translations: { en: "/assets/tldraw-en.json" } },
 				components: {
 					ActionsMenu: null,
 					ContextMenu: null,

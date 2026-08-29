@@ -179,6 +179,13 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
         text(response, 200, "text/javascript", lifecycleClient);
         return;
       }
+      if (
+        url.pathname === "/assets/tldraw-en.json" &&
+        request.method === "GET"
+      ) {
+        text(response, 200, "application/json", "{}");
+        return;
+      }
       if (url.pathname === "/api/board") {
         if (request.method !== "GET") return methodNotAllowed(response, "GET");
         const [statuses, tasks] = await Promise.all([

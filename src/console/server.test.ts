@@ -165,6 +165,7 @@ describe("console server", () => {
       client,
       lifecycleStyles,
       lifecycleClient,
+      tldrawTranslation,
       boardResponse,
       instances,
       events,
@@ -175,6 +176,7 @@ describe("console server", () => {
       globalThis.fetch(`${baseUrl}/assets/console.js`),
       globalThis.fetch(`${baseUrl}/assets/lifecycle.css`),
       globalThis.fetch(`${baseUrl}/assets/lifecycle.js`),
+      globalThis.fetch(`${baseUrl}/assets/tldraw-en.json`),
       globalThis.fetch(`${baseUrl}/api/board`),
       globalThis.fetch(`${baseUrl}/api/instances`),
       globalThis.fetch(`${baseUrl}/api/events?instance=instance-52&after=6`),
@@ -194,6 +196,7 @@ describe("console server", () => {
     await expect(lifecycleClient.text()).resolves.toContain(
       "heddleLifecycleViewer",
     );
+    await expect(tldrawTranslation.json()).resolves.toEqual({});
     await expect(styles.text()).resolves.toContain(".task-card");
     await expect(client.text()).resolves.toContain(
       'url.searchParams.set("scope", scopeElement.value)',

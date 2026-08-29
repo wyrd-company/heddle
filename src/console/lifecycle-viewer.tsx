@@ -185,6 +185,7 @@ function LifecycleViewer() {
 
   useEffect(() => {
     if (editor === null || snapshot === null) return;
+    editor.updateInstanceState({ isReadonly: false });
     const identity = `${snapshot.instanceId}:${snapshot.blueprint.blobHash}`;
     if (replayedIdentity.current !== identity) {
       const sync = new FlowcraftSync(editor);
@@ -234,6 +235,9 @@ function LifecycleViewer() {
           </p>
         ) : (
           <Tldraw
+            assetUrls={{
+              translations: { en: "/assets/tldraw-en.json" },
+            }}
             components={{
               ActionsMenu: null,
               ContextMenu: null,
