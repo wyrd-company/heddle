@@ -1,0 +1,149 @@
+{
+  "$schema": "../schemas/lifecycle-blueprint.json",
+  "relationships": {
+    "implements": "heddle",
+    "uses": [
+      "standard-delivery-implement",
+      "standard-delivery-review",
+      "standard-delivery-remediate",
+      "standard-delivery-retrospective"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "implement",
+      "uses": "wait",
+      "tools": [
+        "advance",
+        "get_task_context",
+        "report_blocked",
+        "escalate",
+        "create_follow_up",
+        "create_finding",
+        "todo_list",
+        "todo_check",
+        "todo_add",
+        "todo_edit",
+        "todo_reorder",
+        "spawn",
+        "liveness",
+        "answer"
+      ],
+      "todo-template": "standard-delivery-implement"
+    },
+    {
+      "id": "review",
+      "uses": "wait",
+      "tools": [
+        "advance",
+        "get_task_context",
+        "report_blocked",
+        "escalate",
+        "create_follow_up",
+        "create_finding",
+        "todo_list",
+        "todo_check",
+        "todo_add",
+        "todo_edit",
+        "todo_reorder",
+        "spawn",
+        "liveness",
+        "answer"
+      ],
+      "todo-template": "standard-delivery-review",
+      "config": {
+        "joinStrategy": "any"
+      }
+    },
+    {
+      "id": "remediate",
+      "uses": "wait",
+      "tools": [
+        "advance",
+        "get_task_context",
+        "report_blocked",
+        "escalate",
+        "create_follow_up",
+        "create_finding",
+        "todo_list",
+        "todo_check",
+        "todo_add",
+        "todo_edit",
+        "todo_reorder",
+        "spawn",
+        "liveness",
+        "answer"
+      ],
+      "todo-template": "standard-delivery-remediate",
+      "config": {
+        "joinStrategy": "any"
+      }
+    },
+    {
+      "id": "merge",
+      "uses": "merge"
+    },
+    {
+      "id": "retrospective",
+      "uses": "wait",
+      "tools": [
+        "advance",
+        "get_task_context",
+        "report_blocked",
+        "escalate",
+        "create_follow_up",
+        "todo_list",
+        "todo_check",
+        "todo_add",
+        "todo_edit",
+        "todo_reorder"
+      ],
+      "todo-template": "standard-delivery-retrospective"
+    },
+    {
+      "id": "finalize",
+      "uses": "finalize"
+    }
+  ],
+  "edges": [
+    {
+      "source": "implement",
+      "target": "review",
+      "condition": "result.output.dispositions.complete",
+      "disposition": "complete",
+      "description": "Implementation is ready for review"
+    },
+    {
+      "source": "review",
+      "target": "merge",
+      "condition": "result.output.dispositions.approve",
+      "disposition": "approve",
+      "description": "Approve the reviewed change"
+    },
+    {
+      "source": "review",
+      "target": "remediate",
+      "condition": "result.output.dispositions.reject",
+      "disposition": "reject",
+      "description": "Return the reviewed change for remediation"
+    },
+    {
+      "source": "remediate",
+      "target": "review",
+      "condition": "result.output.dispositions.complete",
+      "disposition": "complete",
+      "description": "Remediation is ready for another review"
+    },
+    {
+      "source": "merge",
+      "target": "retrospective"
+    },
+    {
+      "source": "retrospective",
+      "target": "finalize",
+      "condition": "result.output.dispositions.complete",
+      "disposition": "complete",
+      "description": "Retrospective is complete"
+    }
+  ]
+}

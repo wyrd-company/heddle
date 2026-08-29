@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "title": "Heddle lifecycle blueprint",
+  "description": "A repository-resident Flowcraft graph that defines one task delivery lifecycle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "relationships", "nodes", "edges"],
+  "properties": {
+    "$schema": {
+      "const": "../schemas/lifecycle-blueprint.json"
+    },
+    "relationships": {
+      "$ref": "#/$defs/relationships"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    }
+  },
+  "$defs": {
+    "artifact-id": {
+      "type": "string",
+      "pattern": "^[a-z]+(?:-[a-z]+)*$"
+    },
+    "relationships": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implements"],
+      "properties": {
+        "implements": {
+          "const": "heddle"
+        },
+        "uses": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact-id"
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "uses"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/artifact-id"
+        },
+        "uses": {
+          "$ref": "#/$defs/artifact-id"
+        },
+        "tools": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z]+(?:_[a-z]+)*$"
+          }
+        },
+        "todo-template": {
+          "$ref": "#/$defs/artifact-id"
+        },
+        "params": {
+          "type": "object"
+        },
+        "inputs": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxRetries": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "retryDelay": {
+              "type": "number",
+              "minimum": 0
+            },
+            "timeout": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "fallback": {
+              "$ref": "#/$defs/artifact-id"
+            },
+            "joinStrategy": {
+              "enum": ["all", "any"]
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "uses": {
+                "const": "wait"
+              }
+            },
+            "required": ["uses"]
+          },
+          "then": {
+            "required": ["tools", "todo-template"]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["tools"]
+                },
+                {
+                  "required": ["todo-template"]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target"],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/artifact-id"
+        },
+        "target": {
+          "$ref": "#/$defs/artifact-id"
+        },
+        "condition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "transform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "disposition": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "dependentRequired": {
+        "disposition": ["condition", "description"]
+      }
+    }
+  }
+}
