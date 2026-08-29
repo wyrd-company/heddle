@@ -11,6 +11,13 @@ export {
 } from "./errors.js";
 export { GitBlueprintStore } from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
+export { LifecycleResolver } from "./lifecycle-resolver.js";
+export type {
+  LifecycleResolution,
+  LifecycleResolutionAttention,
+  LifecycleSelectorTask,
+  ResolvedLifecycle,
+} from "./lifecycle-resolver.js";
 export type {
   CompletedLifecycleOperation,
   ExpectedLanding,

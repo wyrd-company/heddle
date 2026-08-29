@@ -14,12 +14,12 @@ import {
 } from "node:path";
 import { promisify } from "node:util";
 
+import { isBlueprintArtifactId } from "./blueprint-artifact.js";
 import type { LifecycleBlueprint } from "./types.js";
 import { BlueprintValidationError } from "./errors.js";
 
 const execFileAsync = promisify(execFile);
 const gitObjectId = /^[0-9a-f]{40,64}$/;
-const artifactIdPattern = /^[a-z]+(?:-[a-z]+)*$/;
 
 const artifactIdFromPath = (path: string): string => {
   if (extname(path) !== ".json") {
@@ -28,7 +28,7 @@ const artifactIdFromPath = (path: string): string => {
     );
   }
   const artifactId = basename(path, ".json");
-  if (!artifactIdPattern.test(artifactId)) {
+  if (!isBlueprintArtifactId(artifactId)) {
     throw new BlueprintValidationError(
       "Blueprint artifact filename must be a kebab ID",
     );
