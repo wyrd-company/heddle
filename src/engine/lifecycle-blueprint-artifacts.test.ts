@@ -57,6 +57,24 @@ describe("lifecycle blueprint artifacts", () => {
     }
   });
 
+  it.each(blueprintPaths)(
+    "binds %s relationships to its todo templates",
+    async (path) => {
+      const artifact = (await readJson(path)) as {
+        nodes: Array<{ "todo-template"?: string }>;
+        relationships: { uses?: string[] };
+      };
+      const boundTemplates = artifact.nodes
+        .map((node) => node["todo-template"])
+        .filter((value): value is string => value !== undefined)
+        .sort();
+
+      expect([...(artifact.relationships.uses ?? [])].sort()).toEqual(
+        boundTemplates,
+      );
+    },
+  );
+
   it("requires refinery relationships and session-stage bindings", async () => {
     const schema = await readJson(schemaPath);
     const artifact = (await readJson(blueprintPaths[0])) as {
