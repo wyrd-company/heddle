@@ -6,7 +6,7 @@
     "../features/heddle": {
       "statePath": "/var/lib/heddle",
       "port": "4317",
-      "dnsName": "heddle.localhost"
+      "dnsName": "heddle.qualification.test"
     }
   },
   "mounts": [
@@ -17,6 +17,7 @@
     }
   ],
   "remoteUser": "vscode",
+  "runArgs": ["--add-host", "heddle.qualification.test:127.0.0.1"],
   "overrideCommand": false,
   "shutdownAction": "none"
 }

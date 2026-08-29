@@ -62,7 +62,7 @@ up
 
 inside bash -lc '
 set -euo pipefail
-test "$(s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
+test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
 for attempt in $(seq 1 100); do
     if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1
@@ -72,7 +72,7 @@ grep -q "<h1>Heddle</h1>" /tmp/heddle-console.html
 test "$(curl --silent --output /tmp/heddle-mcp.json --write-out "%{http_code}" --request POST http://127.0.0.1:4317/mcp)" = 401
 grep -q "Unauthorized" /tmp/heddle-mcp.json
 for attempt in $(seq 1 100); do
-    if curl --insecure --fail --silent https://heddle.localhost/ >/tmp/heddle-caddy.html; then break; fi
+    if curl --insecure --fail --silent https://heddle.qualification.test/ >/tmp/heddle-caddy.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1
     sleep 0.1
 done
