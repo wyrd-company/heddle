@@ -57,7 +57,20 @@ describe("deployed Heddle service", () => {
         HEDDLE_PORT: "0",
         HEDDLE_STATE_PATH: directory,
       },
-      { board },
+      {
+        blueprintEditor: {
+          load: async (artifactId) => ({
+            blobHash: "a".repeat(40),
+            blueprint: { edges: [], id: artifactId, nodes: [] },
+            path: `blueprints/${artifactId}.json`,
+            positions: {},
+          }),
+          save: async () => {
+            throw new Error("not used");
+          },
+        },
+        board,
+      },
     );
     const origin = `http://127.0.0.1:${service.port}`;
 
@@ -79,6 +92,15 @@ describe("deployed Heddle service", () => {
     expect(projected.columns.flatMap(({ tasks }) => tasks)).toContainEqual(
       expect.objectContaining({ id: 101, stageId: "inspect" }),
     );
+
+    const blueprint = await globalThis.fetch(
+      `${origin}/api/blueprints/sample-process`,
+    );
+    expect(blueprint.status).toBe(200);
+    await expect(blueprint.json()).resolves.toMatchObject({
+      blueprint: { id: "sample-process" },
+      path: "blueprints/sample-process.json",
+    });
 
     const mcp = await globalThis.fetch(`${origin}/mcp`, { method: "POST" });
     expect(mcp.status).toBe(401);

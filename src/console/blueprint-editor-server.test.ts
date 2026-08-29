@@ -118,9 +118,20 @@ describe("console blueprint editor API", () => {
   });
 
   it("rejects malformed writes before the editor port and names allowed methods", async () => {
-    const [malformed, wrongMethod] = await Promise.all([
+    const [malformed, extraField, wrongMethod] = await Promise.all([
       globalThis.fetch(`${baseUrl}/api/blueprints/sample-process`, {
         body: JSON.stringify({ nodes: [], edges: [] }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      }),
+      globalThis.fetch(`${baseUrl}/api/blueprints/sample-process`, {
+        body: JSON.stringify({
+          edges: [],
+          expectedBlobHash: "a".repeat(40),
+          nodes: [{ id: "inspect", uses: "wait" }],
+          positions: {},
+          unexpected: true,
+        }),
         headers: { "content-type": "application/json" },
         method: "PUT",
       }),
@@ -131,6 +142,11 @@ describe("console blueprint editor API", () => {
 
     expect(malformed.status).toBe(400);
     await expect(malformed.json()).resolves.toEqual({
+      error:
+        "request body must contain only nodes, edges, positions, and expectedBlobHash",
+    });
+    expect(extraField.status).toBe(400);
+    await expect(extraField.json()).resolves.toEqual({
       error:
         "request body must contain only nodes, edges, positions, and expectedBlobHash",
     });
