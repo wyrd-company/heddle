@@ -82,11 +82,13 @@ export class SessionObserver {
     target: SessionObservationTarget,
     requestId: string,
     decision: "accept" | "reject",
+    commandId?: string,
   ): Promise<void> {
     await this.options.t3.respondToApproval(
       target.threadId,
       requestId,
       decision,
+      commandId,
     );
   }
 
@@ -94,6 +96,7 @@ export class SessionObserver {
     target: SessionObservationTarget,
     requestId: string,
     answers: Record<string, string | string[]>,
+    commandId?: string,
   ): Promise<void> {
     if (Object.keys(answers).length === 0) {
       throw new TypeError("User-input answers must not be empty");
@@ -102,6 +105,7 @@ export class SessionObserver {
       target.threadId,
       requestId,
       answers,
+      commandId,
     );
   }
 

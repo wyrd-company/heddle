@@ -23,9 +23,10 @@ class FailingApprovalT3 extends SyntheticT3 {
     threadId: string,
     requestId: string,
     decision: "accept" | "reject",
+    commandId?: string,
   ) {
     if (this.fail) throw new Error("Injected approval failure");
-    return super.respondToApproval(threadId, requestId, decision);
+    return super.respondToApproval(threadId, requestId, decision, commandId);
   }
 }
 
@@ -122,6 +123,7 @@ describe("production attention actions", () => {
     });
     expect(t3.approvalResponses).toEqual([
       {
+        commandId: "approval-attention",
         decision: "accept",
         requestId: "approval-one",
         threadId: runtime.threadId,
@@ -161,6 +163,7 @@ describe("production attention actions", () => {
     expect(t3.userInputResponses).toEqual([
       {
         answers: { "question-one": "Second" },
+        commandId: "user-input-attention",
         requestId: "input-one",
         threadId: runtime.threadId,
       },

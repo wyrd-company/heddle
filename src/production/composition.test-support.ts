@@ -21,6 +21,7 @@ export const execute = promisify(execFile);
 export class SyntheticT3 implements ProductionT3Client {
   readonly approvalResponses: Array<{
     decision: "accept" | "reject";
+    commandId?: string;
     requestId: string;
     threadId: string;
   }> = [];
@@ -29,6 +30,7 @@ export class SyntheticT3 implements ProductionT3Client {
   readonly threads = new Set<string>();
   readonly userInputResponses: Array<{
     answers: Record<string, string | string[]>;
+    commandId?: string;
     requestId: string;
     threadId: string;
   }> = [];
@@ -65,8 +67,14 @@ export class SyntheticT3 implements ProductionT3Client {
     threadId: string,
     requestId: string,
     decision: "accept" | "reject",
+    commandId?: string,
   ) {
-    this.approvalResponses.push({ decision, requestId, threadId });
+    this.approvalResponses.push({
+      ...(commandId === undefined ? {} : { commandId }),
+      decision,
+      requestId,
+      threadId,
+    });
     return { sequence: 1 };
   }
 
@@ -74,8 +82,14 @@ export class SyntheticT3 implements ProductionT3Client {
     threadId: string,
     requestId: string,
     answers: Record<string, string | string[]>,
+    commandId?: string,
   ) {
-    this.userInputResponses.push({ answers, requestId, threadId });
+    this.userInputResponses.push({
+      answers,
+      ...(commandId === undefined ? {} : { commandId }),
+      requestId,
+      threadId,
+    });
     return { sequence: 1 };
   }
 }

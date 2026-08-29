@@ -216,6 +216,7 @@ describe("deployed Heddle service", () => {
     expect(actionResponse.status).toBe(204);
     expect(t3.approvalResponses).toEqual([
       {
+        commandId: "approval-attention",
         decision: "accept",
         requestId: "approval-one",
         threadId: runtime.threadId,

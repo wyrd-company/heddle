@@ -119,6 +119,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
         },
         contract.requestId,
         contract.decision,
+        input.attention.attentionId,
       );
       return;
     }
@@ -133,6 +134,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       },
       contract.requestId,
       input.answers,
+      input.attention.attentionId,
     );
   }
 }
