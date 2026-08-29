@@ -223,6 +223,48 @@ describe("console server", () => {
     expect(board.writes).toHaveLength(1);
   });
 
+  it("accepts application/json with media-type parameters", async () => {
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/epics/51/in-progress`,
+      {
+        body: JSON.stringify({ inProgress: false }),
+        headers: { "content-type": "application/json; charset=utf-8" },
+        method: "PUT",
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(board.writes).toEqual([{ inProgress: false, taskId: 51 }]);
+  });
+
+  it("rejects semantic URL scopes before rendering a projection", async () => {
+    const [childAsEpicScope, missingEpicScope, missingTaskScope] =
+      await Promise.all([
+        globalThis.fetch(`${baseUrl}/api/projection?scope=epic:52`),
+        globalThis.fetch(`${baseUrl}/api/projection?scope=epic:999`),
+        globalThis.fetch(`${baseUrl}/api/projection?scope=task:999`),
+      ]);
+
+    expect(childAsEpicScope.status).toBe(400);
+    expect(missingEpicScope.status).toBe(400);
+    expect(missingTaskScope.status).toBe(400);
+    expect(board.writes).toEqual([]);
+  });
+
+  it("rejects lookalike JSON media types before a board write", async () => {
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/epics/51/in-progress`,
+      {
+        body: JSON.stringify({ inProgress: false }),
+        headers: { "content-type": "application/jsonp" },
+        method: "PUT",
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(board.writes).toEqual([]);
+  });
+
   it("rejects malformed scope and lever inputs before a board write", async () => {
     const invalidScope = await globalThis.fetch(
       `${baseUrl}/api/projection?scope=epic:0`,

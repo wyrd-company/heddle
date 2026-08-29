@@ -10,8 +10,13 @@ import {
   type ServerResponse,
 } from "node:http";
 import { URL } from "node:url";
+import { MIMEType } from "node:util";
 
-import { buildKanbanProjection, parseConsoleScope } from "./projection.js";
+import {
+  buildKanbanProjection,
+  ConsoleScopeError,
+  parseConsoleScope,
+} from "./projection.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
 import type { ConsoleBoard, ConsoleStateSource } from "./types.js";
 
@@ -89,7 +94,13 @@ const requestScope = (value: string | null) => {
 };
 
 const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
-  if (!request.headers["content-type"]?.startsWith("application/json")) {
+  let mediaType: MIMEType;
+  try {
+    mediaType = new MIMEType(request.headers["content-type"] ?? "");
+  } catch {
+    throw new RequestError("content-type must be application/json");
+  }
+  if (mediaType.essence !== "application/json") {
     throw new RequestError("content-type must be application/json");
   }
   const chunks: Buffer[] = [];
@@ -214,7 +225,7 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       json(response, 404, { error: "not found" });
     } catch (error) {
-      if (error instanceof RequestError) {
+      if (error instanceof RequestError || error instanceof ConsoleScopeError) {
         json(response, 400, { error: error.message });
         return;
       }

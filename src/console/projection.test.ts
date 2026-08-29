@@ -117,6 +117,30 @@ describe("kanban console projection", () => {
     );
   });
 
+  it("rejects scopes that do not name an existing task of the requested kind", () => {
+    const project = (scope: ReturnType<typeof parseConsoleScope>) =>
+      buildKanbanProjection({
+        instances: [],
+        now: 0,
+        scope,
+        statuses: ["todo", "in-progress", "done"],
+        tasks,
+      });
+
+    expect(() => project(parseConsoleScope("epic:42"))).toThrow(
+      "epic scope 42 must name a root type:epic task",
+    );
+    expect(() => project(parseConsoleScope("epic:90"))).toThrow(
+      "epic scope 90 must name a root type:epic task",
+    );
+    expect(() => project(parseConsoleScope("epic:999"))).toThrow(
+      "epic scope 999 does not name an existing task",
+    );
+    expect(() => project(parseConsoleScope("task:999"))).toThrow(
+      "task scope 999 does not name an existing task",
+    );
+  });
+
   it("rejects agreements that would silently hide cards or instances", () => {
     expect(() =>
       buildKanbanProjection({

@@ -26,6 +26,8 @@ export interface KanbanProjection {
   scope: ConsoleScope;
 }
 
+export class ConsoleScopeError extends Error {}
+
 const scopedId = /^(epic|task):([1-9][0-9]*)$/;
 
 export const parseConsoleScope = (value: string | null): ConsoleScope => {
@@ -60,12 +62,30 @@ const tasksInScope = (tasks: BoardTask[], scope: ConsoleScope): BoardTask[] => {
   switch (scope.kind) {
     case "all":
       return tasks;
-    case "epic":
+    case "epic": {
+      const epic = tasks.find(({ id }) => id === scope.epicId);
+      if (epic === undefined) {
+        throw new ConsoleScopeError(
+          `epic scope ${scope.epicId} does not name an existing task`,
+        );
+      }
+      if (epic.parent !== undefined || !epic.tags.includes("type:epic")) {
+        throw new ConsoleScopeError(
+          `epic scope ${scope.epicId} must name a root type:epic task`,
+        );
+      }
       return tasks.filter(
         ({ id, parent }) => id === scope.epicId || parent === scope.epicId,
       );
-    case "task":
+    }
+    case "task": {
+      if (!tasks.some(({ id }) => id === scope.taskId)) {
+        throw new ConsoleScopeError(
+          `task scope ${scope.taskId} does not name an existing task`,
+        );
+      }
       return tasks.filter(({ id }) => id === scope.taskId);
+    }
   }
 };
 

@@ -50,9 +50,10 @@ export const consoleStyles = `:root {
   --paper-raised: #fffdf7;
   --rule: #b8b3a5;
   --rule-dark: #77746b;
-  --signal: #d84a2f;
+  --signal: #b43321;
+  --signal-focus: #df5a3c;
   --active: #25766e;
-  --muted: #6f7069;
+  --muted: #5f605a;
   --shadow: 3px 3px 0 rgba(25, 26, 23, 0.16);
   font-family: "Azeret Mono", "IBM Plex Mono", ui-monospace, monospace;
   background: var(--paper);
@@ -256,7 +257,7 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
   text-transform: uppercase;
 }
 
-.epic-lever:hover, .epic-lever:focus-visible { color: var(--paper-raised); background: var(--ink); outline: 2px solid var(--signal); outline-offset: 2px; }
+.epic-lever:hover, .epic-lever:focus-visible { color: var(--paper-raised); background: var(--ink); outline: 2px solid var(--signal-focus); outline-offset: 2px; }
 .empty-column { margin: 18px 13px; color: var(--muted); font-size: 10px; }
 
 @media (max-width: 680px) {
