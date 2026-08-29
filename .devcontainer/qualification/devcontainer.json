@@ -5,6 +5,7 @@
     "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
     "../features/heddle": {
       "statePath": "/var/lib/heddle",
+      "boardPath": "/workspaces/kanban",
       "port": "4317",
       "dnsName": "heddle.localhost"
     }
@@ -13,6 +14,11 @@
     {
       "source": "${localEnv:HEDDLE_QUALIFICATION_STATE}",
       "target": "/var/lib/heddle",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_BOARD}",
+      "target": "/workspaces/kanban",
       "type": "bind"
     }
   ],

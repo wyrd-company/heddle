@@ -28,6 +28,11 @@ case "${STATEPATH}" in
     *$'\n'*|*$'\r'*) err "statePath contains unsupported characters." ;;
 esac
 
+[[ "${BOARDPATH}" = /* ]] || err "boardPath must be an absolute path."
+case "${BOARDPATH}" in
+    *$'\n'*|*$'\r'*) err "boardPath contains unsupported characters." ;;
+esac
+
 if [ -n "${DNSNAME}" ]; then
     [ "${#DNSNAME}" -le 253 ] \
         || err "dnsName exceeds the 253-character DNS limit."
@@ -65,6 +70,7 @@ env \
     || err "Heddle was not installed at /usr/local/bin/heddle-server."
 
 printf -v quoted_state '%q' "${STATEPATH}"
+printf -v quoted_board '%q' "${BOARDPATH}"
 printf -v quoted_port '%q' "${PORT}"
 cat >/usr/local/bin/heddle-service <<EOF
 #!/usr/bin/env bash
@@ -77,6 +83,7 @@ mountpoint -q "\${state_path}" || {
 }
 
 export HEDDLE_STATE_PATH="\${state_path}"
+export HEDDLE_BOARD_PATH=${quoted_board}
 export HEDDLE_HOST=127.0.0.1
 export HEDDLE_PORT=${quoted_port}
 exec /usr/local/bin/heddle-server

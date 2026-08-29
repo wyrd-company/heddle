@@ -11,14 +11,28 @@ repository="$(git rev-parse --show-toplevel)"
 accepted_head="$(git rev-parse HEAD)"
 configuration="${repository}/.devcontainer/qualification/devcontainer.json"
 state_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-state.XXXXXX)"
+board_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-board.XXXXXX)"
 container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
+kanban-md init \
+    --dir "${board_directory}" \
+    --name "Sample Board" \
+    --statuses todo,in-progress,done >/dev/null
+qualification_task_id="$(
+    kanban-md create \
+        --dir "${board_directory}" \
+        --status in-progress \
+        --json \
+        "Sample Record" | jq -er '.id'
+)"
+chmod -R a+rX "${board_directory}"
 
 cleanup() {
     if [ -n "${container_id}" ] && docker inspect "${container_id}" >/dev/null 2>&1; then
         docker rm --force "${container_id}" >/dev/null
     fi
     rm -rf "${state_directory}"
+    rm -rf "${board_directory}"
 }
 trap cleanup EXIT
 
@@ -36,6 +50,7 @@ up() {
     local -a container_ids
     log_file="$(mktemp)"
     if ! HEDDLE_QUALIFICATION_STATE="${state_directory}" \
+        HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         devcontainer up \
         --workspace-folder "${repository}" \
         --config "${configuration}" \
@@ -60,6 +75,7 @@ up() {
 
 inside() {
     HEDDLE_QUALIFICATION_STATE="${state_directory}" \
+        HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         devcontainer exec \
         --workspace-folder "${repository}" \
         --config "${configuration}" \
@@ -80,7 +96,7 @@ for attempt in $(seq 1 100); do
     [ "${attempt}" -lt 100 ] || exit 1
     sleep 0.1
 done
-grep -q "<h1>Heddle</h1>" /tmp/heddle-console.html
+grep -q "<title>Heddle Console</title>" /tmp/heddle-console.html
 test "$(curl --silent --output /tmp/heddle-mcp.json --write-out "%{http_code}" --request POST http://127.0.0.1:4317/mcp)" = 401
 grep -q "Unauthorized" /tmp/heddle-mcp.json
 for attempt in $(seq 1 100); do
@@ -88,15 +104,16 @@ for attempt in $(seq 1 100); do
     [ "${attempt}" -lt 100 ] || exit 1
     sleep 0.1
 done
-grep -q "<h1>Heddle</h1>" /tmp/heddle-caddy.html
+grep -q "<title>Heddle Console</title>" /tmp/heddle-caddy.html
 '
 
-inside node --input-type=module -e '
+inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" \
+node --input-type=module -e '
 import { SqlitePersistence } from "/usr/local/lib/node_modules/heddle/dist/persistence/index.js";
 const persistence = new SqlitePersistence({ stateDirectory: "/var/lib/heddle" });
-persistence.createInstance("sample-record", {
+persistence.createInstance(`task-${process.env.HEDDLE_QUALIFICATION_TASK_ID}`, {
   correlationTokens: {},
-  flowcraftContext: { category: "inventory" },
+  flowcraftContext: { awaitingNodeIds: ["inspect"] },
   handoffs: [],
   todoState: null,
 });
@@ -107,16 +124,26 @@ docker rm --force "${container_id}" >/dev/null
 container_id=""
 assert_head
 up
-inside bash -lc '
+inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
 set -euo pipefail
 for attempt in $(seq 1 100); do
     response="$(curl --fail --silent http://127.0.0.1:4317/api/instances || true)"
-    if printf "%s" "${response}" | jq -e '\''.instances == [{instanceId:"sample-record",state:{correlationTokens:{},flowcraftContext:{category:"inventory"},handoffs:[],todoState:null},version:1}]'\'' >/dev/null; then
+    if printf "%s" "${response}" | jq -e --arg task_id "${HEDDLE_QUALIFICATION_TASK_ID}" '\''length == 1 and .[0].instanceId == ("task-" + $task_id) and .[0].taskId == ($task_id | tonumber) and .[0].stageId == "inspect"'\'' >/dev/null; then
         exit 0
     fi
     sleep 0.1
 done
 exit 1
+'
+inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" \
+node --input-type=module -e '
+import { SqlitePersistence } from "/usr/local/lib/node_modules/heddle/dist/persistence/index.js";
+const persistence = new SqlitePersistence({ stateDirectory: "/var/lib/heddle" });
+const record = persistence.getInstance(`task-${process.env.HEDDLE_QUALIFICATION_TASK_ID}`);
+if (record?.version !== 1 || record.state.flowcraftContext.awaitingNodeIds?.[0] !== "inspect") {
+  throw new Error("Rebuilt service did not replay the exact persisted instance");
+}
+persistence.close();
 '
 
 expected_t3="$(jq -er '.t3' "${repository}/deployment/supported-versions.json")"

@@ -10,6 +10,11 @@
       "default": "/var/lib/heddle",
       "description": "Absolute in-container path for Heddle's bind-mounted persistent state."
     },
+    "boardPath": {
+      "type": "string",
+      "default": "/workspaces/kanban",
+      "description": "Absolute in-container path to the workspace kanban-md board."
+    },
     "port": {
       "type": "string",
       "default": "3774",

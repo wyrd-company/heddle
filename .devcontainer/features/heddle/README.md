@@ -10,12 +10,13 @@ set, add the Wyrd Company Caddy Feature to the same devcontainer.
 
 ## Options
 
-| Option        | Type   | Default           | Description                                                         |
-| ------------- | ------ | ----------------- | ------------------------------------------------------------------- |
-| `statePath`   | string | `/var/lib/heddle` | Absolute in-container path for the persistent state bind mount.     |
-| `port`        | string | `3774`            | Loopback port served by Heddle.                                     |
-| `dnsName`     | string | `""`              | Optional fully qualified workspace DNS name served through Caddy.   |
-| `serviceUser` | string | `automatic`       | User that runs Heddle; automatic selection prefers the remote user. |
+| Option        | Type   | Default              | Description                                                         |
+| ------------- | ------ | -------------------- | ------------------------------------------------------------------- |
+| `statePath`   | string | `/var/lib/heddle`    | Absolute in-container path for the persistent state bind mount.     |
+| `boardPath`   | string | `/workspaces/kanban` | Absolute in-container path to the workspace kanban-md board.        |
+| `port`        | string | `3774`               | Loopback port served by Heddle.                                     |
+| `dnsName`     | string | `""`                 | Optional fully qualified workspace DNS name served through Caddy.   |
+| `serviceUser` | string | `automatic`          | User that runs Heddle; automatic selection prefers the remote user. |
 
 ## Workspace-specific persistence
 
@@ -29,6 +30,7 @@ SQLite event history:
     "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
     "ghcr.io/boblangley/heddle:1": {
       "statePath": "/var/lib/heddle",
+      "boardPath": "/workspaces/kanban",
       "port": "3774",
       "dnsName": "heddle.workspace.example.test"
     }
@@ -45,6 +47,10 @@ SQLite event history:
 
 The service refuses to start when `statePath` is not a mount point. One Heddle
 service and one state source belong to one workspace.
+
+`boardPath` names the board already mounted for that workspace. The deployed
+console reads that board and keeps its scope and epic lever on the accepted
+kanban-md adapter boundary.
 
 ## T3 compatibility qualification
 

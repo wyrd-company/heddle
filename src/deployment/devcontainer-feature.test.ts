@@ -20,6 +20,7 @@ describe("Heddle devcontainer feature", () => {
     };
 
     expect(manifest.options).toMatchObject({
+      boardPath: { default: "/workspaces/kanban" },
       dnsName: { default: "" },
       port: { default: "3774" },
       statePath: { default: "/var/lib/heddle" },
@@ -40,6 +41,7 @@ describe("Heddle devcontainer feature", () => {
     expect(installer).toContain('packages=("$(dirname "$0")"/heddle-*.tgz)');
     expect(installer).toContain("--allow-scripts=better-sqlite3");
     expect(installer).toContain('mountpoint -q "\\${state_path}"');
+    expect(installer).toContain("export HEDDLE_BOARD_PATH=${quoted_board}");
     expect(installer).toContain(
       "touch /etc/s6-overlay/user-bundles.d/user/contents.d/heddle",
     );

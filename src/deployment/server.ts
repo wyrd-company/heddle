@@ -10,6 +10,15 @@ import {
   type ServerResponse,
 } from "node:http";
 
+import { KanbanBoardAdapter } from "../board-adapter/index.js";
+import {
+  createConsoleServer,
+  type ConsoleAttention,
+  type ConsoleBoard,
+  type ConsoleEvent,
+  type ConsoleInstance,
+  type ConsoleStateSource,
+} from "../console/index.js";
 import {
   createWorkflowMcpHttpHandler,
   type WorkflowMcpHttpHandler,
@@ -23,17 +32,64 @@ export type HeddleDeploymentServer = {
   readonly port: number;
 };
 
-const html = (instanceCount: number): string => `<!doctype html>
-<html lang="en">
-  <head><meta charset="utf-8"><title>Heddle</title></head>
-  <body>
-    <main>
-      <h1>Heddle</h1>
-      <p data-instance-count="${instanceCount}">${instanceCount} persisted instance${instanceCount === 1 ? "" : "s"} loaded.</p>
-      <p><a href="/api/instances">View instance state</a></p>
-    </main>
-  </body>
-</html>`;
+export interface HeddleDeploymentComposition {
+  board?: ConsoleBoard;
+  consoleState?: ConsoleStateSource;
+}
+
+const taskInstance = /^task-([1-9][0-9]*)$/;
+
+class PersistenceConsoleStateSource implements ConsoleStateSource {
+  public constructor(private readonly persistence: SqlitePersistence) {}
+
+  public async listAttention(): Promise<ConsoleAttention[]> {
+    // Durable attention is supplied by the production composition. Event
+    // payloads are not a second attention authority.
+    return [];
+  }
+
+  public async listEvents(input: {
+    afterSequence: number;
+    instanceId?: string;
+  }): Promise<ConsoleEvent[]> {
+    const records = this.persistence
+      .listInstances()
+      .filter(
+        ({ instanceId }) =>
+          input.instanceId === undefined || instanceId === input.instanceId,
+      );
+    return records
+      .flatMap(({ instanceId }) =>
+        this.persistence.replayEvents(instanceId, input.afterSequence),
+      )
+      .sort((left, right) => left.sequence - right.sequence);
+  }
+
+  public async listInstances(): Promise<ConsoleInstance[]> {
+    return this.persistence.listInstances().flatMap((record) => {
+      const match = taskInstance.exec(record.instanceId);
+      if (match === null) return [];
+      const taskId = Number(match[1]);
+      if (!Number.isSafeInteger(taskId)) return [];
+      const context = record.state.flowcraftContext;
+      const stageId =
+        typeof context === "object" &&
+        context !== null &&
+        !Array.isArray(context) &&
+        Array.isArray(context["awaitingNodeIds"]) &&
+        typeof context["awaitingNodeIds"][0] === "string"
+          ? context["awaitingNodeIds"][0]
+          : undefined;
+      return [
+        {
+          instanceId: record.instanceId,
+          taskId,
+          ...(stageId === undefined ? {} : { stageId }),
+        },
+      ];
+    });
+  }
+}
 
 const readBody = async (request: IncomingMessage): Promise<Uint8Array> => {
   const chunks: Uint8Array[] = [];
@@ -87,6 +143,15 @@ const requiredStateDirectory = (environment: DeploymentEnvironment): string => {
   return stateDirectory;
 };
 
+const requiredBoardDirectory = (environment: DeploymentEnvironment): string => {
+  const boardDirectory =
+    environment["HEDDLE_BOARD_PATH"]?.trim() || "/workspaces/kanban";
+  if (!boardDirectory.startsWith("/")) {
+    throw new Error("HEDDLE_BOARD_PATH must be an absolute path");
+  }
+  return boardDirectory;
+};
+
 const configuredPort = (environment: DeploymentEnvironment): number => {
   const value = environment["HEDDLE_PORT"] ?? "3774";
   if (!/^\d+$/.test(value)) throw new Error("HEDDLE_PORT must be an integer");
@@ -99,8 +164,12 @@ const configuredPort = (environment: DeploymentEnvironment): number => {
 
 export const startHeddleServerFromEnvironment = async (
   environment: DeploymentEnvironment,
+  composition: HeddleDeploymentComposition = {},
 ): Promise<HeddleDeploymentServer> => {
   const port = configuredPort(environment);
+  const board =
+    composition.board ??
+    new KanbanBoardAdapter(requiredBoardDirectory(environment));
   const persistence = new SqlitePersistence({
     stateDirectory: requiredStateDirectory(environment),
   });
@@ -113,22 +182,16 @@ export const startHeddleServerFromEnvironment = async (
     },
     persistence,
   });
+  const consoleServer = createConsoleServer({
+    board,
+    state:
+      composition.consoleState ??
+      new PersistenceConsoleStateSource(persistence),
+  });
   const host = environment["HEDDLE_HOST"]?.trim() || "127.0.0.1";
   const server = createServer(async (request, response) => {
     try {
       const url = new globalThis.URL(request.url ?? "/", `http://${host}`);
-      if (url.pathname === "/") {
-        response.setHeader("content-type", "text/html; charset=utf-8");
-        response.end(html(persistence.listInstances().length));
-        return;
-      }
-      if (url.pathname === "/api/instances") {
-        response.setHeader("content-type", "application/json");
-        response.end(
-          JSON.stringify({ instances: persistence.listInstances() }),
-        );
-        return;
-      }
       if (url.pathname === "/mcp") {
         await writeWebResponse(
           await mcp.fetch(
@@ -141,8 +204,7 @@ export const startHeddleServerFromEnvironment = async (
         );
         return;
       }
-      response.statusCode = 404;
-      response.end("Not found");
+      consoleServer.emit("request", request, response);
     } catch (error) {
       response.statusCode = 500;
       response.setHeader("content-type", "application/json");
@@ -153,10 +215,16 @@ export const startHeddleServerFromEnvironment = async (
       );
     }
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, host, resolve);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, host, resolve);
+    });
+  } catch (error) {
+    await mcp.close();
+    persistence.close();
+    throw error;
+  }
   const address = server.address();
   if (address === null || typeof address === "string") {
     throw new Error("Heddle server did not bind a TCP port");
