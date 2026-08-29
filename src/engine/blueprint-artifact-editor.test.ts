@@ -40,6 +40,7 @@ const artifact = {
   nodes: [
     { id: "prepare", uses: "prepare" },
     {
+      handoff: "standard",
       id: "inspect",
       uses: "wait",
       tools: ["advance"],
