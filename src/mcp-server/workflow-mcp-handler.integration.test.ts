@@ -261,6 +261,27 @@ afterEach(async () => {
 });
 
 describe("workflow MCP HTTP server", () => {
+  it.each([
+    ["missing", undefined],
+    ["unknown", "Bearer token-unknown"],
+  ])("rejects a %s correlation token", async (_kind, authorization) => {
+    const fixture = await makeFixture();
+    const headers: Record<string, string> = {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    };
+    if (authorization !== undefined) headers["authorization"] = authorization;
+
+    const response = await globalThis.fetch(fixture.url, {
+      body: "{}",
+      headers,
+      method: "POST",
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe("Bearer");
+  });
+
   it("returns plain JSON for a stateless MCP POST", async () => {
     const fixture = await makeFixture();
     const response = await globalThis.fetch(fixture.url, {
