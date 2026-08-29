@@ -54,11 +54,20 @@ export class GitBlueprintStore {
       { cwd: this.repositoryRoot },
     );
     const blobHash = blobHashOutput.trim();
+    await execFileAsync(
+      "git",
+      ["update-ref", `refs/heddle/blueprints/${blobHash}`, blobHash],
+      { cwd: this.repositoryRoot },
+    );
     return {
       blobHash,
       blueprint: await this.read(blobHash),
       path: relative(this.repositoryRoot, repositoryPath),
     };
+  }
+
+  normalize(path: string): string {
+    return relative(this.repositoryRoot, this.resolveRepositoryPath(path));
   }
 
   async read(blobHash: string): Promise<LifecycleBlueprint> {

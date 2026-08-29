@@ -13,6 +13,7 @@ import {
 import { BlueprintValidationError } from "./errors.js";
 import type {
   ExpectedLanding,
+  ExpectedLandings,
   LifecycleBlueprint,
   LifecycleEdge,
   LifecycleEffect,
@@ -143,17 +144,33 @@ export const edgeForDisposition = (
 export const expectedLanding = (
   blueprint: LifecycleBlueprint,
   entryNodeIds: string[],
-): ExpectedLanding => {
+): ExpectedLandings => {
   const nodesById = new Map(blueprint.nodes.map((node) => [node.id, node]));
-  const awaitingNodeIds = new Set<string>();
-  const terminalNodeIds = new Set<string>();
-  const visited = new Set<string>();
-  const queue = [...entryNodeIds];
-
-  while (queue.length > 0) {
-    const nodeId = queue.shift();
-    if (nodeId === undefined || visited.has(nodeId)) continue;
-    visited.add(nodeId);
+  const merge = (
+    left: ExpectedLanding,
+    right: ExpectedLanding,
+  ): ExpectedLanding => ({
+    awaitingNodeIds: [
+      ...new Set([...left.awaitingNodeIds, ...right.awaitingNodeIds]),
+    ].sort(),
+    terminalNodeIds: [
+      ...new Set([...left.terminalNodeIds, ...right.terminalNodeIds]),
+    ].sort(),
+  });
+  const combine = (groups: ExpectedLandings[]): ExpectedLandings =>
+    groups.reduce<ExpectedLandings>(
+      (combinations, alternatives) =>
+        combinations.flatMap((combination) =>
+          alternatives.map((alternative) => merge(combination, alternative)),
+        ),
+      [{ awaitingNodeIds: [], terminalNodeIds: [] }],
+    );
+  const visit = (nodeId: string, active: Set<string>): ExpectedLandings => {
+    if (active.has(nodeId)) {
+      throw new BlueprintValidationError(
+        `Route through ${JSON.stringify(nodeId)} cycles without reaching a landing`,
+      );
+    }
     const node = nodesById.get(nodeId);
     if (node === undefined) {
       throw new BlueprintValidationError(
@@ -161,32 +178,55 @@ export const expectedLanding = (
       );
     }
     if (node.uses === "wait") {
-      awaitingNodeIds.add(nodeId);
-      continue;
+      return [{ awaitingNodeIds: [nodeId], terminalNodeIds: [] }];
     }
     const edges = outgoingEdges(blueprint, nodeId);
     if (edges.length === 0) {
-      terminalNodeIds.add(nodeId);
-      continue;
+      return [{ awaitingNodeIds: [], terminalNodeIds: [nodeId] }];
     }
-    queue.push(...edges.map(({ target }) => target));
-  }
+    const nextActive = new Set(active).add(nodeId);
+    const groups = edges.map(({ target }) => visit(target, nextActive));
+    const conditionalCount = edges.filter(
+      ({ condition }) => condition !== undefined,
+    ).length;
+    if (conditionalCount > 0 && conditionalCount !== edges.length) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(nodeId)} mixes conditional and unconditional edges`,
+      );
+    }
+    return conditionalCount === edges.length ? groups.flat() : combine(groups);
+  };
 
-  if (awaitingNodeIds.size === 0 && terminalNodeIds.size === 0) {
+  const alternatives = combine(
+    entryNodeIds.map((nodeId) => visit(nodeId, new Set())),
+  ).filter(
+    ({ awaitingNodeIds, terminalNodeIds }) =>
+      awaitingNodeIds.length > 0 || terminalNodeIds.length > 0,
+  );
+  if (alternatives.length === 0) {
     throw new BlueprintValidationError(
       `Route from ${entryNodeIds.map((id) => JSON.stringify(id)).join(", ")} has no wait or terminal landing`,
     );
   }
-  if (awaitingNodeIds.size > 0 && terminalNodeIds.size > 0) {
-    throw new BlueprintValidationError(
-      `Route from ${entryNodeIds.map((id) => JSON.stringify(id)).join(", ")} mixes wait and terminal landings`,
-    );
+  for (const alternative of alternatives) {
+    if (
+      alternative.awaitingNodeIds.length > 0 &&
+      alternative.terminalNodeIds.length > 0
+    ) {
+      throw new BlueprintValidationError(
+        `Route from ${entryNodeIds.map((id) => JSON.stringify(id)).join(", ")} mixes wait and terminal landings`,
+      );
+    }
   }
-  return {
-    awaitingNodeIds: [...awaitingNodeIds].sort(),
-    terminalNodeIds: [...terminalNodeIds].sort(),
-  };
+  return [
+    ...new Map(
+      alternatives.map((alternative) => [
+        JSON.stringify(alternative),
+        alternative,
+      ]),
+    ).values(),
+  ];
 };
 
-export const startLanding = (blueprint: LifecycleBlueprint): ExpectedLanding =>
+export const startLanding = (blueprint: LifecycleBlueprint): ExpectedLandings =>
   expectedLanding(blueprint, analyzeBlueprint(blueprint).startNodeIds);

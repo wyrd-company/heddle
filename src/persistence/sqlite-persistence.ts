@@ -143,6 +143,30 @@ export class SqlitePersistence {
     })();
   }
 
+  compareAndSwapInstance(
+    instanceId: string,
+    expectedVersion: number,
+    state: InstanceState,
+  ): InstanceRecord | undefined {
+    const stateJson = serialize(state);
+
+    return this.database.transaction(() => {
+      const result = this.database
+        .prepare(
+          `UPDATE heddle_instances
+           SET state_json = ?, version = ?
+           WHERE instance_id = ? AND version = ?`,
+        )
+        .run(stateJson, expectedVersion + 1, instanceId, expectedVersion);
+      if (result.changes === 0) {
+        this.getRequiredInstance(instanceId);
+        return undefined;
+      }
+      this.insertEvent(instanceId, updatedEvent, stateJson);
+      return this.getRequiredInstance(instanceId);
+    })();
+  }
+
   deleteInstance(instanceId: string): void {
     this.database.transaction(() => {
       this.getRequiredInstance(instanceId);

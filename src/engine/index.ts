@@ -6,12 +6,14 @@
 export {
   BlueprintValidationError,
   InvalidDispositionError,
+  TransitionConflictError,
   UnexpectedLandingError,
 } from "./errors.js";
 export { GitBlueprintStore } from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
 export type {
   ExpectedLanding,
+  ExpectedLandings,
   LifecycleBlueprint,
   LifecycleContextRecord,
   LifecycleEdge,

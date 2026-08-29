@@ -47,6 +47,11 @@ export interface LifecyclePersistence {
     type: string,
     payload: JsonValue,
   ): PersistedEvent;
+  compareAndSwapInstance(
+    instanceId: string,
+    expectedVersion: number,
+    state: InstanceState,
+  ): InstanceRecord | undefined;
   createInstance(instanceId: string, state: InstanceState): InstanceRecord;
   getInstance(instanceId: string): InstanceRecord | undefined;
   updateInstance(instanceId: string, state: InstanceState): InstanceRecord;
@@ -87,6 +92,8 @@ export interface ExpectedLanding {
   awaitingNodeIds: string[];
   terminalNodeIds: string[];
 }
+
+export type ExpectedLandings = ExpectedLanding[];
 
 export interface PendingTransition {
   disposition: string | null;

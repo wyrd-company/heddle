@@ -3,7 +3,7 @@
 //   implements: heddle
 // ---
 
-import type { ExpectedLanding } from "./types.js";
+import type { ExpectedLandings } from "./types.js";
 
 export class BlueprintValidationError extends Error {
   constructor(message: string) {
@@ -27,12 +27,21 @@ export class InvalidDispositionError extends Error {
 export class UnexpectedLandingError extends Error {
   constructor(
     public readonly instanceId: string,
-    public readonly expected: ExpectedLanding,
+    public readonly expected: ExpectedLandings,
     public readonly actualStatus: string,
   ) {
     super(
       `Instance ${JSON.stringify(instanceId)} landed in ${actualStatus}; expected ${JSON.stringify(expected)}`,
     );
     this.name = "UnexpectedLandingError";
+  }
+}
+
+export class TransitionConflictError extends Error {
+  constructor(public readonly instanceId: string) {
+    super(
+      `Instance ${JSON.stringify(instanceId)} transition is already claimed`,
+    );
+    this.name = "TransitionConflictError";
   }
 }

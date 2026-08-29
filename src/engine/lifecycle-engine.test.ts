@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,6 +17,7 @@ import {
   BlueprintValidationError,
   InvalidDispositionError,
   LifecycleEngine,
+  TransitionConflictError,
   UnexpectedLandingError,
   type LifecycleBlueprint,
   type LifecycleEffect,
@@ -185,6 +187,9 @@ describe("LifecycleEngine", () => {
       ["hash-object", fixture.blueprintPath],
       { cwd: fixture.repositoryRoot },
     );
+    await execFileAsync("git", ["prune", "--expire", "now"], {
+      cwd: fixture.repositoryRoot,
+    });
 
     const completed = await fixture.engine.resume({
       disposition: "accept",
@@ -197,6 +202,133 @@ describe("LifecycleEngine", () => {
       "mix",
       "serve",
     ]);
+    fixture.persistence.close();
+  });
+
+  it("retries a pending start with the same normalized blueprint path", async () => {
+    let attempts = 0;
+    const fixture = await makeFixture(sampleBlueprint(), {
+      mix: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("interrupted");
+        return { effect: "mix" };
+      },
+      season: async () => ({ effect: "season" }),
+      serve: async () => ({ effect: "serve" }),
+    });
+    const blueprintPath = `./${fixture.blueprintPath}`;
+
+    await expect(
+      fixture.engine.start({ blueprintPath, instanceId: "sample-a" }),
+    ).rejects.toThrow(UnexpectedLandingError);
+    const recovered = await fixture.engine.start({
+      blueprintPath,
+      instanceId: "sample-a",
+    });
+
+    expect(recovered).toMatchObject({
+      awaitingNodeIds: ["taste"],
+      blueprintPath: fixture.blueprintPath,
+      status: "awaiting",
+    });
+    expect(attempts).toBe(2);
+    fixture.persistence.close();
+  });
+
+  it("allows only one concurrent disposition to claim a transition", async () => {
+    const applied: string[] = [];
+    const record =
+      (effect: string): LifecycleEffect =>
+      async () => {
+        applied.push(effect);
+        await delay(10);
+        return { effect };
+      };
+    const fixture = await makeFixture(sampleBlueprint(), {
+      mix: record("mix"),
+      season: record("season"),
+      serve: record("serve"),
+    });
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+
+    const results = await Promise.allSettled([
+      fixture.engine.resume({
+        disposition: "adjust",
+        instanceId: "sample-a",
+      }),
+      fixture.engine.resume({
+        disposition: "accept",
+        instanceId: "sample-a",
+      }),
+    ]);
+
+    expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      1,
+    );
+    const rejected = results.find(({ status }) => status === "rejected");
+    expect(rejected).toMatchObject({
+      reason: expect.any(TransitionConflictError),
+      status: "rejected",
+    });
+    expect(applied.slice(1)).toHaveLength(1);
+    fixture.persistence.close();
+  });
+
+  it("accepts the selected terminal from mutually exclusive conditions", async () => {
+    const blueprint = sampleBlueprint();
+    const acceptEdge = blueprint.edges.find(
+      ({ disposition }) => disposition === "accept",
+    );
+    if (acceptEdge === undefined) throw new Error("accept edge is missing");
+    acceptEdge.target = "choose";
+    blueprint.nodes = blueprint.nodes.filter(({ id }) => id !== "serve");
+    blueprint.nodes.push(
+      { id: "choose", uses: "choose" },
+      { id: "left", uses: "left" },
+      { id: "right", uses: "right" },
+    );
+    blueprint.edges.push(
+      {
+        source: "choose",
+        target: "left",
+        condition: "result.output.left",
+      },
+      {
+        source: "choose",
+        target: "right",
+        condition: "result.output.right",
+      },
+    );
+    const applied: string[] = [];
+    const record =
+      (effect: string, output: Record<string, boolean> = {}): LifecycleEffect =>
+      async () => {
+        applied.push(effect);
+        return { effect, ...output };
+      };
+    const fixture = await makeFixture(blueprint, {
+      choose: record("choose", { left: true, right: false }),
+      left: record("left"),
+      mix: record("mix"),
+      right: record("right"),
+      season: record("season"),
+      serve: record("serve"),
+    });
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+
+    const completed = await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "sample-a",
+    });
+
+    expect(completed.status).toBe("completed");
+    expect(applied).toEqual(["mix", "choose", "left"]);
     fixture.persistence.close();
   });
 

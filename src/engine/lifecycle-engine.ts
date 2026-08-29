@@ -17,7 +17,11 @@ import {
   startLanding,
   validateBlueprint,
 } from "./blueprint.js";
-import { InvalidDispositionError, UnexpectedLandingError } from "./errors.js";
+import {
+  InvalidDispositionError,
+  TransitionConflictError,
+  UnexpectedLandingError,
+} from "./errors.js";
 import {
   awaitingNodeIdsFrom,
   createLifecycleRuntime,
@@ -27,7 +31,7 @@ import {
 } from "./flowcraft-runtime.js";
 import { GitBlueprintStore } from "./git-blueprint-store.js";
 import type {
-  ExpectedLanding,
+  ExpectedLandings,
   LifecycleBlueprint,
   LifecycleContextRecord,
   LifecycleEffect,
@@ -103,7 +107,8 @@ export class LifecycleEngine {
       const context = readLifecycleContext(existing);
       if (
         context.pendingTransition?.kind !== "start" ||
-        context.blueprintPath !== input.blueprintPath
+        context.blueprintPath !==
+          this.blueprintStore.normalize(input.blueprintPath)
       ) {
         throw new Error(`Instance already exists: ${input.instanceId}`);
       }
@@ -179,9 +184,7 @@ export class LifecycleEngine {
         context.pendingTransition.kind !== "resume" ||
         context.pendingTransition.disposition !== input.disposition
       ) {
-        throw new Error(
-          `Instance ${JSON.stringify(input.instanceId)} has a different pending transition`,
-        );
+        throw new TransitionConflictError(input.instanceId);
       }
     } else {
       const pendingTransition: PendingTransition = {
@@ -196,10 +199,15 @@ export class LifecycleEngine {
         nextTransitionNumber: context.nextTransitionNumber + 1,
         pendingTransition,
       };
-      record = this.persistence.updateInstance(
+      const claimed = this.persistence.compareAndSwapInstance(
         input.instanceId,
+        record.version,
         writeLifecycleContext(record.state, context),
       );
+      if (claimed === undefined) {
+        throw new TransitionConflictError(input.instanceId);
+      }
+      record = claimed;
     }
 
     return this.execute(
@@ -212,7 +220,7 @@ export class LifecycleEngine {
   private async execute(
     record: InstanceRecord,
     blueprint: LifecycleBlueprint,
-    expected: ExpectedLanding,
+    expected: ExpectedLandings,
   ): Promise<LifecycleSnapshot> {
     const lifecycleContext = readLifecycleContext(record);
     const pending = lifecycleContext.pendingTransition;
@@ -275,8 +283,16 @@ export class LifecycleEngine {
       this.persistence.appendEvent(record.instanceId, attentionEvent, {
         actualAwaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
         actualStatus: result.status,
-        expectedAwaitingNodeIds: expected.awaitingNodeIds,
-        expectedTerminalNodeIds: expected.terminalNodeIds,
+        expectedAwaitingNodeIds: [
+          ...new Set(
+            expected.flatMap(({ awaitingNodeIds }) => awaitingNodeIds),
+          ),
+        ].sort(),
+        expectedTerminalNodeIds: [
+          ...new Set(
+            expected.flatMap(({ terminalNodeIds }) => terminalNodeIds),
+          ),
+        ].sort(),
         transitionId: pending.id,
       });
       throw new UnexpectedLandingError(

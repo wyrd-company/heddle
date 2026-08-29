@@ -16,7 +16,7 @@ import type { FlowcraftHistory } from "../persistence/index.js";
 import { internalNodeIdParameter } from "./blueprint.js";
 import { BlueprintValidationError } from "./errors.js";
 import type {
-  ExpectedLanding,
+  ExpectedLandings,
   LifecycleBlueprint,
   LifecycleEffect,
   PendingTransition,
@@ -58,21 +58,28 @@ export const prepareRuntimeBlueprint = (
 
 export const landedAsExpected = (
   result: WorkflowResult,
-  expected: ExpectedLanding,
+  expected: ExpectedLandings,
 ): boolean => {
-  if (expected.awaitingNodeIds.length > 0) {
-    return (
-      result.status === "awaiting" &&
-      JSON.stringify(awaitingNodeIdsFrom(result.serializedContext)) ===
-        JSON.stringify(expected.awaitingNodeIds)
+  if (result.status === "awaiting") {
+    const actual = awaitingNodeIdsFrom(result.serializedContext);
+    return expected.some(
+      ({ awaitingNodeIds, terminalNodeIds }) =>
+        terminalNodeIds.length === 0 &&
+        JSON.stringify(actual) === JSON.stringify(awaitingNodeIds),
     );
   }
+  if (result.status !== "completed") return false;
   const context = runtimeContext(result.serializedContext);
-  return (
-    result.status === "completed" &&
-    expected.terminalNodeIds.every((nodeId) =>
-      Object.hasOwn(context, `_outputs.${nodeId}`),
-    )
+  const possibleTerminalNodeIds = [
+    ...new Set(expected.flatMap(({ terminalNodeIds }) => terminalNodeIds)),
+  ].sort();
+  const actualTerminalNodeIds = possibleTerminalNodeIds.filter((nodeId) =>
+    Object.hasOwn(context, `_outputs.${nodeId}`),
+  );
+  return expected.some(
+    ({ awaitingNodeIds, terminalNodeIds }) =>
+      awaitingNodeIds.length === 0 &&
+      JSON.stringify(actualTerminalNodeIds) === JSON.stringify(terminalNodeIds),
   );
 };
 
