@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   BlueprintValidationError,
+  RebaseInstanceNotAwaitingError,
   RebaseTargetNotAwaitableError,
   RebaseTargetNotFoundError,
   TransitionConflictError,
@@ -172,6 +173,79 @@ describe("LifecycleEngine rebase", () => {
         awaitingNodeIds: ["taste"],
       },
     });
+    fixture.persistence.close();
+  });
+
+  it("rejects rebase while a lifecycle transition is active", async () => {
+    let markEffectStarted: (() => void) | undefined;
+    const effectStarted = new Promise<void>((resolve) => {
+      markEffectStarted = resolve;
+    });
+    let releaseEffect: (() => void) | undefined;
+    const effectMayFinish = new Promise<void>((resolve) => {
+      releaseEffect = resolve;
+    });
+    const fixture = await makeFixture(sampleBlueprint(), {
+      mix: async () => ({ effect: "mix" }),
+      season: async () => {
+        markEffectStarted?.();
+        await effectMayFinish;
+        return { effect: "season" };
+      },
+      serve: async () => ({ effect: "serve" }),
+    });
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    const active = fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "sample-a",
+      operationId: "operation-active",
+    });
+    await effectStarted;
+    const before = fixture.persistence.getInstance("sample-a");
+
+    try {
+      await expect(
+        fixture.engine.rebase({
+          instanceId: "sample-a",
+          targetState: "taste",
+        }),
+      ).rejects.toEqual(new TransitionConflictError("sample-a"));
+      expect(fixture.persistence.getInstance("sample-a")).toEqual(before);
+    } finally {
+      releaseEffect?.();
+      await active;
+    }
+    fixture.persistence.close();
+  });
+
+  it("rejects rebase after a lifecycle instance is completed", async () => {
+    const fixture = await makeFixture();
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "sample-a",
+      operationId: "operation-complete",
+    });
+    const before = fixture.persistence.getInstance("sample-a");
+    const invocations = [...fixture.invocations];
+
+    await expect(
+      fixture.engine.rebase({
+        instanceId: "sample-a",
+        targetState: "taste",
+      }),
+    ).rejects.toEqual(
+      new RebaseInstanceNotAwaitingError("sample-a", "completed"),
+    );
+
+    expect(fixture.persistence.getInstance("sample-a")).toEqual(before);
+    expect(fixture.invocations).toEqual(invocations);
     fixture.persistence.close();
   });
 

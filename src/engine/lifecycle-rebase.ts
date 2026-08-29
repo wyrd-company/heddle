@@ -9,6 +9,7 @@ import type { InstanceRecord } from "../persistence/index.js";
 import { validateBlueprint } from "./blueprint.js";
 import {
   BlueprintValidationError,
+  RebaseInstanceNotAwaitingError,
   RebaseTargetNotAwaitableError,
   RebaseTargetNotFoundError,
   TransitionConflictError,
@@ -86,6 +87,12 @@ export const rebaseLifecycle = async (
   const context = readLifecycleContext(record);
   if (context.serializedContext === null) {
     throw new TransitionConflictError(input.instanceId);
+  }
+  if (context.pendingTransition !== null) {
+    throw new TransitionConflictError(input.instanceId);
+  }
+  if (context.status !== "awaiting") {
+    throw new RebaseInstanceNotAwaitingError(input.instanceId, context.status);
   }
   const previousBlueprint = await blueprintStore.read(
     context.blueprintBlobHash,

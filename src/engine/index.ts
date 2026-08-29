@@ -6,6 +6,7 @@
 export {
   BlueprintValidationError,
   InvalidDispositionError,
+  RebaseInstanceNotAwaitingError,
   RebaseTargetNotAwaitableError,
   RebaseTargetNotFoundError,
   TransitionConflictError,

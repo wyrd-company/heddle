@@ -69,3 +69,15 @@ export class RebaseTargetNotAwaitableError extends Error {
     this.name = "RebaseTargetNotAwaitableError";
   }
 }
+
+export class RebaseInstanceNotAwaitingError extends Error {
+  constructor(
+    public readonly instanceId: string,
+    public readonly status: string,
+  ) {
+    super(
+      `Instance ${JSON.stringify(instanceId)} cannot be rebased from lifecycle status ${JSON.stringify(status)}`,
+    );
+    this.name = "RebaseInstanceNotAwaitingError";
+  }
+}
