@@ -231,9 +231,8 @@ describe("SqlitePersistence", () => {
   });
 
   it("provides the Flowcraft SQLite history adapter on the configured database", async () => {
-    const persistence = new SqlitePersistence({
-      stateDirectory: await makeStateDirectory(),
-    });
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
 
     await persistence.flowcraftHistory.store(
       {
@@ -250,5 +249,11 @@ describe("SqlitePersistence", () => {
       },
     ]);
     persistence.close();
+
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    expect(
+      database.prepare("SELECT COUNT(*) AS count FROM events").get(),
+    ).toEqual({ count: 1 });
+    database.close();
   });
 });
