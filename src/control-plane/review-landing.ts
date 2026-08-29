@@ -6,6 +6,13 @@
 import { lstat } from "node:fs/promises";
 
 import type { JsonValue } from "../persistence/index.js";
+import {
+  assertMechanicalBranchRefs,
+  mechanicalWorktreesForBranch,
+  runMechanicalRefTransaction,
+  synchronizeMechanicalBaseWorktree,
+  withMechanicalRefLease,
+} from "./mechanical-ref-transaction.js";
 import { ensureWorktree } from "./worktree-creator.js";
 import {
   assertCleanMechanicalWorktree,
@@ -73,7 +80,10 @@ export const mergeReviewSnapshot = async (
   if (snapshot.status !== "open") {
     throw new Error(`Snapshot ${snapshotId} is not open`);
   }
-  if (sourceHead !== snapshot.sourceHead || baseHead !== snapshot.baseHead) {
+  if (
+    sourceHead !== snapshot.sourceHead ||
+    (baseHead !== snapshot.baseHead && baseHead !== snapshot.sourceHead)
+  ) {
     return {
       alreadyMerged: false,
       dispositions: { merged: false, remediate: true },
@@ -91,7 +101,95 @@ export const mergeReviewSnapshot = async (
     throw new Error("Reviewed change contains a merge commit");
   }
 
-  await command(change.repositoryRoot, "gitpr", ["merge", snapshotId]);
+  await runMechanicalGit(command, change.repositoryRoot, [
+    "merge-base",
+    "--is-ancestor",
+    snapshot.baseHead,
+    snapshot.sourceHead,
+  ]);
+  await assertMechanicalBranchRefs(command, change.repositoryRoot, [
+    change.baseBranch,
+    change.branch,
+  ]);
+  const baseWorktrees = await mechanicalWorktreesForBranch(
+    command,
+    change.repositoryRoot,
+    change.baseBranch,
+  );
+  if (baseWorktrees.length > 1) {
+    throw new Error("Merge base branch is checked out in multiple worktrees");
+  }
+  const baseAlreadyIntegrated = baseHead === snapshot.sourceHead;
+  if (!baseAlreadyIntegrated) {
+    await Promise.all(
+      baseWorktrees.map((path) => assertCleanMechanicalWorktree(command, path)),
+    );
+    try {
+      await runMechanicalRefTransaction(command, change.repositoryRoot, [
+        `update refs/heads/${change.baseBranch} ${snapshot.sourceHead} ${snapshot.baseHead}`,
+        `verify refs/heads/${change.branch} ${snapshot.sourceHead}`,
+      ]);
+    } catch (error) {
+      const [currentSourceHead, currentBaseHead] = await Promise.all([
+        resolveMechanicalBranchHead(
+          command,
+          change.repositoryRoot,
+          change.branch,
+        ),
+        resolveMechanicalBranchHead(
+          command,
+          change.repositoryRoot,
+          change.baseBranch,
+        ),
+      ]);
+      if (
+        currentSourceHead !== snapshot.sourceHead ||
+        (currentBaseHead !== snapshot.baseHead &&
+          currentBaseHead !== snapshot.sourceHead)
+      ) {
+        return {
+          alreadyMerged: false,
+          dispositions: { merged: false, remediate: true },
+          merged: false,
+          snapshotId,
+        };
+      }
+      if (currentBaseHead !== snapshot.sourceHead) throw error;
+    }
+  }
+  await Promise.all(
+    baseWorktrees.map((path) =>
+      synchronizeMechanicalBaseWorktree(
+        command,
+        path,
+        snapshot.baseHead,
+        snapshot.sourceHead,
+      ),
+    ),
+  );
+  try {
+    await withMechanicalRefLease(
+      change.repositoryRoot,
+      `refs/heads/${change.baseBranch}`,
+      snapshot.sourceHead,
+      () => command(change.repositoryRoot, "gitpr", ["merge", snapshotId]),
+    );
+  } catch (error) {
+    const currentBaseHead = await resolveMechanicalBranchHead(
+      command,
+      change.repositoryRoot,
+      change.baseBranch,
+    );
+    if (currentBaseHead !== snapshot.sourceHead) {
+      return {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        snapshotId,
+      };
+    }
+    throw error;
+  }
   const approved = await readReviewSnapshot(
     change.repositoryRoot,
     snapshotId,
@@ -156,10 +254,6 @@ export const cleanupMergedChange = async (
     change.repositoryRoot,
     change.branch,
   );
-  if (branchHead !== undefined && branchHead !== snapshot.sourceHead) {
-    throw new Error("Merged branch moved after review");
-  }
-
   const path = mechanicalWorktreePath(change);
   const worktreeInput = {
     baseRef: change.baseBranch,
@@ -169,6 +263,19 @@ export const cleanupMergedChange = async (
     worktreeName: change.worktreeName,
     worktreesRoot: change.worktreesRoot,
   };
+  if (branchHead !== undefined && branchHead !== snapshot.sourceHead) {
+    if (!(await pathExists(path))) {
+      await ensureWorktree(worktreeInput, (cwd, arguments_) =>
+        runMechanicalGit(command, cwd, arguments_),
+      );
+    }
+    throw new Error("Merged branch moved after review");
+  }
+
+  await assertMechanicalBranchRefs(command, change.repositoryRoot, [
+    change.baseBranch,
+    change.branch,
+  ]);
   let worktreeRemoved = false;
   if (await pathExists(path)) {
     await ensureWorktree(worktreeInput, (cwd, arguments_) =>
@@ -187,11 +294,9 @@ export const cleanupMergedChange = async (
   let branchDeleted = false;
   if (branchHead !== undefined) {
     try {
-      await runMechanicalGit(command, change.repositoryRoot, [
-        "update-ref",
-        "-d",
-        `refs/heads/${change.branch}`,
-        branchHead,
+      await runMechanicalRefTransaction(command, change.repositoryRoot, [
+        `verify refs/heads/${change.baseBranch} ${baseHead}`,
+        `delete refs/heads/${change.branch} ${branchHead}`,
       ]);
     } catch (error) {
       const currentBranchHead = await resolveMechanicalBranchHead(

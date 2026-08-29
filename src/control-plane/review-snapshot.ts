@@ -34,15 +34,17 @@ export type CommandRunner = (
   cwd: string,
   command: string,
   arguments_: string[],
+  input?: string,
 ) => Promise<string>;
 
 export const defaultMechanicalCommand: CommandRunner = (
   cwd,
   command,
   arguments_,
+  input,
 ) =>
   new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       command,
       arguments_,
       { cwd, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
@@ -51,6 +53,7 @@ export const defaultMechanicalCommand: CommandRunner = (
         else resolve(stdout);
       },
     );
+    if (input !== undefined) child.stdin?.end(input);
   });
 
 export const mechanicalWorktreePath = (
@@ -75,7 +78,8 @@ export const runMechanicalGit = (
   command: CommandRunner,
   cwd: string,
   arguments_: string[],
-): Promise<string> => command(cwd, "git", arguments_);
+  input?: string,
+): Promise<string> => command(cwd, "git", arguments_, input);
 
 export const resolveMechanicalBranchHead = async (
   command: CommandRunner,
@@ -95,8 +99,9 @@ export const resolveMechanicalBranchHead = async (
         `refs/heads/${branch}^{commit}`,
       ])
     ).trim();
-  } catch {
-    return undefined;
+  } catch (error) {
+    if ((error as { code?: number | string }).code === 1) return undefined;
+    throw error;
   }
 };
 

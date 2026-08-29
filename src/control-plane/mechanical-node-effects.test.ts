@@ -35,6 +35,20 @@ import {
 const execute = promisify(execFile);
 const temporaryDirectories: string[] = [];
 
+const runCommand: CommandRunner = (cwd, executable, arguments_, input) =>
+  new Promise((resolve, reject) => {
+    const child = execFile(
+      executable,
+      arguments_,
+      { cwd, encoding: "utf8" },
+      (error, stdout) => {
+        if (error) reject(error);
+        else resolve(stdout);
+      },
+    );
+    if (input !== undefined) child.stdin?.end(input);
+  });
+
 const git = async (cwd: string, ...arguments_: string[]): Promise<string> =>
   (await execute("git", arguments_, { cwd })).stdout;
 
@@ -92,6 +106,11 @@ const prepareCommittedChange = async () => {
 const makeLifecycle = async (
   options: MechanicalNodeEffectOptions = {},
   taskId?: number,
+  beforeReviewSnapshot?: (fixture: {
+    change: MechanicalChangeContext;
+    sourcePath: string;
+    worktreePath: string;
+  }) => Promise<void>,
 ) => {
   const fixture = await makeChange();
   fixture.change.taskId = taskId;
@@ -120,6 +139,7 @@ const makeLifecycle = async (
   await writeFile(join(fixture.worktreePath, "inventory.txt"), "one\ntwo\n");
   await git(fixture.worktreePath, "add", "inventory.txt");
   await git(fixture.worktreePath, "commit", "--quiet", "-m", "add item");
+  await beforeReviewSnapshot?.(fixture);
   await engine.resume({
     disposition: "complete",
     instanceId: "sample-lifecycle",
@@ -176,6 +196,14 @@ describe("delivery mechanical nodes", () => {
     expect(await git(fixture.sourcePath, "rev-list", "--merges", "main")).toBe(
       "",
     );
+    expect(
+      await git(
+        fixture.sourcePath,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+      ),
+    ).toBe("");
 
     const firstCleanup = await cleanupMergedChange(
       fixture.change,
@@ -258,30 +286,143 @@ describe("delivery mechanical nodes", () => {
     );
   });
 
-  it("fails a conflicting merge and preserves both branch heads", async () => {
+  it("routes base movement at the atomic merge boundary to remediation", async () => {
     const fixture = await prepareCommittedChange();
+    const intermediateHead = (
+      await git(fixture.sourcePath, "rev-parse", "task/change")
+    ).trim();
+    await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");
+    await git(fixture.worktreePath, "add", "notes.txt");
+    await git(fixture.worktreePath, "commit", "--quiet", "-m", "add note");
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    let baseHead: string | undefined;
-    let conflicted = false;
-    const command: CommandRunner = async (cwd, executable, arguments_) => {
-      if (!conflicted && executable === "gitpr" && arguments_[0] === "merge") {
-        conflicted = true;
-        await writeFile(
-          join(fixture.sourcePath, "inventory.txt"),
-          "replacement\n",
-        );
-        await git(fixture.sourcePath, "add", "inventory.txt");
+    let moved = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (
+        !moved &&
+        executable === "git" &&
+        arguments_[0] === "update-ref" &&
+        arguments_[1] === "--stdin" &&
+        input?.includes("update refs/heads/main")
+      ) {
+        moved = true;
         await git(
           fixture.sourcePath,
-          "commit",
-          "--quiet",
-          "-m",
-          "replace item",
+          "update-ref",
+          "refs/heads/main",
+          intermediateHead,
+          snapshot.baseHead,
         );
-        baseHead = await git(fixture.sourcePath, "rev-parse", "main");
       }
-      return (await execute(executable, arguments_, { cwd })).stdout;
+      return runCommand(cwd, executable, arguments_, input);
     };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
+    ).resolves.toMatchObject({
+      dispositions: { merged: false, remediate: true },
+      merged: false,
+    });
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      intermediateHead + "\n",
+    );
+  });
+
+  it("resumes an interrupted atomic merge before approving the snapshot", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    let interrupted = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (
+        !interrupted &&
+        executable === "git" &&
+        arguments_[0] === "reset" &&
+        arguments_[1] === "--hard"
+      ) {
+        interrupted = true;
+        throw new Error("simulated merge interruption");
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
+    ).rejects.toThrow(/simulated merge interruption/);
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      snapshot.sourceHead + "\n",
+    );
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).resolves.toMatchObject({ merged: true });
+    expect(
+      await git(
+        fixture.sourcePath,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+      ),
+    ).toBe("");
+  });
+
+  it("holds the exact merged base while approving the snapshot", async () => {
+    const fixture = await prepareCommittedChange();
+    const intermediateHead = (
+      await git(fixture.sourcePath, "rev-parse", "task/change")
+    ).trim();
+    await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");
+    await git(fixture.worktreePath, "add", "notes.txt");
+    await git(fixture.worktreePath, "commit", "--quiet", "-m", "add note");
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    let attempted = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (!attempted && executable === "gitpr" && arguments_[0] === "merge") {
+        attempted = true;
+        await git(
+          fixture.sourcePath,
+          "update-ref",
+          "refs/heads/main",
+          intermediateHead,
+          snapshot.sourceHead,
+        );
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
+    ).rejects.toThrow();
+    expect(attempted).toBe(true);
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      snapshot.sourceHead + "\n",
+    );
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).resolves.toMatchObject({ merged: true });
+  });
+
+  it("fails a conflicting merge and preserves both branch heads", async () => {
+    const fixture = await prepareCommittedChange();
+    await writeFile(join(fixture.sourcePath, "inventory.txt"), "replacement\n");
+    await git(fixture.sourcePath, "add", "inventory.txt");
+    await git(fixture.sourcePath, "commit", "--quiet", "-m", "replace item");
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const baseHead = await git(fixture.sourcePath, "rev-parse", "main");
     const sourceHead = await git(
       fixture.sourcePath,
       "rev-parse",
@@ -289,9 +430,8 @@ describe("delivery mechanical nodes", () => {
     );
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
     ).rejects.toThrow();
-    expect(baseHead).toBeDefined();
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(baseHead);
     expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
       sourceHead,
@@ -378,7 +518,12 @@ describe("delivery mechanical nodes", () => {
     await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
     let movedHead: string | undefined;
     let moved = false;
-    const command: CommandRunner = async (cwd, executable, arguments_) => {
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
       if (
         !moved &&
         executable === "git" &&
@@ -408,7 +553,7 @@ describe("delivery mechanical nodes", () => {
           snapshot.sourceHead,
         );
       }
-      return (await execute(executable, arguments_, { cwd })).stdout;
+      return runCommand(cwd, executable, arguments_, input);
     };
 
     await expect(
@@ -419,6 +564,143 @@ describe("delivery mechanical nodes", () => {
     expect(
       await git(fixture.worktreePath, "symbolic-ref", "--short", "HEAD"),
     ).toBe("task/change\n");
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      movedHead + "\n",
+    );
+  });
+
+  it("restores resources when the base rewinds during cleanup", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    let rewound = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (
+        !rewound &&
+        executable === "git" &&
+        arguments_[0] === "worktree" &&
+        arguments_[1] === "remove"
+      ) {
+        rewound = true;
+        await git(
+          fixture.sourcePath,
+          "update-ref",
+          "refs/heads/main",
+          snapshot.baseHead,
+          snapshot.sourceHead,
+        );
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId, command),
+    ).rejects.toThrow();
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      snapshot.sourceHead + "\n",
+    );
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      snapshot.baseHead + "\n",
+    );
+  });
+
+  it("fails cleanup closed when branch resolution has a transient failure", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    let failed = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (
+        !failed &&
+        executable === "git" &&
+        arguments_.some((value) =>
+          value.includes("refs/heads/task/change^{commit}"),
+        )
+      ) {
+        failed = true;
+        throw new Error("transient branch lookup failure");
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId, command),
+    ).rejects.toThrow(/transient branch lookup failure/);
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      snapshot.sourceHead + "\n",
+    );
+  });
+
+  it("restores an absent worktree after interrupted cleanup and branch movement", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    let interrupted = false;
+    let movedHead: string | undefined;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (
+        !interrupted &&
+        executable === "git" &&
+        arguments_[0] === "worktree" &&
+        arguments_[1] === "remove"
+      ) {
+        interrupted = true;
+        await runCommand(cwd, executable, arguments_, input);
+        const tree = (
+          await git(fixture.sourcePath, "rev-parse", "task/change^{tree}")
+        ).trim();
+        movedHead = (
+          await git(
+            fixture.sourcePath,
+            "commit-tree",
+            tree,
+            "-p",
+            snapshot.sourceHead,
+            "-m",
+            "move branch",
+          )
+        ).trim();
+        await git(
+          fixture.sourcePath,
+          "update-ref",
+          "refs/heads/task/change",
+          movedHead,
+          snapshot.sourceHead,
+        );
+        throw new Error("simulated interruption");
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId, command),
+    ).rejects.toThrow(/simulated interruption/);
+    await expect(lstat(fixture.worktreePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/moved/);
+    expect(movedHead).toBeDefined();
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
     expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
       movedHead + "\n",
     );
@@ -554,17 +836,15 @@ describe("delivery mechanical nodes", () => {
   });
 
   it("moves a real merge conflict to attention without entering remediation", async () => {
-    let conflicted = false;
-    const command: CommandRunner = async (cwd, executable, arguments_) => {
-      if (!conflicted && executable === "gitpr" && arguments_[0] === "merge") {
-        conflicted = true;
-        await writeFile(join(cwd, "inventory.txt"), "replacement\n");
-        await git(cwd, "add", "inventory.txt");
-        await git(cwd, "commit", "--quiet", "-m", "replace item");
-      }
-      return (await execute(executable, arguments_, { cwd })).stdout;
-    };
-    const fixture = await makeLifecycle({ command });
+    const fixture = await makeLifecycle(
+      {},
+      undefined,
+      async ({ sourcePath }) => {
+        await writeFile(join(sourcePath, "inventory.txt"), "replacement\n");
+        await git(sourcePath, "add", "inventory.txt");
+        await git(sourcePath, "commit", "--quiet", "-m", "replace item");
+      },
+    );
 
     await expect(
       fixture.engine.resume({
