@@ -20,7 +20,7 @@ export const consolePage = `<!doctype html>
       <div class="masthead-state">
         <span class="live-mark" aria-hidden="true"></span>
         <span>LIVE BOARD</span>
-        <span class="attention-count" id="attention-count" aria-label="Attention items">0</span>
+        <span class="attention-count" id="attention-count" role="status" aria-label="Attention items">0</span>
       </div>
     </header>
     <section class="control-rail" aria-label="Board controls">
@@ -37,7 +37,7 @@ export const consolePage = `<!doctype html>
     </section>
     <main>
       <p id="console-status" class="console-status" aria-live="polite">Loading board…</p>
-      <div id="board" class="board" aria-label="Kanban board"></div>
+      <div id="board" class="board" role="region" aria-label="Kanban board"></div>
     </main>
     <script type="module" src="/assets/console.js"></script>
   </body>

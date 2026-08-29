@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { consoleStyles } from "./page.js";
+import { consolePage, consoleStyles } from "./page.js";
 
 const colorToken = (name: string): string => {
   const match = new RegExp(`--${name}:\\s*(#[0-9a-f]{6});`, "i").exec(
@@ -38,6 +38,15 @@ const contrastRatio = (first: string, second: string): number => {
 };
 
 describe("console page accessibility", () => {
+  it("uses nameable roles for the labelled attention and board nodes", () => {
+    expect(consolePage).toContain(
+      '<span class="attention-count" id="attention-count" role="status" aria-label="Attention items">0</span>',
+    );
+    expect(consolePage).toContain(
+      '<div id="board" class="board" role="region" aria-label="Kanban board"></div>',
+    );
+  });
+
   it("keeps every small signal and muted text pairing at WCAG AA contrast", () => {
     const paper = colorToken("paper");
     const paperRaised = colorToken("paper-raised");
