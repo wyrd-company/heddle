@@ -37,7 +37,7 @@ export const consolePage = `<!doctype html>
     </section>
     <main>
       <p id="console-status" class="console-status" aria-live="polite">Loading board…</p>
-      <div id="board" class="board" role="region" aria-label="Kanban board"></div>
+      <div id="board" class="board" role="region" aria-label="Kanban board" tabindex="0"></div>
     </main>
     <script type="module" src="/assets/console.js"></script>
   </body>
@@ -176,6 +176,8 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
   padding: 0 0 16px;
   scroll-snap-type: x proximity;
 }
+
+.board:focus-visible { outline: 2px solid var(--signal-focus); outline-offset: 2px; }
 
 .column {
   min-height: 430px;

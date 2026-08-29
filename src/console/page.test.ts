@@ -43,7 +43,10 @@ describe("console page accessibility", () => {
       '<span class="attention-count" id="attention-count" role="status" aria-label="Attention items">0</span>',
     );
     expect(consolePage).toContain(
-      '<div id="board" class="board" role="region" aria-label="Kanban board"></div>',
+      '<div id="board" class="board" role="region" aria-label="Kanban board" tabindex="0"></div>',
+    );
+    expect(consoleStyles).toMatch(
+      /\.board:focus-visible \{[^}]*outline: 2px solid var\(--signal-focus\);[^}]*\}/,
     );
   });
 
