@@ -88,6 +88,7 @@ export const rebaseLifecycle = async (
   }
   const previousBlueprint = await blueprintStore.read(
     context.blueprintBlobHash,
+    context.blueprintPath,
   );
   const pinned = await blueprintStore.pin(context.blueprintPath);
   validateBlueprint(pinned.blueprint, effects);

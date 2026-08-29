@@ -55,9 +55,11 @@ describe("LifecycleEngine rebase", () => {
       description: "Approve the sample",
       condition: "result.output.dispositions.approve",
     });
+    const artifact = { ...blueprint } as Partial<typeof blueprint>;
+    delete artifact.id;
     await writeFile(
       join(fixture.repositoryRoot, fixture.blueprintPath),
-      JSON.stringify(blueprint),
+      JSON.stringify(artifact),
     );
 
     const rebased = await fixture.engine.rebase({
