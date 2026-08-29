@@ -183,7 +183,7 @@ process.stdout.write("x".repeat(${outputSize}));
     const consumeSlowly = async (): Promise<void> => {
       for await (const chunk of child.stdout) {
         received += (chunk as Buffer).length;
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 2));
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
       }
     };
     const [code] = await Promise.all([
