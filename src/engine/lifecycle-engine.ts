@@ -5,11 +5,7 @@
 
 import type { WorkflowResult } from "flowcraft";
 
-import type {
-  InstanceRecord,
-  InstanceState,
-  JsonValue,
-} from "../persistence/index.js";
+import type { InstanceRecord } from "../persistence/index.js";
 import {
   dispositionsForNode,
   edgeForDisposition,
@@ -30,6 +26,12 @@ import {
   prepareRuntimeBlueprint,
 } from "./flowcraft-runtime.js";
 import { GitBlueprintStore } from "./git-blueprint-store.js";
+import {
+  initialInstanceState,
+  persistExecution,
+  readLifecycleContext,
+  writeLifecycleContext,
+} from "./lifecycle-state.js";
 import type {
   ExpectedLandings,
   LifecycleBlueprint,
@@ -43,52 +45,6 @@ import type {
 } from "./types.js";
 
 const attentionEvent = "lifecycle:attention-required";
-
-const asJsonValue = (value: unknown): JsonValue => value as JsonValue;
-
-const readLifecycleContext = (
-  record: InstanceRecord,
-): LifecycleContextRecord => {
-  const value = record.state.flowcraftContext;
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !("blueprintBlobHash" in value) ||
-    typeof value.blueprintBlobHash !== "string" ||
-    !("blueprintPath" in value) ||
-    typeof value.blueprintPath !== "string" ||
-    !("executionIds" in value) ||
-    !Array.isArray(value.executionIds) ||
-    !("awaitingNodeIds" in value) ||
-    !Array.isArray(value.awaitingNodeIds) ||
-    !("nextTransitionNumber" in value) ||
-    typeof value.nextTransitionNumber !== "number"
-  ) {
-    throw new Error(
-      `Instance ${JSON.stringify(record.instanceId)} does not contain lifecycle engine state`,
-    );
-  }
-  return value as unknown as LifecycleContextRecord;
-};
-
-const writeLifecycleContext = (
-  state: InstanceState,
-  context: LifecycleContextRecord,
-): InstanceState => ({
-  ...state,
-  flowcraftContext: asJsonValue(context),
-});
-
-const initialInstanceState = (
-  input: StartLifecycleInput,
-  context: LifecycleContextRecord,
-): InstanceState => ({
-  correlationTokens: input.state?.correlationTokens ?? {},
-  flowcraftContext: asJsonValue(context),
-  handoffs: input.state?.handoffs ?? [],
-  todoState: input.state?.todoState ?? null,
-});
 
 export class LifecycleEngine {
   private readonly blueprintStore: GitBlueprintStore;
@@ -264,21 +220,11 @@ export class LifecycleEngine {
 
     if (!landedAsExpected(result, expected)) {
       const executionId = executionIdFrom(result.serializedContext);
-      const executionIds =
-        executionId === undefined ||
-        lifecycleContext.executionIds.includes(executionId)
-          ? lifecycleContext.executionIds
-          : [...lifecycleContext.executionIds, executionId];
-      const current = this.persistence.getInstance(record.instanceId);
-      if (current === undefined) {
-        throw new Error(`Instance does not exist: ${record.instanceId}`);
-      }
-      this.persistence.updateInstance(
+      persistExecution(
+        this.persistence,
         record.instanceId,
-        writeLifecycleContext(current.state, {
-          ...lifecycleContext,
-          executionIds,
-        }),
+        pending.id,
+        executionId,
       );
       this.persistence.appendEvent(record.instanceId, attentionEvent, {
         actualAwaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
@@ -303,26 +249,16 @@ export class LifecycleEngine {
     }
 
     const executionId = executionIdFrom(result.serializedContext);
-    const executionIds =
-      executionId === undefined ||
-      lifecycleContext.executionIds.includes(executionId)
-        ? lifecycleContext.executionIds
-        : [...lifecycleContext.executionIds, executionId];
-    const nextContext: LifecycleContextRecord = {
-      ...lifecycleContext,
-      awaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
-      executionIds,
-      pendingTransition: null,
-      serializedContext: result.serializedContext,
-      status: result.status,
-    };
-    const current = this.persistence.getInstance(record.instanceId);
-    if (current === undefined) {
-      throw new Error(`Instance does not exist: ${record.instanceId}`);
-    }
-    this.persistence.updateInstance(
+    const nextContext = persistExecution(
+      this.persistence,
       record.instanceId,
-      writeLifecycleContext(current.state, nextContext),
+      pending.id,
+      executionId,
+      {
+        awaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
+        serializedContext: result.serializedContext,
+        status: result.status,
+      },
     );
     return this.snapshot(record.instanceId, nextContext, blueprint);
   }

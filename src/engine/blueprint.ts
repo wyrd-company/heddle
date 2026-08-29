@@ -165,6 +165,21 @@ export const expectedLanding = (
         ),
       [{ awaitingNodeIds: [], terminalNodeIds: [] }],
     );
+  const combineMatched = (groups: ExpectedLandings[]): ExpectedLandings =>
+    groups
+      .reduce<ExpectedLandings>(
+        (combinations, alternatives) => [
+          ...combinations,
+          ...combinations.flatMap((combination) =>
+            alternatives.map((alternative) => merge(combination, alternative)),
+          ),
+        ],
+        [{ awaitingNodeIds: [], terminalNodeIds: [] }],
+      )
+      .filter(
+        ({ awaitingNodeIds, terminalNodeIds }) =>
+          awaitingNodeIds.length > 0 || terminalNodeIds.length > 0,
+      );
   const visit = (nodeId: string, active: Set<string>): ExpectedLandings => {
     if (active.has(nodeId)) {
       throw new BlueprintValidationError(
@@ -194,7 +209,9 @@ export const expectedLanding = (
         `Node ${JSON.stringify(nodeId)} mixes conditional and unconditional edges`,
       );
     }
-    return conditionalCount === edges.length ? groups.flat() : combine(groups);
+    return conditionalCount === edges.length
+      ? combineMatched(groups)
+      : combine(groups);
   };
 
   const alternatives = combine(
