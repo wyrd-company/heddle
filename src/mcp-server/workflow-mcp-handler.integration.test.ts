@@ -46,6 +46,7 @@ const blueprint = (
   nodes: [
     { id: "prepare", uses: "prepare" },
     { id: "assess", uses: "wait", tools },
+    { id: "inspect", uses: "wait", tools: ["get_task_context"] },
     { id: "accepted", uses: "accepted" },
     { id: "revised", uses: "revised" },
   ],
@@ -63,6 +64,13 @@ const blueprint = (
       description: "Return the sample for another preparation",
       disposition: "revise",
       source: "assess",
+      target: "inspect",
+    },
+    {
+      condition: "result.output.dispositions.complete",
+      description: "Complete inspection of the revised sample",
+      disposition: "complete",
+      source: "inspect",
       target: "revised",
     },
   ],
@@ -298,7 +306,7 @@ describe("workflow MCP HTTP server", () => {
     const handoff = JSON.parse(stored["handoff"]) as {
       stage: { name: string };
     };
-    handoff.stage.name = "accepted";
+    handoff.stage.name = "inspect";
     fixture.persistence.updateInstance("instance-alpha", {
       ...record.state,
       handoffs: [{ ...stored, handoff: JSON.stringify(handoff) }],
