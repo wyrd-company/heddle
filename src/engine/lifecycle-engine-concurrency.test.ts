@@ -264,11 +264,16 @@ describe("LifecycleEngine concurrent execution", () => {
       status: "completed",
     });
     expect(completed.status).toBe("completed");
-    expect(
-      fixture.persistence
-        .replayEvents("sample-a")
-        .filter(({ type }) => type === "lifecycle:attention-required"),
-    ).toEqual([]);
+    const attentionEvents = fixture.persistence
+      .replayEvents("sample-a")
+      .filter(({ type }) => type === "lifecycle:attention-required");
+    expect(attentionEvents).toHaveLength(1);
+    expect(attentionEvents[0]?.payload).toMatchObject({
+      actualAwaitingNodeIds: [],
+      actualStatus: "completed",
+      expectedAwaitingNodeIds: ["taste"],
+      transitionId: "sample-a:2",
+    });
     fixture.persistence.close();
   });
 

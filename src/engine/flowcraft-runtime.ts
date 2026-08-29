@@ -59,7 +59,52 @@ export const prepareRuntimeBlueprint = (
 export const landedAsExpected = (
   result: WorkflowResult,
   expected: ExpectedLandings,
+  blueprint: LifecycleBlueprint,
+  events: FlowcraftEvent[],
 ): boolean => {
+  const conditionalEdgesBySource = new Map<
+    string,
+    LifecycleBlueprint["edges"]
+  >();
+  for (const edge of blueprint.edges) {
+    if (edge.condition === undefined) continue;
+    if (blueprint.nodes.find(({ id }) => id === edge.source)?.uses === "wait") {
+      continue;
+    }
+    const edges = conditionalEdgesBySource.get(edge.source) ?? [];
+    edges.push(edge);
+    conditionalEdgesBySource.set(edge.source, edges);
+  }
+  for (const [source, edges] of conditionalEdgesBySource) {
+    const expectedEdgeKeys = edges
+      .map(({ condition, target }) => JSON.stringify([target, condition]))
+      .sort();
+    const finishIndexes = events.flatMap((event, index) =>
+      event.type === "node:finish" && event.payload.nodeId === source
+        ? [index]
+        : [],
+    );
+    for (const [finishIndexOffset, finishIndex] of finishIndexes.entries()) {
+      const nextFinishIndex = finishIndexes[finishIndexOffset + 1];
+      const skippedEdgeKeys = events
+        .slice(finishIndex + 1, nextFinishIndex)
+        .filter(
+          (event): event is Extract<FlowcraftEvent, { type: "node:skipped" }> =>
+            event.type === "node:skipped" && event.payload.nodeId === source,
+        )
+        .map(({ payload }) =>
+          JSON.stringify([payload.edge.target, payload.edge.condition]),
+        )
+        .sort();
+      if (
+        skippedEdgeKeys.some((key) => !expectedEdgeKeys.includes(key)) ||
+        new Set(skippedEdgeKeys).size !== skippedEdgeKeys.length ||
+        skippedEdgeKeys.length === expectedEdgeKeys.length
+      ) {
+        return false;
+      }
+    }
+  }
   if (result.status === "awaiting") {
     const actual = awaitingNodeIdsFrom(result.serializedContext);
     return expected.some(

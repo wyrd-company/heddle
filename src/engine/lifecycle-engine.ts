@@ -243,8 +243,12 @@ export class LifecycleEngine {
       );
     }
 
-    if (!landedAsExpected(result, expected)) {
-      const executionId = executionIdFrom(result.serializedContext);
+    const executionId = executionIdFrom(result.serializedContext);
+    const executionEvents =
+      executionId === undefined
+        ? []
+        : await this.persistence.flowcraftHistory.replay(executionId);
+    if (!landedAsExpected(result, expected, blueprint, executionEvents)) {
       const nextContext = persistExecution(
         this.persistence,
         record.instanceId,
@@ -255,13 +259,6 @@ export class LifecycleEngine {
         nextContext,
         pending.id,
       );
-      if (completedOperation !== undefined) {
-        return this.snapshot(
-          record.instanceId,
-          this.contextForCompletedOperation(nextContext, completedOperation),
-          blueprint,
-        );
-      }
       this.persistence.appendEvent(record.instanceId, attentionEvent, {
         actualAwaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
         actualStatus: result.status,
@@ -277,6 +274,13 @@ export class LifecycleEngine {
         ].sort(),
         transitionId: pending.id,
       });
+      if (completedOperation !== undefined) {
+        return this.snapshot(
+          record.instanceId,
+          this.contextForCompletedOperation(nextContext, completedOperation),
+          blueprint,
+        );
+      }
       throw new UnexpectedLandingError(
         record.instanceId,
         expected,
@@ -284,7 +288,6 @@ export class LifecycleEngine {
       );
     }
 
-    const executionId = executionIdFrom(result.serializedContext);
     const nextContext = persistExecution(
       this.persistence,
       record.instanceId,
