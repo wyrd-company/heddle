@@ -221,7 +221,11 @@ describe("console server", () => {
     );
     const wrongMethod = await globalThis.fetch(
       `${baseUrl}/api/epics/51/in-progress`,
-      { method: "POST" },
+      {
+        body: JSON.stringify({ inProgress: false }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
     );
     const missingContentType = await globalThis.fetch(
       `${baseUrl}/api/epics/51/in-progress`,
