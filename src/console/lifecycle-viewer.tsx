@@ -13,13 +13,23 @@ import {
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
-import { Tldraw, defaultShapeUtils, type Editor, type TLShapeId } from "tldraw";
+import {
+  ArrowBindingUtil,
+  ArrowShapeUtil,
+  type Editor,
+  type TLShapeId,
+  TldrawEditor,
+} from "tldraw";
 import "tldraw/tldraw.css";
 import "./lifecycle-viewer.css";
 
 import { useExecutionBridge } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/runtime/ExecutionBridge";
 import { FlowcraftNodeUtil } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/FlowcraftNodeUtil";
-import { FLOWCRAFT_NODE } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/types";
+import {
+  FLOWCRAFT_NODE,
+  type FlowcraftNodeShape,
+  type NodeStatus,
+} from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/types";
 import { EventBus } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/EventBus";
 import { FlowcraftSync } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/FlowcraftSync";
 import { blueprintToCanvas } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/blueprint-to-canvas";
@@ -69,7 +79,8 @@ window.heddleLifecycleViewer = {
   },
 };
 
-const shapeUtils = [FlowcraftNodeUtil, ...defaultShapeUtils];
+const bindingUtils = [ArrowBindingUtil];
+const shapeUtils = [FlowcraftNodeUtil, ArrowShapeUtil];
 
 const positionsFor = (
   snapshot: ConsoleLifecycleSnapshot,
@@ -91,7 +102,10 @@ const applyCurrentStages = (
   snapshot: ConsoleLifecycleSnapshot,
 ): void => {
   const current = new Set(snapshot.currentStageIds);
-  const replayedStatus = new Map<string, "completed" | "failed" | "pending">();
+  const replayed = new Map<
+    string,
+    { nodeData: Record<string, unknown>; status: NodeStatus }
+  >();
   for (const event of snapshot.events) {
     if (
       typeof event.payload !== "object" ||
@@ -101,7 +115,8 @@ const applyCurrentStages = (
     ) {
       continue;
     }
-    const status =
+    const previous = replayed.get(event.payload["nodeId"]);
+    const status: NodeStatus | undefined =
       event.type === "node:start"
         ? "pending"
         : event.type === "node:finish"
@@ -109,23 +124,38 @@ const applyCurrentStages = (
           : event.type === "node:error"
             ? "failed"
             : undefined;
-    if (status !== undefined)
-      replayedStatus.set(event.payload["nodeId"], status);
+    if (status === undefined) continue;
+    const nodeData = { ...previous?.nodeData };
+    if (event.type === "node:start") nodeData.inputs = event.payload["input"];
+    if (event.type === "node:finish") {
+      const result = event.payload["result"];
+      if (
+        typeof result === "object" &&
+        result !== null &&
+        !Array.isArray(result)
+      ) {
+        nodeData.outputs = result["output"];
+      }
+    }
+    if (event.type === "node:error") nodeData.error = event.payload["error"];
+    replayed.set(event.payload["nodeId"], { nodeData, status });
   }
+  const shapes: FlowcraftNodeShape[] = [];
   for (const { id } of snapshot.blueprint.nodes) {
     const shapeId = `shape:${id}` as TLShapeId;
-    const shape = editor.getShape(shapeId);
+    const shape = editor.getShape<FlowcraftNodeShape>(shapeId);
     if (shape?.type !== FLOWCRAFT_NODE) continue;
-    editor.updateShape({
-      id: shapeId,
+    const state = replayed.get(id);
+    shapes.push({
+      ...shape,
       props: {
-        status: current.has(id)
-          ? "pending"
-          : (replayedStatus.get(id) ?? "idle"),
+        ...shape.props,
+        nodeData: state?.nodeData,
+        status: current.has(id) ? "pending" : (state?.status ?? "idle"),
       },
-      type: FLOWCRAFT_NODE,
     });
   }
+  editor.store.mergeRemoteChanges(() => editor.store.put(shapes));
 };
 
 function LifecycleViewer() {
@@ -185,7 +215,6 @@ function LifecycleViewer() {
 
   useEffect(() => {
     if (editor === null || snapshot === null) return;
-    editor.updateInstanceState({ isReadonly: false });
     const identity = `${snapshot.instanceId}:${snapshot.blueprint.blobHash}`;
     if (replayedIdentity.current !== identity) {
       const sync = new FlowcraftSync(editor);
@@ -234,25 +263,8 @@ function LifecycleViewer() {
             Select a task lifecycle to render its pinned history.
           </p>
         ) : (
-          <Tldraw
-            assetUrls={{
-              translations: { en: "/assets/tldraw-en.json" },
-            }}
-            components={{
-              ActionsMenu: null,
-              ContextMenu: null,
-              DebugMenu: null,
-              HelpMenu: null,
-              MainMenu: null,
-              NavigationPanel: null,
-              PageMenu: null,
-              QuickActions: null,
-              SharePanel: null,
-              StylePanel: null,
-              Toolbar: null,
-              ZoomMenu: null,
-            }}
-            hideUi
+          <TldrawEditor
+            bindingUtils={bindingUtils}
             onMount={setEditor}
             shapeUtils={shapeUtils}
           />
