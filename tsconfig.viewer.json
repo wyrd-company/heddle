@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": false,
+    "outDir": null,
+    "rootDir": null,
+    "skipLibCheck": true
+  },
+  "include": ["src/console/lifecycle-viewer.tsx"]
+}

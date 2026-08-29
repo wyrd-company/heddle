@@ -28,6 +28,11 @@ import type {
   ConsoleLifecycleEvent,
   ConsoleLifecycleSnapshot,
 } from "./types.js";
+import {
+  appendLifecycleSnapshot,
+  assertLifecycleReplacement,
+  lifecycleTraversalCounts,
+} from "./lifecycle-tail.js";
 
 interface LifecycleViewerPort {
   append(snapshot: ConsoleLifecycleSnapshot): void;
@@ -75,28 +80,6 @@ const applyCurrentStages = (
   }
 };
 
-const traversalCounts = (
-  events: ConsoleLifecycleEvent[],
-): Array<{ count: number; nodeId: string }> => {
-  const counts = new Map<string, number>();
-  for (const event of events) {
-    if (
-      event.type !== "node:start" ||
-      typeof event.payload !== "object" ||
-      event.payload === null ||
-      Array.isArray(event.payload) ||
-      typeof event.payload["nodeId"] !== "string"
-    ) {
-      continue;
-    }
-    const nodeId = event.payload["nodeId"];
-    counts.set(nodeId, (counts.get(nodeId) ?? 0) + 1);
-  }
-  return [...counts]
-    .filter(([, count]) => count > 1)
-    .map(([nodeId, count]) => ({ count, nodeId }));
-};
-
 function LifecycleViewer() {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [snapshot, setSnapshot] = useState<ConsoleLifecycleSnapshot | null>(
@@ -104,41 +87,24 @@ function LifecycleViewer() {
   );
   const bus = useRef(new EventBus());
   const replayedIdentity = useRef("");
+  const snapshotRef = useRef<ConsoleLifecycleSnapshot | null>(null);
 
   useExecutionBridge(editor, bus.current);
 
   const replace = useCallback((next: ConsoleLifecycleSnapshot) => {
+    assertLifecycleReplacement(next);
     replayedIdentity.current = "";
+    snapshotRef.current = next;
     setSnapshot(next);
   }, []);
 
   const append = useCallback((next: ConsoleLifecycleSnapshot) => {
-    setSnapshot((current) => {
-      if (
-        current === null ||
-        current.instanceId !== next.instanceId ||
-        current.blueprint.blobHash !== next.blueprint.blobHash
-      ) {
-        replayedIdentity.current = "";
-        return next;
-      }
-      if (
-        next.events.some(({ sequence }) => sequence <= current.nextSequence)
-      ) {
-        throw new Error("Lifecycle tail overlaps replayed history");
-      }
-      const expected = current.nextSequence + 1;
-      if (
-        next.events[0] !== undefined &&
-        next.events[0].sequence !== expected
-      ) {
-        throw new Error("Lifecycle tail is not contiguous");
-      }
-      return {
-        ...next,
-        events: [...current.events, ...next.events],
-      };
-    });
+    const current = snapshotRef.current;
+    if (current === null)
+      throw new Error("Lifecycle tail arrived before replay");
+    const combined = appendLifecycleSnapshot(current, next);
+    snapshotRef.current = combined;
+    setSnapshot(combined);
   }, []);
 
   useEffect(() => {
@@ -146,6 +112,7 @@ function LifecycleViewer() {
       append,
       clear: () => {
         replayedIdentity.current = "";
+        snapshotRef.current = null;
         setSnapshot(null);
       },
       replace,
@@ -188,11 +155,11 @@ function LifecycleViewer() {
       },
     });
     applyCurrentStages(editor, snapshot);
-    editor.zoomToFit({ animation: { duration: 0 }, inset: 56 });
+    editor.zoomToFit({ animation: { duration: 0 } });
   }, [editor, snapshot]);
 
   const traversals = useMemo(
-    () => (snapshot === null ? [] : traversalCounts(snapshot.events)),
+    () => (snapshot === null ? [] : lifecycleTraversalCounts(snapshot.events)),
     [snapshot],
   );
 

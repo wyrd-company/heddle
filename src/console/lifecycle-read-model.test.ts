@@ -102,5 +102,18 @@ describe("console lifecycle read model", () => {
         },
       }),
     ).toThrow("Lifecycle edge names a node outside the pinned blueprint");
+    expect(() => make({ afterSequence: 1 })).toThrow(
+      "Lifecycle event cursor is ahead of persisted history",
+    );
+    expect(() =>
+      make({
+        executionHistories: [
+          {
+            events: [{ payload: { nodeId: "missing" }, type: "node:start" }],
+            executionId: "execution-a",
+          },
+        ],
+      }),
+    ).toThrow("Lifecycle node event disagrees with pinned blueprint");
   });
 });

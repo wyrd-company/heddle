@@ -90,6 +90,27 @@ export const buildConsoleLifecycleSnapshot = (
       events.map((event) => ({ event, executionId })),
   );
   const nextSequence = orderedEvents.length;
+  if (input.afterSequence > nextSequence) {
+    throw new TypeError("Lifecycle event cursor is ahead of persisted history");
+  }
+  const nodeEventTypes = new Set(["node:error", "node:finish", "node:start"]);
+  for (const { event } of orderedEvents) {
+    if (event.type.trim() === "") {
+      throw new TypeError("Lifecycle event type must not be empty");
+    }
+    if (!nodeEventTypes.has(event.type)) continue;
+    const payload = event.payload as Record<string, unknown>;
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      typeof payload["nodeId"] !== "string" ||
+      !knownNodes.has(payload["nodeId"])
+    ) {
+      throw new TypeError(
+        "Lifecycle node event disagrees with pinned blueprint",
+      );
+    }
+  }
 
   return {
     blueprint: {

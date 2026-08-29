@@ -15,10 +15,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc --project tsconfig.json && vite build",
+    "build": "tsc --project tsconfig.json && tsc --project tsconfig.viewer.json && vite build",
     "test": "vitest run --config vitest.config.ts",
-    "lint": "eslint src bin scripts/deployment eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment",
-    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment"
+    "lint": "eslint src bin scripts/deployment eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment",
+    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment"
   },
   "keywords": [],
   "author": "",
