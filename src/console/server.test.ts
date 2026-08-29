@@ -241,6 +241,11 @@ describe("console server", () => {
     await expect(
       globalThis.fetch(`${baseUrl}/api/board`, { method: "POST" }),
     ).resolves.toMatchObject({ status: 405 });
+    await expect(
+      globalThis.fetch(`${baseUrl}/api/dependency-graph?scope=all`, {
+        method: "POST",
+      }),
+    ).resolves.toMatchObject({ status: 405 });
     expect(board.writes).toHaveLength(1);
   });
 

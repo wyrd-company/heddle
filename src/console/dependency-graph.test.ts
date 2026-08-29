@@ -123,4 +123,27 @@ describe("dependency graph projection", () => {
       }),
     ).toThrow("dependency graph contains a cycle");
   });
+
+  it("rejects duplicate board and instance identities", () => {
+    expect(() =>
+      buildDependencyGraphProjection({
+        attention: [],
+        instances: [],
+        scope: { kind: "all" },
+        tasks: [task(21, "First", "todo"), task(21, "Second", "todo")],
+      }),
+    ).toThrow("more than one board task exists with id 21");
+
+    expect(() =>
+      buildDependencyGraphProjection({
+        attention: [],
+        instances: [
+          { instanceId: "instance-shared", taskId: 21 },
+          { instanceId: "instance-shared", taskId: 22 },
+        ],
+        scope: { kind: "all" },
+        tasks: [task(21, "First", "todo"), task(22, "Second", "todo")],
+      }),
+    ).toThrow("instance instance-shared names more than one task");
+  });
 });
