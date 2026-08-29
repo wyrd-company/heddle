@@ -242,7 +242,10 @@ proposed-design:
     to an attention state and notifies the operator. Pending T3
     approvals and user-input requests surface through the same poll
     into the attention queue with actions that answer the recorded T3
-    request. Heddle dispositions every pending approval and user-input
+    request. A user-input attention record carries the exact typed question
+    catalog from the T3 request activity; consumers do not reconstruct
+    prompts, options, or answer cardinality from thread messages or shell
+    flags. Heddle dispositions every pending approval and user-input
     request before stopping a session, because stop settles unanswered
     questions with empty answers. Interrupt, question-disposition, stop,
     and archive commands use replayable event-before-effect records;
@@ -314,7 +317,14 @@ proposed-design:
     and pending T3 approvals. Each entry offers the dispositions
     valid for its state, and the buttons call the same actions the
     MCP tools call — humans and agents disposition through one
-    contract. Pushover notifications deep-link to the entry. The
+    contract. Each projected entry has a stable identity, an explicit
+    authority and target for every offered action, and a deterministic
+    fingerprint of its current state and actions. The action endpoint
+    re-reads the canonical unresolved entry and accepts only the offered
+    action and matching fingerprint before it delegates through an injected
+    action port. A deployment without that port fails closed for actionable
+    entries; informational attention has no invented disposition. Pushover
+    notifications preserve scope and deep-link focus to the stable entry. The
     operator can equally disposition conversationally: any agent
     session configured with Heddle's MCP server can act on their
     behalf. T3's own UI remains the surface for conversational
