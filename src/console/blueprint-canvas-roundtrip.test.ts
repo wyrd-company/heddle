@@ -1,0 +1,104 @@
+// ---
+// relationships:
+//   verifies: heddle
+//   references: flowcraft-gate
+// ---
+
+import type { Editor, TLBinding, TLShape, TLShapeId } from "tldraw";
+import { describe, expect, it } from "vitest";
+
+import { blueprintToCanvas } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/blueprint-to-canvas";
+import { canvasToBlueprint } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/canvas-to-blueprint";
+import type { LifecycleBlueprint } from "../engine/index.js";
+
+class FixtureCanvas {
+  readonly bindings: TLBinding[] = [];
+  readonly shapes: TLShape[] = [];
+
+  createBinding(binding: Omit<TLBinding, "id" | "meta">): void {
+    this.bindings.push({
+      ...binding,
+      id: `binding:${this.bindings.length}`,
+      meta: {},
+    } as TLBinding);
+  }
+
+  createShapes(shapes: TLShape[]): void {
+    for (const shape of shapes) {
+      this.shapes.push({
+        index: "a1",
+        isLocked: false,
+        meta: {},
+        opacity: 1,
+        parentId: "page:page",
+        rotation: 0,
+        typeName: "shape",
+        x: 0,
+        y: 0,
+        ...shape,
+      } as TLShape);
+    }
+  }
+
+  deleteShapes(ids: TLShapeId[]): void {
+    const removed = new Set(ids);
+    this.shapes.splice(
+      0,
+      this.shapes.length,
+      ...this.shapes.filter(({ id }) => !removed.has(id)),
+    );
+  }
+
+  getBindingsFromShape(shapeId: TLShapeId): TLBinding[] {
+    return this.bindings.filter(({ fromId }) => fromId === shapeId);
+  }
+
+  getCurrentPageShapes(): TLShape[] {
+    return this.shapes;
+  }
+
+  zoomToFit(): void {}
+}
+
+describe("blueprint canvas conversion", () => {
+  it("round-trips the production node and edge extensions", () => {
+    const canvas = new FixtureCanvas();
+    const blueprint: LifecycleBlueprint = {
+      id: "sample-process",
+      nodes: [
+        {
+          id: "inspect",
+          uses: "wait",
+          tools: ["advance"],
+          "todo-template": "sample-checklist",
+        },
+        { id: "finish", uses: "finish" },
+      ],
+      edges: [
+        {
+          condition: "result.output.dispositions.complete",
+          description: "Continue after inspection",
+          disposition: "complete",
+          source: "inspect",
+          target: "finish",
+          transform: "result.output",
+        },
+      ],
+    };
+
+    blueprintToCanvas(canvas as unknown as Editor, blueprint, {
+      positions: {
+        finish: { x: 420, y: 60 },
+        inspect: { x: 80, y: 120 },
+      },
+    });
+    const roundTrip = canvasToBlueprint(canvas as unknown as Editor);
+
+    expect(roundTrip.nodes).toEqual(blueprint.nodes);
+    expect(roundTrip.edges).toEqual(blueprint.edges);
+    expect(roundTrip.positions).toEqual({
+      finish: { x: 420, y: 60 },
+      inspect: { x: 80, y: 120 },
+    });
+  });
+});

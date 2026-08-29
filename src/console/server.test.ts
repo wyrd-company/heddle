@@ -197,6 +197,12 @@ describe("console server", () => {
     await expect(lifecycleClient.text()).resolves.toContain(
       "heddleLifecycleViewer",
     );
+    const editorClient = await (
+      await globalThis.fetch(`${baseUrl}/assets/lifecycle.js`)
+    ).text();
+    expect(editorClient).toContain("EDIT BLUEPRINT");
+    expect(editorClient).toContain("SAVE ARTIFACT");
+    expect(editorClient).toContain("/api/blueprints/");
     await expect(styles.text()).resolves.toContain(".task-card");
     await expect(client.text()).resolves.toContain(
       'url.searchParams.set("scope", scopeElement.value)',

@@ -10,6 +10,7 @@ export {
 } from "./projection.js";
 export { buildDependencyGraphProjection } from "./dependency-graph.js";
 export { buildConsoleLifecycleSnapshot } from "./lifecycle-read-model.js";
+export type { ConsoleBlueprintEditor } from "./blueprint-editor.js";
 export type { ConsoleLifecycleReadInput } from "./lifecycle-read-model.js";
 export type {
   DependencyGraphEdge,

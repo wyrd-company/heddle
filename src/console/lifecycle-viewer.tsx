@@ -19,6 +19,7 @@ import {
   type Editor,
   TldrawEditor,
 } from "tldraw";
+import type { WorkflowBlueprint } from "flowcraft";
 import "tldraw/tldraw.css";
 import "./lifecycle-viewer.css";
 
@@ -92,12 +93,45 @@ const asFlowcraftEvent = (event: ConsoleLifecycleEvent) => ({
   type: event.type,
 });
 
+type CanvasPositions = Record<string, { x: number; y: number }>;
+
+interface BlueprintArtifactRevision {
+  blobHash: string;
+  blueprint: WorkflowBlueprint;
+  path: string;
+  positions: CanvasPositions;
+}
+
+type EditableBlueprint = WorkflowBlueprint & { positions: CanvasPositions };
+
+const responseJson = async <T,>(response: Response): Promise<T> => {
+  const value = (await response.json()) as T | { error?: unknown };
+  if (!response.ok) {
+    throw new Error(
+      typeof value === "object" &&
+        value !== null &&
+        "error" in value &&
+        typeof value.error === "string"
+        ? value.error
+        : `Blueprint request failed (${response.status})`,
+    );
+  }
+  return value as T;
+};
+
 function LifecycleViewer() {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [snapshot, setSnapshot] = useState<ConsoleLifecycleSnapshot | null>(
     null,
   );
+  const [editing, setEditing] = useState<BlueprintArtifactRevision | null>(
+    null,
+  );
+  const [draft, setDraft] = useState<EditableBlueprint | null>(null);
+  const [editStatus, setEditStatus] = useState("");
+  const [saving, setSaving] = useState(false);
   const bus = useRef(new EventBus());
+  const editSync = useRef<FlowcraftSync | null>(null);
   const replayedIdentity = useRef("");
   const snapshotRef = useRef<ConsoleLifecycleSnapshot | null>(null);
 
@@ -148,7 +182,7 @@ function LifecycleViewer() {
   }, [append, replace]);
 
   useEffect(() => {
-    if (editor === null || snapshot === null) return;
+    if (editor === null || snapshot === null || editing !== null) return;
     const identity = `${snapshot.instanceId}:${snapshot.blueprint.blobHash}`;
     if (replayedIdentity.current !== identity) {
       const sync = new FlowcraftSync(editor);
@@ -178,7 +212,90 @@ function LifecycleViewer() {
     });
     projectLifecycleCanvas(editor, snapshot);
     editor.zoomToFit({ animation: { duration: 0 } });
-  }, [editor, snapshot]);
+  }, [editing, editor, snapshot]);
+
+  useEffect(() => {
+    if (editor === null || editing === null) return;
+    const sync = new FlowcraftSync(editor, (blueprint) => {
+      const editable = blueprint as EditableBlueprint;
+      setDraft({
+        ...editable,
+        positions: { ...editable.positions },
+      });
+      setEditStatus("Unsaved canvas changes");
+    });
+    editSync.current = sync;
+    sync.applyBlueprint(editing.blueprint, editing.positions);
+    sync.startListening();
+    editor.updateInstanceState({ isReadonly: false });
+    editor.zoomToFit({ animation: { duration: 0 } });
+    return () => {
+      sync.dispose();
+      if (editSync.current === sync) editSync.current = null;
+    };
+  }, [editing, editor]);
+
+  const beginEditing = useCallback(async () => {
+    if (snapshot === null) return;
+    setEditStatus("Loading repository artifact…");
+    try {
+      const revision = await responseJson<BlueprintArtifactRevision>(
+        await fetch(
+          `/api/blueprints/${encodeURIComponent(snapshot.blueprint.id)}`,
+        ),
+      );
+      setEditing(revision);
+      setDraft({ ...revision.blueprint, positions: revision.positions });
+      setEditStatus(
+        `Editing ${revision.path} · running instance stays pinned to ${snapshot.blueprint.blobHash.slice(0, 12)}`,
+      );
+    } catch (error) {
+      setEditStatus(
+        error instanceof Error ? error.message : "Blueprint load failed",
+      );
+    }
+  }, [snapshot]);
+
+  const stopEditing = useCallback(() => {
+    replayedIdentity.current = "";
+    setEditing(null);
+    setDraft(null);
+    setEditStatus("");
+  }, []);
+
+  const saveEditing = useCallback(async () => {
+    if (editing === null || draft === null) return;
+    setSaving(true);
+    setEditStatus("Validating and saving repository artifact…");
+    try {
+      const revision = await responseJson<BlueprintArtifactRevision>(
+        await fetch(
+          `/api/blueprints/${encodeURIComponent(editing.blueprint.id)}`,
+          {
+            body: JSON.stringify({
+              edges: draft.edges,
+              expectedBlobHash: editing.blobHash,
+              nodes: draft.nodes,
+              positions: draft.positions,
+            }),
+            headers: { "content-type": "application/json" },
+            method: "PUT",
+          },
+        ),
+      );
+      setEditing(revision);
+      setDraft({ ...revision.blueprint, positions: revision.positions });
+      setEditStatus(
+        `Saved ${revision.path} · artifact ${revision.blobHash.slice(0, 12)}`,
+      );
+    } catch (error) {
+      setEditStatus(
+        error instanceof Error ? error.message : "Blueprint save failed",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [draft, editing]);
 
   const traversals = useMemo(
     () => (snapshot === null ? [] : lifecycleTraversalCounts(snapshot.events)),
@@ -218,6 +335,40 @@ function LifecycleViewer() {
               {snapshot.status}
             </p>
           )}
+          <div className="blueprint-editor-actions">
+            {editing === null ? (
+              <button
+                disabled={snapshot === null}
+                onClick={() => void beginEditing()}
+                type="button"
+              >
+                EDIT BLUEPRINT
+              </button>
+            ) : (
+              <>
+                <button
+                  disabled={draft === null || saving}
+                  onClick={() => void saveEditing()}
+                  type="button"
+                >
+                  {saving ? "SAVING…" : "SAVE ARTIFACT"}
+                </button>
+                <button disabled={saving} onClick={stopEditing} type="button">
+                  CLOSE EDITOR
+                </button>
+              </>
+            )}
+          </div>
+          <p
+            aria-live="polite"
+            className="blueprint-editor-status"
+            data-error={/failed|invalid|violation|changed since/i.test(
+              editStatus,
+            )}
+            role="status"
+          >
+            {editStatus}
+          </p>
         </header>
         {traversals.length === 0 ? null : (
           <p className="lifecycle-traversals">

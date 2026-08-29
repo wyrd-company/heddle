@@ -14,6 +14,8 @@
   },
   "include": [
     "src/console/lifecycle-canvas-projection.tsx",
-    "src/console/lifecycle-viewer.tsx"
+    "src/console/lifecycle-viewer.tsx",
+    "spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/blueprint-to-canvas.ts",
+    "spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/canvas-to-blueprint.ts"
   ]
 }

@@ -15,6 +15,7 @@ import {
   createConsoleServer,
   type ConsoleAttention,
   type ConsoleAttentionActionPort,
+  type ConsoleBlueprintEditor,
   type ConsoleBoard,
   type ConsoleEvent,
   type ConsoleInstance,
@@ -38,6 +39,7 @@ export type HeddleDeploymentServer = {
 export interface HeddleDeploymentComposition {
   board?: ConsoleBoard;
   consoleActions?: ConsoleAttentionActionPort;
+  blueprintEditor?: ConsoleBlueprintEditor;
   consoleState?: ConsoleStateSource;
 }
 
@@ -210,6 +212,7 @@ export const startHeddleServerFromEnvironment = async (
       ? {}
       : { actions: composition.consoleActions }),
     board,
+    blueprintEditor: composition.blueprintEditor,
     state:
       composition.consoleState ??
       new PersistenceConsoleStateSource(persistence),

@@ -14,6 +14,12 @@ import { URL } from "node:url";
 import { MIMEType } from "node:util";
 
 import {
+  BlueprintEditConflictError,
+  BlueprintValidationError,
+  type LifecycleEdge,
+  type LifecycleNode,
+} from "../engine/index.js";
+import {
   buildKanbanProjection,
   ConsoleScopeError,
   parseConsoleScope,
@@ -34,6 +40,7 @@ import type {
   ConsoleStateSource,
 } from "./types.js";
 import { ConsoleLifecycleUnavailableError } from "./types.js";
+import type { ConsoleBlueprintEditor } from "./blueprint-editor.js";
 
 const lifecycleClient = readFileSync(
   new URL("../../assets/console-viewer/lifecycle.js", import.meta.url),
@@ -47,6 +54,7 @@ const lifecycleStyles = readFileSync(
 export interface ConsoleServerOptions {
   actions?: ConsoleAttentionActionPort;
   board: ConsoleBoard;
+  blueprintEditor?: ConsoleBlueprintEditor;
   now?: () => number;
   state: ConsoleStateSource;
 }
@@ -145,6 +153,42 @@ const readJsonBody = async (
   } catch {
     throw new RequestError("request body must be valid JSON");
   }
+};
+
+const requireBlueprintEdit = (
+  value: unknown,
+): {
+  edges: LifecycleEdge[];
+  expectedBlobHash: string;
+  nodes: LifecycleNode[];
+  positions: Record<string, { x: number; y: number }>;
+} => {
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !Array.isArray(candidate["nodes"]) ||
+    !Array.isArray(candidate["edges"]) ||
+    typeof candidate["expectedBlobHash"] !== "string" ||
+    typeof candidate["positions"] !== "object" ||
+    candidate["positions"] === null ||
+    Array.isArray(candidate["positions"]) ||
+    Object.keys(candidate).some(
+      (key) =>
+        !["edges", "expectedBlobHash", "nodes", "positions"].includes(key),
+    )
+  ) {
+    throw new RequestError(
+      "request body must contain only nodes, edges, positions, and expectedBlobHash",
+    );
+  }
+  return value as {
+    edges: LifecycleEdge[];
+    expectedBlobHash: string;
+    nodes: LifecycleNode[];
+    positions: Record<string, { x: number; y: number }>;
+  };
 };
 
 const requireEpicLever = (value: unknown): boolean => {
@@ -374,6 +418,35 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
         );
         return;
       }
+      const blueprintArtifact = /^\/api\/blueprints\/([^/]+)$/.exec(
+        url.pathname,
+      );
+      if (blueprintArtifact !== null) {
+        if (options.blueprintEditor === undefined) {
+          json(response, 503, {
+            error:
+              "Blueprint artifact editor is not active in this deployment composition",
+          });
+          return;
+        }
+        const artifactId = blueprintArtifact[1]!;
+        if (request.method === "GET") {
+          json(response, 200, await options.blueprintEditor.load(artifactId));
+          return;
+        }
+        if (request.method === "PUT") {
+          const edit = requireBlueprintEdit(
+            await readJsonBody(request, 1024 * 1024),
+          );
+          json(
+            response,
+            200,
+            await options.blueprintEditor.save({ artifactId, ...edit }),
+          );
+          return;
+        }
+        return methodNotAllowed(response, "GET, PUT");
+      }
       const epicLever = /^\/api\/epics\/([^/]+)\/in-progress$/.exec(
         url.pathname,
       );
@@ -402,6 +475,14 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       if (error instanceof ConsoleAttentionConflictError) {
         json(response, 409, { error: error.message });
+        return;
+      }
+      if (error instanceof BlueprintEditConflictError) {
+        json(response, 409, { error: error.message });
+        return;
+      }
+      if (error instanceof BlueprintValidationError) {
+        json(response, 422, { error: error.message });
         return;
       }
       json(response, 500, { error: "console request failed" });

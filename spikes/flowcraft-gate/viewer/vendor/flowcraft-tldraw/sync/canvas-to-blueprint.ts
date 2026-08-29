@@ -35,11 +35,12 @@ export function canvasToBlueprint(
 		const targetNodeId = nodeIdByShapeId.get(endBinding.toId)
 		if (!sourceNodeId || !targetNodeId) continue
 
-		const meta = (arrow.meta as Record<string, any>)?.edgeDef ?? {}
-		const edge: EdgeDefinition = { source: sourceNodeId, target: targetNodeId }
-		if (meta.action) edge.action = String(meta.action)
-		if (meta.condition) edge.condition = String(meta.condition)
-		if (meta.transform) edge.transform = String(meta.transform)
+		const meta = (arrow.meta as Record<string, unknown>)?.edgeDef
+		const edge: EdgeDefinition = {
+			...(typeof meta === 'object' && meta !== null ? meta : {}),
+			source: sourceNodeId,
+			target: targetNodeId,
+		}
 		edges.push(edge)
 	}
 

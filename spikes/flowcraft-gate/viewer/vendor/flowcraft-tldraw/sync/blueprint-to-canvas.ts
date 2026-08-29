@@ -71,10 +71,9 @@ export function blueprintToCanvas(
 		const arrowId = createShapeId(`arrow-${edge.source}-${edge.target}`)
 		usedArrowIds.add(arrowId)
 
-		const edgeDef: Record<string, unknown> = {}
-		if (edge.action) edgeDef.action = edge.action
-		if (edge.condition) edgeDef.condition = edge.condition
-		if (edge.transform) edgeDef.transform = edge.transform
+		const edgeDef = { ...edge } as Record<string, unknown>
+		delete edgeDef.source
+		delete edgeDef.target
 
 		arrowPartials.push({
 			id: arrowId,
