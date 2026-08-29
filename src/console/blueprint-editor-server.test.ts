@@ -139,6 +139,23 @@ describe("console blueprint editor API", () => {
     expect(editor.saves).toEqual([]);
   });
 
+  it("rejects an oversized artifact edit before the editor port", async () => {
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/blueprints/sample-process`,
+      {
+        body: JSON.stringify({ padding: "x".repeat(1024 * 1024) }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "request body is too large",
+    });
+    expect(editor.saves).toEqual([]);
+  });
+
   it("returns named validation and edit-conflict failures", async () => {
     const request = () =>
       globalThis.fetch(`${baseUrl}/api/blueprints/sample-process`, {
