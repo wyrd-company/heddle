@@ -35,6 +35,19 @@ const target: SessionObservationTarget = {
   threadId: "thread-one",
 };
 
+const userInputQuestions = [
+  {
+    header: "Question",
+    id: "quantity",
+    multiSelect: false,
+    options: [
+      { description: "Use a small batch", label: "Small" },
+      { description: "Use a large batch", label: "Large" },
+    ],
+    prompt: "Which batch size should be used?",
+  },
+];
+
 const lifecycleContext = (terminal = false): JsonValue => ({
   awaitingNodeIds: terminal ? [] : ["mix"],
   blueprintBlobHash: "a".repeat(40),
@@ -357,7 +370,10 @@ describe("SessionObserver operator actions", () => {
           },
           {
             kind: "user-input.requested",
-            payload: { requestId: "question-one" },
+            payload: {
+              questions: userInputQuestions,
+              requestId: "question-one",
+            },
           },
         ],
       },
@@ -366,7 +382,11 @@ describe("SessionObserver operator actions", () => {
     const result = await test.observer.observe(target);
     expect(result.attentions).toMatchObject([
       { kind: "approval", requestId: "approval-one" },
-      { kind: "user-input", requestId: "question-one" },
+      {
+        kind: "user-input",
+        questions: userInputQuestions,
+        requestId: "question-one",
+      },
     ]);
     await test.observer.answerApproval(target, "approval-one", "accept");
     await test.observer.answerUserInput(target, "question-one", {
@@ -378,6 +398,69 @@ describe("SessionObserver operator actions", () => {
     expect(test.t3.userInputAnswers).toMatchObject([
       { answers: { quantity: "Small" }, requestId: "question-one" },
     ]);
+  });
+
+  it("rejects pending user input without a canonical question catalog", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingUserInput: true,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "user-input.requested",
+            payload: { requestId: "question-one" },
+          },
+        ],
+      },
+    };
+
+    await expect(test.observer.observe(target)).rejects.toThrow(
+      "has no canonical question catalog",
+    );
+    expect(test.attention.entries).toEqual([]);
+  });
+
+  it("rejects repeated user-input question and option identities", async () => {
+    const observe = async (questions: unknown[]) => {
+      const test = fixture();
+      test.t3.shell.threads[0] = {
+        id: target.threadId,
+        hasPendingUserInput: true,
+        latestTurn: { state: "running" },
+        session: { status: "running" },
+      };
+      test.t3.snapshot = {
+        thread: {
+          activities: [
+            {
+              kind: "user-input.requested",
+              payload: { questions, requestId: "question-one" },
+            },
+          ],
+        },
+      };
+      return test.observer.observe(target);
+    };
+
+    await expect(
+      observe([...userInputQuestions, ...userInputQuestions]),
+    ).rejects.toThrow("repeats question 'quantity'");
+    await expect(
+      observe([
+        {
+          ...userInputQuestions[0],
+          options: [
+            { label: "Small" },
+            { description: "Repeated", label: "Small" },
+          ],
+        },
+      ]),
+    ).rejects.toThrow("repeats option label 'Small'");
   });
 
   it("records an interrupt fact before dispatch and replays the completed operation", async () => {
@@ -413,7 +496,10 @@ describe("SessionObserver operator actions", () => {
           },
           {
             kind: "user-input.requested",
-            payload: { requestId: "question-one" },
+            payload: {
+              questions: userInputQuestions,
+              requestId: "question-one",
+            },
           },
         ],
       },
@@ -470,7 +556,10 @@ describe("SessionObserver operator actions", () => {
         activities: [
           {
             kind: "user-input.requested",
-            payload: { requestId: "question-one" },
+            payload: {
+              questions: userInputQuestions,
+              requestId: "question-one",
+            },
           },
         ],
       },
@@ -587,7 +676,10 @@ describe("SessionObserver terminal visibility", () => {
         activities: [
           {
             kind: "user-input.requested",
-            payload: { requestId: "question-one" },
+            payload: {
+              questions: userInputQuestions,
+              requestId: "question-one",
+            },
           },
         ],
       },

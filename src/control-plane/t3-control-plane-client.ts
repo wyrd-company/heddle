@@ -42,6 +42,17 @@ export type T3ThreadActivity = {
   [key: string]: unknown;
 };
 
+export type T3UserInputQuestion = {
+  header?: string;
+  id: string;
+  multiSelect: boolean;
+  options: Array<{
+    description?: string;
+    label: string;
+  }>;
+  prompt: string;
+};
+
 export type T3ThreadSnapshot = {
   snapshotSequence?: number;
   thread: {

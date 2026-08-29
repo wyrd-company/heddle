@@ -16,6 +16,7 @@ import type {
   T3DispatchCommand,
   T3ShellSnapshot,
   T3ThreadSnapshot,
+  T3UserInputQuestion,
 } from "./t3-control-plane-client.js";
 
 export type SessionObservationTarget = {
@@ -35,6 +36,7 @@ export type SessionObservationAttention = {
   instanceId: string;
   kind: "approval" | "ended" | "failed" | "stalled" | "user-input";
   message: string;
+  questions?: T3UserInputQuestion[];
   requestId?: string;
   sessionKey: string;
   threadId: string;
