@@ -121,7 +121,8 @@ export class EscalationCoordinator {
   requireNoPendingForSession(instanceId: string, sessionKey: string): void {
     if (
       this.pendingEscalations(instanceId).some(
-        ({ ownerSessionKey }) => ownerSessionKey === sessionKey,
+        ({ ownerSessionKey, parentSessionKey }) =>
+          ownerSessionKey === sessionKey || parentSessionKey === sessionKey,
       )
     ) {
       throw new Error(

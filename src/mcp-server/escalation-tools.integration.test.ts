@@ -74,6 +74,80 @@ describe("workflow MCP escalation tools", () => {
     expect(subject.lifecycleResumes).toHaveLength(1);
   });
 
+  it("rejects parent advance while a child escalation awaits its answer", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-family-advance", [
+      {
+        sessionKey: "parent",
+        token: "token-parent-advance",
+        tools: ["answer", "advance"],
+      },
+      {
+        parentSessionKey: "parent",
+        sessionKey: "child",
+        token: "token-child-advance",
+        tools: ["escalate"],
+      },
+    ]);
+    const parent = await connectEscalationClient(
+      subject.url,
+      "token-parent-advance",
+      "parent-advance-client",
+    );
+    const child = await connectEscalationClient(
+      subject.url,
+      "token-child-advance",
+      "child-advance-client",
+    );
+    const childCall = child.callTool({
+      arguments: {
+        escalationId: "child-advance-choice",
+        questions: sampleEscalationQuestions,
+      },
+      name: "escalate",
+    });
+    await vi.waitFor(() => expect(subject.parentEscalations).toHaveLength(1));
+
+    await expect(
+      parent.callTool({
+        arguments: { disposition: "complete" },
+        name: "advance",
+      }),
+    ).resolves.toMatchObject({ isError: true });
+    expect(subject.lifecycleResumes).toHaveLength(0);
+
+    await expect(
+      parent.callTool({
+        arguments: {
+          answers: sampleEscalationAnswer,
+          escalationId: "child-advance-choice",
+          ownerSessionKey: "child",
+        },
+        name: "answer",
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        answered: true,
+        escalationId: "child-advance-choice",
+      },
+    });
+    await expect(childCall).resolves.toMatchObject({
+      structuredContent: { answers: sampleEscalationAnswer },
+    });
+    await expect(
+      parent.callTool({
+        arguments: { disposition: "complete" },
+        name: "advance",
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        instanceId: "instance-family-advance",
+        status: "completed",
+      },
+    });
+    expect(subject.lifecycleResumes).toHaveLength(1);
+  });
+
   it("holds a top-level escalation until its attention entry is answered", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-top", [
