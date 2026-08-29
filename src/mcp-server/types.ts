@@ -7,6 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 
 import type { LifecycleSnapshot } from "../engine/index.js";
 import type {
+  InstanceEventClaim,
   InstanceRecord,
   JsonValue,
   PersistedEvent,
@@ -19,6 +20,13 @@ export interface WorkflowMcpPersistence {
     type: string,
     payload: JsonValue,
   ): PersistedEvent;
+  compareAndSwapInstanceWithEvent(
+    instanceId: string,
+    expectedVersion: number,
+    state: InstanceRecord["state"],
+    type: string,
+    payload: JsonValue,
+  ): InstanceEventClaim | undefined;
   compareAndSwapInstance(
     instanceId: string,
     expectedVersion: number,

@@ -57,18 +57,21 @@ const registerAdvance = (
         .strict(),
     },
     async ({ disposition, output }) => {
-      context.escalationCoordinator.requireNoPendingForSession(
+      const operationId = advanceOperationId(context.binding.sessionKey);
+      const snapshot = await context.escalationCoordinator.resumeAfterNoPending(
         context.binding.instance.instanceId,
         context.binding.sessionKey,
+        operationId,
+        () =>
+          context.lifecycle.resume({
+            disposition,
+            instanceId: context.binding.instance.instanceId,
+            operationId,
+            ...(output === undefined
+              ? {}
+              : { output: output as Record<string, JsonValue> }),
+          }),
       );
-      const snapshot = await context.lifecycle.resume({
-        disposition,
-        instanceId: context.binding.instance.instanceId,
-        operationId: advanceOperationId(context.binding.sessionKey),
-        ...(output === undefined
-          ? {}
-          : { output: output as Record<string, JsonValue> }),
-      });
       return result(snapshot as unknown as Record<string, unknown>);
     },
   );

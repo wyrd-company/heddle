@@ -28,6 +28,11 @@ export interface PersistedEvent {
   type: string;
 }
 
+export interface InstanceEventClaim {
+  event: PersistedEvent;
+  record: InstanceRecord;
+}
+
 export interface PersistenceConfiguration {
   stateDirectory: string;
 }

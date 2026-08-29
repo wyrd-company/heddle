@@ -173,6 +173,13 @@ proposed-design:
     provider-specific launch-preparation port applies the setting before
     Heddle creates the T3 thread; Codex and Claude session creation fails
     closed when that consumer is absent.
+    Escalation opening and session disposition share the durable instance
+    claim boundary: opening atomically advances the instance version with
+    its event, while advance claims disposition authority only when neither
+    the session nor a child awaiting its answer has a pending escalation.
+    Once disposition is claimed, new escalations owned by that session or
+    routed to it fail closed. Concurrent open and advance operations therefore
+    produce one valid winner instead of a stopped session with a pending call.
     Because escalation rides Heddle's MCP surface, it is uniform
     across providers and independent of any harness's question
     tool.

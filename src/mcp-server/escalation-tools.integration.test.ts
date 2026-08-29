@@ -148,6 +148,90 @@ describe("workflow MCP escalation tools", () => {
     expect(subject.lifecycleResumes).toHaveLength(1);
   });
 
+  it("serializes concurrent advance and escalation into one valid outcome", async () => {
+    let releaseResume!: () => void;
+    let resumeStarted!: () => void;
+    let escalationOpened!: () => void;
+    const resumeRelease = new Promise<void>((resolve) => {
+      releaseResume = resolve;
+    });
+    const resumeStart = new Promise<void>((resolve) => {
+      resumeStarted = resolve;
+    });
+    const opened = new Promise<void>((resolve) => {
+      escalationOpened = resolve;
+    });
+    const subject = await createEscalationFixture({
+      attention: async () => escalationOpened(),
+      resume: async (input) => {
+        resumeStarted();
+        await resumeRelease;
+        return {
+          awaitingNodeIds: [],
+          blueprintBlobHash: "a".repeat(40),
+          blueprintPath: "blueprints/sample-process.json",
+          executionIds: [],
+          instanceId: input.instanceId,
+          status: "completed",
+          validDispositions: [],
+        };
+      },
+    });
+    createEscalationInstance(subject.persistence, "instance-race", [
+      {
+        sessionKey: "racing-session",
+        token: "token-race",
+        tools: ["advance", "escalate"],
+      },
+    ]);
+    const client = await connectEscalationClient(
+      subject.url,
+      "token-race",
+      "race-client",
+    );
+    const advance = client.callTool({
+      arguments: { disposition: "complete" },
+      name: "advance",
+    });
+    await resumeStart;
+
+    const escalation = client.callTool({
+      arguments: {
+        escalationId: "race-choice",
+        questions: sampleEscalationQuestions,
+      },
+      name: "escalate",
+    });
+    const outcome = await Promise.race([
+      escalation.then((result) => ({ kind: "result" as const, result })),
+      opened.then(() => ({ kind: "opened" as const })),
+    ]);
+    if (outcome.kind === "opened") {
+      subject.coordinator.answerAsOperator({
+        answers: sampleEscalationAnswer,
+        escalationId: "race-choice",
+        instanceId: "instance-race",
+        ownerSessionKey: "racing-session",
+      });
+      await escalation;
+    }
+    releaseResume();
+
+    await expect(advance).resolves.toMatchObject({
+      structuredContent: {
+        instanceId: "instance-race",
+        status: "completed",
+      },
+    });
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: { isError: true },
+    });
+    expect(
+      subject.coordinator.pendingEscalations("instance-race"),
+    ).toHaveLength(0);
+  });
+
   it("holds a top-level escalation until its attention entry is answered", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-top", [

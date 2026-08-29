@@ -19,6 +19,7 @@ import type { LifecycleSnapshot } from "../engine/index.js";
 import type { WorkflowMcpLifecycle } from "./types.js";
 import {
   EscalationCoordinator,
+  type EscalationAttentionQueue,
   type EscalationAnswers,
   type EscalationAttention,
   type EscalationQuestion,
@@ -142,7 +143,12 @@ export const sampleEscalationAnswer: EscalationAnswers = {
   "delivery-window": "continue",
 };
 
-export const createEscalationFixture = async () => {
+export const createEscalationFixture = async (
+  options: {
+    attention?: EscalationAttentionQueue["raise"];
+    resume?: WorkflowMcpLifecycle["resume"];
+  } = {},
+) => {
   const stateDirectory = await mkdtemp(join(tmpdir(), "heddle-escalation-"));
   scratchDirectories.push(stateDirectory);
   const persistence = new SqlitePersistence({ stateDirectory });
@@ -151,7 +157,12 @@ export const createEscalationFixture = async () => {
   const parentEscalations: ParentEscalation[] = [];
   const lifecycleResumes: Parameters<WorkflowMcpLifecycle["resume"]>[0][] = [];
   const coordinator = new EscalationCoordinator({
-    attention: { raise: async (value) => void attentions.push(value) },
+    attention: {
+      raise: async (value) => {
+        attentions.push(value);
+        await options.attention?.(value);
+      },
+    },
     parent: { steer: async (value) => void parentEscalations.push(value) },
     persistence,
     pushover: { send: async (value) => void notifications.push(value) },
@@ -162,6 +173,7 @@ export const createEscalationFixture = async () => {
     lifecycle: {
       resume: async (input) => {
         lifecycleResumes.push(input);
+        if (options.resume !== undefined) return options.resume(input);
         return {
           instanceId: input.instanceId,
           status: "completed",

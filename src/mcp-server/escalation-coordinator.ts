@@ -23,6 +23,10 @@ import type {
   WorkflowMcpPersistence,
   WorkflowMcpSessionBinding,
 } from "./types.js";
+import {
+  dispositionClaimFor,
+  withDispositionClaim,
+} from "./session-disposition-claim.js";
 
 export interface EscalationAttentionQueue {
   raise(attention: EscalationAttention): Promise<void>;
@@ -54,6 +58,7 @@ export class EscalationCoordinator {
   readonly #history: EscalationHistory;
   readonly #now: () => string;
   readonly #parent: ParentEscalationRouter;
+  readonly #persistence: WorkflowMcpPersistence;
   readonly #pushover: PushoverEscalationNotifier;
   readonly #routes = new Map<string, Promise<void>>();
   readonly #waiters = new Map<string, Set<Waiter>>();
@@ -63,6 +68,7 @@ export class EscalationCoordinator {
     this.#history = new EscalationHistory(options.persistence);
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#parent = options.parent;
+    this.#persistence = options.persistence;
     this.#pushover = options.pushover;
   }
 
@@ -129,6 +135,37 @@ export class EscalationCoordinator {
         `Session '${sessionKey}' has a pending escalation and cannot stop`,
       );
     }
+  }
+
+  async resumeAfterNoPending<T>(
+    instanceId: string,
+    sessionKey: string,
+    operationId: string,
+    resume: () => Promise<T>,
+  ): Promise<T> {
+    while (true) {
+      const current = this.#persistence.getInstance(instanceId);
+      if (current === undefined) {
+        throw new Error(`Instance does not exist: ${instanceId}`);
+      }
+      this.requireNoPendingForSession(instanceId, sessionKey);
+      const existing = dispositionClaimFor(current.state, sessionKey);
+      if (existing !== undefined) {
+        if (existing !== operationId) {
+          throw new Error(
+            `Session '${sessionKey}' has another disposition claim`,
+          );
+        }
+        break;
+      }
+      const claimed = this.#persistence.compareAndSwapInstance(
+        instanceId,
+        current.version,
+        withDispositionClaim(current.state, sessionKey, operationId),
+      );
+      if (claimed !== undefined) break;
+    }
+    return resume();
   }
 
   #result(answered: AnsweredEscalation): EscalationResult {

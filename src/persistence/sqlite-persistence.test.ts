@@ -171,6 +171,46 @@ describe("SqlitePersistence", () => {
     persistence.close();
   });
 
+  it("claims an instance update and external event at one version", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+    const winnerState: InstanceState = {
+      ...initialState,
+      todoState: [{ complete: true, text: "item-a" }],
+    };
+
+    expect(
+      persistence.compareAndSwapInstanceWithEvent(
+        "record-a",
+        1,
+        winnerState,
+        "sample:claimed",
+        { value: "winner" },
+      ),
+    ).toMatchObject({
+      event: { payload: { value: "winner" }, type: "sample:claimed" },
+      record: { state: winnerState, version: 2 },
+    });
+    expect(
+      persistence.compareAndSwapInstanceWithEvent(
+        "record-a",
+        1,
+        initialState,
+        "sample:claimed",
+        { value: "loser" },
+      ),
+    ).toBeUndefined();
+    expect(
+      persistence
+        .replayEvents("record-a")
+        .filter(({ type }) => type === "sample:claimed")
+        .map(({ payload }) => payload),
+    ).toEqual([{ value: "winner" }]);
+    persistence.close();
+  });
+
   it("rejects invalid external events without changing history", async () => {
     const persistence = new SqlitePersistence({
       stateDirectory: await makeStateDirectory(),

@@ -21,6 +21,7 @@ import type {
   WorkflowMcpPersistence,
   WorkflowMcpSessionBinding,
 } from "./types.js";
+import { dispositionClaimFor } from "./session-disposition-claim.js";
 
 export const escalationEventTypes = {
   answered: "mcp:escalation-answered",
@@ -108,20 +109,6 @@ export class EscalationHistory {
   } {
     const parsed = escalationInputSchema.parse(input);
     validateQuestions(parsed.questions);
-    const prior = this.find(
-      binding.instance.instanceId,
-      binding.sessionKey,
-      parsed.escalationId,
-    );
-    if (
-      prior.opened !== undefined &&
-      !sameQuestions(prior.opened.questions, parsed.questions)
-    ) {
-      throw new TypeError(
-        `Escalation '${parsed.escalationId}' was retried with different questions`,
-      );
-    }
-    if (prior.opened !== undefined) return { ...prior, opened: prior.opened };
     const opened: PendingEscalation = {
       attentionId: escalationKey(
         binding.instance.instanceId,
@@ -138,12 +125,49 @@ export class EscalationHistory {
       questions: parsed.questions,
       stage: binding.stage.id,
     };
-    this.persistence.appendEvent(
-      binding.instance.instanceId,
-      escalationEventTypes.opened,
-      opened,
-    );
-    return { opened };
+    while (true) {
+      const prior = this.find(
+        binding.instance.instanceId,
+        binding.sessionKey,
+        parsed.escalationId,
+      );
+      if (
+        prior.opened !== undefined &&
+        !sameQuestions(prior.opened.questions, parsed.questions)
+      ) {
+        throw new TypeError(
+          `Escalation '${parsed.escalationId}' was retried with different questions`,
+        );
+      }
+      if (prior.opened !== undefined) {
+        return { ...prior, opened: prior.opened };
+      }
+      const current = this.persistence.getInstance(binding.instance.instanceId);
+      if (current === undefined) {
+        throw new Error(
+          `Instance does not exist: ${binding.instance.instanceId}`,
+        );
+      }
+      const claimedSession = [binding.sessionKey, binding.parentSessionKey]
+        .filter((sessionKey) => sessionKey !== undefined)
+        .find(
+          (sessionKey) =>
+            dispositionClaimFor(current.state, sessionKey) !== undefined,
+        );
+      if (claimedSession !== undefined) {
+        throw new Error(
+          `Session '${claimedSession}' has claimed disposition authority`,
+        );
+      }
+      const claimed = this.persistence.compareAndSwapInstanceWithEvent(
+        binding.instance.instanceId,
+        current.version,
+        current.state,
+        escalationEventTypes.opened,
+        opened,
+      );
+      if (claimed !== undefined) return { opened };
+    }
   }
 
   answer(

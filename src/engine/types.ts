@@ -140,6 +140,7 @@ export interface LifecycleContextRecord {
   blueprintPath: string;
   completedOperations: Record<string, CompletedLifecycleOperation>;
   executionIds: string[];
+  mcpDispositionClaims?: Record<string, string>;
   nextTransitionNumber: number;
   pendingAttentions: LifecycleAttention[];
   pendingTransition: PendingTransition | null;

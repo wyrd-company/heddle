@@ -9,6 +9,7 @@ export {
 } from "./sqlite-persistence.js";
 export type {
   InstanceRecord,
+  InstanceEventClaim,
   InstanceState,
   JsonPrimitive,
   JsonValue,

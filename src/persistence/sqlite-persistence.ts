@@ -13,12 +13,22 @@ import {
   createSqliteFlowcraftHistory,
   type SqliteFlowcraftHistory,
 } from "./sqlite-flowcraft-history.js";
+import { parseEvent, parseState } from "./sqlite-event-row.js";
+import { claimInstanceEvent } from "./sqlite-instance-event-claim.js";
+import {
+  instanceCreatedEvent,
+  instanceDeletedEvent,
+  instanceUpdatedEvent,
+  recoverInstances,
+  stateEventTypes,
+} from "./sqlite-instance-recovery.js";
 import {
   initializePersistenceSchema,
   protectFlowcraftHistory,
 } from "./sqlite-schema.js";
 import type {
   EventRow,
+  InstanceEventClaim,
   InstanceRecord,
   InstanceRow,
   InstanceState,
@@ -28,11 +38,6 @@ import type {
 } from "./types.js";
 
 const databaseFilename = "heddle-state.sqlite";
-const createdEvent = "instance:created";
-const updatedEvent = "instance:updated";
-const deletedEvent = "instance:deleted";
-const stateEventTypes = new Set([createdEvent, updatedEvent, deletedEvent]);
-
 const serialize = (value: JsonValue | InstanceState): string => {
   const serialized = JSON.stringify(value);
   if (serialized === undefined) {
@@ -40,17 +45,6 @@ const serialize = (value: JsonValue | InstanceState): string => {
   }
   return serialized;
 };
-
-const parseState = (serialized: string): InstanceState =>
-  JSON.parse(serialized) as InstanceState;
-
-const parseEvent = (row: EventRow): PersistedEvent => ({
-  instanceId: row.instance_id,
-  payload: JSON.parse(row.payload_json) as JsonValue,
-  recordedAt: row.recorded_at,
-  sequence: row.sequence,
-  type: row.type,
-});
 
 export type FlowcraftHistory = SqliteFlowcraftHistory;
 
@@ -93,7 +87,7 @@ export class SqlitePersistence {
       if (this.instanceExists(instanceId)) {
         throw new Error(`Instance already exists: ${instanceId}`);
       }
-      this.insertEvent(instanceId, createdEvent, stateJson);
+      this.insertEvent(instanceId, instanceCreatedEvent, stateJson);
       this.database
         .prepare(
           `INSERT INTO heddle_instances (instance_id, state_json, version)
@@ -131,7 +125,7 @@ export class SqlitePersistence {
 
     return this.database.transaction(() => {
       const current = this.getRequiredInstance(instanceId);
-      this.insertEvent(instanceId, updatedEvent, stateJson);
+      this.insertEvent(instanceId, instanceUpdatedEvent, stateJson);
       this.database
         .prepare(
           `UPDATE heddle_instances
@@ -162,15 +156,46 @@ export class SqlitePersistence {
         this.getRequiredInstance(instanceId);
         return undefined;
       }
-      this.insertEvent(instanceId, updatedEvent, stateJson);
+      this.insertEvent(instanceId, instanceUpdatedEvent, stateJson);
       return this.getRequiredInstance(instanceId);
     })();
+  }
+
+  compareAndSwapInstanceWithEvent(
+    instanceId: string,
+    expectedVersion: number,
+    state: InstanceState,
+    type: string,
+    payload: JsonValue,
+  ): InstanceEventClaim | undefined {
+    this.assertExternalEventType(type);
+    const stateJson = serialize(state);
+    const payloadJson = serialize(payload);
+
+    return this.database.transaction(() =>
+      claimInstanceEvent({
+        appendEvent: () =>
+          this.getEvent(this.insertEvent(instanceId, type, payloadJson)),
+        claimVersion: () =>
+          this.database
+            .prepare(
+              `UPDATE heddle_instances
+               SET state_json = ?, version = ?
+               WHERE instance_id = ? AND version = ?`,
+            )
+            .run(stateJson, expectedVersion + 1, instanceId, expectedVersion)
+            .changes > 0,
+        recordStateUpdate: () =>
+          void this.insertEvent(instanceId, instanceUpdatedEvent, stateJson),
+        requireRecord: () => this.getRequiredInstance(instanceId),
+      }),
+    )();
   }
 
   deleteInstance(instanceId: string): void {
     this.database.transaction(() => {
       this.getRequiredInstance(instanceId);
-      this.insertEvent(instanceId, deletedEvent, "null");
+      this.insertEvent(instanceId, instanceDeletedEvent, "null");
       this.database
         .prepare("DELETE FROM heddle_instances WHERE instance_id = ?")
         .run(instanceId);
@@ -182,12 +207,7 @@ export class SqlitePersistence {
     type: string,
     payload: JsonValue,
   ): PersistedEvent {
-    if (type.trim() === "") {
-      throw new TypeError("Event type must not be empty");
-    }
-    if (stateEventTypes.has(type)) {
-      throw new TypeError(`Event type is reserved: ${type}`);
-    }
+    this.assertExternalEventType(type);
 
     const payloadJson = serialize(payload);
     return this.database.transaction(() => {
@@ -212,56 +232,7 @@ export class SqlitePersistence {
   }
 
   recoverInstances(): InstanceRecord[] {
-    return this.database.transaction(() => {
-      const rows = this.database
-        .prepare(
-          `SELECT sequence, instance_id, type, payload_json, recorded_at
-           FROM heddle_instance_events
-           ORDER BY sequence`,
-        )
-        .all() as EventRow[];
-      const recovered = new Map<string, InstanceRecord>();
-
-      for (const row of rows) {
-        if (row.type === createdEvent) {
-          recovered.set(row.instance_id, {
-            instanceId: row.instance_id,
-            state: parseState(row.payload_json),
-            version: 1,
-          });
-        } else if (row.type === updatedEvent) {
-          const current = recovered.get(row.instance_id);
-          if (current === undefined) {
-            throw new Error(
-              `Cannot replay update for missing instance: ${row.instance_id}`,
-            );
-          }
-          recovered.set(row.instance_id, {
-            instanceId: row.instance_id,
-            state: parseState(row.payload_json),
-            version: current.version + 1,
-          });
-        } else if (row.type === deletedEvent) {
-          recovered.delete(row.instance_id);
-        }
-      }
-
-      this.database.prepare("DELETE FROM heddle_instances").run();
-      const insert = this.database.prepare(
-        `INSERT INTO heddle_instances (instance_id, state_json, version)
-         VALUES (?, ?, ?)`,
-      );
-      for (const record of recovered.values()) {
-        insert.run(record.instanceId, serialize(record.state), record.version);
-      }
-      return [...recovered.values()].sort((left, right) =>
-        left.instanceId < right.instanceId
-          ? -1
-          : left.instanceId > right.instanceId
-            ? 1
-            : 0,
-      );
-    })();
+    return recoverInstances(this.database);
   }
 
   close(): void {
@@ -274,6 +245,15 @@ export class SqlitePersistence {
   private assertInstanceId(instanceId: string): void {
     if (instanceId.trim() === "") {
       throw new TypeError("instanceId must not be empty");
+    }
+  }
+
+  private assertExternalEventType(type: string): void {
+    if (type.trim() === "") {
+      throw new TypeError("Event type must not be empty");
+    }
+    if (stateEventTypes.has(type)) {
+      throw new TypeError(`Event type is reserved: ${type}`);
     }
   }
 
