@@ -677,8 +677,6 @@ describe("SessionObserver terminal visibility", () => {
       latestTurn: {
         state: "completed",
         requestedAt: "2026-01-01T00:01:00.000Z",
-        startedAt: "2026-01-01T00:01:01.000Z",
-        completedAt: "2026-01-01T00:01:30.000Z",
       },
       session: { status: "ready" },
     };
