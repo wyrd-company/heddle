@@ -113,6 +113,7 @@ export class DurablePushoverNotifier {
     if (this.persistence.effectCompleted("pushover", attention.attentionId)) {
       return;
     }
+    this.persistence.recordEffectIntent("pushover", attention.attentionId);
     const scope = new globalThis.URL(this.configuration.consoleBaseUrl);
     scope.searchParams.set("view", "lifecycle");
     scope.searchParams.set(
@@ -128,6 +129,14 @@ export class DurablePushoverNotifier {
       url: scope.toString(),
       userKey: this.configuration.userKey,
     });
-    this.persistence.recordEffectCompleted("pushover", attention.attentionId);
+    if (
+      !this.persistence.recordEffectCompleted(
+        "pushover",
+        attention.attentionId,
+      ) &&
+      !this.persistence.effectCompleted("pushover", attention.attentionId)
+    ) {
+      throw new Error("Pushover completion lost its durable intent");
+    }
   }
 }

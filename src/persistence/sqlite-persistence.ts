@@ -313,9 +313,23 @@ export class SqlitePersistence {
       this.database
         .prepare(
           `SELECT 1 FROM heddle_completed_effects
-           WHERE effect_kind = ? AND stable_id = ?`,
+           WHERE effect_kind = ? AND stable_id = ? AND state = 'completed'`,
         )
         .get(effectKind, stableId) !== undefined
+    );
+  }
+
+  recordEffectIntent(effectKind: string, stableId: string): boolean {
+    this.assertStableId("effectKind", effectKind);
+    this.assertStableId("stableId", stableId);
+    return (
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO heddle_completed_effects
+             (effect_kind, stable_id, state, recorded_at, completed_at)
+           VALUES (?, ?, 'pending', ?, NULL)`,
+        )
+        .run(effectKind, stableId, new Date().toISOString()).changes > 0
     );
   }
 
@@ -325,11 +339,11 @@ export class SqlitePersistence {
     return (
       this.database
         .prepare(
-          `INSERT OR IGNORE INTO heddle_completed_effects
-             (effect_kind, stable_id, completed_at)
-           VALUES (?, ?, ?)`,
+          `UPDATE heddle_completed_effects
+           SET state = 'completed', completed_at = ?
+           WHERE effect_kind = ? AND stable_id = ? AND state = 'pending'`,
         )
-        .run(effectKind, stableId, new Date().toISOString()).changes > 0
+        .run(new Date().toISOString(), effectKind, stableId).changes > 0
     );
   }
 

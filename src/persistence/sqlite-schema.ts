@@ -55,7 +55,9 @@ export const initializePersistenceSchema = (
     CREATE TABLE IF NOT EXISTS heddle_completed_effects (
       effect_kind TEXT NOT NULL,
       stable_id TEXT NOT NULL,
-      completed_at TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+      recorded_at TEXT NOT NULL,
+      completed_at TEXT,
       PRIMARY KEY (effect_kind, stable_id)
     );
 

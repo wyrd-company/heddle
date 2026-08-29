@@ -88,7 +88,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       .find(({ instanceId }) => instanceId === input.instanceId);
     const provider = input.dispatch?.provider ?? previous?.provider;
     const starting: ReconcilerRuntimeRecord = {
-      boardStatus: "in-progress",
+      boardStatus: input.task.status,
       instanceId: input.instanceId,
       ...(provider === undefined ? {} : { provider }),
       state: "starting",
@@ -206,6 +206,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     );
     this.persistence.writeReconcilerRuntime({
       ...starting,
+      boardStatus: "in-progress",
       sessionKey,
       stageEnteredAt: this.now(),
       stageId,

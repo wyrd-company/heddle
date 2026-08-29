@@ -400,4 +400,152 @@ next_id: 1
     expect(restarted.attention.list()).toHaveLength(1);
     await restarted.close();
   });
+
+  it("preserves epic, blocked, absent-dependency, standalone, and write boundaries", async () => {
+    const { configuration } = await prepare();
+    configuration.pacing.maxConcurrentSessions = 10;
+    const create = async (arguments_: string[]): Promise<number> => {
+      const result = await execute(
+        "kanban-md",
+        [
+          "--dir",
+          configuration.boardDirectory,
+          "create",
+          ...arguments_,
+          "--json",
+        ],
+        { cwd: root },
+      );
+      return (JSON.parse(result.stdout) as { id: number }).id;
+    };
+    const epicId = await create([
+      "Sample Epic",
+      "--status",
+      "in-progress",
+      "--tags",
+      "type:epic",
+    ]);
+    await create([
+      "Completed Child",
+      "--status",
+      "done",
+      "--parent",
+      String(epicId),
+    ]);
+    const uatId = await create([
+      "Acceptance Child",
+      "--status",
+      "backlog",
+      "--parent",
+      String(epicId),
+      "--tags",
+      "uat",
+    ]);
+    const pausedEpicId = await create([
+      "Paused Epic",
+      "--status",
+      "todo",
+      "--tags",
+      "type:epic",
+    ]);
+    const pausedChildId = await create([
+      "Paused Child",
+      "--status",
+      "backlog",
+      "--parent",
+      String(pausedEpicId),
+    ]);
+    const blockedId = await create([
+      "Blocked Item",
+      "--status",
+      "todo",
+      "--tags",
+      "lifecycle:sample",
+    ]);
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        configuration.boardDirectory,
+        "edit",
+        String(blockedId),
+        "--block",
+        "Explicit fixture block",
+      ],
+      { cwd: root },
+    );
+    const missingDependencyId = await create([
+      "Removed Dependency",
+      "--status",
+      "done",
+    ]);
+    const absentDependencyId = await create([
+      "Independent Item",
+      "--status",
+      "todo",
+      "--depends-on",
+      String(missingDependencyId),
+      "--tags",
+      "lifecycle:sample",
+    ]);
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        configuration.boardDirectory,
+        "delete",
+        String(missingDependencyId),
+        "--yes",
+      ],
+      { cwd: root },
+    );
+    const composition = createProductionComposition({
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    let board = await composition.board.readBoard();
+    expect(board.find(({ id }) => id === epicId)?.status).toBe("uat");
+    expect(board.find(({ id }) => id === uatId)?.status).toBe("todo");
+    expect(board.find(({ id }) => id === pausedChildId)?.status).toBe(
+      "backlog",
+    );
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .some(({ taskId }) => taskId === blockedId),
+    ).toBe(false);
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .some(({ taskId }) => taskId === absentDependencyId),
+    ).toBe(true);
+    await expect(
+      composition.board.mirrorTaskStatus(epicId, "done"),
+    ).rejects.toThrow(`task ${epicId} is an epic task`);
+    await expect(
+      composition.board.transitionEpicStatus(absentDependencyId, "done"),
+    ).rejects.toThrow(`task ${absentDependencyId} is not an epic task`);
+
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        configuration.boardDirectory,
+        "edit",
+        String(uatId),
+        "--status",
+        "done",
+      ],
+      { cwd: root },
+    );
+    await composition.scheduler.trigger();
+    board = await composition.board.readBoard();
+    expect(board.find(({ id }) => id === epicId)?.status).toBe("done");
+    await composition.close();
+  });
 });
