@@ -5,10 +5,10 @@
 
 import { execFile, spawn } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { env } from "node:process";
+import { cwd, env } from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 import { promisify } from "node:util";
 
@@ -204,7 +204,11 @@ const makeFixture = async () => {
   const lifecycle = new LifecycleEngine({
     effects: {
       accepted,
+      finalize: effect("finalize"),
+      merge: effect("merge"),
       prepare: effect("prepare"),
+      "prepare-worktree": effect("prepare-worktree"),
+      "review-snapshot": effect("review-snapshot"),
       revised: effect("revised"),
     },
     persistence,
@@ -890,6 +894,94 @@ describe("workflow MCP HTTP server", () => {
     expect(
       fixture.persistence
         .replayEvents("instance-alpha")
+        .some(({ type }) => type === "mcp:blocked-reported"),
+    ).toBe(false);
+  });
+
+  it("keeps an earlier session replay-only when the same wait stage recurs", async () => {
+    const fixture = await makeFixture();
+    const blueprintPath = "blueprints/standard-delivery.json";
+    await copyFile(
+      join(cwd(), blueprintPath),
+      join(fixture.repositoryRoot, blueprintPath),
+    );
+    await fixture.lifecycle.start({
+      blueprintPath,
+      instanceId: "instance-recurring",
+      state: { correlationTokens: {}, handoffs: [], todoState: null },
+    });
+    await fixture.lifecycle.resume({
+      disposition: "complete",
+      instanceId: "instance-recurring",
+      operationId: "implementation-complete",
+    });
+
+    const firstToken = "token-review-first";
+    await fixture.bootstrap(
+      "instance-recurring",
+      "review-first",
+      firstToken,
+      { id: 16, title: "Review a sample" },
+      "review",
+    );
+    const firstReview = await connect(
+      fixture.url,
+      firstToken,
+      "first-review-client",
+    );
+    const firstResult = await firstReview.callTool({
+      name: "advance",
+      arguments: { disposition: "reject" },
+    });
+    await fixture.lifecycle.resume({
+      disposition: "complete",
+      instanceId: "instance-recurring",
+      operationId: "remediation-complete",
+    });
+
+    const secondToken = "token-review-second";
+    await fixture.bootstrap(
+      "instance-recurring",
+      "review-second",
+      secondToken,
+      { id: 17, title: "Review another sample" },
+      "review",
+    );
+    const firstRetry = await connect(
+      fixture.url,
+      firstToken,
+      "first-review-retry-client",
+    );
+    await expect(
+      firstRetry.callTool({
+        name: "report_blocked",
+        arguments: { message: "A late blocked report" },
+      }),
+    ).rejects.toThrow(/Tool report_blocked not found/);
+    expect(
+      (await firstRetry.listTools()).tools.map(({ name }) => name),
+    ).toEqual(["advance"]);
+
+    const secondReview = await connect(
+      fixture.url,
+      secondToken,
+      "second-review-client",
+    );
+    expect(
+      (await secondReview.listTools()).tools.map(({ name }) => name),
+    ).toEqual(["advance", "get_task_context", "report_blocked"]);
+    const replay = await firstRetry.callTool({
+      name: "advance",
+      arguments: { disposition: "reject" },
+    });
+    expect(replay.structuredContent).toEqual(firstResult.structuredContent);
+    const current = fixture.persistence.getInstance("instance-recurring");
+    expect(current?.state.flowcraftContext).toMatchObject({
+      awaitingNodeIds: ["review"],
+    });
+    expect(
+      fixture.persistence
+        .replayEvents("instance-recurring")
         .some(({ type }) => type === "mcp:blocked-reported"),
     ).toBe(false);
   });

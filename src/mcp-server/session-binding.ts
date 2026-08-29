@@ -143,10 +143,9 @@ export class WorkflowMcpSessionResolver {
     ) {
       throw new CorrelationTokenError();
     }
-    const tools =
-      isCompletedStage && !isCurrentStage
-        ? stageContract.tools.filter((tool) => tool === "advance")
-        : stageContract.tools;
+    const tools = isCompletedStage
+      ? stageContract.tools.filter((tool) => tool === "advance")
+      : stageContract.tools;
 
     return {
       dispositions: stageContract.dispositions,
