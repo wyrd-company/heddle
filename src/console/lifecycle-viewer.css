@@ -32,6 +32,11 @@ relationships:
   background: var(--paper-raised);
 }
 
+.lifecycle-history:focus-visible {
+  outline: 2px solid #df5a3c;
+  outline-offset: -3px;
+}
+
 .lifecycle-history header {
   position: sticky;
   top: 0;

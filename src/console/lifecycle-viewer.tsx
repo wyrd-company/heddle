@@ -273,6 +273,7 @@ function LifecycleViewer() {
       <aside
         className="lifecycle-history"
         aria-labelledby="lifecycle-history-title"
+        tabIndex={0}
       >
         <header>
           <p className="eyebrow">ORDERED EVENT HISTORY</p>

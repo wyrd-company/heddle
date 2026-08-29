@@ -77000,6 +77000,7 @@ function bce() {
 		}), /* @__PURE__ */ (0, V.jsxs)("aside", {
 			className: "lifecycle-history",
 			"aria-labelledby": "lifecycle-history-title",
+			tabIndex: 0,
 			children: [
 				/* @__PURE__ */ (0, V.jsxs)("header", { children: [
 					/* @__PURE__ */ (0, V.jsx)("p", {
