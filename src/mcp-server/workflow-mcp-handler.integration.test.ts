@@ -874,7 +874,7 @@ describe("workflow MCP HTTP server", () => {
     });
     const added = await alpha.callTool({
       name: "todo_add",
-      arguments: { position: 0, text: "Check the sample label" },
+      arguments: { position: 1, text: "Check the sample label" },
     });
     const addedId = (added.structuredContent as { id: string }).id;
     await alpha.callTool({
@@ -882,8 +882,12 @@ describe("workflow MCP HTTP server", () => {
       arguments: { id: addedId, text: "Check the sample container label" },
     });
     await alpha.callTool({
+      name: "todo_check",
+      arguments: { id: addedId },
+    });
+    await alpha.callTool({
       name: "todo_reorder",
-      arguments: { id: addedId, position: 1 },
+      arguments: { id: addedId, position: 0 },
     });
 
     const recovered = new SqlitePersistence({
@@ -900,12 +904,12 @@ describe("workflow MCP HTTP server", () => {
       structuredContent: {
         todoList: {
           items: [
-            { checked: true, id: "orient" },
             {
-              checked: false,
+              checked: true,
               id: addedId,
               text: "Check the sample container label",
             },
+            { checked: true, id: "orient" },
           ],
         },
       },
