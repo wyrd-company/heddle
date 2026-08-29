@@ -51,6 +51,21 @@ const state: ConsoleStateSource = {
   ],
   listEvents: async () => [],
   listInstances: async () => [],
+  readLifecycle: async ({ taskId }) => ({
+    blueprint: {
+      blobHash: "b".repeat(40),
+      edges: [],
+      id: "sample-lifecycle",
+      nodes: [{ id: "inspect", uses: "wait" }],
+      path: "blueprints/sample-lifecycle.json",
+    },
+    currentStageIds: ["inspect"],
+    events: [],
+    instanceId: `instance-${taskId}`,
+    nextSequence: 0,
+    status: "awaiting",
+    taskId,
+  }),
 };
 
 describe("dependency graph server route", () => {

@@ -9,6 +9,7 @@ import type {
   ConsoleBoard,
   ConsoleEvent,
   ConsoleInstance,
+  ConsoleLifecycleSnapshot,
   ConsoleStateSource,
 } from "./types.js";
 
@@ -98,6 +99,35 @@ class FixtureState implements ConsoleStateSource {
   async listInstances(): Promise<ConsoleInstance[]> {
     return this.instances;
   }
+
+  async readLifecycle(input: {
+    afterSequence: number;
+    taskId: number;
+  }): Promise<ConsoleLifecycleSnapshot> {
+    const events = [
+      {
+        executionId: "execution-52",
+        payload: { nodeId: "inspect" },
+        sequence: 1,
+        type: "node:start",
+      },
+    ];
+    return {
+      blueprint: {
+        blobHash: "a".repeat(40),
+        edges: [],
+        id: "sample-lifecycle",
+        nodes: [{ id: "inspect", uses: "wait" }],
+        path: "blueprints/sample-lifecycle.json",
+      },
+      currentStageIds: ["inspect"],
+      events: events.filter(({ sequence }) => sequence > input.afterSequence),
+      instanceId: "instance-52",
+      nextSequence: 1,
+      status: "awaiting",
+      taskId: input.taskId,
+    };
+  }
 }
 
 describe("console server", () => {
@@ -128,20 +158,40 @@ describe("console server", () => {
   });
 
   it("serves the shell and read-only board, instance, event, and attention APIs", async () => {
-    const [page, styles, client, boardResponse, instances, events, attention] =
-      await Promise.all([
-        globalThis.fetch(`${baseUrl}/?scope=epic:51`),
-        globalThis.fetch(`${baseUrl}/assets/console.css`),
-        globalThis.fetch(`${baseUrl}/assets/console.js`),
-        globalThis.fetch(`${baseUrl}/api/board`),
-        globalThis.fetch(`${baseUrl}/api/instances`),
-        globalThis.fetch(`${baseUrl}/api/events?instance=instance-52&after=6`),
-        globalThis.fetch(`${baseUrl}/api/attention`),
-      ]);
+    const [
+      page,
+      styles,
+      client,
+      lifecycleStyles,
+      lifecycleClient,
+      boardResponse,
+      instances,
+      events,
+      attention,
+    ] = await Promise.all([
+      globalThis.fetch(`${baseUrl}/?scope=epic:51`),
+      globalThis.fetch(`${baseUrl}/assets/console.css`),
+      globalThis.fetch(`${baseUrl}/assets/console.js`),
+      globalThis.fetch(`${baseUrl}/assets/lifecycle.css`),
+      globalThis.fetch(`${baseUrl}/assets/lifecycle.js`),
+      globalThis.fetch(`${baseUrl}/api/board`),
+      globalThis.fetch(`${baseUrl}/api/instances`),
+      globalThis.fetch(`${baseUrl}/api/events?instance=instance-52&after=6`),
+      globalThis.fetch(`${baseUrl}/api/attention`),
+    ]);
 
     await expect(page.text()).resolves.toContain("KANBAN PROJECTION");
     expect(page.headers.get("content-security-policy")).toContain(
       "default-src 'self'",
+    );
+    expect(page.headers.get("content-security-policy")).toContain(
+      "style-src-attr 'unsafe-inline'",
+    );
+    await expect(lifecycleStyles.text()).resolves.toContain(
+      ".lifecycle-renderer",
+    );
+    await expect(lifecycleClient.text()).resolves.toContain(
+      "heddleLifecycleViewer",
     );
     await expect(styles.text()).resolves.toContain(".task-card");
     await expect(client.text()).resolves.toContain(
@@ -176,6 +226,33 @@ describe("console server", () => {
     await expect(attention.json()).resolves.toEqual([
       expect.objectContaining({ attentionId: "attention-1" }),
     ]);
+    expect(board.writes).toEqual([]);
+  });
+
+  it("serves ordered lifecycle replay and tail reads without a write", async () => {
+    const [replay, tail, wrongMethod, malformedTask, malformedCursor] =
+      await Promise.all([
+        globalThis.fetch(`${baseUrl}/api/lifecycle?task=52&after=0`),
+        globalThis.fetch(`${baseUrl}/api/lifecycle?task=52&after=1`),
+        globalThis.fetch(`${baseUrl}/api/lifecycle?task=52`, {
+          method: "POST",
+        }),
+        globalThis.fetch(`${baseUrl}/api/lifecycle?task=0`),
+        globalThis.fetch(`${baseUrl}/api/lifecycle?task=52&after=-1`),
+      ]);
+
+    await expect(replay.json()).resolves.toMatchObject({
+      blueprint: { blobHash: "a".repeat(40), id: "sample-lifecycle" },
+      currentStageIds: ["inspect"],
+      events: [{ sequence: 1, type: "node:start" }],
+      nextSequence: 1,
+      taskId: 52,
+    });
+    await expect(tail.json()).resolves.toMatchObject({ events: [] });
+    expect(wrongMethod.status).toBe(405);
+    expect(wrongMethod.headers.get("allow")).toBe("GET");
+    expect(malformedTask.status).toBe(400);
+    expect(malformedCursor.status).toBe(400);
     expect(board.writes).toEqual([]);
   });
 

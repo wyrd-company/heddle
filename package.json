@@ -8,16 +8,17 @@
     "heddle-server": "bin/heddle-server.mjs"
   },
   "files": [
+    "assets",
     "bin",
     "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && vite build",
     "test": "vitest run --config vitest.config.ts",
-    "lint": "eslint src bin scripts/deployment eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src bin deployment .devcontainer scripts/deployment",
-    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src bin deployment .devcontainer scripts/deployment"
+    "lint": "eslint src bin scripts/deployment eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment",
+    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment"
   },
   "keywords": [],
   "author": "",
@@ -29,14 +30,18 @@
     "@modelcontextprotocol/node": "^2.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.13.3",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "ajv": "^8.20.0",
     "eslint": "^9.34.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
+    "vite": "^8.2.2",
     "vitest": "^3.2.4"
   },
   "dependencies": {
@@ -44,6 +49,9 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "better-sqlite3": "^12.11.1",
     "flowcraft": "2.10.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tldraw": "^5.3.2",
     "zod": "^4.2.1"
   }
 }

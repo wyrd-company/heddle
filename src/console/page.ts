@@ -10,6 +10,7 @@ export const consolePage = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Heddle Console</title>
     <link rel="stylesheet" href="/assets/console.css">
+    <link rel="stylesheet" href="/assets/lifecycle.css">
   </head>
   <body>
     <header class="masthead">
@@ -62,12 +63,17 @@ export const consolePage = `<!doctype html>
         </div>
       </section>
       <section id="lifecycle-view" class="lifecycle-view" aria-labelledby="lifecycle-view-title" hidden>
-        <p class="eyebrow">TASK LIFECYCLE</p>
-        <h2 id="lifecycle-view-title">Lifecycle canvas</h2>
-        <p id="lifecycle-task" class="lifecycle-task"></p>
-        <p class="lifecycle-pending">The lifecycle renderer attaches to this task-scoped view.</p>
+        <header class="lifecycle-header">
+          <div>
+            <p class="eyebrow">TASK LIFECYCLE</p>
+            <h2 id="lifecycle-view-title">Lifecycle canvas</h2>
+          </div>
+          <p id="lifecycle-task" class="lifecycle-task"></p>
+        </header>
+        <div id="lifecycle-canvas-root"></div>
       </section>
     </main>
+    <script type="module" src="/assets/lifecycle.js"></script>
     <script type="module" src="/assets/console.js"></script>
   </body>
 </html>`;
@@ -389,9 +395,10 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .graph-node[data-treatment="attention"] .graph-node-state { color: var(--signal); }
 .graph-node[data-treatment="blocked"] .graph-node-state { color: #684a08; }
 
-.lifecycle-view { min-height: 360px; padding: 26px; background: var(--paper-raised); border: 1px solid var(--rule-dark); }
-.lifecycle-task { margin: 24px 0 6px; font-family: Georgia, serif; font-size: 20px; }
-.lifecycle-pending { margin: 0; color: var(--muted); font-size: 11px; }
+.lifecycle-view { min-width: 0; min-height: 360px; background: var(--paper-raised); border: 1px solid var(--rule-dark); }
+.lifecycle-header { min-height: 76px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.lifecycle-header .eyebrow { margin-bottom: 4px; }
+.lifecycle-task { margin: 0; color: var(--muted); font-size: 10px; text-align: right; }
 
 @media (max-width: 680px) {
   .masthead-state > span:not(.attention-count):not(.live-mark) { display: none; }
@@ -421,6 +428,7 @@ const viewTitleElement = document.querySelector("#view-title");
 const boardViewLink = document.querySelector("#board-view-link");
 const dependenciesViewLink = document.querySelector("#dependencies-view-link");
 let loadGeneration = 0;
+let lifecyclePollTimer;
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
 
@@ -700,8 +708,36 @@ const renderLoadFailure = (error) => {
   statusElement.textContent = error instanceof Error ? error.message : "Console load failed";
 };
 
+const lifecycleViewer = () => {
+  if (!window.heddleLifecycleViewer) {
+    throw new Error("lifecycle renderer is unavailable");
+  }
+  return window.heddleLifecycleViewer;
+};
+
+const pollLifecycle = (taskId, generation, afterSequence) => {
+  lifecyclePollTimer = window.setTimeout(async () => {
+    if (generation !== loadGeneration) return;
+    try {
+      const tail = await fetchJson(
+        "/api/lifecycle?task=" + taskId + "&after=" + afterSequence,
+      );
+      if (generation !== loadGeneration) return;
+      lifecycleViewer().append(tail);
+      statusElement.textContent =
+        "Lifecycle live · " + tail.nextSequence + " ordered events";
+      pollLifecycle(taskId, generation, tail.nextSequence);
+    } catch (error) {
+      if (generation !== loadGeneration) return;
+      window.heddleLifecycleViewer?.clear();
+      renderLoadFailure(error);
+    }
+  }, 1000);
+};
+
 async function load() {
   const generation = ++loadGeneration;
+  window.clearTimeout(lifecyclePollTimer);
   statusElement.dataset.error = "false";
   statusElement.textContent = "Loading board…";
   const requestedScope = scopeFromUrl();
@@ -714,6 +750,7 @@ async function load() {
     if (generation !== loadGeneration) return;
     addScopeOptions(board.tasks, requestedScope);
     selectView(view, requestedScope);
+    if (view !== "lifecycle") window.heddleLifecycleViewer?.clear();
     attentionElement.textContent = String(attention.length);
     if (view === "board") {
       const projection = await fetchJson("/api/projection?scope=" + encodeURIComponent(requestedScope));
@@ -731,11 +768,18 @@ async function load() {
       if (!match) throw new Error("lifecycle view requires task:<id> scope");
       const task = board.tasks.find(({ id }) => id === Number(match[1]));
       if (!task) throw new Error("lifecycle task does not exist");
+      const lifecycle = await fetchJson(
+        "/api/lifecycle?task=" + task.id + "&after=0",
+      );
+      if (generation !== loadGeneration) return;
       lifecycleTaskElement.textContent = "Task #" + task.id + " · " + task.title;
+      lifecycleViewer().replace(lifecycle);
       statusElement.textContent = "Lifecycle view for task #" + task.id;
+      pollLifecycle(task.id, generation, lifecycle.nextSequence);
     }
   } catch (error) {
     if (generation !== loadGeneration) return;
+    window.heddleLifecycleViewer?.clear();
     renderLoadFailure(error);
   }
 }

@@ -37,6 +37,40 @@ export interface ConsoleAttention {
   taskId?: number;
 }
 
+export interface ConsoleLifecycleEvent {
+  executionId: string;
+  payload: JsonValue;
+  sequence: number;
+  type: string;
+}
+
+export interface ConsoleLifecycleBlueprint {
+  blobHash: string;
+  edges: Array<{
+    condition?: string;
+    source: string;
+    target: string;
+  }>;
+  id: string;
+  nodes: Array<{
+    id: string;
+    uses: string;
+  }>;
+  path: string;
+}
+
+export interface ConsoleLifecycleSnapshot {
+  blueprint: ConsoleLifecycleBlueprint;
+  currentStageIds: string[];
+  events: ConsoleLifecycleEvent[];
+  instanceId: string;
+  nextSequence: number;
+  status: string;
+  taskId: number;
+}
+
+export class ConsoleLifecycleUnavailableError extends Error {}
+
 export interface ConsoleStateSource {
   listAttention(): Promise<ConsoleAttention[]>;
   listEvents(input: {
@@ -44,4 +78,8 @@ export interface ConsoleStateSource {
     instanceId?: string;
   }): Promise<ConsoleEvent[]>;
   listInstances(): Promise<ConsoleInstance[]>;
+  readLifecycle(input: {
+    afterSequence: number;
+    taskId: number;
+  }): Promise<ConsoleLifecycleSnapshot>;
 }

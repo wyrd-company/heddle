@@ -212,12 +212,30 @@ export const clientHarness = async (
   const windowListeners = new Map<string, () => void>();
   const graphResponses = new Map<string, Promise<BrowserResponse>>();
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
+  const lifecycleSnapshots: unknown[] = [];
 
   const fetch = async (input: string): Promise<BrowserResponse> => {
     if (input === "/api/board") {
       return response({ tasks: initialTasks });
     }
     if (input === "/api/attention") return response([]);
+    if (input.startsWith("/api/lifecycle?")) {
+      return response({
+        blueprint: {
+          blobHash: "a".repeat(40),
+          edges: [],
+          id: "sample-lifecycle",
+          nodes: [{ id: "inspect", uses: "wait" }],
+          path: "blueprints/sample-lifecycle.json",
+        },
+        currentStageIds: ["inspect"],
+        events: [],
+        instanceId: "instance-11",
+        nextSequence: 0,
+        status: "awaiting",
+        taskId: 11,
+      });
+    }
     if (input.startsWith("/api/dependency-graph?")) {
       const requestedScope = new URL(input, locationHref).searchParams.get(
         "scope",
@@ -310,7 +328,14 @@ export const clientHarness = async (
         return locationHref;
       },
     },
+    clearTimeout: () => undefined,
+    heddleLifecycleViewer: {
+      append: (value: unknown) => lifecycleSnapshots.push(value),
+      clear: () => lifecycleSnapshots.splice(0),
+      replace: (value: unknown) => lifecycleSnapshots.push(value),
+    },
     setInterval: () => 0,
+    setTimeout: () => 0,
   };
 
   runInNewContext(consoleClient, {
@@ -358,6 +383,7 @@ export const clientHarness = async (
     graphCanvas,
     lifecycle,
     lifecycleTask,
+    lifecycleSnapshots,
     location: () => locationHref,
     navigate: (name: string) => {
       locationHref = `http://console.test/?scope=${encodeURIComponent(name)}`;

@@ -4,6 +4,7 @@
 // ---
 
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
 import {
   createServer,
   type IncomingMessage,
@@ -20,6 +21,16 @@ import {
 import { buildDependencyGraphProjection } from "./dependency-graph.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
 import type { ConsoleBoard, ConsoleStateSource } from "./types.js";
+import { ConsoleLifecycleUnavailableError } from "./types.js";
+
+const lifecycleClient = readFileSync(
+  new URL("../../assets/console-viewer/lifecycle.js", import.meta.url),
+  "utf8",
+);
+const lifecycleStyles = readFileSync(
+  new URL("../../assets/console-viewer/lifecycle.css", import.meta.url),
+  "utf8",
+);
 
 export interface ConsoleServerOptions {
   board: ConsoleBoard;
@@ -53,7 +64,7 @@ const text = (
     ...(contentType === "text/html"
       ? {
           "content-security-policy":
-            "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+            "default-src 'self'; script-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; font-src data:; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
           "x-content-type-options": "nosniff",
         }
       : {}),
@@ -73,13 +84,13 @@ const nonNegativeInteger = (value: string | null, name: string): number => {
   return result;
 };
 
-const positiveInteger = (value: string): number => {
+const positiveInteger = (value: string, name = "epic id"): number => {
   if (!/^[1-9][0-9]*$/.test(value)) {
-    throw new RequestError("epic id must be a positive integer");
+    throw new RequestError(`${name} must be a positive integer`);
   }
   const result = Number(value);
   if (!Number.isSafeInteger(result)) {
-    throw new RequestError("epic id must be a safe integer");
+    throw new RequestError(`${name} must be a safe integer`);
   }
   return result;
 };
@@ -157,6 +168,17 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
         text(response, 200, "text/javascript", consoleClient);
         return;
       }
+      if (
+        url.pathname === "/assets/lifecycle.css" &&
+        request.method === "GET"
+      ) {
+        text(response, 200, "text/css", lifecycleStyles);
+        return;
+      }
+      if (url.pathname === "/assets/lifecycle.js" && request.method === "GET") {
+        text(response, 200, "text/javascript", lifecycleClient);
+        return;
+      }
       if (url.pathname === "/api/board") {
         if (request.method !== "GET") return methodNotAllowed(response, "GET");
         const [statuses, tasks] = await Promise.all([
@@ -231,6 +253,24 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
         );
         return;
       }
+      if (url.pathname === "/api/lifecycle") {
+        if (request.method !== "GET") return methodNotAllowed(response, "GET");
+        json(
+          response,
+          200,
+          await options.state.readLifecycle({
+            afterSequence: nonNegativeInteger(
+              url.searchParams.get("after"),
+              "after",
+            ),
+            taskId: positiveInteger(
+              url.searchParams.get("task") ?? "",
+              "task id",
+            ),
+          }),
+        );
+        return;
+      }
       const epicLever = /^\/api\/epics\/([^/]+)\/in-progress$/.exec(
         url.pathname,
       );
@@ -247,6 +287,10 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
     } catch (error) {
       if (error instanceof RequestError || error instanceof ConsoleScopeError) {
         json(response, 400, { error: error.message });
+        return;
+      }
+      if (error instanceof ConsoleLifecycleUnavailableError) {
+        json(response, 503, { error: error.message });
         return;
       }
       json(response, 500, { error: "console request failed" });

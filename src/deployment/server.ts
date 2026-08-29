@@ -17,6 +17,8 @@ import {
   type ConsoleBoard,
   type ConsoleEvent,
   type ConsoleInstance,
+  ConsoleLifecycleUnavailableError,
+  type ConsoleLifecycleSnapshot,
   type ConsoleStateSource,
 } from "../console/index.js";
 import {
@@ -91,6 +93,16 @@ class PersistenceConsoleStateSource implements ConsoleStateSource {
         },
       ];
     });
+  }
+
+  public async readLifecycle(input: {
+    afterSequence: number;
+    taskId: number;
+  }): Promise<ConsoleLifecycleSnapshot> {
+    void input;
+    throw new ConsoleLifecycleUnavailableError(
+      "Lifecycle canvas source is not active in this deployment composition",
+    );
   }
 }
 

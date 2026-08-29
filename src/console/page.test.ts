@@ -43,7 +43,7 @@ describe("console page state", () => {
       /const renderLoadFailure = \(error\) => \{\s*scopeElement\.selectedIndex = -1;\s*boardElement\.replaceChildren\(\);\s*graphCanvasElement\.replaceChildren\(\);\s*lifecycleTaskElement\.textContent = "";\s*statusElement\.dataset\.error = "true";\s*statusElement\.textContent = error instanceof Error \? error\.message : "Console load failed";\s*\};/,
     );
     expect(consoleClient).toMatch(
-      /catch \(error\) \{\s*if \(generation !== loadGeneration\) return;\s*renderLoadFailure\(error\);\s*\}/,
+      /catch \(error\) \{\s*if \(generation !== loadGeneration\) return;\s*window\.heddleLifecycleViewer\?\.clear\(\);\s*renderLoadFailure\(error\);\s*\}/,
     );
   });
 
