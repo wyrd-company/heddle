@@ -261,6 +261,33 @@ afterEach(async () => {
 });
 
 describe("workflow MCP HTTP server", () => {
+  it("returns plain JSON for a stateless MCP POST", async () => {
+    const fixture = await makeFixture();
+    const response = await globalThis.fetch(fixture.url, {
+      body: JSON.stringify({
+        id: 1,
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          capabilities: {},
+          clientInfo: { name: "sample-client", version: "1.0.0" },
+          protocolVersion: "2025-11-25",
+        },
+      }),
+      headers: {
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${fixture.alphaToken}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/json");
+    expect(response.headers.get("mcp-session-id")).toBeNull();
+    await response.body?.cancel();
+  });
+
   it("connects Claude Code and Codex without an MCP session", async () => {
     const fixture = await makeFixture();
 
