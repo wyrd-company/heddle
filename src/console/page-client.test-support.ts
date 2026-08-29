@@ -194,6 +194,7 @@ export const clientHarness = async (
   initialTasks = [rootTask, childTask],
   initialUrl = "http://console.test/?scope=all",
   initialGraph?: GraphFixture,
+  initialLifecycle?: unknown,
 ) => {
   const board = new FakeElement("div");
   const graph = new FakeElement("section");
@@ -212,7 +213,8 @@ export const clientHarness = async (
   const windowListeners = new Map<string, () => void>();
   const graphResponses = new Map<string, Promise<BrowserResponse>>();
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
-  const lifecycleResponses: BrowserResponse[] = [];
+  const lifecycleResponses: BrowserResponse[] =
+    initialLifecycle === undefined ? [] : [response(initialLifecycle)];
   const lifecycleRequests: string[] = [];
   const lifecycleSnapshots: unknown[] = [];
   const timeouts: Array<() => void> = [];
