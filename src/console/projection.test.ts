@@ -44,7 +44,7 @@ describe("kanban console projection", () => {
         },
         {
           instanceId: "instance-90",
-          stageEnteredAt: 2_000,
+          stageEnteredAt: 200_000,
           stageId: "archive",
           taskId: 90,
         },
@@ -71,6 +71,24 @@ describe("kanban console projection", () => {
       ]),
     );
     expect(projection.columns[2]?.tasks[0]).not.toHaveProperty("stageId");
+
+    const futureStage = buildKanbanProjection({
+      instances: [
+        {
+          instanceId: "instance-42",
+          stageEnteredAt: 200_000,
+          stageId: "inspect",
+          taskId: 42,
+        },
+      ],
+      now: 121_000,
+      scope: { kind: "task", taskId: 42 },
+      statuses: ["todo", "in-progress", "done"],
+      tasks,
+    });
+    expect(futureStage.columns[1]?.tasks[0]).toMatchObject({
+      dwellMilliseconds: 0,
+    });
   });
 
   it("filters all, epic, and task scopes without changing board columns", () => {

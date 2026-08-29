@@ -147,6 +147,11 @@ describe("console server", () => {
     await expect(client.text()).resolves.toContain(
       'url.searchParams.set("scope", scopeElement.value)',
     );
+    const clientSource = await (
+      await globalThis.fetch(`${baseUrl}/assets/console.js`)
+    ).text();
+    expect(clientSource).toContain("card.draggable = false");
+    expect(clientSource).toContain('stage.className = "stage-readout"');
     await expect(boardResponse.json()).resolves.toMatchObject({
       statuses: ["todo", "in-progress", "done"],
       tasks: expect.arrayContaining([expect.objectContaining({ id: 52 })]),
@@ -214,6 +219,22 @@ describe("console server", () => {
     const unsafeSequence = await globalThis.fetch(
       `${baseUrl}/api/events?after=99999999999999999`,
     );
+    const wrongMethod = await globalThis.fetch(
+      `${baseUrl}/api/epics/51/in-progress`,
+      { method: "POST" },
+    );
+    const missingContentType = await globalThis.fetch(
+      `${baseUrl}/api/epics/51/in-progress`,
+      { body: JSON.stringify({ inProgress: false }), method: "PUT" },
+    );
+    const oversizedBody = await globalThis.fetch(
+      `${baseUrl}/api/epics/51/in-progress`,
+      {
+        body: JSON.stringify({ inProgress: false, padding: "x".repeat(1024) }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      },
+    );
     const invalidLever = await globalThis.fetch(
       `${baseUrl}/api/epics/51/in-progress`,
       {
@@ -225,6 +246,9 @@ describe("console server", () => {
 
     expect(invalidScope.status).toBe(400);
     expect(unsafeSequence.status).toBe(400);
+    expect(wrongMethod.status).toBe(405);
+    expect(missingContentType.status).toBe(400);
+    expect(oversizedBody.status).toBe(400);
     expect(invalidLever.status).toBe(400);
     expect(board.writes).toEqual([]);
   });
