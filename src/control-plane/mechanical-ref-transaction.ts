@@ -57,6 +57,22 @@ export const mechanicalWorktreesForBranch = async (
     .filter((path): path is string => path !== undefined);
 };
 
+export const mechanicalWorktreesForSingleCheckout = async (
+  command: CommandRunner,
+  repositoryRoot: string,
+  branch: string,
+): Promise<string[]> => {
+  const worktrees = await mechanicalWorktreesForBranch(
+    command,
+    repositoryRoot,
+    branch,
+  );
+  if (worktrees.length > 1) {
+    throw new Error("Merge base branch is checked out in multiple worktrees");
+  }
+  return worktrees;
+};
+
 const mechanicalApprovalWorktreePath = (
   change: MechanicalChangeContext,
 ): string =>
@@ -144,6 +160,25 @@ export const synchronizeMechanicalBaseWorktree = async (
     throw new Error(`Merge base worktree ${JSON.stringify(path)} is dirty`);
   }
   await runMechanicalGit(command, path, ["reset", "--hard", mergedHead]);
+};
+
+export const synchronizeMechanicalBaseWorktreesAfterRefDrift = async (
+  command: CommandRunner,
+  paths: string[],
+  previousHead: string,
+  currentHead: string,
+): Promise<void> => {
+  if (previousHead === currentHead) return;
+  await Promise.all(
+    paths.map((path) =>
+      synchronizeMechanicalBaseWorktree(
+        command,
+        path,
+        previousHead,
+        currentHead,
+      ),
+    ),
+  );
 };
 
 export const runMechanicalRefTransaction = async (

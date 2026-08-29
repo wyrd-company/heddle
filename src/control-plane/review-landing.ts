@@ -8,11 +8,12 @@ import { lstat } from "node:fs/promises";
 import type { JsonValue } from "../persistence/index.js";
 import {
   assertMechanicalBranchRefs,
-  mechanicalWorktreesForBranch,
+  mechanicalWorktreesForSingleCheckout,
   provisionMechanicalApprovalWorktree,
   removeMechanicalApprovalWorktree,
   runMechanicalRefTransaction,
   synchronizeMechanicalBaseWorktree,
+  synchronizeMechanicalBaseWorktreesAfterRefDrift,
   withMechanicalRefLease,
 } from "./mechanical-ref-transaction.js";
 import { ensureWorktree } from "./worktree-creator.js";
@@ -64,7 +65,6 @@ export const mergeReviewSnapshot = async (
   );
   if (baseHead === undefined)
     throw new Error("Merge base branch does not exist");
-
   if (snapshot.status === "approved") {
     await runMechanicalGit(command, change.repositoryRoot, [
       "merge-base",
@@ -83,10 +83,21 @@ export const mergeReviewSnapshot = async (
   if (snapshot.status !== "open") {
     throw new Error(`Snapshot ${snapshotId} is not open`);
   }
+  let baseWorktrees = await mechanicalWorktreesForSingleCheckout(
+    command,
+    change.repositoryRoot,
+    change.baseBranch,
+  );
   if (
     sourceHead !== snapshot.sourceHead ||
     (baseHead !== snapshot.baseHead && baseHead !== snapshot.sourceHead)
   ) {
+    await synchronizeMechanicalBaseWorktreesAfterRefDrift(
+      command,
+      baseWorktrees,
+      snapshot.baseHead,
+      baseHead,
+    );
     return {
       alreadyMerged: false,
       dispositions: { merged: false, remediate: true },
@@ -114,14 +125,6 @@ export const mergeReviewSnapshot = async (
     change.baseBranch,
     change.branch,
   ]);
-  let baseWorktrees = await mechanicalWorktreesForBranch(
-    command,
-    change.repositoryRoot,
-    change.baseBranch,
-  );
-  if (baseWorktrees.length > 1) {
-    throw new Error("Merge base branch is checked out in multiple worktrees");
-  }
   const baseAlreadyIntegrated = baseHead === snapshot.sourceHead;
   if (!baseAlreadyIntegrated) {
     await Promise.all(

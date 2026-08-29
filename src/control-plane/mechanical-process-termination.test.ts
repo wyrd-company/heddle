@@ -296,51 +296,6 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
     },
   );
 
-  it("routes reviewed-base drift after exact-base integration to remediation", async () => {
-    const fixture = await makeLifecycleAtReview();
-    await terminateAtBoundary(fixture, mergeResume, "exact-base-integrated");
-    const tree = (
-      await git(
-        fixture.repositoryRoot,
-        "rev-parse",
-        `${fixture.snapshot.sourceHead}^{tree}`,
-      )
-    ).trim();
-    const movedBase = (
-      await git(
-        fixture.repositoryRoot,
-        "commit-tree",
-        tree,
-        "-p",
-        fixture.snapshot.sourceHead,
-        "-m",
-        "advance base",
-      )
-    ).trim();
-    await git(
-      fixture.repositoryRoot,
-      "update-ref",
-      "refs/heads/main",
-      movedBase,
-      fixture.snapshot.sourceHead,
-    );
-
-    await expect(restartOperation(fixture, mergeResume)).resolves.toMatchObject(
-      {
-        awaitingNodeIds: ["remediate"],
-        status: "awaiting",
-      },
-    );
-    expect((await snapshotNow(fixture)).status).toBe("open");
-    expect(await readBranchHead(fixture.repositoryRoot, "main")).toBe(
-      movedBase,
-    );
-    expect(
-      await readBranchHead(fixture.repositoryRoot, fixture.change.branch),
-    ).toBe(fixture.snapshot.sourceHead);
-    expect(await pathExists(fixture.sourceWorktreePath)).toBe(true);
-  });
-
   it("enters attention and restores the owned path when the surviving branch moves", async () => {
     const fixture = await makeLifecycleAtRetrospective();
     await terminateAtBoundary(

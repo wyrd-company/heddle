@@ -3,14 +3,12 @@
 //   verifies: heddle
 // ---
 
-import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { readdir, writeFile } from "node:fs/promises";
+import { spawn, type ChildProcess } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
-import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, URL } from "node:url";
-import { promisify } from "node:util";
 
 import { expect } from "vitest";
 
@@ -18,10 +16,17 @@ import type {
   LifecycleSnapshot,
   ResumeLifecycleInput,
 } from "../engine/index.js";
+import {
+  readProcessGroup,
+  readRepositoryRefLocks,
+  settleRestartProcessGroup,
+  waitForEmptyProcessGroup,
+  waitForSettledProcessGroup,
+  type ProcessRecord,
+} from "./mechanical-process-topology.js";
 import type { LifecycleFixture } from "./mechanical-process-termination-fixture.js";
 import type { MechanicalTerminationBoundary } from "./mechanical-process-termination-worker.js";
 
-const execute = promisify(execFile);
 const workerCwd = process.cwd();
 const workerPath = fileURLToPath(
   new URL("./mechanical-process-termination-worker.ts", import.meta.url),
@@ -58,14 +63,6 @@ interface WorkerConfiguration {
   stateDirectory: string;
 }
 
-export interface ProcessRecord {
-  arguments: string;
-  command: string;
-  parentPid: number;
-  processGroupId: number;
-  processId: number;
-}
-
 interface RunningWorker {
   child: ChildProcess;
   exit: Promise<{ code: number | null; signal: string | null }>;
@@ -75,16 +72,26 @@ interface RunningWorker {
   ) => Promise<Extract<WorkerRecord, { kind: T }>>;
 }
 
+export interface RestartProbe {
+  boundary: MechanicalTerminationBoundary;
+  onLaunch?: (processGroupId: number) => void;
+  timeoutMilliseconds: number;
+}
+
 const withTimeout = async <T>(
   promise: Promise<T>,
   message: string,
+  timeoutMilliseconds = 15_000,
 ): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), 15_000);
+        timer = setTimeout(
+          () => reject(new Error(message)),
+          timeoutMilliseconds,
+        );
       }),
     ]);
   } finally {
@@ -96,6 +103,7 @@ const launchWorker = async (
   fixture: LifecycleFixture,
   resume: ResumeLifecycleInput,
   boundary?: MechanicalTerminationBoundary,
+  timeoutMilliseconds = 15_000,
 ): Promise<RunningWorker> => {
   const configuration: WorkerConfiguration = {
     boundary,
@@ -187,64 +195,9 @@ const launchWorker = async (
           }),
         ]),
         `Worker did not emit ${kind}`,
+        timeoutMilliseconds,
       ),
   };
-};
-
-const processGroup = async (
-  processGroupId: number,
-): Promise<ProcessRecord[]> => {
-  const output = (await execute("ps", ["-eo", "pid=,ppid=,pgid=,comm=,args="]))
-    .stdout;
-  return output
-    .split("\n")
-    .map((line) => /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line))
-    .filter((match): match is RegExpExecArray => match !== null)
-    .map((match) => ({
-      arguments: match[5] ?? "",
-      command: match[4] ?? "",
-      parentPid: Number(match[2]),
-      processGroupId: Number(match[3]),
-      processId: Number(match[1]),
-    }))
-    .filter((record) => record.processGroupId === processGroupId);
-};
-
-const waitForEmptyProcessGroup = async (
-  processGroupId: number,
-): Promise<ProcessRecord[]> => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const remaining = await processGroup(processGroupId);
-    if (remaining.length === 0) return remaining;
-    await delay(20);
-  }
-  return processGroup(processGroupId);
-};
-
-const waitForSettledProcessGroup = async (
-  processGroupId: number,
-  holdsLease: boolean,
-): Promise<ProcessRecord[]> => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const observed = await processGroup(processGroupId);
-    const gitProcesses = observed.filter(({ command }) => command === "git");
-    if (gitProcesses.length === (holdsLease ? 1 : 0)) return observed;
-    await delay(20);
-  }
-  return processGroup(processGroupId);
-};
-
-const lockFilesBelow = async (root: string): Promise<string[]> => {
-  const locks: string[] = [];
-  const visit = async (path: string): Promise<void> => {
-    for (const entry of await readdir(path, { withFileTypes: true })) {
-      const child = join(path, entry.name);
-      if (entry.isDirectory()) await visit(child);
-      else if (entry.name.endsWith(".lock")) locks.push(child);
-    }
-  };
-  await visit(root);
-  return locks.sort();
 };
 
 export const terminateAtBoundary = async (
@@ -266,9 +219,7 @@ export const terminateAtBoundary = async (
       processGroupId,
       holdsLease,
     );
-    const locksBeforeKill = await lockFilesBelow(
-      join(fixture.repositoryRoot, ".git"),
-    );
+    const locksBeforeKill = await readRepositoryRefLocks(fixture);
     expect(worker.child.kill("SIGKILL")).toBe(true);
     await expect(worker.exit).resolves.toEqual({
       code: null,
@@ -279,12 +230,10 @@ export const terminateAtBoundary = async (
       remaining,
       `orphaned process group:\n${JSON.stringify(remaining, null, 2)}`,
     ).toEqual([]);
-    expect(await lockFilesBelow(join(fixture.repositoryRoot, ".git"))).toEqual(
-      [],
-    );
+    expect(await readRepositoryRefLocks(fixture)).toEqual([]);
     return { locksBeforeKill, marker, topologyBeforeKill };
   } finally {
-    const remaining = await processGroup(processGroupId);
+    const remaining = await readProcessGroup(processGroupId);
     if (remaining.length > 0) process.kill(-processGroupId, "SIGKILL");
   }
 };
@@ -292,12 +241,29 @@ export const terminateAtBoundary = async (
 export const restartOperation = async (
   fixture: LifecycleFixture,
   resume: ResumeLifecycleInput,
+  probe?: RestartProbe,
 ): Promise<LifecycleSnapshot> => {
-  const worker = await launchWorker(fixture, resume);
-  const result = await worker.waitForRecord("result");
-  const exited = await worker.exit;
-  expect(exited, worker.stderr()).toEqual({ code: 0, signal: null });
-  return result.result;
+  const worker = await launchWorker(
+    fixture,
+    resume,
+    probe?.boundary,
+    probe?.timeoutMilliseconds,
+  );
+  probe?.onLaunch?.(worker.child.pid!);
+  let completed = false;
+  try {
+    const result = await worker.waitForRecord("result");
+    const exited = await withTimeout(
+      worker.exit,
+      "Restart worker did not exit",
+      probe?.timeoutMilliseconds,
+    );
+    expect(exited, worker.stderr()).toEqual({ code: 0, signal: null });
+    completed = true;
+    return result.result;
+  } finally {
+    await settleRestartProcessGroup(worker.child, fixture, !completed);
+  }
 };
 
 export const restartExpectingAttention = async (
@@ -305,8 +271,17 @@ export const restartExpectingAttention = async (
   resume: ResumeLifecycleInput,
 ): Promise<ErrorRecord> => {
   const worker = await launchWorker(fixture, resume);
-  const error = await worker.waitForRecord("error");
-  const exited = await worker.exit;
-  expect(exited).toEqual({ code: 1, signal: null });
-  return error;
+  let completed = false;
+  try {
+    const error = await worker.waitForRecord("error");
+    const exited = await withTimeout(
+      worker.exit,
+      "Restart worker did not exit",
+    );
+    expect(exited).toEqual({ code: 1, signal: null });
+    completed = true;
+    return error;
+  } finally {
+    await settleRestartProcessGroup(worker.child, fixture, !completed);
+  }
 };
