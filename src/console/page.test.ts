@@ -69,6 +69,12 @@ describe("console page state", () => {
     expect(consoleStyles).toMatch(
       /\.graph-edge\[data-trace="true"\] \{[^}]*stroke: var\(--signal\);[^}]*stroke-width: 4;[^}]*\}/,
     );
+    expect(consoleStyles).toMatch(
+      /\.graph-viewport \{[^}]*overflow: auto;[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.graph-canvas \{[^}]*position: relative;[^}]*\}/,
+    );
   });
 });
 

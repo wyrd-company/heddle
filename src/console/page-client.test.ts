@@ -197,6 +197,7 @@ const clientHarness = async (
   const attention = new FakeElement("span");
   let locationHref = initialUrl;
   const windowListeners = new Map<string, () => void>();
+  const graphResponses = new Map<string, Promise<BrowserResponse>>();
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
 
   const fetch = async (input: string): Promise<BrowserResponse> => {
@@ -208,6 +209,8 @@ const clientHarness = async (
       const requestedScope = new URL(input, locationHref).searchParams.get(
         "scope",
       );
+      const heldResponse = graphResponses.get(requestedScope!);
+      if (heldResponse !== undefined) return heldResponse;
       const graph = {
         edges: [{ from: 10, to: 11, trace: true }],
         nodes: [
@@ -335,6 +338,9 @@ const clientHarness = async (
     holdProjection: (name: string, held: Promise<BrowserResponse>) => {
       projectionResponses.set(name, held);
     },
+    holdGraph: (name: string, held: Promise<BrowserResponse>) => {
+      graphResponses.set(name, held);
+    },
     graph,
     graphCanvas,
     lifecycle,
@@ -342,6 +348,10 @@ const clientHarness = async (
     location: () => locationHref,
     navigate: (name: string) => {
       locationHref = `http://console.test/?scope=${encodeURIComponent(name)}`;
+      windowListeners.get("popstate")!();
+    },
+    navigateUrl: (url: string) => {
+      locationHref = url;
       windowListeners.get("popstate")!();
     },
     scope,
@@ -435,6 +445,27 @@ describe("console client request ownership", () => {
     expect(invalidLifecycle.status.textContent).toBe(
       "lifecycle view requires task:<id> scope",
     );
+  });
+
+  it("ignores a stale graph after task lifecycle navigation", async () => {
+    const harness = await clientHarness();
+    const heldGraph = deferred<BrowserResponse>();
+    harness.holdGraph("epic:10", heldGraph.promise);
+
+    harness.navigateUrl(
+      "http://console.test/?view=dependencies&scope=epic%3A10",
+    );
+    harness.navigateUrl("http://console.test/?view=lifecycle&scope=task%3A11");
+    await vi.waitFor(() =>
+      expect(harness.status.textContent).toBe("Lifecycle view for task #11"),
+    );
+
+    heldGraph.resolve(response({ edges: [], nodes: [] }));
+    await delay(0);
+
+    expect(harness.lifecycle.hidden).toBe(false);
+    expect(harness.status.textContent).toBe("Lifecycle view for task #11");
+    expect(harness.graphCanvas.children).toEqual([]);
   });
 
   it("renders a visible structured deferral on a ready card", async () => {
