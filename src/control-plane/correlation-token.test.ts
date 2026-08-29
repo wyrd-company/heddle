@@ -86,4 +86,62 @@ describe("ensureCorrelationToken", () => {
     ).toEqual({ "session-1": "token-1" });
     persistence.close();
   });
+
+  it("reuses one candidate across a compare-and-swap retry", () => {
+    let record: InstanceRecord = {
+      instanceId: "instance-1",
+      state: initialState(),
+      version: 1,
+    };
+    let losesFirstClaim = true;
+    const store = {
+      getInstance: () => record,
+      compareAndSwapInstance: (
+        _instanceId: string,
+        _expectedVersion: number,
+        state: InstanceState,
+      ) => {
+        if (losesFirstClaim) {
+          losesFirstClaim = false;
+          record = {
+            ...record,
+            state: { ...record.state, todoState: ["preserved"] },
+            version: record.version + 1,
+          };
+          return undefined;
+        }
+        record = { ...record, state, version: record.version + 1 };
+        return record;
+      },
+    };
+    const mint = vi.fn(() => "token-1");
+
+    expect(
+      ensureCorrelationToken(store, "instance-1", "session-1", mint),
+    ).toMatchObject({ token: "token-1" });
+    expect(record.state).toMatchObject({
+      correlationTokens: { "session-1": "token-1" },
+      todoState: ["preserved"],
+    });
+    expect(mint).toHaveBeenCalledOnce();
+  });
+
+  it("rejects empty session keys and minted tokens", () => {
+    const record: InstanceRecord = {
+      instanceId: "instance-1",
+      state: initialState(),
+      version: 1,
+    };
+    const store = {
+      getInstance: () => record,
+      compareAndSwapInstance: () => record,
+    };
+
+    expect(() => ensureCorrelationToken(store, "instance-1", " ")).toThrow(
+      /sessionKey/,
+    );
+    expect(() =>
+      ensureCorrelationToken(store, "instance-1", "session-1", () => " "),
+    ).toThrow(/token/);
+  });
 });

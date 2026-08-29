@@ -128,6 +128,12 @@ describe("stage session bootstrap", () => {
     expect(turnCommands.every((command) => !("bootstrap" in command))).toBe(
       true,
     );
+    expect(commands.map(({ type }) => type)).toEqual([
+      "thread.create",
+      "thread.turn.start",
+      "thread.create",
+      "thread.turn.start",
+    ]);
     expect(record.state.correlationTokens).toEqual({
       "prepare-1": "correlation-token",
     });

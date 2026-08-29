@@ -86,4 +86,42 @@ describe("ensureWorktree", () => {
       }),
     ).rejects.toThrow(/does not belong/);
   });
+
+  it("rejects an existing worktree on the wrong branch", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+    scratchDirectories.push(scratch);
+    const repositoryRoot = join(scratch, "source");
+    const worktreesRoot = join(scratch, "worktrees");
+    const ownedPath = join(worktreesRoot, "sample-repository", "task-prepare");
+    await initializeRepository(repositoryRoot);
+    await mkdir(join(worktreesRoot, "sample-repository"), { recursive: true });
+    await exec(
+      "git",
+      ["worktree", "add", "--quiet", "-b", "task/other", ownedPath, "main"],
+      { cwd: repositoryRoot },
+    );
+
+    await expect(
+      ensureWorktree({
+        baseRef: "main",
+        branch: "task/prepare",
+        repositoryName: "sample-repository",
+        repositoryRoot,
+        worktreeName: "task-prepare",
+        worktreesRoot,
+      }),
+    ).rejects.toThrow(/uses branch/);
+  });
+
+  it("rejects path traversal names", async () => {
+    await expect(
+      ensureWorktree({
+        baseRef: "main",
+        branch: "task/prepare",
+        repositoryName: "../outside",
+        repositoryRoot: "/workspaces/sample-repository",
+        worktreeName: "task-prepare",
+      }),
+    ).rejects.toThrow(/safe path segment/);
+  });
 });
