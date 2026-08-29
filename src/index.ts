@@ -1,4 +1,21 @@
-export { console } from "./console/index.js";
+export {
+  buildKanbanProjection,
+  console,
+  createConsoleServer,
+  parseConsoleScope,
+  serializeConsoleScope,
+} from "./console/index.js";
+export type {
+  ConsoleAttention,
+  ConsoleBoard,
+  ConsoleEvent,
+  ConsoleInstance,
+  ConsoleScope,
+  ConsoleServerOptions,
+  ConsoleStateSource,
+  KanbanProjection,
+  ProjectedTask,
+} from "./console/index.js";
 export { controlPlane } from "./control-plane/index.js";
 export { engine } from "./engine/index.js";
 export { mcpServer } from "./mcp-server/index.js";

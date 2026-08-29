@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   console,
   controlPlane,
+  createConsoleServer,
   engine,
   mcpServer,
   reconciler,
@@ -17,5 +18,6 @@ describe("service package layout", () => {
       mcpServer: "mcp-server",
       reconciler: "reconciler",
     });
+    expect(createConsoleServer).toBeTypeOf("function");
   });
 });
