@@ -393,6 +393,13 @@ const updateDwells = () => {
   }
 };
 
+const renderLoadFailure = (error) => {
+  scopeElement.selectedIndex = -1;
+  boardElement.replaceChildren();
+  statusElement.dataset.error = "true";
+  statusElement.textContent = error instanceof Error ? error.message : "Console load failed";
+};
+
 async function load() {
   statusElement.dataset.error = "false";
   statusElement.textContent = "Loading board…";
@@ -409,8 +416,7 @@ async function load() {
     statusElement.textContent = projection.columns.reduce((count, column) => count + column.tasks.length, 0) + " visible records";
     updateDwells();
   } catch (error) {
-    statusElement.dataset.error = "true";
-    statusElement.textContent = error instanceof Error ? error.message : "Console load failed";
+    renderLoadFailure(error);
   }
 }
 

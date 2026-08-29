@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { consolePage, consoleStyles } from "./page.js";
+import { consoleClient, consolePage, consoleStyles } from "./page.js";
 
 const colorToken = (name: string): string => {
   const match = new RegExp(`--${name}:\\s*(#[0-9a-f]{6});`, "i").exec(
@@ -36,6 +36,17 @@ const contrastRatio = (first: string, second: string): number => {
   ].sort((left, right) => right - left);
   return (lighter! + 0.05) / (darker! + 0.05);
 };
+
+describe("console page state", () => {
+  it("clears stale projection and scope state when a scoped reload fails", () => {
+    expect(consoleClient).toMatch(
+      /const renderLoadFailure = \(error\) => \{\s*scopeElement\.selectedIndex = -1;\s*boardElement\.replaceChildren\(\);\s*statusElement\.dataset\.error = "true";\s*statusElement\.textContent = error instanceof Error \? error\.message : "Console load failed";\s*\};/,
+    );
+    expect(consoleClient).toMatch(
+      /catch \(error\) \{\s*renderLoadFailure\(error\);\s*\}/,
+    );
+  });
+});
 
 describe("console page accessibility", () => {
   it("uses nameable roles for the labelled attention and board nodes", () => {
