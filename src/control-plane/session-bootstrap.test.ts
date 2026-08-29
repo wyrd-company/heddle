@@ -6,6 +6,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cwd } from "node:process";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -65,7 +66,7 @@ afterEach(async () => {
 describe("stage session bootstrap", () => {
   it("keeps the documented harness timeout configuration executable", async () => {
     const documentedDesign = await readFile(
-      join(process.cwd(), "docs/technical-designs/heddle.yml"),
+      join(cwd(), "docs/technical-designs/heddle.yml"),
       "utf8",
     );
     const configured = harnessToolTimeoutConfiguration();
