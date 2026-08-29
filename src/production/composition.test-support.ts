@@ -12,7 +12,6 @@ import { promisify } from "node:util";
 import type {
   HarnessToolTimeoutLaunchInput,
   T3DispatchCommand,
-  T3ProviderDispatchContext,
 } from "../control-plane/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
@@ -30,11 +29,8 @@ export class SyntheticT3 implements ProductionT3Client {
     this.timeouts.push(input);
   }
 
-  async dispatch(
-    command: T3DispatchCommand,
-    _providerContext?: T3ProviderDispatchContext,
-  ): Promise<{ sequence: number }> {
-    this.commands.push(structuredClone(command));
+  async dispatch(command: T3DispatchCommand): Promise<{ sequence: number }> {
+    this.commands.push(globalThis.structuredClone(command));
     if (command.type === "thread.create" && command.threadId !== undefined) {
       this.threads.add(command.threadId);
     }

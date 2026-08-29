@@ -5,6 +5,7 @@
 
 import { appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import process from "node:process";
 
 import type { WorkflowMcpSessionBinding } from "../mcp-server/index.js";
 import {
@@ -106,7 +107,7 @@ const binding: WorkflowMcpSessionBinding = {
   taskContext: { id: 17, title: "Example Item" },
   token: "correlation-token",
 };
-const controller = new AbortController();
+const controller = new globalThis.AbortController();
 if (mode === "resume") {
   globalThis.setTimeout(
     () => controller.abort(new Error("probe complete")),

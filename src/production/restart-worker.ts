@@ -4,12 +4,9 @@
 // ---
 
 import { appendFile, readFile } from "node:fs/promises";
+import process from "node:process";
 
-import type { HarnessToolTimeoutLaunchInput } from "../control-plane/index.js";
-import type {
-  T3DispatchCommand,
-  T3ProviderDispatchContext,
-} from "../control-plane/t3-control-plane-client.js";
+import type { T3DispatchCommand } from "../control-plane/t3-control-plane-client.js";
 import {
   createProductionComposition,
   type ProductionT3Client,
@@ -34,12 +31,10 @@ const recorded = (await readFile(commandLog, "utf8").catch(() => ""))
   .map((line) => JSON.parse(line) as T3DispatchCommand);
 const seen = new Set(recorded.map(({ commandId }) => commandId));
 const t3: ProductionT3Client = {
-  applyHarnessToolTimeout: async (_input: HarnessToolTimeoutLaunchInput) =>
-    undefined,
-  dispatch: async (
-    command: T3DispatchCommand,
-    _context?: T3ProviderDispatchContext,
-  ) => {
+  applyHarnessToolTimeout: async () => {
+    await Promise.resolve();
+  },
+  dispatch: async (command: T3DispatchCommand) => {
     if (!seen.has(command.commandId)) {
       seen.add(command.commandId);
       recorded.push(command);
