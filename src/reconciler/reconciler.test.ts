@@ -5,138 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { BoardTask } from "../board-adapter/index.js";
-import {
-  Reconciler,
-  type ReconcilerAttention,
-  type ReconcilerBoard,
-  type ReconcilerInstance,
-  type ReconcilerInstanceController,
-  type ReconcilerLifecycleResolver,
-} from "./index.js";
-
-const task = (
-  id: number,
-  status: string,
-  overrides: Partial<BoardTask> = {},
-): BoardTask => ({
-  dependencies: [],
-  id,
-  priority: "medium",
-  status,
-  tags: [],
-  title: `Sample record ${id}`,
-  ...overrides,
-});
-
-class FixtureBoard implements ReconcilerBoard {
-  readonly childWrites: Array<{ status: string; taskId: number }> = [];
-  readonly epicWrites: Array<{ status: "done" | "uat"; taskId: number }> = [];
-
-  constructor(readonly tasks: BoardTask[]) {}
-
-  async readBoard(): Promise<BoardTask[]> {
-    return this.tasks.map((item) => ({ ...item }));
-  }
-
-  async mirrorChildStatus(taskId: number, status: string): Promise<void> {
-    const item = this.required(taskId);
-    if (item.parent === undefined) throw new Error("fixture expected a child");
-    item.status = status;
-    this.childWrites.push({ status, taskId });
-  }
-
-  async transitionEpicStatus(
-    taskId: number,
-    status: "done" | "uat",
-  ): Promise<void> {
-    this.required(taskId).status = status;
-    this.epicWrites.push({ status, taskId });
-  }
-
-  private required(taskId: number): BoardTask {
-    const item = this.tasks.find(({ id }) => id === taskId);
-    if (item === undefined) throw new Error(`fixture task ${taskId} is absent`);
-    return item;
-  }
-}
-
-class FixtureInstances implements ReconcilerInstanceController {
-  readonly instances: ReconcilerInstance[] = [];
-  readonly starts: Array<{
-    blueprintPath: string;
-    instanceId: string;
-    task: BoardTask;
-  }> = [];
-
-  async listInstances(): Promise<ReconcilerInstance[]> {
-    return this.instances.map((instance) => ({ ...instance }));
-  }
-
-  async start(input: {
-    blueprintPath: string;
-    instanceId: string;
-    task: BoardTask;
-  }): Promise<void> {
-    this.starts.push(input);
-    this.instances.push({
-      boardStatus: input.task.status,
-      instanceId: input.instanceId,
-      state: "waiting",
-      taskId: input.task.id,
-    });
-  }
-}
-
-class FixtureAttentionQueue {
-  readonly entries = new Map<string, ReconcilerAttention>();
-
-  async has(attentionId: string): Promise<boolean> {
-    return this.entries.has(attentionId);
-  }
-
-  async raise(attention: ReconcilerAttention): Promise<void> {
-    this.entries.set(attention.attentionId, attention);
-  }
-}
-
-const lifecycleResolver: ReconcilerLifecycleResolver = {
-  resolve: async (item) =>
-    item.lifecycle === undefined
-      ? {
-          attention: {
-            code: "lifecycle-not-declared",
-            message: `Task ${item.id} does not declare a lifecycle`,
-            taskId: item.id,
-          },
-          kind: "attention-required",
-        }
-      : {
-          artifactId: item.lifecycle,
-          blueprintPath: `blueprints/${item.lifecycle}.json`,
-          kind: "resolved",
-        },
-};
-
-const fixture = (
-  tasks: BoardTask[],
-  options: {
-    now?: () => number;
-    staleThresholds?: Record<string, number>;
-  } = {},
-) => {
-  const board = new FixtureBoard(tasks);
-  const instances = new FixtureInstances();
-  const attention = new FixtureAttentionQueue();
-  const reconciler = new Reconciler({
-    attention,
-    board,
-    instances,
-    lifecycleResolver,
-    ...options,
-  });
-  return { attention, board, instances, reconciler };
-};
+import { fixture, task } from "./reconciler.test-support.js";
 
 describe("Reconciler", () => {
   it("ignites an epic, picks up late children, and dispatches standalone todo tasks", async () => {
@@ -152,7 +21,7 @@ describe("Reconciler", () => {
 
     const ignition = await subject.reconciler.reconcile();
 
-    expect(subject.board.childWrites).toEqual([
+    expect(subject.board.statusWrites).toEqual([
       { status: "todo", taskId: first.id },
     ]);
     expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
@@ -160,7 +29,7 @@ describe("Reconciler", () => {
       standalone.id,
     ]);
     expect(ignition.map(({ kind }) => kind)).toEqual([
-      "child-status-transition",
+      "task-status-transition",
       "instance-start",
       "instance-start",
     ]);
@@ -173,7 +42,7 @@ describe("Reconciler", () => {
 
     await subject.reconciler.reconcile();
 
-    expect(subject.board.childWrites.at(-1)).toEqual({
+    expect(subject.board.statusWrites.at(-1)).toEqual({
       status: "todo",
       taskId: late.id,
     });
@@ -206,7 +75,7 @@ describe("Reconciler", () => {
 
     const released = await subject.reconciler.reconcile();
 
-    expect(subject.board.childWrites).toContainEqual({
+    expect(subject.board.statusWrites).toContainEqual({
       status: "done",
       taskId: inventory.id,
     });
@@ -242,6 +111,34 @@ describe("Reconciler", () => {
     expect(actions).toEqual([]);
   });
 
+  it("projects running and done standalone instances through the board adapter", async () => {
+    const standalone = task(45, "todo", { lifecycle: "material-repair" });
+    const subject = fixture([standalone]);
+    await subject.reconciler.reconcile();
+    Object.assign(subject.instances.instances[0]!, {
+      boardStatus: "in-progress",
+      state: "running",
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.board.statusWrites).toEqual([
+      { status: "in-progress", taskId: standalone.id },
+    ]);
+    Object.assign(subject.instances.instances[0]!, {
+      boardStatus: "done",
+      state: "done",
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.board.statusWrites.at(-1)).toEqual({
+      status: "done",
+      taskId: standalone.id,
+    });
+    expect(standalone.status).toBe("done");
+  });
+
   it("opens UAT after non-UAT children finish and completes the epic after UAT acceptance", async () => {
     const epic = task(50, "in-progress", { tags: ["type:epic"] });
     const delivery = task(51, "done", { parent: epic.id });
@@ -257,7 +154,7 @@ describe("Reconciler", () => {
     expect(subject.board.epicWrites).toEqual([
       { status: "uat", taskId: epic.id },
     ]);
-    expect(subject.board.childWrites).toContainEqual({
+    expect(subject.board.statusWrites).toContainEqual({
       status: "todo",
       taskId: acceptance.id,
     });
@@ -266,13 +163,64 @@ describe("Reconciler", () => {
       boardStatus: "done",
       state: "done",
     });
+    const lateDelivery = task(53, "backlog", {
+      lifecycle: "late-catalogue-repair",
+      parent: epic.id,
+    });
+    subject.board.tasks.push(lateDelivery);
 
+    await subject.reconciler.reconcile();
+
+    expect(subject.board.epicWrites.at(-1)).toEqual({
+      status: "uat",
+      taskId: epic.id,
+    });
+    lateDelivery.status = "done";
     await subject.reconciler.reconcile();
 
     expect(subject.board.epicWrites.at(-1)).toEqual({
       status: "done",
       taskId: epic.id,
     });
+  });
+
+  it("does not promote or dispatch blocked child and standalone tasks", async () => {
+    const epic = task(55, "in-progress", { tags: ["type:epic"] });
+    const child = task(56, "backlog", {
+      blocked: true,
+      lifecycle: "crate-repair",
+      parent: epic.id,
+    });
+    const standalone = task(57, "todo", {
+      blocked: true,
+      lifecycle: "window-cleaning",
+    });
+    const todoChild = task(59, "todo", {
+      blocked: true,
+      lifecycle: "shelf-cleaning",
+      parent: epic.id,
+    });
+    const subject = fixture([epic, child, standalone, todoChild]);
+
+    await expect(subject.reconciler.reconcile()).resolves.toEqual([]);
+
+    expect(subject.board.statusWrites).toEqual([]);
+    expect(subject.instances.starts).toEqual([]);
+    expect(child.status).toBe("backlog");
+  });
+
+  it("treats an absent dependency record as satisfied", async () => {
+    const standalone = task(58, "todo", {
+      dependencies: [999],
+      lifecycle: "room-inspection",
+    });
+    const subject = fixture([standalone]);
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      standalone.id,
+    ]);
   });
 
   it("raises one attention entry instead of guessing a missing lifecycle", async () => {
@@ -291,7 +239,7 @@ describe("Reconciler", () => {
       }),
     ]);
     expect(actions.map(({ kind }) => kind)).toEqual([
-      "child-status-transition",
+      "task-status-transition",
       "attention-raised",
     ]);
     await expect(subject.reconciler.reconcile()).resolves.toEqual([]);

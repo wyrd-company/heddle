@@ -13,6 +13,7 @@ const lifecycleName = /^[a-z][a-z-]*$/;
 export type KanbanCommandRunner = (arguments_: string[]) => Promise<string>;
 
 export interface BoardTask {
+  blocked: boolean;
   id: number;
   title: string;
   status: string;
@@ -35,6 +36,7 @@ export interface CreateBoardRecord {
 }
 
 interface KanbanTaskJson {
+  blocked?: boolean;
   id: number;
   title: string;
   status: string;
@@ -62,7 +64,9 @@ const requireTask = (value: unknown): KanbanTaskJson => {
     typeof (value as KanbanTaskJson).title !== "string" ||
     typeof (value as KanbanTaskJson).status !== "string" ||
     typeof (value as KanbanTaskJson).priority !== "string" ||
-    typeof (value as KanbanTaskJson).file !== "string"
+    typeof (value as KanbanTaskJson).file !== "string" ||
+    ((value as KanbanTaskJson).blocked !== undefined &&
+      typeof (value as KanbanTaskJson).blocked !== "boolean")
   ) {
     throw new Error("kanban-md returned an invalid task");
   }
@@ -140,6 +144,14 @@ export class KanbanBoardAdapter {
     await this.command("edit", String(taskId), "--status", status, "--json");
   }
 
+  public async mirrorTaskStatus(taskId: number, status: string): Promise<void> {
+    const task = await this.readTask(taskId);
+    if (task.tags.includes("type:epic")) {
+      throw new Error(`task ${taskId} is an epic task`);
+    }
+    await this.command("edit", String(taskId), "--status", status, "--json");
+  }
+
   public async transitionEpicStatus(
     taskId: number,
     status: "done" | "uat",
@@ -188,6 +200,7 @@ export class KanbanBoardAdapter {
       lifecycleFromFrontMatter(source) ?? lifecycleFromTag(tags),
     );
     return {
+      blocked: task.blocked ?? false,
       id: task.id,
       title: task.title,
       status: task.status,

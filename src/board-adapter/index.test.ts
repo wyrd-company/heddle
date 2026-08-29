@@ -103,6 +103,15 @@ next_id: 1
       "--parent",
       String(collectionId),
     );
+    await runKanban([
+      "--dir",
+      boardDirectory,
+      "edit",
+      String(inventoryId),
+      "--block",
+      "Awaiting a storage-room key",
+      "--json",
+    ]);
     const displayId = await createTask(
       "Prepare display shelves",
       "--parent",
@@ -140,6 +149,10 @@ next_id: 1
           lifecycle: "collection-renewal",
         }),
         expect.objectContaining({
+          blocked: true,
+          id: inventoryId,
+        }),
+        expect.objectContaining({
           id: displayId,
           parent: collectionId,
           dependencies: [inventoryId],
@@ -175,6 +188,33 @@ next_id: 1
     await expect(
       adapter.mirrorChildStatus(collectionId, "done"),
     ).rejects.toThrow("is not a child task");
+  });
+
+  it("mirrors standalone status while preserving the epic status boundary", async () => {
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
+    const standaloneId = await createTask("Repair reading-room lamp");
+    const childId = await createTask(
+      "Label storage crates",
+      "--parent",
+      String(collectionId),
+    );
+
+    await adapter.mirrorTaskStatus(standaloneId, "in-progress");
+    await adapter.mirrorTaskStatus(childId, "done");
+
+    await expect(adapter.readTask(standaloneId)).resolves.toMatchObject({
+      status: "in-progress",
+    });
+    await expect(adapter.readTask(childId)).resolves.toMatchObject({
+      status: "done",
+    });
+    await expect(
+      adapter.mirrorTaskStatus(collectionId, "done"),
+    ).rejects.toThrow("is an epic task");
   });
 
   it("limits epic transitions to uat and done", async () => {

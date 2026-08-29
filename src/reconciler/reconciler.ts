@@ -73,13 +73,13 @@ export class Reconciler {
     for (const task of tasks) {
       const instance = instances.get(task.id);
       if (
-        task.parent === undefined ||
+        isEpic(task) ||
         instance === undefined ||
         task.status === instance.boardStatus
       ) {
         continue;
       }
-      await this.transitionChild(task, instance.boardStatus, actions);
+      await this.transitionTask(task, instance.boardStatus, actions);
     }
   }
 
@@ -102,6 +102,9 @@ export class Reconciler {
       const acceptanceChildren = children.filter(isUat);
       if (
         epic.status === "uat" &&
+        deliveryChildren.every(
+          ({ id }) => tasksById.get(id)?.status === "done",
+        ) &&
         acceptanceChildren.length > 0 &&
         acceptanceChildren.every(
           ({ id }) => tasksById.get(id)?.status === "done",
@@ -118,14 +121,14 @@ export class Reconciler {
     actions: ReconciliationAction[],
   ): Promise<void> {
     for (const child of tasks.filter(({ parent }) => parent !== undefined)) {
-      if (child.status !== "backlog") continue;
+      if (child.status !== "backlog" || child.blocked) continue;
       const epic = tasksById.get(child.parent!);
       const shouldPromote =
         epic !== undefined &&
         isEpic(epic) &&
         ((epic.status === "in-progress" && !isUat(child)) ||
           (epic.status === "uat" && isUat(child)));
-      if (shouldPromote) await this.transitionChild(child, "todo", actions);
+      if (shouldPromote) await this.transitionTask(child, "todo", actions);
     }
   }
 
@@ -138,6 +141,7 @@ export class Reconciler {
     for (const task of tasks) {
       if (
         isEpic(task) ||
+        task.blocked ||
         task.status !== "todo" ||
         instances.has(task.id) ||
         !this.dependenciesDone(task, tasksById) ||
@@ -183,9 +187,10 @@ export class Reconciler {
     task: BoardTask,
     tasks: ReadonlyMap<number, BoardTask>,
   ): boolean {
-    return task.dependencies.every(
-      (dependencyId) => tasks.get(dependencyId)?.status === "done",
-    );
+    return task.dependencies.every((dependencyId) => {
+      const dependency = tasks.get(dependencyId);
+      return dependency === undefined || dependency.status === "done";
+    });
   }
 
   private dispatchEnabled(
@@ -260,17 +265,17 @@ export class Reconciler {
     actions.push({ attention, kind: "attention-raised" });
   }
 
-  private async transitionChild(
+  private async transitionTask(
     task: BoardTask,
     status: string,
     actions: ReconciliationAction[],
   ): Promise<void> {
     const from = task.status;
-    await this.options.board.mirrorChildStatus(task.id, status);
+    await this.options.board.mirrorTaskStatus(task.id, status);
     task.status = status;
     actions.push({
       from,
-      kind: "child-status-transition",
+      kind: "task-status-transition",
       taskId: task.id,
       to: status,
     });

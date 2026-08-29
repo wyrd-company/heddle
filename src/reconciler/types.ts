@@ -7,7 +7,7 @@ import type { BoardTask } from "../board-adapter/index.js";
 import type { LifecycleResolution } from "../engine/index.js";
 
 export interface ReconcilerBoard {
-  mirrorChildStatus(taskId: number, status: string): Promise<void>;
+  mirrorTaskStatus(taskId: number, status: string): Promise<void>;
   readBoard(): Promise<BoardTask[]>;
   transitionEpicStatus(taskId: number, status: "done" | "uat"): Promise<void>;
 }
@@ -63,7 +63,7 @@ export interface ReconcilerOptions {
 export type ReconciliationAction =
   | {
       from: string;
-      kind: "child-status-transition";
+      kind: "task-status-transition";
       taskId: number;
       to: string;
     }

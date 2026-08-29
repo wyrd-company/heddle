@@ -1,0 +1,140 @@
+// ---
+// relationships:
+//   implements: heddle
+// ---
+
+import type { BoardTask } from "../board-adapter/index.js";
+import {
+  Reconciler,
+  type ReconcilerAttention,
+  type ReconcilerBoard,
+  type ReconcilerInstance,
+  type ReconcilerInstanceController,
+  type ReconcilerLifecycleResolver,
+} from "./index.js";
+
+export const task = (
+  id: number,
+  status: string,
+  overrides: Partial<BoardTask> = {},
+): BoardTask => ({
+  blocked: false,
+  dependencies: [],
+  id,
+  priority: "medium",
+  status,
+  tags: [],
+  title: `Sample record ${id}`,
+  ...overrides,
+});
+
+class FixtureBoard implements ReconcilerBoard {
+  readonly statusWrites: Array<{ status: string; taskId: number }> = [];
+  readonly epicWrites: Array<{ status: "done" | "uat"; taskId: number }> = [];
+
+  constructor(readonly tasks: BoardTask[]) {}
+
+  async readBoard(): Promise<BoardTask[]> {
+    return this.tasks.map((item) => ({ ...item }));
+  }
+
+  async mirrorTaskStatus(taskId: number, status: string): Promise<void> {
+    const item = this.required(taskId);
+    if (item.tags.includes("type:epic")) {
+      throw new Error("fixture cannot mirror an epic");
+    }
+    item.status = status;
+    this.statusWrites.push({ status, taskId });
+  }
+
+  async transitionEpicStatus(
+    taskId: number,
+    status: "done" | "uat",
+  ): Promise<void> {
+    this.required(taskId).status = status;
+    this.epicWrites.push({ status, taskId });
+  }
+
+  private required(taskId: number): BoardTask {
+    const item = this.tasks.find(({ id }) => id === taskId);
+    if (item === undefined) throw new Error(`fixture task ${taskId} is absent`);
+    return item;
+  }
+}
+
+class FixtureInstances implements ReconcilerInstanceController {
+  readonly instances: ReconcilerInstance[] = [];
+  readonly starts: Array<{
+    blueprintPath: string;
+    instanceId: string;
+    task: BoardTask;
+  }> = [];
+
+  async listInstances(): Promise<ReconcilerInstance[]> {
+    return this.instances.map((instance) => ({ ...instance }));
+  }
+
+  async start(input: {
+    blueprintPath: string;
+    instanceId: string;
+    task: BoardTask;
+  }): Promise<void> {
+    this.starts.push(input);
+    this.instances.push({
+      boardStatus: input.task.status,
+      instanceId: input.instanceId,
+      state: "waiting",
+      taskId: input.task.id,
+    });
+  }
+}
+
+class FixtureAttentionQueue {
+  readonly entries = new Map<string, ReconcilerAttention>();
+
+  async has(attentionId: string): Promise<boolean> {
+    return this.entries.has(attentionId);
+  }
+
+  async raise(attention: ReconcilerAttention): Promise<void> {
+    this.entries.set(attention.attentionId, attention);
+  }
+}
+
+const lifecycleResolver: ReconcilerLifecycleResolver = {
+  resolve: async (item) =>
+    item.lifecycle === undefined
+      ? {
+          attention: {
+            code: "lifecycle-not-declared",
+            message: `Task ${item.id} does not declare a lifecycle`,
+            taskId: item.id,
+          },
+          kind: "attention-required",
+        }
+      : {
+          artifactId: item.lifecycle,
+          blueprintPath: `blueprints/${item.lifecycle}.json`,
+          kind: "resolved",
+        },
+};
+
+export const fixture = (
+  tasks: BoardTask[],
+  options: {
+    now?: () => number;
+    staleThresholds?: Record<string, number>;
+  } = {},
+) => {
+  const board = new FixtureBoard(tasks);
+  const instances = new FixtureInstances();
+  const attention = new FixtureAttentionQueue();
+  const reconciler = new Reconciler({
+    attention,
+    board,
+    instances,
+    lifecycleResolver,
+    ...options,
+  });
+  return { attention, board, instances, reconciler };
+};
