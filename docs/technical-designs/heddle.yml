@@ -103,7 +103,9 @@ proposed-design:
     current pass within a configured bound. Runtime scheduling and adapter
     completion records persist intent and replay position only. Lifecycle,
     pacing, attention meaning, escalation identity, and session liveness remain
-    authoritative in their existing components.
+    authoritative in their existing components. The production session boundary
+    supports one configured provider, so its driver and the pacing evaluator's
+    default provider must agree.
   agent-sessions: >
     Sessions run on T3 Code, driven headlessly over plain HTTP:
     `POST /api/orchestration/dispatch` carries every command, and
@@ -119,9 +121,12 @@ proposed-design:
 
     Every production thread uses the configured existing workspace
     `projectId`. Its bounded deterministic title contains the Heddle marker,
-    complete task identity, and a stable stage discriminator. First-turn
-    dispatch omits `titleSeed`, so T3 cannot replace the Heddle title from a
-    prompt-derived seed.
+    complete task identity, and a stable stage-occurrence discriminator. Each
+    wait-stage occurrence has one durable session and thread identity; a stage
+    reached again through a lifecycle loop receives a new occurrence identity,
+    while restart resumes an incomplete occurrence. First-turn dispatch omits
+    `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived
+    seed.
 
     Sessions are short and stage-scoped. Nothing carries between
     stages except the handoff: a deterministically assembled bootstrap
@@ -289,9 +294,11 @@ proposed-design:
     make this cleanup idempotent. Heddle does not snooze, settle, pin, or
     reorder active or operator-blocked work.
 
-    The production scheduler invokes this observer for each persisted active
-    session after reconciliation. Observation thresholds and reconciler stage
-    thresholds come from the workspace configuration and survive restart.
+    The production scheduler invokes this observer for each persisted session
+    occurrence after reconciliation. This retains observation history when the
+    accepted lifecycle enters another wait stage. Observation thresholds and
+    reconciler stage thresholds come from the workspace configuration and
+    survive restart.
   mechanical-nodes: >
     Every step with a single correct outcome executes as a
     deterministic blueprint node running real code: creating the

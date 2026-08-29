@@ -12,12 +12,21 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SqlitePersistence } from "../persistence/index.js";
 import type { ConsoleBoard } from "../console/index.js";
 import {
+  createProductionComposition,
+  type ProductionComposition,
+} from "../production/index.js";
+import {
+  prepareProductionFixture,
+  SyntheticT3,
+} from "../production/composition.test-support.js";
+import {
   startHeddleServerFromEnvironment,
   type HeddleDeploymentServer,
 } from "./server.js";
 
 describe("deployed Heddle service", () => {
   let directory = "";
+  let production: ProductionComposition | undefined;
   let service: HeddleDeploymentServer | undefined;
   const board: ConsoleBoard = {
     readBoard: async () => [
@@ -37,6 +46,7 @@ describe("deployed Heddle service", () => {
 
   afterEach(async () => {
     await service?.close();
+    await production?.close();
     if (directory) await rm(directory, { force: true, recursive: true });
   });
 
@@ -131,5 +141,60 @@ describe("deployed Heddle service", () => {
     await expect(startHeddleServerFromEnvironment(input)).rejects.toThrow(
       expected,
     );
+  });
+
+  it("uses one production owner for scheduling, board, state, and shutdown", async () => {
+    const fixture = await prepareProductionFixture();
+    directory = fixture.root;
+    production = createProductionComposition({
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: async () => undefined },
+      t3: new SyntheticT3(),
+    });
+    await expect(
+      startHeddleServerFromEnvironment(
+        { HEDDLE_HOST: "127.0.0.1", HEDDLE_PORT: "0" },
+        { board, production },
+      ),
+    ).rejects.toThrow(
+      "A production composition owns its board and console state boundaries",
+    );
+    service = await startHeddleServerFromEnvironment(
+      { HEDDLE_HOST: "127.0.0.1", HEDDLE_PORT: "0" },
+      { production },
+    );
+
+    const response = await globalThis.fetch(
+      `http://127.0.0.1:${service.port}/api/instances`,
+    );
+    await expect(response.json()).resolves.toMatchObject([
+      { instanceId: `task-${fixture.taskId}`, taskId: fixture.taskId },
+    ]);
+    expect(() =>
+      createProductionComposition({
+        configuration: fixture.configuration,
+        providerUsage: {
+          readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        },
+        pushoverTransport: { send: async () => undefined },
+        t3: new SyntheticT3(),
+      }),
+    ).toThrow("A production composition already owns");
+
+    await service.close();
+    service = undefined;
+    production = undefined;
+    const replacement = createProductionComposition({
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: async () => undefined },
+      t3: new SyntheticT3(),
+    });
+    await replacement.close();
   });
 });

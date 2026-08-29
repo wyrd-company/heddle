@@ -131,9 +131,7 @@ export const createProductionComposition = (
     persistence = new SqlitePersistence({
       stateDirectory: configuration.stateDirectory,
     });
-    const t3 =
-      options.t3 ??
-      (new T3ControlPlaneClient(configuration.t3) as ProductionT3Client);
+    const t3 = options.t3 ?? new T3ControlPlaneClient(configuration.t3);
     const attention = new DurableAttentionQueue(persistence);
     const pushover = new DurablePushoverNotifier(
       persistence,
