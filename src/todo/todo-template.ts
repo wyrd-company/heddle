@@ -81,6 +81,9 @@ const instantiateText = (text: string, taskContract: JsonValue): string =>
     taskValue(taskContract, path),
   );
 
+const hasInvalidPlaceholderSyntax = (text: string): boolean =>
+  /[{}]/.test(text.replace(placeholder, ""));
+
 export const emptyTodoState = (): TodoState => ({
   format: "heddle.todo-state",
   lists: [],
@@ -146,12 +149,12 @@ export const instantiateTodoList = async (input: {
     );
   }
   const items: TodoItem[] = template.items.map(({ id, text }) => {
-    const instantiated = instantiateText(text, input.taskContract);
-    if (instantiated.includes("{{") || instantiated.includes("}}")) {
+    if (hasInvalidPlaceholderSyntax(text)) {
       throw new TypeError(
         `Todo template contains invalid placeholder syntax: ${input.templateId}`,
       );
     }
+    const instantiated = instantiateText(text, input.taskContract);
     if (instantiated.trim() === "") {
       throw new TypeError(
         `Todo template produces empty item text: ${input.templateId}`,
