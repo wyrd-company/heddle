@@ -28,6 +28,7 @@ import {
 } from "../pacing/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { Reconciler } from "../reconciler/index.js";
+import type { SubagentCoordinator } from "../subagents/index.js";
 import {
   DurableAttentionQueue,
   DurablePushoverNotifier,
@@ -41,6 +42,10 @@ import {
 import { ProductionInstanceController } from "./instance-controller.js";
 import { ProductionConsoleState } from "./console-state.js";
 import { ProductionScheduler } from "./scheduler.js";
+import {
+  createProductionSubagentCoordinator,
+  productionSessionTargets,
+} from "./subagent-composition.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -66,6 +71,7 @@ export type ProductionComposition = {
   mcp: WorkflowMcpHttpHandler;
   persistence: SqlitePersistence;
   scheduler: ProductionScheduler;
+  subagents: SubagentCoordinator;
   start(): Promise<void>;
 };
 
@@ -144,23 +150,41 @@ export const createProductionComposition = (
         },
       },
     });
+    const pacing = new DispatchPacingGate(
+      configuration.pacing,
+      options.providerUsage,
+    );
+    let subagents: SubagentCoordinator | undefined;
     const observer = new SessionObserver({
       attention,
+      childStops: {
+        onObserved: async (target, result) => {
+          if (subagents === undefined) {
+            throw new Error("Production subagent composition is not active");
+          }
+          await subagents.onObserved(target, result);
+        },
+      },
       escalations: escalation,
       persistence,
       t3,
       thresholds: configuration.observationThresholds,
     });
+    const coordinator = createProductionSubagentCoordinator({
+      configuration,
+      observer,
+      pacing,
+      persistence,
+      t3,
+    });
+    subagents = coordinator;
     const reconciler = new Reconciler({
       attention,
       board,
       instances,
       lifecycleResolver: new LifecycleResolver(configuration.repositoryRoot),
       pacing: {
-        evaluator: new DispatchPacingGate(
-          configuration.pacing,
-          options.providerUsage,
-        ),
+        evaluator: pacing,
       },
       staleThresholds: configuration.stageThresholds,
     });
@@ -170,7 +194,7 @@ export const createProductionComposition = (
       pass: async () => {
         await reconciler.reconcile();
         await instances.synchronize(await board.readBoard());
-        for (const session of persistence!.listSessionRuntime()) {
+        for (const session of productionSessionTargets(persistence!)) {
           await observer.observe({
             instanceId: session.instanceId,
             sessionKey: session.sessionKey,
@@ -184,6 +208,7 @@ export const createProductionComposition = (
       escalationCoordinator: escalation,
       lifecycle,
       persistence,
+      subagentCoordinator: coordinator,
     });
     let closed = false;
     return {
@@ -199,6 +224,7 @@ export const createProductionComposition = (
       mcp,
       persistence,
       scheduler,
+      subagents: coordinator,
       start: () => scheduler.start(),
       close: async () => {
         if (closed) return;

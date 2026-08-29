@@ -21,8 +21,9 @@ stop timeout; provider pacing; session provider settings; observation and
 per-stage staleness thresholds; and Pushover routing. Secrets enter the
 in-memory configuration from the operator's secret source and are not stored in
 the repository. The configured pacing `defaultProvider` must equal the session
-`driver`; this composition has one session-provider boundary and rejects a
-configuration that would pace one provider and dispatch another.
+`driver` used for top-level lifecycle stages. Delegated subagents carry their
+explicit provider and model through the same pacing evaluator and T3 provider
+preconditions.
 T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
 the runtime validator and configuration schema reject other schemes.
 
@@ -49,6 +50,13 @@ replays Flowcraft history in the execution ID order stored by the lifecycle
 context. One global cursor covers the complete ordered history. A missing
 production runtime or instance returns unavailable; it does not synthesize an
 identity or substitute working-tree blueprint content.
+
+Subagent spawn, liveness, and stop steering use the same SQLite instance store,
+global correlation-token catalog, pacing evaluator, stage-session bootstrap,
+and observation loop. Active child assignments join the production observation
+inventory. A child reuses the task branch and worktree, while its provider and
+model remain the explicit delegated selection. The durable todo assignment is
+the only subtree and child-session authority.
 
 The scheduler starts with one immediate pass and then uses the configured
 cadence. Ticks coalesce while a pass is active; passes never overlap. Stop
