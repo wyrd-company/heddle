@@ -872,7 +872,7 @@ const assertLifecycleSettled = async () => {
   );
   const counts = await evaluate(`(() => ({
     events: document.querySelectorAll("[data-event-sequence]").length,
-    nodes: document.querySelectorAll("[data-shape-type='flowcraft-node'], [data-shape-id^='shape:']").length,
+    nodes: document.querySelectorAll("[data-shape-type='flowcraft-node']").length,
   }))()`);
   invariant(
     counts.events === 5,
@@ -880,9 +880,9 @@ const assertLifecycleSettled = async () => {
     `rendered ${counts.events} ordered events instead of 5`,
   );
   invariant(
-    counts.nodes >= 2,
+    counts.nodes === 2,
     "lifecycle-readiness",
-    `rendered ${counts.nodes} lifecycle nodes instead of at least 2`,
+    `rendered ${counts.nodes} lifecycle nodes instead of 2`,
   );
 };
 
