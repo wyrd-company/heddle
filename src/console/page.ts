@@ -53,6 +53,7 @@ export const consoleStyles = `:root {
   --signal: #b43321;
   --signal-focus: #df5a3c;
   --active: #25766e;
+  --deferred: #74540a;
   --muted: #5f605a;
   --shadow: 3px 3px 0 rgba(25, 26, 23, 0.16);
   font-family: "Azeret Mono", "IBM Plex Mono", ui-monospace, monospace;
@@ -245,6 +246,18 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 
 .stage-readout strong { overflow-wrap: anywhere; letter-spacing: 0.05em; text-transform: uppercase; }
 
+.deferral-readout {
+  margin: 12px 0 0;
+  padding: 9px;
+  display: grid;
+  gap: 4px;
+  color: var(--paper-raised);
+  background: var(--deferred);
+  font-size: 10px;
+}
+
+.deferral-readout strong { letter-spacing: 0.08em; }
+
 .epic-lever {
   width: 100%;
   margin-top: 12px;
@@ -305,6 +318,26 @@ const text = (tag, value, className) => {
 
 const isEpic = (task) => task.parent === undefined && task.tags.includes("type:epic");
 
+const deferralDetail = (deferral) => {
+  switch (deferral.reason) {
+    case "work-in-progress-limit":
+      return deferral.activeSessions + " / " + deferral.limit + " active sessions";
+    case "provider-usage-window": {
+      const retryDate = new Date(deferral.retryAt);
+      const retryAt = Number.isNaN(retryDate.valueOf())
+        ? String(deferral.retryAt)
+        : retryDate.toISOString();
+      return deferral.provider + " " + deferral.used + " / " + deferral.limit + " until " + retryAt;
+    }
+    case "subagent-depth-limit":
+      return "depth " + deferral.requestedDepth + " / " + deferral.limit;
+    case "subagent-fan-out-limit":
+      return deferral.activeChildren + " / " + deferral.limit + " active children";
+    default:
+      return "capacity unavailable";
+  }
+};
+
 const createCard = (task) => {
   const card = document.createElement("article");
   card.className = "task-card";
@@ -328,6 +361,14 @@ const createCard = (task) => {
     if (task.stageEnteredAt !== undefined) dwell.dataset.stageEnteredAt = String(task.stageEnteredAt);
     stage.append(dwell);
     card.append(stage);
+  }
+
+  if (task.deferral) {
+    const deferral = document.createElement("p");
+    deferral.className = "deferral-readout";
+    deferral.append(text("strong", "DEFERRED"));
+    deferral.append(text("span", deferralDetail(task.deferral)));
+    card.append(deferral);
   }
 
   if (isEpic(task)) {

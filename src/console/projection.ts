@@ -4,6 +4,7 @@
 // ---
 
 import type { BoardTask } from "../board-adapter/index.js";
+import type { PacingDeferral } from "../pacing/index.js";
 import type { ConsoleInstance } from "./types.js";
 
 export type ConsoleScope =
@@ -12,6 +13,7 @@ export type ConsoleScope =
   | { kind: "task"; taskId: number };
 
 export interface ProjectedTask extends BoardTask {
+  deferral?: PacingDeferral;
   dwellMilliseconds?: number;
   instanceId?: string;
   stageEnteredAt?: number;
@@ -109,12 +111,17 @@ const enrich = (
   instance: ConsoleInstance | undefined,
   now: number,
 ): ProjectedTask => {
-  if (task.status !== "in-progress" || instance === undefined) return task;
+  if (instance === undefined) return task;
+  const hasStage = task.status === "in-progress";
+  if (!hasStage && instance.deferral === undefined) return task;
   return {
     ...task,
     instanceId: instance.instanceId,
-    ...(instance.stageId === undefined ? {} : { stageId: instance.stageId }),
-    ...(instance.stageEnteredAt === undefined
+    ...(instance.deferral === undefined ? {} : { deferral: instance.deferral }),
+    ...(!hasStage || instance.stageId === undefined
+      ? {}
+      : { stageId: instance.stageId }),
+    ...(!hasStage || instance.stageEnteredAt === undefined
       ? {}
       : {
           dwellMilliseconds: Math.max(0, now - instance.stageEnteredAt),

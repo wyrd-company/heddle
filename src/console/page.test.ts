@@ -67,12 +67,14 @@ describe("console page accessibility", () => {
     const ink = colorToken("ink");
     const signal = colorToken("signal");
     const signalFocus = colorToken("signal-focus");
+    const deferred = colorToken("deferred");
     const muted = colorToken("muted");
 
     expect(contrastRatio(signal, paper)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(muted, paper)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(muted, paperRaised)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(paperRaised, signal)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(paperRaised, deferred)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(signalFocus, ink)).toBeGreaterThanOrEqual(3);
   });
 
@@ -88,6 +90,9 @@ describe("console page accessibility", () => {
     );
     expect(consoleStyles).toMatch(
       /\.card-meta \{[^}]*color: var\(--muted\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.deferral-readout \{[^}]*color: var\(--paper-raised\);[^}]*background: var\(--deferred\);[^}]*\}/,
     );
     expect(consoleStyles).toMatch(
       /\.epic-lever:hover, \.epic-lever:focus-visible \{[^}]*outline: 2px solid var\(--signal-focus\);[^}]*\}/,

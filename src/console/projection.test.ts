@@ -91,6 +91,39 @@ describe("kanban console projection", () => {
     });
   });
 
+  it("projects a structured pacing deferral without moving the ready card", () => {
+    const projection = buildKanbanProjection({
+      instances: [
+        {
+          deferral: {
+            activeSessions: 2,
+            limit: 2,
+            reason: "work-in-progress-limit",
+          },
+          instanceId: "instance-43",
+          taskId: 43,
+        },
+      ],
+      now: 121_000,
+      scope: { kind: "task", taskId: 43 },
+      statuses: ["todo", "in-progress", "done"],
+      tasks,
+    });
+
+    expect(projection.columns[0]?.tasks).toEqual([
+      expect.objectContaining({
+        deferral: {
+          activeSessions: 2,
+          limit: 2,
+          reason: "work-in-progress-limit",
+        },
+        instanceId: "instance-43",
+        status: "todo",
+      }),
+    ]);
+    expect(projection.columns[1]?.tasks).toEqual([]);
+  });
+
   it("filters all, epic, and task scopes without changing board columns", () => {
     const project = (scope: ReturnType<typeof parseConsoleScope>) =>
       buildKanbanProjection({

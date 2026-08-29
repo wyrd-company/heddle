@@ -126,11 +126,35 @@ const childTask = {
   title: "Example item",
 };
 
+const deferredTask = {
+  ...childTask,
+  deferral: {
+    activeSessions: 2,
+    limit: 2,
+    reason: "work-in-progress-limit",
+  },
+  instanceId: "instance-11",
+  status: "todo",
+};
+
+const providerDeferredTask = {
+  ...childTask,
+  deferral: {
+    limit: 80,
+    provider: "provider-a",
+    reason: "provider-usage-window",
+    retryAt: 18_010_000,
+    used: 80,
+  },
+  instanceId: "instance-11",
+  status: "todo",
+};
+
 const projection = (tasks: unknown[]) => ({
   columns: [{ status: "in-progress", tasks }],
 });
 
-const clientHarness = async () => {
+const clientHarness = async (initialTasks = [rootTask, childTask]) => {
   const board = new FakeElement("div");
   const scope = new FakeSelect();
   scope.replaceChildren(new FakeOption("All work", "all"));
@@ -142,7 +166,7 @@ const clientHarness = async () => {
 
   const fetch = async (input: string): Promise<BrowserResponse> => {
     if (input === "/api/board") {
-      return response({ tasks: [rootTask, childTask] });
+      return response({ tasks: initialTasks });
     }
     if (input === "/api/attention") return response([]);
     if (input.startsWith("/api/projection?")) {
@@ -157,7 +181,7 @@ const clientHarness = async () => {
         return response(projection([rootTask, childTask]));
       }
       if (requestedScope === "all") {
-        return response(projection([rootTask, childTask]));
+        return response(projection(initialTasks));
       }
       return response(`scope ${requestedScope} is invalid`, {
         ok: false,
@@ -214,11 +238,11 @@ const clientHarness = async () => {
 
   await vi.waitFor(() => expect(status.textContent).toBe("2 visible records"));
 
+  const visit = (element: FakeElement): FakeElement[] => [
+    element,
+    ...element.children.flatMap(visit),
+  ];
   const cardIds = (): string[] => {
-    const visit = (element: FakeElement): FakeElement[] => [
-      element,
-      ...element.children.flatMap(visit),
-    ];
     return visit(board)
       .filter(({ tagName }) => tagName === "article")
       .map(({ dataset }) => dataset.taskId!);
@@ -227,6 +251,8 @@ const clientHarness = async () => {
   return {
     board,
     cardIds,
+    elementsByClass: (className: string) =>
+      visit(board).filter((element) => element.className === className),
     holdProjection: (name: string, held: Promise<BrowserResponse>) => {
       projectionResponses.set(name, held);
     },
@@ -240,6 +266,28 @@ const clientHarness = async () => {
 };
 
 describe("console client request ownership", () => {
+  it("renders a visible structured deferral on a ready card", async () => {
+    const harness = await clientHarness([rootTask, deferredTask]);
+
+    const readout = harness.elementsByClass("deferral-readout");
+    expect(readout).toHaveLength(1);
+    expect(readout[0]?.children.map(({ textContent }) => textContent)).toEqual([
+      "DEFERRED",
+      "2 / 2 active sessions",
+    ]);
+    expect(harness.cardIds()).toEqual(["10", "11"]);
+  });
+
+  it("renders the provider window reopen time", async () => {
+    const harness = await clientHarness([rootTask, providerDeferredTask]);
+
+    const readout = harness.elementsByClass("deferral-readout");
+    expect(readout[0]?.children.map(({ textContent }) => textContent)).toEqual([
+      "DEFERRED",
+      "provider-a 80 / 80 until 1970-01-01T05:00:10.000Z",
+    ]);
+  });
+
   it("ignores a stale successful scope load after a newer failure", async () => {
     const harness = await clientHarness();
     const heldSuccess = deferred<BrowserResponse>();

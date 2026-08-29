@@ -4,6 +4,7 @@
 // ---
 
 import type { BoardTask } from "../board-adapter/index.js";
+import type { PacingDeferral } from "../pacing/index.js";
 import type { JsonValue } from "../persistence/index.js";
 
 export interface ConsoleBoard {
@@ -13,6 +14,7 @@ export interface ConsoleBoard {
 }
 
 export interface ConsoleInstance {
+  deferral?: PacingDeferral;
   instanceId: string;
   stageEnteredAt?: number;
   stageId?: string;
