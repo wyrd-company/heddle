@@ -9,7 +9,11 @@ import type { InstanceRecord } from "../persistence/index.js";
 import { GitBlueprintStore } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
-import { ensureStageTodoList, instantiateTodoList } from "../todo/index.js";
+import {
+  ensureStageTodoList,
+  instantiateTodoList,
+  stageTodoList,
+} from "../todo/index.js";
 import {
   ensureCorrelationToken,
   type InstanceStateStore,
@@ -218,7 +222,7 @@ const ensureStoredHandoff = async (
     }
 
     const workflowMcp = await resolveStageContract(input, current);
-    const todoState = await ensureStageTodoList(
+    await ensureStageTodoList(
       store,
       {
         instanceId: input.instanceId,
@@ -240,6 +244,16 @@ const ensureStoredHandoff = async (
         .some(({ sessionKey }) => sessionKey === input.sessionKey)
     ) {
       continue;
+    }
+    const { list: todoList, state: todoState } = stageTodoList(
+      refreshed,
+      input.sessionKey,
+      workflowMcp.stage,
+    );
+    if (todoList.template !== workflowMcp.todoTemplate) {
+      throw new Error(
+        `Stored todo list does not match stage contract for '${input.sessionKey}'`,
+      );
     }
     const handoff = assembleStageHandoff({
       ...input.handoff,

@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { InstanceRecord, InstanceState } from "../persistence/index.js";
+import type { TodoState } from "../todo/index.js";
 import {
   bootstrapStageSession,
   type SessionBootstrapDependencies,
@@ -142,6 +143,59 @@ describe("stage session cold retry guards", () => {
       (turnCommands[1]?.["message"] as { text: string }).text,
     );
     expect(memory.record.state.handoffs).toHaveLength(1);
+  });
+
+  it("assembles the handoff from the todo state committed at its CAS version", async () => {
+    const memory = memoryStore();
+    let injected = false;
+    const persistence = {
+      compareAndSwapInstance: memory.store.compareAndSwapInstance,
+      getInstance: (instanceId: string) => {
+        const current = memory.store.getInstance(instanceId);
+        if (
+          !injected &&
+          current !== undefined &&
+          current.state.todoState !== null &&
+          current.state.handoffs.length === 0
+        ) {
+          injected = true;
+          const todoState = current.state.todoState as TodoState;
+          memory.store.compareAndSwapInstance(instanceId, current.version, {
+            ...current.state,
+            todoState: {
+              ...todoState,
+              lists: todoState.lists.map((list) => ({
+                ...list,
+                items: list.items.map((item) => ({ ...item, checked: true })),
+              })),
+            },
+          });
+          return memory.store.getInstance(instanceId);
+        }
+        return current;
+      },
+    };
+
+    const result = await bootstrapStageSession(input, {
+      persistence,
+      instantiateTodoList,
+      resolveWorkflowMcpStageContract,
+      t3: { dispatch: async () => ({ sequence: 1 }) },
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: false,
+        path: "/workspaces/worktrees/sample-repository/task-prepare",
+      }),
+      mintCorrelationToken: () => "correlation-token",
+      nextId: () => globalThis.crypto.randomUUID(),
+    });
+    const handoff = JSON.parse(result.handoff) as {
+      todoList: { lists: Array<{ items: Array<{ checked: boolean }> }> };
+    };
+
+    expect(injected).toBe(true);
+    expect(handoff.todoList.lists[0]?.items[0]?.checked).toBe(true);
+    expect(memory.record.state.handoffs[0]?.["handoff"]).toBe(result.handoff);
   });
 
   it("fails closed when the stored handoff token disagrees", async () => {
