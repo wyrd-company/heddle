@@ -141,6 +141,24 @@ describe("DispatchPacingGate", () => {
       kind: "defer",
     });
 
+    await expect(
+      gate.evaluate(
+        {
+          kind: "subagent",
+          parentSessionId: "parent-a",
+          provider: "provider-a",
+          sessionId: "child-c",
+        },
+        [
+          {
+            depth: 1,
+            provider: "provider-a",
+            sessionId: "parent-a",
+          },
+        ],
+      ),
+    ).resolves.toEqual({ kind: "dispatch" });
+
     const active = [
       {
         depth: 0,
@@ -264,28 +282,81 @@ describe("DispatchPacingGate", () => {
     ).rejects.toThrow("parent depth must be a non-negative safe integer");
   });
 
-  it("rejects invalid configuration and provider observations", async () => {
+  it.each([
+    [
+      "empty default provider",
+      configuration({ defaultProvider: " " }),
+      "defaultProvider must not be empty",
+    ],
+    [
+      "negative WIP limit",
+      configuration({ maxConcurrentSessions: -1 }),
+      "maxConcurrentSessions must be a non-negative safe integer",
+    ],
+    [
+      "wrong window length",
+      { ...configuration(), usageWindowHours: 4 as 5 },
+      "usageWindowHours must be 5",
+    ],
+    [
+      "negative depth limit",
+      configuration({ subagents: { maxDepth: -1, maxFanOut: 2 } }),
+      "subagents.maxDepth must be a non-negative safe integer",
+    ],
+    [
+      "fractional fan-out limit",
+      configuration({ subagents: { maxDepth: 2, maxFanOut: 1.5 } }),
+      "subagents.maxFanOut must be a non-negative safe integer",
+    ],
+    [
+      "empty provider identifier",
+      configuration({ providerBudgets: { "": { usageLimit: 80 } } }),
+      "provider must not be empty",
+    ],
+    [
+      "negative provider limit",
+      configuration({
+        providerBudgets: { "provider-a": { usageLimit: -1 } },
+      }),
+      "providerBudgets.provider-a.usageLimit must be a non-negative finite number",
+    ],
+  ])("rejects %s configuration", (_name, invalid, message) => {
+    expect(() => new DispatchPacingGate(invalid, new UsageStub({}))).toThrow(
+      message,
+    );
+  });
+
+  it.each([
+    [
+      "empty session identifier",
+      { kind: "task" as const, provider: "provider-a", sessionId: " " },
+      "sessionId must not be empty",
+    ],
+    [
+      "empty provider identifier",
+      { kind: "task" as const, provider: " ", sessionId: "session-a" },
+      "provider must not be empty",
+    ],
+    [
+      "empty parent identifier",
+      {
+        kind: "subagent" as const,
+        parentSessionId: " ",
+        provider: "provider-a",
+        sessionId: "child-a",
+      },
+      "parentSessionId must not be empty",
+    ],
+  ])("rejects a request with an %s", async (_name, request, message) => {
+    const gate = new DispatchPacingGate(configuration(), new UsageStub({}));
+
+    await expect(gate.evaluate(request, [])).rejects.toThrow(message);
+  });
+
+  it("rejects invalid provider observations", async () => {
     const usage = new UsageStub({
       "provider-a": { used: -1, windowStartedAt: 1_000 },
     });
-    expect(
-      () =>
-        new DispatchPacingGate(
-          configuration({ maxConcurrentSessions: -1 }),
-          usage,
-        ),
-    ).toThrow("maxConcurrentSessions must be a non-negative safe integer");
-    expect(
-      () =>
-        new DispatchPacingGate(
-          {
-            ...configuration(),
-            usageWindowHours: 4 as 5,
-          },
-          usage,
-        ),
-    ).toThrow("usageWindowHours must be 5");
-
     const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
     await expect(
       gate.evaluate(
@@ -297,5 +368,25 @@ describe("DispatchPacingGate", () => {
         [],
       ),
     ).rejects.toThrow("provider-a usage must be a non-negative finite number");
+
+    const invalidWindow = new DispatchPacingGate(
+      configuration(),
+      new UsageStub({
+        "provider-a": { used: 1, windowStartedAt: -1 },
+      }),
+      () => 2_000,
+    );
+    await expect(
+      invalidWindow.evaluate(
+        {
+          kind: "task",
+          provider: "provider-a",
+          sessionId: "session-a",
+        },
+        [],
+      ),
+    ).rejects.toThrow(
+      "provider-a windowStartedAt must be a non-negative safe integer",
+    );
   });
 });
