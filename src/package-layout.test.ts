@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 type PackageManifest = {
   bin?: Record<string, string>;
+  dependencies: Record<string, string>;
   license: string;
   name: string;
 };
@@ -25,9 +26,11 @@ describe("package separation", () => {
 
     expect(production).toMatchObject({ name: "heddle", license: "Apache-2.0" });
     expect(lock.packages[""]).toMatchObject({
+      dependencies: { flowcraft: "2.10.1" },
       name: production.name,
       license: production.license,
     });
+    expect(production.dependencies).toMatchObject({ flowcraft: "2.10.1" });
     expect(spike).toMatchObject({ name: "spike-flowcraft-gate" });
   });
 
