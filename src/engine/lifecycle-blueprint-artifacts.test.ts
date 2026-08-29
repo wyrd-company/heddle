@@ -75,6 +75,20 @@ describe("lifecycle blueprint artifacts", () => {
     },
   );
 
+  it("marks only the standard-delivery remediation wait as remediation", async () => {
+    const artifact = (await readJson(blueprintPaths[0])) as {
+      nodes: Array<{ handoff?: string; id: string; uses: string }>;
+    };
+    const agentWaits = artifact.nodes.filter(({ uses }) => uses === "wait");
+
+    expect(agentWaits.map(({ handoff, id }) => ({ handoff, id }))).toEqual([
+      { handoff: "standard", id: "implement" },
+      { handoff: "standard", id: "review" },
+      { handoff: "remediation", id: "remediate" },
+      { handoff: "standard", id: "retrospective" },
+    ]);
+  });
+
   it("requires refinery relationships and session-stage bindings", async () => {
     const schema = await readJson(schemaPath);
     const artifact = (await readJson(blueprintPaths[0])) as {
@@ -103,6 +117,26 @@ describe("lifecycle blueprint artifacts", () => {
     }
     delete otherWaitNode["todo-template"];
     expect(validate(withoutTodoTemplate)).toBe(false);
+
+    const withoutHandoff = cloneJson(artifact);
+    const handoffWaitNode = withoutHandoff.nodes.find(
+      ({ uses }) => uses === "wait",
+    );
+    if (handoffWaitNode === undefined) {
+      throw new Error("wait node fixture is missing");
+    }
+    delete handoffWaitNode.handoff;
+    expect(validate(withoutHandoff)).toBe(false);
+
+    const invalidHandoff = cloneJson(artifact);
+    invalidHandoff.nodes.find(({ uses }) => uses === "wait")!.handoff =
+      "private";
+    expect(validate(invalidHandoff)).toBe(false);
+
+    const inconsistentHandoff = cloneJson(artifact);
+    inconsistentHandoff.nodes.find(({ uses }) => uses !== "wait")!.handoff =
+      "standard";
+    expect(validate(inconsistentHandoff)).toBe(false);
 
     const withAuthoredArtifactId = { ...artifact, id: "standard-delivery" };
     expect(validate(withAuthoredArtifactId)).toBe(false);

@@ -34,6 +34,11 @@ session and thread identity. A recurring review or remediation stage receives
 a new occurrence discriminator; restart resumes an incomplete occurrence.
 All stage occurrences for one task use the same task branch and worktree so
 review, remediation, and later stages operate on the same delivery state.
+Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
+pinned lifecycle blueprint. Heddle reconstructs completed wait-stage outputs in
+recorded lifecycle execution order. A standard stage receives those prior
+outputs. A remediation stage receives the latest review findings through the
+canonical handoff assembler; review transcript data is not dispatched.
 
 The scheduler starts with one immediate pass and then uses the configured
 cadence. Ticks coalesce while a pass is active; passes never overlap. Stop

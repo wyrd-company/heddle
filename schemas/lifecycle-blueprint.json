@@ -75,6 +75,9 @@
             "pattern": "^[a-z]+(?:_[a-z]+)*$"
           }
         },
+        "handoff": {
+          "enum": ["standard", "remediation"]
+        },
         "todo-template": {
           "$ref": "#/$defs/artifact-id"
         },
@@ -130,7 +133,7 @@
             "required": ["uses"]
           },
           "then": {
-            "required": ["tools", "todo-template"]
+            "required": ["handoff", "tools", "todo-template"]
           },
           "else": {
             "not": {
@@ -140,6 +143,9 @@
                 },
                 {
                   "required": ["todo-template"]
+                },
+                {
+                  "required": ["handoff"]
                 }
               ]
             }

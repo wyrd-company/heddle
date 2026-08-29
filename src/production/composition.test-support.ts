@@ -110,6 +110,7 @@ export const prepareProductionFixture =
         ],
         nodes: [
           {
+            handoff: "standard",
             id: "implement",
             tools: ["advance"],
             "todo-template": "sample-stage",
@@ -117,6 +118,7 @@ export const prepareProductionFixture =
           },
           {
             id: "review",
+            handoff: "standard",
             config: { joinStrategy: "any" },
             tools: ["advance"],
             "todo-template": "sample-stage",
@@ -124,6 +126,7 @@ export const prepareProductionFixture =
           },
           {
             id: "remediate",
+            handoff: "remediation",
             config: { joinStrategy: "any" },
             tools: ["advance"],
             "todo-template": "sample-stage",

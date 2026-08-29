@@ -154,11 +154,12 @@ const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
     );
     if (
       stage?.uses !== "wait" ||
+      stage.handoff !== input.handoff.stage.kind ||
       !Array.isArray(stage.tools) ||
       typeof stage["todo-template"] !== "string"
     ) {
       throw new Error(
-        "Stage session bootstrap requires a wait-stage tool declaration",
+        "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
       );
     }
     const dispositions = blueprint.edges

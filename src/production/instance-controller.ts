@@ -8,9 +8,16 @@ import { createHash } from "node:crypto";
 import type { BoardTask } from "../board-adapter/index.js";
 import {
   bootstrapStageSession,
+  type StageHandoffInput,
   type SessionT3Client,
 } from "../control-plane/index.js";
-import { readLifecycleContext, type LifecycleEngine } from "../engine/index.js";
+import {
+  GitBlueprintStore,
+  readCompletedStageOutputs,
+  readLifecycleContext,
+  type LifecycleEngine,
+} from "../engine/index.js";
+import { advanceOperationId } from "../mcp-server/operations.js";
 import type { PacingDeferral } from "../pacing/index.js";
 import type {
   JsonValue,
@@ -36,6 +43,8 @@ const stableUuid = (seed: string): string => {
 
 const deferral = (value: JsonValue | undefined): PacingDeferral | undefined =>
   value as PacingDeferral | undefined;
+
+type HandoffStage = StageHandoffInput["stage"];
 
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(
@@ -221,15 +230,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       return value;
     };
     const session = this.configuration.session;
+    const handoffStage = await this.#handoffStage(instanceId, stageId);
     await bootstrapStageSession(
       {
         handoff: {
           skillPointer: session.skillPointer,
-          stage: {
-            kind: "standard",
-            name: stageId,
-            priorStageOutputs: [],
-          },
+          stage: handoffStage,
           taskContract: json(task),
         },
         instanceId,
@@ -279,5 +285,66 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       state: "waiting",
       threadId,
     });
+  }
+
+  async #handoffStage(
+    instanceId: string,
+    stageId: string,
+  ): Promise<HandoffStage> {
+    const record = this.persistence.getInstance(instanceId);
+    if (record === undefined) {
+      throw new Error(`Instance does not exist: ${instanceId}`);
+    }
+    const context = readLifecycleContext(record);
+    const blueprint = await new GitBlueprintStore(
+      this.configuration.repositoryRoot,
+    ).read(context.blueprintBlobHash, context.blueprintPath);
+    const node = blueprint.nodes.find(({ id }) => id === stageId);
+    if (
+      node?.uses !== "wait" ||
+      (node.handoff !== "standard" && node.handoff !== "remediation")
+    ) {
+      throw new Error(
+        `Stage ${JSON.stringify(stageId)} has no valid handoff metadata`,
+      );
+    }
+    const completedStages = this.persistence
+      .listSessionRuntime()
+      .filter((session) => session.instanceId === instanceId)
+      .flatMap((session) => {
+        const operation =
+          context.completedOperations[advanceOperationId(session.sessionKey)];
+        return operation === undefined
+          ? []
+          : [{ operation, stageId: session.stageId }];
+      });
+    const outputs = await readCompletedStageOutputs(
+      this.persistence,
+      context,
+      completedStages,
+    );
+    if (node.handoff === "standard") {
+      return {
+        kind: "standard",
+        name: stageId,
+        priorStageOutputs: outputs.map(({ output }) => output),
+      };
+    }
+    const review = outputs.at(-1)?.output;
+    if (review === undefined || !Array.isArray(review["findings"])) {
+      throw new Error(
+        `Remediation stage ${JSON.stringify(stageId)} has no canonical review findings`,
+      );
+    }
+    return {
+      kind: "remediation",
+      name: stageId,
+      review: {
+        findings: review["findings"],
+        ...(review["transcript"] === undefined
+          ? {}
+          : { transcript: review["transcript"] }),
+      },
+    };
   }
 }

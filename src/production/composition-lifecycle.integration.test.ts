@@ -5,6 +5,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { bootstrapStageSession } from "../control-plane/index.js";
+import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
   prepareProductionFixture,
@@ -88,7 +90,8 @@ describe("production lifecycle composition", () => {
     await composition.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
-      operationId: "advance-implement",
+      operationId: advanceOperationId(`task-${taskId}:implement:1`),
+      output: { result: { count: 2 } },
     });
     await composition.scheduler.trigger();
 
@@ -105,6 +108,17 @@ describe("production lifecycle composition", () => {
     expect(creates[0]?.branch).toBe(`heddle/task-${taskId}`);
     expect(creates[1]?.branch).toBe(creates[0]?.branch);
     expect(creates[1]?.worktreePath).toBe(creates[0]?.worktreePath);
+    const reviewTurn = t3.commands.filter(
+      ({ type }) => type === "thread.turn.start",
+    )[1];
+    const reviewHandoff = JSON.parse(
+      (reviewTurn?.["message"] as { text: string }).text,
+    ) as { stage: unknown };
+    expect(reviewHandoff.stage).toEqual({
+      kind: "standard",
+      name: "review",
+      priorStageOutputs: [{ result: { count: 2 } }],
+    });
     expect(
       await composition.consoleState.listEvents({ afterSequence: 0 }),
     ).toEqual(
@@ -130,19 +144,40 @@ describe("production lifecycle composition", () => {
     await composition.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
-      operationId: "advance-implement",
+      operationId: advanceOperationId(`task-${taskId}:implement:1`),
     });
     await composition.scheduler.trigger();
     await composition.lifecycle.resume({
       disposition: "reject",
       instanceId: `task-${taskId}`,
-      operationId: "advance-review-one",
+      operationId: advanceOperationId(`task-${taskId}:review:1`),
+      output: {
+        findings: [{ code: "P1", summary: "The recorded count is unchecked" }],
+        transcript: ["private discussion"],
+      },
     });
     await composition.scheduler.trigger();
+    const remediationTurn = t3.commands.filter(
+      ({ type }) => type === "thread.turn.start",
+    )[2];
+    const remediationText = (remediationTurn?.["message"] as { text: string })
+      .text;
+    expect(JSON.parse(remediationText)).toMatchObject({
+      stage: {
+        kind: "remediation",
+        name: "remediate",
+        reviewFindings: [
+          { code: "P1", summary: "The recorded count is unchecked" },
+        ],
+      },
+    });
+    expect(remediationText).not.toContain("private discussion");
+    expect(remediationText).not.toContain("transcript");
     await composition.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
-      operationId: "advance-remediate",
+      operationId: advanceOperationId(`task-${taskId}:remediate:1`),
+      output: { correction: { count: 3 } },
     });
     await composition.scheduler.trigger();
 
@@ -162,6 +197,108 @@ describe("production lifecycle composition", () => {
       )
       .map(({ title }) => title);
     expect(new Set(reviewTitles).size).toBe(2);
+    const repeatedReviewTurn = t3.commands.filter(
+      ({ type }) => type === "thread.turn.start",
+    )[3];
+    const repeatedReviewHandoff = JSON.parse(
+      (repeatedReviewTurn?.["message"] as { text: string }).text,
+    ) as { stage: { priorStageOutputs: unknown[] } };
+    expect(repeatedReviewHandoff.stage.priorStageOutputs).toEqual([
+      {},
+      {
+        findings: [{ code: "P1", summary: "The recorded count is unchecked" }],
+        transcript: ["private discussion"],
+      },
+      { correction: { count: 3 } },
+    ]);
+    await composition.close();
+  });
+
+  it("fails closed when remediation has no canonical review findings", async () => {
+    const { configuration, taskId } = await prepare();
+    const composition = createProductionComposition({
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId: `task-${taskId}`,
+      operationId: advanceOperationId(`task-${taskId}:implement:1`),
+    });
+    await composition.scheduler.trigger();
+    await composition.lifecycle.resume({
+      disposition: "reject",
+      instanceId: `task-${taskId}`,
+      operationId: advanceOperationId(`task-${taskId}:review:1`),
+    });
+
+    await expect(composition.scheduler.trigger()).rejects.toThrow(
+      'Remediation stage "remediate" has no canonical review findings',
+    );
+    await composition.close();
+  });
+
+  it("rejects handoff input that disagrees with pinned stage metadata", async () => {
+    const { configuration, taskId } = await prepare();
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    const commandsBeforeMismatch = t3.commands.length;
+
+    await expect(
+      bootstrapStageSession(
+        {
+          handoff: {
+            skillPointer: configuration.session.skillPointer,
+            stage: {
+              kind: "remediation",
+              name: "implement",
+              review: { findings: [] },
+            },
+            taskContract: { title: "Example Item" },
+          },
+          instanceId: `task-${taskId}`,
+          interactionMode: configuration.session.interactionMode,
+          modelSelection: {
+            instanceId: configuration.session.driver,
+            model: configuration.session.model,
+          },
+          projectId: configuration.projectId,
+          providerContext: {
+            cliVersion: configuration.session.cliVersion,
+            driver: configuration.session.driver,
+            lifecycle: "independent",
+          },
+          runtimeMode: configuration.session.runtimeMode,
+          sessionKey: `task-${taskId}:mismatch:1`,
+          title: "Metadata agreement probe",
+          worktree: {
+            baseRef: configuration.session.baseRef,
+            branch: `heddle/task-${taskId}`,
+            repositoryName: configuration.session.repositoryName,
+            repositoryRoot: configuration.repositoryRoot,
+            worktreeName: `task-${taskId}`,
+            worktreesRoot: configuration.session.worktreesRoot,
+          },
+        },
+        { persistence: composition.persistence, t3 },
+      ),
+    ).rejects.toThrow(
+      "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
+    );
+    expect(t3.commands).toHaveLength(commandsBeforeMismatch);
     await composition.close();
   });
 
@@ -179,7 +316,7 @@ describe("production lifecycle composition", () => {
     await first.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
-      operationId: "advance-implement",
+      operationId: advanceOperationId(`task-${taskId}:implement:1`),
     });
     const runtime = first.persistence.listReconcilerRuntime()[0]!;
     first.persistence.writeReconcilerRuntime({
@@ -230,7 +367,7 @@ describe("production lifecycle composition", () => {
     await first.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
-      operationId: "advance-implement",
+      operationId: advanceOperationId(`task-${taskId}:implement:1`),
     });
     for (let activation = 1; activation <= 10; activation += 1) {
       first.persistence.writeSessionRuntime({

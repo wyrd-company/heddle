@@ -23,6 +23,11 @@ export type { WorkingBlueprintArtifact } from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
 export { LifecycleResolver } from "./lifecycle-resolver.js";
 export { readLifecycleContext } from "./lifecycle-state.js";
+export {
+  readCompletedStageOutputs,
+  type CompletedStageOperation,
+  type CompletedStageOutput,
+} from "./stage-output-history.js";
 export type {
   LifecycleResolution,
   LifecycleResolutionAttention,

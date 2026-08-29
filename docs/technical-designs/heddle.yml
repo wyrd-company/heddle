@@ -136,7 +136,12 @@ proposed-design:
     review session's transcript), the stage's instantiated todo list,
     and a pointer to the stage's skill. Because the handoff is data on
     the instance, retrying a stage cold means replaying the same
-    bootstrap into a fresh session.
+    bootstrap into a fresh session. Every agent wait node declares explicit
+    `handoff` metadata as `standard` or `remediation`; missing, invalid, or
+    non-wait metadata fails closed. Standard handoffs receive completed
+    wait-stage outputs reconstructed in recorded lifecycle execution order.
+    Remediation receives the latest canonical review output through the
+    handoff assembler, which retains findings and excludes transcript data.
   workflow-mcp: >
     Heddle exposes its actions to agents as a stateless
     streamable-HTTP MCP server, the one integration surface every

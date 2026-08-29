@@ -74,6 +74,7 @@ describe("production process restart", () => {
         ],
         nodes: [
           {
+            handoff: "standard",
             id: "implement",
             tools: ["advance"],
             "todo-template": "sample-stage",

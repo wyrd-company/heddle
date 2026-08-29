@@ -96,12 +96,14 @@ const blueprint = (
     { id: "prepare", uses: "prepare" },
     {
       id: "assess",
+      handoff: "standard",
       uses: "wait",
       tools,
       "todo-template": "sample-stage",
     },
     {
       id: "inspect",
+      handoff: "standard",
       uses: "wait",
       tools: ["get_task_context"],
       "todo-template": "sample-stage",

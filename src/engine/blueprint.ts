@@ -65,6 +65,28 @@ export const validateBlueprint = (
         `Node ${JSON.stringify(node.id)} uses reserved parameter ${internalNodeIdParameter}`,
       );
     }
+    const isAgentWait =
+      node.uses === "wait" &&
+      (node.tools !== undefined || node["todo-template"] !== undefined);
+    if (
+      node.handoff !== undefined &&
+      node.handoff !== "standard" &&
+      node.handoff !== "remediation"
+    ) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} has invalid handoff metadata`,
+      );
+    }
+    if (isAgentWait && node.handoff === undefined) {
+      throw new BlueprintValidationError(
+        `Agent wait node ${JSON.stringify(node.id)} has no handoff metadata`,
+      );
+    }
+    if (node.uses !== "wait" && node.handoff !== undefined) {
+      throw new BlueprintValidationError(
+        `Non-wait node ${JSON.stringify(node.id)} must not declare handoff metadata`,
+      );
+    }
     const dispositions = new Set<string>();
     const edges = outgoingEdges(blueprint, node.id);
     const usesDispositionRouting = edges.some(

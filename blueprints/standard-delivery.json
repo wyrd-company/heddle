@@ -16,6 +16,7 @@
     },
     {
       "id": "implement",
+      "handoff": "standard",
       "uses": "wait",
       "tools": [
         "advance",
@@ -44,6 +45,7 @@
     },
     {
       "id": "review",
+      "handoff": "standard",
       "uses": "wait",
       "tools": [
         "advance",
@@ -68,6 +70,7 @@
     },
     {
       "id": "remediate",
+      "handoff": "remediation",
       "uses": "wait",
       "tools": [
         "advance",
@@ -99,6 +102,7 @@
     },
     {
       "id": "retrospective",
+      "handoff": "standard",
       "uses": "wait",
       "tools": [
         "advance",
