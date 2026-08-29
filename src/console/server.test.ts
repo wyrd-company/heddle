@@ -151,6 +151,10 @@ describe("console server", () => {
       await globalThis.fetch(`${baseUrl}/assets/console.js`)
     ).text();
     expect(clientSource).toContain("card.draggable = false");
+    expect(clientSource).not.toContain("contentEditable = true");
+    expect(clientSource).toContain("if (task.stageId) {");
+    expect(clientSource).toContain("const requestedScope = scopeFromUrl();");
+    expect(clientSource).toContain("if (isEpic(task)) {");
     expect(clientSource).toContain('stage.className = "stage-readout"');
     await expect(boardResponse.json()).resolves.toMatchObject({
       statuses: ["todo", "in-progress", "done"],
