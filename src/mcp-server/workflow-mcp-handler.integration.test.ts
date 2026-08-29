@@ -232,6 +232,7 @@ const makeFixture = async () => {
     sessionKey: string,
     token: string,
     taskContract: Record<string, string | number>,
+    stage = "assess",
   ) =>
     bootstrapStageSession(
       {
@@ -239,7 +240,7 @@ const makeFixture = async () => {
           skillPointer: "skills/sample.md",
           stage: {
             kind: "standard",
-            name: "assess",
+            name: stage,
             priorStageOutputs: [],
           },
           taskContract,
@@ -293,6 +294,7 @@ const makeFixture = async () => {
     accepted,
     alphaToken,
     betaToken,
+    bootstrap,
     handler,
     lifecycle,
     persistence,
@@ -524,6 +526,70 @@ describe("workflow MCP HTTP server", () => {
     await expect(
       connect(fixture.url, fixture.alphaToken, "mismatched-client"),
     ).rejects.toThrow();
+  });
+
+  it("rejects a handoff with no static MCP contract", async () => {
+    const fixture = await makeFixture();
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const stored = record.state.handoffs[0];
+    if (
+      typeof stored !== "object" ||
+      stored === null ||
+      Array.isArray(stored)
+    ) {
+      throw new Error("alpha handoff fixture is invalid");
+    }
+    const withoutWorkflowMcp = { ...stored };
+    delete withoutWorkflowMcp["workflowMcp"];
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [withoutWorkflowMcp],
+    });
+
+    await expect(
+      connect(fixture.url, fixture.alphaToken, "missing-contract-client"),
+    ).rejects.toThrow();
+  });
+
+  it("rejects bootstrap for a stage the lifecycle is not awaiting", async () => {
+    const fixture = await makeFixture();
+
+    await expect(
+      fixture.bootstrap(
+        "instance-alpha",
+        "stage-inspect",
+        "token-inspect",
+        { id: 13, title: "Inspect a sample" },
+        "inspect",
+      ),
+    ).rejects.toThrow(/does not match the awaiting lifecycle stage/);
+    expect(
+      fixture.persistence.getInstance("instance-alpha")?.state.handoffs,
+    ).toHaveLength(1);
+  });
+
+  it("rejects bootstrap when a disposition has no description", async () => {
+    const fixture = await makeFixture();
+    await writeBlueprint(
+      fixture.repositoryRoot,
+      "alpha-sample",
+      blueprint(["advance", "report_blocked"], ""),
+    );
+    await fixture.lifecycle.rebase({
+      instanceId: "instance-alpha",
+      targetState: "assess",
+    });
+
+    await expect(
+      fixture.bootstrap("instance-alpha", "stage-rebased", "token-rebased", {
+        id: 14,
+        title: "Prepare another sample",
+      }),
+    ).rejects.toThrow(/description for every disposition/);
+    expect(
+      fixture.persistence.getInstance("instance-alpha")?.state.handoffs,
+    ).toHaveLength(1);
   });
 
   it("rejects a handoff document carrying a different correlation token", async () => {
