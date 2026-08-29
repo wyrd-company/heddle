@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { Buffer } from "node:buffer";
 import process from "node:process";
+import { clearTimeout, setTimeout as scheduleTimeout } from "node:timers";
 import { setTimeout as delay } from "node:timers/promises";
 import { URL } from "node:url";
 
@@ -46,7 +47,17 @@ const command = async (...args) => {
   child.stderr.on("data", (value) => {
     stderr += value;
   });
+  let timedOut = false;
+  const timeout = scheduleTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, 30_000);
+  timeout.unref();
   const [code] = await once(child, "close");
+  clearTimeout(timeout);
+  if (timedOut) {
+    throw new Error(`agent-browser ${args.join(" ")} timed out after 30s`);
+  }
   if (code !== 0) {
     throw new Error(
       `agent-browser ${args.join(" ")} failed (${code}): ${stderr || stdout}`,
@@ -475,6 +486,69 @@ const assertBoardKeyboard = async (baseUrl) => {
       JSON.stringify([{ inProgress: false, taskId: 40 }]),
     "keyboard-authorized-action",
     "Enter did not dispatch the exact epic pause contract",
+  );
+};
+
+const exerciseShellControls = async (baseUrl) => {
+  fixture.reset();
+  await setViewport({ height: 1000, width: 1440 });
+  await open(`${baseUrl}/?scope=all`);
+  await assertPageReady("4 visible records");
+  await evaluate(`document.querySelector(".wordmark").focus()`);
+  await press("Tab");
+  await assertFocused("#attention-toggle", "attention toggle activation");
+  await press("Enter");
+  await waitFor(`document.querySelector("#attention-overlay").open === true`);
+  await assertFocused("#attention-close", "attention close activation");
+  await press("Enter");
+  await waitFor(`document.querySelector("#attention-overlay").open === false`);
+  invariant(
+    (await evaluate(
+      `document.querySelector("#attention-toggle").getAttribute("aria-expanded")`,
+    )) === "false",
+    "keyboard-shell-control-activation",
+    "attention close did not restore the collapsed toggle state",
+  );
+
+  await evaluate(`document.querySelector(".wordmark").focus()`);
+  for (let index = 0; index < 3; index += 1) await press("Tab");
+  await assertFocused(
+    "#dependencies-view-link",
+    "dependency navigation activation",
+  );
+  await press("Enter");
+  await waitFor(
+    `document.querySelector("#dependency-graph").hidden === false && new URL(window.location.href).searchParams.get("view") === "dependencies"`,
+  );
+  await assertPageReady("4 visible nodes");
+
+  await evaluate(`document.querySelector(".wordmark").focus()`);
+  for (let index = 0; index < 2; index += 1) await press("Tab");
+  await assertFocused("#board-view-link", "board navigation activation");
+  await press("Enter");
+  await waitFor(
+    `document.querySelector("#board").hidden === false && new URL(window.location.href).searchParams.get("view") === null`,
+  );
+  await assertPageReady("4 visible records");
+
+  await command("focus", "#scope");
+  await assertFocused("#scope", "scope activation");
+  await evaluate(`(() => {
+    const scope = document.querySelector("#scope");
+    scope.value = "epic:40";
+    scope.dispatchEvent(new Event("change", { bubbles: true }));
+  })()`);
+  await delay(100);
+  const scopeState = await evaluate(`(() => ({
+    scope: document.querySelector("#scope").value,
+    status: document.querySelector("#console-status")?.textContent,
+    url: window.location.href,
+  }))()`);
+  invariant(
+    new URL(scopeState.url).searchParams.get("scope") === "epic:40" &&
+      scopeState.status === "4 visible records",
+    "keyboard-shell-control-activation",
+    `scope control selection was not applied: ${JSON.stringify(scopeState)}`,
   );
 };
 
@@ -1023,6 +1097,29 @@ const mutationBattery = async (baseUrl) => {
     },
   );
 
+  await open(`${baseUrl}/?scope=all`);
+  await assertPageReady("4 visible records");
+  await expectSoleKill(
+    "keyboard-shell-control-activation",
+    () =>
+      evaluate(`document.querySelector("#attention-toggle").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, true)`),
+    async () => {
+      await evaluate(`document.querySelector("#attention-toggle").focus()`);
+      await press("Enter");
+      await delay(100);
+      invariant(
+        await evaluate(
+          `document.querySelector("#attention-overlay").open === true`,
+        ),
+        "keyboard-shell-control-activation",
+        "broken attention-toggle activation was accepted",
+      );
+    },
+  );
+
   await open(`${baseUrl}/?scope=epic%3A40`);
   await assertPageReady("4 visible records");
   await expectSoleKill(
@@ -1212,6 +1309,7 @@ const main = async () => {
     `unknown phase ${phase}`,
   );
   if (phase !== "mutations") {
+    await exerciseShellControls(baseUrl);
     for (const viewport of viewports) {
       for (const view of ["board", "dependencies", "lifecycle", "attention"]) {
         await auditView(baseUrl, viewport, view);
