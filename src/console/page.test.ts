@@ -52,4 +52,22 @@ describe("console page accessibility", () => {
     expect(contrastRatio(paperRaised, signal)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(signalFocus, ink)).toBeGreaterThanOrEqual(3);
   });
+
+  it("binds accessible tokens to the rendered small-text and focus rules", () => {
+    expect(consoleStyles).toMatch(
+      /\.attention-count \{[^}]*color: var\(--paper-raised\);[^}]*background: var\(--signal\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.eyebrow, \.scope-control span \{[^}]*color: var\(--signal\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.console-status \{[^}]*color: var\(--muted\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.card-meta \{[^}]*color: var\(--muted\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.epic-lever:hover, \.epic-lever:focus-visible \{[^}]*outline: 2px solid var\(--signal-focus\);[^}]*\}/,
+    );
+  });
 });
