@@ -190,7 +190,9 @@ proposed-design:
     Stopping an assignment atomically stops every active assignment descendant
     in deterministic assignment order. Active authorization requires an
     unbroken active lineage, so an inactive ancestor cannot leave an orphaned
-    writer. The subagent service supplies this hook to the session observer;
+    writer. A concurrent descendant observation that loses its teardown claim
+    to an ancestor recognizes the stored ancestor stop and returns without a
+    second steer. The subagent service supplies this hook to the session observer;
     it does not poll T3 or decide liveness separately.
 
     Escalation is a blocking question through the MCP suite's

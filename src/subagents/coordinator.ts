@@ -382,12 +382,14 @@ export class SubagentCoordinator {
         phase: result.phase as "absent" | "completed" | "failed",
         status: "issued" as const,
       };
-      assignment = stopTodoAssignmentTree(
+      const stopped = stopTodoAssignmentTree(
         this.options.persistence,
         instanceId,
         assignment.sessionKey,
         notice,
-      ).assignment;
+      );
+      assignment = stopped.assignment;
+      if (stopped.kind === "stopped-by-ancestor") return;
     }
     if (assignment.stopNotification?.status === "completed") return;
     await this.options.steerParent({

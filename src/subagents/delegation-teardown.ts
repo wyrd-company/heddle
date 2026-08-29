@@ -48,7 +48,17 @@ export const stopTodoAssignmentTree = (
   instanceId: string,
   sessionKey: string,
   notification: NonNullable<TodoAssignment["stopNotification"]>,
-): { assignment: TodoAssignment; stoppedSessionKeys: string[] } => {
+):
+  | {
+      assignment: TodoAssignment;
+      kind: "stopped-by-ancestor";
+      stoppedSessionKeys: string[];
+    }
+  | {
+      assignment: TodoAssignment;
+      kind: "stopped-root";
+      stoppedSessionKeys: string[];
+    } => {
   while (true) {
     const current = requireRecord(store, instanceId);
     const { assignment, list } = assignmentForChild(current, sessionKey);
@@ -61,7 +71,14 @@ export const stopTodoAssignmentTree = (
       ({ sessionKey: candidate }) => candidate,
     );
     if (assignment.status === "stopped") {
-      return { assignment, stoppedSessionKeys };
+      return {
+        assignment,
+        kind:
+          assignment.ancestorStop === undefined
+            ? "stopped-root"
+            : "stopped-by-ancestor",
+        stoppedSessionKeys,
+      };
     }
     const nextList: TodoList = {
       ...list,
@@ -107,6 +124,7 @@ export const stopTodoAssignmentTree = (
     if (claimed !== undefined) {
       return {
         assignment: assignmentForChild(claimed, sessionKey).assignment,
+        kind: "stopped-root",
         stoppedSessionKeys,
       };
     }

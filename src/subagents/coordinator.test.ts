@@ -3,16 +3,36 @@
 //   verifies: heddle
 // ---
 
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DispatchPacingGate } from "../pacing/index.js";
-import type { InstanceRecord, InstanceState } from "../persistence/index.js";
+import {
+  SqlitePersistence,
+  type InstanceRecord,
+  type InstanceState,
+} from "../persistence/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/types.js";
 import {
   assignmentForChild,
+  claimTodoAssignment,
   type DelegationStateStore,
 } from "./delegation-state.js";
+import { stopTodoAssignmentTree } from "./delegation-teardown.js";
 import { SubagentCoordinator } from "./coordinator.js";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
+});
 
 const initialState = (): InstanceState => ({
   correlationTokens: { parent: "parent-token" },
@@ -300,6 +320,147 @@ describe("SubagentCoordinator", () => {
       assignmentForChild(test.store.record, "child-session").assignment
         .stopNotification,
     ).toMatchObject({ status: "completed" });
+  });
+
+  it("returns without a descendant steer when an ancestor wins the teardown CAS", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "subagent-stop-race-"));
+    temporaryDirectories.push(stateDirectory);
+    let persistence = new SqlitePersistence({ stateDirectory });
+    persistence.createInstance("instance", initialState());
+    const claim = (
+      sessionKey: string,
+      parentSessionKey: string,
+      rootItemId: string,
+      depth: number,
+    ) =>
+      claimTodoAssignment(persistence, {
+        bootstrap: {
+          createCommandId: `create-${sessionKey}`,
+          createdAt: new Date(0).toISOString(),
+          messageId: `message-${sessionKey}`,
+          turnCommandId: `turn-${sessionKey}`,
+        },
+        correlationToken: `token-${sessionKey}`,
+        depth,
+        instanceId: "instance",
+        listSessionKey: "parent",
+        model: "sample-model",
+        operationId: `spawn-${sessionKey}`,
+        parentSessionKey,
+        parentThreadId:
+          parentSessionKey === "parent"
+            ? "parent-thread"
+            : `thread-${parentSessionKey}`,
+        provider: "sample-provider",
+        rootItemId,
+        sessionKey,
+        stage: "implement",
+        threadId: `thread-${sessionKey}`,
+      });
+    claim("child-session", "parent", "root", 1);
+    claim("nested-session", "child-session", "child", 2);
+    const ancestorNotice = {
+      commandId: "ancestor-stop-command",
+      createdAt: new Date(1).toISOString(),
+      message: "Ancestor stopped with phase failed.",
+      messageId: "ancestor-stop-message",
+      phase: "failed" as const,
+      status: "issued" as const,
+    };
+    const versionBeforeRace = persistence.getInstance("instance")!.version;
+    let ancestorWon = false;
+    const racingStore: DelegationStateStore = {
+      getInstance: (instanceId) => persistence.getInstance(instanceId),
+      compareAndSwapInstance: (instanceId, expectedVersion, state) => {
+        if (!ancestorWon) {
+          ancestorWon = true;
+          stopTodoAssignmentTree(
+            persistence,
+            instanceId,
+            "child-session",
+            ancestorNotice,
+          );
+          return undefined;
+        }
+        return persistence.compareAndSwapInstance(
+          instanceId,
+          expectedVersion,
+          state,
+        );
+      },
+    };
+    const steerParent = vi.fn(async () => undefined);
+    const coordinator = new SubagentCoordinator({
+      activeSessions: async () => [],
+      bootstrapDependencies: {
+        persistence,
+        t3: { dispatch: async () => ({ sequence: 1 }) },
+      },
+      nextId: () => "descendant-stop-id",
+      observeChild: async () => ({
+        archiveDispatched: false,
+        attentions: [],
+        phase: "failed",
+      }),
+      pacing: new DispatchPacingGate(
+        {
+          defaultProvider: "sample-provider",
+          maxConcurrentSessions: 4,
+          providerBudgets: {},
+          subagents: { maxDepth: 2, maxFanOut: 2 },
+          usageWindowHours: 5,
+        },
+        { readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }) },
+      ),
+      persistence: racingStore,
+      prepareSession: async () => {
+        throw new Error("not used");
+      },
+      sessionTargetFor: () => ({
+        instanceId: "instance",
+        sessionKey: "parent",
+        threadId: "parent-thread",
+      }),
+      steerParent,
+    });
+
+    await expect(
+      coordinator.onObserved(
+        {
+          instanceId: "instance",
+          sessionKey: "nested-session",
+          threadId: "thread-nested-session",
+        },
+        {
+          archiveDispatched: false,
+          attentions: [],
+          phase: "failed",
+        },
+      ),
+    ).resolves.toBeUndefined();
+    expect(ancestorWon).toBe(true);
+    expect(steerParent).not.toHaveBeenCalled();
+    expect(persistence.getInstance("instance")!.version).toBe(
+      versionBeforeRace + 1,
+    );
+    persistence.close();
+
+    persistence = new SqlitePersistence({ stateDirectory });
+    const reloaded = persistence.getInstance("instance")!;
+    expect(reloaded.version).toBe(versionBeforeRace + 1);
+    expect(
+      assignmentForChild(reloaded, "child-session").assignment,
+    ).toMatchObject({
+      status: "stopped",
+      stopNotification: ancestorNotice,
+    });
+    expect(
+      assignmentForChild(reloaded, "nested-session").assignment,
+    ).toMatchObject({
+      ancestorStop: { ancestorSessionKey: "child-session" },
+      status: "stopped",
+    });
+    persistence.close();
   });
 
   it("reports working and crashed states only to the owning parent", async () => {
