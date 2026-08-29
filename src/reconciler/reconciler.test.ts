@@ -409,5 +409,12 @@ describe("Reconciler", () => {
         taskId: second.id,
       }),
     );
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      first.id,
+    ]);
+    expect(subject.instances.deferrals).toHaveLength(1);
   });
 });

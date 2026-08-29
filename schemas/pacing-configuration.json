@@ -34,12 +34,13 @@
     "defaultProvider": {
       "description": "Provider used when a task or stage does not select one.",
       "type": "string",
-      "minLength": 1
+      "pattern": ".*\\S.*"
     },
     "maxConcurrentSessions": {
       "description": "Maximum total active lifecycle and subagent sessions in the workspace.",
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "maximum": 9007199254740991
     },
     "providerBudgets": {
       "description": "Provider usage limits keyed by provider identifier. Missing providers have no usage limit.",
@@ -48,7 +49,7 @@
         "$ref": "#/$defs/provider-budget"
       },
       "propertyNames": {
-        "minLength": 1
+        "pattern": ".*\\S.*"
       }
     },
     "subagents": {
@@ -59,12 +60,14 @@
         "maxDepth": {
           "description": "Maximum subagent nesting depth. Top-level sessions have depth zero.",
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "maxFanOut": {
           "description": "Maximum active child sessions for one parent session.",
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       }
     },

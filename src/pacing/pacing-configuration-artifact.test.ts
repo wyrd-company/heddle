@@ -55,16 +55,26 @@ describe("pacing configuration artifact", () => {
     );
   });
 
-  it("rejects a different window and negative capacity", async () => {
+  it.each([
+    ["a different window", { usageWindowHours: 4 }],
+    ["negative WIP capacity", { maxConcurrentSessions: -1 }],
+    ["unsafe WIP capacity", { maxConcurrentSessions: 9_007_199_254_740_992 }],
+    ["a whitespace default provider", { defaultProvider: " " }],
+    ["a fractional depth", { subagents: { maxDepth: 1.5, maxFanOut: 2 } }],
+    ["a fractional fan-out", { subagents: { maxDepth: 2, maxFanOut: 1.5 } }],
+    [
+      "a whitespace provider key",
+      { providerBudgets: { " ": { usageLimit: 1 } } },
+    ],
+    [
+      "a negative provider budget",
+      { providerBudgets: { "provider-a": { usageLimit: -1 } } },
+    ],
+  ])("rejects %s", async (_name, mutation) => {
     const validate = new Ajv2020({ allErrors: true, strict: false }).compile(
       await readSchema(),
     );
 
-    expect(validate({ ...validConfiguration, usageWindowHours: 4 })).toBe(
-      false,
-    );
-    expect(validate({ ...validConfiguration, maxConcurrentSessions: -1 })).toBe(
-      false,
-    );
+    expect(validate({ ...validConfiguration, ...mutation })).toBe(false);
   });
 });
