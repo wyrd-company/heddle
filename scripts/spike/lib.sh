@@ -3,7 +3,7 @@
 
 SPIKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRATCH="$SPIKE_ROOT/.spike-scratch"
-T3_URL="${T3_URL:-http://127.0.0.1:3799}"
+T3_URL="${T3_URL:-http://127.0.0.1:3801}"
 TOKEN_FILE="$SCRATCH/token.txt"
 
 tok() { cat "$TOKEN_FILE"; }

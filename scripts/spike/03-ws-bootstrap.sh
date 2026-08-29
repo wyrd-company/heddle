@@ -26,6 +26,6 @@ PAYLOAD=$(jq -n --arg cid "$(uuidgen)" --arg tid "$TID" --arg mid "$(uuidgen)" \
     runSetupScript:true},
   createdAt:$t}')
 
-node "$(dirname "$0")/ws-dispatch.mjs" "${T3_WS_URL:-ws://127.0.0.1:3799/ws}" \
+node "$(dirname "$0")/ws-dispatch.mjs" "${T3_WS_URL:-ws://127.0.0.1:3801/ws}" \
   "$(tok)" "orchestration.dispatchCommand" "$PAYLOAD"
 echo "$TID"
