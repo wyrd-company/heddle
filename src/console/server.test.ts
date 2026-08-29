@@ -222,6 +222,9 @@ describe("console server", () => {
     const malformedSequence = await globalThis.fetch(
       `${baseUrl}/api/events?after=several`,
     );
+    const nonCanonicalSequence = await globalThis.fetch(
+      `${baseUrl}/api/events?after=1e2`,
+    );
     const unsafeEpic = await globalThis.fetch(
       `${baseUrl}/api/epics/99999999999999999/in-progress`,
       {
@@ -232,6 +235,14 @@ describe("console server", () => {
     );
     const malformedEpic = await globalThis.fetch(
       `${baseUrl}/api/epics/several/in-progress`,
+      {
+        body: JSON.stringify({ inProgress: false }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      },
+    );
+    const nonCanonicalEpic = await globalThis.fetch(
+      `${baseUrl}/api/epics/1e2/in-progress`,
       {
         body: JSON.stringify({ inProgress: false }),
         headers: { "content-type": "application/json" },
@@ -278,8 +289,10 @@ describe("console server", () => {
     expect(invalidScope.status).toBe(400);
     expect(unsafeSequence.status).toBe(400);
     expect(malformedSequence.status).toBe(400);
+    expect(nonCanonicalSequence.status).toBe(400);
     expect(unsafeEpic.status).toBe(400);
     expect(malformedEpic.status).toBe(400);
+    expect(nonCanonicalEpic.status).toBe(400);
     expect(wrongMethod.status).toBe(405);
     expect(missingContentType.status).toBe(400);
     expect(malformedJson.status).toBe(400);
