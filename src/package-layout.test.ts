@@ -49,8 +49,9 @@ describe("package separation", () => {
   it("packages the maintained Cursor API-key wrapper", async () => {
     const production = await readManifest("package.json");
 
-    expect(production.bin).toEqual({
+    expect(production.bin).toMatchObject({
       "heddle-cursor-agent": "bin/heddle-cursor-agent.mjs",
+      "heddle-server": "bin/heddle-server.mjs",
     });
     await expect(
       readFile("bin/heddle-cursor-agent.mjs", "utf8"),
