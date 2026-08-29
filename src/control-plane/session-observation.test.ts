@@ -352,6 +352,27 @@ describe("SessionObserver liveness", () => {
 });
 
 describe("SessionObserver operator actions", () => {
+  const observeUserInputQuestions = async (questions: unknown[]) => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingUserInput: true,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "user-input.requested",
+            payload: { questions, requestId: "question-one" },
+          },
+        ],
+      },
+    };
+    return test.observer.observe(target);
+  };
+
   it("projects pending approval and user input as independently answerable attention", async () => {
     const test = fixture();
     test.t3.shell.threads[0] = {
@@ -425,33 +446,15 @@ describe("SessionObserver operator actions", () => {
     expect(test.attention.entries).toEqual([]);
   });
 
-  it("rejects repeated user-input question and option identities", async () => {
-    const observe = async (questions: unknown[]) => {
-      const test = fixture();
-      test.t3.shell.threads[0] = {
-        id: target.threadId,
-        hasPendingUserInput: true,
-        latestTurn: { state: "running" },
-        session: { status: "running" },
-      };
-      test.t3.snapshot = {
-        thread: {
-          activities: [
-            {
-              kind: "user-input.requested",
-              payload: { questions, requestId: "question-one" },
-            },
-          ],
-        },
-      };
-      return test.observer.observe(target);
-    };
-
+  it("rejects repeated user-input question identities", async () => {
     await expect(
-      observe([...userInputQuestions, ...userInputQuestions]),
+      observeUserInputQuestions([...userInputQuestions, ...userInputQuestions]),
     ).rejects.toThrow("repeats question 'quantity'");
+  });
+
+  it("rejects repeated user-input option identities", async () => {
     await expect(
-      observe([
+      observeUserInputQuestions([
         {
           ...userInputQuestions[0],
           options: [
