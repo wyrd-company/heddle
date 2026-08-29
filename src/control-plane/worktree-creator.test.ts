@@ -45,9 +45,15 @@ describe("ensureWorktree", () => {
     const repositoryRoot = join(scratch, "source");
     const worktreesRoot = join(scratch, "worktrees");
     await initializeRepository(repositoryRoot);
+    await exec("git", ["branch", "integration-base"], { cwd: repositoryRoot });
+    await exec(
+      "git",
+      ["commit", "--allow-empty", "--quiet", "-m", "later change"],
+      { cwd: repositoryRoot },
+    );
 
     const input = {
-      baseRef: "main",
+      baseRef: "integration-base",
       branch: "task/prepare",
       repositoryName: "sample-repository",
       repositoryRoot,
@@ -63,6 +69,15 @@ describe("ensureWorktree", () => {
       path: join(worktreesRoot, "sample-repository", "task-prepare"),
     });
     expect(reused).toEqual({ ...created, created: false });
+    expect(
+      (await exec("git", ["rev-parse", "HEAD"], { cwd: created.path })).stdout,
+    ).toBe(
+      (
+        await exec("git", ["rev-parse", "integration-base"], {
+          cwd: repositoryRoot,
+        })
+      ).stdout,
+    );
   });
 
   it("rejects an unrelated repository at the owned path", async () => {
