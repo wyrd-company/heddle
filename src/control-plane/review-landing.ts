@@ -73,7 +73,7 @@ export const mergeReviewSnapshot = async (
   if (snapshot.status !== "open") {
     throw new Error(`Snapshot ${snapshotId} is not open`);
   }
-  if (sourceHead !== snapshot.sourceHead) {
+  if (sourceHead !== snapshot.sourceHead || baseHead !== snapshot.baseHead) {
     return {
       alreadyMerged: false,
       dispositions: { merged: false, remediate: true },
@@ -161,18 +161,18 @@ export const cleanupMergedChange = async (
   }
 
   const path = mechanicalWorktreePath(change);
+  const worktreeInput = {
+    baseRef: change.baseBranch,
+    branch: change.branch,
+    repositoryName: change.repositoryName,
+    repositoryRoot: change.repositoryRoot,
+    worktreeName: change.worktreeName,
+    worktreesRoot: change.worktreesRoot,
+  };
   let worktreeRemoved = false;
   if (await pathExists(path)) {
-    await ensureWorktree(
-      {
-        baseRef: change.baseBranch,
-        branch: change.branch,
-        repositoryName: change.repositoryName,
-        repositoryRoot: change.repositoryRoot,
-        worktreeName: change.worktreeName,
-        worktreesRoot: change.worktreesRoot,
-      },
-      (cwd, arguments_) => runMechanicalGit(command, cwd, arguments_),
+    await ensureWorktree(worktreeInput, (cwd, arguments_) =>
+      runMechanicalGit(command, cwd, arguments_),
     );
     await assertCleanMechanicalWorktree(command, path);
     await runMechanicalGit(command, change.repositoryRoot, [
@@ -186,12 +186,34 @@ export const cleanupMergedChange = async (
 
   let branchDeleted = false;
   if (branchHead !== undefined) {
-    await runMechanicalGit(command, change.repositoryRoot, [
-      "update-ref",
-      "-d",
-      `refs/heads/${change.branch}`,
-      branchHead,
-    ]);
+    try {
+      await runMechanicalGit(command, change.repositoryRoot, [
+        "update-ref",
+        "-d",
+        `refs/heads/${change.branch}`,
+        branchHead,
+      ]);
+    } catch (error) {
+      const currentBranchHead = await resolveMechanicalBranchHead(
+        command,
+        change.repositoryRoot,
+        change.branch,
+      );
+      if (worktreeRemoved && currentBranchHead !== undefined) {
+        try {
+          // The removed worktree was clean, so the surviving branch is its complete recovery source.
+          await ensureWorktree(worktreeInput, (cwd, arguments_) =>
+            runMechanicalGit(command, cwd, arguments_),
+          );
+        } catch (restorationError) {
+          throw new AggregateError(
+            [error, restorationError],
+            "Cleanup failed and the worktree could not be restored",
+          );
+        }
+      }
+      throw error;
+    }
     branchDeleted = true;
   }
   return { branchDeleted, snapshotId, worktreeRemoved };

@@ -27,6 +27,7 @@ import {
   ensureReviewSnapshot,
   mechanicalChangeContextKey,
   mergeReviewSnapshot,
+  type CommandRunner,
   type MechanicalChangeContext,
   type MechanicalNodeEffectOptions,
 } from "./mechanical-node-effects.js";
@@ -227,13 +228,60 @@ describe("delivery mechanical nodes", () => {
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(baseBefore);
   });
 
+  it("routes recorded-base drift to remediation without merging", async () => {
+    const fixture = await prepareCommittedChange();
+    const intermediateHead = (
+      await git(fixture.sourcePath, "rev-parse", "task/change")
+    ).trim();
+    await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");
+    await git(fixture.worktreePath, "add", "notes.txt");
+    await git(fixture.worktreePath, "commit", "--quiet", "-m", "add note");
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await git(
+      fixture.sourcePath,
+      "update-ref",
+      "refs/heads/main",
+      intermediateHead,
+      snapshot.baseHead,
+    );
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).resolves.toEqual({
+      alreadyMerged: false,
+      dispositions: { merged: false, remediate: true },
+      merged: false,
+      snapshotId: snapshot.snapshotId,
+    });
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      intermediateHead + "\n",
+    );
+  });
+
   it("fails a conflicting merge and preserves both branch heads", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await writeFile(join(fixture.sourcePath, "inventory.txt"), "replacement\n");
-    await git(fixture.sourcePath, "add", "inventory.txt");
-    await git(fixture.sourcePath, "commit", "--quiet", "-m", "replace item");
-    const baseHead = await git(fixture.sourcePath, "rev-parse", "main");
+    let baseHead: string | undefined;
+    let conflicted = false;
+    const command: CommandRunner = async (cwd, executable, arguments_) => {
+      if (!conflicted && executable === "gitpr" && arguments_[0] === "merge") {
+        conflicted = true;
+        await writeFile(
+          join(fixture.sourcePath, "inventory.txt"),
+          "replacement\n",
+        );
+        await git(fixture.sourcePath, "add", "inventory.txt");
+        await git(
+          fixture.sourcePath,
+          "commit",
+          "--quiet",
+          "-m",
+          "replace item",
+        );
+        baseHead = await git(fixture.sourcePath, "rev-parse", "main");
+      }
+      return (await execute(executable, arguments_, { cwd })).stdout;
+    };
     const sourceHead = await git(
       fixture.sourcePath,
       "rev-parse",
@@ -241,8 +289,9 @@ describe("delivery mechanical nodes", () => {
     );
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
     ).rejects.toThrow();
+    expect(baseHead).toBeDefined();
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(baseHead);
     expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
       sourceHead,
@@ -320,6 +369,58 @@ describe("delivery mechanical nodes", () => {
     await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
     expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
       movedHead,
+    );
+  });
+
+  it("restores the worktree when the merged branch moves during cleanup", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    let movedHead: string | undefined;
+    let moved = false;
+    const command: CommandRunner = async (cwd, executable, arguments_) => {
+      if (
+        !moved &&
+        executable === "git" &&
+        arguments_[0] === "worktree" &&
+        arguments_[1] === "remove"
+      ) {
+        moved = true;
+        const tree = (
+          await git(fixture.sourcePath, "rev-parse", "task/change^{tree}")
+        ).trim();
+        movedHead = (
+          await git(
+            fixture.sourcePath,
+            "commit-tree",
+            tree,
+            "-p",
+            snapshot.sourceHead,
+            "-m",
+            "move branch",
+          )
+        ).trim();
+        await git(
+          fixture.sourcePath,
+          "update-ref",
+          "refs/heads/task/change",
+          movedHead,
+          snapshot.sourceHead,
+        );
+      }
+      return (await execute(executable, arguments_, { cwd })).stdout;
+    };
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId, command),
+    ).rejects.toThrow();
+    expect(movedHead).toBeDefined();
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    expect(
+      await git(fixture.worktreePath, "symbolic-ref", "--short", "HEAD"),
+    ).toBe("task/change\n");
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      movedHead + "\n",
     );
   });
 
@@ -453,10 +554,17 @@ describe("delivery mechanical nodes", () => {
   });
 
   it("moves a real merge conflict to attention without entering remediation", async () => {
-    const fixture = await makeLifecycle();
-    await writeFile(join(fixture.sourcePath, "inventory.txt"), "replacement\n");
-    await git(fixture.sourcePath, "add", "inventory.txt");
-    await git(fixture.sourcePath, "commit", "--quiet", "-m", "replace item");
+    let conflicted = false;
+    const command: CommandRunner = async (cwd, executable, arguments_) => {
+      if (!conflicted && executable === "gitpr" && arguments_[0] === "merge") {
+        conflicted = true;
+        await writeFile(join(cwd, "inventory.txt"), "replacement\n");
+        await git(cwd, "add", "inventory.txt");
+        await git(cwd, "commit", "--quiet", "-m", "replace item");
+      }
+      return (await execute(executable, arguments_, { cwd })).stdout;
+    };
+    const fixture = await makeLifecycle({ command });
 
     await expect(
       fixture.engine.resume({
