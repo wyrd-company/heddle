@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SqlitePersistence } from "../persistence/index.js";
@@ -73,6 +74,64 @@ describe("durable production adapters", () => {
       'Attention "task-19:session:choice" changed durable identity',
     );
     expect(queue.list()).toMatchObject([{ message: "Choose a lifecycle" }]);
+    persistence.close();
+  });
+
+  it("retains resolved attention identity while hiding it across restart", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-attention-resolved-"));
+    const attention = {
+      attentionId: "task-21:session:choice",
+      code: "lifecycle-not-declared",
+      kind: "lifecycle-resolution" as const,
+      message: "Choose a lifecycle",
+      taskId: 21,
+    };
+    const firstPersistence = new SqlitePersistence({
+      stateDirectory: directory,
+    });
+    const first = new DurableAttentionQueue(firstPersistence);
+    await first.raise(attention);
+    expect(first.resolve(attention.attentionId)).toBe(true);
+    expect(first.list()).toEqual([]);
+    expect(await first.has(attention.attentionId)).toBe(true);
+    firstPersistence.close();
+
+    const secondPersistence = new SqlitePersistence({
+      stateDirectory: directory,
+    });
+    const second = new DurableAttentionQueue(secondPersistence);
+    expect(second.resolve(attention.attentionId)).toBe(false);
+    expect(() => second.resolve("task-21:session:unknown")).toThrow(
+      'Attention "task-21:session:unknown" does not exist',
+    );
+    expect(second.list()).toEqual([]);
+    expect(await second.has(attention.attentionId)).toBe(true);
+    secondPersistence.close();
+  });
+
+  it("adds durable resolution state to an existing attention store", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-attention-schema-"));
+    const database = new Database(join(directory, "heddle-state.sqlite"));
+    database.exec(`
+      CREATE TABLE heddle_attention (
+        attention_id TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+      )
+    `);
+    database.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    const queue = new DurableAttentionQueue(persistence);
+    await queue.raise({
+      attentionId: "task-23:session:choice",
+      code: "lifecycle-not-declared",
+      kind: "lifecycle-resolution",
+      message: "Choose a lifecycle",
+      taskId: 23,
+    });
+    expect(queue.resolve("task-23:session:choice")).toBe(true);
+    expect(queue.list()).toEqual([]);
     persistence.close();
   });
 

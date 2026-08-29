@@ -27,6 +27,10 @@ export class DurableAttentionQueue {
     );
   }
 
+  resolve(attentionId: string): boolean {
+    return this.persistence.resolveAttention(attentionId);
+  }
+
   list(): ConsoleAttention[] {
     return this.persistence.listAttention().map((record) => {
       const payload = record.payload;

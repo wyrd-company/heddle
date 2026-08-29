@@ -49,7 +49,8 @@ export const initializePersistenceSchema = (
     CREATE TABLE IF NOT EXISTS heddle_attention (
       attention_id TEXT PRIMARY KEY,
       payload_json TEXT NOT NULL,
-      recorded_at TEXT NOT NULL
+      recorded_at TEXT NOT NULL,
+      resolved_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS heddle_session_runtime (
@@ -82,6 +83,13 @@ export const initializePersistenceSchema = (
       SELECT RAISE(ABORT, 'heddle instance history is append-only');
     END;
   `);
+
+  const attentionColumns = database
+    .prepare("PRAGMA table_info(heddle_attention)")
+    .all() as Array<{ name: string }>;
+  if (!attentionColumns.some(({ name }) => name === "resolved_at")) {
+    database.exec("ALTER TABLE heddle_attention ADD COLUMN resolved_at TEXT");
+  }
 };
 
 export const protectFlowcraftHistory = (database: Database.Database): void => {

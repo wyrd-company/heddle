@@ -306,6 +306,7 @@ export class SqlitePersistence {
       .prepare(
         `SELECT attention_id, payload_json, recorded_at
          FROM heddle_attention
+         WHERE resolved_at IS NULL
          ORDER BY recorded_at, attention_id`,
       )
       .all() as Array<{
@@ -318,6 +319,21 @@ export class SqlitePersistence {
       payload: JSON.parse(row.payload_json) as JsonValue,
       recordedAt: row.recorded_at,
     }));
+  }
+
+  resolveAttention(attentionId: string): boolean {
+    this.assertStableId("attentionId", attentionId);
+    const resolved =
+      this.database
+        .prepare(
+          `UPDATE heddle_attention
+           SET resolved_at = ?
+           WHERE attention_id = ? AND resolved_at IS NULL`,
+        )
+        .run(new Date().toISOString(), attentionId).changes > 0;
+    if (resolved) return true;
+    if (this.hasAttention(attentionId)) return false;
+    throw new Error(`Attention ${JSON.stringify(attentionId)} does not exist`);
   }
 
   effectCompleted(effectKind: string, stableId: string): boolean {
