@@ -256,4 +256,40 @@ describe("workflow MCP escalation tools", () => {
     ]);
     recoveredPersistence.close();
   });
+
+  it("rejects a malformed persisted answer before clearing pending state", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-invalid-answer", [
+      { sessionKey: "top", token: "token-invalid", tools: ["escalate"] },
+    ]);
+    const binding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-invalid");
+    const abort = new globalThis.AbortController();
+    const abandoned = subject.coordinator.escalate(
+      binding,
+      {
+        escalationId: "invalid-choice",
+        questions: sampleEscalationQuestions,
+      },
+      abort.signal,
+    );
+    await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
+    abort.abort(new Error("simulated caller stop"));
+    await expect(abandoned).rejects.toThrow(/simulated caller stop/);
+
+    subject.persistence.appendEvent(
+      "instance-invalid-answer",
+      "mcp:escalation-answered",
+      {
+        answers: { "delivery-window": "unoffered" },
+        escalationId: "invalid-choice",
+        ownerSessionKey: "top",
+      },
+    );
+
+    expect(() =>
+      subject.coordinator.pendingEscalations("instance-invalid-answer"),
+    ).toThrow(/does not name an offered option/);
+  });
 });
