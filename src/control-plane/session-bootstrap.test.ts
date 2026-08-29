@@ -17,10 +17,10 @@ import {
 } from "../persistence/index.js";
 import {
   bootstrapStageSession,
-  harnessToolTimeoutConfiguration,
   steerStageSession,
   type SessionBootstrapDependencies,
 } from "./session-bootstrap.js";
+import { harnessToolTimeoutConfiguration } from "./harness-tool-timeout.js";
 
 const initialState = (): InstanceState => ({
   correlationTokens: {},

@@ -4,7 +4,6 @@
 //   references: t3-headless
 // ---
 
-import type { JsonValue } from "../persistence/index.js";
 import type { InstanceRecord } from "../persistence/index.js";
 import { GitBlueprintStore } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
@@ -23,6 +22,15 @@ import {
   assembleStageHandoff,
   type StageHandoffInput,
 } from "./handoff-assembler.js";
+import {
+  harnessToolTimeoutConfiguration,
+  type HarnessToolTimeoutConfiguration,
+} from "./harness-tool-timeout.js";
+import {
+  assertParentSession,
+  isStoredHandoff,
+  type StoredStageHandoffCandidate,
+} from "./stored-stage-handoff.js";
 import type {
   T3DispatchCommand,
   T3ProviderDispatchContext,
@@ -32,15 +40,6 @@ import {
   type PreparedWorktree,
   type WorktreeInput,
 } from "./worktree-creator.js";
-
-type StoredStageHandoffCandidate = {
-  correlationToken: string;
-  handoff: string;
-  kind: "stage-handoff";
-  parentSessionKey?: string;
-  sessionKey: string;
-  workflowMcp?: JsonValue;
-};
 
 export interface SessionT3Client {
   dispatch(
@@ -86,17 +85,6 @@ export const harnessConfiguration = (): HarnessConfiguration => ({
   codex: { tools: { update_plan: { enabled: false } } },
 });
 
-export type HarnessToolTimeoutConfiguration = {
-  claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } };
-  codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } };
-};
-
-export const harnessToolTimeoutConfiguration =
-  (): HarnessToolTimeoutConfiguration => ({
-    claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } },
-    codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } },
-  });
-
 export type SessionBootstrapDependencies = {
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
   instantiateTodoList?: typeof instantiateTodoList;
@@ -125,37 +113,6 @@ export type SessionSteeringDependencies = {
   nextId?: () => string;
   now?: () => string;
   t3: SessionT3Client;
-};
-
-const isStoredHandoff = (
-  value: JsonValue,
-): value is StoredStageHandoffCandidate =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  value["kind"] === "stage-handoff" &&
-  typeof value["sessionKey"] === "string" &&
-  typeof value["correlationToken"] === "string" &&
-  typeof value["handoff"] === "string";
-
-const assertParentSession = (
-  record: InstanceRecord,
-  input: SessionBootstrapInput,
-): void => {
-  if (input.parentSessionKey === undefined) return;
-  if (input.parentSessionKey === input.sessionKey) {
-    throw new TypeError("A stage session cannot be its own parent");
-  }
-  if (
-    !Object.hasOwn(record.state.correlationTokens, input.parentSessionKey) ||
-    !record.state.handoffs
-      .filter(isStoredHandoff)
-      .some(({ sessionKey }) => sessionKey === input.parentSessionKey)
-  ) {
-    throw new Error(
-      `Parent session '${input.parentSessionKey}' is not bound to this instance`,
-    );
-  }
 };
 
 const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =

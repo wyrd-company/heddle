@@ -13,17 +13,19 @@ export {
 export {
   bootstrapStageSession,
   harnessConfiguration,
-  harnessToolTimeoutConfiguration,
   steerStageSession,
   type SessionBootstrapDependencies,
   type HarnessConfiguration,
-  type HarnessToolTimeoutConfiguration,
   type SessionBootstrapInput,
   type SessionBootstrapResult,
   type SessionSteeringDependencies,
   type SessionSteeringInput,
   type SessionT3Client,
 } from "./session-bootstrap.js";
+export {
+  harnessToolTimeoutConfiguration,
+  type HarnessToolTimeoutConfiguration,
+} from "./harness-tool-timeout.js";
 export {
   ensureWorktree,
   type GitRunner,
