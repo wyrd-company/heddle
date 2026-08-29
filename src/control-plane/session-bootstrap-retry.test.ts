@@ -163,6 +163,31 @@ describe("stage session cold retry guards", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it("rejects a session that names itself as its parent", async () => {
+    const memory = memoryStore();
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(
+        { ...input, parentSessionKey: "child", sessionKey: "child" },
+        {
+          instantiateTodoList,
+          persistence: memory.store,
+          resolveWorkflowMcpStageContract,
+          t3: { dispatch },
+          ensureWorktree: async ({ branch }) => ({
+            branch,
+            created: false,
+            path: "/workspaces/worktrees/sample-repository/task-prepare",
+          }),
+          mintCorrelationToken: () => "token-child",
+        },
+      ),
+    ).rejects.toThrow(/cannot be its own parent/);
+    expect(memory.record.state).toEqual(initialState());
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("rejects a retry when the stored parent session disagrees", async () => {
     const memory = memoryStore({
       ...initialState(),
