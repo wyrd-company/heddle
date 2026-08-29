@@ -29,4 +29,16 @@ describe("package separation", () => {
     });
     expect(spike).toMatchObject({ name: "spike-flowcraft-gate" });
   });
+
+  it("documents the relocated spike working directory", async () => {
+    const spikeDocument = await readFile(
+      "docs/spikes/flowcraft-gate.md",
+      "utf8",
+    );
+
+    expect(spikeDocument).toContain(
+      "Working directory for every relative path and reproduction command:\n" +
+        "`spikes/flowcraft-gate` from the repository root.",
+    );
+  });
 });

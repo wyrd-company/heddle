@@ -4,6 +4,9 @@ Evaluation of `flowcraft` 2.10.1 (+ `@flowcraft/sqlite-history` 1.0.0-alpha.1,
 `@flowcraft/tldraw` source) as the interpreter for Heddle task lifecycles.
 Source reference: `/workspaces/references/flowcraft`.
 
+Working directory for every relative path and reproduction command:
+`spikes/flowcraft-gate` from the repository root.
+
 Lifecycle under test: implement -> review (wait) -> approve -> merge ->
 retrospective -> done, with reject -> remediate -> review as a cycle.
 Blueprint: `blueprint.js`. Driver: `spike.js`. Viewer harness: `viewer/`.
