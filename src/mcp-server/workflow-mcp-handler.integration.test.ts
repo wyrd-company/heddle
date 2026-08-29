@@ -1101,6 +1101,28 @@ describe("workflow MCP HTTP server", () => {
       "todo_edit",
       "todo_reorder",
     ]);
+    const secondTodoList = await secondReview.callTool({
+      name: "todo_list",
+      arguments: {},
+    });
+    expect(secondTodoList.structuredContent).toMatchObject({
+      todoList: { sessionKey: "review-second" },
+    });
+    expect(
+      (
+        secondTodoList.structuredContent as {
+          todoList: { items: unknown[] };
+        }
+      ).todoList.items,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          checked: false,
+          id: "orient",
+          text: "Orient on the review contract for Review another sample",
+        },
+      ]),
+    );
     const replay = await firstRetry.callTool({
       name: "advance",
       arguments: { disposition: "reject" },
