@@ -30,6 +30,60 @@ afterEach(async () => {
 });
 
 describe("LifecycleEngine concurrent execution", () => {
+  it("rejects multiple routes from an exclusive mechanical disposition", async () => {
+    const blueprint: LifecycleBlueprint = {
+      id: "exclusive-sample",
+      nodes: [
+        { id: "select", uses: "select" },
+        { id: "left", uses: "record" },
+        { id: "right", uses: "record" },
+        { id: "pause", uses: "wait", config: { joinStrategy: "any" } },
+        { id: "finish", uses: "record" },
+      ],
+      edges: [
+        {
+          source: "select",
+          target: "left",
+          condition: "result.output.dispositions.left",
+          disposition: "left",
+        },
+        {
+          source: "select",
+          target: "right",
+          condition: "result.output.dispositions.right",
+          disposition: "right",
+        },
+        { source: "left", target: "pause" },
+        { source: "right", target: "pause" },
+        {
+          source: "pause",
+          target: "finish",
+          condition: "result.output.dispositions.complete",
+          disposition: "complete",
+        },
+      ],
+    };
+    const fixture = await makeFixture(blueprint, {
+      record: async () => ({ recorded: true }),
+      select: async () => ({
+        dispositions: { left: true, right: true },
+      }),
+    });
+
+    await expect(
+      fixture.engine.start({
+        blueprintPath: fixture.blueprintPath,
+        instanceId: "sample-a",
+      }),
+    ).rejects.toThrow(/landed/);
+    expect(
+      fixture.persistence
+        .replayEvents("sample-a")
+        .filter(({ type }) => type === "lifecycle:attention-required"),
+    ).toHaveLength(1);
+    fixture.persistence.close();
+  });
+
   it("rejects a landing with multiple wait nodes", async () => {
     const blueprint: LifecycleBlueprint = {
       id: "parallel-sample",

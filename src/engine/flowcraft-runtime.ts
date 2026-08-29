@@ -62,17 +62,24 @@ export const landedAsExpected = (
   blueprint: LifecycleBlueprint,
   events: FlowcraftEvent[],
 ): boolean => {
-  const conditionalEdgeKeysBySource = new Map<string, Set<string>>();
+  const conditionalEdgesBySource = new Map<
+    string,
+    { edgeKeys: Set<string>; exclusive: boolean }
+  >();
   for (const edge of blueprint.edges) {
     if (edge.condition === undefined) continue;
     if (blueprint.nodes.find(({ id }) => id === edge.source)?.uses === "wait") {
       continue;
     }
-    const edgeKeys = conditionalEdgeKeysBySource.get(edge.source) ?? new Set();
-    edgeKeys.add(JSON.stringify([edge.target, edge.condition]));
-    conditionalEdgeKeysBySource.set(edge.source, edgeKeys);
+    const conditional = conditionalEdgesBySource.get(edge.source) ?? {
+      edgeKeys: new Set<string>(),
+      exclusive: false,
+    };
+    conditional.edgeKeys.add(JSON.stringify([edge.target, edge.condition]));
+    conditional.exclusive ||= edge.disposition !== undefined;
+    conditionalEdgesBySource.set(edge.source, conditional);
   }
-  for (const [source, edgeKeys] of conditionalEdgeKeysBySource) {
+  for (const [source, { edgeKeys, exclusive }] of conditionalEdgesBySource) {
     const finishIndexes = events.flatMap((event, index) =>
       event.type === "node:finish" && event.payload.nodeId === source
         ? [index]
@@ -86,7 +93,12 @@ export const landedAsExpected = (
           (event) =>
             event.type === "node:skipped" && event.payload.nodeId === source,
         ).length;
-      if (skippedEdgeCount >= edgeKeys.size) return false;
+      if (
+        (exclusive && skippedEdgeCount !== edgeKeys.size - 1) ||
+        (!exclusive && skippedEdgeCount >= edgeKeys.size)
+      ) {
+        return false;
+      }
     }
   }
   if (result.status === "awaiting") {

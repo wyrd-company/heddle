@@ -54,12 +54,21 @@ export const defaultMechanicalCommand: CommandRunner = (
 
 export const mechanicalWorktreePath = (
   change: MechanicalChangeContext,
-): string =>
-  join(
+): string => {
+  for (const [label, value] of [
+    ["repositoryName", change.repositoryName],
+    ["worktreeName", change.worktreeName],
+  ] as const) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)) {
+      throw new TypeError(`${label} must be one safe path segment`);
+    }
+  }
+  return join(
     change.worktreesRoot ?? "/workspaces/worktrees",
     change.repositoryName,
     change.worktreeName,
   );
+};
 
 export const runMechanicalGit = (
   command: CommandRunner,

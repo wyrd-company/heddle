@@ -261,6 +261,40 @@ describe("delivery mechanical nodes", () => {
     );
   });
 
+  it("preserves a clean worktree when the merged branch moved", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await writeFile(join(fixture.worktreePath, "notes.txt"), "later\n");
+    await git(fixture.worktreePath, "add", "notes.txt");
+    await git(fixture.worktreePath, "commit", "--quiet", "-m", "later note");
+    const movedHead = await git(fixture.sourcePath, "rev-parse", "task/change");
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/moved/);
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      movedHead,
+    );
+  });
+
+  it("rejects path traversal before running a mechanical command", async () => {
+    const fixture = await makeChange();
+    let commands = 0;
+
+    await expect(
+      ensureReviewSnapshot(
+        { ...fixture.change, repositoryName: "../outside" },
+        async () => {
+          commands += 1;
+          throw new Error("command must not run");
+        },
+      ),
+    ).rejects.toThrow(/safe path segment/);
+    expect(commands).toBe(0);
+  });
+
   it("routes real snapshot drift through the lifecycle remediation wait", async () => {
     const fixture = await makeLifecycle();
     await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");

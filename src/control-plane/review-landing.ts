@@ -151,6 +151,15 @@ export const cleanupMergedChange = async (
     baseHead,
   ]);
 
+  const branchHead = await resolveMechanicalBranchHead(
+    command,
+    change.repositoryRoot,
+    change.branch,
+  );
+  if (branchHead !== undefined && branchHead !== snapshot.sourceHead) {
+    throw new Error("Merged branch moved after review");
+  }
+
   const path = mechanicalWorktreePath(change);
   let worktreeRemoved = false;
   if (await pathExists(path)) {
@@ -175,16 +184,8 @@ export const cleanupMergedChange = async (
     worktreeRemoved = true;
   }
 
-  const branchHead = await resolveMechanicalBranchHead(
-    command,
-    change.repositoryRoot,
-    change.branch,
-  );
   let branchDeleted = false;
   if (branchHead !== undefined) {
-    if (branchHead !== snapshot.sourceHead) {
-      throw new Error("Merged branch moved after review");
-    }
     await runMechanicalGit(command, change.repositoryRoot, [
       "update-ref",
       "-d",
