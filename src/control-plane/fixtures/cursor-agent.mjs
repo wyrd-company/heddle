@@ -7,6 +7,7 @@
 
 import { appendFileSync } from "node:fs";
 import process from "node:process";
+import { setTimeout } from "node:timers";
 
 const arguments_ = process.argv.slice(2);
 if (arguments_[0] === "about") {
@@ -21,6 +22,10 @@ if (!expectedApiKey || process.env.CURSOR_API_KEY !== expectedApiKey)
   process.exit(77);
 
 const requestLog = process.env.HEDDLE_CURSOR_TEST_REQUEST_LOG;
+const promptDelayMs = Number.parseInt(
+  process.env.HEDDLE_CURSOR_TEST_PROMPT_DELAY_MS ?? "0",
+  10,
+);
 const log = (entry) => {
   if (requestLog) appendFileSync(requestLog, `${JSON.stringify(entry)}\n`);
 };
@@ -78,22 +83,28 @@ process.stdin.on("data", (chunk) => {
       case "session/set_config_option":
         respond(request.id, { configOptions: [] });
         break;
-      case "session/prompt":
-        process.stdout.write(
-          `${JSON.stringify({
-            jsonrpc: "2.0",
-            method: "session/update",
-            params: {
-              sessionId: request.params.sessionId,
-              update: {
-                sessionUpdate: "agent_message_chunk",
-                content: { type: "text", text: "done" },
+      case "session/prompt": {
+        const completePrompt = () => {
+          process.stdout.write(
+            `${JSON.stringify({
+              jsonrpc: "2.0",
+              method: "session/update",
+              params: {
+                sessionId: request.params.sessionId,
+                update: {
+                  sessionUpdate: "agent_message_chunk",
+                  content: { type: "text", text: "done" },
+                },
               },
-            },
-          })}\n`,
-        );
-        respond(request.id, { stopReason: "end_turn" });
+            })}\n`,
+          );
+          respond(request.id, { stopReason: "end_turn" });
+        };
+        if (Number.isFinite(promptDelayMs) && promptDelayMs > 0)
+          setTimeout(completePrompt, promptDelayMs);
+        else completePrompt();
         break;
+      }
       case "cursor/list_available_models":
         respond(request.id, {
           models: [{ value: "default", name: "Auto", configOptions: [] }],
