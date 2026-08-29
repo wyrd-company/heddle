@@ -101,6 +101,12 @@ export type StopSessionInput = SessionObservationTarget & {
 
 export type SessionObservationOptions = {
   attention: SessionObservationAttentionQueue;
+  childStops?: {
+    onObserved(
+      target: SessionObservationTarget,
+      result: SessionObservationResult,
+    ): Promise<void>;
+  };
   escalations: SessionObservationEscalations;
   nextId?: () => string;
   now?: () => number;

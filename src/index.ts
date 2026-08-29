@@ -20,6 +20,20 @@ export { controlPlane } from "./control-plane/index.js";
 export { engine } from "./engine/index.js";
 export { mcpServer } from "./mcp-server/index.js";
 export {
+  SubagentCoordinator,
+  subagents,
+  workflowMcpSubagentTools,
+} from "./subagents/index.js";
+export type {
+  ClaimTodoAssignmentInput,
+  DelegationStateStore,
+  SpawnSubagentInput,
+  SpawnSubagentResult,
+  SubagentCoordinatorOptions,
+  SubagentLiveness,
+  SubagentSessionPreparation,
+} from "./subagents/index.js";
+export {
   DispatchPacingGate,
   pacing,
   PROVIDER_USAGE_WINDOW_MS,

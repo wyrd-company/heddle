@@ -19,13 +19,20 @@ import {
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { bootstrapStageSession } from "../control-plane/index.js";
+import {
+  assembleStageHandoff,
+  bootstrapStageSession,
+} from "../control-plane/index.js";
 import {
   LifecycleEngine,
   type LifecycleBlueprint,
   type LifecycleEffect,
 } from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
+import {
+  claimTodoAssignment,
+  mutateTodoAssignment,
+} from "../subagents/index.js";
 import { createWorkflowMcpHttpHandler } from "./workflow-mcp-handler.js";
 
 const execFileAsync = promisify(execFile);
@@ -939,6 +946,165 @@ describe("workflow MCP HTTP server", () => {
         expect.objectContaining({ sessionKey: "stage-inspect" }),
       ]),
     );
+  });
+
+  it("limits child todo reads and writes to its durable assigned subtree", async () => {
+    const fixture = await makeFixture();
+    const parent = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "subtree-parent-client",
+    );
+    const inside = await parent.callTool({
+      name: "todo_add",
+      arguments: { parentId: "orient", text: "Inspect the nested sample" },
+    });
+    const outside = await parent.callTool({
+      name: "todo_add",
+      arguments: { text: "Inspect another sample" },
+    });
+    const insideId = (inside.structuredContent as { id: string }).id;
+    const outsideId = (outside.structuredContent as { id: string }).id;
+    claimTodoAssignment(fixture.persistence, {
+      correlationToken: "child-token",
+      depth: 1,
+      instanceId: "instance-alpha",
+      listSessionKey: "stage-alpha",
+      model: "sample-model",
+      operationId: "spawn-child",
+      parentSessionKey: "stage-alpha",
+      parentThreadId: "parent-thread",
+      provider: "sample-provider",
+      rootItemId: "orient",
+      sessionKey: "child-session",
+      stage: "assess",
+      threadId: "child-thread",
+    });
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const parentStored = record.state.handoffs[0];
+    if (
+      typeof parentStored !== "object" ||
+      parentStored === null ||
+      Array.isArray(parentStored) ||
+      typeof parentStored["workflowMcp"] !== "object" ||
+      parentStored["workflowMcp"] === null ||
+      Array.isArray(parentStored["workflowMcp"])
+    ) {
+      throw new Error("alpha handoff fixture is invalid");
+    }
+    const handoff = assembleStageHandoff({
+      correlationToken: "child-token",
+      skillPointer: "skills/sample.md",
+      stage: { kind: "standard", name: "assess", priorStageOutputs: [] },
+      taskContract: { id: 11, title: "Prepare a sample" },
+      todoList: record.state.todoState,
+    });
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [
+        ...record.state.handoffs,
+        {
+          correlationToken: "child-token",
+          handoff,
+          kind: "stage-handoff",
+          parentSessionKey: "stage-alpha",
+          sessionKey: "child-session",
+          todoAssignment: {
+            listSessionKey: "stage-alpha",
+            rootItemId: "orient",
+          },
+          workflowMcp: parentStored["workflowMcp"],
+        },
+      ],
+    });
+    const child = await connect(
+      fixture.url,
+      "child-token",
+      "subtree-child-client",
+    );
+
+    await expect(
+      parent.callTool({
+        name: "todo_check",
+        arguments: { id: "orient" },
+      }),
+    ).resolves.toMatchObject({
+      content: [
+        expect.objectContaining({
+          text: expect.stringMatching(/assigned to child session/),
+        }),
+      ],
+      isError: true,
+    });
+
+    await expect(
+      child.callTool({ name: "todo_list", arguments: {} }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        todoList: {
+          items: expect.arrayContaining([
+            expect.objectContaining({ id: "orient" }),
+            expect.objectContaining({ id: insideId, parentId: "orient" }),
+          ]),
+        },
+      },
+    });
+    const childList = await child.callTool({
+      name: "todo_list",
+      arguments: {},
+    });
+    expect(
+      (
+        childList.structuredContent as {
+          todoList: { items: Array<{ id: string }> };
+        }
+      ).todoList.items.map(({ id }) => id),
+    ).not.toContain(outsideId);
+    await expect(
+      child.callTool({
+        name: "todo_edit",
+        arguments: { id: outsideId, text: "Foreign write" },
+      }),
+    ).resolves.toMatchObject({
+      content: [
+        expect.objectContaining({
+          text: expect.stringMatching(/outside the assigned subtree/),
+        }),
+      ],
+      isError: true,
+    });
+    await expect(
+      child.callTool({
+        name: "todo_add",
+        arguments: { parentId: outsideId, text: "Foreign child" },
+      }),
+    ).resolves.toMatchObject({
+      content: [
+        expect.objectContaining({
+          text: expect.stringMatching(/outside the assigned subtree/),
+        }),
+      ],
+      isError: true,
+    });
+    await expect(
+      child.callTool({
+        name: "todo_check",
+        arguments: { id: insideId },
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: { todoList: expect.any(Object) },
+    });
+
+    mutateTodoAssignment(
+      fixture.persistence,
+      "instance-alpha",
+      "child-session",
+      (assignment) => ({ ...assignment, status: "stopped" }),
+    );
+    await expect(
+      child.callTool({ name: "todo_check", arguments: { id: insideId } }),
+    ).rejects.toThrow(/Unauthorized/);
   });
 
   it("rejects instance injection and advances only the token-bound instance", async () => {

@@ -159,6 +159,14 @@ proposed-design:
     — and mints a correlation token scoped to that assignment, so the
     child's writes land only inside its subtree. A node has one
     active assignee, so two agents never race on the same work.
+    Todo items carry optional parent links that form an acyclic durable
+    tree. The parent list owns each assignment as one compare-and-swap
+    record containing the subtree root, correlation token, child session
+    and thread identity, parent identity, provider, model, and nesting
+    depth. Authorization resolves ancestry from that stored tree and
+    fails closed for missing, cyclic, foreign, inactive, or overlapping
+    nodes. Assignment and correlation-token publication are one state
+    replacement.
 
     The shared todo list is the progress channel: the parent reads
     the child's subtree to check progress, and a liveness tool
@@ -170,6 +178,11 @@ proposed-design:
     depth are dispatch preconditions alongside the reconciler's
     other pacing gates, so delegation draws from the same capacity
     budget as all other sessions.
+    The observation loop records a stopped assignment and a deterministic
+    parent-steer intent before it dispatches the steering turn. Replay uses
+    the same command and message identities, and completion is recorded on
+    the canonical assignment. The subagent service supplies this hook to
+    the session observer; it does not poll T3 or decide liveness separately.
 
     Escalation is a blocking question through the MCP suite's
     `escalate` tool: structured questions with options, the call

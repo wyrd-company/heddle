@@ -10,6 +10,10 @@ import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
 import { isAuthorityValidStoredStageHandoff } from "../mcp-server/session-binding.js";
 import {
+  assignmentForChild,
+  scopedTodoItems,
+} from "../subagents/delegation-state.js";
+import {
   ensureStageTodoList,
   instantiateTodoList,
   stageTodoStateForHandoff,
@@ -60,6 +64,11 @@ export type SessionBootstrapInput = {
   runtimeMode: string;
   sessionKey: string;
   title: string;
+  threadId?: string;
+  todoAssignment?: {
+    listSessionKey: string;
+    rootItemId: string;
+  };
   worktree: WorktreeInput;
 };
 
@@ -102,8 +111,11 @@ export type WorkflowMcpStageContractResolver = (
 ) => Promise<WorkflowMcpStageContract>;
 
 export type SessionSteeringInput = {
+  commandId?: string;
+  createdAt?: string;
   interactionMode: string;
   message: string;
+  messageId?: string;
   providerContext: T3ProviderDispatchContext;
   runtimeMode: string;
   threadId: string;
@@ -202,6 +214,15 @@ const ensureStoredHandoff = async (
           `Stored handoff and parent session disagree for '${input.sessionKey}'`,
         );
       }
+      if (
+        existing.todoAssignment?.listSessionKey !==
+          input.todoAssignment?.listSessionKey ||
+        existing.todoAssignment?.rootItemId !== input.todoAssignment?.rootItemId
+      ) {
+        throw new Error(
+          `Stored handoff and todo assignment disagree for '${input.sessionKey}'`,
+        );
+      }
       const workflowMcp = existing["workflowMcp"];
       if (
         workflowMcp === undefined ||
@@ -220,18 +241,20 @@ const ensureStoredHandoff = async (
     }
 
     const templateContract = await resolveStageContract(input, current);
-    await ensureStageTodoList(
-      store,
-      {
-        instanceId: input.instanceId,
-        repositoryRoot: input.worktree.repositoryRoot,
-        sessionKey: input.sessionKey,
-        stage: templateContract.stage,
-        taskContract: input.handoff.taskContract,
-        templateId: templateContract.todoTemplate,
-      },
-      instantiate,
-    );
+    if (input.todoAssignment === undefined) {
+      await ensureStageTodoList(
+        store,
+        {
+          instanceId: input.instanceId,
+          repositoryRoot: input.worktree.repositoryRoot,
+          sessionKey: input.sessionKey,
+          stage: templateContract.stage,
+          taskContract: input.handoff.taskContract,
+          templateId: templateContract.todoTemplate,
+        },
+        instantiate,
+      );
+    }
     const refreshed = store.getInstance(input.instanceId);
     if (refreshed === undefined) {
       throw new Error(`Instance does not exist: ${input.instanceId}`);
@@ -244,14 +267,48 @@ const ensureStoredHandoff = async (
       continue;
     }
     const workflowMcp = await resolveStageContract(input, refreshed);
-    const { list: todoList, state: todoState } = stageTodoStateForHandoff(
-      refreshed,
-      input.sessionKey,
-      workflowMcp.stage,
-      refreshed.state.handoffs
-        .filter(isAuthorityValidStoredStageHandoff)
-        .map(({ sessionKey }) => sessionKey),
-    );
+    const assignment =
+      input.todoAssignment === undefined
+        ? undefined
+        : assignmentForChild(refreshed, input.sessionKey);
+    if (
+      assignment !== undefined &&
+      (assignment.list.sessionKey !== input.todoAssignment?.listSessionKey ||
+        assignment.assignment.rootItemId !== input.todoAssignment.rootItemId ||
+        assignment.assignment.status !== "active" ||
+        assignment.assignment.correlationToken !== correlationToken)
+    ) {
+      throw new Error(
+        `Stored todo assignment does not match child session '${input.sessionKey}'`,
+      );
+    }
+    const { list: todoList, state: todoState } =
+      assignment === undefined
+        ? stageTodoStateForHandoff(
+            refreshed,
+            input.sessionKey,
+            workflowMcp.stage,
+            refreshed.state.handoffs
+              .filter(isAuthorityValidStoredStageHandoff)
+              .map(({ sessionKey }) => sessionKey),
+          )
+        : {
+            list: assignment.list,
+            state: {
+              format: "heddle.todo-state" as const,
+              lists: [
+                {
+                  ...assignment.list,
+                  assignments: [assignment.assignment],
+                  items: scopedTodoItems(
+                    assignment.list,
+                    assignment.assignment.rootItemId,
+                  ),
+                },
+              ],
+              version: 1 as const,
+            },
+          };
     if (todoList.template !== workflowMcp.todoTemplate) {
       throw new Error(
         `Stored todo list does not match stage contract for '${input.sessionKey}'`,
@@ -270,6 +327,9 @@ const ensureStoredHandoff = async (
         ? {}
         : { parentSessionKey: input.parentSessionKey }),
       sessionKey: input.sessionKey,
+      ...(input.todoAssignment === undefined
+        ? {}
+        : { todoAssignment: input.todoAssignment }),
       workflowMcp,
     };
     const claimed = store.compareAndSwapInstance(
@@ -311,7 +371,7 @@ export const bootstrapStageSession = async (
       resolveWorkflowMcpStageContract,
     dependencies.instantiateTodoList ?? instantiateTodoList,
   );
-  const threadId = nextId();
+  const threadId = input.threadId ?? nextId();
   await applyHarnessToolTimeoutBeforeThread({
     consumer: dependencies.t3.applyHarnessToolTimeout,
     driver: input.providerContext.driver,
@@ -370,17 +430,17 @@ export const steerStageSession = async (
   return dependencies.t3.dispatch(
     {
       type: "thread.turn.start",
-      commandId: nextId(),
+      commandId: input.commandId ?? nextId(),
       threadId: input.threadId,
       message: {
-        messageId: nextId(),
+        messageId: input.messageId ?? nextId(),
         role: "user",
         text: input.message,
         attachments: [],
       },
       runtimeMode: input.runtimeMode,
       interactionMode: input.interactionMode,
-      createdAt: now(),
+      createdAt: input.createdAt ?? now(),
     },
     input.providerContext,
   );

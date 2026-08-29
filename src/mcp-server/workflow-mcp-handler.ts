@@ -26,6 +26,7 @@ import type {
   WorkflowMcpSessionBinding,
   WorkflowMcpToolContributor,
 } from "./types.js";
+import { workflowMcpSubagentTools } from "../subagents/tools.js";
 
 export interface WorkflowMcpHttpHandler {
   readonly bus: McpHttpHandler["bus"];
@@ -94,7 +95,12 @@ export const createWorkflowMcpHttpHandler = (
       },
       persistence: options.persistence,
     });
-  const contributors = contributorsByName(options.tools ?? []);
+  const contributors = contributorsByName([
+    ...(options.subagentCoordinator === undefined
+      ? []
+      : workflowMcpSubagentTools(options.subagentCoordinator)),
+    ...(options.tools ?? []),
+  ]);
   const serverForBinding = (binding: WorkflowMcpSessionBinding): McpServer => {
     const server = new McpServer({ name: "heddle", version: "1.0.0" });
     for (const toolName of binding.stage.tools ?? []) {

@@ -16,6 +16,10 @@ export type StoredStageHandoffCandidate = {
   kind: "stage-handoff";
   parentSessionKey?: string;
   sessionKey: string;
+  todoAssignment?: {
+    listSessionKey: string;
+    rootItemId: string;
+  };
   workflowMcp?: JsonValue;
 };
 
@@ -28,7 +32,13 @@ export const isStoredHandoff = (
   value["kind"] === "stage-handoff" &&
   typeof value["sessionKey"] === "string" &&
   typeof value["correlationToken"] === "string" &&
-  typeof value["handoff"] === "string";
+  typeof value["handoff"] === "string" &&
+  (value["todoAssignment"] === undefined ||
+    (typeof value["todoAssignment"] === "object" &&
+      value["todoAssignment"] !== null &&
+      !Array.isArray(value["todoAssignment"]) &&
+      typeof value["todoAssignment"]["listSessionKey"] === "string" &&
+      typeof value["todoAssignment"]["rootItemId"] === "string"));
 
 export const assertParentSession = (
   store: InstanceStateStore,

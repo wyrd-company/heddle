@@ -7,6 +7,7 @@ import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 
 import type { InstanceRecord, JsonValue } from "../persistence/index.js";
+import { assignmentForChild } from "../subagents/delegation-state.js";
 import type {
   CorrelationTokenMatch,
   StageHandoffDocument,
@@ -61,6 +62,12 @@ const isStoredStageHandoff = (value: JsonValue): value is StoredStageHandoff =>
   typeof value["handoff"] === "string" &&
   (value["parentSessionKey"] === undefined ||
     typeof value["parentSessionKey"] === "string") &&
+  (value["todoAssignment"] === undefined ||
+    (typeof value["todoAssignment"] === "object" &&
+      value["todoAssignment"] !== null &&
+      !Array.isArray(value["todoAssignment"]) &&
+      typeof value["todoAssignment"]["listSessionKey"] === "string" &&
+      typeof value["todoAssignment"]["rootItemId"] === "string")) &&
   value["workflowMcp"] !== undefined &&
   isWorkflowMcpStageContract(value["workflowMcp"]);
 
@@ -188,6 +195,23 @@ export const resolveWorkflowMcpSessionBinding = (
   const tools = isCompletedStage
     ? stageContract.tools.filter((tool) => tool === "advance")
     : stageContract.tools;
+  const todoAssignment = storedHandoffs[0]!.todoAssignment;
+  if (todoAssignment !== undefined) {
+    try {
+      const stored = assignmentForChild(match.instance, match.sessionKey);
+      if (
+        stored.list.sessionKey !== todoAssignment.listSessionKey ||
+        stored.assignment.rootItemId !== todoAssignment.rootItemId ||
+        stored.assignment.correlationToken !== token ||
+        stored.assignment.status !== "active"
+      ) {
+        throw new CorrelationTokenError();
+      }
+    } catch (error) {
+      if (error instanceof CorrelationTokenError) throw error;
+      throw new CorrelationTokenError();
+    }
+  }
 
   return {
     dispositions: stageContract.dispositions,
@@ -198,6 +222,7 @@ export const resolveWorkflowMcpSessionBinding = (
     sessionKey: match.sessionKey,
     stage: { id: stageContract.stage, tools },
     taskContext: handoff.taskContract,
+    ...(todoAssignment === undefined ? {} : { todoAssignment }),
     token,
   };
 };

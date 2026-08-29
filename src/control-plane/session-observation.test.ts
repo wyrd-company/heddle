@@ -18,6 +18,7 @@ import type {
   SessionObservationAttention,
   SessionObservationAttentionQueue,
   SessionObservationEscalations,
+  SessionObservationOptions,
   SessionObservationPersistence,
   SessionObservationT3Client,
   SessionObservationTarget,
@@ -195,7 +196,11 @@ class MemoryT3 implements SessionObservationT3Client {
   }
 }
 
-const fixture = () => {
+const fixture = (childStops?: {
+  onObserved: NonNullable<
+    SessionObservationOptions["childStops"]
+  >["onObserved"];
+}) => {
   const attention = new MemoryAttention();
   const escalations = new MemoryEscalations();
   const persistence = new MemoryPersistence();
@@ -204,6 +209,7 @@ const fixture = () => {
   let next = 0;
   const observer = new SessionObserver({
     attention,
+    ...(childStops === undefined ? {} : { childStops }),
     escalations,
     nextId: () => `command-${++next}`,
     now: () => now,
@@ -228,6 +234,32 @@ const fixture = () => {
 };
 
 describe("SessionObserver liveness", () => {
+  it("offers the settled shell observation to the child-stop hook", async () => {
+    const observed: unknown[] = [];
+    const test = fixture({
+      async onObserved(observedTarget, result) {
+        observed.push({ result, target: observedTarget });
+      },
+    });
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestTurn: { state: "error" },
+      session: { status: "error" },
+    };
+
+    await test.observer.observe(target);
+
+    expect(observed).toEqual([
+      {
+        result: {
+          archiveDispatched: false,
+          attentions: [],
+          phase: "failed",
+        },
+        target,
+      },
+    ]);
+  });
   it("ignores unrelated primitive instance events while replaying observation state", async () => {
     const test = fixture();
     test.persistence.appendEvent(target.instanceId, "sample:note", "ready");

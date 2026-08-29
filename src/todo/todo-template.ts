@@ -7,7 +7,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { JsonValue } from "../persistence/index.js";
-import type { TodoItem, TodoList, TodoState, TodoTemplate } from "./types.js";
+import type {
+  TodoAssignment,
+  TodoItem,
+  TodoList,
+  TodoState,
+  TodoTemplate,
+} from "./types.js";
 
 const artifactId = /^[a-z]+(?:-[a-z]+)*$/;
 const placeholder =
@@ -90,6 +96,41 @@ export const emptyTodoState = (): TodoState => ({
   version: 1,
 });
 
+const validTodoTree = (items: TodoItem[]): boolean => {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const item of items) {
+    if (item.parentId !== undefined && !byId.has(item.parentId)) return false;
+    const visited = new Set<string>();
+    let current: TodoItem | undefined = item;
+    while (current?.parentId !== undefined) {
+      if (visited.has(current.id)) return false;
+      visited.add(current.id);
+      current = byId.get(current.parentId);
+      if (current === undefined) return false;
+    }
+  }
+  return true;
+};
+
+const subtreeIds = (items: TodoItem[], rootItemId: string): Set<string> => {
+  const descendants = new Set<string>([rootItemId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const item of items) {
+      if (
+        item.parentId !== undefined &&
+        descendants.has(item.parentId) &&
+        !descendants.has(item.id)
+      ) {
+        descendants.add(item.id);
+        changed = true;
+      }
+    }
+  }
+  return descendants;
+};
+
 export const isTodoState = (value: JsonValue): value is TodoState => {
   if (
     !isObject(value) ||
@@ -110,7 +151,9 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
       candidate["stage"].trim() === "" ||
       typeof candidate["template"] !== "string" ||
       !artifactId.test(candidate["template"]) ||
-      !Array.isArray(candidate["items"])
+      !Array.isArray(candidate["items"]) ||
+      (candidate["assignments"] !== undefined &&
+        !Array.isArray(candidate["assignments"]))
     ) {
       return false;
     }
@@ -124,11 +167,128 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
         itemIds.has(item["id"]) ||
         typeof item["text"] !== "string" ||
         item["text"].trim() === "" ||
-        typeof item["checked"] !== "boolean"
+        typeof item["checked"] !== "boolean" ||
+        (item["parentId"] !== undefined && typeof item["parentId"] !== "string")
       ) {
         return false;
       }
       itemIds.add(item["id"]);
+    }
+    if (!validTodoTree(candidate["items"] as TodoItem[])) return false;
+    const assignmentSessions = new Set<string>();
+    const assignmentOperations = new Set<string>();
+    for (const assignment of candidate["assignments"] ?? []) {
+      if (
+        !isObject(assignment) ||
+        typeof assignment["correlationToken"] !== "string" ||
+        assignment["correlationToken"].trim() === "" ||
+        typeof assignment["depth"] !== "number" ||
+        !Number.isSafeInteger(assignment["depth"]) ||
+        assignment["depth"] < 1 ||
+        typeof assignment["model"] !== "string" ||
+        assignment["model"].trim() === "" ||
+        typeof assignment["operationId"] !== "string" ||
+        assignment["operationId"].trim() === "" ||
+        typeof assignment["parentSessionKey"] !== "string" ||
+        assignment["parentSessionKey"].trim() === "" ||
+        typeof assignment["parentThreadId"] !== "string" ||
+        assignment["parentThreadId"].trim() === "" ||
+        typeof assignment["provider"] !== "string" ||
+        assignment["provider"].trim() === "" ||
+        typeof assignment["rootItemId"] !== "string" ||
+        !itemIds.has(assignment["rootItemId"]) ||
+        typeof assignment["sessionKey"] !== "string" ||
+        assignment["sessionKey"].trim() === "" ||
+        assignmentSessions.has(assignment["sessionKey"]) ||
+        assignmentOperations.has(assignment["operationId"]) ||
+        (assignment["status"] !== "active" &&
+          assignment["status"] !== "stopped") ||
+        typeof assignment["threadId"] !== "string" ||
+        assignment["threadId"].trim() === ""
+      ) {
+        return false;
+      }
+      const notice = assignment["stopNotification"];
+      if (
+        notice !== undefined &&
+        (!isObject(notice) ||
+          typeof notice["commandId"] !== "string" ||
+          notice["commandId"].trim() === "" ||
+          typeof notice["createdAt"] !== "string" ||
+          notice["createdAt"].trim() === "" ||
+          typeof notice["messageId"] !== "string" ||
+          notice["messageId"].trim() === "" ||
+          (notice["status"] !== "issued" && notice["status"] !== "completed"))
+      ) {
+        return false;
+      }
+      assignmentSessions.add(assignment["sessionKey"]);
+      assignmentOperations.add(assignment["operationId"]);
+    }
+    const assignments = (candidate["assignments"] ?? []) as TodoAssignment[];
+    for (const assignment of assignments) {
+      const visited = new Set<string>();
+      let parentSessionKey = assignment.parentSessionKey;
+      while (parentSessionKey !== candidate["sessionKey"]) {
+        if (visited.has(parentSessionKey)) return false;
+        visited.add(parentSessionKey);
+        const parent = assignments.find(
+          (possibleParent) => possibleParent.sessionKey === parentSessionKey,
+        );
+        if (parent === undefined) return false;
+        parentSessionKey = parent.parentSessionKey;
+      }
+    }
+    const activeAssignments = assignments.filter(
+      ({ status }) => status === "active",
+    );
+    const ancestorsFor = (assignment: TodoAssignment): Set<string> => {
+      const ancestors = new Set<string>();
+      let parentSessionKey = assignment.parentSessionKey;
+      while (parentSessionKey !== candidate["sessionKey"]) {
+        ancestors.add(parentSessionKey);
+        const parent = assignments.find(
+          ({ sessionKey }) => sessionKey === parentSessionKey,
+        );
+        if (parent === undefined) return new Set(["__invalid__"]);
+        parentSessionKey = parent.parentSessionKey;
+      }
+      return ancestors;
+    };
+    for (let left = 0; left < activeAssignments.length; left += 1) {
+      const assignment = activeAssignments[left]!;
+      for (let right = left + 1; right < activeAssignments.length; right += 1) {
+        const other = activeAssignments[right]!;
+        const assignmentSubtree = subtreeIds(
+          candidate["items"] as TodoItem[],
+          assignment.rootItemId,
+        );
+        const otherSubtree = subtreeIds(
+          candidate["items"] as TodoItem[],
+          other.rootItemId,
+        );
+        const overlaps = [...assignmentSubtree].some((id) =>
+          otherSubtree.has(id),
+        );
+        if (!overlaps) continue;
+        const assignmentAncestors = ancestorsFor(assignment);
+        const otherAncestors = ancestorsFor(other);
+        const assignmentIsDescendant = assignmentAncestors.has(
+          other.sessionKey,
+        );
+        const otherIsDescendant = otherAncestors.has(assignment.sessionKey);
+        if (!assignmentIsDescendant && !otherIsDescendant) return false;
+        if (assignment.rootItemId === other.rootItemId) return false;
+        if (
+          assignmentIsDescendant &&
+          !otherSubtree.has(assignment.rootItemId)
+        ) {
+          return false;
+        }
+        if (otherIsDescendant && !assignmentSubtree.has(other.rootItemId)) {
+          return false;
+        }
+      }
     }
   }
   return true;
@@ -148,7 +308,7 @@ export const instantiateTodoList = async (input: {
       `Todo template contains duplicate item IDs: ${input.templateId}`,
     );
   }
-  const items: TodoItem[] = template.items.map(({ id, text }) => {
+  const items: TodoItem[] = template.items.map(({ id, parentId, text }) => {
     if (hasInvalidPlaceholderSyntax(text)) {
       throw new TypeError(
         `Todo template contains invalid placeholder syntax: ${input.templateId}`,
@@ -160,8 +320,18 @@ export const instantiateTodoList = async (input: {
         `Todo template produces empty item text: ${input.templateId}`,
       );
     }
-    return { checked: false, id, text: instantiated };
+    return {
+      checked: false,
+      id,
+      ...(parentId === undefined ? {} : { parentId }),
+      text: instantiated,
+    };
   });
+  if (!validTodoTree(items)) {
+    throw new TypeError(
+      `Todo template contains an invalid tree: ${input.templateId}`,
+    );
+  }
   return {
     items,
     sessionKey: input.sessionKey,

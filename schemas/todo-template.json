@@ -41,6 +41,10 @@
           "type": "string",
           "pattern": "^[a-z]+(?:-[a-z]+)*$"
         },
+        "parentId": {
+          "type": "string",
+          "pattern": "^[a-z]+(?:-[a-z]+)*$"
+        },
         "text": {
           "type": "string",
           "minLength": 1,

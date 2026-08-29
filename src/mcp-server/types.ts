@@ -13,6 +13,7 @@ import type {
   PersistedEvent,
 } from "../persistence/index.js";
 import type { EscalationCoordinator } from "./escalation-coordinator.js";
+import type { SubagentCoordinator } from "../subagents/coordinator.js";
 
 export interface WorkflowMcpPersistence {
   appendEvent(
@@ -59,6 +60,10 @@ export interface WorkflowMcpSessionBinding {
   sessionKey: string;
   stage: { id: string; tools: string[] };
   taskContext: JsonValue;
+  todoAssignment?: {
+    listSessionKey: string;
+    rootItemId: string;
+  };
   token: string;
 }
 
@@ -88,6 +93,7 @@ export interface WorkflowMcpHandlerOptions {
   escalationCoordinator?: EscalationCoordinator;
   lifecycle: WorkflowMcpLifecycle;
   persistence: WorkflowMcpPersistence;
+  subagentCoordinator?: SubagentCoordinator;
   tools?: readonly WorkflowMcpToolContributor[];
 }
 
@@ -103,6 +109,10 @@ export type StoredStageHandoff = {
   kind: "stage-handoff";
   parentSessionKey?: string;
   sessionKey: string;
+  todoAssignment?: {
+    listSessionKey: string;
+    rootItemId: string;
+  };
   workflowMcp: WorkflowMcpStageContract;
 };
 

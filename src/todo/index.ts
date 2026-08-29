@@ -17,6 +17,7 @@ export {
   type TodoStateStore,
 } from "./stage-todo-state.js";
 export type {
+  TodoAssignment,
   TodoItem,
   TodoList,
   TodoState,

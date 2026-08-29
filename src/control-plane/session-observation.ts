@@ -73,7 +73,9 @@ export class SessionObserver {
       thread,
       this.#nextId,
     );
-    return { archiveDispatched, attentions, phase };
+    const result = { archiveDispatched, attentions, phase };
+    await this.options.childStops?.onObserved(target, result);
+    return result;
   }
 
   async answerApproval(
