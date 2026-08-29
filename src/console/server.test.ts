@@ -219,8 +219,19 @@ describe("console server", () => {
     const unsafeSequence = await globalThis.fetch(
       `${baseUrl}/api/events?after=99999999999999999`,
     );
+    const malformedSequence = await globalThis.fetch(
+      `${baseUrl}/api/events?after=several`,
+    );
     const unsafeEpic = await globalThis.fetch(
       `${baseUrl}/api/epics/99999999999999999/in-progress`,
+      {
+        body: JSON.stringify({ inProgress: false }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      },
+    );
+    const malformedEpic = await globalThis.fetch(
+      `${baseUrl}/api/epics/several/in-progress`,
       {
         body: JSON.stringify({ inProgress: false }),
         headers: { "content-type": "application/json" },
@@ -238,6 +249,14 @@ describe("console server", () => {
     const missingContentType = await globalThis.fetch(
       `${baseUrl}/api/epics/51/in-progress`,
       { body: JSON.stringify({ inProgress: false }), method: "PUT" },
+    );
+    const malformedJson = await globalThis.fetch(
+      `${baseUrl}/api/epics/51/in-progress`,
+      {
+        body: "{",
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      },
     );
     const oversizedBody = await globalThis.fetch(
       `${baseUrl}/api/epics/51/in-progress`,
@@ -258,9 +277,12 @@ describe("console server", () => {
 
     expect(invalidScope.status).toBe(400);
     expect(unsafeSequence.status).toBe(400);
+    expect(malformedSequence.status).toBe(400);
     expect(unsafeEpic.status).toBe(400);
+    expect(malformedEpic.status).toBe(400);
     expect(wrongMethod.status).toBe(405);
     expect(missingContentType.status).toBe(400);
+    expect(malformedJson.status).toBe(400);
     expect(oversizedBody.status).toBe(400);
     expect(invalidLever.status).toBe(400);
     expect(board.writes).toEqual([]);
