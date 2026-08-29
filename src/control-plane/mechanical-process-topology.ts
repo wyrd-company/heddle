@@ -45,8 +45,9 @@ export const readProcessGroup = async (
 
 export const waitForEmptyProcessGroup = async (
   processGroupId: number,
+  attempts = 100,
 ): Promise<ProcessRecord[]> => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const remaining = await readProcessGroup(processGroupId);
     if (remaining.length === 0) return remaining;
     await delay(20);
@@ -102,7 +103,7 @@ export const settleRestartProcessGroup = async (
   if (failed && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGKILL");
   }
-  let remaining = await waitForEmptyProcessGroup(processGroupId);
+  let remaining = await waitForEmptyProcessGroup(processGroupId, 25);
   if (failed && remaining.length > 0) {
     await signalProcessGroup(processGroupId);
     remaining = await waitForEmptyProcessGroup(processGroupId);

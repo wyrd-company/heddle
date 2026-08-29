@@ -3,6 +3,7 @@
 //   verifies: heddle
 // ---
 
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { setInterval } from "node:timers";
@@ -31,6 +32,7 @@ interface WorkerConfiguration {
   repositoryRoot: string;
   resume: ResumeLifecycleInput;
   stateDirectory: string;
+  stubbornDescendant?: boolean;
 }
 
 interface BoundaryInstruction {
@@ -135,6 +137,11 @@ const main = async (): Promise<void> => {
   const configuration = JSON.parse(
     await readFile(configurationPath, "utf8"),
   ) as WorkerConfiguration;
+  if (configuration.stubbornDescendant === true) {
+    spawn(process.execPath, ["-e", "setInterval(() => undefined, 60000)"], {
+      stdio: "ignore",
+    });
+  }
   let markerEmitted = false;
   const command: CommandRunner = async (cwd, executable, arguments_, input) => {
     const before = {

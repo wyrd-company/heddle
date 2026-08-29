@@ -61,6 +61,7 @@ interface WorkerConfiguration {
   repositoryRoot: string;
   resume: ResumeLifecycleInput;
   stateDirectory: string;
+  stubbornDescendant?: boolean;
 }
 
 interface RunningWorker {
@@ -76,6 +77,7 @@ export interface RestartProbe {
   boundary: MechanicalTerminationBoundary;
   onLaunch?: (processGroupId: number) => void;
   timeoutMilliseconds: number;
+  withStubbornDescendant?: boolean;
 }
 
 const withTimeout = async <T>(
@@ -104,6 +106,7 @@ const launchWorker = async (
   resume: ResumeLifecycleInput,
   boundary?: MechanicalTerminationBoundary,
   timeoutMilliseconds = 15_000,
+  stubbornDescendant = false,
 ): Promise<RunningWorker> => {
   const configuration: WorkerConfiguration = {
     boundary,
@@ -111,6 +114,7 @@ const launchWorker = async (
     repositoryRoot: fixture.repositoryRoot,
     resume,
     stateDirectory: fixture.stateDirectory,
+    stubbornDescendant,
   };
   const configurationPath = join(
     dirname(fixture.repositoryRoot),
@@ -248,6 +252,7 @@ export const restartOperation = async (
     resume,
     probe?.boundary,
     probe?.timeoutMilliseconds,
+    probe?.withStubbornDescendant,
   );
   probe?.onLaunch?.(worker.child.pid!);
   let completed = false;
@@ -276,6 +281,7 @@ export const restartExpectingAttention = async (
     resume,
     probe?.boundary,
     probe?.timeoutMilliseconds,
+    probe?.withStubbornDescendant,
   );
   probe?.onLaunch?.(worker.child.pid!);
   let completed = false;

@@ -145,6 +145,7 @@ describe(
               processGroupId = launchedProcessGroupId;
             },
             timeoutMilliseconds: 250,
+            withStubbornDescendant: true,
           }),
         ).rejects.toThrow("Worker did not emit result");
         expect(processGroupId).toBeDefined();
@@ -172,6 +173,7 @@ describe(
               processGroupId = launchedProcessGroupId;
             },
             timeoutMilliseconds: 250,
+            withStubbornDescendant: true,
           }),
         ).rejects.toThrow("Worker did not emit error");
         expect(processGroupId).toBeDefined();
