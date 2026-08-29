@@ -14,6 +14,11 @@ import {
   isTodoState,
 } from "./todo-template.js";
 import type { TodoList, TodoState } from "./types.js";
+import { projectTodoList, type ProjectedTodoList } from "./todo-tree.js";
+
+type ProjectedTodoState = Omit<TodoState, "lists"> & {
+  lists: ProjectedTodoList[];
+};
 
 export interface TodoStateStore {
   compareAndSwapInstance(
@@ -55,7 +60,7 @@ export const stageTodoStateForHandoff = (
   sessionKey: string,
   stage: string,
   storedHandoffSessionKeys: readonly string[],
-): { list: TodoList; state: TodoState } => {
+): { list: TodoList; state: ProjectedTodoState } => {
   const { list, state } = stageTodoList(record, sessionKey, stage);
   const eligibleSessionKeys = new Set([
     ...storedHandoffSessionKeys,
@@ -65,9 +70,9 @@ export const stageTodoStateForHandoff = (
     list,
     state: {
       ...state,
-      lists: state.lists.filter((candidate) =>
-        eligibleSessionKeys.has(candidate.sessionKey),
-      ),
+      lists: state.lists
+        .filter((candidate) => eligibleSessionKeys.has(candidate.sessionKey))
+        .map((candidate) => projectTodoList(candidate)),
     },
   };
 };

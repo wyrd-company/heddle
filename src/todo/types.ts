@@ -19,6 +19,10 @@ export type TodoAssignment = Record<string, JsonValue> & {
     messageId: string;
     turnCommandId: string;
   };
+  ancestorStop?: {
+    ancestorSessionKey: string;
+    createdAt: string;
+  };
   correlationToken: string;
   depth: number;
   model: string;
@@ -33,6 +37,8 @@ export type TodoAssignment = Record<string, JsonValue> & {
     commandId: string;
     createdAt: string;
     messageId: string;
+    message: string;
+    phase: "absent" | "completed" | "failed";
     status: "issued" | "completed";
   };
   threadId: string;

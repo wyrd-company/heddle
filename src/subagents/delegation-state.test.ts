@@ -3,15 +3,35 @@
 //   verifies: heddle
 // ---
 
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import type { InstanceRecord, InstanceState } from "../persistence/index.js";
+import { afterEach, describe, expect, it } from "vitest";
+
+import {
+  SqlitePersistence,
+  type InstanceRecord,
+  type InstanceState,
+} from "../persistence/index.js";
 import { isTodoState, scopedTodoItems, todoSubtreeIds } from "../todo/index.js";
 import {
   assignmentForChild,
   claimTodoAssignment,
+  mutateTodoAssignment,
   type DelegationStateStore,
 } from "./delegation-state.js";
+import { stopTodoAssignmentTree } from "./delegation-teardown.js";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
+});
 
 const state = (): InstanceState => ({
   correlationTokens: { parent: "parent-token" },
@@ -200,6 +220,88 @@ describe("todo subtree assignments", () => {
     });
   });
 
+  it("atomically stops an assignment and every active descendant with replay after reload", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "subagent-stop-tree-"));
+    temporaryDirectories.push(stateDirectory);
+    let persistence = new SqlitePersistence({ stateDirectory });
+    persistence.createInstance("instance", state());
+    claimTodoAssignment(persistence, {
+      ...claimInput(),
+    });
+    claimTodoAssignment(persistence, {
+      ...claimInput(),
+      bootstrap: {
+        createCommandId: "create-nested",
+        createdAt: new Date(0).toISOString(),
+        messageId: "message-nested",
+        turnCommandId: "turn-nested",
+      },
+      correlationToken: "nested-token",
+      depth: 2,
+      operationId: "spawn-nested",
+      parentSessionKey: "child-session",
+      parentThreadId: "child-thread",
+      rootItemId: "child",
+      sessionKey: "nested-session",
+      threadId: "nested-thread",
+    });
+    const notice = {
+      commandId: "stop-command",
+      createdAt: new Date(1).toISOString(),
+      message: "Child stopped with phase failed.",
+      messageId: "stop-message",
+      phase: "failed" as const,
+      status: "issued" as const,
+    };
+    expect(() =>
+      mutateTodoAssignment(
+        persistence,
+        "instance",
+        "child-session",
+        (assignment) => ({
+          ...assignment,
+          status: "stopped",
+          stopNotification: notice,
+        }),
+      ),
+    ).toThrow(/mutation is invalid/);
+    const versionBeforeStop = persistence.getInstance("instance")!.version;
+
+    expect(
+      stopTodoAssignmentTree(persistence, "instance", "child-session", notice),
+    ).toMatchObject({
+      assignment: { stopNotification: notice },
+      stoppedSessionKeys: ["child-session", "nested-session"],
+    });
+    expect(persistence.getInstance("instance")!.version).toBe(
+      versionBeforeStop + 1,
+    );
+    persistence.close();
+    persistence = new SqlitePersistence({ stateDirectory });
+    const reloaded = persistence.getInstance("instance")!;
+    expect(
+      assignmentForChild(reloaded, "nested-session").assignment,
+    ).toMatchObject({
+      ancestorStop: {
+        ancestorSessionKey: "child-session",
+        createdAt: notice.createdAt,
+      },
+      status: "stopped",
+    });
+    const reloadedVersion = reloaded.version;
+    expect(
+      stopTodoAssignmentTree(persistence, "instance", "child-session", {
+        ...notice,
+        message: "Different replay payload",
+      }),
+    ).toMatchObject({
+      assignment: { stopNotification: notice },
+      stoppedSessionKeys: ["child-session", "nested-session"],
+    });
+    expect(persistence.getInstance("instance")!.version).toBe(reloadedVersion);
+    persistence.close();
+  });
+
   it("rejects a reused operation when its requested contract changes", () => {
     const store = new MemoryStore();
     claim(store);
@@ -208,4 +310,26 @@ describe("todo subtree assignments", () => {
       /does not match/,
     );
   });
+});
+
+const claimInput = (): Parameters<typeof claimTodoAssignment>[1] => ({
+  bootstrap: {
+    createCommandId: "create-child",
+    createdAt: new Date(0).toISOString(),
+    messageId: "message-child",
+    turnCommandId: "turn-child",
+  },
+  correlationToken: "child-token",
+  depth: 1,
+  instanceId: "instance",
+  listSessionKey: "parent",
+  model: "sample-model",
+  operationId: "spawn-one",
+  parentSessionKey: "parent",
+  parentThreadId: "parent-thread",
+  provider: "sample-provider",
+  rootItemId: "root",
+  sessionKey: "child-session",
+  stage: "implement",
+  threadId: "child-thread",
 });

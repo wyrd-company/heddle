@@ -171,6 +171,140 @@ describe("SqlitePersistence", () => {
     persistence.close();
   });
 
+  it("serializes one correlation token across two synchronized worker claims and reload", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const setup = new SqlitePersistence({ stateDirectory });
+    const emptyTokens = { ...initialState, correlationTokens: {} };
+    setup.createInstance("record-a", emptyTokens);
+    setup.createInstance("record-b", emptyTokens);
+    setup.close();
+    const moduleUrl = pathToFileURL(
+      join(process.cwd(), "src/persistence/sqlite-persistence.ts"),
+    ).href;
+    const workerScript = `
+      import { SqlitePersistence } from ${JSON.stringify(moduleUrl)};
+      const [stateDirectory, instanceId] = process.argv.slice(1);
+      const persistence = new SqlitePersistence({ stateDirectory });
+      const current = persistence.getInstance(instanceId);
+      process.stdout.write("ready\\n");
+      for await (const chunk of process.stdin) {
+        if (!chunk.toString().includes("go")) continue;
+        try {
+          const claimed = persistence.compareAndSwapInstance(
+            instanceId,
+            current.version,
+            {
+              ...current.state,
+              correlationTokens: {
+                ...current.state.correlationTokens,
+                child: "shared-token",
+              },
+            },
+          );
+          process.stdout.write(JSON.stringify({ claimed: claimed !== undefined }) + "\\n");
+        } catch (error) {
+          process.stdout.write(JSON.stringify({ claimed: false, error: error.code ?? error.name }) + "\\n");
+        }
+        persistence.close();
+        break;
+      }
+    `;
+    const startWorker = (instanceId: string) =>
+      spawn(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "--eval",
+          workerScript,
+          stateDirectory,
+          instanceId,
+        ],
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+    const workers = [startWorker("record-a"), startWorker("record-b")];
+    const exits = workers.map((worker) => once(worker, "exit"));
+    await Promise.all(workers.map((worker) => once(worker.stdout!, "data")));
+    const results = workers.map((worker) => once(worker.stdout!, "data"));
+    for (const worker of workers) worker.stdin!.end("go\n");
+    const parsed = await Promise.all(
+      results.map(async (result) => {
+        const [chunk] = await result;
+        return JSON.parse(chunk.toString()) as {
+          claimed: boolean;
+          error?: string;
+        };
+      }),
+    );
+    await Promise.all(exits);
+
+    expect(parsed.filter(({ claimed }) => claimed)).toHaveLength(1);
+    expect(
+      parsed.filter(({ error }) => error?.includes("CONSTRAINT")),
+    ).toHaveLength(1);
+    const staleProjection = new Database(
+      join(stateDirectory, "heddle-state.sqlite"),
+    );
+    staleProjection.prepare("DELETE FROM heddle_correlation_tokens").run();
+    staleProjection.close();
+    const reloaded = new SqlitePersistence({ stateDirectory });
+    const records = reloaded.listInstances();
+    expect(
+      records.filter(
+        ({ state }) => state.correlationTokens.child === "shared-token",
+      ),
+    ).toHaveLength(1);
+    expect(records.map(({ version }) => version).sort()).toEqual([1, 2]);
+    const loser = records.find(
+      ({ state }) => state.correlationTokens.child === undefined,
+    )!;
+    expect(() =>
+      reloaded.updateInstance(loser.instanceId, {
+        ...loser.state,
+        correlationTokens: {
+          ...loser.state.correlationTokens,
+          child: "shared-token",
+        },
+      }),
+    ).toThrow(/UNIQUE constraint failed|SQLITE_CONSTRAINT/);
+    reloaded.close();
+  });
+
+  it("fails recovery closed when event history contains duplicate correlation tokens", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.createInstance("record-a", {
+      ...initialState,
+      correlationTokens: { primary: "token-a" },
+    });
+    persistence.createInstance("record-b", {
+      ...initialState,
+      correlationTokens: { primary: "token-b" },
+    });
+    persistence.close();
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    database
+      .prepare(
+        `INSERT INTO heddle_instance_events
+          (instance_id, type, payload_json, recorded_at)
+         VALUES (?, 'instance:updated', ?, ?)`,
+      )
+      .run(
+        "record-b",
+        JSON.stringify({
+          ...initialState,
+          correlationTokens: { primary: "token-a" },
+        }),
+        new Date(0).toISOString(),
+      );
+    database.close();
+
+    expect(() => new SqlitePersistence({ stateDirectory })).toThrow(
+      /UNIQUE constraint failed|SQLITE_CONSTRAINT/,
+    );
+  });
+
   it("claims an instance update and external event at one version", async () => {
     const persistence = new SqlitePersistence({
       stateDirectory: await makeStateDirectory(),

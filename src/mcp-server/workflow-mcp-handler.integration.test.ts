@@ -32,6 +32,7 @@ import { SqlitePersistence } from "../persistence/index.js";
 import {
   claimTodoAssignment,
   mutateTodoAssignment,
+  stopTodoAssignmentTree,
 } from "../subagents/index.js";
 import { createWorkflowMcpHttpHandler } from "./workflow-mcp-handler.js";
 
@@ -687,36 +688,20 @@ describe("workflow MCP HTTP server", () => {
     ).rejects.toThrow();
   });
 
-  it("rejects a correlation token that matches more than one instance", async () => {
+  it("rejects a duplicate correlation token before another instance can authenticate it", async () => {
     const fixture = await makeFixture();
     const beta = fixture.persistence.getInstance("instance-beta");
     if (beta === undefined) throw new Error("beta fixture is missing");
-    fixture.persistence.updateInstance("instance-beta", {
-      ...beta.state,
-      correlationTokens: { "stage-beta": fixture.alphaToken },
-    });
-
-    const response = await globalThis.fetch(fixture.url, {
-      body: JSON.stringify({
-        id: 1,
-        jsonrpc: "2.0",
-        method: "initialize",
-        params: {
-          capabilities: {},
-          clientInfo: { name: "sample-client", version: "1.0.0" },
-          protocolVersion: "2025-11-25",
-        },
+    expect(() =>
+      fixture.persistence.updateInstance("instance-beta", {
+        ...beta.state,
+        correlationTokens: { "stage-beta": fixture.alphaToken },
       }),
-      headers: {
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${fixture.alphaToken}`,
-        "content-type": "application/json",
-      },
-      method: "POST",
-    });
-
-    expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toBe("Bearer");
+    ).toThrow(/UNIQUE constraint failed|SQLITE_CONSTRAINT/);
+    expect(fixture.persistence.getInstance("instance-beta")).toEqual(beta);
+    await expect(
+      connect(fixture.url, fixture.alphaToken, "unique-token-client"),
+    ).resolves.toBeDefined();
   });
 
   it("derives a static, omission-based tool list and disposition descriptions", async () => {
@@ -986,6 +971,36 @@ describe("workflow MCP HTTP server", () => {
       stage: "assess",
       threadId: "child-thread",
     });
+    claimTodoAssignment(fixture.persistence, {
+      bootstrap: {
+        createCommandId: "create-sibling",
+        createdAt: new Date(0).toISOString(),
+        messageId: "message-sibling",
+        turnCommandId: "turn-sibling",
+      },
+      correlationToken: "sibling-token",
+      depth: 1,
+      instanceId: "instance-alpha",
+      listSessionKey: "stage-alpha",
+      model: "sample-model",
+      operationId: "spawn-sibling",
+      parentSessionKey: "stage-alpha",
+      parentThreadId: "parent-thread",
+      provider: "sample-provider",
+      rootItemId: outsideId,
+      sessionKey: "sibling-session",
+      stage: "assess",
+      threadId: "sibling-thread",
+    });
+    mutateTodoAssignment(
+      fixture.persistence,
+      "instance-alpha",
+      "sibling-session",
+      (assignment) => ({
+        ...assignment,
+        secretMetadata: "foreign-secret",
+      }),
+    );
     const record = fixture.persistence.getInstance("instance-alpha");
     if (record === undefined) throw new Error("alpha fixture is missing");
     const parentStored = record.state.handoffs[0];
@@ -1060,6 +1075,22 @@ describe("workflow MCP HTTP server", () => {
       name: "todo_list",
       arguments: {},
     });
+    const serializedChildList = JSON.stringify(childList.structuredContent);
+    expect(serializedChildList).not.toContain("assignments");
+    expect(serializedChildList).not.toContain("sibling-token");
+    expect(serializedChildList).not.toContain("sibling-session");
+    expect(serializedChildList).not.toContain("foreign-secret");
+    const childMutation = await child.callTool({
+      name: "todo_check",
+      arguments: { checked: false, id: "orient" },
+    });
+    const serializedChildMutation = JSON.stringify(
+      childMutation.structuredContent,
+    );
+    expect(serializedChildMutation).not.toContain("assignments");
+    expect(serializedChildMutation).not.toContain("sibling-token");
+    expect(serializedChildMutation).not.toContain("sibling-session");
+    expect(serializedChildMutation).not.toContain("foreign-secret");
     expect(
       (
         childList.structuredContent as {
@@ -1127,7 +1158,9 @@ describe("workflow MCP HTTP server", () => {
         stopNotification: {
           commandId: "stop-command",
           createdAt: new Date(0).toISOString(),
+          message: "Child stopped with phase completed.",
           messageId: "stop-message",
+          phase: "completed",
           status: "completed",
         },
       }),
@@ -1135,6 +1168,140 @@ describe("workflow MCP HTTP server", () => {
     await expect(
       child.callTool({ name: "todo_check", arguments: { id: insideId } }),
     ).rejects.toThrow(/Unauthorized/);
+  });
+
+  it("atomically revokes nested writers before the top parent regains todo authority", async () => {
+    const fixture = await makeFixture();
+    const parent = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "teardown-parent-client",
+    );
+    const nestedItem = await parent.callTool({
+      name: "todo_add",
+      arguments: { parentId: "orient", text: "Inspect the nested sample" },
+    });
+    const nestedItemId = (nestedItem.structuredContent as { id: string }).id;
+    claimTodoAssignment(fixture.persistence, {
+      bootstrap: {
+        createCommandId: "create-child",
+        createdAt: new Date(0).toISOString(),
+        messageId: "message-child",
+        turnCommandId: "turn-child",
+      },
+      correlationToken: "child-token",
+      depth: 1,
+      instanceId: "instance-alpha",
+      listSessionKey: "stage-alpha",
+      model: "sample-model",
+      operationId: "spawn-child",
+      parentSessionKey: "stage-alpha",
+      parentThreadId: "parent-thread",
+      provider: "sample-provider",
+      rootItemId: "orient",
+      sessionKey: "child-session",
+      stage: "assess",
+      threadId: "child-thread",
+    });
+    claimTodoAssignment(fixture.persistence, {
+      bootstrap: {
+        createCommandId: "create-nested",
+        createdAt: new Date(0).toISOString(),
+        messageId: "message-nested",
+        turnCommandId: "turn-nested",
+      },
+      correlationToken: "nested-token",
+      depth: 2,
+      instanceId: "instance-alpha",
+      listSessionKey: "stage-alpha",
+      model: "sample-model",
+      operationId: "spawn-nested",
+      parentSessionKey: "child-session",
+      parentThreadId: "child-thread",
+      provider: "sample-provider",
+      rootItemId: nestedItemId,
+      sessionKey: "nested-session",
+      stage: "assess",
+      threadId: "nested-thread",
+    });
+    const record = fixture.persistence.getInstance("instance-alpha")!;
+    const parentStored = record.state.handoffs[0] as {
+      workflowMcp: Record<string, never>;
+    };
+    const childHandoff = (sessionKey: string, token: string) => ({
+      correlationToken: token,
+      handoff: assembleStageHandoff({
+        correlationToken: token,
+        skillPointer: "skills/sample.md",
+        stage: {
+          kind: "standard" as const,
+          name: "assess",
+          priorStageOutputs: [],
+        },
+        taskContract: { id: 11, title: "Prepare a sample" },
+        todoList: record.state.todoState,
+      }),
+      kind: "stage-handoff",
+      parentSessionKey:
+        sessionKey === "child-session" ? "stage-alpha" : "child-session",
+      sessionKey,
+      todoAssignment: {
+        listSessionKey: "stage-alpha",
+        rootItemId: sessionKey === "child-session" ? "orient" : nestedItemId,
+      },
+      workflowMcp: parentStored.workflowMcp,
+    });
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [
+        ...record.state.handoffs,
+        childHandoff("child-session", "child-token"),
+        childHandoff("nested-session", "nested-token"),
+      ],
+    });
+    const child = await connect(
+      fixture.url,
+      "child-token",
+      "teardown-child-client",
+    );
+    const nested = await connect(
+      fixture.url,
+      "nested-token",
+      "teardown-nested-client",
+    );
+    await expect(
+      parent.callTool({ name: "todo_check", arguments: { id: nestedItemId } }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      child.callTool({ name: "todo_check", arguments: { id: nestedItemId } }),
+    ).resolves.toMatchObject({ isError: true });
+    await expect(
+      nested.callTool({ name: "todo_check", arguments: { id: nestedItemId } }),
+    ).resolves.toMatchObject({ structuredContent: expect.any(Object) });
+
+    stopTodoAssignmentTree(
+      fixture.persistence,
+      "instance-alpha",
+      "child-session",
+      {
+        commandId: "stop-command",
+        createdAt: new Date(1).toISOString(),
+        message: "Child stopped with phase failed.",
+        messageId: "stop-message",
+        phase: "failed",
+        status: "completed",
+      },
+    );
+
+    await expect(
+      child.callTool({ name: "todo_check", arguments: { id: nestedItemId } }),
+    ).rejects.toThrow(/Unauthorized/);
+    await expect(
+      nested.callTool({ name: "todo_check", arguments: { id: nestedItemId } }),
+    ).rejects.toThrow(/Unauthorized/);
+    await expect(
+      parent.callTool({ name: "todo_check", arguments: { id: nestedItemId } }),
+    ).resolves.toMatchObject({ structuredContent: expect.any(Object) });
   });
 
   it("rejects instance injection and advances only the token-bound instance", async () => {

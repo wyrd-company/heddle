@@ -23,6 +23,13 @@ export const initializePersistenceSchema = (
       recorded_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_correlation_tokens (
+      token TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      session_key TEXT NOT NULL,
+      UNIQUE(instance_id, session_key)
+    );
+
     CREATE INDEX IF NOT EXISTS heddle_instance_events_instance_sequence
       ON heddle_instance_events(instance_id, sequence);
 

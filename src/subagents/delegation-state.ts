@@ -8,13 +8,16 @@ import { isTodoState, todoSubtreeIds } from "../todo/index.js";
 import type { TodoAssignment, TodoList } from "../todo/types.js";
 
 export interface DelegationStateStore {
+  /**
+   * Replaces instance state atomically and rejects correlation-token values
+   * already owned by any other instance/session in the durable store.
+   */
   compareAndSwapInstance(
     instanceId: string,
     expectedVersion: number,
     state: InstanceState,
   ): InstanceRecord | undefined;
   getInstance(instanceId: string): InstanceRecord | undefined;
-  listInstances(): InstanceRecord[];
 }
 
 export type ClaimTodoAssignmentInput = {
@@ -90,22 +93,6 @@ const assignmentAncestors = (
     sessionKey = owner.parentSessionKey;
   }
 };
-
-const tokenIsGloballyAvailable = (
-  store: Pick<DelegationStateStore, "listInstances">,
-  token: string,
-  instanceId: string,
-  sessionKey: string,
-): boolean =>
-  store
-    .listInstances()
-    .every((record) =>
-      Object.entries(record.state.correlationTokens).every(
-        ([candidateSession, candidateToken]) =>
-          candidateToken !== token ||
-          (record.instanceId === instanceId && candidateSession === sessionKey),
-      ),
-    );
 
 export const claimTodoAssignment = (
   store: DelegationStateStore,
@@ -200,16 +187,6 @@ export const claimTodoAssignment = (
       throw new Error(
         `Todo subtree '${input.rootItemId}' is already assigned to '${conflict.sessionKey}'`,
       );
-    }
-    if (
-      !tokenIsGloballyAvailable(
-        store,
-        input.correlationToken,
-        input.instanceId,
-        input.sessionKey,
-      )
-    ) {
-      throw new Error("The subagent correlation token is already assigned");
     }
     const nextList: TodoList = {
       ...list,

@@ -25,6 +25,7 @@ import {
   mutateTodoAssignment,
   type DelegationStateStore,
 } from "./delegation-state.js";
+import { stopTodoAssignmentTree } from "./delegation-teardown.js";
 import type { TodoAssignment } from "../todo/types.js";
 
 export type SpawnSubagentInput = {
@@ -369,28 +370,29 @@ export class SubagentCoordinator {
     result: SessionObservationResult,
   ): Promise<void> {
     let assignment = current;
+    if (assignment.ancestorStop !== undefined) return;
     if (assignment.stopNotification?.status === "completed") return;
     if (assignment.stopNotification === undefined) {
+      const message = `Subagent ${assignment.sessionKey} stopped with phase ${result.phase}; assigned todo subtree ${assignment.rootItemId}.`;
       const notice = {
         commandId: this.#nextId(),
         createdAt: this.#now(),
         messageId: this.#nextId(),
+        message,
+        phase: result.phase as "absent" | "completed" | "failed",
         status: "issued" as const,
       };
-      assignment = mutateTodoAssignment(
+      assignment = stopTodoAssignmentTree(
         this.options.persistence,
         instanceId,
         assignment.sessionKey,
-        (candidate) =>
-          candidate.stopNotification === undefined
-            ? { ...candidate, status: "stopped", stopNotification: notice }
-            : candidate,
-      );
+        notice,
+      ).assignment;
     }
     if (assignment.stopNotification?.status === "completed") return;
     await this.options.steerParent({
       assignment,
-      message: `Subagent ${assignment.sessionKey} stopped with phase ${result.phase}; assigned todo subtree ${assignment.rootItemId}.`,
+      message: assignment.stopNotification!.message,
     });
     mutateTodoAssignment(
       this.options.persistence,

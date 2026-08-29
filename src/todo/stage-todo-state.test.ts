@@ -9,6 +9,7 @@ import type { InstanceRecord, InstanceState } from "../persistence/index.js";
 import {
   ensureStageTodoList,
   mutateStageTodoList,
+  stageTodoStateForHandoff,
 } from "./stage-todo-state.js";
 
 const state = (): InstanceState => ({
@@ -248,5 +249,61 @@ describe("stage todo state", () => {
         text: "Preserve this concurrent item",
       },
     ]);
+  });
+
+  it("projects todo handoff state without assignment bearer tokens or metadata", () => {
+    const record: InstanceRecord = {
+      instanceId: input.instanceId,
+      state: {
+        ...state(),
+        todoState: {
+          format: "heddle.todo-state",
+          lists: [
+            {
+              assignments: [
+                {
+                  bootstrap: {
+                    createCommandId: "create-child",
+                    createdAt: new Date(0).toISOString(),
+                    messageId: "message-child",
+                    turnCommandId: "turn-child",
+                  },
+                  correlationToken: "secret-token",
+                  depth: 1,
+                  model: "sample-model",
+                  operationId: "spawn-child",
+                  parentSessionKey: input.sessionKey,
+                  parentThreadId: "parent-thread",
+                  provider: "sample-provider",
+                  rootItemId: "orient",
+                  secretMetadata: "secret-metadata",
+                  sessionKey: "child-session",
+                  status: "active",
+                  threadId: "child-thread",
+                },
+              ],
+              items: [
+                { checked: false, id: "orient", text: "Orient on the sample" },
+              ],
+              sessionKey: input.sessionKey,
+              stage: input.stage,
+              template: input.templateId,
+            },
+          ],
+          version: 1,
+        },
+      },
+      version: 1,
+    };
+
+    const projected = stageTodoStateForHandoff(
+      record,
+      input.sessionKey,
+      input.stage,
+      [input.sessionKey],
+    ).state;
+    expect(projected.lists[0]).not.toHaveProperty("assignments");
+    expect(JSON.stringify(projected)).not.toContain("secret-token");
+    expect(JSON.stringify(projected)).not.toContain("secret-metadata");
   });
 });

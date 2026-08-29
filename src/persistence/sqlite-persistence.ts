@@ -16,6 +16,10 @@ import {
 import { parseEvent, parseState } from "./sqlite-event-row.js";
 import { claimInstanceEvent } from "./sqlite-instance-event-claim.js";
 import {
+  deleteCorrelationTokenIndex,
+  replaceCorrelationTokenIndex,
+} from "./sqlite-correlation-token-index.js";
+import {
   instanceCreatedEvent,
   instanceDeletedEvent,
   instanceUpdatedEvent,
@@ -94,6 +98,11 @@ export class SqlitePersistence {
            VALUES (?, ?, 1)`,
         )
         .run(instanceId, stateJson);
+      replaceCorrelationTokenIndex(
+        this.database,
+        instanceId,
+        state.correlationTokens,
+      );
       return this.getRequiredInstance(instanceId);
     })();
   }
@@ -133,6 +142,11 @@ export class SqlitePersistence {
            WHERE instance_id = ?`,
         )
         .run(stateJson, current.version + 1, instanceId);
+      replaceCorrelationTokenIndex(
+        this.database,
+        instanceId,
+        state.correlationTokens,
+      );
       return this.getRequiredInstance(instanceId);
     })();
   }
@@ -156,6 +170,11 @@ export class SqlitePersistence {
         this.getRequiredInstance(instanceId);
         return undefined;
       }
+      replaceCorrelationTokenIndex(
+        this.database,
+        instanceId,
+        state.correlationTokens,
+      );
       this.insertEvent(instanceId, instanceUpdatedEvent, stateJson);
       return this.getRequiredInstance(instanceId);
     })();
@@ -172,8 +191,8 @@ export class SqlitePersistence {
     const stateJson = serialize(state);
     const payloadJson = serialize(payload);
 
-    return this.database.transaction(() =>
-      claimInstanceEvent({
+    return this.database.transaction(() => {
+      const claimed = claimInstanceEvent({
         appendEvent: () =>
           this.getEvent(this.insertEvent(instanceId, type, payloadJson)),
         claimVersion: () =>
@@ -188,8 +207,16 @@ export class SqlitePersistence {
         recordStateUpdate: () =>
           void this.insertEvent(instanceId, instanceUpdatedEvent, stateJson),
         requireRecord: () => this.getRequiredInstance(instanceId),
-      }),
-    )();
+      });
+      if (claimed !== undefined) {
+        replaceCorrelationTokenIndex(
+          this.database,
+          instanceId,
+          state.correlationTokens,
+        );
+      }
+      return claimed;
+    })();
   }
 
   deleteInstance(instanceId: string): void {
@@ -199,6 +226,7 @@ export class SqlitePersistence {
       this.database
         .prepare("DELETE FROM heddle_instances WHERE instance_id = ?")
         .run(instanceId);
+      deleteCorrelationTokenIndex(this.database, instanceId);
     })();
   }
 

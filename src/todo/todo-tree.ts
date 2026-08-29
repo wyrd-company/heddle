@@ -3,7 +3,16 @@
 //   implements: heddle
 // ---
 
+import type { JsonValue } from "../persistence/index.js";
 import type { TodoItem, TodoList } from "./types.js";
+
+export type ProjectedTodoList = Record<string, JsonValue> & {
+  assignments?: never;
+  items: TodoItem[];
+  sessionKey: string;
+  stage: string;
+  template: string;
+};
 
 export const validTodoTree = (items: readonly TodoItem[]): boolean => {
   const byId = new Map(items.map((item) => [item.id, item]));
@@ -53,4 +62,18 @@ export const scopedTodoItems = (
 ): TodoItem[] => {
   const allowed = todoSubtreeIds(list, rootItemId);
   return list.items.filter((item) => allowed.has(item.id));
+};
+
+export const projectTodoList = (
+  list: TodoList,
+  rootItemId?: string,
+): ProjectedTodoList => {
+  const { assignments: _secretAssignments, ...projection } = list;
+  return {
+    ...projection,
+    items:
+      rootItemId === undefined
+        ? [...list.items]
+        : scopedTodoItems(list, rootItemId),
+  };
 };

@@ -8,6 +8,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import type { InstanceRecord, JsonValue } from "../persistence/index.js";
 import { assignmentForChild } from "../subagents/delegation-state.js";
+import { requireActiveAssignmentLineage } from "../subagents/delegation-authorization.js";
 import type {
   CorrelationTokenMatch,
   StageHandoffDocument,
@@ -199,6 +200,7 @@ export const resolveWorkflowMcpSessionBinding = (
   if (todoAssignment !== undefined) {
     try {
       const stored = assignmentForChild(match.instance, match.sessionKey);
+      requireActiveAssignmentLineage(stored.list, match.sessionKey);
       if (
         stored.list.sessionKey !== todoAssignment.listSessionKey ||
         stored.assignment.rootItemId !== todoAssignment.rootItemId ||

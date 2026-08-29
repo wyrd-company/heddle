@@ -8,11 +8,13 @@ import { z } from "zod";
 
 import {
   mutateStageTodoList,
+  projectTodoList,
   scopedTodoItems,
   stageTodoList,
   todoSubtreeIds,
   type TodoList,
 } from "../todo/index.js";
+import { requireActiveAssignmentLineage } from "../subagents/delegation-authorization.js";
 import type {
   WorkflowMcpToolContext,
   WorkflowMcpToolContributor,
@@ -48,6 +50,10 @@ const requireActiveAssignment = (
 ): void => {
   const scope = context.binding.todoAssignment;
   if (scope === undefined) return;
+  const active = requireActiveAssignmentLineage(
+    list,
+    context.binding.sessionKey,
+  );
   const matches = (list.assignments ?? []).filter(
     (assignment) =>
       assignment.sessionKey === context.binding.sessionKey &&
@@ -55,9 +61,17 @@ const requireActiveAssignment = (
       assignment.rootItemId === scope.rootItemId &&
       assignment.status === "active",
   );
-  if (matches.length !== 1) {
+  if (matches.length !== 1 || matches[0] !== active) {
     throw new Error("The subagent todo assignment is not active");
   }
+};
+
+const projectAuthorizedTodoList = (
+  context: WorkflowMcpToolContext,
+  list: TodoList,
+) => {
+  requireActiveAssignment(context, list);
+  return projectTodoList(list, context.binding.todoAssignment?.rootItemId);
 };
 
 const requireInScope = (
@@ -115,14 +129,7 @@ const registerList = (
           context.binding.sessionKey,
         context.binding.stage.id,
       ).list;
-      requireActiveAssignment(context, todoList);
-      const root = context.binding.todoAssignment?.rootItemId;
-      return result({
-        todoList:
-          root === undefined
-            ? todoList
-            : { ...todoList, items: scopedTodoItems(todoList, root) },
-      });
+      return result({ todoList: projectAuthorizedTodoList(context, todoList) });
     },
   );
 };
@@ -149,7 +156,9 @@ const registerCheck = (
           ),
         };
       });
-      return result({ todoList });
+      return result({
+        todoList: projectAuthorizedTodoList(context, todoList),
+      });
     },
   );
 };
@@ -203,7 +212,10 @@ const registerAdd = (
         });
         return { ...list, items };
       });
-      return result({ id, todoList });
+      return result({
+        id,
+        todoList: projectAuthorizedTodoList(context, todoList),
+      });
     },
   );
 };
@@ -230,7 +242,9 @@ const registerEdit = (
           ),
         };
       });
-      return result({ todoList });
+      return result({
+        todoList: projectAuthorizedTodoList(context, todoList),
+      });
     },
   );
 };
@@ -274,7 +288,9 @@ const registerReorder = (
         }
         return { ...list, items: reorderedItems };
       });
-      return result({ todoList });
+      return result({
+        todoList: projectAuthorizedTodoList(context, todoList),
+      });
     },
   );
 };

@@ -166,7 +166,12 @@ proposed-design:
     depth. Authorization resolves ancestry from that stored tree and
     fails closed for missing, cyclic, foreign, inactive, or overlapping
     nodes. Assignment and correlation-token publication are one state
-    replacement.
+    replacement. SQLite maintains a global unique correlation-token catalog
+    in the same transaction as every instance-state replacement and rebuilds
+    it from event history on recovery; duplicate history fails recovery.
+    Agent-facing todo and handoff projections omit the assignment catalog,
+    so bearer tokens and assignment metadata remain inside the authorization
+    boundary.
 
     The shared todo list is the progress channel: the parent reads
     the child's subtree to check progress, and a liveness tool
@@ -180,9 +185,13 @@ proposed-design:
     budget as all other sessions.
     The observation loop records a stopped assignment and a deterministic
     parent-steer intent before it dispatches the steering turn. Replay uses
-    the same command and message identities, and completion is recorded on
-    the canonical assignment. The subagent service supplies this hook to
-    the session observer; it does not poll T3 or decide liveness separately.
+    the same command identity, message identity, terminal phase, and exact
+    message payload, and completion is recorded on the canonical assignment.
+    Stopping an assignment atomically stops every active assignment descendant
+    in deterministic assignment order. Active authorization requires an
+    unbroken active lineage, so an inactive ancestor cannot leave an orphaned
+    writer. The subagent service supplies this hook to the session observer;
+    it does not poll T3 or decide liveness separately.
 
     Escalation is a blocking question through the MCP suite's
     `escalate` tool: structured questions with options, the call

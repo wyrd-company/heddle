@@ -282,11 +282,20 @@ describe("SubagentCoordinator", () => {
     expect(issued).toMatchObject({ status: "issued" });
 
     await expect(
-      test.coordinator.onObserved(target, stopped),
+      test.coordinator.onObserved(target, { ...stopped, phase: "absent" }),
     ).resolves.toBeUndefined();
     const replayed =
       test.steerParent.mock.calls[1]![0].assignment.stopNotification;
     expect(replayed).toEqual(issued);
+    expect(test.steerParent.mock.calls[1]![0].message).toBe(
+      test.steerParent.mock.calls[0]![0].message,
+    );
+    expect(test.steerParent.mock.calls[1]![0].message).toContain(
+      "phase failed",
+    );
+    expect(test.steerParent.mock.calls[1]![0].message).not.toContain(
+      "phase absent",
+    );
     expect(
       assignmentForChild(test.store.record, "child-session").assignment
         .stopNotification,

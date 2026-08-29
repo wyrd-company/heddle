@@ -193,13 +193,31 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
           notice["createdAt"].trim() === "" ||
           typeof notice["messageId"] !== "string" ||
           notice["messageId"].trim() === "" ||
+          typeof notice["message"] !== "string" ||
+          notice["message"].trim() === "" ||
+          (notice["phase"] !== "absent" &&
+            notice["phase"] !== "completed" &&
+            notice["phase"] !== "failed") ||
           (notice["status"] !== "issued" && notice["status"] !== "completed"))
       ) {
         return false;
       }
+      const ancestorStop = assignment["ancestorStop"];
       if (
-        (assignment["status"] === "active" && notice !== undefined) ||
-        (assignment["status"] === "stopped" && notice === undefined)
+        ancestorStop !== undefined &&
+        (!isObject(ancestorStop) ||
+          typeof ancestorStop["ancestorSessionKey"] !== "string" ||
+          ancestorStop["ancestorSessionKey"].trim() === "" ||
+          typeof ancestorStop["createdAt"] !== "string" ||
+          ancestorStop["createdAt"].trim() === "")
+      ) {
+        return false;
+      }
+      if (
+        (assignment["status"] === "active" &&
+          (notice !== undefined || ancestorStop !== undefined)) ||
+        (assignment["status"] === "stopped" &&
+          (notice === undefined) === (ancestorStop === undefined))
       ) {
         return false;
       }
@@ -228,7 +246,23 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
           (possibleParent) => possibleParent.sessionKey === parentSessionKey,
         );
         if (parent === undefined) return false;
+        if (assignment.status === "active" && parent.status !== "active") {
+          return false;
+        }
         parentSessionKey = parent.parentSessionKey;
+      }
+      if (assignment.ancestorStop !== undefined) {
+        const ancestor = assignments.find(
+          ({ sessionKey }) =>
+            sessionKey === assignment.ancestorStop?.ancestorSessionKey,
+        );
+        if (
+          ancestor === undefined ||
+          ancestor.status !== "stopped" ||
+          !visited.has(ancestor.sessionKey)
+        ) {
+          return false;
+        }
       }
     }
     const activeAssignments = assignments.filter(

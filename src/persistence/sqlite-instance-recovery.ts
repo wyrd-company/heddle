@@ -6,6 +6,7 @@
 import type Database from "better-sqlite3";
 
 import type { EventRow, InstanceRecord, InstanceState } from "./types.js";
+import { replaceCorrelationTokenIndex } from "./sqlite-correlation-token-index.js";
 
 export const instanceCreatedEvent = "instance:created";
 export const instanceDeletedEvent = "instance:deleted";
@@ -54,6 +55,7 @@ export const recoverInstances = (
       }
     }
 
+    database.prepare("DELETE FROM heddle_correlation_tokens").run();
     database.prepare("DELETE FROM heddle_instances").run();
     const insert = database.prepare(
       `INSERT INTO heddle_instances (instance_id, state_json, version)
@@ -64,6 +66,11 @@ export const recoverInstances = (
         record.instanceId,
         JSON.stringify(record.state),
         record.version,
+      );
+      replaceCorrelationTokenIndex(
+        database,
+        record.instanceId,
+        record.state.correlationTokens,
       );
     }
     return [...recovered.values()].sort((left, right) =>

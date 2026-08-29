@@ -13,7 +13,7 @@ import { assignmentForChild } from "../subagents/delegation-state.js";
 import {
   ensureStageTodoList,
   instantiateTodoList,
-  scopedTodoItems,
+  projectTodoList,
   stageTodoStateForHandoff,
 } from "../todo/index.js";
 import {
@@ -299,14 +299,10 @@ const ensureStoredHandoff = async (
             state: {
               format: "heddle.todo-state" as const,
               lists: [
-                {
-                  ...assignment.list,
-                  assignments: [assignment.assignment],
-                  items: scopedTodoItems(
-                    assignment.list,
-                    assignment.assignment.rootItemId,
-                  ),
-                },
+                projectTodoList(
+                  assignment.list,
+                  assignment.assignment.rootItemId,
+                ),
               ],
               version: 1 as const,
             },
