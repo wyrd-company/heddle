@@ -13,6 +13,11 @@ const artifactHeader = `// ---\n// relationships:\n//   implements: heddle\n//  
 const stylesheetArtifactHeader = `/* ---\nrelationships:\n  implements: heddle\n  references: flowcraft-gate\n--- */\n`;
 
 export default defineConfig({
+  define: {
+    "process.env": "{}",
+    "process.env.NODE_ENV": JSON.stringify("production"),
+    "process.env.TLDRAW_ENV": JSON.stringify("production"),
+  },
   build: {
     assetsDir: ".",
     assetsInlineLimit: 100_000_000,
@@ -37,7 +42,7 @@ export default defineConfig({
       generateBundle(_options, bundle) {
         for (const output of Object.values(bundle)) {
           if (output.type === "chunk") {
-            output.code = artifactHeader + output.code;
+            output.code = artifactHeader + output.code.replace(/[\t ]+$/gm, "");
           } else if (output.fileName.endsWith(".css")) {
             output.source = stylesheetArtifactHeader + String(output.source);
           }

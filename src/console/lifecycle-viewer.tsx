@@ -46,6 +46,29 @@ declare global {
   }
 }
 
+let mountedPort: LifecycleViewerPort | undefined;
+let pendingReplacement: ConsoleLifecycleSnapshot | undefined;
+
+window.heddleLifecycleViewer = {
+  append(snapshot) {
+    if (mountedPort === undefined) {
+      throw new Error("Lifecycle tail arrived before renderer mount");
+    }
+    mountedPort.append(snapshot);
+  },
+  clear() {
+    pendingReplacement = undefined;
+    mountedPort?.clear();
+  },
+  replace(snapshot) {
+    if (mountedPort === undefined) {
+      pendingReplacement = snapshot;
+      return;
+    }
+    mountedPort.replace(snapshot);
+  },
+};
+
 const shapeUtils = [FlowcraftNodeUtil, ...defaultShapeUtils];
 
 const positionsFor = (
@@ -68,13 +91,38 @@ const applyCurrentStages = (
   snapshot: ConsoleLifecycleSnapshot,
 ): void => {
   const current = new Set(snapshot.currentStageIds);
+  const replayedStatus = new Map<string, "completed" | "failed" | "pending">();
+  for (const event of snapshot.events) {
+    if (
+      typeof event.payload !== "object" ||
+      event.payload === null ||
+      Array.isArray(event.payload) ||
+      typeof event.payload["nodeId"] !== "string"
+    ) {
+      continue;
+    }
+    const status =
+      event.type === "node:start"
+        ? "pending"
+        : event.type === "node:finish"
+          ? "completed"
+          : event.type === "node:error"
+            ? "failed"
+            : undefined;
+    if (status !== undefined)
+      replayedStatus.set(event.payload["nodeId"], status);
+  }
   for (const { id } of snapshot.blueprint.nodes) {
     const shapeId = `shape:${id}` as TLShapeId;
     const shape = editor.getShape(shapeId);
     if (shape?.type !== FLOWCRAFT_NODE) continue;
     editor.updateShape({
       id: shapeId,
-      props: { status: current.has(id) ? "pending" : shape.props.status },
+      props: {
+        status: current.has(id)
+          ? "pending"
+          : (replayedStatus.get(id) ?? "idle"),
+      },
       type: FLOWCRAFT_NODE,
     });
   }
@@ -104,7 +152,14 @@ function LifecycleViewer() {
       throw new Error("Lifecycle tail arrived before replay");
     const combined = appendLifecycleSnapshot(current, next);
     snapshotRef.current = combined;
-    setSnapshot(combined);
+    if (
+      next.events.length > 0 ||
+      current.status !== next.status ||
+      current.currentStageIds.join("\u0000") !==
+        next.currentStageIds.join("\u0000")
+    ) {
+      setSnapshot(combined);
+    }
   }, []);
 
   useEffect(() => {
@@ -117,11 +172,14 @@ function LifecycleViewer() {
       },
       replace,
     };
-    window.heddleLifecycleViewer = port;
+    mountedPort = port;
+    if (pendingReplacement !== undefined) {
+      const replacement = pendingReplacement;
+      pendingReplacement = undefined;
+      port.replace(replacement);
+    }
     return () => {
-      if (window.heddleLifecycleViewer === port) {
-        delete window.heddleLifecycleViewer;
-      }
+      if (mountedPort === port) mountedPort = undefined;
     };
   }, [append, replace]);
 
