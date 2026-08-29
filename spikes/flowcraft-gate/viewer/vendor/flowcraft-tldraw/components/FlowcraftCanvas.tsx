@@ -13,6 +13,7 @@ import { FlowcraftNodeUtil } from '../shapes/FlowcraftNodeUtil'
 import type { FlowcraftCanvasProps } from '../shapes/types'
 import { FLOWCRAFT_NODE } from '../shapes/types'
 import { RuntimeControls } from '../runtime/RuntimeControls'
+import { edgeShapeIds } from '../sync/blueprint-to-canvas'
 
 const shapeUtils: TLAnyShapeUtilConstructor[] = [FlowcraftNodeUtil, ...defaultShapeUtils]
 
@@ -50,10 +51,11 @@ export function FlowcraftCanvas({ flow, positions, init = {}, className }: Flowc
 				})
 			}
 
-			for (const edge of uiGraph.edges) {
+			const arrowIds = edgeShapeIds(uiGraph.edges)
+			for (const [edgeIndex, edge] of uiGraph.edges.entries()) {
 				const sourceId = createShapeId(edge.source)
 				const targetId = createShapeId(edge.target)
-				const arrowId = createShapeId(`arrow-${edge.source}-${edge.target}`)
+				const arrowId = arrowIds[edgeIndex]
 
 				const edgeDef: JsonObject = {}
 				if (edge.action) edgeDef.action = edge.action

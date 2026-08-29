@@ -76718,7 +76718,14 @@ var uce = class extends nm {
 };
 //#endregion
 //#region spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/blueprint-to-canvas.ts
-function fce(e, t, n = {}) {
+function fce(e) {
+	let t = /* @__PURE__ */ new Map();
+	return e.map(({ source: e, target: n }) => {
+		let r = `${e}\u0000${n}`, i = t.get(r) ?? 0;
+		return t.set(r, i + 1), Do(`arrow-${e}-${n}${i === 0 ? "" : `-${i}`}`);
+	});
+}
+function pce(e, t, n = {}) {
 	let r = e.getCurrentPageShapes().filter((e) => e.type === "flowcraft-node" || e.type === "arrow").map(({ id: e }) => e);
 	r.length > 0 && e.deleteShapes(r);
 	let i = /* @__PURE__ */ new Set(), a = [];
@@ -76742,13 +76749,13 @@ function fce(e, t, n = {}) {
 			}
 		});
 	}
-	let o = [];
-	for (let e of t.edges) {
-		let t = Do(e.source), n = Do(e.target);
-		if (!i.has(t) || !i.has(n)) continue;
-		let r = Do(`arrow-${e.source}-${e.target}`), a = { ...e };
-		delete a.source, delete a.target, o.push({
-			id: r,
+	let o = [], s = fce(t.edges);
+	for (let [e, n] of t.edges.entries()) {
+		let t = Do(n.source), r = Do(n.target);
+		if (!i.has(t) || !i.has(r)) continue;
+		let a = s[e], c = { ...n };
+		delete c.source, delete c.target, o.push({
+			id: a,
 			type: "arrow",
 			props: {
 				start: {
@@ -76760,20 +76767,20 @@ function fce(e, t, n = {}) {
 					y: 0
 				}
 			},
-			meta: { edgeDef: a }
+			meta: { edgeDef: c }
 		});
 	}
 	e.createShapes(a), e.createShapes(o);
-	for (let n of t.edges) {
-		let t = Do(n.source), r = Do(n.target), a = Do(`arrow-${n.source}-${n.target}`);
-		!i.has(t) || !i.has(r) || (e.createBinding({
-			fromId: a,
+	for (let [n, r] of t.edges.entries()) {
+		let t = Do(r.source), a = Do(r.target), o = s[n];
+		!i.has(t) || !i.has(a) || (e.createBinding({
+			fromId: o,
 			toId: t,
 			type: "arrow",
 			props: { terminal: "start" }
 		}), e.createBinding({
-			fromId: a,
-			toId: r,
+			fromId: o,
+			toId: a,
 			type: "arrow",
 			props: { terminal: "end" }
 		}));
@@ -76782,7 +76789,7 @@ function fce(e, t, n = {}) {
 }
 //#endregion
 //#region spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/canvas-to-blueprint.ts
-function pce(e) {
+function mce(e) {
 	let t = e.getCurrentPageShapes(), n = t.filter((e) => e.type === U9), r = t.filter((e) => e.type === "arrow"), i = [], a = {}, o = /* @__PURE__ */ new Map();
 	for (let e of n) {
 		let t = e.props.nodeDef;
@@ -76825,13 +76832,13 @@ var J9 = class {
 	applyBlueprint(e, t) {
 		this.isApplyingBlueprint = !0;
 		try {
-			fce(this.editor, e, { positions: t });
+			pce(this.editor, e, { positions: t });
 		} finally {
 			this.isApplyingBlueprint = !1;
 		}
 	}
 	readBlueprint() {
-		return pce(this.editor);
+		return mce(this.editor);
 	}
 	startListening() {
 		this.unsubscribe || !this.onBlueprintChange || (this.unsubscribe = this.editor.store.listen(() => {
@@ -76848,7 +76855,7 @@ var J9 = class {
 	dispose() {
 		this.stopListening();
 	}
-}, mce = (e, t) => {
+}, hce = (e, t) => {
 	let n = new Set(t.currentStageIds), r = /* @__PURE__ */ new Map();
 	for (let e of t.events) {
 		if (typeof e.payload != "object" || e.payload === null || Array.isArray(e.payload) || typeof e.payload.nodeId != "string") continue;
@@ -76879,7 +76886,7 @@ var J9 = class {
 		});
 	}
 	e.store.mergeRemoteChanges(() => e.store.put(i));
-}, hce = (e) => {
+}, gce = (e) => {
 	let t = /* @__PURE__ */ new Map();
 	for (let n of e) {
 		if (n.type !== "node:start" || typeof n.payload != "object" || n.payload === null || Array.isArray(n.payload) || typeof n.payload.nodeId != "string") continue;
@@ -76890,11 +76897,11 @@ var J9 = class {
 		count: t,
 		nodeId: e
 	}));
-}, gce = (e) => {
+}, _ce = (e) => {
 	if (e.events.forEach(({ sequence: e }, t) => {
 		if (e !== t + 1) throw Error("Lifecycle replay is not contiguous from sequence one");
 	}), e.nextSequence !== e.events.length) throw Error("Lifecycle replay cursor disagrees with event history");
-}, _ce = (e, t) => {
+}, vce = (e, t) => {
 	if (e.instanceId !== t.instanceId || e.taskId !== t.taskId || e.blueprint.blobHash !== t.blueprint.blobHash) throw Error("Lifecycle tail identity disagrees with replayed history");
 	t.events.forEach(({ sequence: t }, n) => {
 		if (t !== e.nextSequence + n + 1) throw Error("Lifecycle tail is not contiguous");
@@ -76922,7 +76929,7 @@ window.heddleLifecycleViewer = {
 		Y9.replace(e);
 	}
 };
-var vce = [_8], yce = [uce, u7], bce = (e) => {
+var yce = [_8], bce = [uce, u7], xce = (e) => {
 	let t = {};
 	return e.blueprint.nodes.forEach(({ id: e }, n) => {
 		t[e] = {
@@ -76938,17 +76945,17 @@ var vce = [_8], yce = [uce, u7], bce = (e) => {
 	if (!e.ok) throw Error(typeof t == "object" && t && "error" in t && typeof t.error == "string" ? t.error : `Blueprint request failed (${e.status})`);
 	return t;
 };
-function xce() {
+function Sce() {
 	let [e, t] = (0, _.useState)(null), [n, r] = (0, _.useState)(null), [i, a] = (0, _.useState)(null), [o, s] = (0, _.useState)(null), [c, l] = (0, _.useState)(""), [u, d] = (0, _.useState)(!1), f = (0, _.useRef)(new dce()), p = (0, _.useRef)(0), m = (0, _.useRef)(""), h = (0, _.useRef)(null);
 	ace(e, f.current);
 	let g = (0, _.useCallback)(() => {
 		p.current += 1, m.current = "", a(null), s(null), l(""), d(!1);
 	}, []), v = (0, _.useCallback)((e) => {
-		gce(e), g(), h.current = e, r(e);
+		_ce(e), g(), h.current = e, r(e);
 	}, [g]), y = (0, _.useCallback)((e) => {
 		let t = h.current;
 		if (t === null) throw Error("Lifecycle tail arrived before replay");
-		let n = _ce(t, e);
+		let n = vce(t, e);
 		h.current = n, (e.events.length > 0 || t.status !== e.status || t.currentStageIds.join("\0") !== e.currentStageIds.join("\0")) && r(n);
 	}, []);
 	(0, _.useEffect)(() => {
@@ -76974,7 +76981,7 @@ function xce() {
 		if (e === null || n === null || i !== null) return;
 		let t = `${n.instanceId}:${n.blueprint.blobHash}`;
 		if (m.current !== t) {
-			new J9(e).applyBlueprint(n.blueprint, bce(n));
+			new J9(e).applyBlueprint(n.blueprint, xce(n));
 			for (let e of n.events) f.current.emit(Z9(e));
 			m.current = t;
 		} else {
@@ -76987,7 +76994,7 @@ function xce() {
 				...e.getInstanceState().meta,
 				heddleSequence: n.nextSequence
 			}
-		}), mce(e, n), e.zoomToFit({ animation: { duration: 0 } });
+		}), hce(e, n), e.zoomToFit({ animation: { duration: 0 } });
 	}, [
 		i,
 		e,
@@ -77046,7 +77053,7 @@ function xce() {
 		} finally {
 			e === p.current && d(!1);
 		}
-	}, [o, i]), C = (0, _.useMemo)(() => n === null ? [] : hce(n.events), [n]);
+	}, [o, i]), C = (0, _.useMemo)(() => n === null ? [] : gce(n.events), [n]);
 	return /* @__PURE__ */ (0, V.jsxs)("div", {
 		className: "lifecycle-renderer",
 		"data-ready": n !== null,
@@ -77058,10 +77065,10 @@ function xce() {
 				className: "lifecycle-empty",
 				children: "Select a task lifecycle to render its pinned history."
 			}) : /* @__PURE__ */ (0, V.jsx)(dy, {
-				bindingUtils: vce,
+				bindingUtils: yce,
 				initialState: "select",
 				onMount: t,
-				shapeUtils: yce,
+				shapeUtils: bce,
 				tools: P9
 			})
 		}), /* @__PURE__ */ (0, V.jsxs)("aside", {
@@ -77143,5 +77150,5 @@ function xce() {
 	});
 }
 var $9 = document.querySelector("#lifecycle-canvas-root");
-$9 !== null && (0, v.createRoot)($9).render(/* @__PURE__ */ (0, V.jsx)(_.StrictMode, { children: /* @__PURE__ */ (0, V.jsx)(xce, {}) }));
+$9 !== null && (0, v.createRoot)($9).render(/* @__PURE__ */ (0, V.jsx)(_.StrictMode, { children: /* @__PURE__ */ (0, V.jsx)(Sce, {}) }));
 //#endregion

@@ -119,4 +119,33 @@ describe("blueprint canvas conversion", () => {
       inspect: { x: 80, y: 120 },
     });
   });
+
+  it("keeps parallel edges distinct", () => {
+    const canvas = new FixtureCanvas();
+    const blueprint: LifecycleBlueprint = {
+      id: "sample-process",
+      nodes: [
+        { id: "first", uses: "prepare" },
+        { id: "second", uses: "finish" },
+      ],
+      edges: [
+        {
+          condition: "result.output.left",
+          source: "first",
+          target: "second",
+        },
+        {
+          condition: "result.output.right",
+          source: "first",
+          target: "second",
+        },
+      ],
+    };
+
+    blueprintToCanvas(canvas as unknown as Editor, blueprint);
+
+    expect(canvasToBlueprint(canvas as unknown as Editor).edges).toEqual(
+      blueprint.edges,
+    );
+  });
 });

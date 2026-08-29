@@ -8,6 +8,19 @@ export interface BlueprintToCanvasOptions {
 	positions?: Record<string, { x: number; y: number }>
 }
 
+export function edgeShapeIds(
+	edges: ReadonlyArray<{ source: string; target: string }>,
+): TLShapeId[] {
+	const occurrences = new Map<string, number>()
+	return edges.map(({ source, target }) => {
+		const pair = `${source}\u0000${target}`
+		const occurrence = occurrences.get(pair) ?? 0
+		occurrences.set(pair, occurrence + 1)
+		const suffix = occurrence === 0 ? '' : `-${occurrence}`
+		return createShapeId(`arrow-${source}-${target}${suffix}`)
+	})
+}
+
 export function blueprintToCanvas(
 	editor: Editor,
 	blueprint: WorkflowBlueprint,
@@ -52,14 +65,15 @@ export function blueprintToCanvas(
 	}
 
 	const arrowPartials: TLCreateShapePartial[] = []
+	const arrowIds = edgeShapeIds(blueprint.edges)
 
-	for (const edge of blueprint.edges) {
+	for (const [edgeIndex, edge] of blueprint.edges.entries()) {
 		const sourceShapeId = createShapeId(edge.source)
 		const targetShapeId = createShapeId(edge.target)
 
 		if (!newNodeIds.has(sourceShapeId) || !newNodeIds.has(targetShapeId)) continue
 
-		const arrowId = createShapeId(`arrow-${edge.source}-${edge.target}`)
+		const arrowId = arrowIds[edgeIndex]
 		const edgeDef = { ...edge } as Record<string, unknown>
 		delete edgeDef.source
 		delete edgeDef.target
@@ -79,10 +93,10 @@ export function blueprintToCanvas(
 	editor.createShapes(arrowPartials)
 
 	// Create binding records for each arrow
-	for (const edge of blueprint.edges) {
+	for (const [edgeIndex, edge] of blueprint.edges.entries()) {
 		const sourceShapeId = createShapeId(edge.source)
 		const targetShapeId = createShapeId(edge.target)
-		const arrowId = createShapeId(`arrow-${edge.source}-${edge.target}`)
+		const arrowId = arrowIds[edgeIndex]
 
 		if (!newNodeIds.has(sourceShapeId) || !newNodeIds.has(targetShapeId)) continue
 
