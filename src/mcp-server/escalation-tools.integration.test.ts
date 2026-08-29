@@ -20,6 +20,60 @@ import {
 afterEach(cleanupEscalationFixtures);
 
 describe("workflow MCP escalation tools", () => {
+  it("rejects advance while the session has a pending escalation", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-advance", [
+      {
+        sessionKey: "top",
+        token: "token-advance",
+        tools: ["advance", "escalate"],
+      },
+    ]);
+    const client = await connectEscalationClient(
+      subject.url,
+      "token-advance",
+      "advance-client",
+    );
+    const escalation = client.callTool({
+      arguments: {
+        escalationId: "advance-choice",
+        questions: sampleEscalationQuestions,
+      },
+      name: "escalate",
+    });
+    await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
+
+    await expect(
+      client.callTool({
+        arguments: { disposition: "complete" },
+        name: "advance",
+      }),
+    ).resolves.toMatchObject({ isError: true });
+    expect(subject.lifecycleResumes).toHaveLength(0);
+
+    subject.coordinator.answerAsOperator({
+      answers: sampleEscalationAnswer,
+      escalationId: "advance-choice",
+      instanceId: "instance-advance",
+      ownerSessionKey: "top",
+    });
+    await expect(escalation).resolves.toMatchObject({
+      structuredContent: { answers: sampleEscalationAnswer },
+    });
+    await expect(
+      client.callTool({
+        arguments: { disposition: "complete" },
+        name: "advance",
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        instanceId: "instance-advance",
+        status: "completed",
+      },
+    });
+    expect(subject.lifecycleResumes).toHaveLength(1);
+  });
+
   it("holds a top-level escalation until its attention entry is answered", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-top", [

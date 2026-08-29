@@ -15,6 +15,8 @@ import {
 import { toNodeHandler } from "@modelcontextprotocol/node";
 
 import { SqlitePersistence } from "../persistence/index.js";
+import type { LifecycleSnapshot } from "../engine/index.js";
+import type { WorkflowMcpLifecycle } from "./types.js";
 import {
   EscalationCoordinator,
   type EscalationAnswers,
@@ -48,7 +50,9 @@ const storedHandoff = (
   workflowMcp: {
     blueprintBlobHash: "a".repeat(40),
     blueprintPath: "blueprints/sample-process.json",
-    dispositions: [],
+    dispositions: [
+      { description: "Complete the assessment", name: "complete" },
+    ],
     stage: "assess",
     todoTemplate: "sample-assess",
     tools,
@@ -145,6 +149,7 @@ export const createEscalationFixture = async () => {
   const attentions: EscalationAttention[] = [];
   const notifications: EscalationAttention[] = [];
   const parentEscalations: ParentEscalation[] = [];
+  const lifecycleResumes: Parameters<WorkflowMcpLifecycle["resume"]>[0][] = [];
   const coordinator = new EscalationCoordinator({
     attention: { raise: async (value) => void attentions.push(value) },
     parent: { steer: async (value) => void parentEscalations.push(value) },
@@ -155,8 +160,12 @@ export const createEscalationFixture = async () => {
   const handler = createWorkflowMcpHttpHandler({
     escalationCoordinator: coordinator,
     lifecycle: {
-      resume: async () => {
-        throw new Error("Lifecycle resume is outside this fixture");
+      resume: async (input) => {
+        lifecycleResumes.push(input);
+        return {
+          instanceId: input.instanceId,
+          status: "completed",
+        } as LifecycleSnapshot;
       },
     },
     persistence,
@@ -166,6 +175,7 @@ export const createEscalationFixture = async () => {
     attentions,
     coordinator,
     handler,
+    lifecycleResumes,
     notifications,
     parentEscalations,
     persistence,

@@ -57,6 +57,10 @@ const registerAdvance = (
         .strict(),
     },
     async ({ disposition, output }) => {
+      context.escalationCoordinator.requireNoPendingForSession(
+        context.binding.instance.instanceId,
+        context.binding.sessionKey,
+      );
       const snapshot = await context.lifecycle.resume({
         disposition,
         instanceId: context.binding.instance.instanceId,
