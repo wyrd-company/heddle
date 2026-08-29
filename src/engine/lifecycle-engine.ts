@@ -255,6 +255,23 @@ export class LifecycleEngine {
     }
 
     if (!landedAsExpected(result, expected)) {
+      const executionId = executionIdFrom(result.serializedContext);
+      const executionIds =
+        executionId === undefined ||
+        lifecycleContext.executionIds.includes(executionId)
+          ? lifecycleContext.executionIds
+          : [...lifecycleContext.executionIds, executionId];
+      const current = this.persistence.getInstance(record.instanceId);
+      if (current === undefined) {
+        throw new Error(`Instance does not exist: ${record.instanceId}`);
+      }
+      this.persistence.updateInstance(
+        record.instanceId,
+        writeLifecycleContext(current.state, {
+          ...lifecycleContext,
+          executionIds,
+        }),
+      );
       this.persistence.appendEvent(record.instanceId, attentionEvent, {
         actualAwaitingNodeIds: awaitingNodeIdsFrom(result.serializedContext),
         actualStatus: result.status,

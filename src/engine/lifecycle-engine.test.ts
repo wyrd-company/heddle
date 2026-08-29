@@ -223,9 +223,8 @@ describe("LifecycleEngine", () => {
   it("rejects action routing and cycle nodes without joinStrategy any", async () => {
     const actionBlueprint = sampleBlueprint();
     actionBlueprint.edges[1] = {
+      ...actionBlueprint.edges[1]!,
       action: "adjust",
-      source: "taste",
-      target: "season",
     };
     const actionFixture = await makeFixture(actionBlueprint);
 
@@ -234,8 +233,22 @@ describe("LifecycleEngine", () => {
         blueprintPath: actionFixture.blueprintPath,
         instanceId: "sample-a",
       }),
-    ).rejects.toThrow(BlueprintValidationError);
+    ).rejects.toThrow(/condition edges, not action edges/);
     actionFixture.persistence.close();
+
+    const conditionBlueprint = sampleBlueprint();
+    conditionBlueprint.edges[1] = {
+      ...conditionBlueprint.edges[1]!,
+      condition: "result.output.adjust",
+    };
+    const conditionFixture = await makeFixture(conditionBlueprint);
+    await expect(
+      conditionFixture.engine.start({
+        blueprintPath: conditionFixture.blueprintPath,
+        instanceId: "sample-condition",
+      }),
+    ).rejects.toThrow(BlueprintValidationError);
+    conditionFixture.persistence.close();
 
     const joinBlueprint = sampleBlueprint();
     delete joinBlueprint.nodes[2]?.config;
@@ -297,6 +310,14 @@ describe("LifecycleEngine", () => {
     expect(attention[0]?.payload).toMatchObject({
       actualStatus: "completed",
       expectedAwaitingNodeIds: ["confirm"],
+    });
+    expect(
+      fixture.persistence.getInstance("sample-a")?.state.flowcraftContext,
+    ).toMatchObject({
+      executionIds: [expect.any(String), expect.any(String)],
+      pendingTransition: {
+        disposition: "accept",
+      },
     });
     fixture.persistence.close();
   });
