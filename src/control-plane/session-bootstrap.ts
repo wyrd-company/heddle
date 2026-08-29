@@ -42,6 +42,7 @@ import {
 } from "./worktree-creator.js";
 
 export interface SessionT3Client {
+  applyHarnessToolTimeout?: HarnessToolTimeoutConsumer;
   dispatch(
     command: T3DispatchCommand,
     providerContext?: T3ProviderDispatchContext,
@@ -85,7 +86,6 @@ export const harnessConfiguration = (): HarnessConfiguration => ({
 });
 
 export type SessionBootstrapDependencies = {
-  applyHarnessToolTimeout?: HarnessToolTimeoutConsumer;
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
   instantiateTodoList?: typeof instantiateTodoList;
   mintCorrelationToken?: () => string;
@@ -313,7 +313,7 @@ export const bootstrapStageSession = async (
   );
   const threadId = nextId();
   await applyHarnessToolTimeoutBeforeThread({
-    consumer: dependencies.applyHarnessToolTimeout,
+    consumer: dependencies.t3.applyHarnessToolTimeout,
     driver: input.providerContext.driver,
     sessionKey: input.sessionKey,
     threadId,

@@ -145,7 +145,6 @@ describe("stage session bootstrap", () => {
           },
         },
         {
-          applyHarnessToolTimeout,
           ensureWorktree: async ({ branch }) => ({
             branch,
             created: true,
@@ -162,7 +161,7 @@ describe("stage session bootstrap", () => {
             },
           },
           resolveWorkflowMcpStageContract,
-          t3: { dispatch },
+          t3: { applyHarnessToolTimeout, dispatch },
         },
       );
 
