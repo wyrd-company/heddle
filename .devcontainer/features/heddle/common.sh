@@ -40,6 +40,13 @@ ensure_s6_overlay() {
     done
 }
 
+ensure_apt_packages() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y
+    apt-get install -y --no-install-recommends "$@"
+    rm -rf /var/lib/apt/lists/*
+}
+
 pick_service_user() {
     local requested="${1:-automatic}"
     local candidate

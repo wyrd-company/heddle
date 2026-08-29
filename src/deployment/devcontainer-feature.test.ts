@@ -30,9 +30,15 @@ describe("Heddle devcontainer feature", () => {
   });
 
   it("binds s6, state-mount, installed-package, and Caddy agreements", async () => {
+    const common = await readFile(`${featureDirectory}/common.sh`, "utf8");
     const installer = await readFile(`${featureDirectory}/install.sh`, "utf8");
 
+    expect(common).toContain("apt-get install -y --no-install-recommends");
+    expect(installer).toContain(
+      "ensure_apt_packages build-essential ca-certificates python3",
+    );
     expect(installer).toContain('packages=("$(dirname "$0")"/heddle-*.tgz)');
+    expect(installer).toContain("--allow-scripts=better-sqlite3");
     expect(installer).toContain('mountpoint -q "\\${state_path}"');
     expect(installer).toContain(
       "touch /etc/s6-overlay/user-bundles.d/user/contents.d/heddle",

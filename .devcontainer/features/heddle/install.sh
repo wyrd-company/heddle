@@ -14,6 +14,7 @@ source "$(dirname "$0")/common.sh"
 require_root
 check_debian_family
 ensure_s6_overlay
+ensure_apt_packages build-essential ca-certificates python3
 
 [[ "${PORT}" =~ ^[0-9]+$ ]] \
     || err "port must be an integer between 1 and 65535."
@@ -57,7 +58,9 @@ log "Installing the packaged Heddle release"
 env \
     NPM_CONFIG_ENGINE_STRICT=true \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
-    npm install --global --prefix /usr/local "${packages[0]}"
+    npm install --global --prefix /usr/local \
+        --allow-scripts=better-sqlite3 \
+        "${packages[0]}"
 [ -x /usr/local/bin/heddle-server ] \
     || err "Heddle was not installed at /usr/local/bin/heddle-server."
 
