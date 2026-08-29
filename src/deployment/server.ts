@@ -197,6 +197,7 @@ export const startHeddleServerFromEnvironment = async (
   if (
     composition.production !== undefined &&
     (composition.board !== undefined ||
+      composition.blueprintEditor !== undefined ||
       composition.consoleActions !== undefined ||
       composition.consoleState !== undefined)
   ) {
@@ -234,7 +235,8 @@ export const startHeddleServerFromEnvironment = async (
             composition.consoleActions!,
         }),
     board,
-    blueprintEditor: composition.blueprintEditor,
+    blueprintEditor:
+      composition.production?.blueprintEditor ?? composition.blueprintEditor,
     state:
       composition.consoleState ??
       composition.production?.consoleState ??

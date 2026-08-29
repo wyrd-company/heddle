@@ -438,9 +438,10 @@ proposed-design:
     complete, self-contained installation.
 
     The deployment server accepts the canonical production composition and
-    shares its board, persistence, console state, console action port, MCP
-    handler, scheduler, and shutdown lifetime. Supplying separate board, console
-    state, or console action authorities with a production composition is
-    rejected. Its lifecycle reader projects the canonical instance, pinned
-    blueprint, and Flowcraft histories; it does not own a parallel blueprint or
-    event store.
+    shares its board, persistence, console state, console action port,
+    repository blueprint editor, MCP handler, scheduler, and shutdown lifetime.
+    The editor uses the lifecycle engine's repository root and mechanical effect
+    registry. Supplying separate board, console state, console action, or
+    blueprint-editor authorities with a production composition is rejected. Its
+    lifecycle reader projects the canonical instance, pinned blueprint, and
+    Flowcraft histories; it does not own a parallel blueprint or event store.

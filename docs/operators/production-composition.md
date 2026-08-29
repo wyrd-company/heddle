@@ -11,8 +11,10 @@ relationships:
 One production composition owns one workspace. Construct it with
 `createProductionComposition`, supply it to `startHeddleServerFromEnvironment`,
 and use the same composition for the server, console, MCP endpoint, scheduler,
-attention queue, and persistence lifetime. The factory rejects a second live
-composition for the same board directory.
+attention queue, repository blueprint editor, and persistence lifetime. The
+editor is the accepted `BlueprintArtifactEditor` over the same repository root
+and mechanical effect registry as the lifecycle engine. The factory rejects a
+second live composition for the same board directory.
 
 Configuration conforms to `schemas/production-configuration.json`. Required
 workspace values are the absolute board, repository, state, and optional

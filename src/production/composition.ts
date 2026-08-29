@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { KanbanBoardAdapter } from "../board-adapter/index.js";
 import type {
   ConsoleAttentionActionPort,
+  ConsoleBlueprintEditor,
   ConsoleStateSource,
 } from "../console/index.js";
 import {
@@ -18,7 +19,11 @@ import {
   type SessionObservationT3Client,
   type SessionT3Client,
 } from "../control-plane/index.js";
-import { LifecycleEngine, LifecycleResolver } from "../engine/index.js";
+import {
+  BlueprintArtifactEditor,
+  LifecycleEngine,
+  LifecycleResolver,
+} from "../engine/index.js";
 import {
   createWorkflowMcpHttpHandler,
   EscalationCoordinator,
@@ -68,6 +73,7 @@ export type ProductionCompositionOptions = {
 export type ProductionComposition = {
   attention: DurableAttentionQueue;
   board: KanbanBoardAdapter;
+  blueprintEditor: ConsoleBlueprintEditor;
   close(): Promise<void>;
   consoleActions: ConsoleAttentionActionPort;
   consoleState: ConsoleStateSource;
@@ -105,8 +111,9 @@ export const createProductionComposition = (
       options.pushoverTransport ??
         new HttpPushoverTransport(configuration.pushover.apiUrl),
     );
+    const effects = createMechanicalNodeEffects({ board });
     const lifecycle = new LifecycleEngine({
-      effects: createMechanicalNodeEffects({ board }),
+      effects,
       persistence,
       repositoryRoot: configuration.repositoryRoot,
     });
@@ -225,6 +232,10 @@ export const createProductionComposition = (
     return {
       attention,
       board,
+      blueprintEditor: new BlueprintArtifactEditor({
+        effects,
+        repositoryRoot: configuration.repositoryRoot,
+      }),
       consoleActions,
       consoleState: new ProductionConsoleState(
         persistence,

@@ -167,6 +167,24 @@ describe("deployed Heddle service", () => {
       startHeddleServerFromEnvironment(
         { HEDDLE_HOST: "127.0.0.1", HEDDLE_PORT: "0" },
         {
+          blueprintEditor: {
+            load: async () => {
+              throw new Error("not used");
+            },
+            save: async () => {
+              throw new Error("not used");
+            },
+          },
+          production,
+        },
+      ),
+    ).rejects.toThrow(
+      "A production composition owns its board and console state boundaries",
+    );
+    await expect(
+      startHeddleServerFromEnvironment(
+        { HEDDLE_HOST: "127.0.0.1", HEDDLE_PORT: "0" },
+        {
           consoleActions: { execute: async () => undefined },
           production,
         },
@@ -235,6 +253,14 @@ describe("deployed Heddle service", () => {
       currentStageIds: ["implement"],
       instanceId: `task-${fixture.taskId}`,
       taskId: fixture.taskId,
+    });
+    const blueprint = await globalThis.fetch(
+      `http://127.0.0.1:${service.port}/api/blueprints/sample`,
+    );
+    expect(blueprint.status).toBe(200);
+    await expect(blueprint.json()).resolves.toMatchObject({
+      blueprint: { id: "sample" },
+      path: "blueprints/sample.json",
     });
     const unavailableLifecycle = await globalThis.fetch(
       `http://127.0.0.1:${service.port}/api/lifecycle?task=999&after=0`,
