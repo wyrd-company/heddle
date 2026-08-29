@@ -11,8 +11,11 @@ import {
 } from "flowcraft";
 
 import { BlueprintValidationError } from "./errors.js";
+import {
+  combineLandings,
+  combineMatchedLandings,
+} from "./landing-combinations.js";
 import type {
-  ExpectedLanding,
   ExpectedLandings,
   LifecycleBlueprint,
   LifecycleEdge,
@@ -146,40 +149,6 @@ export const expectedLanding = (
   entryNodeIds: string[],
 ): ExpectedLandings => {
   const nodesById = new Map(blueprint.nodes.map((node) => [node.id, node]));
-  const merge = (
-    left: ExpectedLanding,
-    right: ExpectedLanding,
-  ): ExpectedLanding => ({
-    awaitingNodeIds: [
-      ...new Set([...left.awaitingNodeIds, ...right.awaitingNodeIds]),
-    ].sort(),
-    terminalNodeIds: [
-      ...new Set([...left.terminalNodeIds, ...right.terminalNodeIds]),
-    ].sort(),
-  });
-  const combine = (groups: ExpectedLandings[]): ExpectedLandings =>
-    groups.reduce<ExpectedLandings>(
-      (combinations, alternatives) =>
-        combinations.flatMap((combination) =>
-          alternatives.map((alternative) => merge(combination, alternative)),
-        ),
-      [{ awaitingNodeIds: [], terminalNodeIds: [] }],
-    );
-  const combineMatched = (groups: ExpectedLandings[]): ExpectedLandings =>
-    groups
-      .reduce<ExpectedLandings>(
-        (combinations, alternatives) => [
-          ...combinations,
-          ...combinations.flatMap((combination) =>
-            alternatives.map((alternative) => merge(combination, alternative)),
-          ),
-        ],
-        [{ awaitingNodeIds: [], terminalNodeIds: [] }],
-      )
-      .filter(
-        ({ awaitingNodeIds, terminalNodeIds }) =>
-          awaitingNodeIds.length > 0 || terminalNodeIds.length > 0,
-      );
   const visit = (nodeId: string, active: Set<string>): ExpectedLandings => {
     if (active.has(nodeId)) {
       throw new BlueprintValidationError(
@@ -210,11 +179,11 @@ export const expectedLanding = (
       );
     }
     return conditionalCount === edges.length
-      ? combineMatched(groups)
-      : combine(groups);
+      ? combineMatchedLandings(groups)
+      : combineLandings(groups);
   };
 
-  const alternatives = combine(
+  const alternatives = combineLandings(
     entryNodeIds.map((nodeId) => visit(nodeId, new Set())),
   ).filter(
     ({ awaitingNodeIds, terminalNodeIds }) =>
@@ -226,6 +195,11 @@ export const expectedLanding = (
     );
   }
   for (const alternative of alternatives) {
+    if (alternative.awaitingNodeIds.length > 1) {
+      throw new BlueprintValidationError(
+        `Route from ${entryNodeIds.map((id) => JSON.stringify(id)).join(", ")} can land at more than one wait node`,
+      );
+    }
     if (
       alternative.awaitingNodeIds.length > 0 &&
       alternative.terminalNodeIds.length > 0

@@ -5,7 +5,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { LifecycleEffect } from "./index.js";
+import type { LifecycleBlueprint, LifecycleEffect } from "./index.js";
 import {
   cleanupFixtures,
   conditionalTerminalBlueprint,
@@ -30,6 +30,85 @@ afterEach(async () => {
 });
 
 describe("LifecycleEngine concurrent execution", () => {
+  it("rejects a landing with multiple wait nodes", async () => {
+    const blueprint: LifecycleBlueprint = {
+      id: "parallel-sample",
+      nodes: [
+        { id: "select", uses: "select" },
+        { id: "left", uses: "wait" },
+        { id: "right", uses: "wait" },
+        { id: "left-done", uses: "finish" },
+        { id: "right-done", uses: "finish" },
+      ],
+      edges: [
+        { source: "select", target: "left", condition: "result.output.left" },
+        {
+          source: "select",
+          target: "right",
+          condition: "result.output.right",
+        },
+        {
+          source: "left",
+          target: "left-done",
+          disposition: "continue",
+          condition: "result.output.dispositions.continue",
+        },
+        {
+          source: "right",
+          target: "right-done",
+          disposition: "continue",
+          condition: "result.output.dispositions.continue",
+        },
+      ],
+    };
+    const fixture = await makeFixture(blueprint, {
+      finish: async () => ({ complete: true }),
+      select: async () => ({ left: true, right: true }),
+    });
+
+    await expect(
+      fixture.engine.start({
+        blueprintPath: fixture.blueprintPath,
+        instanceId: "sample-a",
+      }),
+    ).rejects.toThrow(/more than one wait node/);
+    fixture.persistence.close();
+  });
+
+  it("rejects expected landing expansion beyond the supported limit", async () => {
+    const optionIds = Array.from(
+      { length: 9 },
+      (_, index) => `option-${index}`,
+    );
+    const blueprint: LifecycleBlueprint = {
+      id: "wide-sample",
+      nodes: [
+        { id: "select", uses: "select" },
+        ...optionIds.map((id) => ({ id, uses: "finish" })),
+      ],
+      edges: optionIds.map((target, index) => ({
+        source: "select",
+        target,
+        condition: `result.output.option${index}`,
+      })),
+    };
+    const fixture = await makeFixture(blueprint, {
+      finish: async () => ({ complete: true }),
+      select: async () =>
+        Object.fromEntries(
+          optionIds.map((_, index) => [`option${index}`, true]),
+        ),
+    });
+
+    await expect(
+      fixture.engine.start({
+        blueprintPath: fixture.blueprintPath,
+        instanceId: "sample-a",
+      }),
+    ).rejects.toThrow(/more than 255 expected landing alternatives/);
+    fixture.persistence.close();
+  });
+
   it("merges overlapping retries of the same pending disposition", async () => {
     let attempts = 0;
     let releaseFirst: (() => void) | undefined;
