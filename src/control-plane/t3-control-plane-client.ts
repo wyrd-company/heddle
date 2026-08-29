@@ -244,7 +244,7 @@ export class T3ControlPlaneClient {
       commandId,
       threadId,
       requestId,
-      decision,
+      decision: decision === "reject" ? "decline" : decision,
       createdAt: new Date().toISOString(),
     });
   }

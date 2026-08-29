@@ -36,7 +36,8 @@ export const approvalResponseRecorded = (
 ): boolean => {
   const activity = resolvedActivity(snapshot, "approval.resolved", requestId);
   if (activity === undefined) return false;
-  if (activity.payload?.["decision"] !== decision) {
+  const providerDecision = decision === "reject" ? "decline" : decision;
+  if (activity.payload?.["decision"] !== providerDecision) {
     throw new Error(
       `T3 approval '${requestId}' resolved with a different decision`,
     );

@@ -202,6 +202,45 @@ describe("T3ControlPlaneClient", () => {
     });
   });
 
+  it("translates the domain reject action to T3 decline", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          threads: [{ id: "thread-1", hasPendingApprovals: true }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          thread: {
+            activities: [
+              {
+                kind: "approval.requested",
+                payload: { requestId: "request-1" },
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ sequence: 42 }));
+    const client = new T3ControlPlaneClient({
+      baseUrl: "http://t3.test",
+      accessToken: "access-token",
+      fetch,
+    });
+
+    await expect(
+      client.respondToApproval("thread-1", "request-1", "reject", "command-1"),
+    ).resolves.toEqual({ sequence: 42 });
+    expect(JSON.parse(String(fetch.mock.calls[2]?.[1]?.body))).toMatchObject({
+      type: "thread.approval.respond",
+      commandId: "command-1",
+      threadId: "thread-1",
+      requestId: "request-1",
+      decision: "decline",
+    });
+  });
+
   it("dispatches a user-input response after its preconditions pass", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

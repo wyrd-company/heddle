@@ -287,6 +287,24 @@ describe.skipIf(!t3Binary)(
       throw new Error(`Isolated T3 did not expose pending ${kind}`);
     };
 
+    const awaitResolvedApproval = async (
+      threadId: string,
+      requestId: string,
+    ): Promise<Record<string, unknown>> => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const activity = (await client.getThread(threadId)).thread.activities
+          ?.filter(
+            (entry) =>
+              entry.kind === "approval.resolved" &&
+              entry.payload?.requestId === requestId,
+          )
+          .at(-1);
+        if (activity?.payload) return activity.payload;
+        await delay(100);
+      }
+      throw new Error("Isolated T3 did not record the resolved approval");
+    };
+
     it("projects and answers approval and user-input through the pinned T3 client", async () => {
       const sessionObserver = observer();
       const approvalTarget = await createThread(
@@ -429,6 +447,41 @@ describe.skipIf(!t3Binary)(
           ),
         );
       }
+    }, 20_000);
+
+    it("translates a rejected approval through pinned T3", async () => {
+      const sessionObserver = observer();
+      const approvalTarget = await createThread(
+        "sample-rejected-approval",
+        "REQUEST_APPROVAL",
+      );
+      const approval = await awaitAttention(
+        sessionObserver,
+        approvalTarget,
+        "approval",
+      );
+      if (approval.requestId === undefined) {
+        throw new Error("Pinned T3 approval has no request identity");
+      }
+
+      await sessionObserver.answerApproval(
+        approvalTarget,
+        approval.requestId,
+        "reject",
+        "sample-rejected-approval-command",
+      );
+
+      expect(
+        (await client.getShell()).threads.find(
+          ({ id }) => id === approvalTarget.threadId,
+        )?.hasPendingApprovals,
+      ).toBe(false);
+      await expect(
+        awaitResolvedApproval(approvalTarget.threadId, approval.requestId),
+      ).resolves.toMatchObject({
+        decision: "decline",
+        requestId: approval.requestId,
+      });
     }, 20_000);
 
     it("archives only after recorded lifecycle terminality and removes the thread from the normal shell", async () => {

@@ -33,6 +33,14 @@ describe("T3 response reconciliation", () => {
     expect(approvalResponseRecorded(recorded, "request-other", "accept")).toBe(
       false,
     );
+
+    const declined = snapshot("approval.resolved", {
+      decision: "decline",
+      requestId: "request-two",
+    });
+    expect(approvalResponseRecorded(declined, "request-two", "reject")).toBe(
+      true,
+    );
   });
 
   it("accepts only the recorded user-input answers for the intended request", () => {
