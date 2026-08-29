@@ -48,6 +48,12 @@ const assertPathSegment = (label: string, value: string): void => {
   }
 };
 
+const assertBranchOperand = (branch: string): void => {
+  if (branch.trim() === "") throw new TypeError("branch must not be empty");
+  if (branch.startsWith("-"))
+    throw new TypeError("branch must not be option-shaped");
+};
+
 const resolveCommitRef = async (
   repositoryRoot: string,
   baseRef: string,
@@ -112,8 +118,7 @@ export const ensureWorktree = async (
 ): Promise<PreparedWorktree> => {
   assertPathSegment("repositoryName", input.repositoryName);
   assertPathSegment("worktreeName", input.worktreeName);
-  if (input.branch.trim() === "")
-    throw new TypeError("branch must not be empty");
+  assertBranchOperand(input.branch);
   if (input.baseRef.trim() === "")
     throw new TypeError("baseRef must not be empty");
 
