@@ -217,6 +217,19 @@ describe("SqlitePersistence", () => {
     recovered.close();
   });
 
+  it("does not resurrect a deleted instance during replay", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const writer = new SqlitePersistence({ stateDirectory });
+    writer.createInstance("record-a", initialState);
+    writer.deleteInstance("record-a");
+    writer.close();
+
+    const recovered = new SqlitePersistence({ stateDirectory });
+    expect(recovered.getInstance("record-a")).toBeUndefined();
+    expect(recovered.replayEvents("record-a")).toHaveLength(2);
+    recovered.close();
+  });
+
   it("provides the Flowcraft SQLite history adapter on the configured database", async () => {
     const persistence = new SqlitePersistence({
       stateDirectory: await makeStateDirectory(),
