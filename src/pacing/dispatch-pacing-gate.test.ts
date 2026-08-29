@@ -294,6 +294,16 @@ describe("DispatchPacingGate", () => {
       "maxConcurrentSessions must be a non-negative safe integer",
     ],
     [
+      "fractional WIP limit",
+      configuration({ maxConcurrentSessions: 1.5 }),
+      "maxConcurrentSessions must be a non-negative safe integer",
+    ],
+    [
+      "unsafe WIP limit",
+      configuration({ maxConcurrentSessions: 9_007_199_254_740_992 }),
+      "maxConcurrentSessions must be a non-negative safe integer",
+    ],
+    [
       "wrong window length",
       { ...configuration(), usageWindowHours: 4 as 5 },
       "usageWindowHours must be 5",
@@ -304,8 +314,22 @@ describe("DispatchPacingGate", () => {
       "subagents.maxDepth must be a non-negative safe integer",
     ],
     [
+      "unsafe depth limit",
+      configuration({
+        subagents: { maxDepth: 9_007_199_254_740_992, maxFanOut: 2 },
+      }),
+      "subagents.maxDepth must be a non-negative safe integer",
+    ],
+    [
       "fractional fan-out limit",
       configuration({ subagents: { maxDepth: 2, maxFanOut: 1.5 } }),
+      "subagents.maxFanOut must be a non-negative safe integer",
+    ],
+    [
+      "unsafe fan-out limit",
+      configuration({
+        subagents: { maxDepth: 2, maxFanOut: 9_007_199_254_740_992 },
+      }),
       "subagents.maxFanOut must be a non-negative safe integer",
     ],
     [

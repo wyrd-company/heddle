@@ -59,9 +59,18 @@ describe("pacing configuration artifact", () => {
     ["a different window", { usageWindowHours: 4 }],
     ["negative WIP capacity", { maxConcurrentSessions: -1 }],
     ["unsafe WIP capacity", { maxConcurrentSessions: 9_007_199_254_740_992 }],
+    ["fractional WIP capacity", { maxConcurrentSessions: 1.5 }],
     ["a whitespace default provider", { defaultProvider: " " }],
     ["a fractional depth", { subagents: { maxDepth: 1.5, maxFanOut: 2 } }],
+    [
+      "an unsafe depth",
+      { subagents: { maxDepth: 9_007_199_254_740_992, maxFanOut: 2 } },
+    ],
     ["a fractional fan-out", { subagents: { maxDepth: 2, maxFanOut: 1.5 } }],
+    [
+      "an unsafe fan-out",
+      { subagents: { maxDepth: 2, maxFanOut: 9_007_199_254_740_992 } },
+    ],
     [
       "a whitespace provider key",
       { providerBudgets: { " ": { usageLimit: 1 } } },
