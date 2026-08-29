@@ -68,10 +68,60 @@ describe("SqlitePersistence", () => {
     persistence.deleteInstance("record-a");
     expect(persistence.getInstance("record-a")).toBeUndefined();
     persistence.close();
+  });
+
+  it("places its database in the configured state directory", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.close();
 
     expect(
       await readFile(join(stateDirectory, "heddle-state.sqlite")),
     ).not.toHaveLength(0);
+    expect(() => new SqlitePersistence({ stateDirectory: " " })).toThrow(
+      /stateDirectory/,
+    );
+  });
+
+  it("rejects invalid instance writes", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+
+    expect(() => persistence.createInstance("", initialState)).toThrow(
+      /instanceId/,
+    );
+    expect(() => persistence.createInstance("record-a", initialState)).toThrow(
+      /already exists/,
+    );
+    expect(() => persistence.updateInstance("missing", initialState)).toThrow(
+      /does not exist/,
+    );
+    expect(() => persistence.deleteInstance("missing")).toThrow(
+      /does not exist/,
+    );
+    expect(persistence.replayEvents("record-a")).toHaveLength(1);
+    persistence.close();
+  });
+
+  it("rejects invalid external events without changing history", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+
+    expect(() =>
+      persistence.appendEvent("missing", "sample:observed", null),
+    ).toThrow(/does not exist/);
+    expect(() => persistence.appendEvent("record-a", " ", null)).toThrow(
+      /must not be empty/,
+    );
+    expect(() =>
+      persistence.appendEvent("record-a", "instance:updated", initialState),
+    ).toThrow(/reserved/);
+    expect(persistence.replayEvents("record-a")).toHaveLength(1);
+    persistence.close();
   });
 
   it("appends and replays events in insertion order", async () => {
