@@ -85,6 +85,12 @@ describe("workflow MCP escalation tools", () => {
         escalationId: "window-choice",
       },
     });
+    expect(() =>
+      subject.coordinator.answerAsOperator({
+        ...operatorAnswer,
+        answers: { "delivery-window": "wait" },
+      }),
+    ).toThrow(/already answered differently/);
     expect(subject.coordinator.answerAsOperator(operatorAnswer)).toMatchObject({
       answers: sampleEscalationAnswer,
     });
