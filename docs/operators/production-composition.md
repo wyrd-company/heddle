@@ -68,7 +68,10 @@ accepted lifecycle or escalation contract. SQLite stores attention and adapter
 completion records. Reusing an attention ID with a different payload fails
 closed as a durable-identity disagreement. A restart replays an unfinished
 escalation route without adding a second attention entry or repeating a completed
-Pushover delivery.
+Pushover delivery. The current console catalog lists only unresolved attention.
+An accepted disposition performs its canonical effect before marking the entry
+resolved. The resolved record remains durable so the same stable ID cannot raise
+a second entry after restart.
 Pushover transport is an explicit port so qualification can use a synthetic
 transport. Routine operation uses `HttpPushoverTransport`.
 

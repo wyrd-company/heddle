@@ -258,7 +258,11 @@ proposed-design:
     completion is durable, so a process that stops after an effect succeeds but
     before its route event is appended can replay the route without duplicating
     the attention entry or notification delivery. The escalation remains
-    pending and answerable until the accepted answer event is recorded.
+    pending and answerable until the accepted answer event is recorded. An
+    accepted console disposition invokes the canonical escalation or T3 action
+    before recording the attention entry as resolved. Resolved entries leave the
+    current console catalog but retain their stable identity for restart
+    deduplication.
 
     Harness-native question tools serve assistive tasks, where the
     operator already works in T3's UI. The provider adapters map
@@ -406,9 +410,10 @@ proposed-design:
     replaying its bootstrap.
 
     The same database stores canonical scheduling intent, durable attention
-    entries, and stable-ID adapter completion. These records make instance
-    start, session activation, attention routing, and notification replay
-    idempotent without introducing another lifecycle or attention authority.
+    entries with their unresolved or resolved queue lifecycle, and stable-ID
+    adapter completion. These records make instance start, session activation,
+    attention routing, action replay, and notification replay idempotent without
+    introducing another lifecycle or attention authority.
   deployment: >
     Heddle installs as a devcontainer feature in each workspace
     container, following the t3code-server pattern: an s6-supervised
