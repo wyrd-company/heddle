@@ -124,4 +124,39 @@ describe("ensureWorktree", () => {
       }),
     ).rejects.toThrow(/safe path segment/);
   });
+
+  it("rejects empty branch and base references", async () => {
+    const common = {
+      repositoryName: "sample-repository",
+      repositoryRoot: "/workspaces/sample-repository",
+      worktreeName: "task-prepare",
+    };
+
+    await expect(
+      ensureWorktree({ ...common, baseRef: "main", branch: " " }),
+    ).rejects.toThrow(/branch/);
+    await expect(
+      ensureWorktree({ ...common, baseRef: " ", branch: "task/prepare" }),
+    ).rejects.toThrow(/baseRef/);
+  });
+
+  it("rejects a nested directory that is not a worktree root", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+    scratchDirectories.push(scratch);
+    const worktreesRoot = join(scratch, "worktrees");
+    const repositoryRoot = join(worktreesRoot, "sample-repository");
+    await initializeRepository(repositoryRoot);
+    await mkdir(join(repositoryRoot, "task-prepare"));
+
+    await expect(
+      ensureWorktree({
+        baseRef: "main",
+        branch: "main",
+        repositoryName: "sample-repository",
+        repositoryRoot,
+        worktreeName: "task-prepare",
+        worktreesRoot,
+      }),
+    ).rejects.toThrow(/root/);
+  });
 });

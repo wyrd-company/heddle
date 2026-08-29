@@ -144,4 +144,26 @@ describe("ensureCorrelationToken", () => {
       ensureCorrelationToken(store, "instance-1", "session-1", () => " "),
     ).toThrow(/token/);
   });
+
+  it("rejects an empty token already stored on the instance", () => {
+    const record: InstanceRecord = {
+      instanceId: "instance-1",
+      state: {
+        ...initialState(),
+        correlationTokens: { "session-1": " " },
+      },
+      version: 1,
+    };
+
+    expect(() =>
+      ensureCorrelationToken(
+        {
+          getInstance: () => record,
+          compareAndSwapInstance: () => record,
+        },
+        "instance-1",
+        "session-1",
+      ),
+    ).toThrow(/empty correlation token/);
+  });
 });
