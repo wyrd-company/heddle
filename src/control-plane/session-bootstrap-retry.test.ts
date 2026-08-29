@@ -161,6 +161,59 @@ describe("stage session cold retry guards", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it("rejects a retry when the stored parent session disagrees", async () => {
+    const memory = memoryStore({
+      ...initialState(),
+      correlationTokens: {
+        child: "token-child",
+        "parent-a": "token-parent-a",
+        "parent-b": "token-parent-b",
+      },
+      handoffs: [
+        {
+          correlationToken: "token-parent-a",
+          handoff: "parent a handoff",
+          kind: "stage-handoff",
+          sessionKey: "parent-a",
+          workflowMcp,
+        },
+        {
+          correlationToken: "token-parent-b",
+          handoff: "parent b handoff",
+          kind: "stage-handoff",
+          sessionKey: "parent-b",
+          workflowMcp,
+        },
+        {
+          correlationToken: "token-child",
+          handoff: "child handoff",
+          kind: "stage-handoff",
+          parentSessionKey: "parent-a",
+          sessionKey: "child",
+          workflowMcp,
+        },
+      ],
+    });
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(
+        { ...input, parentSessionKey: "parent-b", sessionKey: "child" },
+        {
+          persistence: memory.store,
+          resolveWorkflowMcpStageContract,
+          t3: { dispatch },
+          ensureWorktree: async ({ branch }) => ({
+            branch,
+            created: false,
+            path: "/workspaces/worktrees/sample-repository/task-prepare",
+          }),
+        },
+      ),
+    ).rejects.toThrow(/parent session disagree/);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("persists and replays the handoff after the initial turn fails", async () => {
     const memory = memoryStore();
     const commands: Record<string, unknown>[] = [];

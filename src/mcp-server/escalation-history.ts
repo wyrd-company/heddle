@@ -209,7 +209,7 @@ export class EscalationHistory {
 
   pending(instanceId: string): PendingEscalation[] {
     const opened = new Map<string, PendingEscalation>();
-    const answered = new Set<string>();
+    const answered = new Map<string, AnsweredEscalation>();
     for (const event of this.persistence.replayEvents(instanceId)) {
       if (event.type === escalationEventTypes.opened) {
         const value = openedFrom(event);
@@ -219,14 +219,19 @@ export class EscalationHistory {
         );
       } else if (event.type === escalationEventTypes.answered) {
         const value = answeredFrom(event);
-        answered.add(
+        answered.set(
           escalationKey(instanceId, value.ownerSessionKey, value.escalationId),
+          value,
         );
       }
     }
-    return [...opened.entries()]
-      .filter(([key]) => !answered.has(key))
-      .map(([, value]) => value);
+    for (const [key, value] of answered) {
+      const pending = opened.get(key);
+      if (pending === undefined) continue;
+      validateAnswers(pending, value.answers);
+      opened.delete(key);
+    }
+    return [...opened.values()];
   }
 
   routeTypes(opened: PendingEscalation): Set<string> {

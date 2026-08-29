@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,6 +16,7 @@ import {
 } from "../persistence/index.js";
 import {
   bootstrapStageSession,
+  harnessToolTimeoutConfiguration,
   steerStageSession,
   type SessionBootstrapDependencies,
 } from "./session-bootstrap.js";
@@ -62,6 +63,21 @@ afterEach(async () => {
 });
 
 describe("stage session bootstrap", () => {
+  it("keeps the documented harness timeout configuration executable", async () => {
+    const documentedDesign = await readFile(
+      join(process.cwd(), "docs/technical-designs/heddle.yml"),
+      "utf8",
+    );
+    const configured = harnessToolTimeoutConfiguration();
+
+    expect(documentedDesign).toContain(
+      `tool_timeout_sec = ${configured.codex.mcp_servers.heddle.tool_timeout_sec}`,
+    );
+    expect(documentedDesign).toContain(
+      `MCP_TOOL_TIMEOUT=${configured.claudeCode.environment.MCP_TOOL_TIMEOUT}`,
+    );
+  });
+
   it("replays an identical persisted handoff into a fresh cold-retry session", async () => {
     let record: InstanceRecord = {
       instanceId: "instance-1",

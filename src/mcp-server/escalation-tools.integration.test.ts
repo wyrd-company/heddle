@@ -217,15 +217,23 @@ describe("workflow MCP escalation tools", () => {
         ownerSessionKey: "top",
       },
     ]);
+    const recoveredBinding = await new WorkflowMcpSessionResolver(
+      recoveredPersistence,
+    ).resolve("token-replay");
+    const reattached = recovered.escalate(recoveredBinding, {
+      escalationId: "restart-choice",
+      questions: sampleEscalationQuestions,
+    });
     recovered.answerAsOperator({
       answers: sampleEscalationAnswer,
       escalationId: "restart-choice",
       instanceId: "instance-replay",
       ownerSessionKey: "top",
     });
-    const recoveredBinding = await new WorkflowMcpSessionResolver(
-      recoveredPersistence,
-    ).resolve("token-replay");
+    await expect(reattached).resolves.toEqual({
+      answers: sampleEscalationAnswer,
+      escalationId: "restart-choice",
+    });
     await expect(
       recovered.escalate(recoveredBinding, {
         escalationId: "restart-choice",
