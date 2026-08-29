@@ -42,6 +42,9 @@ describe("Heddle devcontainer feature", () => {
     expect(installer).toContain("--allow-scripts=better-sqlite3");
     expect(installer).toContain('mountpoint -q "\\${state_path}"');
     expect(installer).toContain("expected_kanban_version=0.37.0-fork+b9fc380");
+    expect(installer).toContain(
+      'observed_kanban_version="\\$(kanban-md --version',
+    );
     expect(installer).toContain("export HEDDLE_BOARD_PATH=${quoted_board}");
     expect(installer).toContain(
       "touch /etc/s6-overlay/user-bundles.d/user/contents.d/heddle",

@@ -78,7 +78,7 @@ set -euo pipefail
 
 state_path=${quoted_state}
 expected_kanban_version=0.37.0-fork+b9fc380
-observed_kanban_version="$(kanban-md --version 2>/dev/null || true)"
+observed_kanban_version="\$(kanban-md --version 2>/dev/null || true)"
 [[ "\${observed_kanban_version}" = *"\${expected_kanban_version}"* ]] || {
     echo "[heddle] ERROR: kanban-md \${expected_kanban_version} must be on PATH." >&2
     exit 1
