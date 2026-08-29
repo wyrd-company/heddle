@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import type { InstanceRecord } from "../persistence/index.js";
 import { validateBlueprint } from "./blueprint.js";
 import {
+  BlueprintValidationError,
   RebaseTargetNotAwaitableError,
   RebaseTargetNotFoundError,
   TransitionConflictError,
@@ -91,6 +92,11 @@ export const rebaseLifecycle = async (
     context.blueprintPath,
   );
   const pinned = await blueprintStore.pin(context.blueprintPath);
+  if (previousBlueprint.id !== pinned.blueprint.id) {
+    throw new BlueprintValidationError(
+      "Rebase blueprint artifact identity does not match the running instance",
+    );
+  }
   validateBlueprint(pinned.blueprint, effects);
   const target = pinned.blueprint.nodes.find(
     ({ id }) => id === input.targetState,

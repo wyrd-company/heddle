@@ -6,13 +6,15 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  BlueprintValidationError,
   RebaseTargetNotAwaitableError,
   RebaseTargetNotFoundError,
   TransitionConflictError,
 } from "./errors.js";
+import { GitBlueprintStore } from "./git-blueprint-store.js";
 import {
   cleanupFixtures,
   makeFixture,
@@ -20,6 +22,7 @@ import {
 } from "./lifecycle-engine.test-support.js";
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupFixtures();
 });
 
@@ -169,6 +172,38 @@ describe("LifecycleEngine rebase", () => {
         awaitingNodeIds: ["taste"],
       },
     });
+    fixture.persistence.close();
+  });
+
+  it("rejects a historical blueprint with a different artifact identity", async () => {
+    const fixture = await makeFixture();
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    const before = fixture.persistence.getInstance("sample-a");
+    const read = GitBlueprintStore.prototype.read;
+    let reads = 0;
+    vi.spyOn(GitBlueprintStore.prototype, "read").mockImplementation(
+      async function (blobHash, path) {
+        const blueprint = await read.call(this, blobHash, path);
+        reads += 1;
+        return reads === 1 ? { ...blueprint, id: "other" } : blueprint;
+      },
+    );
+
+    await expect(
+      fixture.engine.rebase({
+        instanceId: "sample-a",
+        targetState: "taste",
+      }),
+    ).rejects.toEqual(
+      new BlueprintValidationError(
+        "Rebase blueprint artifact identity does not match the running instance",
+      ),
+    );
+
+    expect(fixture.persistence.getInstance("sample-a")).toEqual(before);
     fixture.persistence.close();
   });
 
