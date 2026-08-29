@@ -9,26 +9,13 @@
     "build": "tsc --project tsconfig.json",
     "test": "vitest run --config vitest.config.ts",
     "lint": "eslint src eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src",
-    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src",
-    "spike:viewer": "vite"
+    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json eslint.config.js vitest.config.ts src"
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
-  "dependencies": {
-    "@flowcraft/sqlite-history": "^1.0.0-alpha.1",
-    "flowcraft": "^2.10.1",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "tldraw": "^5.3.2"
-  },
-  "allowScripts": {
-    "better-sqlite3@12.11.1": true
-  },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
-    "@types/node": "^24.10.1",
     "@eslint/js": "^9.34.0",
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",
@@ -36,7 +23,6 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
-    "vite": "^8.2.2",
     "vitest": "^3.2.4"
   }
 }

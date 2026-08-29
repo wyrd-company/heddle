@@ -1,5 +1,5 @@
 data/
 dist/
 node_modules/
-viewer/vendor/
+**/viewer/vendor/
 package-lock.json
