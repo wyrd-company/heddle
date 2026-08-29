@@ -147,20 +147,39 @@ describe("LifecycleEngine concurrent execution", () => {
       instanceId: "sample-a",
       operationId: "operation-a",
     });
+    const completed = await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "sample-a",
+      operationId: "operation-b",
+    });
     const beforeLateCompletion =
       fixture.persistence.getInstance("sample-a")?.state.flowcraftContext;
     releaseFirst?.();
     const late = await first;
     const persisted =
       fixture.persistence.getInstance("sample-a")?.state.flowcraftContext;
+    const laterExecutionIds = completed.executionIds.filter(
+      (executionId) => !second.executionIds.includes(executionId),
+    );
 
     expect(second.executionIds).toHaveLength(2);
     expect(late.executionIds).toHaveLength(3);
-    expect(persisted).toMatchObject({
+    expect(late).toMatchObject({
       awaitingNodeIds: ["taste"],
-      executionIds: expect.arrayContaining(late.executionIds),
+      status: "awaiting",
+      validDispositions: ["accept", "adjust"],
+    });
+    expect(laterExecutionIds).toHaveLength(1);
+    expect(late.executionIds).not.toContain(laterExecutionIds[0]);
+    expect(persisted).toMatchObject({
+      awaitingNodeIds: [],
+      executionIds: expect.arrayContaining([
+        ...completed.executionIds,
+        ...late.executionIds,
+      ]),
       pendingTransition: null,
       serializedContext: serializedContextFrom(beforeLateCompletion),
+      status: "completed",
     });
     fixture.persistence.close();
   });
