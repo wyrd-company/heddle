@@ -346,6 +346,10 @@ describe("Reconciler", () => {
     expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
       ready.id,
     ]);
+    expect(subject.instances.starts[0]?.dispatch).toEqual({
+      depth: 0,
+      provider: "provider-a",
+    });
     expect(subject.instances.instances.at(-1)).toMatchObject({
       instanceId: "task-81",
       state: "waiting",

@@ -12,6 +12,7 @@ import {
   type ReconcilerInstanceController,
   type ReconcilerLifecycleResolver,
   type ReconcilerPacing,
+  type StartReconcilerInstanceInput,
 } from "./index.js";
 
 export const task = (
@@ -66,11 +67,7 @@ class FixtureBoard implements ReconcilerBoard {
 class FixtureInstances implements ReconcilerInstanceController {
   readonly deferrals: ReconcilerInstance[] = [];
   readonly instances: ReconcilerInstance[] = [];
-  readonly starts: Array<{
-    blueprintPath: string;
-    instanceId: string;
-    task: BoardTask;
-  }> = [];
+  readonly starts: StartReconcilerInstanceInput[] = [];
 
   async listInstances(): Promise<ReconcilerInstance[]> {
     return this.instances.map((instance) => ({ ...instance }));
@@ -87,11 +84,7 @@ class FixtureInstances implements ReconcilerInstanceController {
     this.replace(deferred);
   }
 
-  async start(input: {
-    blueprintPath: string;
-    instanceId: string;
-    task: BoardTask;
-  }): Promise<void> {
+  async start(input: StartReconcilerInstanceInput): Promise<void> {
     this.starts.push(input);
     this.replace({
       boardStatus: input.task.status,
