@@ -50,6 +50,28 @@ export const stageTodoList = (
   return { list, state: record.state.todoState };
 };
 
+export const stageTodoStateForHandoff = (
+  record: InstanceRecord,
+  sessionKey: string,
+  stage: string,
+  storedHandoffSessionKeys: readonly string[],
+): { list: TodoList; state: TodoState } => {
+  const { list, state } = stageTodoList(record, sessionKey, stage);
+  const eligibleSessionKeys = new Set([
+    ...storedHandoffSessionKeys,
+    sessionKey,
+  ]);
+  return {
+    list,
+    state: {
+      ...state,
+      lists: state.lists.filter((candidate) =>
+        eligibleSessionKeys.has(candidate.sessionKey),
+      ),
+    },
+  };
+};
+
 export const mutateStageTodoList = (
   store: TodoStateStore,
   input: { instanceId: string; sessionKey: string; stage: string },

@@ -198,7 +198,7 @@ describe("stage session cold retry guards", () => {
     expect(memory.record.state.handoffs[0]?.["handoff"]).toBe(result.handoff);
   });
 
-  it("rejects an old-stage handoff when todo instantiation crosses a lifecycle advance", async () => {
+  it("retains but excludes an abandoned activation list from the next valid handoff", async () => {
     const memory = memoryStore({
       ...initialState(),
       flowcraftContext: { awaitingNodeIds: ["prepare"] },
@@ -255,6 +255,54 @@ describe("stage session cold retry guards", () => {
     });
     expect(memory.record.state.handoffs).toHaveLength(0);
     expect(dispatch).not.toHaveBeenCalled();
+
+    expect(memory.record.state.todoState).toMatchObject({
+      lists: [{ sessionKey: "prepare-1", stage: "prepare" }],
+    });
+
+    const nextInput: SessionBootstrapInput = {
+      ...input,
+      handoff: {
+        ...input.handoff,
+        skillPointer: "skill://next",
+        stage: { kind: "standard", name: "next", priorStageOutputs: [] },
+      },
+      sessionKey: "next-1",
+    };
+    const nextWorkflowMcp = {
+      ...workflowMcp,
+      stage: "next",
+      todoTemplate: "sample-next",
+    };
+    const next = await bootstrapStageSession(nextInput, {
+      persistence: memory.store,
+      instantiateTodoList,
+      resolveWorkflowMcpStageContract: async () => nextWorkflowMcp,
+      t3: { dispatch },
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: false,
+        path: "/workspaces/worktrees/sample-repository/task-next",
+      }),
+      mintCorrelationToken: () => "next-correlation-token",
+      nextId: () => globalThis.crypto.randomUUID(),
+    });
+    const nextHandoff = JSON.parse(next.handoff) as {
+      todoList: TodoState;
+    };
+
+    expect(
+      nextHandoff.todoList.lists.map(({ sessionKey }) => sessionKey),
+    ).toEqual(["next-1"]);
+    expect(
+      (memory.record.state.todoState as TodoState).lists.map(
+        ({ sessionKey }) => sessionKey,
+      ),
+    ).toEqual(["prepare-1", "next-1"]);
+    expect(memory.record.state.handoffs).toMatchObject([
+      { sessionKey: "next-1", workflowMcp: { stage: "next" } },
+    ]);
+    expect(dispatch).toHaveBeenCalledTimes(2);
   });
 
   it("fails closed when the stored handoff token disagrees", async () => {

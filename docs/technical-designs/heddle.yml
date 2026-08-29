@@ -133,8 +133,10 @@ proposed-design:
     list belongs to the stage's agent, which can add, edit, and
     reorder items; the template itself never changes. The todo tools
     read and write that stored list, so progress persists across
-    session retries, appears in the console, and rides the handoff
-    into the next stage.
+    session retries and appears in the console. Each activation list
+    remains on the instance as history. A handoff carries its current
+    activation list and prior lists whose activations own stored
+    handoffs; all other historical lists are excluded.
   subagents: >
     Delegation is a Heddle capability rather than a harness feature.
     The MCP suite includes subagent tools: spawn starts an

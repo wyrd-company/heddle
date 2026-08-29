@@ -12,7 +12,7 @@ import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
 import {
   ensureStageTodoList,
   instantiateTodoList,
-  stageTodoList,
+  stageTodoStateForHandoff,
 } from "../todo/index.js";
 import {
   ensureCorrelationToken,
@@ -246,10 +246,13 @@ const ensureStoredHandoff = async (
       continue;
     }
     const workflowMcp = await resolveStageContract(input, refreshed);
-    const { list: todoList, state: todoState } = stageTodoList(
+    const { list: todoList, state: todoState } = stageTodoStateForHandoff(
       refreshed,
       input.sessionKey,
       workflowMcp.stage,
+      refreshed.state.handoffs
+        .filter(isStoredHandoff)
+        .map(({ sessionKey }) => sessionKey),
     );
     if (todoList.template !== workflowMcp.todoTemplate) {
       throw new Error(
