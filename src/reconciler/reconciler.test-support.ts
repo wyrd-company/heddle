@@ -11,6 +11,7 @@ import {
   type ReconcilerInstance,
   type ReconcilerInstanceController,
   type ReconcilerLifecycleResolver,
+  type ReconcilerPacing,
 } from "./index.js";
 
 export const task = (
@@ -63,6 +64,7 @@ class FixtureBoard implements ReconcilerBoard {
 }
 
 class FixtureInstances implements ReconcilerInstanceController {
+  readonly deferrals: ReconcilerInstance[] = [];
   readonly instances: ReconcilerInstance[] = [];
   readonly starts: Array<{
     blueprintPath: string;
@@ -74,18 +76,38 @@ class FixtureInstances implements ReconcilerInstanceController {
     return this.instances.map((instance) => ({ ...instance }));
   }
 
+  async defer(
+    input: Parameters<ReconcilerInstanceController["defer"]>[0],
+  ): Promise<void> {
+    const deferred: ReconcilerInstance = {
+      ...input,
+      state: "deferred",
+    };
+    this.deferrals.push(deferred);
+    this.replace(deferred);
+  }
+
   async start(input: {
     blueprintPath: string;
     instanceId: string;
     task: BoardTask;
   }): Promise<void> {
     this.starts.push(input);
-    this.instances.push({
+    this.replace({
       boardStatus: input.task.status,
+      ...(input.dispatch ?? {}),
       instanceId: input.instanceId,
       state: "waiting",
       taskId: input.task.id,
     });
+  }
+
+  private replace(instance: ReconcilerInstance): void {
+    const index = this.instances.findIndex(
+      ({ taskId }) => taskId === instance.taskId,
+    );
+    if (index === -1) this.instances.push(instance);
+    else this.instances[index] = instance;
   }
 }
 
@@ -123,6 +145,7 @@ export const fixture = (
   tasks: BoardTask[],
   options: {
     now?: () => number;
+    pacing?: ReconcilerPacing;
     staleThresholds?: Record<string, number>;
   } = {},
 ) => {

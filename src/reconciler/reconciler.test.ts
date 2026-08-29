@@ -5,7 +5,24 @@
 
 import { describe, expect, it } from "vitest";
 
+import { DispatchPacingGate } from "../pacing/index.js";
 import { fixture, task } from "./reconciler.test-support.js";
+
+const pacing = (
+  usage: { used: number; windowStartedAt: number },
+  now: () => number = () => 2_000,
+) => ({
+  evaluator: new DispatchPacingGate(
+    {
+      defaultProvider: "provider-a",
+      maxConcurrentSessions: 1,
+      providerBudgets: { "provider-a": { usageLimit: 80 } },
+      subagents: { maxDepth: 2, maxFanOut: 2 },
+    },
+    { readFiveHourWindow: async () => ({ ...usage }) },
+    now,
+  ),
+});
 
 describe("Reconciler", () => {
   it("ignites an epic, picks up late children, and dispatches standalone todo tasks", async () => {
@@ -274,5 +291,99 @@ describe("Reconciler", () => {
       }),
     ]);
     await expect(subject.reconciler.reconcile()).resolves.toEqual([]);
+  });
+
+  it("preserves ready work as a visible deferral until WIP capacity is freed", async () => {
+    const underway = task(80, "in-progress", {
+      lifecycle: "inventory-count",
+    });
+    const ready = task(81, "todo", { lifecycle: "label-replacement" });
+    const subject = fixture([underway, ready], {
+      pacing: pacing({ used: 0, windowStartedAt: 1_000 }),
+    });
+    subject.instances.instances.push({
+      boardStatus: "in-progress",
+      depth: 0,
+      instanceId: "task-80",
+      provider: "provider-a",
+      state: "running",
+      taskId: underway.id,
+    });
+
+    const deferred = await subject.reconciler.reconcile();
+
+    expect(ready.status).toBe("todo");
+    expect(subject.instances.instances).toContainEqual({
+      boardStatus: "todo",
+      deferral: {
+        activeSessions: 1,
+        limit: 1,
+        reason: "work-in-progress-limit",
+      },
+      depth: 0,
+      instanceId: "task-81",
+      provider: "provider-a",
+      state: "deferred",
+      taskId: ready.id,
+    });
+    expect(deferred).toContainEqual(
+      expect.objectContaining({
+        deferral: expect.objectContaining({
+          reason: "work-in-progress-limit",
+        }),
+        kind: "dispatch-deferred",
+        taskId: ready.id,
+      }),
+    );
+
+    Object.assign(subject.instances.instances[0]!, {
+      boardStatus: "done",
+      state: "done",
+    });
+    const dispatched = await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      ready.id,
+    ]);
+    expect(subject.instances.instances.at(-1)).toMatchObject({
+      instanceId: "task-81",
+      state: "waiting",
+    });
+    expect(dispatched).toContainEqual(
+      expect.objectContaining({ kind: "instance-start", taskId: ready.id }),
+    );
+  });
+
+  it("persists a provider-window deferral and dispatches on a later pass", async () => {
+    const ready = task(90, "todo", { lifecycle: "surface-cleaning" });
+    const usage = { used: 80, windowStartedAt: 10_000 };
+    let now = 11_000;
+    const subject = fixture([ready], {
+      pacing: pacing(usage, () => now),
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.instances.instances).toEqual([
+      expect.objectContaining({
+        deferral: expect.objectContaining({
+          provider: "provider-a",
+          reason: "provider-usage-window",
+          retryAt: 18_010_000,
+        }),
+        state: "deferred",
+        taskId: ready.id,
+      }),
+    ]);
+    await expect(subject.reconciler.reconcile()).resolves.toEqual([]);
+    expect(subject.instances.deferrals).toHaveLength(1);
+
+    now = 18_010_000;
+    await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      ready.id,
+    ]);
+    expect(ready.status).toBe("todo");
   });
 });

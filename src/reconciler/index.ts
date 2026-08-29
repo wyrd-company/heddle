@@ -4,10 +4,12 @@ export type {
   ReconcilerAttention,
   ReconcilerAttentionQueue,
   ReconcilerBoard,
+  ReconcilerPacing,
   ReconcilerInstance,
   ReconcilerInstanceController,
   ReconcilerLifecycleResolver,
   ReconcilerOptions,
   ReconciliationAction,
+  DeferReconcilerInstanceInput,
   StartReconcilerInstanceInput,
 } from "./types.js";

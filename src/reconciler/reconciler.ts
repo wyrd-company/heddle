@@ -4,6 +4,7 @@
 // ---
 
 import type { BoardTask } from "../board-adapter/index.js";
+import type { PacingDeferral, PacingSession } from "../pacing/index.js";
 import type {
   ReconcilerAttention,
   ReconcilerInstance,
@@ -14,6 +15,11 @@ import type {
 const isEpic = (task: BoardTask): boolean => task.tags.includes("type:epic");
 const isUat = (task: BoardTask): boolean => task.tags.includes("uat");
 const byId = (left: BoardTask, right: BoardTask): number => left.id - right.id;
+
+const sameDeferral = (
+  left: PacingDeferral | undefined,
+  right: PacingDeferral,
+): boolean => JSON.stringify(left) === JSON.stringify(right);
 
 export const instanceIdForTask = (taskId: number): string => `task-${taskId}`;
 
@@ -138,12 +144,26 @@ export class Reconciler {
     instances: ReadonlyMap<number, ReconcilerInstance>,
     actions: ReconciliationAction[],
   ): Promise<void> {
+    const activeSessions: PacingSession[] = [...instances.values()]
+      .filter(({ state }) => state === "running" || state === "waiting")
+      .map((instance) => ({
+        depth: instance.depth ?? 0,
+        sessionId: instance.instanceId,
+        ...(instance.parentSessionId === undefined
+          ? {}
+          : { parentSessionId: instance.parentSessionId }),
+        ...(instance.provider === undefined
+          ? {}
+          : { provider: instance.provider }),
+      }));
+
     for (const task of tasks) {
+      const existing = instances.get(task.id);
       if (
         isEpic(task) ||
         task.blocked ||
         task.status !== "todo" ||
-        instances.has(task.id) ||
+        (existing !== undefined && existing.state !== "deferred") ||
         !this.dependenciesDone(task, tasksById) ||
         !this.dispatchEnabled(task, tasksById)
       ) {
@@ -169,11 +189,52 @@ export class Reconciler {
       }
 
       const instanceId = instanceIdForTask(task.id);
+      let dispatch: { depth: 0; provider: string } | undefined;
+      if (this.options.pacing !== undefined) {
+        const provider =
+          this.options.pacing.providerFor === undefined
+            ? this.options.pacing.evaluator.defaultProvider
+            : await this.options.pacing.providerFor(task, resolution);
+        const decision = await this.options.pacing.evaluator.evaluate(
+          { kind: "task", provider, sessionId: instanceId },
+          activeSessions,
+        );
+        if (decision.kind === "defer") {
+          if (!sameDeferral(existing?.deferral, decision.deferral)) {
+            await this.options.instances.defer({
+              boardStatus: task.status,
+              deferral: decision.deferral,
+              depth: 0,
+              instanceId,
+              provider,
+              taskId: task.id,
+            });
+            actions.push({
+              deferral: decision.deferral,
+              instanceId,
+              kind: "dispatch-deferred",
+              provider,
+              taskId: task.id,
+            });
+          }
+          continue;
+        }
+        dispatch = { depth: 0, provider };
+      }
+
       await this.options.instances.start({
         blueprintPath: resolution.blueprintPath,
+        ...(dispatch === undefined ? {} : { dispatch }),
         instanceId,
         task: { ...task },
       });
+      if (dispatch !== undefined) {
+        activeSessions.push({
+          depth: dispatch.depth,
+          provider: dispatch.provider,
+          sessionId: instanceId,
+        });
+      }
       actions.push({
         blueprintPath: resolution.blueprintPath,
         instanceId,

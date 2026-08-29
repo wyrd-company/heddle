@@ -44,10 +44,12 @@ export type {
   ReconcilerAttention,
   ReconcilerAttentionQueue,
   ReconcilerBoard,
+  ReconcilerPacing,
   ReconcilerInstance,
   ReconcilerInstanceController,
   ReconcilerLifecycleResolver,
   ReconcilerOptions,
   ReconciliationAction,
+  DeferReconcilerInstanceInput,
   StartReconcilerInstanceInput,
 } from "./reconciler/index.js";
