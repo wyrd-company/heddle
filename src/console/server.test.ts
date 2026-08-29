@@ -230,7 +230,7 @@ describe("console server", () => {
     const oversizedBody = await globalThis.fetch(
       `${baseUrl}/api/epics/51/in-progress`,
       {
-        body: JSON.stringify({ inProgress: false, padding: "x".repeat(1024) }),
+        body: JSON.stringify({ inProgress: false }) + " ".repeat(1024),
         headers: { "content-type": "application/json" },
         method: "PUT",
       },
