@@ -30,6 +30,10 @@ import type {
   StopSessionInput,
 } from "./session-observation-types.js";
 import type { T3ShellThread } from "./t3-control-plane-client.js";
+import {
+  approvalResponseRecorded,
+  userInputResponseRecorded,
+} from "./session-response-reconciliation.js";
 
 const phaseFor = (
   thread: T3ShellThread | undefined,
@@ -106,6 +110,30 @@ export class SessionObserver {
       requestId,
       answers,
       commandId,
+    );
+  }
+
+  async approvalResponseRecorded(
+    target: SessionObservationTarget,
+    requestId: string,
+    decision: "accept" | "reject",
+  ): Promise<boolean> {
+    return approvalResponseRecorded(
+      await this.options.t3.getThread(target.threadId),
+      requestId,
+      decision,
+    );
+  }
+
+  async userInputResponseRecorded(
+    target: SessionObservationTarget,
+    requestId: string,
+    answers: Record<string, string | string[]>,
+  ): Promise<boolean> {
+    return userInputResponseRecorded(
+      await this.options.t3.getThread(target.threadId),
+      requestId,
+      answers,
     );
   }
 

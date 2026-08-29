@@ -92,7 +92,9 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     if (
       !this.persistence.effectCompleted(effectKind, input.attention.attentionId)
     ) {
-      await this.#apply(validated);
+      if (!(await this.#effectRecorded(validated))) {
+        await this.#apply(validated);
+      }
       if (
         !this.persistence.recordEffectCompleted(
           effectKind,
@@ -107,6 +109,30 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       }
     }
     this.attention.resolve(input.attention.attentionId);
+  }
+
+  async #effectRecorded(
+    input: Parameters<ConsoleAttentionActionPort["execute"]>[0],
+  ): Promise<boolean> {
+    const contract = input.action.contract;
+    if (contract.kind === "escalation.answer") return false;
+    const target = {
+      instanceId: contract.instanceId,
+      sessionKey: contract.sessionKey,
+      threadId: contract.threadId,
+    };
+    if (contract.kind === "t3.approval.respond") {
+      return this.observer.approvalResponseRecorded(
+        target,
+        contract.requestId,
+        contract.decision,
+      );
+    }
+    return this.observer.userInputResponseRecorded(
+      target,
+      contract.requestId,
+      input.answers!,
+    );
   }
 
   async #apply(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
