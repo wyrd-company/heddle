@@ -162,6 +162,16 @@ next_id: 1
     );
   });
 
+  it("reads every configured board column in board order", async () => {
+    await expect(adapter.readBoardStatuses()).resolves.toEqual([
+      "backlog",
+      "todo",
+      "in-progress",
+      "uat",
+      "done",
+    ]);
+  });
+
   it("mirrors child status through kanban-md", async () => {
     const collectionId = await createTask("Seasonal collection");
     const childId = await createTask(
@@ -245,6 +255,44 @@ next_id: 1
     await expect(
       adapter.transitionEpicStatus(standaloneId, "done"),
     ).rejects.toThrow("is not an epic task");
+    expect(commands).not.toContainEqual(
+      expect.arrayContaining(["edit", String(standaloneId)]),
+    );
+  });
+
+  it("moves only an epic in and out of in-progress", async () => {
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
+    const childId = await createTask(
+      "Label storage crates",
+      "--parent",
+      String(collectionId),
+    );
+    const standaloneId = await createTask("Repair reading-room lamp");
+    commands = [];
+
+    await adapter.setEpicInProgress(collectionId, true);
+    await expect(adapter.readTask(collectionId)).resolves.toMatchObject({
+      status: "in-progress",
+    });
+    await adapter.setEpicInProgress(collectionId, false);
+    await expect(adapter.readTask(collectionId)).resolves.toMatchObject({
+      status: "todo",
+    });
+
+    commands = [];
+    await expect(adapter.setEpicInProgress(childId, true)).rejects.toThrow(
+      "is not an epic task",
+    );
+    await expect(adapter.setEpicInProgress(standaloneId, true)).rejects.toThrow(
+      "is not an epic task",
+    );
+    expect(commands).not.toContainEqual(
+      expect.arrayContaining(["edit", String(childId)]),
+    );
     expect(commands).not.toContainEqual(
       expect.arrayContaining(["edit", String(standaloneId)]),
     );

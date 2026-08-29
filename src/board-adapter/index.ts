@@ -47,6 +47,10 @@ interface KanbanTaskJson {
   file: string;
 }
 
+interface KanbanBoardJson {
+  statuses: Array<{ status: string }>;
+}
+
 const defaultRunner: KanbanCommandRunner = async (arguments_) => {
   const result = await executeFile("kanban-md", arguments_, {
     maxBuffer: 10 * 1024 * 1024,
@@ -71,6 +75,25 @@ const requireTask = (value: unknown): KanbanTaskJson => {
     throw new Error("kanban-md returned an invalid task");
   }
   return value as KanbanTaskJson;
+};
+
+const requireBoardStatuses = (value: unknown): string[] => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("statuses" in value) ||
+    !Array.isArray(value.statuses) ||
+    !value.statuses.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "status" in item &&
+        typeof item.status === "string",
+    )
+  ) {
+    throw new Error("kanban-md returned an invalid board");
+  }
+  return (value as KanbanBoardJson).statuses.map(({ status }) => status);
 };
 
 const lifecycleFromTag = (tags: string[]): string | undefined => {
@@ -128,6 +151,12 @@ export class KanbanBoardAdapter {
     );
   }
 
+  public async readBoardStatuses(): Promise<string[]> {
+    return requireBoardStatuses(
+      parseJson(await this.command("board", "--json")),
+    );
+  }
+
   public async readTask(taskId: number): Promise<BoardTask> {
     const output = await this.command("show", String(taskId), "--json");
     return this.normalizeTask(requireTask(parseJson(output)));
@@ -164,6 +193,23 @@ export class KanbanBoardAdapter {
       throw new Error(`task ${taskId} is not an epic task`);
     }
     await this.command("edit", String(taskId), "--status", status, "--json");
+  }
+
+  public async setEpicInProgress(
+    taskId: number,
+    inProgress: boolean,
+  ): Promise<void> {
+    const task = await this.readTask(taskId);
+    if (task.parent !== undefined || !task.tags.includes("type:epic")) {
+      throw new Error(`task ${taskId} is not an epic task`);
+    }
+    await this.command(
+      "edit",
+      String(taskId),
+      "--status",
+      inProgress ? "in-progress" : "todo",
+      "--json",
+    );
   }
 
   public async createRecord(record: CreateBoardRecord): Promise<BoardTask> {
