@@ -36,4 +36,29 @@ describe("lifecycle blueprint editor contract", () => {
     );
     expect(styles).toContain("flex-wrap: wrap");
   });
+
+  it("invalidates artifact responses when the lifecycle selection changes", async () => {
+    const source = await readFile("src/console/lifecycle-viewer.tsx", "utf8");
+
+    expect(source).toContain(
+      "const generation = ++editRequestGeneration.current;",
+    );
+    expect(
+      source.match(
+        /if \(generation !== editRequestGeneration\.current\) return;/g,
+      ),
+    ).toHaveLength(4);
+    expect(source).toMatch(
+      /clear: \(\) => \{\s*resetEditing\(\);\s*snapshotRef\.current = null;/,
+    );
+    const replaceStart = source.indexOf("const replace = useCallback");
+    const replaceReset = source.indexOf("resetEditing();", replaceStart);
+    const replaceSnapshot = source.indexOf(
+      "snapshotRef.current = next;",
+      replaceStart,
+    );
+    expect(replaceStart).toBeGreaterThan(-1);
+    expect(replaceReset).toBeGreaterThan(replaceStart);
+    expect(replaceReset).toBeLessThan(replaceSnapshot);
+  });
 });

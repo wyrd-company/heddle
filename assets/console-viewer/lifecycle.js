@@ -76939,11 +76939,13 @@ var vce = [_8], yce = [uce, u7], bce = (e) => {
 	return t;
 };
 function xce() {
-	let [e, t] = (0, _.useState)(null), [n, r] = (0, _.useState)(null), [i, a] = (0, _.useState)(null), [o, s] = (0, _.useState)(null), [c, l] = (0, _.useState)(""), [u, d] = (0, _.useState)(!1), f = (0, _.useRef)(new dce()), p = (0, _.useRef)(null), m = (0, _.useRef)(""), h = (0, _.useRef)(null);
+	let [e, t] = (0, _.useState)(null), [n, r] = (0, _.useState)(null), [i, a] = (0, _.useState)(null), [o, s] = (0, _.useState)(null), [c, l] = (0, _.useState)(""), [u, d] = (0, _.useState)(!1), f = (0, _.useRef)(new dce()), p = (0, _.useRef)(0), m = (0, _.useRef)(""), h = (0, _.useRef)(null);
 	ace(e, f.current);
-	let g = (0, _.useCallback)((e) => {
-		gce(e), m.current = "", h.current = e, r(e);
+	let g = (0, _.useCallback)(() => {
+		p.current += 1, m.current = "", a(null), s(null), l(""), d(!1);
 	}, []), v = (0, _.useCallback)((e) => {
+		gce(e), g(), h.current = e, r(e);
+	}, [g]), y = (0, _.useCallback)((e) => {
 		let t = h.current;
 		if (t === null) throw Error("Lifecycle tail arrived before replay");
 		let n = _ce(t, e);
@@ -76951,11 +76953,11 @@ function xce() {
 	}, []);
 	(0, _.useEffect)(() => {
 		let e = {
-			append: v,
+			append: y,
 			clear: () => {
-				m.current = "", h.current = null, r(null);
+				g(), h.current = null, r(null);
 			},
-			replace: g
+			replace: v
 		};
 		if (Y9 = e, X9 !== void 0) {
 			let t = X9;
@@ -76964,7 +76966,11 @@ function xce() {
 		return () => {
 			Y9 === e && (Y9 = void 0);
 		};
-	}, [v, g]), (0, _.useEffect)(() => {
+	}, [
+		y,
+		v,
+		g
+	]), (0, _.useEffect)(() => {
 		if (e === null || n === null || i !== null) return;
 		let t = `${n.instanceId}:${n.blueprint.blobHash}`;
 		if (m.current !== t) {
@@ -76995,50 +77001,52 @@ function xce() {
 				positions: { ...t.positions }
 			}), l("Unsaved canvas changes");
 		});
-		return p.current = t, e.updateInstanceState({ isReadonly: !1 }), t.applyBlueprint(i.blueprint, i.positions), t.startListening(), e.zoomToFit({ animation: { duration: 0 } }), () => {
-			t.dispose(), p.current === t && (p.current = null);
+		return e.updateInstanceState({ isReadonly: !1 }), t.applyBlueprint(i.blueprint, i.positions), t.startListening(), e.zoomToFit({ animation: { duration: 0 } }), () => {
+			t.dispose();
 		};
 	}, [i, e]);
-	let y = (0, _.useCallback)(async () => {
-		if (n !== null) {
-			l("Loading repository artifact…");
-			try {
-				let e = await Q9(await fetch(`/api/blueprints/${encodeURIComponent(n.blueprint.id)}`));
-				a(e), s({
-					...e.blueprint,
-					positions: e.positions
-				}), l(`Editing ${e.path} · running instance stays pinned to ${n.blueprint.blobHash.slice(0, 12)}`);
-			} catch (e) {
-				l(e instanceof Error ? e.message : "Blueprint load failed");
-			}
+	let b = (0, _.useCallback)(async () => {
+		if (n === null) return;
+		let e = ++p.current;
+		l("Loading repository artifact…");
+		try {
+			let t = await Q9(await fetch(`/api/blueprints/${encodeURIComponent(n.blueprint.id)}`));
+			if (e !== p.current) return;
+			a(t), s({
+				...t.blueprint,
+				positions: t.positions
+			}), l(`Editing ${t.path} · running instance stays pinned to ${n.blueprint.blobHash.slice(0, 12)}`);
+		} catch (t) {
+			if (e !== p.current) return;
+			l(t instanceof Error ? t.message : "Blueprint load failed");
 		}
-	}, [n]), b = (0, _.useCallback)(() => {
-		m.current = "", a(null), s(null), l("");
-	}, []), x = (0, _.useCallback)(async () => {
-		if (i !== null && o !== null) {
-			d(!0), l("Validating and saving repository artifact…");
-			try {
-				let e = await Q9(await fetch(`/api/blueprints/${encodeURIComponent(i.blueprint.id)}`, {
-					body: JSON.stringify({
-						edges: o.edges,
-						expectedBlobHash: i.blobHash,
-						nodes: o.nodes,
-						positions: o.positions
-					}),
-					headers: { "content-type": "application/json" },
-					method: "PUT"
-				}));
-				a(e), s({
-					...e.blueprint,
-					positions: e.positions
-				}), l(`Saved ${e.path} · artifact ${e.blobHash.slice(0, 12)}`);
-			} catch (e) {
-				l(e instanceof Error ? e.message : "Blueprint save failed");
-			} finally {
-				d(!1);
-			}
+	}, [n]), x = g, S = (0, _.useCallback)(async () => {
+		if (i === null || o === null) return;
+		let e = p.current;
+		d(!0), l("Validating and saving repository artifact…");
+		try {
+			let t = await Q9(await fetch(`/api/blueprints/${encodeURIComponent(i.blueprint.id)}`, {
+				body: JSON.stringify({
+					edges: o.edges,
+					expectedBlobHash: i.blobHash,
+					nodes: o.nodes,
+					positions: o.positions
+				}),
+				headers: { "content-type": "application/json" },
+				method: "PUT"
+			}));
+			if (e !== p.current) return;
+			a(t), s({
+				...t.blueprint,
+				positions: t.positions
+			}), l(`Saved ${t.path} · artifact ${t.blobHash.slice(0, 12)}`);
+		} catch (t) {
+			if (e !== p.current) return;
+			l(t instanceof Error ? t.message : "Blueprint save failed");
+		} finally {
+			e === p.current && d(!1);
 		}
-	}, [o, i]), S = (0, _.useMemo)(() => n === null ? [] : hce(n.events), [n]);
+	}, [o, i]), C = (0, _.useMemo)(() => n === null ? [] : hce(n.events), [n]);
 	return /* @__PURE__ */ (0, V.jsxs)("div", {
 		className: "lifecycle-renderer",
 		"data-ready": n !== null,
@@ -77085,17 +77093,17 @@ function xce() {
 						className: "blueprint-editor-actions",
 						children: i === null ? /* @__PURE__ */ (0, V.jsx)("button", {
 							disabled: n === null,
-							onClick: () => void y(),
+							onClick: () => void b(),
 							type: "button",
 							children: "EDIT BLUEPRINT"
 						}) : /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsx)("button", {
 							disabled: o === null || u,
-							onClick: () => void x(),
+							onClick: () => void S(),
 							type: "button",
 							children: u ? "SAVING…" : "SAVE ARTIFACT"
 						}), /* @__PURE__ */ (0, V.jsx)("button", {
 							disabled: u,
-							onClick: b,
+							onClick: x,
 							type: "button",
 							children: "CLOSE EDITOR"
 						})] })
@@ -77108,12 +77116,12 @@ function xce() {
 						children: c
 					})
 				] }),
-				S.length === 0 ? null : /* @__PURE__ */ (0, V.jsxs)("p", {
+				C.length === 0 ? null : /* @__PURE__ */ (0, V.jsxs)("p", {
 					className: "lifecycle-traversals",
 					children: [
 						"LOOP TRAVERSALS ·",
 						" ",
-						S.map(({ count: e, nodeId: t }) => `${t} ×${e}`).join(" · ")
+						C.map(({ count: e, nodeId: t }) => `${t} ×${e}`).join(" · ")
 					]
 				}),
 				/* @__PURE__ */ (0, V.jsx)("ol", {

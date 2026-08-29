@@ -132,18 +132,30 @@ function LifecycleViewer() {
   const [editStatus, setEditStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const bus = useRef(new EventBus());
-  const editSync = useRef<FlowcraftSync | null>(null);
+  const editRequestGeneration = useRef(0);
   const replayedIdentity = useRef("");
   const snapshotRef = useRef<ConsoleLifecycleSnapshot | null>(null);
 
   useExecutionBridge(editor, bus.current);
 
-  const replace = useCallback((next: ConsoleLifecycleSnapshot) => {
-    assertLifecycleReplacement(next);
+  const resetEditing = useCallback(() => {
+    editRequestGeneration.current += 1;
     replayedIdentity.current = "";
-    snapshotRef.current = next;
-    setSnapshot(next);
+    setEditing(null);
+    setDraft(null);
+    setEditStatus("");
+    setSaving(false);
   }, []);
+
+  const replace = useCallback(
+    (next: ConsoleLifecycleSnapshot) => {
+      assertLifecycleReplacement(next);
+      resetEditing();
+      snapshotRef.current = next;
+      setSnapshot(next);
+    },
+    [resetEditing],
+  );
 
   const append = useCallback((next: ConsoleLifecycleSnapshot) => {
     const current = snapshotRef.current;
@@ -165,7 +177,7 @@ function LifecycleViewer() {
     const port: LifecycleViewerPort = {
       append,
       clear: () => {
-        replayedIdentity.current = "";
+        resetEditing();
         snapshotRef.current = null;
         setSnapshot(null);
       },
@@ -180,7 +192,7 @@ function LifecycleViewer() {
     return () => {
       if (mountedPort === port) mountedPort = undefined;
     };
-  }, [append, replace]);
+  }, [append, replace, resetEditing]);
 
   useEffect(() => {
     if (editor === null || snapshot === null || editing !== null) return;
@@ -225,19 +237,18 @@ function LifecycleViewer() {
       });
       setEditStatus("Unsaved canvas changes");
     });
-    editSync.current = sync;
     editor.updateInstanceState({ isReadonly: false });
     sync.applyBlueprint(editing.blueprint, editing.positions);
     sync.startListening();
     editor.zoomToFit({ animation: { duration: 0 } });
     return () => {
       sync.dispose();
-      if (editSync.current === sync) editSync.current = null;
     };
   }, [editing, editor]);
 
   const beginEditing = useCallback(async () => {
     if (snapshot === null) return;
+    const generation = ++editRequestGeneration.current;
     setEditStatus("Loading repository artifact…");
     try {
       const revision = await responseJson<BlueprintArtifactRevision>(
@@ -245,27 +256,25 @@ function LifecycleViewer() {
           `/api/blueprints/${encodeURIComponent(snapshot.blueprint.id)}`,
         ),
       );
+      if (generation !== editRequestGeneration.current) return;
       setEditing(revision);
       setDraft({ ...revision.blueprint, positions: revision.positions });
       setEditStatus(
         `Editing ${revision.path} · running instance stays pinned to ${snapshot.blueprint.blobHash.slice(0, 12)}`,
       );
     } catch (error) {
+      if (generation !== editRequestGeneration.current) return;
       setEditStatus(
         error instanceof Error ? error.message : "Blueprint load failed",
       );
     }
   }, [snapshot]);
 
-  const stopEditing = useCallback(() => {
-    replayedIdentity.current = "";
-    setEditing(null);
-    setDraft(null);
-    setEditStatus("");
-  }, []);
+  const stopEditing = resetEditing;
 
   const saveEditing = useCallback(async () => {
     if (editing === null || draft === null) return;
+    const generation = editRequestGeneration.current;
     setSaving(true);
     setEditStatus("Validating and saving repository artifact…");
     try {
@@ -284,17 +293,19 @@ function LifecycleViewer() {
           },
         ),
       );
+      if (generation !== editRequestGeneration.current) return;
       setEditing(revision);
       setDraft({ ...revision.blueprint, positions: revision.positions });
       setEditStatus(
         `Saved ${revision.path} · artifact ${revision.blobHash.slice(0, 12)}`,
       );
     } catch (error) {
+      if (generation !== editRequestGeneration.current) return;
       setEditStatus(
         error instanceof Error ? error.message : "Blueprint save failed",
       );
     } finally {
-      setSaving(false);
+      if (generation === editRequestGeneration.current) setSaving(false);
     }
   }, [draft, editing]);
 
