@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SqlitePersistence } from "../persistence/index.js";
 import { BlueprintArtifactEditor } from "./blueprint-artifact-editor.js";
@@ -79,6 +79,7 @@ const fixture = async () => {
 };
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -218,6 +219,51 @@ describe("blueprint artifact editor", () => {
     ).rejects.toBeInstanceOf(BlueprintEditConflictError);
 
     expect(await readFile(setup.path, "utf8")).toBe(newer);
+  });
+
+  it("rejects an artifact change made during replacement", async () => {
+    const setup = await fixture();
+    const loaded = await setup.editor.load(artifactId);
+    const newer = `${(await readFile(setup.path, "utf8")).trimEnd()}  \n`;
+    const inspect = GitBlueprintStore.prototype.inspect;
+    let inspections = 0;
+    vi.spyOn(GitBlueprintStore.prototype, "inspect").mockImplementation(
+      async function (path) {
+        inspections += 1;
+        if (inspections === 3) await writeFile(setup.path, newer);
+        return inspect.call(this, path);
+      },
+    );
+
+    await expect(
+      setup.editor.save({
+        artifactId,
+        edges: loaded.blueprint.edges,
+        expectedBlobHash: loaded.blobHash,
+        nodes: loaded.blueprint.nodes,
+        positions: {},
+      }),
+    ).rejects.toBeInstanceOf(BlueprintEditConflictError);
+
+    expect(await readFile(setup.path, "utf8")).toBe(newer);
+  });
+
+  it("rejects an invalid expected blob hash without replacing the artifact", async () => {
+    const setup = await fixture();
+    const loaded = await setup.editor.load(artifactId);
+    const before = await readFile(setup.path);
+
+    await expect(
+      setup.editor.save({
+        artifactId,
+        edges: loaded.blueprint.edges,
+        expectedBlobHash: "not-a-git-object-id",
+        nodes: loaded.blueprint.nodes,
+        positions: {},
+      }),
+    ).rejects.toThrow("Expected blueprint git blob hash is invalid");
+
+    expect(await readFile(setup.path)).toEqual(before);
   });
 
   it("keeps a running instance on its pinned blob after a saved edit", async () => {
