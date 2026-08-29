@@ -27,6 +27,7 @@ export type T3ProviderPreconditionReason =
   | "provider-not-configured"
   | "provider-cli-version-not-configured"
   | "provider-context-required"
+  | "provider-driver-mismatch"
   | "provider-runtime-mode-mismatch"
   | "provider-question-tool-unavailable";
 
@@ -47,11 +48,18 @@ export const assertT3ProviderDispatchPreconditions = (
   table: T3ProviderPreconditionTable,
   context: T3ProviderDispatchContext | undefined,
   runtimeMode: unknown,
+  selectedDriver?: unknown,
 ): void => {
   if (!context)
     throw new T3ProviderPreconditionError(
       "provider-context-required",
       "Cannot dispatch 'thread.turn.start': provider context is required",
+    );
+
+  if (selectedDriver !== undefined && selectedDriver !== context.driver)
+    throw new T3ProviderPreconditionError(
+      "provider-driver-mismatch",
+      `Cannot dispatch 'thread.turn.start': selected provider '${String(selectedDriver)}' does not match provider context '${context.driver}'`,
     );
 
   const provider = table[context.driver];

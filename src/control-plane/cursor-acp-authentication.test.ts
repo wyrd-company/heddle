@@ -4,15 +4,18 @@
 //   references: cursor-headless
 // ---
 
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 const wrapper = resolve("bin/heddle-cursor-agent.mjs");
+const shim = resolve("bin/cursor-acp-authenticate-shim.mjs");
 const scratchDirectories: string[] = [];
 
 const runWrapper = async (
@@ -126,5 +129,71 @@ process.stdin.on("data", (chunk) => {
     expect(result.stderr).toContain(
       "Cursor API-key authentication requires HEDDLE_CURSOR_API_KEY or CURSOR_API_KEY",
     );
+  });
+
+  it("exits when the Cursor target cannot spawn while stdin remains open", async () => {
+    const child = spawn(shim, [], {
+      env: {
+        ...process.env,
+        HEDDLE_CURSOR_AGENT_BINARY: resolve("missing-test-executable"),
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    const code = await new Promise<number | null>((resolveExit, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error("Cursor authentication shim did not exit")),
+        2_000,
+      );
+      child.once("exit", (exitCode) => {
+        clearTimeout(timeout);
+        resolveExit(exitCode);
+      });
+    }).finally(() => child.kill());
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("Failed to start Cursor Agent");
+  });
+
+  it("drains target stdout before exiting under backpressure", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-cursor-drain-"));
+    scratchDirectories.push(scratch);
+    const target = join(scratch, "large-output.mjs");
+    const outputSize = 10_000_000;
+    await writeFile(
+      target,
+      `#!/usr/bin/env node
+import process from "node:process";
+process.stdout.write("x".repeat(${outputSize}));
+`,
+      { mode: 0o755 },
+    );
+    await chmod(target, 0o755);
+    const child = spawn(shim, [], {
+      env: { ...process.env, HEDDLE_CURSOR_AGENT_BINARY: target },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let received = 0;
+    const consumeSlowly = async (): Promise<void> => {
+      for await (const chunk of child.stdout) {
+        received += (chunk as Buffer).length;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 2));
+      }
+    };
+    const [code] = await Promise.all([
+      new Promise<number | null>((resolveExit) => {
+        child.once("exit", resolveExit);
+      }),
+      consumeSlowly(),
+    ]);
+
+    expect(code).toBe(0);
+    expect(received).toBe(outputSize);
   });
 });

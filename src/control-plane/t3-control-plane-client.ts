@@ -204,6 +204,7 @@ export class T3ControlPlaneClient {
         this.#providerPreconditions,
         providerContext,
         command.runtimeMode,
+        this.#selectedDriver(command.modelSelection),
       );
     }
     await this.#checkDispatchPreconditions(command);
@@ -212,6 +213,13 @@ export class T3ControlPlaneClient {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(command),
     });
+  }
+
+  #selectedDriver(modelSelection: unknown): unknown {
+    if (typeof modelSelection !== "object" || modelSelection === null)
+      return undefined;
+    if (!("instanceId" in modelSelection)) return undefined;
+    return modelSelection.instanceId;
   }
 
   async respondToApproval(
