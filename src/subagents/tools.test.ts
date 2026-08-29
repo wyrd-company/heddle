@@ -29,5 +29,16 @@ describe("subagent MCP tool contributors", () => {
       [...declared].sort(),
     );
     expect([...declared].sort()).toEqual(["liveness", "spawn"]);
+
+    const registered: string[] = [];
+    const server = {
+      registerTool(name: string) {
+        registered.push(name);
+      },
+    };
+    for (const contributor of contributors) {
+      contributor.register(server as never, {} as never);
+    }
+    expect(registered.sort()).toEqual(["liveness", "spawn"]);
   });
 });
