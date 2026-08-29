@@ -256,4 +256,34 @@ describe("durable production adapters", () => {
     expect(attempts).toBe(2);
     persistence.close();
   });
+
+  it("rejects Pushover without one canonical production task scope", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-scope-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    const transport = { send: vi.fn(async () => undefined) };
+    const notifier = new DurablePushoverNotifier(
+      persistence,
+      {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        userKey: "operator-key",
+      },
+      transport,
+    );
+
+    await expect(
+      notifier.send({
+        attentionId: "instance-19:session:choice",
+        escalationId: "choice",
+        instanceId: "instance-19",
+        openedAt: "2030-01-01T00:00:00.000Z",
+        ownerSessionKey: "instance-19:implement",
+        questions: [],
+        stage: "implement",
+      }),
+    ).rejects.toThrow("does not resolve to one production task");
+    expect(transport.send).not.toHaveBeenCalled();
+    persistence.close();
+  });
 });
