@@ -6,11 +6,21 @@
 import { Buffer } from "node:buffer";
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { constants as fileSystemConstants, type Stats } from "node:fs";
+import {
+  type FileHandle,
+  lstat,
+  open,
+  realpath,
+  rename,
+  rm,
+} from "node:fs/promises";
 import {
   basename,
+  dirname,
   extname,
   isAbsolute,
+  join,
   relative,
   resolve,
   sep,
@@ -21,9 +31,18 @@ import { isBlueprintArtifactId } from "./blueprint-artifact.js";
 import type { LifecycleBlueprint } from "./types.js";
 import { BlueprintValidationError } from "./errors.js";
 import { BlueprintEditConflictError } from "./errors.js";
+import { acquireRepositoryWriterLease } from "./repository-writer-lease.js";
 
 const execFileAsync = promisify(execFile);
 const gitObjectId = /^[0-9a-f]{40,64}$/;
+
+interface BlueprintDirectory {
+  artifactPath: string;
+  directory: FileHandle;
+  directoryPath: string;
+  expectedRealPath: string;
+  normalizedPath: string;
+}
 
 const artifactIdFromPath = (path: string): string => {
   if (extname(path) !== ".json") {
@@ -81,20 +100,23 @@ export interface WorkingBlueprintArtifact {
 }
 
 export class GitBlueprintStore {
-  constructor(private readonly repositoryRoot: string) {}
+  private readonly repositoryRoot: string;
+
+  constructor(repositoryRoot: string) {
+    this.repositoryRoot = resolve(repositoryRoot);
+  }
 
   async pin(path: string): Promise<{
     blobHash: string;
     blueprint: LifecycleBlueprint;
     path: string;
   }> {
-    const repositoryPath = this.resolveRepositoryPath(path);
-    const { stdout: blobHashOutput } = await execFileAsync(
-      "git",
-      ["hash-object", "-w", "--", repositoryPath],
-      { cwd: this.repositoryRoot },
+    const inspected = await this.inspect(path);
+    const blobHash = await this.hashSerialized(
+      inspected.serialized,
+      inspected.path,
+      true,
     );
-    const blobHash = blobHashOutput.trim();
     await execFileAsync(
       "git",
       ["update-ref", `refs/heddle/blueprints/${blobHash}`, blobHash],
@@ -102,33 +124,50 @@ export class GitBlueprintStore {
     );
     return {
       blobHash,
-      blueprint: await this.read(
-        blobHash,
-        relative(this.repositoryRoot, repositoryPath),
-      ),
-      path: relative(this.repositoryRoot, repositoryPath),
+      blueprint: inspected.blueprint,
+      path: inspected.path,
     };
   }
 
   normalize(path: string): string {
-    return relative(this.repositoryRoot, this.resolveRepositoryPath(path));
+    return this.normalizeArtifactPath(path);
   }
 
   async inspect(path: string): Promise<WorkingBlueprintArtifact> {
-    const repositoryPath = this.resolveRepositoryPath(path);
-    const normalizedPath = relative(this.repositoryRoot, repositoryPath);
-    const serialized = await readFile(repositoryPath, "utf8");
+    const directory = await this.openBlueprintDirectory(path);
+    try {
+      return await this.inspectFromDirectory(directory);
+    } finally {
+      await directory.directory.close();
+    }
+  }
+
+  private async inspectFromDirectory(
+    directory: BlueprintDirectory,
+  ): Promise<WorkingBlueprintArtifact> {
+    await this.assertBlueprintDirectory(directory);
+    const artifact = await this.openArtifact(directory);
+    let serialized: string;
+    try {
+      serialized = await artifact.readFile("utf8");
+      await this.assertArtifactFile(directory, artifact);
+    } finally {
+      await artifact.close();
+    }
     const blueprint = parseBlueprint(
       serialized,
-      artifactIdFromPath(normalizedPath),
+      artifactIdFromPath(directory.normalizedPath),
     );
-    const blobHash = await this.hashSerialized(serialized, normalizedPath);
-    const artifact = JSON.parse(serialized) as Record<string, unknown>;
+    const blobHash = await this.hashSerialized(
+      serialized,
+      directory.normalizedPath,
+    );
+    const artifactValue = JSON.parse(serialized) as Record<string, unknown>;
     return {
-      artifact,
+      artifact: artifactValue,
       blobHash,
       blueprint,
-      path: normalizedPath,
+      path: directory.normalizedPath,
       serialized,
     };
   }
@@ -143,26 +182,49 @@ export class GitBlueprintStore {
         "Expected blueprint git blob hash is invalid",
       );
     }
-    const repositoryPath = this.resolveRepositoryPath(path);
-    const current = await this.inspect(path);
-    if (current.blobHash !== expectedBlobHash) {
-      throw new BlueprintEditConflictError(expectedBlobHash, current.blobHash);
-    }
-    const temporaryPath = `${repositoryPath}.heddle-${randomUUID()}.tmp`;
+    const lease = await acquireRepositoryWriterLease(this.repositoryRoot);
+    let replaced: WorkingBlueprintArtifact;
     try {
-      await writeFile(temporaryPath, serialized, {
-        encoding: "utf8",
-        flag: "wx",
-      });
-      const latest = await this.inspect(path);
-      if (latest.blobHash !== expectedBlobHash) {
-        throw new BlueprintEditConflictError(expectedBlobHash, latest.blobHash);
+      const directory = await this.openBlueprintDirectory(path);
+      try {
+        const current = await this.inspectFromDirectory(directory);
+        this.assertExpectedBlob(expectedBlobHash, current.blobHash);
+        const temporaryPath = `${directory.artifactPath}.heddle-${randomUUID()}.tmp`;
+        try {
+          const temporary = await open(
+            temporaryPath,
+            fileSystemConstants.O_CREAT |
+              fileSystemConstants.O_EXCL |
+              fileSystemConstants.O_NOFOLLOW |
+              fileSystemConstants.O_WRONLY,
+            0o600,
+          );
+          try {
+            await temporary.writeFile(serialized, "utf8");
+            await temporary.sync();
+          } finally {
+            await temporary.close();
+          }
+          const latest = await this.inspectFromDirectory(directory);
+          this.assertExpectedBlob(expectedBlobHash, latest.blobHash);
+          await this.beforeArtifactRename();
+          await lease.assertOwned();
+          await this.assertBlueprintDirectory(directory);
+          const final = await this.inspectFromDirectory(directory);
+          this.assertExpectedBlob(expectedBlobHash, final.blobHash);
+          await rename(temporaryPath, directory.artifactPath);
+          await directory.directory.sync();
+          replaced = await this.inspectFromDirectory(directory);
+        } finally {
+          await rm(temporaryPath, { force: true });
+        }
+      } finally {
+        await directory.directory.close();
       }
-      await rename(temporaryPath, repositoryPath);
     } finally {
-      await rm(temporaryPath, { force: true });
+      await lease.release();
     }
-    return this.inspect(path);
+    return replaced!;
   }
 
   async read(blobHash: string, path: string): Promise<LifecycleBlueprint> {
@@ -177,11 +239,17 @@ export class GitBlueprintStore {
     return parseBlueprint(stdout, artifactIdFromPath(path));
   }
 
-  protected hashSerialized(serialized: string, path: string): Promise<string> {
+  protected hashSerialized(
+    serialized: string,
+    path: string,
+    write = false,
+  ): Promise<string> {
     return new Promise((resolveHash, rejectHash) => {
-      const child = spawn("git", ["hash-object", `--path=${path}`, "--stdin"], {
-        cwd: this.repositoryRoot,
-      });
+      const child = spawn(
+        "git",
+        ["hash-object", ...(write ? ["-w"] : []), `--path=${path}`, "--stdin"],
+        { cwd: this.repositoryRoot },
+      );
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
@@ -202,7 +270,17 @@ export class GitBlueprintStore {
     });
   }
 
-  private resolveRepositoryPath(path: string): string {
+  protected beforeArtifactRename(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  private assertExpectedBlob(expected: string, actual: string): void {
+    if (actual !== expected) {
+      throw new BlueprintEditConflictError(expected, actual);
+    }
+  }
+
+  private normalizeArtifactPath(path: string): string {
     if (path.trim() === "") {
       throw new BlueprintValidationError("Blueprint path must not be empty");
     }
@@ -220,6 +298,123 @@ export class GitBlueprintStore {
         "Blueprint path must be inside the repository",
       );
     }
-    return repositoryPath;
+    const normalizedPath = relative(this.repositoryRoot, repositoryPath);
+    if (
+      dirname(normalizedPath) !== "blueprints" ||
+      basename(normalizedPath) !== normalizedPath.slice("blueprints/".length)
+    ) {
+      throw new BlueprintValidationError(
+        "Blueprint path must be a direct child of the blueprint directory",
+      );
+    }
+    artifactIdFromPath(normalizedPath);
+    return normalizedPath;
+  }
+
+  private async openBlueprintDirectory(
+    path: string,
+  ): Promise<BlueprintDirectory> {
+    const normalizedPath = this.normalizeArtifactPath(path);
+    const lexicalDirectory = join(this.repositoryRoot, "blueprints");
+    const repositoryRealPath = await realpath(this.repositoryRoot);
+    const expectedRealPath = join(repositoryRealPath, "blueprints");
+    let lexicalStatus: Stats;
+    try {
+      lexicalStatus = await lstat(lexicalDirectory);
+    } catch (error) {
+      throw this.physicalContainmentError(error);
+    }
+    if (!lexicalStatus.isDirectory() || lexicalStatus.isSymbolicLink()) {
+      throw this.physicalContainmentError();
+    }
+    let directory: FileHandle;
+    try {
+      directory = await open(
+        lexicalDirectory,
+        fileSystemConstants.O_DIRECTORY |
+          fileSystemConstants.O_NOFOLLOW |
+          fileSystemConstants.O_RDONLY,
+      );
+    } catch (error) {
+      throw this.physicalContainmentError(error);
+    }
+    const opened: BlueprintDirectory = {
+      artifactPath: join(
+        `/proc/self/fd/${directory.fd}`,
+        basename(normalizedPath),
+      ),
+      directory,
+      directoryPath: `/proc/self/fd/${directory.fd}`,
+      expectedRealPath,
+      normalizedPath,
+    };
+    try {
+      await this.assertBlueprintDirectory(opened);
+      return opened;
+    } catch (error) {
+      await directory.close();
+      throw error;
+    }
+  }
+
+  private async assertBlueprintDirectory(
+    directory: BlueprintDirectory,
+  ): Promise<void> {
+    let openedRealPath: string;
+    try {
+      openedRealPath = await realpath(directory.directoryPath);
+    } catch (error) {
+      throw this.physicalContainmentError(error);
+    }
+    if (openedRealPath !== directory.expectedRealPath) {
+      throw this.physicalContainmentError();
+    }
+  }
+
+  private async openArtifact(
+    directory: BlueprintDirectory,
+  ): Promise<FileHandle> {
+    let artifactStatus: Stats;
+    try {
+      artifactStatus = await lstat(directory.artifactPath);
+    } catch (error) {
+      throw this.physicalContainmentError(error);
+    }
+    if (!artifactStatus.isFile() || artifactStatus.isSymbolicLink()) {
+      throw this.physicalContainmentError();
+    }
+    try {
+      const artifact = await open(
+        directory.artifactPath,
+        fileSystemConstants.O_NOFOLLOW | fileSystemConstants.O_RDONLY,
+      );
+      await this.assertArtifactFile(directory, artifact);
+      return artifact;
+    } catch (error) {
+      throw this.physicalContainmentError(error);
+    }
+  }
+
+  private async assertArtifactFile(
+    directory: BlueprintDirectory,
+    artifact: FileHandle,
+  ): Promise<void> {
+    const artifactStatus = await artifact.stat();
+    if (!artifactStatus.isFile()) throw this.physicalContainmentError();
+    let artifactRealPath: string;
+    try {
+      artifactRealPath = await realpath(`/proc/self/fd/${artifact.fd}`);
+    } catch (error) {
+      throw this.physicalContainmentError(error);
+    }
+    if (dirname(artifactRealPath) !== directory.expectedRealPath) {
+      throw this.physicalContainmentError();
+    }
+  }
+
+  private physicalContainmentError(cause?: unknown): BlueprintValidationError {
+    return new BlueprintValidationError(
+      `Blueprint artifact must be a physical regular file inside the repository blueprint directory${cause instanceof Error ? `: ${cause.message}` : ""}`,
+    );
   }
 }

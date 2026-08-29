@@ -4,9 +4,19 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout } from "node:timers";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -256,31 +266,213 @@ describe("blueprint artifact editor", () => {
     expect(await readFile(setup.path, "utf8")).toBe(newer);
   });
 
-  it("rejects an artifact change made during replacement", async () => {
+  it("rejects an external artifact change at the pre-rename boundary", async () => {
     const setup = await fixture();
     const loaded = await setup.editor.load(artifactId);
     const newer = `${(await readFile(setup.path, "utf8")).trimEnd()}  \n`;
-    const inspect = GitBlueprintStore.prototype.inspect;
-    let inspections = 0;
-    vi.spyOn(GitBlueprintStore.prototype, "inspect").mockImplementation(
-      async function (path) {
-        inspections += 1;
-        if (inspections === 3) await writeFile(setup.path, newer);
-        return inspect.call(this, path);
-      },
-    );
+    class ExternalWriterStore extends GitBlueprintStore {
+      protected override async beforeArtifactRename(): Promise<void> {
+        await writeFile(setup.path, newer);
+      }
+    }
+    const store = new ExternalWriterStore(setup.repositoryRoot);
+    const replacement = `${newer.trimEnd()} \n`;
 
     await expect(
-      setup.editor.save({
-        artifactId,
-        edges: loaded.blueprint.edges,
-        expectedBlobHash: loaded.blobHash,
-        nodes: loaded.blueprint.nodes,
-        positions: {},
-      }),
+      store.replace(artifactPath, loaded.blobHash, replacement),
     ).rejects.toBeInstanceOf(BlueprintEditConflictError);
 
     expect(await readFile(setup.path, "utf8")).toBe(newer);
+  });
+
+  it("serializes repository writers through the comparison and rename", async () => {
+    const setup = await fixture();
+    const loaded = await new GitBlueprintStore(setup.repositoryRoot).inspect(
+      artifactPath,
+    );
+    let enterBoundary!: () => void;
+    let releaseBoundary!: () => void;
+    const boundaryEntered = new Promise<void>((resolveBoundary) => {
+      enterBoundary = resolveBoundary;
+    });
+    const boundaryReleased = new Promise<void>((resolveBoundary) => {
+      releaseBoundary = resolveBoundary;
+    });
+    class PausedWriterStore extends GitBlueprintStore {
+      protected override async beforeArtifactRename(): Promise<void> {
+        enterBoundary();
+        await boundaryReleased;
+      }
+    }
+    let enterSecondBoundary!: () => void;
+    const secondBoundaryEntered = new Promise<void>((resolveBoundary) => {
+      enterSecondBoundary = resolveBoundary;
+    });
+    class ObservedWriterStore extends GitBlueprintStore {
+      protected override async beforeArtifactRename(): Promise<void> {
+        enterSecondBoundary();
+      }
+    }
+    const firstBytes = `${loaded.serialized.trimEnd()} \n`;
+    const secondBytes = `${loaded.serialized.trimEnd()}  \n`;
+    const first = new PausedWriterStore(setup.repositoryRoot).replace(
+      artifactPath,
+      loaded.blobHash,
+      firstBytes,
+    );
+    await boundaryEntered;
+    let secondSettled = false;
+    const second = new ObservedWriterStore(setup.repositoryRoot)
+      .replace(artifactPath, loaded.blobHash, secondBytes)
+      .finally(() => {
+        secondSettled = true;
+      });
+    const crossedBoundary = await Promise.race([
+      secondBoundaryEntered.then(() => true),
+      new Promise<false>((resolveWait) =>
+        setTimeout(() => resolveWait(false), 75),
+      ),
+    ]);
+
+    const settledBeforeRelease = secondSettled;
+    releaseBoundary();
+    const [firstResult, secondResult] = await Promise.allSettled([
+      first,
+      second,
+    ]);
+
+    expect({
+      crossedBoundary,
+      firstStatus: firstResult.status,
+      secondConflict:
+        secondResult.status === "rejected" &&
+        secondResult.reason instanceof BlueprintEditConflictError,
+      settledBeforeRelease,
+    }).toEqual({
+      crossedBoundary: false,
+      firstStatus: "fulfilled",
+      secondConflict: true,
+      settledBeforeRelease: false,
+    });
+    expect(await readFile(setup.path, "utf8")).toBe(firstBytes);
+  });
+
+  it("rejects a blueprint directory symlink without reading outside the repository", async () => {
+    const setup = await fixture();
+    const outside = await mkdtemp(join(tmpdir(), "artifact-outside-"));
+    temporaryDirectories.push(outside);
+    const outsideArtifact = join(outside, `${artifactId}.json`);
+    const outsideBytes = `${JSON.stringify(artifact)}\n`;
+    await writeFile(outsideArtifact, outsideBytes);
+    await rm(join(setup.repositoryRoot, "blueprints"), {
+      recursive: true,
+    });
+    await symlink(outside, join(setup.repositoryRoot, "blueprints"), "dir");
+
+    await expect(
+      new GitBlueprintStore(setup.repositoryRoot).inspect(artifactPath),
+    ).rejects.toThrow(
+      "Blueprint artifact must be a physical regular file inside the repository blueprint directory",
+    );
+    await expect(
+      new GitBlueprintStore(setup.repositoryRoot).pin(artifactPath),
+    ).rejects.toThrow(
+      "Blueprint artifact must be a physical regular file inside the repository blueprint directory",
+    );
+    expect(await readFile(outsideArtifact, "utf8")).toBe(outsideBytes);
+  });
+
+  it("rejects a blueprint file symlink without replacing its external target", async () => {
+    const setup = await fixture();
+    const outside = await mkdtemp(join(tmpdir(), "artifact-outside-"));
+    temporaryDirectories.push(outside);
+    const outsideArtifact = join(outside, `${artifactId}.json`);
+    const outsideBytes = `${JSON.stringify(artifact)}\n`;
+    await writeFile(outsideArtifact, outsideBytes);
+    await rm(setup.path);
+    await symlink(outsideArtifact, setup.path, "file");
+
+    await expect(
+      new GitBlueprintStore(setup.repositoryRoot).replace(
+        artifactPath,
+        "a".repeat(40),
+        "replacement",
+      ),
+    ).rejects.toThrow(
+      "Blueprint artifact must be a physical regular file inside the repository blueprint directory",
+    );
+    expect(await readFile(outsideArtifact, "utf8")).toBe(outsideBytes);
+  });
+
+  it("rejects a blueprint component swap at the pre-rename boundary", async () => {
+    const setup = await fixture();
+    const loaded = await new GitBlueprintStore(setup.repositoryRoot).inspect(
+      artifactPath,
+    );
+    const outside = await mkdtemp(join(tmpdir(), "artifact-outside-"));
+    temporaryDirectories.push(outside);
+    const outsideArtifact = join(outside, `${artifactId}.json`);
+    const outsideBytes = `${JSON.stringify(artifact)}\n`;
+    await writeFile(outsideArtifact, outsideBytes);
+    class DirectorySwapStore extends GitBlueprintStore {
+      protected override async beforeArtifactRename(): Promise<void> {
+        await rename(
+          join(setup.repositoryRoot, "blueprints"),
+          join(setup.repositoryRoot, "relocated-blueprints"),
+        );
+        await symlink(outside, join(setup.repositoryRoot, "blueprints"), "dir");
+      }
+    }
+
+    await expect(
+      new DirectorySwapStore(setup.repositoryRoot).replace(
+        artifactPath,
+        loaded.blobHash,
+        `${loaded.serialized.trimEnd()} \n`,
+      ),
+    ).rejects.toThrow(
+      "Blueprint artifact must be a physical regular file inside the repository blueprint directory",
+    );
+    expect(await readFile(outsideArtifact, "utf8")).toBe(outsideBytes);
+    expect(
+      await readFile(
+        join(
+          setup.repositoryRoot,
+          "relocated-blueprints",
+          `${artifactId}.json`,
+        ),
+        "utf8",
+      ),
+    ).toBe(loaded.serialized);
+  });
+
+  it("recovers a stale repository writer lease before replacing", async () => {
+    const setup = await fixture();
+    const store = new GitBlueprintStore(setup.repositoryRoot);
+    const loaded = await store.inspect(artifactPath);
+    const { stdout } = await executeFile(
+      "git",
+      [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-path",
+        "heddle/blueprint-writer.lock",
+      ],
+      { cwd: setup.repositoryRoot },
+    );
+    const leasePath = stdout.trim();
+    await mkdir(leasePath, { recursive: true });
+    await writeFile(join(leasePath, "owner"), "crashed-writer");
+    const staleTime = new Date(Date.now() - 60_000);
+    await utimes(leasePath, staleTime, staleTime);
+    const replacement = `${loaded.serialized.trimEnd()} \n`;
+
+    await store.replace(artifactPath, loaded.blobHash, replacement);
+
+    expect(await readFile(setup.path, "utf8")).toBe(replacement);
+    await expect(
+      readFile(join(leasePath, "owner"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects an invalid expected blob hash without replacing the artifact", async () => {
