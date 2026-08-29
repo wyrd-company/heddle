@@ -1,0 +1,22 @@
+{
+  "name": "Heddle feature qualification",
+  "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
+    "../features/heddle": {
+      "statePath": "/var/lib/heddle",
+      "port": "4317",
+      "dnsName": "heddle.localhost"
+    }
+  },
+  "mounts": [
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_STATE}",
+      "target": "/var/lib/heddle",
+      "type": "bind"
+    }
+  ],
+  "remoteUser": "vscode",
+  "overrideCommand": false,
+  "shutdownAction": "none"
+}

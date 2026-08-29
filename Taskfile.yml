@@ -12,3 +12,13 @@ tasks:
   lint:
     cmds:
       - npm run lint
+
+  deployment:package:
+    deps: [build]
+    cmds:
+      - scripts/deployment/package-feature.sh
+
+  deployment:qualification:
+    deps: [build]
+    cmds:
+      - scripts/deployment/qualify-feature.sh

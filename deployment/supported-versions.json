@@ -1,0 +1,6 @@
+{
+  "relationships": {
+    "references": ["t3-headless"]
+  },
+  "t3": "0.0.36"
+}
