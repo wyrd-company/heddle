@@ -60,7 +60,10 @@ export const serializeConsoleScope = (scope: ConsoleScope): string => {
   }
 };
 
-const tasksInScope = (tasks: BoardTask[], scope: ConsoleScope): BoardTask[] => {
+export const projectTasksForScope = (
+  tasks: BoardTask[],
+  scope: ConsoleScope,
+): BoardTask[] => {
   switch (scope.kind) {
     case "all":
       return tasks;
@@ -145,7 +148,7 @@ export const buildKanbanProjection = (input: {
     );
   }
   const instanceIndex = instancesByTask(input.instances);
-  const tasks = tasksInScope(input.tasks, input.scope);
+  const tasks = projectTasksForScope(input.tasks, input.scope);
   return {
     columns: input.statuses.map((status) => ({
       status,
