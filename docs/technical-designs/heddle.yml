@@ -102,10 +102,15 @@ proposed-design:
     streamable-HTTP MCP server, the one integration surface every
     agent harness supports through ordinary configuration. The tool
     suite includes `advance` (disposition the current stage),
-    `get_task_context`, `report_blocked`, `escalate`, follow-up and
-    finding creation, and a todo suite (list, check, add) that
-    replaces each harness's built-in todo tools, which are disabled
-    per harness. `advance` presents only the dispositions valid for
+    `get_task_context`, `report_blocked`, `escalate` (raise a
+    blocking question), follow-up and finding creation, and a todo
+    suite (list, check, add) that replaces each harness's built-in
+    todo tools, which are disabled per harness. The tool list is
+    per-session: computed at bootstrap from the task and its stage's
+    blueprint declaration, and tools a task type does not use are
+    omitted rather than offered and denied. Because sessions are
+    stage-scoped, the list holds static for a session's life and no
+    harness needs dynamic tool updates. `advance` presents only the dispositions valid for
     the instance's current state, generated from the blueprint's
     outgoing edges with per-disposition descriptions — the tool schema
     itself guides the agent to a legal transition. Every session's
@@ -147,24 +152,28 @@ proposed-design:
     other pacing gates, so delegation draws from the same capacity
     budget as all other sessions.
 
-    Escalation is the question path. An agent that needs a decision
-    asks through its harness's native question tool; every T3
-    provider adapter maps that call to the same pending-user-input
-    state on the thread shell, holding the tool call open until
-    answered. Heddle's shell poll sees the pending question and
-    routes it by parentage: a subagent's question is steered to its
-    parent, which answers through an answer MCP tool wrapping T3's
-    user-input response, scoped by correlation token to the parent's
-    own children; a top-level session's question enters the
-    attention queue with a pushover notification, and the operator
-    answers from the console or T3's UI. Resolution is an event in
-    the thread's history, so every watching client clears the
-    prompt and shows the chosen answer regardless of who answered.
-    Because stopping or interrupting a session settles its pending
-    questions with empty answers, Heddle dispositions a pending
-    question before it stops a session, and the question tool's
-    availability is per-harness configuration verified as a
-    dispatch precondition.
+    Escalation is a blocking question through the MCP suite's
+    `escalate` tool: structured questions with options, the call
+    held open until answered, the answer returned as the tool
+    result. Heddle routes by parentage: a subagent's escalation is
+    steered to its parent, which answers through an answer tool
+    scoped by correlation token to its own children; a top-level
+    session's escalation enters the attention queue with a pushover
+    notification, and the operator answers from the console.
+    Because escalation rides Heddle's MCP surface, it is uniform
+    across providers and independent of any harness's question
+    tool.
+
+    Harness-native question tools serve assistive tasks, where the
+    operator already works in T3's UI. The provider adapters map
+    those tools to pending-user-input state on the thread shell,
+    answerable from the UI or over the dispatch API, and resolution
+    is an event in thread history, so every watching client clears
+    the prompt regardless of who answered. Assistive task types run
+    only on harnesses that provide a question tool, verified as a
+    dispatch precondition, and Heddle dispositions any pending
+    question before stopping a session, because a stop settles
+    pending questions with empty answers.
   observation: >
     Two channels report on running work, split by who holds the truth.
     Semantic outcomes — the verdict of a review, the completion of an
