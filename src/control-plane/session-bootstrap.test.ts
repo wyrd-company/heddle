@@ -168,6 +168,10 @@ describe("stage session bootstrap", () => {
       claudeCode: { permissions: { deny: ["TodoWrite"] } },
       codex: { tools: { update_plan: { enabled: false } } },
     });
+    expect(first.toolTimeoutConfiguration).toEqual({
+      claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } },
+      codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } },
+    });
     expect(dependencies.mintCorrelationToken).toHaveBeenCalledOnce();
   });
 

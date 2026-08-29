@@ -34,11 +34,12 @@ import {
 } from "./worktree-creator.js";
 
 type StoredStageHandoffCandidate = {
-  [key: string]: JsonValue;
   correlationToken: string;
   handoff: string;
   kind: "stage-handoff";
+  parentSessionKey?: string;
   sessionKey: string;
+  workflowMcp?: JsonValue;
 };
 
 export interface SessionT3Client {
@@ -53,6 +54,7 @@ export type SessionBootstrapInput = {
   instanceId: string;
   interactionMode: string;
   modelSelection: { instanceId: string; model: string };
+  parentSessionKey?: string;
   projectId: string;
   providerContext: T3ProviderDispatchContext;
   runtimeMode: string;
@@ -65,6 +67,7 @@ export type SessionBootstrapResult = {
   correlationToken: string;
   harnessConfiguration: HarnessConfiguration;
   handoff: string;
+  toolTimeoutConfiguration: HarnessToolTimeoutConfiguration;
   threadId: string;
   worktree: PreparedWorktree;
 };
@@ -82,6 +85,17 @@ export const harnessConfiguration = (): HarnessConfiguration => ({
   claudeCode: { permissions: { deny: ["TodoWrite"] } },
   codex: { tools: { update_plan: { enabled: false } } },
 });
+
+export type HarnessToolTimeoutConfiguration = {
+  claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } };
+  codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } };
+};
+
+export const harnessToolTimeoutConfiguration =
+  (): HarnessToolTimeoutConfiguration => ({
+    claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } },
+    codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } },
+  });
 
 export type SessionBootstrapDependencies = {
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
@@ -123,6 +137,26 @@ const isStoredHandoff = (
   typeof value["sessionKey"] === "string" &&
   typeof value["correlationToken"] === "string" &&
   typeof value["handoff"] === "string";
+
+const assertParentSession = (
+  record: InstanceRecord,
+  input: SessionBootstrapInput,
+): void => {
+  if (input.parentSessionKey === undefined) return;
+  if (input.parentSessionKey === input.sessionKey) {
+    throw new TypeError("A stage session cannot be its own parent");
+  }
+  if (
+    !Object.hasOwn(record.state.correlationTokens, input.parentSessionKey) ||
+    !record.state.handoffs
+      .filter(isStoredHandoff)
+      .some(({ sessionKey }) => sessionKey === input.parentSessionKey)
+  ) {
+    throw new Error(
+      `Parent session '${input.parentSessionKey}' is not bound to this instance`,
+    );
+  }
+};
 
 const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
   async (input, record) => {
@@ -196,6 +230,7 @@ const ensureStoredHandoff = async (
     if (current === undefined) {
       throw new Error(`Instance does not exist: ${input.instanceId}`);
     }
+    assertParentSession(current, input);
     const existing = current.state.handoffs
       .filter(isStoredHandoff)
       .find(({ sessionKey }) => sessionKey === input.sessionKey);
@@ -203,6 +238,11 @@ const ensureStoredHandoff = async (
       if (existing.correlationToken !== correlationToken) {
         throw new Error(
           `Stored handoff and correlation token disagree for '${input.sessionKey}'`,
+        );
+      }
+      if (existing.parentSessionKey !== input.parentSessionKey) {
+        throw new Error(
+          `Stored handoff and parent session disagree for '${input.sessionKey}'`,
         );
       }
       const workflowMcp = existing["workflowMcp"];
@@ -269,6 +309,9 @@ const ensureStoredHandoff = async (
       correlationToken,
       handoff,
       kind: "stage-handoff",
+      ...(input.parentSessionKey === undefined
+        ? {}
+        : { parentSessionKey: input.parentSessionKey }),
       sessionKey: input.sessionKey,
       workflowMcp,
     };
@@ -292,6 +335,11 @@ export const bootstrapStageSession = async (
   const nextId = dependencies.nextId ?? (() => globalThis.crypto.randomUUID());
   const now = dependencies.now ?? (() => new Date().toISOString());
   const worktree = await prepareWorktree(input.worktree);
+  const initial = dependencies.persistence.getInstance(input.instanceId);
+  if (initial === undefined) {
+    throw new Error(`Instance does not exist: ${input.instanceId}`);
+  }
+  assertParentSession(initial, input);
   const { token: correlationToken } = ensureCorrelationToken(
     dependencies.persistence,
     input.instanceId,
@@ -345,6 +393,7 @@ export const bootstrapStageSession = async (
     handoff,
     harnessConfiguration: harnessConfiguration(),
     threadId,
+    toolTimeoutConfiguration: harnessToolTimeoutConfiguration(),
     worktree,
   };
 };

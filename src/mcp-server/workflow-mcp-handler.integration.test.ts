@@ -1099,11 +1099,13 @@ describe("workflow MCP HTTP server", () => {
       "advance",
       "get_task_context",
       "report_blocked",
+      "escalate",
       "todo_list",
       "todo_check",
       "todo_add",
       "todo_edit",
       "todo_reorder",
+      "answer",
     ]);
     const secondTodoList = await secondReview.callTool({
       name: "todo_list",

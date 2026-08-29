@@ -13,9 +13,11 @@ export {
 export {
   bootstrapStageSession,
   harnessConfiguration,
+  harnessToolTimeoutConfiguration,
   steerStageSession,
   type SessionBootstrapDependencies,
   type HarnessConfiguration,
+  type HarnessToolTimeoutConfiguration,
   type SessionBootstrapInput,
   type SessionBootstrapResult,
   type SessionSteeringDependencies,

@@ -11,6 +11,7 @@ import type {
   JsonValue,
   PersistedEvent,
 } from "../persistence/index.js";
+import type { EscalationCoordinator } from "./escalation-coordinator.js";
 
 export interface WorkflowMcpPersistence {
   appendEvent(
@@ -25,6 +26,7 @@ export interface WorkflowMcpPersistence {
   ): InstanceRecord | undefined;
   getInstance(instanceId: string): InstanceRecord | undefined;
   listInstances(): InstanceRecord[];
+  replayEvents(instanceId: string, afterSequence?: number): PersistedEvent[];
 }
 
 export interface WorkflowMcpLifecycle {
@@ -45,6 +47,7 @@ export interface WorkflowMcpDisposition {
 export interface WorkflowMcpSessionBinding {
   dispositions: WorkflowMcpDisposition[];
   instance: InstanceRecord;
+  parentSessionKey?: string;
   sessionKey: string;
   stage: { id: string; tools: string[] };
   taskContext: JsonValue;
@@ -63,6 +66,7 @@ export interface WorkflowMcpStageContract {
 
 export interface WorkflowMcpToolContext {
   binding: WorkflowMcpSessionBinding;
+  escalationCoordinator: EscalationCoordinator;
   lifecycle: WorkflowMcpLifecycle;
   persistence: WorkflowMcpPersistence;
 }
@@ -73,6 +77,7 @@ export interface WorkflowMcpToolContributor {
 }
 
 export interface WorkflowMcpHandlerOptions {
+  escalationCoordinator?: EscalationCoordinator;
   lifecycle: WorkflowMcpLifecycle;
   persistence: WorkflowMcpPersistence;
   tools?: readonly WorkflowMcpToolContributor[];
@@ -85,10 +90,10 @@ export interface CorrelationTokenMatch {
 }
 
 export type StoredStageHandoff = {
-  [key: string]: JsonValue;
   correlationToken: string;
   handoff: string;
   kind: "stage-handoff";
+  parentSessionKey?: string;
   sessionKey: string;
   workflowMcp: WorkflowMcpStageContract;
 };

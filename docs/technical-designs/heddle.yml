@@ -167,6 +167,9 @@ proposed-design:
     scoped by correlation token to its own children; a top-level
     session's escalation enters the attention queue with a pushover
     notification, and the operator answers from the console.
+    Session preparation configures the Heddle MCP server for these
+    long-held calls: Codex receives `tool_timeout_sec = 100000`, and
+    Claude Code receives `MCP_TOOL_TIMEOUT=100000000` milliseconds.
     Because escalation rides Heddle's MCP surface, it is uniform
     across providers and independent of any harness's question
     tool.

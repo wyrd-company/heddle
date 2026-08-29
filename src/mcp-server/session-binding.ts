@@ -41,6 +41,8 @@ const isStoredStageHandoff = (value: JsonValue): value is StoredStageHandoff =>
   typeof value["sessionKey"] === "string" &&
   typeof value["correlationToken"] === "string" &&
   typeof value["handoff"] === "string" &&
+  (value["parentSessionKey"] === undefined ||
+    typeof value["parentSessionKey"] === "string") &&
   value["workflowMcp"] !== undefined &&
   isWorkflowMcpStageContract(value["workflowMcp"]);
 
@@ -164,6 +166,9 @@ export class WorkflowMcpSessionResolver {
     return {
       dispositions: stageContract.dispositions,
       instance: match.instance,
+      ...(storedHandoffs[0]!.parentSessionKey === undefined
+        ? {}
+        : { parentSessionKey: storedHandoffs[0]!.parentSessionKey }),
       sessionKey: match.sessionKey,
       stage: { id: stageContract.stage, tools },
       taskContext: handoff.taskContract,

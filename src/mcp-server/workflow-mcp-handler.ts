@@ -13,6 +13,8 @@ import {
 } from "@modelcontextprotocol/server";
 
 import { workflowMcpCoreTools } from "./core-tools.js";
+import { EscalationCoordinator } from "./escalation-coordinator.js";
+import { workflowMcpEscalationTools } from "./escalation-tools.js";
 import { workflowMcpTodoTools } from "./todo-tools.js";
 import {
   bearerCorrelationToken,
@@ -54,6 +56,7 @@ const contributorsByName = (
   const contributors = new Map<string, WorkflowMcpToolContributor>();
   for (const contributor of [
     ...workflowMcpCoreTools(),
+    ...workflowMcpEscalationTools(),
     ...workflowMcpTodoTools(),
     ...additional,
   ]) {
@@ -71,12 +74,33 @@ export const createWorkflowMcpHttpHandler = (
   options: WorkflowMcpHandlerOptions,
 ): WorkflowMcpHttpHandler => {
   const resolver = new WorkflowMcpSessionResolver(options.persistence);
+  const escalationCoordinator =
+    options.escalationCoordinator ??
+    new EscalationCoordinator({
+      attention: {
+        raise: async () => {
+          throw new Error("Escalation attention routing is not configured");
+        },
+      },
+      pushover: {
+        send: async () => {
+          throw new Error("Escalation Pushover routing is not configured");
+        },
+      },
+      parent: {
+        steer: async () => {
+          throw new Error("Parent escalation routing is not configured");
+        },
+      },
+      persistence: options.persistence,
+    });
   const contributors = contributorsByName(options.tools ?? []);
   const serverForBinding = (binding: WorkflowMcpSessionBinding): McpServer => {
     const server = new McpServer({ name: "heddle", version: "1.0.0" });
     for (const toolName of binding.stage.tools ?? []) {
       contributors.get(toolName)?.register(server, {
         binding,
+        escalationCoordinator,
         lifecycle: options.lifecycle,
         persistence: options.persistence,
       });

@@ -93,6 +93,74 @@ const memoryStore = (state = initialState()) => {
 };
 
 describe("stage session cold retry guards", () => {
+  it("persists parentage only for a child of a bound session", async () => {
+    const parentHandoff = {
+      correlationToken: "token-parent",
+      handoff: "parent handoff",
+      kind: "stage-handoff",
+      sessionKey: "parent",
+      workflowMcp,
+    };
+    const memory = memoryStore({
+      ...initialState(),
+      correlationTokens: { parent: "token-parent" },
+      handoffs: [parentHandoff],
+    });
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await bootstrapStageSession(
+      { ...input, parentSessionKey: "parent", sessionKey: "child" },
+      {
+        instantiateTodoList,
+        persistence: memory.store,
+        resolveWorkflowMcpStageContract,
+        t3: { dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+        mintCorrelationToken: () => "token-child",
+        nextId: vi
+          .fn()
+          .mockReturnValueOnce("thread-child")
+          .mockReturnValueOnce("create-child")
+          .mockReturnValueOnce("turn-child")
+          .mockReturnValueOnce("message-child"),
+      },
+    );
+
+    expect(memory.record.state.handoffs).toContainEqual(
+      expect.objectContaining({
+        parentSessionKey: "parent",
+        sessionKey: "child",
+      }),
+    );
+  });
+
+  it("rejects an unbound parent before persisting or dispatching", async () => {
+    const memory = memoryStore();
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(
+        { ...input, parentSessionKey: "missing-parent", sessionKey: "child" },
+        {
+          persistence: memory.store,
+          t3: { dispatch },
+          ensureWorktree: async ({ branch }) => ({
+            branch,
+            created: false,
+            path: "/workspaces/worktrees/sample-repository/task-prepare",
+          }),
+          mintCorrelationToken: () => "token-child",
+        },
+      ),
+    ).rejects.toThrow(/not bound to this instance/);
+    expect(memory.record.state).toEqual(initialState());
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("persists and replays the handoff after the initial turn fails", async () => {
     const memory = memoryStore();
     const commands: Record<string, unknown>[] = [];
