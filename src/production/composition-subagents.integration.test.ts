@@ -13,6 +13,7 @@ import {
   prepareProductionFixture,
   SyntheticT3,
 } from "./composition.test-support.js";
+import { productionSessionTargets } from "./subagent-composition.js";
 
 const storedCorrelationToken = (handoffs: JsonValue[]): string => {
   const stored = handoffs.find(
@@ -241,6 +242,64 @@ describe("production subagent composition", () => {
           type: "thread.create",
         }),
       ]),
+    );
+    await composition.close();
+  });
+
+  it("fails closed when persisted parent and child session identities collide", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const composition = createProductionComposition({
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const current = composition.persistence.getInstance(instanceId)!;
+    if (!isTodoState(current.state.todoState)) {
+      throw new Error("Todo state is absent");
+    }
+    const parent = composition.persistence.listSessionRuntime()[0]!;
+    const list = current.state.todoState.lists[0]!;
+    composition.persistence.updateInstance(instanceId, {
+      ...current.state,
+      todoState: {
+        ...current.state.todoState,
+        lists: [
+          {
+            ...list,
+            assignments: [
+              {
+                bootstrap: {
+                  createCommandId: "create-command",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                  messageId: "message-id",
+                  turnCommandId: "turn-command",
+                },
+                correlationToken: "child-token",
+                depth: 1,
+                model: "sample-model",
+                operationId: "spawn-collision",
+                parentSessionKey: parent.sessionKey,
+                parentThreadId: parent.threadId,
+                provider: "codex",
+                rootItemId: "deliver",
+                sessionKey: parent.sessionKey,
+                status: "active",
+                threadId: "child-thread",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(() => productionSessionTargets(composition.persistence)).toThrow(
+      "Production session identities are not globally unique",
     );
     await composition.close();
   });
