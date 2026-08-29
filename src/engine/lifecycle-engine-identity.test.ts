@@ -45,8 +45,15 @@ describe("LifecycleEngine identity", () => {
       ...request,
       output: { second: 2, first: 1 },
     });
+    await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "sample-a",
+      operationId: "operation-b",
+    });
+    const delayedRetry = await fixture.engine.resume(request);
 
     expect(retried).toEqual(completed);
+    expect(delayedRetry).toEqual(completed);
     expect(
       fixture.invocations.filter(({ effect }) => effect === "season"),
     ).toHaveLength(1);
@@ -82,6 +89,7 @@ describe("LifecycleEngine identity", () => {
   });
 
   it("rejects a different operation while an equivalent resume is pending", async () => {
+    let attempts = 0;
     let releaseFirst: (() => void) | undefined;
     const firstMayFinish = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -93,8 +101,11 @@ describe("LifecycleEngine identity", () => {
     const fixture = await makeFixture(sampleBlueprint(), {
       mix: async () => ({ effect: "mix" }),
       season: async () => {
-        markFirstStarted?.();
-        await firstMayFinish;
+        attempts += 1;
+        if (attempts === 1) {
+          markFirstStarted?.();
+          await firstMayFinish;
+        }
         return { effect: "season" };
       },
       serve: async () => ({ effect: "serve" }),
@@ -108,6 +119,7 @@ describe("LifecycleEngine identity", () => {
       disposition: "adjust",
       instanceId: "sample-a",
       operationId: "operation-a",
+      output: { value: 1 },
     });
     await firstStarted;
     await expect(
@@ -115,10 +127,46 @@ describe("LifecycleEngine identity", () => {
         disposition: "adjust",
         instanceId: "sample-a",
         operationId: "operation-b",
+        output: { value: 1 },
+      }),
+    ).rejects.toEqual(new TransitionConflictError("sample-a"));
+    await expect(
+      fixture.engine.resume({
+        disposition: "adjust",
+        instanceId: "sample-a",
+        operationId: "operation-a",
+        output: { value: 2 },
       }),
     ).rejects.toEqual(new TransitionConflictError("sample-a"));
     releaseFirst?.();
     await first;
+    fixture.persistence.close();
+  });
+
+  it("rejects malformed completed-operation state", async () => {
+    const fixture = await makeFixture();
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    const record = fixture.persistence.getInstance("sample-a");
+    if (record === undefined) throw new Error("Fixture instance is missing");
+    const context = record.state.flowcraftContext;
+    if (context === null || Array.isArray(context)) {
+      throw new Error("Fixture lifecycle context is malformed");
+    }
+    fixture.persistence.updateInstance("sample-a", {
+      ...record.state,
+      flowcraftContext: { ...context, completedOperations: [] },
+    });
+
+    await expect(
+      fixture.engine.resume({
+        disposition: "adjust",
+        instanceId: "sample-a",
+        operationId: "operation-a",
+      }),
+    ).rejects.toThrow(/does not contain lifecycle engine state/);
     fixture.persistence.close();
   });
 
