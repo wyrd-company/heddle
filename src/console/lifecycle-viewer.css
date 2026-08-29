@@ -19,6 +19,14 @@ relationships:
   border-right: 1px solid var(--rule-dark);
 }
 
+.lifecycle-canvas-shell
+  .tl-html-container
+  > div
+  > div:nth-child(n + 3)
+  > div:first-child {
+  color: var(--muted) !important;
+}
+
 .lifecycle-empty {
   margin: 28px;
   color: var(--muted);

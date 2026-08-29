@@ -18,12 +18,15 @@ class FakeElement {
   private readonly listeners = new Map<string, (event?: unknown) => void>();
   checked = false;
   className = "";
+  clientWidth = 320;
   disabled = false;
   draggable = false;
   hidden = false;
   href = "";
   name = "";
   open = false;
+  scrollLeft = 0;
+  scrollWidth = 800;
   textContent = "";
   type = "";
   value = "";
@@ -34,8 +37,8 @@ class FakeElement {
     this.listeners.set(name, listener);
   }
 
-  dispatch(name: string): void {
-    this.listeners.get(name)?.();
+  dispatch(name: string, event?: unknown): void {
+    this.listeners.get(name)?.(event);
   }
 
   close(): void {
@@ -225,6 +228,7 @@ export const clientHarness = async (
 ) => {
   const board = new FakeElement("div");
   const graph = new FakeElement("section");
+  const graphViewport = new FakeElement("div");
   const graphCanvas = new FakeElement("div");
   const lifecycle = new FakeElement("section");
   const lifecycleTask = new FakeElement("p");
@@ -358,6 +362,7 @@ export const clientHarness = async (
       if (selector === "#attention-status") return attentionStatus;
       if (selector === "#attention-list") return attentionList;
       if (selector === "#dependency-graph") return graph;
+      if (selector === "#graph-viewport") return graphViewport;
       if (selector === "#graph-canvas") return graphCanvas;
       if (selector === "#lifecycle-view") return lifecycle;
       if (selector === "#lifecycle-task") return lifecycleTask;
@@ -446,6 +451,7 @@ export const clientHarness = async (
     },
     graph,
     graphCanvas,
+    graphViewport,
     lifecycle,
     lifecycleTask,
     lifecycleSnapshots,

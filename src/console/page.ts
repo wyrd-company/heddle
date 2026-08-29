@@ -120,8 +120,6 @@ body {
   min-width: 320px;
   margin: 0;
   background-color: var(--paper);
-  background-image: linear-gradient(rgba(25, 26, 23, 0.035) 1px, transparent 1px);
-  background-size: 100% 24px;
 }
 
 button, input, select { font: inherit; }
@@ -183,7 +181,7 @@ button, input, select { font: inherit; }
   letter-spacing: 0.09em;
 }
 
-.attention-toggle:focus-visible, .attention-close:focus-visible, .attention-action:focus-visible {
+.attention-toggle:focus-visible, .attention-close:focus-visible, .attention-action:focus-visible, .attention-option input:focus-visible {
   outline: 2px solid var(--signal-focus);
   outline-offset: 3px;
 }
@@ -294,6 +292,8 @@ select {
   border-radius: 0;
 }
 
+select:focus-visible { outline: 2px solid var(--signal-focus); outline-offset: 3px; }
+
 main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 
 .console-status { min-height: 18px; margin: 0 0 10px; color: var(--muted); font-size: 11px; }
@@ -332,23 +332,15 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .card-stack { display: grid; gap: 10px; padding: 10px; }
 
 .task-card {
-  position: relative;
-  padding: 13px;
+  padding: 13px 13px 13px 10px;
   background: var(--paper-raised);
   border: 1px solid var(--rule-dark);
+  border-left-width: 4px;
   box-shadow: var(--shadow);
 }
 
-.task-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--rule-dark);
-}
-
-.task-card[data-status="in-progress"]::before { background: var(--active); }
-.task-card[data-blocked="true"]::before { background: var(--signal); }
+.task-card[data-status="in-progress"] { border-left-color: var(--active); }
+.task-card[data-blocked="true"] { border-left-color: var(--signal); }
 .card-id { margin: 0 0 8px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.12em; }
 .card-title { margin: 0; font-family: Georgia, serif; font-size: 17px; line-height: 1.22; }
 
@@ -452,25 +444,21 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
   height: 126px;
   box-sizing: border-box;
   overflow: hidden;
-  padding: 12px 13px 11px 17px;
+  padding: 12px 13px 11px;
   display: flex;
   flex-direction: column;
   color: var(--ink);
   background: var(--paper-raised);
   border: 2px solid var(--rule-dark);
+  border-left-width: 6px;
   box-shadow: var(--shadow);
   text-decoration: none;
 }
-.graph-node::before { content: ""; position: absolute; inset: -2px auto -2px -2px; width: 6px; background: var(--rule-dark); }
 .graph-node:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 rgba(25, 26, 23, 0.19); }
 .graph-node[data-treatment="done"] { border-color: #356b51; }
-.graph-node[data-treatment="done"]::before { background: #356b51; }
 .graph-node[data-treatment="running"] { border-color: var(--active); }
-.graph-node[data-treatment="running"]::before { background: var(--active); }
 .graph-node[data-treatment="attention"] { border-color: var(--signal); box-shadow: 4px 4px 0 rgba(180, 51, 33, 0.23); }
-.graph-node[data-treatment="attention"]::before { background: var(--signal); }
-.graph-node[data-treatment="blocked"] { border-color: #5f4305; background-image: repeating-linear-gradient(135deg, transparent 0 9px, rgba(116, 84, 10, 0.08) 9px 11px); }
-.graph-node[data-treatment="blocked"]::before { background: #8b6511; }
+.graph-node[data-treatment="blocked"] { border-color: #5f4305; background: #f6f0df; }
 .graph-node-id { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.11em; }
 .graph-node-title { display: -webkit-box; font-family: Georgia, serif; font-size: 16px; line-height: 1.18; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 .graph-node-state { display: block; margin-top: auto; padding-top: 10px; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -508,6 +496,7 @@ const attentionCloseElement = document.querySelector("#attention-close");
 const attentionStatusElement = document.querySelector("#attention-status");
 const attentionListElement = document.querySelector("#attention-list");
 const graphElement = document.querySelector("#dependency-graph");
+const graphViewportElement = document.querySelector("#graph-viewport");
 const graphCanvasElement = document.querySelector("#graph-canvas");
 const lifecycleElement = document.querySelector("#lifecycle-view");
 const lifecycleTaskElement = document.querySelector("#lifecycle-task");
@@ -575,6 +564,28 @@ attentionCloseElement.addEventListener("click", closeAttention);
 attentionOverlayElement.addEventListener("close", () => {
   attentionToggleElement.setAttribute("aria-expanded", "false");
 });
+
+const enableKeyboardScroll = (element) => {
+  element.addEventListener("keydown", (event) => {
+    const page = Math.max(80, Math.round(element.clientWidth * 0.7));
+    const left =
+      event.key === "ArrowLeft"
+        ? element.scrollLeft - page
+        : event.key === "ArrowRight"
+          ? element.scrollLeft + page
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? element.scrollWidth
+              : undefined;
+    if (left === undefined) return;
+    event.preventDefault();
+    element.scrollLeft = left;
+  });
+};
+
+enableKeyboardScroll(boardElement);
+enableKeyboardScroll(graphViewportElement);
 
 const selectedAnswers = (questions, controls) => {
   const answers = {};

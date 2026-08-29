@@ -20,6 +20,23 @@ import {
 } from "./page-client.test-support.js";
 
 describe("console client request ownership", () => {
+  it("scrolls board and dependency overflow with keyboard-only controls", async () => {
+    const harness = await clientHarness();
+
+    for (const viewport of [harness.board, harness.graphViewport]) {
+      const preventDefault = vi.fn();
+      viewport.dispatch("keydown", { key: "ArrowRight", preventDefault });
+      expect(preventDefault).toHaveBeenCalledOnce();
+      expect(viewport.scrollLeft).toBe(224);
+
+      viewport.dispatch("keydown", { key: "End", preventDefault });
+      expect(viewport.scrollLeft).toBe(viewport.scrollWidth);
+
+      viewport.dispatch("keydown", { key: "Home", preventDefault });
+      expect(viewport.scrollLeft).toBe(0);
+    }
+  });
+
   it("advances every scheduled lifecycle tail from the preceding nonzero cursor without reloading", async () => {
     const lifecycle = (
       events: Array<{ sequence: number }>,
