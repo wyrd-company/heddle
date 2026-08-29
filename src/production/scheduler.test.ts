@@ -72,7 +72,11 @@ describe("production reconciliation scheduler", () => {
     await expect(scheduler.stop()).rejects.toThrow(
       "Timed out draining the reconciliation pass",
     );
+    await expect(scheduler.stop()).rejects.toThrow(
+      "Timed out draining the reconciliation pass",
+    );
     release?.();
     await starting;
+    await scheduler.stop();
   });
 });

@@ -215,4 +215,56 @@ describe("production lifecycle composition", () => {
     ).toContain("review-1");
     await restarted.close();
   });
+
+  it("keeps a double-digit occurrence identity after session intent persistence", async () => {
+    const { configuration, taskId } = await prepare();
+    const first = createProductionComposition({
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await first.start();
+    await first.lifecycle.resume({
+      disposition: "complete",
+      instanceId: `task-${taskId}`,
+      operationId: "advance-implement",
+    });
+    for (let activation = 1; activation <= 10; activation += 1) {
+      first.persistence.writeSessionRuntime({
+        activation,
+        instanceId: `task-${taskId}`,
+        sessionKey: `task-${taskId}:review:${activation}`,
+        stageId: "review",
+        threadId: `review-thread-${activation}`,
+      });
+    }
+    const runtime = first.persistence.listReconcilerRuntime()[0]!;
+    first.persistence.writeReconcilerRuntime({
+      ...runtime,
+      sessionKey: `task-${taskId}:review:10`,
+      stageId: "review",
+      state: "starting",
+      threadId: "review-thread-10",
+    });
+    await first.close();
+
+    const t3 = new SyntheticT3();
+    const restarted = createProductionComposition({
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await restarted.start();
+
+    expect(
+      t3.commands.find(({ type }) => type === "thread.create")?.title,
+    ).toContain("review-10");
+    await restarted.close();
+  });
 });

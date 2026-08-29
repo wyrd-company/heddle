@@ -45,13 +45,14 @@ export class ProductionScheduler {
   }
 
   async stop(): Promise<void> {
-    if (this.#stopping) return this.#active;
-    this.#stopping = true;
-    this.#running = false;
-    this.#pending = false;
-    if (this.#timer !== undefined) {
-      globalThis.clearInterval(this.#timer);
-      this.#timer = undefined;
+    if (!this.#stopping) {
+      this.#stopping = true;
+      this.#running = false;
+      this.#pending = false;
+      if (this.#timer !== undefined) {
+        globalThis.clearInterval(this.#timer);
+        this.#timer = undefined;
+      }
     }
     const active = this.#active;
     if (active === undefined) return;

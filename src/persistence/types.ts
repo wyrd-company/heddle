@@ -57,6 +57,7 @@ export interface ReconcilerRuntimeRecord {
 }
 
 export interface SessionRuntimeRecord {
+  activation: number;
   instanceId: string;
   sessionKey: string;
   stageId: string;

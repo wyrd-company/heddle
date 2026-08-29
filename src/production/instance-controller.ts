@@ -186,8 +186,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       : undefined;
     const activation =
       intendedSession === undefined
-        ? priorSessions.length + 1
-        : priorSessions.indexOf(intendedSession) + 1;
+        ? priorSessions.reduce(
+            (maximum, session) => Math.max(maximum, session.activation),
+            0,
+          ) + 1
+        : intendedSession.activation;
     const sessionKey = retryingIntent
       ? starting.sessionKey!
       : `${instanceId}:${stageId}:${activation}`;
@@ -202,6 +205,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       threadId,
     });
     this.persistence.writeSessionRuntime({
+      activation,
       instanceId,
       sessionKey,
       stageId,

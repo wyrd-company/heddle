@@ -435,21 +435,29 @@ export class SqlitePersistence {
   listSessionRuntime(): SessionRuntimeRecord[] {
     return this.database
       .prepare(
-        `SELECT instance_id AS instanceId, session_key AS sessionKey,
+        `SELECT activation, instance_id AS instanceId, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
-         ORDER BY session_key`,
+         ORDER BY instance_id, stage_id, activation`,
       )
       .all() as SessionRuntimeRecord[];
   }
 
   writeSessionRuntime(record: SessionRuntimeRecord): void {
-    for (const [name, value] of Object.entries(record)) {
-      this.assertStableId(name, value);
+    if (!Number.isSafeInteger(record.activation) || record.activation < 1) {
+      throw new TypeError("activation must be a positive safe integer");
+    }
+    for (const name of [
+      "instanceId",
+      "sessionKey",
+      "stageId",
+      "threadId",
+    ] as const) {
+      this.assertStableId(name, record[name]);
     }
     const prior = this.database
       .prepare(
-        `SELECT instance_id AS instanceId, session_key AS sessionKey,
+        `SELECT activation, instance_id AS instanceId, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
          WHERE session_key = ?`,
@@ -466,11 +474,12 @@ export class SqlitePersistence {
     this.database
       .prepare(
         `INSERT INTO heddle_session_runtime
-           (session_key, instance_id, stage_id, thread_id)
-         VALUES (?, ?, ?, ?)`,
+           (session_key, activation, instance_id, stage_id, thread_id)
+         VALUES (?, ?, ?, ?, ?)`,
       )
       .run(
         record.sessionKey,
+        record.activation,
         record.instanceId,
         record.stageId,
         record.threadId,
