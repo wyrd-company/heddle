@@ -169,6 +169,9 @@ describe("delivery mechanical nodes", () => {
     );
     expect(firstMerge).toMatchObject({ merged: true, alreadyMerged: false });
     expect(secondMerge).toMatchObject({ merged: false, alreadyMerged: true });
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      firstSnapshot.sourceHead + "\n",
+    );
     expect(await git(fixture.sourcePath, "rev-list", "--merges", "main")).toBe(
       "",
     );
@@ -246,6 +249,47 @@ describe("delivery mechanical nodes", () => {
     );
   });
 
+  it("refuses a reviewed history that contains a merge commit", async () => {
+    const fixture = await prepareCommittedChange();
+    const sourceHead = (
+      await git(fixture.sourcePath, "rev-parse", "task/change")
+    ).trim();
+    const baseHead = (
+      await git(fixture.sourcePath, "rev-parse", "main")
+    ).trim();
+    const tree = (
+      await git(fixture.sourcePath, "rev-parse", "task/change^{tree}")
+    ).trim();
+    const mergeHead = (
+      await git(
+        fixture.sourcePath,
+        "commit-tree",
+        tree,
+        "-p",
+        sourceHead,
+        "-p",
+        baseHead,
+        "-m",
+        "combine histories",
+      )
+    ).trim();
+    await git(
+      fixture.sourcePath,
+      "update-ref",
+      "refs/heads/task/change",
+      mergeHead,
+      sourceHead,
+    );
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/merge commit/);
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      baseHead + "\n",
+    );
+  });
+
   it("refuses cleanup while the merged worktree is dirty", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
@@ -276,6 +320,30 @@ describe("delivery mechanical nodes", () => {
     await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
     expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
       movedHead,
+    );
+  });
+
+  it("preserves merged resources when the base no longer contains the snapshot", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await git(
+      fixture.sourcePath,
+      "update-ref",
+      "refs/heads/main",
+      snapshot.baseHead,
+      snapshot.sourceHead,
+    );
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow();
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow();
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      snapshot.sourceHead + "\n",
     );
   });
 
