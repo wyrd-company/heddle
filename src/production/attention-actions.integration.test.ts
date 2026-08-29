@@ -75,6 +75,19 @@ describe("production attention actions", () => {
       expect(composition.attention.list()).toHaveLength(1),
     );
     const attention = composition.attention.list()[0]!;
+    await expect(
+      composition.consoleActions.execute({
+        action: attention.actions[0]!,
+        answers: {},
+        attention,
+      }),
+    ).rejects.toThrow("Answers must name every offered question exactly once");
+    expect(
+      composition.persistence.effectIntentRecorded(
+        "console-attention-action",
+        attention.attentionId,
+      ),
+    ).toBe(false);
 
     await composition.consoleActions.execute({
       action: attention.actions[0]!,
@@ -201,7 +214,7 @@ describe("production attention actions", () => {
         answers: { unsupported: "answer" },
         attention,
       }),
-    ).rejects.toThrow("Approval actions do not accept answers");
+    ).rejects.toThrow("request body contains an unsupported field");
     expect(
       composition.persistence.effectIntentRecorded(
         "console-attention-action",

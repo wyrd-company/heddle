@@ -5,6 +5,7 @@
 
 import {
   assertConsoleAttentionFingerprint,
+  parseConsoleAttentionActionRequest,
   type ConsoleAttentionAction,
   type ConsoleAttentionActionAnswers,
   type ConsoleAttentionActionPort,
@@ -71,8 +72,18 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
         `Attention '${input.attention.attentionId}' does not offer action '${input.action.actionId}'`,
       );
     }
-    this.#validateInput(input);
-    const intent = actionIntent(input.action, input.answers);
+    const request = parseConsoleAttentionActionRequest(
+      {
+        ...(input.answers === undefined ? {} : { answers: input.answers }),
+        fingerprint: input.attention.fingerprint,
+      },
+      input.action,
+    );
+    const validated = {
+      ...input,
+      ...(request.answers === undefined ? {} : { answers: request.answers }),
+    };
+    const intent = actionIntent(input.action, request.answers);
     this.persistence.recordEffectIntent(
       effectKind,
       input.attention.attentionId,
@@ -81,7 +92,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     if (
       !this.persistence.effectCompleted(effectKind, input.attention.attentionId)
     ) {
-      await this.#apply(input);
+      await this.#apply(validated);
       if (
         !this.persistence.recordEffectCompleted(
           effectKind,
@@ -96,25 +107,6 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       }
     }
     this.attention.resolve(input.attention.attentionId);
-  }
-
-  #validateInput(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
-    if (input.action.contract.kind === "escalation.answer") {
-      escalationAnswers(input.answers);
-      return;
-    }
-    if (input.action.contract.kind === "t3.approval.respond") {
-      if (input.answers !== undefined) {
-        throw new TypeError("Approval actions do not accept answers");
-      }
-      return;
-    }
-    if (
-      input.answers === undefined ||
-      Object.keys(input.answers).length === 0
-    ) {
-      throw new TypeError("User-input actions require answers");
-    }
   }
 
   async #apply(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
