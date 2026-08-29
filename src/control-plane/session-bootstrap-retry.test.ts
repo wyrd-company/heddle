@@ -53,7 +53,7 @@ const workflowMcp = {
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
   stage: "prepare",
   todoTemplate: "sample-prepare",
-  tools: ["advance", "get_task_context"],
+  tools: ["advance", "answer", "get_task_context"],
 };
 
 const resolveWorkflowMcpStageContract = async () => workflowMcp;
@@ -66,6 +66,19 @@ const handoffDocument = (token: string, stage = "prepare") =>
     taskContract: { title: "Prepare a sample" },
     version: 1,
   });
+
+const withParentAuthority = (state: InstanceState): InstanceState =>
+  state.flowcraftContext === null
+    ? {
+        ...state,
+        flowcraftContext: {
+          awaitingNodeIds: ["prepare"],
+          blueprintBlobHash: "a".repeat(40),
+          blueprintPath: "blueprints/sample-process.json",
+          completedOperations: {},
+        },
+      }
+    : state;
 
 const instantiateTodoList: NonNullable<
   SessionBootstrapDependencies["instantiateTodoList"]
@@ -109,7 +122,7 @@ const expectParentRejected = async (
   state: InstanceState,
   otherRecords: InstanceRecord[] = [],
 ) => {
-  const memory = memoryStore(state, otherRecords);
+  const memory = memoryStore(withParentAuthority(state), otherRecords);
   const dispatch = vi.fn(async () => ({ sequence: 1 }));
   await expect(
     bootstrapStageSession(
@@ -139,11 +152,13 @@ describe("stage session cold retry guards", () => {
       sessionKey: "parent",
       workflowMcp,
     };
-    const memory = memoryStore({
-      ...initialState(),
-      correlationTokens: { parent: "token-parent" },
-      handoffs: [parentHandoff],
-    });
+    const memory = memoryStore(
+      withParentAuthority({
+        ...initialState(),
+        correlationTokens: { parent: "token-parent" },
+        handoffs: [parentHandoff],
+      }),
+    );
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
 
     await bootstrapStageSession(
@@ -250,6 +265,28 @@ describe("stage session cold retry guards", () => {
     );
   });
 
+  it("rejects a completed parent whose MCP authority has no answer tool", async () => {
+    await expectParentRejected({
+      ...initialState(),
+      correlationTokens: { parent: "token-parent" },
+      flowcraftContext: {
+        awaitingNodeIds: ["prepare"],
+        blueprintBlobHash: "a".repeat(40),
+        blueprintPath: "blueprints/sample-process.json",
+        completedOperations: { "mcp:advance:parent": {} },
+      },
+      handoffs: [
+        {
+          correlationToken: "token-parent",
+          handoff: handoffDocument("token-parent"),
+          kind: "stage-handoff",
+          sessionKey: "parent",
+          workflowMcp,
+        },
+      ],
+    });
+  });
+
   it("rejects an unbound parent before persisting or dispatching", async () => {
     const memory = memoryStore();
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
@@ -301,38 +338,40 @@ describe("stage session cold retry guards", () => {
   });
 
   it("rejects a retry when the stored parent session disagrees", async () => {
-    const memory = memoryStore({
-      ...initialState(),
-      correlationTokens: {
-        child: "token-child",
-        "parent-a": "token-parent-a",
-        "parent-b": "token-parent-b",
-      },
-      handoffs: [
-        {
-          correlationToken: "token-parent-a",
-          handoff: handoffDocument("token-parent-a"),
-          kind: "stage-handoff",
-          sessionKey: "parent-a",
-          workflowMcp,
+    const memory = memoryStore(
+      withParentAuthority({
+        ...initialState(),
+        correlationTokens: {
+          child: "token-child",
+          "parent-a": "token-parent-a",
+          "parent-b": "token-parent-b",
         },
-        {
-          correlationToken: "token-parent-b",
-          handoff: handoffDocument("token-parent-b"),
-          kind: "stage-handoff",
-          sessionKey: "parent-b",
-          workflowMcp,
-        },
-        {
-          correlationToken: "token-child",
-          handoff: "child handoff",
-          kind: "stage-handoff",
-          parentSessionKey: "parent-a",
-          sessionKey: "child",
-          workflowMcp,
-        },
-      ],
-    });
+        handoffs: [
+          {
+            correlationToken: "token-parent-a",
+            handoff: handoffDocument("token-parent-a"),
+            kind: "stage-handoff",
+            sessionKey: "parent-a",
+            workflowMcp,
+          },
+          {
+            correlationToken: "token-parent-b",
+            handoff: handoffDocument("token-parent-b"),
+            kind: "stage-handoff",
+            sessionKey: "parent-b",
+            workflowMcp,
+          },
+          {
+            correlationToken: "token-child",
+            handoff: "child handoff",
+            kind: "stage-handoff",
+            parentSessionKey: "parent-a",
+            sessionKey: "child",
+            workflowMcp,
+          },
+        ],
+      }),
+    );
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
 
     await expect(

@@ -138,59 +138,66 @@ export class WorkflowMcpSessionResolver {
   }
 
   async resolve(token: string): Promise<WorkflowMcpSessionBinding> {
-    const match = this.authenticate(token);
-    const storedHandoffs = authorityValidStoredStageHandoffsForSession(
-      match.instance,
-      match.sessionKey,
-      token,
-    );
-    if (storedHandoffs.length !== 1) throw new CorrelationTokenError();
-    const handoff = parseHandoff(storedHandoffs[0]!.handoff, token);
-    const context = match.instance.state.flowcraftContext;
-    if (
-      typeof context !== "object" ||
-      context === null ||
-      Array.isArray(context) ||
-      typeof context["blueprintBlobHash"] !== "string" ||
-      typeof context["blueprintPath"] !== "string" ||
-      !Array.isArray(context["awaitingNodeIds"]) ||
-      typeof context["completedOperations"] !== "object" ||
-      context["completedOperations"] === null ||
-      Array.isArray(context["completedOperations"])
-    ) {
-      throw new CorrelationTokenError();
-    }
-    const isCurrentStage =
-      context["awaitingNodeIds"].length === 1 &&
-      context["awaitingNodeIds"][0] === handoff.stage.name;
-    const isCompletedStage = Object.hasOwn(
-      context["completedOperations"],
-      advanceOperationId(match.sessionKey),
-    );
-    if (!isCurrentStage && !isCompletedStage) {
-      throw new CorrelationTokenError();
-    }
-    const stageContract = storedHandoffs[0]!.workflowMcp;
-    if (
-      stageContract.stage !== handoff.stage.name ||
-      stageContract.blueprintBlobHash !== context["blueprintBlobHash"]
-    ) {
-      throw new CorrelationTokenError();
-    }
-    const tools = isCompletedStage
-      ? stageContract.tools.filter((tool) => tool === "advance")
-      : stageContract.tools;
-
-    return {
-      dispositions: stageContract.dispositions,
-      instance: match.instance,
-      ...(storedHandoffs[0]!.parentSessionKey === undefined
-        ? {}
-        : { parentSessionKey: storedHandoffs[0]!.parentSessionKey }),
-      sessionKey: match.sessionKey,
-      stage: { id: stageContract.stage, tools },
-      taskContext: handoff.taskContract,
-      token,
-    };
+    return resolveWorkflowMcpSessionBinding(this.persistence, token);
   }
 }
+
+export const resolveWorkflowMcpSessionBinding = (
+  persistence: Pick<WorkflowMcpPersistence, "listInstances">,
+  token: string,
+): WorkflowMcpSessionBinding => {
+  const match = authenticateCorrelationToken(persistence, token);
+  const storedHandoffs = authorityValidStoredStageHandoffsForSession(
+    match.instance,
+    match.sessionKey,
+    token,
+  );
+  if (storedHandoffs.length !== 1) throw new CorrelationTokenError();
+  const handoff = parseHandoff(storedHandoffs[0]!.handoff, token);
+  const context = match.instance.state.flowcraftContext;
+  if (
+    typeof context !== "object" ||
+    context === null ||
+    Array.isArray(context) ||
+    typeof context["blueprintBlobHash"] !== "string" ||
+    typeof context["blueprintPath"] !== "string" ||
+    !Array.isArray(context["awaitingNodeIds"]) ||
+    typeof context["completedOperations"] !== "object" ||
+    context["completedOperations"] === null ||
+    Array.isArray(context["completedOperations"])
+  ) {
+    throw new CorrelationTokenError();
+  }
+  const isCurrentStage =
+    context["awaitingNodeIds"].length === 1 &&
+    context["awaitingNodeIds"][0] === handoff.stage.name;
+  const isCompletedStage = Object.hasOwn(
+    context["completedOperations"],
+    advanceOperationId(match.sessionKey),
+  );
+  if (!isCurrentStage && !isCompletedStage) {
+    throw new CorrelationTokenError();
+  }
+  const stageContract = storedHandoffs[0]!.workflowMcp;
+  if (
+    stageContract.stage !== handoff.stage.name ||
+    stageContract.blueprintBlobHash !== context["blueprintBlobHash"]
+  ) {
+    throw new CorrelationTokenError();
+  }
+  const tools = isCompletedStage
+    ? stageContract.tools.filter((tool) => tool === "advance")
+    : stageContract.tools;
+
+  return {
+    dispositions: stageContract.dispositions,
+    instance: match.instance,
+    ...(storedHandoffs[0]!.parentSessionKey === undefined
+      ? {}
+      : { parentSessionKey: storedHandoffs[0]!.parentSessionKey }),
+    sessionKey: match.sessionKey,
+    stage: { id: stageContract.stage, tools },
+    taskContext: handoff.taskContract,
+    token,
+  };
+};

@@ -5,9 +5,8 @@
 
 import type { InstanceRecord, JsonValue } from "../persistence/index.js";
 import {
-  authenticateCorrelationToken,
-  authorityValidStoredStageHandoffsForSession,
   CorrelationTokenError,
+  resolveWorkflowMcpSessionBinding,
 } from "../mcp-server/session-binding.js";
 import type { InstanceStateStore } from "./correlation-token.js";
 
@@ -44,15 +43,11 @@ export const assertParentSession = (
   let isCanonicalParent = false;
   if (token !== undefined) {
     try {
-      const match = authenticateCorrelationToken(store, token);
+      const binding = resolveWorkflowMcpSessionBinding(store, token);
       isCanonicalParent =
-        match.instance.instanceId === record.instanceId &&
-        match.sessionKey === input.parentSessionKey &&
-        authorityValidStoredStageHandoffsForSession(
-          record,
-          input.parentSessionKey,
-          token,
-        ).length === 1;
+        binding.instance.instanceId === record.instanceId &&
+        binding.sessionKey === input.parentSessionKey &&
+        binding.stage.tools.includes("answer");
     } catch (error) {
       if (!(error instanceof CorrelationTokenError)) throw error;
     }
