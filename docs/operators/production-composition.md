@@ -79,20 +79,32 @@ within the configured bound if the pass cannot drain.
 
 Attention and notification delivery use the stable attention ID from the
 accepted lifecycle or escalation contract. SQLite stores attention and adapter
-completion records. Reusing an attention ID with a different payload fails
-closed as a durable-identity disagreement. A restart replays an unfinished
-escalation route without adding a second attention entry or repeating a completed
-Pushover delivery. The current console catalog lists only unresolved attention.
+intent and completion records. Reusing an attention ID with a different payload
+fingerprint fails closed as a durable-identity disagreement. A restart replays
+an unfinished escalation route without adding a second attention entry. The
+current console catalog lists only unresolved attention.
 An accepted disposition performs its canonical effect before marking the entry
 resolved. The resolved record remains durable so the same stable ID cannot raise
 a second entry after restart. The production action port records the exact action
 and answers as durable intent before effect. It delegates only to
 `EscalationCoordinator.answerAsOperator`, `SessionObserver.answerApproval`, or
 `SessionObserver.answerUserInput`. T3 dispatch uses the stable attention ID as
-its command identity. Completion is durable before queue resolution; failure
-keeps the entry unresolved, and changing a pending action or answer fails closed.
+its command identity. Before retry, Heddle reconciles the exact intended request,
+approval decision, or user-input answers against authoritative T3 resolved
+activity history. A matching outcome completes locally without a second
+response; a different outcome fails closed. Heddle approval `reject` maps to T3
+provider decision `decline`. Completion is durable before queue resolution;
+failure keeps the entry unresolved, and changing a pending action or answer
+fails closed.
 Pushover transport is an explicit port so qualification can use a synthetic
-transport. Routine operation uses `HttpPushoverTransport`.
+transport. Routine operation uses `HttpPushoverTransport`. The Pushover message
+API has no idempotency or outcome-reconciliation key. Delivery is at-least-once:
+Heddle records intent before the HTTP request and retries pending intent after
+restart so operator attention is not lost. A process crash after Pushover
+accepts the request but before Heddle records completion can produce one
+duplicate per ambiguous attempt. Durable completion suppresses later replay.
+The stable attention ID remains the local outbox and console deep-link identity;
+the HTTP transport does not represent it as provider deduplication.
 
 Qualification uses generated boards, repositories, state directories,
 worktrees, and synthetic notification transport. It does not use the shared

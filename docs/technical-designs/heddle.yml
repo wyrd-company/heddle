@@ -254,18 +254,26 @@ proposed-design:
 
     Top-level routing composes one durable attention adapter and one Pushover
     adapter. Both consume the escalation's stable attention ID. Adapter
-    persistence rejects a different attention payload under the same stable ID.
-    completion is durable, so a process that stops after an effect succeeds but
-    before its route event is appended can replay the route without duplicating
-    the attention entry or notification delivery. The escalation remains
-    pending and answerable until the accepted answer event is recorded. An
+    persistence rejects a different payload fingerprint under the same stable
+    ID. Attention insertion is idempotent. Pushover delivery is at-least-once:
+    the provider has no idempotency or outcome-reconciliation key, so pending
+    intent is retried after restart. A process stop after provider acceptance but
+    before local completion can produce one duplicate per ambiguous attempt.
+    The stable attention ID is local outbox and deep-link identity, not provider
+    deduplication. The escalation remains pending and answerable until the
+    accepted answer event is recorded. An
     accepted console disposition invokes the canonical escalation or T3 action
     before recording the attention entry as resolved. The production adapter
     records the exact action and answers as durable intent, uses the attention ID
-    as the T3 command identity, records completion after accepted effect success,
-    and then resolves the queue entry. A failed effect remains unresolved; a
-    changed pending action fails closed. Resolved entries leave the current
-    console catalog but retain their stable identity for restart deduplication.
+    as the T3 command identity, and reconciles pending local intent against the
+    exact request and outcome in authoritative T3 resolved activity history. A
+    matching approval decision or user-input answer completes locally without a
+    second response; a mismatch fails closed. Heddle approval reject maps to T3
+    provider decision decline. The adapter records completion after accepted
+    effect success and then resolves the queue entry. A failed effect remains
+    unresolved; a changed pending action fails closed. Resolved entries leave
+    the current console catalog but retain their stable identity for restart
+    deduplication.
 
     Harness-native question tools serve assistive tasks, where the
     operator already works in T3's UI. The provider adapters map
@@ -424,9 +432,10 @@ proposed-design:
 
     The same database stores canonical scheduling intent, durable attention
     entries with their unresolved or resolved queue lifecycle, and stable-ID
-    adapter completion. These records make instance start, session activation,
-    attention routing, action replay, and notification replay idempotent without
-    introducing another lifecycle or attention authority.
+    adapter intent and completion. These records make instance start, session
+    activation, attention routing, action replay, and completed-notification
+    replay idempotent without introducing another lifecycle or attention
+    authority. A pending Pushover notification is retried at-least-once.
   deployment: >
     Heddle installs as a devcontainer feature in each workspace
     container, following the t3code-server pattern: an s6-supervised
