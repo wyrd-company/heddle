@@ -13,12 +13,11 @@ export function blueprintToCanvas(
 	blueprint: WorkflowBlueprint,
 	options: BlueprintToCanvasOptions = {},
 ): void {
-	const existingNodeIds = new Set(
-		editor
-			.getCurrentPageShapes()
-			.filter((s) => s.type === FLOWCRAFT_NODE)
-			.map((s) => s.id),
-	)
+	const existingGraphIds = editor
+		.getCurrentPageShapes()
+		.filter((shape) => shape.type === FLOWCRAFT_NODE || shape.type === 'arrow')
+		.map(({ id }) => id)
+	if (existingGraphIds.length > 0) editor.deleteShapes(existingGraphIds)
 
 	const GAP_X = 300
 	const GAP_Y = 150
@@ -52,14 +51,6 @@ export function blueprintToCanvas(
 		})
 	}
 
-	const existingArrowIds = new Set(
-		editor
-			.getCurrentPageShapes()
-			.filter((s) => s.type === 'arrow')
-			.map((s) => s.id),
-	)
-
-	const usedArrowIds = new Set<TLShapeId>()
 	const arrowPartials: TLCreateShapePartial[] = []
 
 	for (const edge of blueprint.edges) {
@@ -69,8 +60,6 @@ export function blueprintToCanvas(
 		if (!newNodeIds.has(sourceShapeId) || !newNodeIds.has(targetShapeId)) continue
 
 		const arrowId = createShapeId(`arrow-${edge.source}-${edge.target}`)
-		usedArrowIds.add(arrowId)
-
 		const edgeDef = { ...edge } as Record<string, unknown>
 		delete edgeDef.source
 		delete edgeDef.target
@@ -109,18 +98,6 @@ export function blueprintToCanvas(
 			type: 'arrow',
 			props: { terminal: 'end' },
 		})
-	}
-
-	const shapesToDelete: TLShapeId[] = []
-	for (const id of existingNodeIds) {
-		if (!newNodeIds.has(id)) shapesToDelete.push(id)
-	}
-	for (const id of existingArrowIds) {
-		if (!usedArrowIds.has(id)) shapesToDelete.push(id)
-	}
-
-	if (shapesToDelete.length > 0) {
-		editor.deleteShapes(shapesToDelete)
 	}
 
 	editor.zoomToFit()

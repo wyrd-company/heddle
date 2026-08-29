@@ -16,6 +16,7 @@ import { createRoot } from "react-dom/client";
 import {
   ArrowBindingUtil,
   ArrowShapeUtil,
+  defaultTools,
   type Editor,
   TldrawEditor,
 } from "tldraw";
@@ -225,9 +226,9 @@ function LifecycleViewer() {
       setEditStatus("Unsaved canvas changes");
     });
     editSync.current = sync;
+    editor.updateInstanceState({ isReadonly: false });
     sync.applyBlueprint(editing.blueprint, editing.positions);
     sync.startListening();
-    editor.updateInstanceState({ isReadonly: false });
     editor.zoomToFit({ animation: { duration: 0 } });
     return () => {
       sync.dispose();
@@ -316,8 +317,10 @@ function LifecycleViewer() {
         ) : (
           <TldrawEditor
             bindingUtils={bindingUtils}
+            initialState="select"
             onMount={setEditor}
             shapeUtils={shapeUtils}
+            tools={defaultTools}
           />
         )}
       </div>

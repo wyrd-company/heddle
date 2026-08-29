@@ -86,6 +86,24 @@ describe("blueprint canvas conversion", () => {
       ],
     };
 
+    blueprintToCanvas(
+      canvas as unknown as Editor,
+      {
+        id: blueprint.id,
+        nodes: blueprint.nodes.map(({ id, uses }) => ({ id, uses })),
+        edges: blueprint.edges.map(({ condition, source, target }) => ({
+          condition,
+          source,
+          target,
+        })),
+      },
+      {
+        positions: {
+          finish: { x: 300, y: 20 },
+          inspect: { x: 0, y: 20 },
+        },
+      },
+    );
     blueprintToCanvas(canvas as unknown as Editor, blueprint, {
       positions: {
         finish: { x: 420, y: 60 },
