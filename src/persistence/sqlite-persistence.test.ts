@@ -8,6 +8,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 
@@ -223,15 +224,27 @@ describe("SqlitePersistence", () => {
         ],
         { stdio: ["pipe", "pipe", "pipe"] },
       );
-    const workers = [startWorker("record-a"), startWorker("record-b")];
-    const exits = workers.map((worker) => once(worker, "exit"));
-    await Promise.all(workers.map((worker) => once(worker.stdout!, "data")));
-    const results = workers.map((worker) => once(worker.stdout!, "data"));
+    const workers: Array<ReturnType<typeof startWorker>> = [];
+    const exits: Array<ReturnType<typeof once>> = [];
+    const outputs: AsyncIterableIterator<string>[] = [];
+    for (const instanceId of ["record-a", "record-b"]) {
+      const worker = startWorker(instanceId);
+      const output = createInterface({
+        input: worker.stdout!,
+      })[Symbol.asyncIterator]();
+      workers.push(worker);
+      exits.push(once(worker, "exit"));
+      outputs.push(output);
+      await expect(output.next()).resolves.toMatchObject({
+        done: false,
+        value: "ready",
+      });
+    }
     for (const worker of workers) worker.stdin!.end("go\n");
     const parsed = await Promise.all(
-      results.map(async (result) => {
-        const [chunk] = await result;
-        return JSON.parse(chunk.toString()) as {
+      outputs.map(async (output) => {
+        const line = await output.next();
+        return JSON.parse(line.value) as {
           claimed: boolean;
           error?: string;
         };

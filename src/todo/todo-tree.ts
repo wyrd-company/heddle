@@ -68,12 +68,16 @@ export const projectTodoList = (
   list: TodoList,
   rootItemId?: string,
 ): ProjectedTodoList => {
-  const { assignments: _secretAssignments, ...projection } = list;
+  const projection: Record<string, JsonValue> = { ...list };
+  delete projection["assignments"];
   return {
     ...projection,
     items:
       rootItemId === undefined
         ? [...list.items]
         : scopedTodoItems(list, rootItemId),
+    sessionKey: list.sessionKey,
+    stage: list.stage,
+    template: list.template,
   };
 };
