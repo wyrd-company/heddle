@@ -33,7 +33,10 @@ class FixtureBoard implements ConsoleBoard {
   readonly tasks = [
     task(51, "Seasonal display", "in-progress", { tags: ["type:epic"] }),
     task(52, "Count storage crates", "in-progress", { parent: 51 }),
-    task(53, "Prepare shelf labels", "todo", { parent: 51 }),
+    task(53, "Prepare shelf labels", "todo", {
+      dependencies: [52],
+      parent: 51,
+    }),
     task(80, "Repair reading-room lamp", "done"),
   ];
 
@@ -128,16 +131,25 @@ describe("console server", () => {
   });
 
   it("serves the shell and read-only board, instance, event, and attention APIs", async () => {
-    const [page, styles, client, boardResponse, instances, events, attention] =
-      await Promise.all([
-        globalThis.fetch(`${baseUrl}/?scope=epic:51`),
-        globalThis.fetch(`${baseUrl}/assets/console.css`),
-        globalThis.fetch(`${baseUrl}/assets/console.js`),
-        globalThis.fetch(`${baseUrl}/api/board`),
-        globalThis.fetch(`${baseUrl}/api/instances`),
-        globalThis.fetch(`${baseUrl}/api/events?instance=instance-52&after=6`),
-        globalThis.fetch(`${baseUrl}/api/attention`),
-      ]);
+    const [
+      page,
+      styles,
+      client,
+      boardResponse,
+      instances,
+      events,
+      attention,
+      graph,
+    ] = await Promise.all([
+      globalThis.fetch(`${baseUrl}/?scope=epic:51`),
+      globalThis.fetch(`${baseUrl}/assets/console.css`),
+      globalThis.fetch(`${baseUrl}/assets/console.js`),
+      globalThis.fetch(`${baseUrl}/api/board`),
+      globalThis.fetch(`${baseUrl}/api/instances`),
+      globalThis.fetch(`${baseUrl}/api/events?instance=instance-52&after=6`),
+      globalThis.fetch(`${baseUrl}/api/attention`),
+      globalThis.fetch(`${baseUrl}/api/dependency-graph?scope=epic:51`),
+    ]);
 
     await expect(page.text()).resolves.toContain("KANBAN PROJECTION");
     expect(page.headers.get("content-security-policy")).toContain(
@@ -176,6 +188,15 @@ describe("console server", () => {
     await expect(attention.json()).resolves.toEqual([
       expect.objectContaining({ attentionId: "attention-1" }),
     ]);
+    await expect(graph.json()).resolves.toMatchObject({
+      edges: [{ from: 52, to: 53, trace: true }],
+      nodes: expect.arrayContaining([
+        expect.objectContaining({ id: 51, treatment: "running" }),
+        expect.objectContaining({ id: 52, treatment: "attention" }),
+        expect.objectContaining({ id: 53, treatment: "blocked" }),
+      ]),
+      scope: { epicId: 51, kind: "epic" },
+    });
     expect(board.writes).toEqual([]);
   });
 

@@ -8,6 +8,13 @@ export {
   parseConsoleScope,
   serializeConsoleScope,
 } from "./projection.js";
+export { buildDependencyGraphProjection } from "./dependency-graph.js";
+export type {
+  DependencyGraphEdge,
+  DependencyGraphNode,
+  DependencyGraphProjection,
+  DependencyNodeTreatment,
+} from "./dependency-graph.js";
 export type {
   ConsoleScope,
   KanbanProjection,

@@ -17,6 +17,7 @@ import {
   ConsoleScopeError,
   parseConsoleScope,
 } from "./projection.js";
+import { buildDependencyGraphProjection } from "./dependency-graph.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
 import type { ConsoleBoard, ConsoleStateSource } from "./types.js";
 
@@ -206,6 +207,25 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
             now: now(),
             scope: requestScope(url.searchParams.get("scope")),
             statuses,
+            tasks,
+          }),
+        );
+        return;
+      }
+      if (url.pathname === "/api/dependency-graph") {
+        if (request.method !== "GET") return methodNotAllowed(response, "GET");
+        const [tasks, instances, attention] = await Promise.all([
+          options.board.readBoard(),
+          options.state.listInstances(),
+          options.state.listAttention(),
+        ]);
+        json(
+          response,
+          200,
+          buildDependencyGraphProjection({
+            attention,
+            instances,
+            scope: requestScope(url.searchParams.get("scope")),
             tasks,
           }),
         );
