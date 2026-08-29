@@ -44,7 +44,7 @@ const userInputQuestions = [
       { description: "Use a small batch", label: "Small" },
       { description: "Use a large batch", label: "Large" },
     ],
-    prompt: "Which batch size should be used?",
+    question: "Which batch size should be used?",
   },
 ];
 

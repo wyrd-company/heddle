@@ -58,7 +58,7 @@ export const userInputQuestionsFor = (
     const question = value as Record<string, unknown>;
     if (
       !nonEmptyString(question["id"]) ||
-      !nonEmptyString(question["prompt"]) ||
+      !nonEmptyString(question["question"]) ||
       typeof question["multiSelect"] !== "boolean" ||
       !Array.isArray(question["options"]) ||
       question["options"].length < 2
@@ -112,7 +112,7 @@ export const userInputQuestionsFor = (
       id: question["id"],
       multiSelect: question["multiSelect"],
       options,
-      prompt: question["prompt"],
+      question: question["question"],
     };
   });
 };

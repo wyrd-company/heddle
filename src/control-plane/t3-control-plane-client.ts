@@ -50,7 +50,7 @@ export type T3UserInputQuestion = {
     description?: string;
     label: string;
   }>;
-  prompt: string;
+  question: string;
 };
 
 export type T3ThreadSnapshot = {
