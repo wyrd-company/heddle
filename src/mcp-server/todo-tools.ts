@@ -8,13 +8,11 @@ import { z } from "zod";
 
 import {
   mutateStageTodoList,
+  scopedTodoItems,
   stageTodoList,
+  todoSubtreeIds,
   type TodoList,
 } from "../todo/index.js";
-import {
-  scopedTodoItems,
-  todoSubtreeIds,
-} from "../subagents/delegation-state.js";
 import type {
   WorkflowMcpToolContext,
   WorkflowMcpToolContributor,
@@ -254,22 +252,27 @@ const registerReorder = (
     },
     ({ id, position }) => {
       const todoList = mutateList(context, (list) => {
-        const from = itemIndex(context, list, id);
+        itemIndex(context, list, id);
         const root = context.binding.todoAssignment?.rootItemId;
-        const scopedItems =
-          root === undefined ? list.items : scopedTodoItems(list, root);
+        const scopedItems = [
+          ...(root === undefined ? list.items : scopedTodoItems(list, root)),
+        ];
         if (position >= scopedItems.length) {
           throw new Error(`Todo position is outside the list: ${position}`);
         }
         const items = [...list.items];
-        const [item] = items.splice(from, 1);
-        const targetId = scopedItems[position]!.id;
-        const insertion =
-          targetId === id
-            ? from
-            : items.findIndex(({ id: candidate }) => candidate === targetId);
-        items.splice(insertion, 0, item!);
-        return { ...list, items };
+        const scopedFrom = scopedItems.findIndex((item) => item.id === id);
+        const [item] = scopedItems.splice(scopedFrom, 1);
+        scopedItems.splice(position, 0, item!);
+        let reorderedItems = scopedItems;
+        if (root !== undefined) {
+          const reordered = scopedItems[Symbol.iterator]();
+          const scopedIds = todoSubtreeIds(list, root);
+          reorderedItems = items.map((candidate) =>
+            scopedIds.has(candidate.id) ? reordered.next().value! : candidate,
+          );
+        }
+        return { ...list, items: reorderedItems };
       });
       return result({ todoList });
     },

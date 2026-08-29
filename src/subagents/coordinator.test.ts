@@ -89,7 +89,16 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
   }));
   const steerParent = vi.fn(async () => undefined);
   let observedPhase: "failed" | "running" = "running";
-  const ids = ["child-token", "child-session", "child-thread"];
+  const ids = [
+    "child-token",
+    "child-session",
+    "child-thread",
+    "create-command",
+    "turn-message",
+    "turn-command",
+    "stop-command",
+    "stop-message",
+  ];
   const coordinator = new SubagentCoordinator({
     activeSessions: async () => [
       { depth: 0, provider: "sample-provider", sessionId: "parent" },
@@ -178,15 +187,40 @@ describe("SubagentCoordinator", () => {
     });
     expect(test.bootstrap).toHaveBeenCalledWith(
       expect.objectContaining({
+        createdAt: expect.any(String),
         parentSessionKey: "parent",
         sessionKey: "child-session",
+        threadCreateCommandId: "create-command",
         threadId: "child-thread",
         todoAssignment: { listSessionKey: "parent", rootItemId: "root" },
+        turnCommandId: "turn-command",
+        turnMessageId: "turn-message",
       }),
       expect.objectContaining({ mintCorrelationToken: expect.any(Function) }),
     );
     const dependencies = test.bootstrap.mock.calls[0]![1];
     expect(dependencies.mintCorrelationToken?.()).toBe("child-token");
+  });
+
+  it("replays one operation with its canonical child and bootstrap identities", async () => {
+    const test = fixture();
+
+    const first = await spawn(test.coordinator, test.store);
+    const replay = await spawn(test.coordinator, test.store);
+
+    expect(replay).toEqual(first);
+    expect(test.bootstrap).toHaveBeenCalledTimes(2);
+    expect(test.bootstrap.mock.calls[1]?.[0]).toMatchObject(
+      test.bootstrap.mock.calls[0]?.[0] ?? {},
+    );
+    await expect(
+      test.coordinator.spawn(binding(test.store), {
+        model: "different-model",
+        operationId: "spawn-one",
+        provider: "sample-provider",
+        rootItemId: "root",
+      }),
+    ).rejects.toThrow(/does not match its stored assignment/);
   });
 
   it("returns the shared pacing deferral without claiming the subtree", async () => {

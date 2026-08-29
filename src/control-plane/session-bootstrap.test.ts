@@ -356,6 +356,95 @@ describe("stage session bootstrap", () => {
     expect(dependencies.mintCorrelationToken).toHaveBeenCalledOnce();
   });
 
+  it("uses caller-pinned thread and command identities for delegated replay", async () => {
+    let record: InstanceRecord = {
+      instanceId: "instance-delegated",
+      state: initialState(),
+      version: 1,
+    };
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+    const input = {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      handoff: {
+        skillPointer: "skill://prepare",
+        stage: {
+          kind: "standard" as const,
+          name: "prepare",
+          priorStageOutputs: [],
+        },
+        taskContract: { title: "Prepare inventory" },
+      },
+      instanceId: "instance-delegated",
+      interactionMode: "default",
+      modelSelection: { instanceId: "cursor", model: "default" },
+      projectId: "project-delegated",
+      providerContext: {
+        cliVersion: "sample-version",
+        driver: "cursor",
+        lifecycle: "independent" as const,
+      },
+      runtimeMode: "auto",
+      sessionKey: "prepare-delegated",
+      threadCreateCommandId: "create-delegated",
+      threadId: "thread-delegated",
+      title: "Prepare inventory",
+      turnCommandId: "turn-delegated",
+      turnMessageId: "message-delegated",
+      worktree: {
+        baseRef: "main",
+        branch: "task/prepare-delegated",
+        repositoryName: "sample-repository",
+        repositoryRoot: "/workspaces/sample-repository",
+        worktreeName: "task-prepare-delegated",
+      },
+    };
+    const dependencies: SessionBootstrapDependencies = {
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: true,
+        path: "/workspaces/worktrees/sample-repository/task-prepare-delegated",
+      }),
+      instantiateTodoList,
+      mintCorrelationToken: () => "correlation-token",
+      nextId: () => "unexpected-id",
+      now: () => "unexpected-time",
+      persistence: {
+        compareAndSwapInstance: (_id, version, state) => {
+          if (version !== record.version) return undefined;
+          record = { ...record, state, version: record.version + 1 };
+          return record;
+        },
+        getInstance: () => record,
+      },
+      resolveWorkflowMcpStageContract,
+      t3: { dispatch },
+    };
+
+    await bootstrapStageSession(input, dependencies);
+    await bootstrapStageSession(input, dependencies);
+
+    expect(dispatch.mock.calls.map(([command]) => command)).toEqual([
+      expect.objectContaining({
+        commandId: "create-delegated",
+        createdAt: input.createdAt,
+        threadId: "thread-delegated",
+        type: "thread.create",
+      }),
+      expect.objectContaining({
+        commandId: "turn-delegated",
+        createdAt: input.createdAt,
+        message: expect.objectContaining({ messageId: "message-delegated" }),
+        threadId: "thread-delegated",
+        type: "thread.turn.start",
+      }),
+      expect.objectContaining({ commandId: "create-delegated" }),
+      expect.objectContaining({
+        commandId: "turn-delegated",
+        message: expect.objectContaining({ messageId: "message-delegated" }),
+      }),
+    ]);
+  });
+
   it("steers with a second bare turn on the existing thread", async () => {
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
 

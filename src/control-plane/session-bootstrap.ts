@@ -9,13 +9,11 @@ import { GitBlueprintStore } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
 import { isAuthorityValidStoredStageHandoff } from "../mcp-server/session-binding.js";
-import {
-  assignmentForChild,
-  scopedTodoItems,
-} from "../subagents/delegation-state.js";
+import { assignmentForChild } from "../subagents/delegation-state.js";
 import {
   ensureStageTodoList,
   instantiateTodoList,
+  scopedTodoItems,
   stageTodoStateForHandoff,
 } from "../todo/index.js";
 import {
@@ -54,6 +52,7 @@ export interface SessionT3Client {
 }
 
 export type SessionBootstrapInput = {
+  createdAt?: string;
   handoff: Omit<StageHandoffInput, "correlationToken" | "todoList">;
   instanceId: string;
   interactionMode: string;
@@ -64,11 +63,14 @@ export type SessionBootstrapInput = {
   runtimeMode: string;
   sessionKey: string;
   title: string;
+  threadCreateCommandId?: string;
   threadId?: string;
   todoAssignment?: {
     listSessionKey: string;
     rootItemId: string;
   };
+  turnCommandId?: string;
+  turnMessageId?: string;
   worktree: WorktreeInput;
 };
 
@@ -382,7 +384,7 @@ export const bootstrapStageSession = async (
 
   await dependencies.t3.dispatch({
     type: "thread.create",
-    commandId: nextId(),
+    commandId: input.threadCreateCommandId ?? nextId(),
     threadId,
     projectId: input.projectId,
     title: input.title,
@@ -391,15 +393,15 @@ export const bootstrapStageSession = async (
     interactionMode: input.interactionMode,
     branch: worktree.branch,
     worktreePath: worktree.path,
-    createdAt: now(),
+    createdAt: input.createdAt ?? now(),
   });
   await dependencies.t3.dispatch(
     {
       type: "thread.turn.start",
-      commandId: nextId(),
+      commandId: input.turnCommandId ?? nextId(),
       threadId,
       message: {
-        messageId: nextId(),
+        messageId: input.turnMessageId ?? nextId(),
         role: "user",
         text: handoff,
         attachments: [],
@@ -407,7 +409,7 @@ export const bootstrapStageSession = async (
       modelSelection: input.modelSelection,
       runtimeMode: input.runtimeMode,
       interactionMode: input.interactionMode,
-      createdAt: now(),
+      createdAt: input.createdAt ?? now(),
     },
     input.providerContext,
   );

@@ -14,12 +14,13 @@ import type {
   TodoState,
   TodoTemplate,
 } from "./types.js";
+import { todoSubtreeIds, validTodoTree } from "./todo-tree.js";
 
 const artifactId = /^[a-z]+(?:-[a-z]+)*$/;
 const placeholder =
   /\{\{task\.([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*)\}\}/g;
 
-const isObject = (value: JsonValue): value is Record<string, JsonValue> =>
+const isObject = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readTemplate = async (
@@ -96,41 +97,6 @@ export const emptyTodoState = (): TodoState => ({
   version: 1,
 });
 
-const validTodoTree = (items: TodoItem[]): boolean => {
-  const byId = new Map(items.map((item) => [item.id, item]));
-  for (const item of items) {
-    if (item.parentId !== undefined && !byId.has(item.parentId)) return false;
-    const visited = new Set<string>();
-    let current: TodoItem | undefined = item;
-    while (current?.parentId !== undefined) {
-      if (visited.has(current.id)) return false;
-      visited.add(current.id);
-      current = byId.get(current.parentId);
-      if (current === undefined) return false;
-    }
-  }
-  return true;
-};
-
-const subtreeIds = (items: TodoItem[], rootItemId: string): Set<string> => {
-  const descendants = new Set<string>([rootItemId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const item of items) {
-      if (
-        item.parentId !== undefined &&
-        descendants.has(item.parentId) &&
-        !descendants.has(item.id)
-      ) {
-        descendants.add(item.id);
-        changed = true;
-      }
-    }
-  }
-  return descendants;
-};
-
 export const isTodoState = (value: JsonValue): value is TodoState => {
   if (
     !isObject(value) ||
@@ -180,6 +146,15 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
     for (const assignment of candidate["assignments"] ?? []) {
       if (
         !isObject(assignment) ||
+        !isObject(assignment["bootstrap"]) ||
+        typeof assignment["bootstrap"]["createCommandId"] !== "string" ||
+        assignment["bootstrap"]["createCommandId"].trim() === "" ||
+        typeof assignment["bootstrap"]["createdAt"] !== "string" ||
+        assignment["bootstrap"]["createdAt"].trim() === "" ||
+        typeof assignment["bootstrap"]["messageId"] !== "string" ||
+        assignment["bootstrap"]["messageId"].trim() === "" ||
+        typeof assignment["bootstrap"]["turnCommandId"] !== "string" ||
+        assignment["bootstrap"]["turnCommandId"].trim() === "" ||
         typeof assignment["correlationToken"] !== "string" ||
         assignment["correlationToken"].trim() === "" ||
         typeof assignment["depth"] !== "number" ||
@@ -222,6 +197,12 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
       ) {
         return false;
       }
+      if (
+        (assignment["status"] === "active" && notice !== undefined) ||
+        (assignment["status"] === "stopped" && notice === undefined)
+      ) {
+        return false;
+      }
       assignmentSessions.add(assignment["sessionKey"]);
       assignmentOperations.add(assignment["operationId"]);
     }
@@ -229,6 +210,17 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
     for (const assignment of assignments) {
       const visited = new Set<string>();
       let parentSessionKey = assignment.parentSessionKey;
+      const directParent = assignments.find(
+        (possibleParent) => possibleParent.sessionKey === parentSessionKey,
+      );
+      if (
+        parentSessionKey === candidate["sessionKey"]
+          ? assignment.depth !== 1
+          : directParent === undefined ||
+            assignment.depth !== directParent.depth + 1
+      ) {
+        return false;
+      }
       while (parentSessionKey !== candidate["sessionKey"]) {
         if (visited.has(parentSessionKey)) return false;
         visited.add(parentSessionKey);
@@ -259,14 +251,9 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
       const assignment = activeAssignments[left]!;
       for (let right = left + 1; right < activeAssignments.length; right += 1) {
         const other = activeAssignments[right]!;
-        const assignmentSubtree = subtreeIds(
-          candidate["items"] as TodoItem[],
-          assignment.rootItemId,
-        );
-        const otherSubtree = subtreeIds(
-          candidate["items"] as TodoItem[],
-          other.rootItemId,
-        );
+        const list = candidate as unknown as TodoList;
+        const assignmentSubtree = todoSubtreeIds(list, assignment.rootItemId);
+        const otherSubtree = todoSubtreeIds(list, other.rootItemId);
         const overlaps = [...assignmentSubtree].some((id) =>
           otherSubtree.has(id),
         );

@@ -171,6 +171,12 @@ describe.skipIf(!t3Binary)(
             {
               assignments: [
                 {
+                  bootstrap: {
+                    createCommandId: "create-child",
+                    createdAt: new Date(0).toISOString(),
+                    messageId: "message-child",
+                    turnCommandId: "turn-child",
+                  },
                   correlationToken: "child-token",
                   depth: 1,
                   model: "default",

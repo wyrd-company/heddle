@@ -6,12 +6,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { InstanceRecord, InstanceState } from "../persistence/index.js";
-import { isTodoState } from "../todo/index.js";
+import { isTodoState, scopedTodoItems, todoSubtreeIds } from "../todo/index.js";
 import {
   assignmentForChild,
   claimTodoAssignment,
-  scopedTodoItems,
-  todoSubtreeIds,
   type DelegationStateStore,
 } from "./delegation-state.js";
 
@@ -89,6 +87,12 @@ const claim = (
   overrides: Partial<Parameters<typeof claimTodoAssignment>[1]> = {},
 ) =>
   claimTodoAssignment(store, {
+    bootstrap: {
+      createCommandId: "create-child",
+      createdAt: new Date(0).toISOString(),
+      messageId: "message-child",
+      turnCommandId: "turn-child",
+    },
     correlationToken: "child-token",
     depth: 1,
     instanceId: "instance",

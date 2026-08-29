@@ -15,11 +15,10 @@ export {
   assignmentForChild,
   claimTodoAssignment,
   mutateTodoAssignment,
-  scopedTodoItems,
-  todoSubtreeIds,
   type ClaimTodoAssignmentInput,
   type DelegationStateStore,
 } from "./delegation-state.js";
+export { scopedTodoItems, todoSubtreeIds } from "../todo/index.js";
 export { workflowMcpSubagentTools } from "./tools.js";
 
 export const subagents = "subagents" as const;

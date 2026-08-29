@@ -13,6 +13,12 @@ export type TodoItem = Record<string, JsonValue> & {
 };
 
 export type TodoAssignment = Record<string, JsonValue> & {
+  bootstrap: {
+    createCommandId: string;
+    createdAt: string;
+    messageId: string;
+    turnCommandId: string;
+  };
   correlationToken: string;
   depth: number;
   model: string;

@@ -8,6 +8,7 @@ export {
   instantiateTodoList,
   isTodoState,
 } from "./todo-template.js";
+export { scopedTodoItems, todoSubtreeIds, validTodoTree } from "./todo-tree.js";
 export {
   ensureStageTodoList,
   mutateStageTodoList,

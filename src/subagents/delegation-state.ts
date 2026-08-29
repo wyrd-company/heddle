@@ -4,8 +4,8 @@
 // ---
 
 import type { InstanceRecord, InstanceState } from "../persistence/index.js";
-import { isTodoState } from "../todo/index.js";
-import type { TodoAssignment, TodoItem, TodoList } from "../todo/types.js";
+import { isTodoState, todoSubtreeIds } from "../todo/index.js";
+import type { TodoAssignment, TodoList } from "../todo/types.js";
 
 export interface DelegationStateStore {
   compareAndSwapInstance(
@@ -18,6 +18,7 @@ export interface DelegationStateStore {
 }
 
 export type ClaimTodoAssignmentInput = {
+  bootstrap: TodoAssignment["bootstrap"];
   correlationToken: string;
   depth: number;
   instanceId: string;
@@ -58,32 +59,6 @@ const requireList = (
     throw new Error("The stage session has no bound todo list");
   }
   return list;
-};
-
-export const todoSubtreeIds = (
-  list: TodoList,
-  rootItemId: string,
-): ReadonlySet<string> => {
-  const byId = new Map(list.items.map((item) => [item.id, item]));
-  if (!byId.has(rootItemId)) {
-    throw new Error(`Todo item does not exist: ${rootItemId}`);
-  }
-  const descendants = new Set<string>([rootItemId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const item of list.items) {
-      if (
-        item.parentId !== undefined &&
-        descendants.has(item.parentId) &&
-        !descendants.has(item.id)
-      ) {
-        descendants.add(item.id);
-        changed = true;
-      }
-    }
-  }
-  return descendants;
 };
 
 const assignmentsOverlap = (
@@ -137,6 +112,7 @@ export const claimTodoAssignment = (
   input: ClaimTodoAssignmentInput,
 ): TodoAssignment => {
   const candidate: TodoAssignment = {
+    bootstrap: input.bootstrap,
     correlationToken: input.correlationToken,
     depth: input.depth,
     model: input.model,
@@ -208,6 +184,8 @@ export const claimTodoAssignment = (
       throw new Error(
         "The subagent parent is outside the todo assignment tree",
       );
+    } else if (input.depth !== 1) {
+      throw new Error("A top-level subagent assignment must have depth one");
     }
     const ancestors = assignmentAncestors(
       activeAssignments,
@@ -239,6 +217,15 @@ export const claimTodoAssignment = (
     };
     const todoState = current.state.todoState;
     if (!isTodoState(todoState)) throw new Error("Invalid todo state");
+    const nextTodoState = {
+      ...todoState,
+      lists: todoState.lists.map((candidateList) =>
+        candidateList.sessionKey === list.sessionKey ? nextList : candidateList,
+      ),
+    };
+    if (!isTodoState(nextTodoState)) {
+      throw new Error("The todo assignment would create invalid durable state");
+    }
     const claimed = store.compareAndSwapInstance(
       input.instanceId,
       current.version,
@@ -248,14 +235,7 @@ export const claimTodoAssignment = (
           ...current.state.correlationTokens,
           [input.sessionKey]: input.correlationToken,
         },
-        todoState: {
-          ...todoState,
-          lists: todoState.lists.map((candidateList) =>
-            candidateList.sessionKey === list.sessionKey
-              ? nextList
-              : candidateList,
-          ),
-        },
+        todoState: nextTodoState,
       },
     );
     if (claimed !== undefined) return candidate;
@@ -282,14 +262,6 @@ export const assignmentForChild = (
   return matches[0]!;
 };
 
-export const scopedTodoItems = (
-  list: TodoList,
-  rootItemId: string,
-): TodoItem[] => {
-  const allowed = todoSubtreeIds(list, rootItemId);
-  return list.items.filter((item) => allowed.has(item.id));
-};
-
 export const mutateTodoAssignment = (
   store: DelegationStateStore,
   instanceId: string,
@@ -300,6 +272,25 @@ export const mutateTodoAssignment = (
     const current = requireRecord(store, instanceId);
     const { assignment, list } = assignmentForChild(current, sessionKey);
     const next = mutate(assignment);
+    for (const field of [
+      "bootstrap",
+      "correlationToken",
+      "depth",
+      "model",
+      "operationId",
+      "parentSessionKey",
+      "parentThreadId",
+      "provider",
+      "rootItemId",
+      "sessionKey",
+      "threadId",
+    ] as const) {
+      if (JSON.stringify(next[field]) !== JSON.stringify(assignment[field])) {
+        throw new Error(
+          `Todo assignment identity field cannot change: ${field}`,
+        );
+      }
+    }
     const todoState = current.state.todoState;
     if (!isTodoState(todoState)) throw new Error("Invalid todo state");
     const nextList: TodoList = {
@@ -308,14 +299,18 @@ export const mutateTodoAssignment = (
         candidate.sessionKey === sessionKey ? next : candidate,
       ),
     };
+    const nextTodoState = {
+      ...todoState,
+      lists: todoState.lists.map((candidate) =>
+        candidate.sessionKey === list.sessionKey ? nextList : candidate,
+      ),
+    };
+    if (!isTodoState(nextTodoState)) {
+      throw new Error("The todo assignment mutation is invalid");
+    }
     const claimed = store.compareAndSwapInstance(instanceId, current.version, {
       ...current.state,
-      todoState: {
-        ...todoState,
-        lists: todoState.lists.map((candidate) =>
-          candidate.sessionKey === list.sessionKey ? nextList : candidate,
-        ),
-      },
+      todoState: nextTodoState,
     });
     if (claimed !== undefined) return next;
   }

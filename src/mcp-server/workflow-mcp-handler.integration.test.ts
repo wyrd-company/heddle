@@ -966,6 +966,12 @@ describe("workflow MCP HTTP server", () => {
     const insideId = (inside.structuredContent as { id: string }).id;
     const outsideId = (outside.structuredContent as { id: string }).id;
     claimTodoAssignment(fixture.persistence, {
+      bootstrap: {
+        createCommandId: "create-child",
+        createdAt: new Date(0).toISOString(),
+        messageId: "message-child",
+        turnCommandId: "turn-child",
+      },
       correlationToken: "child-token",
       depth: 1,
       instanceId: "instance-alpha",
@@ -1095,12 +1101,36 @@ describe("workflow MCP HTTP server", () => {
     ).resolves.toMatchObject({
       structuredContent: { todoList: expect.any(Object) },
     });
+    await expect(
+      child.callTool({
+        name: "todo_reorder",
+        arguments: { id: insideId, position: 0 },
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: { todoList: expect.any(Object) },
+    });
+    const reordered = fixture.persistence.getInstance("instance-alpha")?.state
+      .todoState as { lists: Array<{ items: Array<{ id: string }> }> };
+    expect(reordered.lists[0]?.items.map(({ id }) => id)).toEqual([
+      insideId,
+      "orient",
+      outsideId,
+    ]);
 
     mutateTodoAssignment(
       fixture.persistence,
       "instance-alpha",
       "child-session",
-      (assignment) => ({ ...assignment, status: "stopped" }),
+      (assignment) => ({
+        ...assignment,
+        status: "stopped",
+        stopNotification: {
+          commandId: "stop-command",
+          createdAt: new Date(0).toISOString(),
+          messageId: "stop-message",
+          status: "completed",
+        },
+      }),
     );
     await expect(
       child.callTool({ name: "todo_check", arguments: { id: insideId } }),

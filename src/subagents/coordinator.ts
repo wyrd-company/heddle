@@ -18,6 +18,7 @@ import type {
   PacingSession,
 } from "../pacing/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/types.js";
+import { isTodoState } from "../todo/index.js";
 import {
   assignmentForChild,
   claimTodoAssignment,
@@ -134,6 +135,16 @@ export class SubagentCoordinator {
       );
     }
     const existing = this.#assignmentForOperation(binding, input.operationId);
+    if (
+      existing !== undefined &&
+      (existing.rootItemId !== input.rootItemId ||
+        existing.provider !== input.provider ||
+        existing.model !== input.model)
+    ) {
+      throw new Error(
+        `Subagent operation '${input.operationId}' does not match its stored assignment`,
+      );
+    }
     let assignment = existing;
     if (assignment === undefined) {
       const identity: ChildIdentity = {
@@ -164,6 +175,12 @@ export class SubagentCoordinator {
       }
       assignment = claimTodoAssignment(this.options.persistence, {
         ...identity,
+        bootstrap: {
+          createCommandId: this.#nextId(),
+          createdAt: this.#now(),
+          messageId: this.#nextId(),
+          turnCommandId: this.#nextId(),
+        },
         depth: parent.depth + 1,
         instanceId: binding.instance.instanceId,
         listSessionKey:
@@ -176,6 +193,9 @@ export class SubagentCoordinator {
         rootItemId: input.rootItemId,
         stage: binding.stage.id,
       });
+    }
+    if (assignment.status === "stopped") {
+      return { assignment, kind: "spawned" };
     }
     const preparation = await this.options.prepareSession({
       binding,
@@ -199,12 +219,16 @@ export class SubagentCoordinator {
         instanceId: binding.instance.instanceId,
         parentSessionKey: binding.sessionKey,
         sessionKey: assignment.sessionKey,
+        createdAt: assignment.bootstrap.createdAt,
+        threadCreateCommandId: assignment.bootstrap.createCommandId,
         threadId: assignment.threadId,
         todoAssignment: {
           listSessionKey:
             binding.todoAssignment?.listSessionKey ?? binding.sessionKey,
           rootItemId: assignment.rootItemId,
         },
+        turnCommandId: assignment.bootstrap.turnCommandId,
+        turnMessageId: assignment.bootstrap.messageId,
       },
       {
         ...this.options.bootstrapDependencies,
@@ -286,31 +310,16 @@ export class SubagentCoordinator {
     operationId: string,
   ): TodoAssignment | undefined {
     const record = this.#freshBindingRecord(binding);
-    if (
-      typeof record.state.todoState !== "object" ||
-      record.state.todoState === null ||
-      Array.isArray(record.state.todoState)
-    )
-      return undefined;
-    const lists = record.state.todoState["lists"];
-    if (!Array.isArray(lists)) return undefined;
-    const matches = lists.flatMap((list) => {
-      if (
-        typeof list !== "object" ||
-        list === null ||
-        Array.isArray(list) ||
-        !Array.isArray(list["assignments"])
-      )
-        return [];
-      return list["assignments"].filter(
+    if (!isTodoState(record.state.todoState)) {
+      throw new Error("The workflow instance has no valid todo state");
+    }
+    const matches = record.state.todoState.lists.flatMap((list) =>
+      (list.assignments ?? []).filter(
         (candidate) =>
-          typeof candidate === "object" &&
-          candidate !== null &&
-          !Array.isArray(candidate) &&
-          candidate["parentSessionKey"] === binding.sessionKey &&
-          candidate["operationId"] === operationId,
-      ) as TodoAssignment[];
-    });
+          candidate.parentSessionKey === binding.sessionKey &&
+          candidate.operationId === operationId,
+      ),
+    );
     if (matches.length > 1) throw new Error("Subagent operation is not unique");
     return matches[0];
   }
@@ -362,22 +371,23 @@ export class SubagentCoordinator {
     let assignment = current;
     if (assignment.stopNotification?.status === "completed") return;
     if (assignment.stopNotification === undefined) {
+      const notice = {
+        commandId: this.#nextId(),
+        createdAt: this.#now(),
+        messageId: this.#nextId(),
+        status: "issued" as const,
+      };
       assignment = mutateTodoAssignment(
         this.options.persistence,
         instanceId,
         assignment.sessionKey,
-        (candidate) => ({
-          ...candidate,
-          status: "stopped",
-          stopNotification: {
-            commandId: this.#nextId(),
-            createdAt: this.#now(),
-            messageId: this.#nextId(),
-            status: "issued",
-          },
-        }),
+        (candidate) =>
+          candidate.stopNotification === undefined
+            ? { ...candidate, status: "stopped", stopNotification: notice }
+            : candidate,
       );
     }
+    if (assignment.stopNotification?.status === "completed") return;
     await this.options.steerParent({
       assignment,
       message: `Subagent ${assignment.sessionKey} stopped with phase ${result.phase}; assigned todo subtree ${assignment.rootItemId}.`,
