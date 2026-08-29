@@ -40,10 +40,34 @@ const contrastRatio = (first: string, second: string): number => {
 describe("console page state", () => {
   it("clears stale projection and scope state when a scoped reload fails", () => {
     expect(consoleClient).toMatch(
-      /const renderLoadFailure = \(error\) => \{\s*scopeElement\.selectedIndex = -1;\s*boardElement\.replaceChildren\(\);\s*statusElement\.dataset\.error = "true";\s*statusElement\.textContent = error instanceof Error \? error\.message : "Console load failed";\s*\};/,
+      /const renderLoadFailure = \(error\) => \{\s*scopeElement\.selectedIndex = -1;\s*boardElement\.replaceChildren\(\);\s*graphCanvasElement\.replaceChildren\(\);\s*lifecycleTaskElement\.textContent = "";\s*statusElement\.dataset\.error = "true";\s*statusElement\.textContent = error instanceof Error \? error\.message : "Console load failed";\s*\};/,
     );
     expect(consoleClient).toMatch(
       /catch \(error\) \{\s*if \(generation !== loadGeneration\) return;\s*renderLoadFailure\(error\);\s*\}/,
+    );
+  });
+
+  it("binds graph scope and lifecycle navigation to the URL contract", () => {
+    expect(consoleClient).toContain(
+      'fetchJson("/api/dependency-graph?scope=" + encodeURIComponent(requestedScope))',
+    );
+    expect(consoleClient).toContain(
+      'link.href = consoleUrl("lifecycle", "task:" + node.id)',
+    );
+    expect(consoleClient).toContain(
+      'url.searchParams.set("scope", scopeElement.value)',
+    );
+    expect(consolePage).toContain(
+      '<ul class="graph-legend" aria-label="Node status legend">',
+    );
+    for (const treatment of ["done", "running", "attention", "blocked"]) {
+      expect(consolePage).toContain(`data-treatment="${treatment}"`);
+      expect(consoleStyles).toContain(
+        `.graph-node[data-treatment="${treatment}"]`,
+      );
+    }
+    expect(consoleStyles).toMatch(
+      /\.graph-edge\[data-trace="true"\] \{[^}]*stroke: var\(--signal\);[^}]*stroke-width: 4;[^}]*\}/,
     );
   });
 });
@@ -56,8 +80,17 @@ describe("console page accessibility", () => {
     expect(consolePage).toContain(
       '<div id="board" class="board" role="region" aria-label="Kanban board" tabindex="0"></div>',
     );
+    expect(consolePage).toContain(
+      '<div id="graph-viewport" class="graph-viewport" role="region" aria-label="Task dependency graph" tabindex="0">',
+    );
+    expect(consolePage).toContain(
+      '<section id="lifecycle-view" class="lifecycle-view" aria-labelledby="lifecycle-view-title" hidden>',
+    );
     expect(consoleStyles).toMatch(
       /\.board:focus-visible \{[^}]*outline: 2px solid var\(--signal-focus\);[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.graph-viewport:focus-visible \{[^}]*outline: 2px solid var\(--signal-focus\);[^}]*\}/,
     );
   });
 

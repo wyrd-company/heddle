@@ -25,19 +25,48 @@ export const consolePage = `<!doctype html>
     </header>
     <section class="control-rail" aria-label="Board controls">
       <div>
-        <p class="eyebrow">KANBAN PROJECTION</p>
-        <h1>Delivery floor</h1>
+        <p class="eyebrow" id="view-eyebrow">KANBAN PROJECTION</p>
+        <h1 id="view-title">Delivery floor</h1>
       </div>
-      <label class="scope-control" for="scope">
-        <span>SCOPE</span>
-        <select id="scope" name="scope">
-          <option value="all">All work</option>
-        </select>
-      </label>
+      <div class="view-controls">
+        <nav class="view-tabs" aria-label="Console views">
+          <a id="board-view-link" href="/?scope=all">BOARD</a>
+          <a id="dependencies-view-link" href="/?view=dependencies&amp;scope=all">DEPENDENCIES</a>
+        </nav>
+        <label class="scope-control" for="scope">
+          <span>SCOPE</span>
+          <select id="scope" name="scope">
+            <option value="all">All work</option>
+          </select>
+        </label>
+      </div>
     </section>
     <main>
       <p id="console-status" class="console-status" aria-live="polite">Loading board…</p>
       <div id="board" class="board" role="region" aria-label="Kanban board" tabindex="0"></div>
+      <section id="dependency-graph" class="dependency-graph" aria-labelledby="dependency-graph-title" hidden>
+        <header class="graph-header">
+          <div>
+            <p class="eyebrow">READINESS PATHS</p>
+            <h2 id="dependency-graph-title">Task dependencies</h2>
+          </div>
+          <ul class="graph-legend" aria-label="Node status legend">
+            <li data-treatment="done"><span aria-hidden="true"></span>Done</li>
+            <li data-treatment="running"><span aria-hidden="true"></span>Running</li>
+            <li data-treatment="attention"><span aria-hidden="true"></span>Attention</li>
+            <li data-treatment="blocked"><span aria-hidden="true"></span>Blocked</li>
+          </ul>
+        </header>
+        <div id="graph-viewport" class="graph-viewport" role="region" aria-label="Task dependency graph" tabindex="0">
+          <div id="graph-canvas" class="graph-canvas"></div>
+        </div>
+      </section>
+      <section id="lifecycle-view" class="lifecycle-view" aria-labelledby="lifecycle-view-title" hidden>
+        <p class="eyebrow">TASK LIFECYCLE</p>
+        <h2 id="lifecycle-view-title">Lifecycle canvas</h2>
+        <p id="lifecycle-task" class="lifecycle-task"></p>
+        <p class="lifecycle-pending">The lifecycle renderer attaches to this task-scoped view.</p>
+      </section>
     </main>
     <script type="module" src="/assets/console.js"></script>
   </body>
@@ -141,6 +170,20 @@ button, select { font: inherit; }
   gap: 24px;
   border-bottom: 1px solid var(--rule-dark);
 }
+
+.view-controls { display: grid; gap: 10px; justify-items: end; }
+.view-tabs { display: flex; gap: 3px; }
+.view-tabs a {
+  padding: 5px 8px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-decoration: none;
+}
+.view-tabs a[aria-current="page"] { color: var(--ink); border-color: var(--signal); }
+.view-tabs a:focus-visible, .graph-node:focus-visible { outline: 2px solid var(--signal-focus); outline-offset: 3px; }
 
 .eyebrow, .scope-control span {
   margin: 0 0 7px;
@@ -275,10 +318,85 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .epic-lever:hover, .epic-lever:focus-visible { color: var(--paper-raised); background: var(--ink); outline: 2px solid var(--signal-focus); outline-offset: 2px; }
 .empty-column { margin: 18px 13px; color: var(--muted); font-size: 10px; }
 
+[hidden] { display: none !important; }
+
+.dependency-graph {
+  min-width: 0;
+  background: rgba(255, 253, 247, 0.55);
+  border: 1px solid var(--rule-dark);
+}
+
+.graph-header {
+  min-height: 76px;
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.graph-header h2, .lifecycle-view h2 { margin: 0; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
+.graph-header .eyebrow { margin-bottom: 4px; }
+.graph-legend { margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: end; gap: 8px 14px; list-style: none; }
+.graph-legend li { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.graph-legend span { width: 11px; height: 11px; background: var(--paper-raised); border: 2px solid var(--rule-dark); }
+.graph-legend [data-treatment="done"] span { background: #356b51; border-color: #356b51; }
+.graph-legend [data-treatment="running"] span { background: var(--active); border-color: var(--active); }
+.graph-legend [data-treatment="attention"] span { background: var(--signal); border-color: var(--signal); }
+.graph-legend [data-treatment="blocked"] span { background: #8b6511; border-color: #5f4305; }
+
+.graph-viewport {
+  min-height: 480px;
+  overflow: auto;
+  background-image: radial-gradient(circle, rgba(25, 26, 23, 0.16) 0.8px, transparent 0.9px);
+  background-size: 18px 18px;
+}
+.graph-viewport:focus-visible { outline: 2px solid var(--signal-focus); outline-offset: -4px; }
+.graph-canvas { position: relative; min-height: 480px; }
+.graph-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.graph-edge { fill: none; stroke: var(--rule-dark); stroke-width: 2; marker-end: url(#dependency-arrow); }
+.graph-edge[data-trace="true"] { stroke: var(--signal); stroke-width: 4; stroke-dasharray: 8 5; }
+
+.graph-node {
+  position: absolute;
+  width: 220px;
+  min-height: 96px;
+  padding: 12px 13px 11px 17px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 2px solid var(--rule-dark);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+}
+.graph-node::before { content: ""; position: absolute; inset: -2px auto -2px -2px; width: 6px; background: var(--rule-dark); }
+.graph-node:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 rgba(25, 26, 23, 0.19); }
+.graph-node[data-treatment="done"] { border-color: #356b51; }
+.graph-node[data-treatment="done"]::before { background: #356b51; }
+.graph-node[data-treatment="running"] { border-color: var(--active); }
+.graph-node[data-treatment="running"]::before { background: var(--active); }
+.graph-node[data-treatment="attention"] { border-color: var(--signal); box-shadow: 4px 4px 0 rgba(180, 51, 33, 0.23); }
+.graph-node[data-treatment="attention"]::before { background: var(--signal); }
+.graph-node[data-treatment="blocked"] { border-color: #5f4305; background-image: repeating-linear-gradient(135deg, transparent 0 9px, rgba(116, 84, 10, 0.08) 9px 11px); }
+.graph-node[data-treatment="blocked"]::before { background: #8b6511; }
+.graph-node-id { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.11em; }
+.graph-node-title { display: block; font-family: Georgia, serif; font-size: 16px; line-height: 1.18; }
+.graph-node-state { display: block; margin-top: 10px; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.graph-node[data-treatment="attention"] .graph-node-state { color: var(--signal); }
+.graph-node[data-treatment="blocked"] .graph-node-state { color: #684a08; }
+
+.lifecycle-view { min-height: 360px; padding: 26px; background: var(--paper-raised); border: 1px solid var(--rule-dark); }
+.lifecycle-task { margin: 24px 0 6px; font-family: Georgia, serif; font-size: 20px; }
+.lifecycle-pending { margin: 0; color: var(--muted); font-size: 11px; }
+
 @media (max-width: 680px) {
   .masthead-state > span:not(.attention-count):not(.live-mark) { display: none; }
   .control-rail { align-items: stretch; flex-direction: column; }
+  .view-controls { justify-items: stretch; }
+  .view-tabs { justify-content: space-between; }
   .scope-control { min-width: 0; }
+  .graph-header { align-items: flex-start; flex-direction: column; }
+  .graph-legend { justify-content: start; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -290,9 +408,32 @@ export const consoleClient = `const boardElement = document.querySelector("#boar
 const scopeElement = document.querySelector("#scope");
 const statusElement = document.querySelector("#console-status");
 const attentionElement = document.querySelector("#attention-count");
+const graphElement = document.querySelector("#dependency-graph");
+const graphCanvasElement = document.querySelector("#graph-canvas");
+const lifecycleElement = document.querySelector("#lifecycle-view");
+const lifecycleTaskElement = document.querySelector("#lifecycle-task");
+const viewEyebrowElement = document.querySelector("#view-eyebrow");
+const viewTitleElement = document.querySelector("#view-title");
+const boardViewLink = document.querySelector("#board-view-link");
+const dependenciesViewLink = document.querySelector("#dependencies-view-link");
 let loadGeneration = 0;
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
+
+const viewFromUrl = () => {
+  const view = new URL(window.location.href).searchParams.get("view") || "board";
+  if (view !== "board" && view !== "dependencies" && view !== "lifecycle") {
+    throw new Error("view must be board, dependencies, or lifecycle");
+  }
+  return view;
+};
+
+const consoleUrl = (view, scope) => {
+  const url = new URL("/", window.location.href);
+  if (view !== "board") url.searchParams.set("view", view);
+  url.searchParams.set("scope", scope);
+  return url.pathname + url.search;
+};
 
 const fetchJson = async (url, options) => {
   const response = await fetch(url, { cache: "no-store", ...options });
@@ -313,6 +454,14 @@ const text = (tag, value, className) => {
   const element = document.createElement(tag);
   element.textContent = value;
   if (className) element.className = className;
+  return element;
+};
+
+const svg = (tag, attributes) => {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [name, value] of Object.entries(attributes)) {
+    element.setAttribute(name, String(value));
+  }
   return element;
 };
 
@@ -418,6 +567,108 @@ const renderProjection = (projection) => {
   }
 };
 
+const graphNodeWidth = 220;
+const graphNodeHeight = 96;
+const graphColumnGap = 90;
+const graphRowGap = 30;
+const graphPadding = 28;
+
+const graphPosition = (node) => ({
+  x: graphPadding + node.layer * (graphNodeWidth + graphColumnGap),
+  y: graphPadding + node.row * (graphNodeHeight + graphRowGap),
+});
+
+const renderDependencyGraph = (graph) => {
+  graphCanvasElement.replaceChildren();
+  const maxLayer = graph.nodes.reduce((maximum, node) => Math.max(maximum, node.layer), 0);
+  const maxRow = graph.nodes.reduce((maximum, node) => Math.max(maximum, node.row), 0);
+  const width = graphPadding * 2 + graphNodeWidth + maxLayer * (graphNodeWidth + graphColumnGap);
+  const height = Math.max(480, graphPadding * 2 + graphNodeHeight + maxRow * (graphNodeHeight + graphRowGap));
+  graphCanvasElement.style.width = width + "px";
+  graphCanvasElement.style.height = height + "px";
+
+  const locations = new Map(graph.nodes.map((node) => [node.id, graphPosition(node)]));
+  const edges = svg("svg", {
+    "aria-hidden": "true",
+    class: "graph-edges",
+    height,
+    viewBox: "0 0 " + width + " " + height,
+    width,
+  });
+  const definitions = svg("defs", {});
+  const arrow = svg("marker", {
+    id: "dependency-arrow",
+    markerHeight: 7,
+    markerWidth: 7,
+    orient: "auto-start-reverse",
+    refX: 6,
+    refY: 3.5,
+    viewBox: "0 0 7 7",
+  });
+  arrow.append(svg("path", { d: "M 0 0 L 7 3.5 L 0 7 z", fill: "context-stroke" }));
+  definitions.append(arrow);
+  edges.append(definitions);
+  for (const edge of graph.edges) {
+    const from = locations.get(edge.from);
+    const to = locations.get(edge.to);
+    if (!from || !to) continue;
+    const startX = from.x + graphNodeWidth;
+    const startY = from.y + graphNodeHeight / 2;
+    const endX = to.x;
+    const endY = to.y + graphNodeHeight / 2;
+    const middleX = (startX + endX) / 2;
+    const path = svg("path", {
+      class: "graph-edge",
+      d: "M " + startX + " " + startY + " C " + middleX + " " + startY + ", " + middleX + " " + endY + ", " + endX + " " + endY,
+      "data-from": edge.from,
+      "data-to": edge.to,
+      "data-trace": edge.trace,
+    });
+    edges.append(path);
+  }
+  graphCanvasElement.append(edges);
+
+  for (const node of graph.nodes) {
+    const position = locations.get(node.id);
+    const link = document.createElement("a");
+    link.className = "graph-node";
+    link.dataset.taskId = String(node.id);
+    link.dataset.treatment = node.treatment;
+    link.href = consoleUrl("lifecycle", "task:" + node.id);
+    link.style.left = position.x + "px";
+    link.style.top = position.y + "px";
+    link.setAttribute("aria-label", "Task #" + node.id + ", " + node.title + ", " + node.treatment + ". Open lifecycle view");
+    link.append(text("span", "TASK #" + node.id, "graph-node-id"));
+    link.append(text("strong", node.title, "graph-node-title"));
+    link.append(text("span", node.treatment, "graph-node-state"));
+    graphCanvasElement.append(link);
+  }
+};
+
+const selectView = (view, scope) => {
+  boardElement.hidden = view !== "board";
+  graphElement.hidden = view !== "dependencies";
+  lifecycleElement.hidden = view !== "lifecycle";
+  boardViewLink.href = consoleUrl("board", scope);
+  dependenciesViewLink.href = consoleUrl("dependencies", scope);
+  if (view === "board") {
+    boardViewLink.setAttribute("aria-current", "page");
+    dependenciesViewLink.removeAttribute("aria-current");
+    viewEyebrowElement.textContent = "KANBAN PROJECTION";
+    viewTitleElement.textContent = "Delivery floor";
+  } else if (view === "dependencies") {
+    boardViewLink.removeAttribute("aria-current");
+    dependenciesViewLink.setAttribute("aria-current", "page");
+    viewEyebrowElement.textContent = "DEPENDENCY GRAPH";
+    viewTitleElement.textContent = "Readiness paths";
+  } else {
+    boardViewLink.removeAttribute("aria-current");
+    dependenciesViewLink.removeAttribute("aria-current");
+    viewEyebrowElement.textContent = "LIFECYCLE CANVAS";
+    viewTitleElement.textContent = "Task detail";
+  }
+};
+
 const addScopeOptions = (tasks, selected) => {
   scopeElement.replaceChildren(new Option("All work", "all"));
   for (const task of tasks.filter(isEpic)) {
@@ -438,6 +689,8 @@ const updateDwells = () => {
 const renderLoadFailure = (error) => {
   scopeElement.selectedIndex = -1;
   boardElement.replaceChildren();
+  graphCanvasElement.replaceChildren();
+  lifecycleTaskElement.textContent = "";
   statusElement.dataset.error = "true";
   statusElement.textContent = error instanceof Error ? error.message : "Console load failed";
 };
@@ -448,17 +701,34 @@ async function load() {
   statusElement.textContent = "Loading board…";
   const requestedScope = scopeFromUrl();
   try {
-    const [board, projection, attention] = await Promise.all([
+    const view = viewFromUrl();
+    const [board, attention] = await Promise.all([
       fetchJson("/api/board"),
-      fetchJson("/api/projection?scope=" + encodeURIComponent(requestedScope)),
       fetchJson("/api/attention"),
     ]);
     if (generation !== loadGeneration) return;
     addScopeOptions(board.tasks, requestedScope);
-    renderProjection(projection);
+    selectView(view, requestedScope);
     attentionElement.textContent = String(attention.length);
-    statusElement.textContent = projection.columns.reduce((count, column) => count + column.tasks.length, 0) + " visible records";
-    updateDwells();
+    if (view === "board") {
+      const projection = await fetchJson("/api/projection?scope=" + encodeURIComponent(requestedScope));
+      if (generation !== loadGeneration) return;
+      renderProjection(projection);
+      statusElement.textContent = projection.columns.reduce((count, column) => count + column.tasks.length, 0) + " visible records";
+      updateDwells();
+    } else if (view === "dependencies") {
+      const graph = await fetchJson("/api/dependency-graph?scope=" + encodeURIComponent(requestedScope));
+      if (generation !== loadGeneration) return;
+      renderDependencyGraph(graph);
+      statusElement.textContent = graph.nodes.length + " visible nodes · " + graph.edges.length + " dependency edges";
+    } else {
+      const match = /^task:([1-9][0-9]*)$/.exec(requestedScope);
+      if (!match) throw new Error("lifecycle view requires task:<id> scope");
+      const task = board.tasks.find(({ id }) => id === Number(match[1]));
+      if (!task) throw new Error("lifecycle task does not exist");
+      lifecycleTaskElement.textContent = "Task #" + task.id + " · " + task.title;
+      statusElement.textContent = "Lifecycle view for task #" + task.id;
+    }
   } catch (error) {
     if (generation !== loadGeneration) return;
     renderLoadFailure(error);

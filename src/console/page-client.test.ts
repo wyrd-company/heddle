@@ -14,15 +14,32 @@ import { consoleClient } from "./page.js";
 class FakeElement {
   readonly children: FakeElement[] = [];
   readonly dataset: Record<string, string> = {};
+  readonly style: Record<string, string> = {};
+  private readonly attributes = new Map<string, string>();
   className = "";
   disabled = false;
   draggable = false;
+  hidden = false;
+  href = "";
   textContent = "";
   type = "";
 
   constructor(readonly tagName: string) {}
 
   addEventListener(): void {}
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
+  }
+
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
+    if (name === "class") this.className = value;
+  }
 
   append(...children: FakeElement[]): void {
     this.children.push(...children);
@@ -154,13 +171,24 @@ const projection = (tasks: unknown[]) => ({
   columns: [{ status: "in-progress", tasks }],
 });
 
-const clientHarness = async (initialTasks = [rootTask, childTask]) => {
+const clientHarness = async (
+  initialTasks = [rootTask, childTask],
+  initialUrl = "http://console.test/?scope=all",
+) => {
   const board = new FakeElement("div");
+  const graph = new FakeElement("section");
+  const graphCanvas = new FakeElement("div");
+  const lifecycle = new FakeElement("section");
+  const lifecycleTask = new FakeElement("p");
+  const viewEyebrow = new FakeElement("p");
+  const viewTitle = new FakeElement("h1");
+  const boardViewLink = new FakeElement("a");
+  const dependenciesViewLink = new FakeElement("a");
   const scope = new FakeSelect();
   scope.replaceChildren(new FakeOption("All work", "all"));
   const status = new FakeElement("p");
   const attention = new FakeElement("span");
-  let locationHref = "http://console.test/?scope=all";
+  let locationHref = initialUrl;
   const windowListeners = new Map<string, () => void>();
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
 
@@ -169,6 +197,31 @@ const clientHarness = async (initialTasks = [rootTask, childTask]) => {
       return response({ tasks: initialTasks });
     }
     if (input === "/api/attention") return response([]);
+    if (input.startsWith("/api/dependency-graph?")) {
+      return response({
+        edges: [{ from: 10, to: 11, trace: true }],
+        nodes: [
+          {
+            id: 10,
+            layer: 0,
+            priority: "medium",
+            row: 0,
+            status: "in-progress",
+            title: "Example group",
+            treatment: "attention",
+          },
+          {
+            id: 11,
+            layer: 1,
+            priority: "medium",
+            row: 0,
+            status: "todo",
+            title: "Example item",
+            treatment: "blocked",
+          },
+        ],
+      });
+    }
     if (input.startsWith("/api/projection?")) {
       const requestedScope = new URL(input, locationHref).searchParams.get(
         "scope",
@@ -193,11 +246,21 @@ const clientHarness = async (initialTasks = [rootTask, childTask]) => {
 
   const document = {
     createElement: (tagName: string) => new FakeElement(tagName),
+    createElementNS: (_namespace: string, tagName: string) =>
+      new FakeElement(tagName),
     querySelector: (selector: string) => {
       if (selector === "#board") return board;
       if (selector === "#scope") return scope;
       if (selector === "#console-status") return status;
       if (selector === "#attention-count") return attention;
+      if (selector === "#dependency-graph") return graph;
+      if (selector === "#graph-canvas") return graphCanvas;
+      if (selector === "#lifecycle-view") return lifecycle;
+      if (selector === "#lifecycle-task") return lifecycleTask;
+      if (selector === "#view-eyebrow") return viewEyebrow;
+      if (selector === "#view-title") return viewTitle;
+      if (selector === "#board-view-link") return boardViewLink;
+      if (selector === "#dependencies-view-link") return dependenciesViewLink;
       throw new Error(`unexpected selector ${selector}`);
     },
     querySelectorAll: () => [],
@@ -236,7 +299,7 @@ const clientHarness = async (initialTasks = [rootTask, childTask]) => {
     window,
   });
 
-  await vi.waitFor(() => expect(status.textContent).toBe("2 visible records"));
+  await vi.waitFor(() => expect(status.textContent).not.toBe("Loading board…"));
 
   const visit = (element: FakeElement): FakeElement[] => [
     element,
@@ -250,22 +313,76 @@ const clientHarness = async (initialTasks = [rootTask, childTask]) => {
 
   return {
     board,
+    boardViewLink,
     cardIds,
+    dependenciesViewLink,
     elementsByClass: (className: string) =>
       visit(board).filter((element) => element.className === className),
     holdProjection: (name: string, held: Promise<BrowserResponse>) => {
       projectionResponses.set(name, held);
     },
+    graph,
+    graphCanvas,
+    lifecycle,
+    lifecycleTask,
     navigate: (name: string) => {
       locationHref = `http://console.test/?scope=${encodeURIComponent(name)}`;
       windowListeners.get("popstate")!();
     },
     scope,
     status,
+    viewEyebrow,
+    viewTitle,
   };
 };
 
 describe("console client request ownership", () => {
+  it("renders traced graph nodes with task-scoped lifecycle links", async () => {
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?view=dependencies&scope=epic%3A10",
+    );
+
+    expect(harness.board.hidden).toBe(true);
+    expect(harness.graph.hidden).toBe(false);
+    expect(harness.viewEyebrow.textContent).toBe("DEPENDENCY GRAPH");
+    expect(harness.status.textContent).toBe(
+      "2 visible nodes · 1 dependency edges",
+    );
+    const links = harness.graphCanvas.children.filter(
+      ({ tagName }) => tagName === "a",
+    );
+    expect(links.map(({ dataset }) => dataset.treatment)).toEqual([
+      "attention",
+      "blocked",
+    ]);
+    expect(links[1]?.href).toBe("/?view=lifecycle&scope=task%3A11");
+    expect(links[1]?.getAttribute("aria-label")).toContain(
+      "Open lifecycle view",
+    );
+    const edge = harness.graphCanvas.children[0]?.children.find(
+      (element) =>
+        element.tagName === "path" &&
+        element.getAttribute("data-trace") !== null,
+    );
+    expect(edge?.dataset.trace).toBeUndefined();
+    expect(edge?.getAttribute("data-trace")).toBe("true");
+    expect(harness.dependenciesViewLink.getAttribute("aria-current")).toBe(
+      "page",
+    );
+  });
+
+  it("opens the task-scoped lifecycle route selected by a graph node", async () => {
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?view=lifecycle&scope=task%3A11",
+    );
+
+    expect(harness.lifecycle.hidden).toBe(false);
+    expect(harness.lifecycleTask.textContent).toBe("Task #11 · Example item");
+    expect(harness.status.textContent).toBe("Lifecycle view for task #11");
+  });
+
   it("renders a visible structured deferral on a ready card", async () => {
     const harness = await clientHarness([rootTask, deferredTask]);
 
