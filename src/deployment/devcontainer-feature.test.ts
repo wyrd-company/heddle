@@ -58,6 +58,10 @@ describe("Heddle devcontainer feature", () => {
       "scripts/deployment/qualify-pinned-t3.mjs",
       "utf8",
     );
+    const featureQualification = await readFile(
+      "scripts/deployment/qualify-feature.sh",
+      "utf8",
+    );
 
     expect(versions.t3).toBe("0.0.36");
     expect(readme).toContain(`supports T3 \`${versions.t3}\``);
@@ -68,6 +72,12 @@ describe("Heddle devcontainer feature", () => {
     );
     expect(qualification).toContain("port === 3773");
     expect(qualification).toContain("dirname(process.execPath)");
+    expect(featureQualification).toContain(
+      'git -C "${repository}" diff --quiet',
+    );
+    expect(featureQualification).toContain(
+      '--filter "label=heddle.qualification=${qualification_label}"',
+    );
     expect(qualification).toContain(
       "dist/control-plane/t3-control-plane-client.js",
     );

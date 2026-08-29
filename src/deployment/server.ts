@@ -38,6 +38,9 @@ export interface HeddleDeploymentComposition {
 }
 
 const taskInstance = /^task-([1-9][0-9]*)$/;
+const maximumMcpRequestBytes = 1024 * 1024;
+
+class McpRequestTooLargeError extends Error {}
 
 class PersistenceConsoleStateSource implements ConsoleStateSource {
   public constructor(private readonly persistence: SqlitePersistence) {}
@@ -93,8 +96,14 @@ class PersistenceConsoleStateSource implements ConsoleStateSource {
 
 const readBody = async (request: IncomingMessage): Promise<Uint8Array> => {
   const chunks: Uint8Array[] = [];
+  let size = 0;
   for await (const chunk of request) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    size += bytes.length;
+    if (size > maximumMcpRequestBytes) {
+      throw new McpRequestTooLargeError("MCP request body is too large");
+    }
+    chunks.push(bytes);
   }
   return Buffer.concat(chunks);
 };
@@ -206,7 +215,8 @@ export const startHeddleServerFromEnvironment = async (
       }
       consoleServer.emit("request", request, response);
     } catch (error) {
-      response.statusCode = 500;
+      response.statusCode =
+        error instanceof McpRequestTooLargeError ? 413 : 500;
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({

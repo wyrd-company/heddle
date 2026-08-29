@@ -14,6 +14,23 @@ state_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-state.XXXXXX)"
 board_directory="$(mktemp -d /workspaces/mnt/heddle-qualification-board.XXXXXX)"
 container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
+
+cleanup() {
+    local scratch_container
+    local -a scratch_containers
+    mapfile -t scratch_containers < <(
+        docker ps --all --quiet \
+            --filter "label=heddle.qualification=${qualification_label}" \
+            2>/dev/null || true
+    )
+    for scratch_container in "${scratch_containers[@]}"; do
+        docker rm --force "${scratch_container}" >/dev/null 2>&1 || true
+    done
+    rm -rf "${state_directory}"
+    rm -rf "${board_directory}"
+}
+trap cleanup EXIT
+
 printf 'n\n' | kanban-md init \
     --dir "${board_directory}" \
     --name "Sample Board" \
@@ -27,20 +44,16 @@ qualification_task_id="$(
 )"
 chmod -R a+rX "${board_directory}"
 
-cleanup() {
-    if [ -n "${container_id}" ] && docker inspect "${container_id}" >/dev/null 2>&1; then
-        docker rm --force "${container_id}" >/dev/null
-    fi
-    rm -rf "${state_directory}"
-    rm -rf "${board_directory}"
-}
-trap cleanup EXIT
-
 assert_head() {
     local observed
     observed="$(git -C "${repository}" rev-parse HEAD)"
     [ "${observed}" = "${accepted_head}" ] || {
         echo "Repository head moved: expected ${accepted_head}, observed ${observed}." >&2
+        exit 1
+    }
+    git -C "${repository}" diff --quiet \
+        && git -C "${repository}" diff --cached --quiet || {
+        echo "Repository has tracked changes at accepted head ${accepted_head}." >&2
         exit 1
     }
 }
@@ -88,7 +101,7 @@ task -d "${repository}" deployment:package
 assert_head
 up
 
-inside bash -lc '
+inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
 set -euo pipefail
 test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
 for attempt in $(seq 1 100); do
@@ -97,6 +110,8 @@ for attempt in $(seq 1 100); do
     sleep 0.1
 done
 grep -q "<title>Heddle Console</title>" /tmp/heddle-console.html
+projection="$(curl --fail --silent http://127.0.0.1:4317/api/projection)"
+printf "%s" "${projection}" | jq -e --arg task_id "${HEDDLE_QUALIFICATION_TASK_ID}" '\''[.columns[].tasks[]] == [{blocked:false,dependencies:[],id:($task_id | tonumber),priority:"medium",status:"in-progress",tags:[],title:"Sample Record"}]'\'' >/dev/null
 test "$(curl --silent --output /tmp/heddle-mcp.json --write-out "%{http_code}" --request POST http://127.0.0.1:4317/mcp)" = 401
 grep -q "Unauthorized" /tmp/heddle-mcp.json
 for attempt in $(seq 1 100); do

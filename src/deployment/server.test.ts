@@ -83,6 +83,12 @@ describe("deployed Heddle service", () => {
     const mcp = await globalThis.fetch(`${origin}/mcp`, { method: "POST" });
     expect(mcp.status).toBe(401);
     expect(mcp.headers.get("www-authenticate")).toBe("Bearer");
+
+    const oversized = await globalThis.fetch(`${origin}/mcp`, {
+      body: new Uint8Array(1024 * 1024 + 1),
+      method: "POST",
+    });
+    expect(oversized.status).toBe(413);
   });
 
   it.each([

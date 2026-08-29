@@ -56,92 +56,106 @@ const { T3ControlPlaneClient } = await import(
 );
 
 const scratch = await mkdtemp(join(tmpdir(), "heddle-pinned-t3-"));
-const baseDirectory = join(scratch, "base");
-const projectPath = join(scratch, "project");
-await mkdir(baseDirectory, { recursive: true });
-await mkdir(projectPath, { recursive: true });
-await execute("git", ["init", "--quiet", "--initial-branch=main"], {
-  cwd: projectPath,
-});
-await execute("git", ["config", "user.email", "test@example.invalid"], {
-  cwd: projectPath,
-});
-await execute("git", ["config", "user.name", "Test Operator"], {
-  cwd: projectPath,
-});
-await execute("git", ["commit", "--allow-empty", "--quiet", "-m", "initial"], {
-  cwd: projectPath,
-});
-
-const { createServer } = await import("node:net");
-const socket = createServer();
-await new Promise((resolve, reject) => {
-  socket.once("error", reject);
-  socket.listen(0, "127.0.0.1", resolve);
-});
-const socketAddress = socket.address();
-if (!socketAddress || typeof socketAddress === "string") {
-  throw new Error("Unable to allocate an isolated T3 port");
-}
-const port = socketAddress.port;
-await new Promise((resolve, reject) =>
-  socket.close((error) => (error ? reject(error) : resolve())),
-);
-if (port === 3773) throw new Error("Refusing the live T3 port 3773");
-
-const childEnvironment = {
-  HOME: join(scratch, "home"),
-  LANG: "C.UTF-8",
-  NO_COLOR: "1",
-  PATH: `${dirname(process.execPath)}:${dirname(t3Binary)}:/usr/bin:/bin`,
-  T3CODE_HOME: baseDirectory,
-  T3CODE_NO_BROWSER: "1",
+let server;
+const signalServer = (signal) => {
+  if (server?.pid === undefined) return;
+  try {
+    process.kill(-server.pid, signal);
+  } catch (error) {
+    if (error?.code !== "ESRCH") throw error;
+  }
 };
-await mkdir(childEnvironment.HOME, { recursive: true });
-const server = spawn(
-  t3Binary,
-  [
-    "serve",
-    "--host",
-    "127.0.0.1",
-    "--port",
-    String(port),
-    "--base-dir",
-    baseDirectory,
-    projectPath,
-  ],
-  {
-    detached: true,
-    env: childEnvironment,
-    stdio: ["ignore", "pipe", "pipe"],
-  },
-);
-
-let serverOutput = "";
-const pairing = new Promise((resolvePairing, rejectPairing) => {
-  const inspect = (chunk) => {
-    serverOutput += chunk.toString();
-    const token = serverOutput.match(/Token:\s+(\S+)/)?.[1];
-    if (token) resolvePairing(token);
-  };
-  server.stdout.on("data", inspect);
-  server.stderr.on("data", inspect);
-  server.once("exit", (code) =>
-    rejectPairing(new Error(`Isolated T3 exited before pairing (${code})`)),
-  );
-});
-
 const terminateServer = async () => {
-  if (server.exitCode !== null || server.pid === undefined) return;
-  process.kill(-server.pid, "SIGTERM");
+  if (server === undefined || server.exitCode !== null) return;
+  signalServer("SIGTERM");
   await Promise.race([
     new Promise((resolveExit) => server.once("exit", resolveExit)),
     delay(3_000),
   ]);
-  if (server.exitCode === null) process.kill(-server.pid, "SIGKILL");
+  if (server.exitCode === null) signalServer("SIGKILL");
 };
 
 try {
+  const baseDirectory = join(scratch, "base");
+  const projectPath = join(scratch, "project");
+  await mkdir(baseDirectory, { recursive: true });
+  await mkdir(projectPath, { recursive: true });
+  await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+    cwd: projectPath,
+  });
+  await execute("git", ["config", "user.email", "test@example.invalid"], {
+    cwd: projectPath,
+  });
+  await execute("git", ["config", "user.name", "Test Operator"], {
+    cwd: projectPath,
+  });
+  await execute(
+    "git",
+    ["commit", "--allow-empty", "--quiet", "-m", "initial"],
+    {
+      cwd: projectPath,
+    },
+  );
+
+  const { createServer } = await import("node:net");
+  const socket = createServer();
+  await new Promise((resolve, reject) => {
+    socket.once("error", reject);
+    socket.listen(0, "127.0.0.1", resolve);
+  });
+  const socketAddress = socket.address();
+  if (!socketAddress || typeof socketAddress === "string") {
+    throw new Error("Unable to allocate an isolated T3 port");
+  }
+  const port = socketAddress.port;
+  await new Promise((resolve, reject) =>
+    socket.close((error) => (error ? reject(error) : resolve())),
+  );
+  if (port === 3773) throw new Error("Refusing the live T3 port 3773");
+
+  const childEnvironment = {
+    HOME: join(scratch, "home"),
+    LANG: "C.UTF-8",
+    NO_COLOR: "1",
+    PATH: `${dirname(process.execPath)}:${dirname(t3Binary)}:/usr/bin:/bin`,
+    T3CODE_HOME: baseDirectory,
+    T3CODE_NO_BROWSER: "1",
+  };
+  await mkdir(childEnvironment.HOME, { recursive: true });
+  server = spawn(
+    t3Binary,
+    [
+      "serve",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--base-dir",
+      baseDirectory,
+      projectPath,
+    ],
+    {
+      detached: true,
+      env: childEnvironment,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  let serverOutput = "";
+  const pairing = new Promise((resolvePairing, rejectPairing) => {
+    const inspect = (chunk) => {
+      serverOutput += chunk.toString();
+      const token = serverOutput.match(/Token:\s+(\S+)/)?.[1];
+      if (token) resolvePairing(token);
+    };
+    server.stdout.on("data", inspect);
+    server.stderr.on("data", inspect);
+    server.once("error", rejectPairing);
+    server.once("exit", (code) =>
+      rejectPairing(new Error(`Isolated T3 exited before pairing (${code})`)),
+    );
+  });
+
   const token = await Promise.race([
     pairing,
     delay(15_000).then(() => {
@@ -216,6 +230,9 @@ try {
     })}\n`,
   );
 } finally {
-  await terminateServer();
-  await rm(scratch, { force: true, recursive: true });
+  try {
+    await terminateServer();
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
 }
