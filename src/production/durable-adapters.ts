@@ -88,12 +88,17 @@ export class DurablePushoverNotifier {
       return;
     }
     this.persistence.recordEffectIntent("pushover", attention.attentionId);
+    const runtimes = this.persistence
+      .listReconcilerRuntime()
+      .filter(({ instanceId }) => instanceId === attention.instanceId);
+    if (runtimes.length !== 1) {
+      throw new Error(
+        `Escalation '${attention.attentionId}' does not resolve to one production task`,
+      );
+    }
     const scope = new globalThis.URL(this.configuration.consoleBaseUrl);
     scope.searchParams.set("view", "lifecycle");
-    scope.searchParams.set(
-      "scope",
-      `task:${attention.instanceId.replace(/^task-/, "")}`,
-    );
+    scope.searchParams.set("scope", `task:${runtimes[0]!.taskId}`);
     scope.searchParams.set("attention", attention.attentionId);
     await this.transport.send({
       applicationToken: this.configuration.applicationToken,

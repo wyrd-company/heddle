@@ -99,6 +99,15 @@ if (instance === undefined) {
     todoState: null,
   });
 }
+composition.persistence.writeReconcilerRuntime({
+  boardStatus: "in-progress",
+  instanceId: "task-17",
+  sessionKey: "task-17:implement",
+  stageId: "implement",
+  state: "waiting",
+  taskId: 17,
+  threadId: "thread-17",
+});
 const binding: WorkflowMcpSessionBinding = {
   dispositions: [],
   instance,

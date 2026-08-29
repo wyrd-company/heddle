@@ -177,6 +177,12 @@ describe("durable production adapters", () => {
     const firstPersistence = new SqlitePersistence({
       stateDirectory: directory,
     });
+    firstPersistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-17",
+      state: "waiting",
+      taskId: 17,
+    });
     await new DurablePushoverNotifier(
       firstPersistence,
       configuration,
@@ -196,11 +202,18 @@ describe("durable production adapters", () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0]?.stableId).toBe(attention.attentionId);
+    expect(sent[0]?.url).toContain("scope=task%3A17");
   });
 
   it("records Pushover intent before a failed effect and retries it", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-intent-"));
     const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-18",
+      state: "waiting",
+      taskId: 18,
+    });
     let attempts = 0;
     const notifier = new DurablePushoverNotifier(
       persistence,
