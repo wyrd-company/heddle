@@ -431,8 +431,31 @@ describe("SessionObserver operator actions", () => {
     };
 
     await expect(
-      test.observer.stop({ ...target, operationId: "stop-one" }),
+      test.observer.stop({
+        ...target,
+        operationId: "stop-one",
+        userInputAnswers: { "question-one": {} },
+      }),
     ).rejects.toThrow("Explicit disposition");
+    expect(test.t3.commands).toHaveLength(0);
+  });
+
+  it("refuses to stop while a Heddle escalation is pending", async () => {
+    const test = fixture();
+    test.escalations.pending = [
+      {
+        createdAt: 1,
+        escalationId: "choice-one",
+        instanceId: target.instanceId,
+        ownerSessionKey: target.sessionKey,
+        request: {},
+        status: "pending",
+      },
+    ];
+
+    await expect(
+      test.observer.stop({ ...target, operationId: "stop-one" }),
+    ).rejects.toThrow("pending escalation");
     expect(test.t3.commands).toHaveLength(0);
   });
 });
@@ -458,9 +481,16 @@ describe("SessionObserver terminal visibility", () => {
     await expect(test.observer.observe(target)).resolves.toMatchObject({
       archiveDispatched: true,
     });
+    test.t3.shell.threads = [
+      {
+        id: target.threadId,
+        latestTurn: { state: "completed" },
+        session: { status: "ready" },
+      },
+    ];
     await expect(test.observer.observe(target)).resolves.toMatchObject({
       archiveDispatched: false,
-      phase: "absent",
+      phase: "completed",
     });
     expect(
       test.t3.commands.filter(({ type }) => type === "thread.archive"),
