@@ -25,7 +25,7 @@ class FixtureCanvas {
 
   createShapes(shapes: TLShape[]): void {
     for (const shape of shapes) {
-      this.shapes.push({
+      const record = {
         index: "a1",
         isLocked: false,
         meta: {},
@@ -36,7 +36,10 @@ class FixtureCanvas {
         x: 0,
         y: 0,
         ...shape,
-      } as TLShape);
+      } as TLShape;
+      const existingIndex = this.shapes.findIndex(({ id }) => id === record.id);
+      if (existingIndex === -1) this.shapes.push(record);
+      else this.shapes.splice(existingIndex, 1, record);
     }
   }
 
