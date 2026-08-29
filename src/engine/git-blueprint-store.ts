@@ -3,7 +3,8 @@
 //   implements: heddle
 // ---
 
-import { execFile } from "node:child_process";
+import { Buffer } from "node:buffer";
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import {
@@ -121,15 +122,11 @@ export class GitBlueprintStore {
       serialized,
       artifactIdFromPath(normalizedPath),
     );
-    const { stdout } = await execFileAsync(
-      "git",
-      ["hash-object", "--", repositoryPath],
-      { cwd: this.repositoryRoot },
-    );
+    const blobHash = await this.hashSerialized(serialized, normalizedPath);
     const artifact = JSON.parse(serialized) as Record<string, unknown>;
     return {
       artifact,
-      blobHash: stdout.trim(),
+      blobHash,
       blueprint,
       path: normalizedPath,
       serialized,
@@ -178,6 +175,31 @@ export class GitBlueprintStore {
       { cwd: this.repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
     );
     return parseBlueprint(stdout, artifactIdFromPath(path));
+  }
+
+  protected hashSerialized(serialized: string, path: string): Promise<string> {
+    return new Promise((resolveHash, rejectHash) => {
+      const child = spawn("git", ["hash-object", `--path=${path}`, "--stdin"], {
+        cwd: this.repositoryRoot,
+      });
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
+      child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+      child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+      child.once("error", rejectHash);
+      child.once("close", (code) => {
+        if (code === 0) {
+          resolveHash(Buffer.concat(stdout).toString("utf8").trim());
+          return;
+        }
+        rejectHash(
+          new Error(
+            `git hash-object failed (${code ?? "signal"}): ${Buffer.concat(stderr).toString("utf8").trim()}`,
+          ),
+        );
+      });
+      child.stdin.end(serialized, "utf8");
+    });
   }
 
   private resolveRepositoryPath(path: string): string {

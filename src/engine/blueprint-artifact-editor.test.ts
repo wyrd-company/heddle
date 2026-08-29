@@ -88,6 +88,31 @@ afterEach(async () => {
 });
 
 describe("blueprint artifact editor", () => {
+  it("binds an inspected blob hash to the artifact bytes already read", async () => {
+    const setup = await fixture();
+    const stable = await new GitBlueprintStore(setup.repositoryRoot).inspect(
+      artifactPath,
+    );
+    const newer = `${stable.serialized.trimEnd()}  \n`;
+    class ConcurrentInspectStore extends GitBlueprintStore {
+      protected override async hashSerialized(
+        serialized: string,
+        path: string,
+      ): Promise<string> {
+        await writeFile(setup.path, newer);
+        return super.hashSerialized(serialized, path);
+      }
+    }
+
+    const inspected = await new ConcurrentInspectStore(
+      setup.repositoryRoot,
+    ).inspect(artifactPath);
+
+    expect(inspected.serialized).toBe(stable.serialized);
+    expect(inspected.blobHash).toBe(stable.blobHash);
+    expect(await readFile(setup.path, "utf8")).toBe(newer);
+  });
+
   it("round-trips canvas positions while preserving untouched node and edge bytes", async () => {
     const setup = await fixture();
     const compactNode = '{"id":"finish", "uses":"finish"}';
