@@ -51,6 +51,16 @@ context. One global cursor covers the complete ordered history. A missing
 production runtime or instance returns unavailable; it does not synthesize an
 identity or substitute working-tree blueprint content.
 
+The console attention source projects the current unresolved durable queue
+through the same reconciler runtime records. Those records supply task scope;
+the source does not infer a task from an attention message or instance-name
+shape. Escalation entries offer the exact recorded option IDs. Approval entries
+offer accept and reject. User-input entries preserve the recorded question,
+optional header, selection mode, option labels, and descriptions; T3 option
+labels are the submitted answer values. Stale, terminal, and lifecycle
+adjudication entries remain informational. Missing or inconsistent runtime,
+request, question, or durable identity fails closed.
+
 Subagent spawn, liveness, and stop steering use the same SQLite instance store,
 global correlation-token catalog, pacing evaluator, stage-session bootstrap,
 and observation loop. Active child assignments join the production observation
@@ -71,7 +81,12 @@ escalation route without adding a second attention entry or repeating a complete
 Pushover delivery. The current console catalog lists only unresolved attention.
 An accepted disposition performs its canonical effect before marking the entry
 resolved. The resolved record remains durable so the same stable ID cannot raise
-a second entry after restart.
+a second entry after restart. The production action port records the exact action
+and answers as durable intent before effect. It delegates only to
+`EscalationCoordinator.answerAsOperator`, `SessionObserver.answerApproval`, or
+`SessionObserver.answerUserInput`. T3 dispatch uses the stable attention ID as
+its command identity. Completion is durable before queue resolution; failure
+keeps the entry unresolved, and changing a pending action or answer fails closed.
 Pushover transport is an explicit port so qualification can use a synthetic
 transport. Routine operation uses `HttpPushoverTransport`.
 

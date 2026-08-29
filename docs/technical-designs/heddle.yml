@@ -260,9 +260,12 @@ proposed-design:
     the attention entry or notification delivery. The escalation remains
     pending and answerable until the accepted answer event is recorded. An
     accepted console disposition invokes the canonical escalation or T3 action
-    before recording the attention entry as resolved. Resolved entries leave the
-    current console catalog but retain their stable identity for restart
-    deduplication.
+    before recording the attention entry as resolved. The production adapter
+    records the exact action and answers as durable intent, uses the attention ID
+    as the T3 command identity, records completion after accepted effect success,
+    and then resolves the queue entry. A failed effect remains unresolved; a
+    changed pending action fails closed. Resolved entries leave the current
+    console catalog but retain their stable identity for restart deduplication.
 
     Harness-native question tools serve assistive tasks, where the
     operator already works in T3's UI. The provider adapters map
@@ -381,6 +384,15 @@ proposed-design:
     session configured with Heddle's MCP server can act on their
     behalf. T3's own UI remains the surface for conversational
     participation in live sessions.
+
+    Production assembles this overlay from the unresolved durable attention
+    queue and canonical reconciler runtime identity. Runtime records provide the
+    task scope. Escalation options retain their recorded IDs. Approval actions
+    target the recorded request, session, and thread. User-input questions map
+    the recorded T3 question to the console prompt, preserve optional headers and
+    option metadata, and submit option labels. The action port delegates to the
+    existing escalation coordinator and session observer; the viewer owns no
+    disposition or queue state.
   viewer: >
     The canvas is built from the vendored `@flowcraft/tldraw`
     primitives — `EventBus`, `useExecutionBridge`, `FlowcraftSync`,
@@ -425,8 +437,9 @@ proposed-design:
     complete, self-contained installation.
 
     The deployment server accepts the canonical production composition and
-    shares its board, persistence, console state, MCP handler, scheduler, and
-    shutdown lifetime. Supplying separate board or console authorities with a
-    production composition is rejected. Its lifecycle reader projects the
-    canonical instance, pinned blueprint, and Flowcraft histories; it does not
-    own a parallel blueprint or event store.
+    shares its board, persistence, console state, console action port, MCP
+    handler, scheduler, and shutdown lifetime. Supplying separate board, console
+    state, or console action authorities with a production composition is
+    rejected. Its lifecycle reader projects the canonical instance, pinned
+    blueprint, and Flowcraft histories; it does not own a parallel blueprint or
+    event store.
