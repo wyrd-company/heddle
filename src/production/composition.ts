@@ -63,6 +63,9 @@ export type ProductionCompositionOptions = {
     effect: "attention" | "pushover",
     attentionId: string,
   ) => Promise<void> | void;
+  afterPushoverTransportSuccess?: (
+    message: Parameters<PushoverTransport["send"]>[0],
+  ) => Promise<void> | void;
   configuration: ProductionConfiguration;
   onSchedulerError?: (error: unknown) => void;
   providerUsage: ProviderUsageSource;
@@ -110,6 +113,7 @@ export const createProductionComposition = (
       configuration.pushover,
       options.pushoverTransport ??
         new HttpPushoverTransport(configuration.pushover.apiUrl),
+      options.afterPushoverTransportSuccess,
     );
     const effects = createMechanicalNodeEffects({ board });
     const lifecycle = new LifecycleEngine({

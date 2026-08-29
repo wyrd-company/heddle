@@ -13,6 +13,11 @@ import {
   type ProductionT3Client,
 } from "./composition.js";
 import type { ProductionConfiguration } from "./configuration.js";
+import {
+  DurablePushoverNotifier,
+  type PushoverMessage,
+  type PushoverTransport,
+} from "./durable-adapters.js";
 
 const [mode, root, deliveriesPath] = process.argv.slice(2);
 if (
@@ -72,21 +77,29 @@ const t3 = {
   respondToUserInput: async () => ({ sequence: 1 }),
 } as ProductionT3Client;
 
+const pushoverTransport: PushoverTransport = {
+  send: async (message) =>
+    appendFile(deliveriesPath, `${JSON.stringify(message)}\n`),
+};
+
 const composition = createProductionComposition({
-  ...(mode === "resume"
-    ? {}
-    : {
+  ...(mode === "crash-attention"
+    ? {
         afterEscalationEffect: (effect: "attention" | "pushover") => {
-          if (effect === mode.replace("crash-", "")) process.exit(86);
+          if (effect === "attention") process.exit(86);
         },
-      }),
+      }
+    : {}),
+  ...(mode === "crash-pushover"
+    ? {
+        afterPushoverTransportSuccess: () => process.exit(86),
+      }
+    : {}),
   configuration,
   providerUsage: {
     readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
   },
-  pushoverTransport: {
-    send: async ({ stableId }) => appendFile(deliveriesPath, `${stableId}\n`),
-  },
+  pushoverTransport,
   t3,
 });
 
@@ -145,13 +158,36 @@ try {
   if (mode !== "resume" || !controller.signal.aborted) throw error;
 }
 
+if (mode === "resume") {
+  const pending = composition.escalation
+    .pendingEscalations("task-17")
+    .find(({ escalationId }) => escalationId === "delivery-choice");
+  if (pending === undefined) {
+    throw new Error("Replay probe lost its pending escalation");
+  }
+  await new DurablePushoverNotifier(
+    composition.persistence,
+    configuration.pushover,
+    pushoverTransport,
+  ).send(pending);
+}
+
 const deliveries = (await readFile(deliveriesPath, "utf8").catch(() => ""))
   .split("\n")
-  .filter(Boolean);
+  .filter(Boolean)
+  .map((line) => JSON.parse(line) as PushoverMessage);
 process.stdout.write(
   JSON.stringify({
     attentionCount: composition.attention.list().length,
     deliveries,
+    effectCompleted: composition.persistence.effectCompleted(
+      "pushover",
+      '["task-17","task-17:implement","delivery-choice"]',
+    ),
+    effectIntentRecorded: composition.persistence.effectIntentRecorded(
+      "pushover",
+      '["task-17","task-17:implement","delivery-choice"]',
+    ),
     routeTypes: composition.persistence
       .replayEvents("task-17")
       .filter(({ type }) => type.startsWith("mcp:escalation-"))

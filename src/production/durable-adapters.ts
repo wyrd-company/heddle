@@ -3,6 +3,8 @@
 //   implements: heddle
 // ---
 
+import { createHash } from "node:crypto";
+
 import type { EscalationAttention } from "../mcp-server/index.js";
 import type { SessionObservationAttention } from "../control-plane/index.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
@@ -81,13 +83,15 @@ export class DurablePushoverNotifier {
     private readonly persistence: SqlitePersistence,
     private readonly configuration: PushoverConfiguration,
     private readonly transport: PushoverTransport,
+    private readonly afterTransportSuccess?: (
+      message: PushoverMessage,
+    ) => Promise<void> | void,
   ) {}
 
   async send(attention: EscalationAttention): Promise<void> {
     if (this.persistence.effectCompleted("pushover", attention.attentionId)) {
       return;
     }
-    this.persistence.recordEffectIntent("pushover", attention.attentionId);
     const runtimes = this.persistence
       .listReconcilerRuntime()
       .filter(({ instanceId }) => instanceId === attention.instanceId);
@@ -100,14 +104,22 @@ export class DurablePushoverNotifier {
     scope.searchParams.set("view", "lifecycle");
     scope.searchParams.set("scope", `task:${runtimes[0]!.taskId}`);
     scope.searchParams.set("attention", attention.attentionId);
-    await this.transport.send({
+    const message: PushoverMessage = {
       applicationToken: this.configuration.applicationToken,
       message: `Heddle escalation in ${attention.stage}`,
       stableId: attention.attentionId,
       title: "Heddle needs attention",
       url: scope.toString(),
       userKey: this.configuration.userKey,
+    };
+    const messageFingerprint = createHash("sha256")
+      .update(JSON.stringify(message))
+      .digest("hex");
+    this.persistence.recordEffectIntent("pushover", attention.attentionId, {
+      messageFingerprint,
     });
+    await this.transport.send(message);
+    await this.afterTransportSuccess?.(message);
     if (
       !this.persistence.recordEffectCompleted(
         "pushover",

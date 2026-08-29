@@ -257,6 +257,63 @@ describe("durable production adapters", () => {
     persistence.close();
   });
 
+  it("rejects changed Pushover payload under a pending stable ID", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-payload-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-20",
+      state: "waiting",
+      taskId: 20,
+    });
+    const attention = {
+      attentionId: "task-20:session:choice",
+      escalationId: "choice",
+      instanceId: "task-20",
+      openedAt: "2030-01-01T00:00:00.000Z",
+      ownerSessionKey: "task-20:implement",
+      questions: [],
+      stage: "implement",
+    };
+    const firstTransport = {
+      send: vi.fn(async () => {
+        throw new Error("Injected ambiguous failure");
+      }),
+    };
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        {
+          apiUrl: "https://notify.invalid/messages",
+          applicationToken: "application-token",
+          consoleBaseUrl: "https://console.invalid/",
+          userKey: "operator-key",
+        },
+        firstTransport,
+      ).send(attention),
+    ).rejects.toThrow("Injected ambiguous failure");
+
+    const changedTransport = { send: vi.fn(async () => undefined) };
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        {
+          apiUrl: "https://notify.invalid/messages",
+          applicationToken: "changed-application-token",
+          consoleBaseUrl: "https://console.invalid/",
+          userKey: "operator-key",
+        },
+        changedTransport,
+      ).send(attention),
+    ).rejects.toThrow("changed durable identity");
+    expect(firstTransport.send).toHaveBeenCalledTimes(1);
+    expect(changedTransport.send).not.toHaveBeenCalled();
+    expect(persistence.effectCompleted("pushover", attention.attentionId)).toBe(
+      false,
+    );
+    persistence.close();
+  });
+
   it("rejects Pushover without one canonical production task scope", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-scope-"));
     const persistence = new SqlitePersistence({ stateDirectory: directory });
