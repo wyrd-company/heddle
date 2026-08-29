@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@flowcraft/sqlite-history": "^1.0.0-beta.1",
-    "better-sqlite3": "^12.11.1"
+    "better-sqlite3": "^12.11.1",
+    "flowcraft": "2.10.1"
   }
 }
