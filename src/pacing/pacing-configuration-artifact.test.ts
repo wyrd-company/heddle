@@ -20,7 +20,7 @@ const validConfiguration = {
   defaultProvider: "provider-a",
   maxConcurrentSessions: 3,
   providerBudgets: {
-    "provider-a": { usageLimit: 80 },
+    "provider-a": { usageLimit: 80.5 },
   },
   subagents: { maxDepth: 2, maxFanOut: 2 },
   usageWindowHours: 5,

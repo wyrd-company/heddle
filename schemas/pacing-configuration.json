@@ -81,7 +81,7 @@
       "properties": {
         "usageLimit": {
           "description": "Maximum usage in the units reported by the provider usage source.",
-          "type": "integer",
+          "type": "number",
           "minimum": 0
         }
       }

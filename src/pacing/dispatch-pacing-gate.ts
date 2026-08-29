@@ -19,6 +19,12 @@ const requireNonNegativeInteger = (name: string, value: number): void => {
   }
 };
 
+const requireNonNegativeFinite = (name: string, value: number): void => {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new TypeError(`${name} must be a non-negative finite number`);
+  }
+};
+
 const requireNonEmpty = (name: string, value: string): void => {
   if (value.trim() === "") throw new TypeError(`${name} must not be empty`);
 };
@@ -44,7 +50,7 @@ const validateConfiguration = (configuration: PacingConfiguration): void => {
     configuration.providerBudgets,
   )) {
     requireNonEmpty("provider", provider);
-    requireNonNegativeInteger(
+    requireNonNegativeFinite(
       `providerBudgets.${provider}.usageLimit`,
       budget.usageLimit,
     );
@@ -138,7 +144,7 @@ export class DispatchPacingGate implements DispatchPacingEvaluator {
     if (budget === undefined) return { kind: "dispatch" };
 
     const usage = await this.usage.readFiveHourWindow(request.provider);
-    requireNonNegativeInteger(`${request.provider} usage`, usage.used);
+    requireNonNegativeFinite(`${request.provider} usage`, usage.used);
     requireNonNegativeInteger(
       `${request.provider} windowStartedAt`,
       usage.windowStartedAt,

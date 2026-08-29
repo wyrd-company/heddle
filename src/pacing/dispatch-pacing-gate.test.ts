@@ -71,10 +71,16 @@ describe("DispatchPacingGate", () => {
   it("defers exhausted provider usage until the five-hour window opens", async () => {
     const windowStartedAt = 10_000;
     const usage = new UsageStub({
-      "provider-a": { used: 80, windowStartedAt },
+      "provider-a": { used: 80.5, windowStartedAt },
     });
     let now = windowStartedAt + 1;
-    const gate = new DispatchPacingGate(configuration(), usage, () => now);
+    const gate = new DispatchPacingGate(
+      configuration({
+        providerBudgets: { "provider-a": { usageLimit: 80.5 } },
+      }),
+      usage,
+      () => now,
+    );
     const request = {
       kind: "task" as const,
       provider: "provider-a",
@@ -83,11 +89,11 @@ describe("DispatchPacingGate", () => {
 
     await expect(gate.evaluate(request, [])).resolves.toEqual({
       deferral: {
-        limit: 80,
+        limit: 80.5,
         provider: "provider-a",
         reason: "provider-usage-window",
         retryAt: windowStartedAt + PROVIDER_USAGE_WINDOW_MS,
-        used: 80,
+        used: 80.5,
       },
       kind: "defer",
     });
@@ -219,6 +225,23 @@ describe("DispatchPacingGate", () => {
     });
   });
 
+  it("allows an unbudgeted provider without consulting its usage source", async () => {
+    const usage = new UsageStub({});
+    const gate = new DispatchPacingGate(configuration(), usage, () => 2_000);
+
+    await expect(
+      gate.evaluate(
+        {
+          kind: "task",
+          provider: "provider-b",
+          sessionId: "session-a",
+        },
+        [],
+      ),
+    ).resolves.toEqual({ kind: "dispatch" });
+    expect(usage.reads).toEqual([]);
+  });
+
   it("derives depth only from an active parent session", async () => {
     const usage = new UsageStub({
       "provider-a": { used: 0, windowStartedAt: 1_000 },
@@ -273,6 +296,6 @@ describe("DispatchPacingGate", () => {
         },
         [],
       ),
-    ).rejects.toThrow("provider-a usage must be a non-negative safe integer");
+    ).rejects.toThrow("provider-a usage must be a non-negative finite number");
   });
 });
