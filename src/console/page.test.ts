@@ -70,6 +70,11 @@ describe("console page state", () => {
       /\.graph-edge\[data-trace="true"\] \{[^}]*stroke: var\(--signal\);[^}]*stroke-width: 4;[^}]*\}/,
     );
     expect(consoleStyles).toMatch(
+      /\.graph-edge \{[^}]*marker-end: url\(#dependency-arrow\);[^}]*\}/,
+    );
+    expect(consoleClient).toContain('id: "dependency-arrow"');
+    expect(consoleClient).toContain('fill: "context-stroke"');
+    expect(consoleStyles).toMatch(
       /\.graph-viewport \{[^}]*overflow: auto;[^}]*\}/,
     );
     expect(consoleStyles).toMatch(
