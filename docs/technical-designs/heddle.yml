@@ -272,6 +272,19 @@ proposed-design:
     of the console URL, so a pushover deep link lands already scoped
     to the entry that raised it.
 
+    The lifecycle view consumes one canonical read model assembled
+    outside the viewer. It identifies the persisted instance and its
+    pinned blueprint blob and carries the raw flowcraft events grouped
+    in recorded execution order behind one monotonic cursor. An initial
+    read replays the complete persisted history; later reads contain
+    only a contiguous tail. The view fails closed on cursor gaps,
+    overlaps, instance or blueprint identity drift, and events that name
+    nodes outside the pinned blueprint. It renders the current stage,
+    repeated node traversals, and the same ordered events in an adjacent
+    history panel without becoming an authority for blueprint or event
+    state. Deployments without a composed lifecycle reader return an
+    unavailable response instead of substituting partial state.
+
     An attention queue overlays every view and lists each instance
     awaiting a human: adjudications, escalations, stale work, UAT,
     and pending T3 approvals. Each entry offers the dispositions
@@ -288,6 +301,13 @@ proposed-design:
     `blueprintToCanvas` — fed by Heddle's event stream rather than an
     in-tab runtime. Replaying an instance's persisted event log
     renders its exact history; tailing the log renders it live. The
+    console serves its generated React and tldraw bundle from the
+    installed package and does not depend on a workspace-only
+    `@flowcraft/tldraw` registry package. The console canvas is
+    read-only and hides editing controls. Its content security policy
+    keeps scripts and style elements self-hosted; tldraw's generated
+    geometry requires inline style attributes, while object content,
+    base remapping, and framing remain denied.
     same components edit blueprints: canvas changes round-trip to the
     blueprint JSON, so the diagram the operator edits is the artifact
     the interpreter runs.

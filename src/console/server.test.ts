@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
 import { createConsoleServer } from "./server.js";
+import { ConsoleLifecycleUnavailableError } from "./types.js";
 import type {
   ConsoleAttention,
   ConsoleBoard,
@@ -253,6 +254,37 @@ describe("console server", () => {
     expect(wrongMethod.headers.get("allow")).toBe("GET");
     expect(malformedTask.status).toBe(400);
     expect(malformedCursor.status).toBe(400);
+    expect(board.writes).toEqual([]);
+  });
+
+  it("fails closed when the deployed lifecycle reader is unavailable", async () => {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      ),
+    );
+    class UnavailableState extends FixtureState {
+      override async readLifecycle(): Promise<ConsoleLifecycleSnapshot> {
+        throw new ConsoleLifecycleUnavailableError(
+          "Lifecycle history composition is unavailable",
+        );
+      }
+    }
+    server = createConsoleServer({ board, state: new UnavailableState() });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=52&after=0`,
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Lifecycle history composition is unavailable",
+    });
     expect(board.writes).toEqual([]);
   });
 

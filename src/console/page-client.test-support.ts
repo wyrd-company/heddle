@@ -212,7 +212,10 @@ export const clientHarness = async (
   const windowListeners = new Map<string, () => void>();
   const graphResponses = new Map<string, Promise<BrowserResponse>>();
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
+  const lifecycleResponses: BrowserResponse[] = [];
+  const lifecycleRequests: string[] = [];
   const lifecycleSnapshots: unknown[] = [];
+  const timeouts: Array<() => void> = [];
 
   const fetch = async (input: string): Promise<BrowserResponse> => {
     if (input === "/api/board") {
@@ -220,15 +223,18 @@ export const clientHarness = async (
     }
     if (input === "/api/attention") return response([]);
     if (input.startsWith("/api/lifecycle?")) {
+      lifecycleRequests.push(input);
+      const queued = lifecycleResponses.shift();
+      if (queued !== undefined) return queued;
       return response({
         blueprint: {
           blobHash: "a".repeat(40),
           edges: [],
-          id: "sample-lifecycle",
-          nodes: [{ id: "inspect", uses: "wait" }],
-          path: "blueprints/sample-lifecycle.json",
+          id: "parcel-preparation",
+          nodes: [{ id: "label", uses: "wait" }],
+          path: "blueprints/parcel-preparation.json",
         },
-        currentStageIds: ["inspect"],
+        currentStageIds: ["label"],
         events: [],
         instanceId: "instance-11",
         nextSequence: 0,
@@ -335,7 +341,10 @@ export const clientHarness = async (
       replace: (value: unknown) => lifecycleSnapshots.push(value),
     },
     setInterval: () => 0,
-    setTimeout: () => 0,
+    setTimeout: (callback: () => void) => {
+      timeouts.push(callback);
+      return timeouts.length;
+    },
   };
 
   runInNewContext(consoleClient, {
@@ -384,6 +393,7 @@ export const clientHarness = async (
     lifecycle,
     lifecycleTask,
     lifecycleSnapshots,
+    lifecycleRequests,
     location: () => locationHref,
     navigate: (name: string) => {
       locationHref = `http://console.test/?scope=${encodeURIComponent(name)}`;
@@ -392,6 +402,14 @@ export const clientHarness = async (
     navigateUrl: (url: string) => {
       locationHref = url;
       windowListeners.get("popstate")!();
+    },
+    queueLifecycle: (body: unknown) => {
+      lifecycleResponses.push(response(body));
+    },
+    runNextTimeout: () => {
+      const callback = timeouts.shift();
+      if (callback === undefined) throw new Error("no timeout is scheduled");
+      callback();
     },
     scope,
     status,
