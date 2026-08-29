@@ -4,7 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -78,6 +78,34 @@ describe("ensureWorktree", () => {
         })
       ).stdout,
     );
+  });
+
+  it("rejects an option-shaped base ref without creating a worktree or branch", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+    scratchDirectories.push(scratch);
+    const repositoryRoot = join(scratch, "source");
+    const worktreesRoot = join(scratch, "worktrees");
+    const ownedPath = join(worktreesRoot, "sample-repository", "task-prepare");
+    await initializeRepository(repositoryRoot);
+
+    await expect(
+      ensureWorktree({
+        baseRef: "--no-checkout",
+        branch: "task/prepare",
+        repositoryName: "sample-repository",
+        repositoryRoot,
+        worktreeName: "task-prepare",
+        worktreesRoot,
+      }),
+    ).rejects.toThrow();
+    await expect(lstat(ownedPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      exec(
+        "git",
+        ["show-ref", "--verify", "--quiet", "refs/heads/task/prepare"],
+        { cwd: repositoryRoot },
+      ),
+    ).rejects.toThrow();
   });
 
   it("rejects an unrelated repository at the owned path", async () => {
