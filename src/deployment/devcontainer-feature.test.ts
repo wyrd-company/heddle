@@ -198,6 +198,16 @@ describe("Heddle devcontainer feature", () => {
     expect(featureQualification).toContain(
       'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',
     );
+    expect(featureQualification).toContain(
+      "persistence.writeReconcilerRuntime({",
+    );
+    expect(featureQualification).toContain(
+      'blueprintPath: "blueprints/qualification.json",',
+    );
+    expect(featureQualification).toContain("pendingTransition: null,");
+    expect(featureQualification).toContain(
+      'stageId: "inspect",\n  state: "waiting",',
+    );
     expect(
       featureQualification.match(
         /--filter "label=heddle\.qualification=\$\{qualification_label\}"/g,

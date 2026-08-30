@@ -203,9 +203,27 @@ import { SqlitePersistence } from "/usr/local/lib/node_modules/heddle/dist/persi
 const persistence = new SqlitePersistence({ stateDirectory: "/var/lib/heddle" });
 persistence.createInstance(`task-${process.env.HEDDLE_QUALIFICATION_TASK_ID}`, {
   correlationTokens: {},
-  flowcraftContext: { awaitingNodeIds: ["inspect"] },
+  flowcraftContext: {
+    awaitingNodeIds: ["inspect"],
+    blueprintBlobHash: "qualification-blueprint-hash",
+    blueprintPath: "blueprints/qualification.json",
+    completedOperations: {},
+    executionIds: [],
+    nextTransitionNumber: 1,
+    pendingAttentions: [],
+    pendingTransition: null,
+    serializedContext: null,
+    status: "waiting",
+  },
   handoffs: [],
   todoState: null,
+});
+persistence.writeReconcilerRuntime({
+  boardStatus: "in-progress",
+  instanceId: `task-${process.env.HEDDLE_QUALIFICATION_TASK_ID}`,
+  stageId: "inspect",
+  state: "waiting",
+  taskId: Number(process.env.HEDDLE_QUALIFICATION_TASK_ID),
 });
 persistence.close();
 '
