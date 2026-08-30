@@ -89,6 +89,28 @@ describe("lifecycle blueprint artifacts", () => {
     ]);
   });
 
+  it("accepts repository metadata only as a safe wait-stage declaration", async () => {
+    const schema = await readJson(schemaPath);
+    const artifact = (await readJson(blueprintPaths[0])) as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    const validate = new Ajv2020({ allErrors: true, strict: false }).compile(
+      schema,
+    );
+    const valid = cloneJson(artifact);
+    valid.nodes.find(({ uses }) => uses === "wait")!.repo = "sample-repository";
+    expect(validate(valid), JSON.stringify(validate.errors)).toBe(true);
+
+    const invalid = cloneJson(valid);
+    invalid.nodes.find(({ uses }) => uses === "wait")!.repo = "../outside";
+    expect(validate(invalid)).toBe(false);
+
+    const inconsistent = cloneJson(artifact);
+    inconsistent.nodes.find(({ uses }) => uses !== "wait")!.repo =
+      "sample-repository";
+    expect(validate(inconsistent)).toBe(false);
+  });
+
   it("requires refinery relationships and session-stage bindings", async () => {
     const schema = await readJson(schemaPath);
     const artifact = (await readJson(blueprintPaths[0])) as {

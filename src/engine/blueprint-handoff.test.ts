@@ -60,4 +60,21 @@ describe("lifecycle blueprint handoff metadata", () => {
       'Non-wait node "finish" must not declare handoff metadata',
     );
   });
+
+  it("accepts a declared repository only on a wait node", () => {
+    const value = blueprint();
+    value.nodes[0]!.repo = "sample-repository";
+    expect(() => validate(value)).not.toThrow();
+
+    value.nodes[0]!.repo = "../outside";
+    expect(() => validate(value)).toThrow(
+      'Node "prepare" has invalid repository metadata',
+    );
+
+    delete value.nodes[0]!.repo;
+    value.nodes[1]!.repo = "sample-repository";
+    expect(() => validate(value)).toThrow(
+      'Node "finish" has invalid repository metadata',
+    );
+  });
 });
