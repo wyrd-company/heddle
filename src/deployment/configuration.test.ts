@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -20,6 +20,7 @@ import {
   loadDeploymentConfiguration,
   parseHeddleServerArguments,
   resolveConfigurationDirectory,
+  validateProviderUsageConfiguration,
 } from "./configuration.js";
 
 const fixture = (root: string): ProductionConfiguration => ({
@@ -223,6 +224,78 @@ describe("deployed configuration directory", () => {
     await mkdir(path);
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
       `Configuration file '${path}' cannot be read`,
+    );
+  });
+
+  it("requires one available executable adapter exactly when provider budgets exist", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const path = join(root, "config.yml");
+    const budgeted = fixture(root);
+    budgeted.pacing.providerBudgets = { codex: { usageLimit: 80 } };
+    await writeFile(path, stringify(budgeted));
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "providerUsage",
+    );
+
+    const executable = join(root, "provider-usage-command");
+    await writeFile(executable, "#!/bin/sh\nexit 0\n");
+    await chmod(executable, 0o755);
+    await writeFile(
+      path,
+      stringify({ ...budgeted, providerUsage: { executable } }),
+    );
+    await expect(loadDeploymentConfiguration(root)).resolves.toMatchObject({
+      providerUsage: {
+        arguments: [],
+        executable,
+        timeoutMilliseconds: 10_000,
+      },
+    });
+
+    await writeFile(
+      path,
+      stringify({
+        ...fixture(root),
+        providerUsage: { executable },
+      }),
+    );
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "must NOT be valid",
+    );
+  });
+
+  it("enforces the provider-budget adapter conditional in runtime validation", () => {
+    const configuration = fixture("/tmp/sample-root");
+    configuration.pacing.providerBudgets = { codex: { usageLimit: 80 } };
+    expect(() =>
+      validateProviderUsageConfiguration(configuration, undefined),
+    ).toThrow(
+      "providerUsage is required when pacing.providerBudgets is non-empty",
+    );
+
+    configuration.pacing.providerBudgets = {};
+    expect(() =>
+      validateProviderUsageConfiguration(configuration, {
+        arguments: [],
+        executable: "/tmp/sample-executable",
+        timeoutMilliseconds: 1_000,
+      }),
+    ).toThrow("providerUsage must be omitted");
+  });
+
+  it("fails startup preflight before composition when the configured executable is unavailable", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const path = join(root, "config.yml");
+    const configuration = fixture(root);
+    configuration.pacing.providerBudgets = { codex: { usageLimit: 80 } };
+    const executable = join(root, "missing-provider-usage-command");
+    await writeFile(
+      path,
+      stringify({ ...configuration, providerUsage: { executable } }),
+    );
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `Configuration file '${path}' is invalid: providerUsage.executable '${executable}' must be an available executable file`,
     );
   });
 

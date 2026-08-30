@@ -3,7 +3,8 @@
 //   implements: heddle
 // ---
 
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { URL } from "node:url";
 
@@ -29,7 +30,14 @@ export type LoadedDeploymentConfiguration = {
   configuration: ProductionConfiguration;
   configurationDirectory: string;
   configurationPath: string;
+  providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
+};
+
+export type ExecutableProviderUsageConfiguration = {
+  arguments: string[];
+  executable: string;
+  timeoutMilliseconds: number;
 };
 
 export type HeddleServerArguments = {
@@ -38,6 +46,7 @@ export type HeddleServerArguments = {
 };
 
 type ConfigurationDocument = ProductionConfiguration & {
+  providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
 };
 
@@ -155,6 +164,36 @@ const readConfigurationSchema = async (): Promise<AnySchema> =>
     ),
   ) as AnySchema;
 
+export const validateProviderUsageConfiguration = (
+  configuration: ProductionConfiguration,
+  providerUsage: ExecutableProviderUsageConfiguration | undefined,
+): void => {
+  const hasProviderBudgets =
+    Object.keys(configuration.pacing.providerBudgets).length > 0;
+  if (hasProviderBudgets !== (providerUsage !== undefined)) {
+    throw new TypeError(
+      hasProviderBudgets
+        ? "providerUsage is required when pacing.providerBudgets is non-empty"
+        : "providerUsage must be omitted when pacing.providerBudgets is empty",
+    );
+  }
+};
+
+const preflightProviderUsageExecutable = async (
+  providerUsage: ExecutableProviderUsageConfiguration | undefined,
+): Promise<void> => {
+  if (providerUsage === undefined) return;
+  try {
+    const metadata = await stat(providerUsage.executable);
+    if (!metadata.isFile()) throw new Error("not a file");
+    await access(providerUsage.executable, constants.X_OK);
+  } catch {
+    throw new TypeError(
+      `providerUsage.executable '${providerUsage.executable}' must be an available executable file`,
+    );
+  }
+};
+
 export const loadDeploymentConfiguration = async (
   configurationDirectory: string,
 ): Promise<LoadedDeploymentConfiguration> => {
@@ -201,14 +240,26 @@ export const loadDeploymentConfiguration = async (
     if (!validator(value)) {
       throw new TypeError(firstSchemaError(validator.errors?.[0]));
     }
-    const { server, ...configuration } = value as ConfigurationDocument;
+    const { providerUsage, server, ...configuration } =
+      value as ConfigurationDocument;
     if (server.host.trim() === "") {
       throw new TypeError("/server/host must not be empty");
     }
+    const validated = validateProductionConfiguration(configuration);
+    validateProviderUsageConfiguration(validated, providerUsage);
+    await preflightProviderUsageExecutable(providerUsage);
     return {
-      configuration: validateProductionConfiguration(configuration),
+      configuration: validated,
       configurationDirectory: directory,
       configurationPath,
+      ...(providerUsage === undefined
+        ? {}
+        : {
+            providerUsage: {
+              ...providerUsage,
+              arguments: [...providerUsage.arguments],
+            },
+          }),
       server: { ...server, host: server.host.trim() },
     };
   } catch (error) {
