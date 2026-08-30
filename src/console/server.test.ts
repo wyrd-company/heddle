@@ -267,6 +267,39 @@ describe("console server", () => {
     expect(board.writes).toEqual([]);
   });
 
+  it("does not expose raw or future board task fields through the board HTTP API", async () => {
+    board.tasks[1]!.frontMatter = {
+      display: "board-front-matter-marker",
+      nested: { value: "board-nested-marker" },
+    };
+    const taskWithFutureField = board.tasks[1] as BoardTask & {
+      futurePrivateField?: string;
+    };
+    taskWithFutureField.futurePrivateField = "board-future-marker";
+
+    const response = await globalThis.fetch(`${baseUrl}/api/board`);
+    const serialized = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(serialized).not.toContain("board-front-matter-marker");
+    expect(serialized).not.toContain("board-nested-marker");
+    expect(serialized).not.toContain("board-future-marker");
+    const body = JSON.parse(serialized) as {
+      tasks: Array<Record<string, unknown>>;
+    };
+    const publicTask = body.tasks.find(({ id }) => id === 52);
+    expect(publicTask).toEqual({
+      blocked: false,
+      dependencies: [],
+      id: 52,
+      parent: 51,
+      priority: "medium",
+      status: "in-progress",
+      tags: [],
+      title: "Count storage crates",
+    });
+  });
+
   it("fails closed when the deployed lifecycle reader is unavailable", async () => {
     await new Promise<void>((resolve, reject) =>
       server.close((error) =>

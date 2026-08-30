@@ -12,13 +12,41 @@ export type ConsoleScope =
   | { epicId: number; kind: "epic" }
   | { kind: "task"; taskId: number };
 
-export interface ProjectedTask extends Omit<BoardTask, "frontMatter"> {
+export interface PublicBoardTask {
+  blocked: boolean;
+  dependencies: number[];
+  id: number;
+  lifecycle?: string;
+  parent?: number;
+  priority: string;
+  product?: string;
+  repos?: string[];
+  status: string;
+  tags: string[];
+  title: string;
+}
+
+export interface ProjectedTask extends PublicBoardTask {
   deferral?: PacingDeferral;
   dwellMilliseconds?: number;
   instanceId?: string;
   stageEnteredAt?: number;
   stageId?: string;
 }
+
+export const projectPublicBoardTask = (task: BoardTask): PublicBoardTask => ({
+  blocked: task.blocked,
+  dependencies: [...task.dependencies],
+  id: task.id,
+  ...(task.lifecycle === undefined ? {} : { lifecycle: task.lifecycle }),
+  ...(task.parent === undefined ? {} : { parent: task.parent }),
+  priority: task.priority,
+  ...(task.product === undefined ? {} : { product: task.product }),
+  ...(task.repos === undefined ? {} : { repos: [...task.repos] }),
+  status: task.status,
+  tags: [...task.tags],
+  title: task.title,
+});
 
 export interface KanbanProjection {
   columns: Array<{
@@ -114,19 +142,7 @@ const enrich = (
   instance: ConsoleInstance | undefined,
   now: number,
 ): ProjectedTask => {
-  const projectedTask: Omit<BoardTask, "frontMatter"> = {
-    blocked: task.blocked,
-    dependencies: [...task.dependencies],
-    id: task.id,
-    ...(task.lifecycle === undefined ? {} : { lifecycle: task.lifecycle }),
-    ...(task.parent === undefined ? {} : { parent: task.parent }),
-    priority: task.priority,
-    ...(task.product === undefined ? {} : { product: task.product }),
-    ...(task.repos === undefined ? {} : { repos: [...task.repos] }),
-    status: task.status,
-    tags: [...task.tags],
-    title: task.title,
-  };
+  const projectedTask = projectPublicBoardTask(task);
   if (instance === undefined) return projectedTask;
   const hasStage = task.status === "in-progress";
   if (!hasStage && instance.deferral === undefined) return projectedTask;

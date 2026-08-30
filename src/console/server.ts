@@ -23,6 +23,7 @@ import {
   buildKanbanProjection,
   ConsoleScopeError,
   parseConsoleScope,
+  projectPublicBoardTask,
 } from "./projection.js";
 import {
   ConsoleAttentionActionsUnavailableError,
@@ -274,7 +275,10 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
           options.board.readBoardStatuses(),
           options.board.readBoard(),
         ]);
-        json(response, 200, { statuses, tasks });
+        json(response, 200, {
+          statuses,
+          tasks: tasks.map(projectPublicBoardTask),
+        });
         return;
       }
       if (url.pathname === "/api/instances") {

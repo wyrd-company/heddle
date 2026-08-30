@@ -6,6 +6,7 @@
 export {
   buildKanbanProjection,
   parseConsoleScope,
+  projectPublicBoardTask,
   serializeConsoleScope,
 } from "./projection.js";
 export { buildDependencyGraphProjection } from "./dependency-graph.js";
@@ -22,6 +23,7 @@ export type {
   ConsoleScope,
   KanbanProjection,
   ProjectedTask,
+  PublicBoardTask,
 } from "./projection.js";
 export { createConsoleServer } from "./server.js";
 export type { ConsoleServerOptions } from "./server.js";
