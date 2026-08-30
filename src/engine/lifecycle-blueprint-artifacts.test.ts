@@ -3,6 +3,8 @@
 //   verifies: heddle
 // ---
 
+import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +17,17 @@ import { deliveryBlueprintFixture } from "./lifecycle-blueprint.test-support.js"
 
 const roots: string[] = [];
 
+const sampleHandoffTemplate = "# {{ task.title }}\n";
+const sampleTodoTemplate = `${JSON.stringify(
+  { items: [{ id: "orient", text: "Orient on {{task.title}}" }] },
+  null,
+  2,
+)}\n`;
+const sampleHandoffBlobHash = createHash("sha1")
+  .update(`blob ${Buffer.byteLength(sampleHandoffTemplate)}\0`)
+  .update(sampleHandoffTemplate)
+  .digest("hex");
+
 const artifact = () => ({
   $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
   relationships: {
@@ -26,7 +39,7 @@ const artifact = () => ({
     {
       handoff: "standard",
       "handoff-template": {
-        blobHash: "a".repeat(40),
+        blobHash: sampleHandoffBlobHash,
         path: "handoff-templates/sample-handoff.md",
       },
       id: "inspect",
@@ -58,6 +71,16 @@ const repository = async (
   await writeFile(
     join(root, "blueprints", `${artifactId}.json`),
     `${JSON.stringify(value, null, 2)}\n`,
+  );
+  await mkdir(join(root, "handoff-templates"));
+  await writeFile(
+    join(root, "handoff-templates", "sample-handoff.md"),
+    sampleHandoffTemplate,
+  );
+  await mkdir(join(root, "todo-templates"));
+  await writeFile(
+    join(root, "todo-templates", "sample-checklist.json"),
+    sampleTodoTemplate,
   );
   return root;
 };
@@ -103,6 +126,35 @@ describe("organization lifecycle blueprint artifacts", () => {
     await expect(
       validateBlueprintRepository(await repository(invalid)),
     ).rejects.toThrow("relationships must name its template artifacts");
+  });
+
+  it("rejects a pinned handoff template path with no repository artifact", async () => {
+    const root = await repository();
+    await rm(join(root, "handoff-templates", "sample-handoff.md"));
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      "pins handoff template 'handoff-templates/sample-handoff.md' that is not in the repository",
+    );
+  });
+
+  it("rejects a pinned handoff template blob hash that does not match the artifact", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as { "handoff-template": { blobHash: string } })[
+      "handoff-template"
+    ].blobHash = "b".repeat(40);
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow(
+      "pins handoff template blob " +
+        `${"b".repeat(40)} that does not match 'handoff-templates/sample-handoff.md'`,
+    );
+  });
+
+  it("rejects a named todo template with no repository artifact", async () => {
+    const root = await repository();
+    await rm(join(root, "todo-templates", "sample-checklist.json"));
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      "names todo template 'sample-checklist' that has no artifact in todo-templates/",
+    );
   });
 
   it.each(["standard-delivery", "trivial"] as const)(

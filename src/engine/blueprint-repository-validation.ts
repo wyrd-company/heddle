@@ -3,7 +3,9 @@
 //   implements: heddle
 // ---
 
-import { readFile, readdir } from "node:fs/promises";
+import type { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -72,6 +74,51 @@ const assertTemplateRelationships = (
   }
 };
 
+const gitBlobHash = (content: Buffer, blobHash: string): string =>
+  createHash(blobHash.length === 64 ? "sha256" : "sha1")
+    .update(`blob ${content.byteLength}\0`)
+    .update(content)
+    .digest("hex");
+
+const assertTemplateArtifacts = async (
+  artifactId: string,
+  nodes: LifecycleNode[],
+  repositoryRoot: string,
+): Promise<void> => {
+  for (const node of nodes) {
+    const pinned = node["handoff-template"];
+    if (pinned !== undefined) {
+      let content: Buffer;
+      try {
+        content = await readFile(join(repositoryRoot, pinned.path));
+      } catch {
+        throw new BlueprintValidationError(
+          `Blueprint '${artifactId}' node '${node.id}' pins handoff template '${pinned.path}' that is not in the repository`,
+        );
+      }
+      if (gitBlobHash(content, pinned.blobHash) !== pinned.blobHash) {
+        throw new BlueprintValidationError(
+          `Blueprint '${artifactId}' node '${node.id}' pins handoff template blob ${pinned.blobHash} that does not match '${pinned.path}'`,
+        );
+      }
+    }
+    const todoTemplate = node["todo-template"];
+    if (todoTemplate !== undefined) {
+      const path = join(
+        repositoryRoot,
+        "todo-templates",
+        `${todoTemplate}.json`,
+      );
+      const artifact = await stat(path).catch(() => undefined);
+      if (artifact === undefined || !artifact.isFile()) {
+        throw new BlueprintValidationError(
+          `Blueprint '${artifactId}' node '${node.id}' names todo template '${todoTemplate}' that has no artifact in todo-templates/`,
+        );
+      }
+    }
+  }
+};
+
 const assertDeliveryHandoffs = (
   artifactId: string,
   nodes: LifecycleNode[],
@@ -98,7 +145,8 @@ const assertDeliveryHandoffs = (
 export const validateBlueprintRepository = async (
   repositoryRoot: string,
 ): Promise<string[]> => {
-  const directory = join(resolve(repositoryRoot), "blueprints");
+  const root = resolve(repositoryRoot);
+  const directory = join(root, "blueprints");
   const filenames = (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && extname(entry.name) === ".json")
     .map(({ name }) => name)
@@ -136,6 +184,7 @@ export const validateBlueprintRepository = async (
       blueprint,
     );
     assertDeliveryHandoffs(artifactId, blueprint.nodes);
+    await assertTemplateArtifacts(artifactId, blueprint.nodes, root);
   }
   return filenames.map((filename) => basename(filename, ".json"));
 };

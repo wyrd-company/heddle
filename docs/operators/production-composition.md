@@ -159,7 +159,10 @@ task validate HEDDLE_REPOSITORY_ROOT=/absolute/path/to/heddle
 ```
 
 Heddle owns the lifecycle blueprint schema and interpreter. The organization
-repository owns authored blueprint artifacts.
+repository owns authored blueprint artifacts together with the
+`handoff-templates/` and `todo-templates/` artifacts they bind. Validation
+fails when a node's pinned handoff-template path and blob hash or named todo
+template does not resolve in the repository being validated.
 
 For example, the routing portion has this shape:
 
