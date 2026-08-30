@@ -12,7 +12,7 @@ import {
   loadDeploymentConfiguration,
   parseHeddleServerArguments,
 } from "../dist/deployment/configuration.js";
-import { startHeddleServerFromEnvironment } from "../dist/deployment/server.js";
+import { startConfiguredProductionService } from "../dist/deployment/production-service.js";
 
 const main = async () => {
   const input = parseHeddleServerArguments(process.argv.slice(2), process.env);
@@ -32,7 +32,7 @@ const main = async () => {
     return;
   }
 
-  const service = await startHeddleServerFromEnvironment(process.env);
+  const service = await startConfiguredProductionService(loaded);
   const stop = async () => {
     await service.close();
     process.exitCode = 0;

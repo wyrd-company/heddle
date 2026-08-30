@@ -32,9 +32,16 @@ export type LoadedDeploymentConfiguration = {
   configurationPath: string;
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
+  timeoutApplication?: ExecutableTimeoutApplicationConfiguration;
 };
 
 export type ExecutableProviderUsageConfiguration = {
+  arguments: string[];
+  executable: string;
+  timeoutMilliseconds: number;
+};
+
+export type ExecutableTimeoutApplicationConfiguration = {
   arguments: string[];
   executable: string;
   timeoutMilliseconds: number;
@@ -45,9 +52,12 @@ export type HeddleServerArguments = {
   configurationDirectory?: string;
 };
 
-type ConfigurationDocument = ProductionConfiguration & {
+type ConfigurationDocument = Omit<ProductionConfiguration, "session"> & {
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
+  session: ProductionConfiguration["session"] & {
+    timeoutApplication?: ExecutableTimeoutApplicationConfiguration;
+  };
 };
 
 export class HeddleConfigurationError extends Error {
@@ -179,17 +189,37 @@ export const validateProviderUsageConfiguration = (
   }
 };
 
-const preflightProviderUsageExecutable = async (
-  providerUsage: ExecutableProviderUsageConfiguration | undefined,
+const preflightExecutable = async (
+  field: string,
+  configuration:
+    | ExecutableProviderUsageConfiguration
+    | ExecutableTimeoutApplicationConfiguration
+    | undefined,
 ): Promise<void> => {
-  if (providerUsage === undefined) return;
+  if (configuration === undefined) return;
   try {
-    const metadata = await stat(providerUsage.executable);
+    const metadata = await stat(configuration.executable);
     if (!metadata.isFile()) throw new Error("not a file");
-    await access(providerUsage.executable, constants.X_OK);
+    await access(configuration.executable, constants.X_OK);
   } catch {
     throw new TypeError(
-      `providerUsage.executable '${providerUsage.executable}' must be an available executable file`,
+      `${field}.executable '${configuration.executable}' must be an available executable file`,
+    );
+  }
+};
+
+export const validateTimeoutApplicationConfiguration = (
+  configuration: ProductionConfiguration,
+  timeoutApplication: ExecutableTimeoutApplicationConfiguration | undefined,
+): void => {
+  const requiresTimeoutApplication =
+    configuration.session.driver === "codex" ||
+    configuration.session.driver === "claudeAgent";
+  if (requiresTimeoutApplication !== (timeoutApplication !== undefined)) {
+    throw new TypeError(
+      requiresTimeoutApplication
+        ? `session.timeoutApplication is required for driver '${configuration.session.driver}'`
+        : `session.timeoutApplication must be omitted for driver '${configuration.session.driver}'`,
     );
   }
 };
@@ -240,14 +270,18 @@ export const loadDeploymentConfiguration = async (
     if (!validator(value)) {
       throw new TypeError(firstSchemaError(validator.errors?.[0]));
     }
-    const { providerUsage, server, ...configuration } =
-      value as ConfigurationDocument;
+    const document = value as ConfigurationDocument;
+    const { timeoutApplication, ...session } = document.session;
+    const { providerUsage, server, ...root } = document;
+    const configuration: ProductionConfiguration = { ...root, session };
     if (server.host.trim() === "") {
       throw new TypeError("/server/host must not be empty");
     }
     const validated = validateProductionConfiguration(configuration);
     validateProviderUsageConfiguration(validated, providerUsage);
-    await preflightProviderUsageExecutable(providerUsage);
+    validateTimeoutApplicationConfiguration(validated, timeoutApplication);
+    await preflightExecutable("providerUsage", providerUsage);
+    await preflightExecutable("session.timeoutApplication", timeoutApplication);
     return {
       configuration: validated,
       configurationDirectory: directory,
@@ -258,6 +292,14 @@ export const loadDeploymentConfiguration = async (
             providerUsage: {
               ...providerUsage,
               arguments: [...providerUsage.arguments],
+            },
+          }),
+      ...(timeoutApplication === undefined
+        ? {}
+        : {
+            timeoutApplication: {
+              ...timeoutApplication,
+              arguments: [...timeoutApplication.arguments],
             },
           }),
       server: { ...server, host: server.host.trim() },

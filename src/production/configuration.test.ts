@@ -73,7 +73,7 @@ describe("production configuration", () => {
     ) as { properties: Record<string, unknown>; required: string[] };
     const configuration = fixture();
     expect(Object.keys(schema.properties).sort()).toEqual(
-      [...Object.keys(configuration), "server"].sort(),
+      [...Object.keys(configuration), "providerUsage", "server"].sort(),
     );
     expect([...schema.required].sort()).toEqual(
       Object.keys(configuration).sort(),
@@ -83,7 +83,17 @@ describe("production configuration", () => {
       formats: { uri: true },
       strict: false,
     }).compile(schema);
-    expect(validate(configuration), JSON.stringify(validate.errors)).toBe(true);
+    const deploymentDocument = {
+      ...configuration,
+      providerUsage: {
+        arguments: [],
+        executable: "/tmp/sample-provider-usage",
+        timeoutMilliseconds: 1_000,
+      },
+    };
+    expect(validate(deploymentDocument), JSON.stringify(validate.errors)).toBe(
+      true,
+    );
     expect(validateProductionConfiguration(configuration)).toBe(configuration);
   });
 

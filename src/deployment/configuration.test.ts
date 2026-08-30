@@ -3,7 +3,8 @@
 //   verifies: heddle
 // ---
 
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -21,6 +22,7 @@ import {
   parseHeddleServerArguments,
   resolveConfigurationDirectory,
   validateProviderUsageConfiguration,
+  validateTimeoutApplicationConfiguration,
 } from "./configuration.js";
 
 const fixture = (root: string): ProductionConfiguration => ({
@@ -37,7 +39,7 @@ const fixture = (root: string): ProductionConfiguration => ({
     stalledMilliseconds: 1_000,
   },
   pacing: {
-    defaultProvider: "codex",
+    defaultProvider: "cursor",
     maxConcurrentSessions: 1,
     providerBudgets: {},
     subagents: { maxDepth: 1, maxFanOut: 1 },
@@ -63,7 +65,7 @@ const fixture = (root: string): ProductionConfiguration => ({
   session: {
     baseRef: "main",
     cliVersion: "1.0.0",
-    driver: "codex",
+    driver: "cursor",
     interactionMode: "default",
     model: "sample-model",
     runtimeMode: "sample-mode",
@@ -283,6 +285,99 @@ describe("deployed configuration directory", () => {
     ).toThrow("providerUsage must be omitted");
   });
 
+  it("requires a preflighted timeout application exactly for codex and claudeAgent", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const path = join(root, "config.yml");
+    const executable = join(root, "timeout-application-command");
+    await writeFile(executable, "#!/bin/sh\nexit 0\n");
+    await chmod(executable, 0o755);
+    const configuration = fixture(root);
+    configuration.pacing.defaultProvider = "codex";
+    configuration.session.driver = "codex";
+
+    await writeFile(path, stringify(configuration));
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "timeoutApplication",
+    );
+
+    await writeFile(
+      path,
+      stringify({
+        ...configuration,
+        session: {
+          ...configuration.session,
+          timeoutApplication: { executable },
+        },
+      }),
+    );
+    const loaded = await loadDeploymentConfiguration(root);
+    expect(loaded.timeoutApplication).toEqual({
+      arguments: [],
+      executable,
+      timeoutMilliseconds: 10_000,
+    });
+    expect(loaded.configuration.session).not.toHaveProperty(
+      "timeoutApplication",
+    );
+
+    const cursor = fixture(root);
+    await writeFile(
+      path,
+      stringify({
+        ...cursor,
+        session: {
+          ...cursor.session,
+          timeoutApplication: { executable },
+        },
+      }),
+    );
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "must NOT be valid",
+    );
+  });
+
+  it("enforces the timeout-application conditional in runtime validation", () => {
+    const configuration = fixture("/tmp/sample-root");
+    configuration.pacing.defaultProvider = "claudeAgent";
+    configuration.session.driver = "claudeAgent";
+    expect(() =>
+      validateTimeoutApplicationConfiguration(configuration, undefined),
+    ).toThrow("session.timeoutApplication is required");
+
+    configuration.pacing.defaultProvider = "cursor";
+    configuration.session.driver = "cursor";
+    expect(() =>
+      validateTimeoutApplicationConfiguration(configuration, {
+        arguments: [],
+        executable: "/tmp/sample-executable",
+        timeoutMilliseconds: 1_000,
+      }),
+    ).toThrow("session.timeoutApplication must be omitted");
+  });
+
+  it("fails startup preflight when the timeout application is unavailable", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const path = join(root, "config.yml");
+    const configuration = fixture(root);
+    configuration.pacing.defaultProvider = "codex";
+    configuration.session.driver = "codex";
+    const executable = join(root, "missing-timeout-application-command");
+    await writeFile(
+      path,
+      stringify({
+        ...configuration,
+        session: {
+          ...configuration.session,
+          timeoutApplication: { executable },
+        },
+      }),
+    );
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `Configuration file '${path}' is invalid: session.timeoutApplication.executable '${executable}' must be an available executable file`,
+    );
+  });
+
   it("fails startup preflight before composition when the configured executable is unavailable", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const path = join(root, "config.yml");
@@ -318,5 +413,30 @@ describe("deployed configuration directory", () => {
     expect(rendered).not.toContain(secret);
     expect(rendered).toContain("[REDACTED]");
     expect(rendered).toContain(`Configuration file '${path}' is invalid`);
+  });
+
+  it("redacts actual entry-point startup failure and creates no service state", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const path = join(root, "config.yml");
+    const configuration = fixture(root) as ProductionConfiguration &
+      Record<string, unknown>;
+    configuration["t3-secret-value"] = true;
+    await writeFile(path, stringify(configuration));
+
+    const failure = await execute(
+      process.execPath,
+      ["bin/heddle-server.mjs", "--config", root],
+      { env: process.env },
+    ).catch((error: unknown) => error as { code: number; stderr: string });
+
+    expect(failure).toMatchObject({ code: 1 });
+    expect(failure.stderr).toContain(`Configuration file '${path}' is invalid`);
+    expect(failure.stderr).toContain("[REDACTED]");
+    expect(failure.stderr).not.toContain("t3-secret-value");
+    expect(failure.stderr).not.toContain("application-secret-value");
+    expect(failure.stderr).not.toContain("operator-secret-value");
+    await expect(
+      access(configuration.stateDirectory, constants.F_OK),
+    ).rejects.toThrow();
   });
 });
