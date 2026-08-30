@@ -10,6 +10,7 @@ import type { JsonValue } from "../persistence/index.js";
 import { isTodoState } from "../todo/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
+  prepareProductionEpicFixture,
   prepareProductionFixture,
   SyntheticT3,
 } from "./composition.test-support.js";
@@ -43,7 +44,7 @@ describe("production subagent composition", () => {
   });
 
   it("shares persistence, pacing, bootstrap, observation, and token authority", async () => {
-    const fixture = await prepareProductionFixture();
+    const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
@@ -115,9 +116,12 @@ describe("production subagent composition", () => {
         command.type === "thread.create" &&
         command.threadId === spawned.assignment.threadId,
     );
+    const epicProjectId = t3.commands.find(
+      ({ type }) => type === "project.create",
+    )?.projectId;
     expect(childCreate).toMatchObject({
       branch: `heddle/task-${fixture.taskId}`,
-      projectId: fixture.configuration.adHocProject.projectId,
+      projectId: epicProjectId,
       title: expect.stringContaining(`task-${fixture.taskId}`),
     });
     expect(childCreate?.worktreePath).toBe(

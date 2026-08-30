@@ -101,6 +101,8 @@ export type ProductionFixture = {
   taskId: number;
 };
 
+export type ProductionEpicFixture = ProductionFixture & { epicId: number };
+
 export const prepareProductionFixture =
   async (): Promise<ProductionFixture> => {
     const root = await mkdtemp(join(tmpdir(), "heddle-production-"));
@@ -305,5 +307,61 @@ next_id: 1
         stopTimeoutMilliseconds: 1_000,
         t3: { accessToken: "access-token", baseUrl: "http://127.0.0.1:3999" },
       },
+    };
+  };
+
+export const prepareProductionEpicFixture =
+  async (): Promise<ProductionEpicFixture> => {
+    const fixture = await prepareProductionFixture();
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--status",
+        "done",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const epic = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Sample Delivery",
+        "--status",
+        "in-progress",
+        "--tags",
+        "type:epic",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const epicId = (JSON.parse(epic.stdout) as { id: number }).id;
+    const child = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Arrange sample items",
+        "--status",
+        "todo",
+        "--parent",
+        String(epicId),
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    return {
+      ...fixture,
+      epicId,
+      taskId: (JSON.parse(child.stdout) as { id: number }).id,
     };
   };

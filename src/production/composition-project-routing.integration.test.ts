@@ -1,0 +1,53 @@
+// ---
+// relationships:
+//   verifies: heddle
+// ---
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { createProductionComposition } from "./composition.js";
+import {
+  prepareProductionEpicFixture,
+  SyntheticT3,
+} from "./composition.test-support.js";
+
+describe("production project routing", () => {
+  let cleanup: (() => Promise<void>) | undefined;
+
+  afterEach(async () => cleanup?.());
+
+  it("provisions an epic project and routes its child through the task-first worktree", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    const project = t3.commands.find(({ type }) => type === "project.create");
+    const thread = t3.commands.find(
+      (command) =>
+        command.type === "thread.create" &&
+        command.title === `task-${fixture.taskId} · implement-1`,
+    );
+    expect(project).toMatchObject({
+      title: `Sample product - epic-${fixture.epicId}`,
+      type: "project.create",
+      workspaceRoot: `${fixture.configuration.session.worktreesRoot}/${fixture.epicId}`,
+    });
+    expect(thread).toMatchObject({
+      projectId: project?.projectId,
+      type: "thread.create",
+      worktreePath: `${fixture.configuration.session.worktreesRoot}/${fixture.taskId}/sample-repository`,
+    });
+    expect(thread).not.toHaveProperty("titleSeed");
+    await composition.close();
+  });
+});
