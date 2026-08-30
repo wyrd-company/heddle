@@ -233,6 +233,39 @@ describe("organization blueprint repository", () => {
     ]);
   });
 
+  it("fails closed with one durable attention when origin cannot be fetched", async () => {
+    const setup = await prepare();
+    const before = (
+      await executeGit("git", ["rev-parse", "HEAD"], {
+        cwd: setup.repositoryRoot,
+      })
+    ).stdout.trim();
+    await executeGit(
+      "git",
+      ["remote", "set-url", "origin", join(setup.root, "missing.git")],
+      { cwd: setup.repositoryRoot },
+    );
+
+    await expect(setup.repository.synchronize()).rejects.toThrow(
+      "could not fetch origin",
+    );
+
+    expect(
+      (
+        await executeGit("git", ["rev-parse", "HEAD"], {
+          cwd: setup.repositoryRoot,
+        })
+      ).stdout.trim(),
+    ).toBe(before);
+    expect(setup.attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: "blueprint-repository:state:fetch-failed",
+        kind: "blueprint-repository",
+        message: "The organization blueprint repository could not fetch origin",
+      }),
+    ]);
+  });
+
   it("raises one divergence attention and never merges, rebases, or resets either commit", async () => {
     const setup = await prepare();
     await writeFile(join(setup.repositoryRoot, "local.txt"), "local\n");
