@@ -3,6 +3,9 @@
 //   verifies: heddle
 // ---
 
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createProductionComposition } from "./composition.js";
@@ -48,6 +51,16 @@ describe("production project routing", () => {
       worktreePath: `${fixture.configuration.session.worktreesRoot}/${fixture.taskId}/sample-repository`,
     });
     expect(thread).not.toHaveProperty("titleSeed");
+    await expect(
+      stat(
+        join(
+          fixture.configuration.session.worktreesRoot!,
+          String(fixture.epicId),
+          "sample-repository",
+          ".git",
+        ),
+      ),
+    ).resolves.toBeDefined();
     await composition.close();
   });
 });

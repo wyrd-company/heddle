@@ -8,6 +8,10 @@ import { join } from "node:path";
 
 import type { BoardTask } from "../board-adapter/index.js";
 import type { T3DispatchCommand } from "../control-plane/t3-control-plane-client.js";
+import {
+  ensureWorktree,
+  type WorktreeInput,
+} from "../control-plane/worktree-creator.js";
 import type {
   EpicProjectRecord,
   SqlitePersistence,
@@ -37,6 +41,9 @@ export class EpicProjectCoordinator {
     private readonly routing: ProductRoutingCatalog,
     private readonly t3: EpicProjectT3Client,
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly prepareWorktree: (
+      input: WorktreeInput,
+    ) => Promise<unknown> = ensureWorktree,
   ) {
     for (const product of configuration.products) {
       if (product.epicProject === undefined) continue;
@@ -107,6 +114,18 @@ export class EpicProjectCoordinator {
         "creating",
       );
       this.persistence.writeEpicProject(record);
+    }
+    for (const repository of route.repositories) {
+      await this.prepareWorktree({
+        baseRef: this.configuration.session.baseRef,
+        branch: `epic/${epic.id}`,
+        repositoryName: repository.name,
+        repositoryRoot: repository.repositoryRoot,
+        worktreeName: String(epic.id),
+        ...(this.configuration.session.worktreesRoot === undefined
+          ? {}
+          : { worktreesRoot: this.configuration.session.worktreesRoot }),
+      });
     }
     await this.t3.dispatch({
       commandId: record.createCommandId,

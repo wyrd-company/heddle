@@ -53,7 +53,7 @@ const configuration = (root: string): ProductionConfiguration =>
         ],
       },
     ],
-    session: { worktreesRoot: join(root, "worktrees") },
+    session: { baseRef: "main", worktreesRoot: join(root, "worktrees") },
   }) as ProductionConfiguration;
 
 describe("EpicProjectCoordinator", () => {
@@ -64,6 +64,9 @@ describe("EpicProjectCoordinator", () => {
       stateDirectory: join(root, "state"),
     });
     const commands: T3DispatchCommand[] = [];
+    const worktrees: Parameters<
+      ConstructorParameters<typeof EpicProjectCoordinator>[5]
+    >[0][] = [];
     const config = configuration(root);
     const coordinator = new EpicProjectCoordinator(
       config,
@@ -76,6 +79,7 @@ describe("EpicProjectCoordinator", () => {
         ),
       },
       () => "2026-01-01T00:00:00.000Z",
+      async (input) => void worktrees.push(input),
     );
 
     await expect(
@@ -87,6 +91,16 @@ describe("EpicProjectCoordinator", () => {
       type: "project.create",
       workspaceRoot: join(root, "worktrees", "101"),
     });
+    expect(worktrees).toEqual([
+      {
+        baseRef: "main",
+        branch: "epic/101",
+        repositoryName: "sample-repository",
+        repositoryRoot: join(root, "sample-repository"),
+        worktreeName: "101",
+        worktreesRoot: join(root, "worktrees"),
+      },
+    ]);
     await expect(coordinator.reconcile([task("uat")])).resolves.toEqual([]);
     await expect(coordinator.reconcile([task("paused")])).resolves.toEqual([]);
     await expect(coordinator.reconcile([task("stopped")])).resolves.toEqual([]);
@@ -126,6 +140,8 @@ describe("EpicProjectCoordinator", () => {
           { sequence: commands.length }
         ),
       },
+      undefined,
+      async () => undefined,
     );
 
     await expect(coordinator.reconcile([task("uat")])).resolves.toEqual([]);
@@ -133,6 +149,53 @@ describe("EpicProjectCoordinator", () => {
       coordinator.projectForTask({ ...task("todo"), id: 102, parent: 101 }),
     ).toBe("retained-project");
     expect(commands).toEqual([]);
+    persistence.close();
+  });
+
+  it("retries one persisted project-create identity after restart", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const config = configuration(root);
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const commands: T3DispatchCommand[] = [];
+    const t3 = {
+      dispatch: async (command: T3DispatchCommand) => {
+        commands.push(command);
+        if (commands.length === 1) throw new Error("ambiguous create");
+        return { sequence: commands.length };
+      },
+    };
+    const prepareWorktree = async () => undefined;
+    const first = new EpicProjectCoordinator(
+      config,
+      persistence,
+      new ProductRoutingCatalog(config),
+      t3,
+      () => "2026-01-01T00:00:00.000Z",
+      prepareWorktree,
+    );
+
+    await expect(first.reconcile([task("in-progress")])).rejects.toThrow(
+      "ambiguous create",
+    );
+    expect(persistence.getEpicProject(101)?.state).toBe("creating");
+
+    const restarted = new EpicProjectCoordinator(
+      config,
+      persistence,
+      new ProductRoutingCatalog(config),
+      t3,
+      () => "2027-01-01T00:00:00.000Z",
+      prepareWorktree,
+    );
+    await expect(
+      restarted.reconcile([task("in-progress")]),
+    ).resolves.toMatchObject([{ epicId: 101, kind: "created" }]);
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toEqual(commands[0]);
+    expect(persistence.getEpicProject(101)?.state).toBe("active");
     persistence.close();
   });
 });
