@@ -3,28 +3,36 @@
 //   implements: heddle
 // ---
 
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
+
 import type { ConsoleBlueprintEditor } from "../console/index.js";
 import {
   BlueprintArtifactEditor,
+  BlueprintValidationError,
+  isBlueprintArtifactId,
   type LifecycleEffect,
 } from "../engine/index.js";
 import type { ProductConfiguration } from "./configuration.js";
 
 export class ProductBlueprintArtifactEditor implements ConsoleBlueprintEditor {
-  private readonly editors: BlueprintArtifactEditor[];
+  private readonly editors: Array<{
+    editor: BlueprintArtifactEditor;
+    repositoryRoot: string;
+  }>;
 
   constructor(options: {
     effects: Record<string, LifecycleEffect>;
     products: ProductConfiguration[];
   }) {
     this.editors = options.products.flatMap((product) =>
-      product.repos.map(
-        (repository) =>
-          new BlueprintArtifactEditor({
-            effects: options.effects,
-            repositoryRoot: repository.repositoryRoot,
-          }),
-      ),
+      product.repos.map((repository) => ({
+        editor: new BlueprintArtifactEditor({
+          effects: options.effects,
+          repositoryRoot: repository.repositoryRoot,
+        }),
+        repositoryRoot: repository.repositoryRoot,
+      })),
     );
   }
 
@@ -51,14 +59,26 @@ export class ProductBlueprintArtifactEditor implements ConsoleBlueprintEditor {
   }
 
   private async matches(artifactId: string) {
-    const settled = await Promise.allSettled(
-      this.editors.map(async (editor) => ({
-        editor,
-        revision: await editor.load(artifactId),
-      })),
-    );
-    return settled.flatMap((result) =>
-      result.status === "fulfilled" ? [result.value] : [],
-    );
+    if (!isBlueprintArtifactId(artifactId)) {
+      throw new BlueprintValidationError(
+        "Blueprint artifact ID must be a kebab ID",
+      );
+    }
+    const matches = [];
+    for (const entry of this.editors) {
+      try {
+        await lstat(
+          join(entry.repositoryRoot, "blueprints", `${artifactId}.json`),
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code === "ENOENT") continue;
+        throw error;
+      }
+      matches.push({
+        editor: entry.editor,
+        revision: await entry.editor.load(artifactId),
+      });
+    }
+    return matches;
   }
 }

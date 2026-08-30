@@ -61,13 +61,6 @@ export class ProductRoutingCatalog {
     this.tasksById = new Map(tasks.map((task) => [task.id, task]));
   }
 
-  task(taskId: number): BoardTask {
-    const task = this.tasksById.get(taskId);
-    if (task === undefined)
-      throw new Error(`Task ${taskId} is absent from routing`);
-    return task;
-  }
-
   route(task: BoardTask): TaskRoute {
     const parent =
       task.parent === undefined ? undefined : this.tasksById.get(task.parent);
