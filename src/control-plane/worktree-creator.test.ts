@@ -73,8 +73,8 @@ describe("ensureWorktree", () => {
       const worktreesRoot = join(scratch, "worktrees");
       const ownedPath = join(
         worktreesRoot,
-        "sample-repository",
         "task-prepare",
+        "sample-repository",
       );
       await initializeRepository(repositoryRoot);
       await exec("git", ["update-ref", `refs/heads/${branch}`, "HEAD"], {
@@ -127,7 +127,7 @@ describe("ensureWorktree", () => {
     },
   );
 
-  it("creates the owned path once and reuses it on retry", async () => {
+  it("creates the task-first owner/repository path and reuses it on retry", async () => {
     const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
     scratchDirectories.push(scratch);
     const repositoryRoot = join(scratch, "source");
@@ -154,7 +154,7 @@ describe("ensureWorktree", () => {
     expect(created).toEqual({
       branch: "task/prepare",
       created: true,
-      path: join(worktreesRoot, "sample-repository", "task-prepare"),
+      path: join(worktreesRoot, "task-prepare", "sample-repository"),
     });
     expect(reused).toEqual({ ...created, created: false });
     expect(
@@ -173,7 +173,7 @@ describe("ensureWorktree", () => {
     scratchDirectories.push(scratch);
     const repositoryRoot = join(scratch, "source");
     const worktreesRoot = join(scratch, "worktrees");
-    const ownedPath = join(worktreesRoot, "sample-repository", "task-prepare");
+    const ownedPath = join(worktreesRoot, "task-prepare", "sample-repository");
     await initializeRepository(repositoryRoot);
 
     await expect(
@@ -235,8 +235,8 @@ describe("ensureWorktree", () => {
     const worktreesRoot = join(scratch, "worktrees");
     const preparedPath = join(
       worktreesRoot,
-      "sample-repository",
       "task-prepare",
+      "sample-repository",
     );
     const commit = "a".repeat(40);
     const calls: string[][] = [];
@@ -280,7 +280,7 @@ describe("ensureWorktree", () => {
     scratchDirectories.push(scratch);
     const repositoryRoot = join(scratch, "source");
     const worktreesRoot = join(scratch, "worktrees");
-    const ownedPath = join(worktreesRoot, "sample-repository", "task-prepare");
+    const ownedPath = join(worktreesRoot, "task-prepare", "sample-repository");
     await initializeRepository(repositoryRoot);
     await initializeRepository(ownedPath);
     await exec("git", ["branch", "-m", "task/prepare"], { cwd: ownedPath });
@@ -302,9 +302,9 @@ describe("ensureWorktree", () => {
     scratchDirectories.push(scratch);
     const repositoryRoot = join(scratch, "source");
     const worktreesRoot = join(scratch, "worktrees");
-    const ownedPath = join(worktreesRoot, "sample-repository", "task-prepare");
+    const ownedPath = join(worktreesRoot, "task-prepare", "sample-repository");
     await initializeRepository(repositoryRoot);
-    await mkdir(join(worktreesRoot, "sample-repository"), { recursive: true });
+    await mkdir(join(worktreesRoot, "task-prepare"), { recursive: true });
     await exec(
       "git",
       ["worktree", "add", "--quiet", "-b", "task/other", ownedPath, "main"],
@@ -357,9 +357,9 @@ describe("ensureWorktree", () => {
     const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
     scratchDirectories.push(scratch);
     const worktreesRoot = join(scratch, "worktrees");
-    const repositoryRoot = join(worktreesRoot, "sample-repository");
+    const repositoryRoot = join(worktreesRoot, "task-prepare");
     await initializeRepository(repositoryRoot);
-    await mkdir(join(repositoryRoot, "task-prepare"));
+    await mkdir(join(repositoryRoot, "sample-repository"));
 
     await expect(
       ensureWorktree({

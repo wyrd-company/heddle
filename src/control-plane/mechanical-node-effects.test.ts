@@ -61,7 +61,7 @@ const makeChange = async (): Promise<{
   temporaryDirectories.push(root);
   const sourcePath = join(root, "source");
   const worktreesRoot = join(root, "worktrees");
-  const worktreePath = join(worktreesRoot, "sample-repository", "task-change");
+  const worktreePath = join(worktreesRoot, "task-change", "sample-repository");
   await mkdir(sourcePath);
   await git(sourcePath, "init", "--quiet", "--initial-branch=main");
   await git(sourcePath, "config", "user.email", "test@example.invalid");
@@ -448,8 +448,8 @@ describe("delivery mechanical nodes", () => {
     const snapshot = await ensureReviewSnapshot(fixture.change);
     const approvalWorktreePath = join(
       fixture.change.worktreesRoot!,
-      fixture.change.repositoryName,
       `${fixture.change.worktreeName}.merge-base`,
+      fixture.change.repositoryName,
     );
     await git(fixture.sourcePath, "switch", "--detach");
     let interrupted = false;
@@ -853,7 +853,7 @@ describe("delivery mechanical nodes", () => {
   it("rejects a wrong-branch owned path without creating a snapshot", async () => {
     const fixture = await makeChange();
     await git(fixture.sourcePath, "branch", "task/change", "main");
-    await mkdir(join(fixture.change.worktreesRoot!, "sample-repository"), {
+    await mkdir(join(fixture.change.worktreesRoot!, "task-change"), {
       recursive: true,
     });
     await git(

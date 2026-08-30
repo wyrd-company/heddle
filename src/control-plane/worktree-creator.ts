@@ -130,8 +130,8 @@ export const ensureWorktree = async (
 
   const path = join(
     input.worktreesRoot ?? "/workspaces/worktrees",
-    input.repositoryName,
     input.worktreeName,
+    input.repositoryName,
   );
   if (await exists(path)) {
     await verifyWorktree(path, input.branch, input.repositoryRoot, git);

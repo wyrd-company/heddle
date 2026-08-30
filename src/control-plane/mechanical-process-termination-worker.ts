@@ -90,7 +90,10 @@ const instructionMatches = (
         executable === "git" &&
         arguments_[0] === "worktree" &&
         arguments_[1] === "remove" &&
-        arguments_.at(-1)?.endsWith(`/${change.worktreeName}`) === true
+        arguments_
+          .at(-1)
+          ?.endsWith(`/${change.worktreeName}/${change.repositoryName}`) ===
+          true
       );
     case "cleanup-ref-deleted":
       return (

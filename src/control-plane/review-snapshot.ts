@@ -69,8 +69,8 @@ export const mechanicalWorktreePath = (
   }
   return join(
     change.worktreesRoot ?? "/workspaces/worktrees",
-    change.repositoryName,
     change.worktreeName,
+    change.repositoryName,
   );
 };
 

@@ -110,13 +110,13 @@ export const makeLifecycleAtReview = async (
   };
   const sourceWorktreePath = join(
     worktreesRoot,
-    change.repositoryName,
     change.worktreeName,
+    change.repositoryName,
   );
   const approvalWorktreePath = join(
     worktreesRoot,
-    change.repositoryName,
     `${change.worktreeName}.merge-base`,
+    change.repositoryName,
   );
   const persistence = new SqlitePersistence({ stateDirectory });
   const engine = new LifecycleEngine({
