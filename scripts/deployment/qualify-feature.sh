@@ -14,6 +14,7 @@ scratch_root="${HEDDLE_QUALIFICATION_SCRATCH_ROOT:-/workspaces/mnt}"
 state_directory=""
 board_directory=""
 tools_directory=""
+config_directory=""
 container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
@@ -31,6 +32,7 @@ cleanup() {
     [ -z "${state_directory}" ] || rm -rf "${state_directory}"
     [ -z "${board_directory}" ] || rm -rf "${board_directory}"
     [ -z "${tools_directory}" ] || rm -rf "${tools_directory}"
+    [ -z "${config_directory}" ] || rm -rf "${config_directory}"
 }
 trap cleanup EXIT
 
@@ -46,6 +48,7 @@ allocate_scratch_directory() {
 state_directory="$(allocate_scratch_directory state)"
 board_directory="$(allocate_scratch_directory board)"
 tools_directory="$(allocate_scratch_directory tools)"
+config_directory="$(allocate_scratch_directory config)"
 
 install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
 
@@ -61,6 +64,55 @@ qualification_task_id="$(
         "Sample Record" | jq -er '.id'
 )"
 chmod -R a+rX "${board_directory}"
+cat >"${config_directory}/config.yml" <<'EOF'
+adHocProject:
+  name: Shared records
+  projectId: shared-project
+  workspaceRoot: /workspaces/heddle
+boardDirectory: /workspaces/kanban
+cadenceMilliseconds: 60000
+observationThresholds:
+  endedMilliseconds: 60000
+  failedMilliseconds: 60000
+  stalledMilliseconds: 60000
+pacing:
+  defaultProvider: cursor
+  maxConcurrentSessions: 1
+  providerBudgets: {}
+  subagents:
+    maxDepth: 1
+    maxFanOut: 1
+  usageWindowHours: 5
+products:
+  - name: Sample collection
+    repos:
+      - name: sample-repository
+        repositoryRoot: /workspaces/heddle
+pushover:
+  apiUrl: http://127.0.0.1:9/messages
+  applicationToken: sample-application-token
+  consoleBaseUrl: https://console.example.invalid/
+  userKey: sample-user-key
+server:
+  host: 127.0.0.1
+  port: 4317
+session:
+  baseRef: main
+  cliVersion: 2026.08.25-3e8eec8
+  driver: cursor
+  interactionMode: default
+  model: sample-model
+  runtimeMode: auto
+  skillPointer: skill://sample
+stageThresholds:
+  inspect: 60000
+stateDirectory: /var/lib/heddle
+stopTimeoutMilliseconds: 1000
+t3:
+  accessToken: sample-access-token
+  baseUrl: http://127.0.0.1:9
+EOF
+chmod 0600 "${config_directory}/config.yml"
 
 assert_head() {
     local observed
@@ -83,6 +135,7 @@ up() {
     if ! HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
+        HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         devcontainer up \
         --workspace-folder "${repository}" \
         --config "${configuration}" \
@@ -109,6 +162,7 @@ inside() {
     HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
+        HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         devcontainer exec \
         --workspace-folder "${repository}" \
         --config "${configuration}" \

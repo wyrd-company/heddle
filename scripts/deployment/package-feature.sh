@@ -26,6 +26,7 @@ trap 'rm -f "${contents}"' EXIT
 tar -tzf "${packages[0]}" >"${contents}"
 grep -qx 'package/dist/control-plane/t3-control-plane-client.js' "${contents}"
 grep -qx 'package/dist/deployment/server.js' "${contents}"
+grep -qx 'package/dist/deployment/production-service.js' "${contents}"
 grep -qx 'package/bin/heddle-server.mjs' "${contents}"
 grep -qx 'package/assets/console-viewer/lifecycle.js' "${contents}"
 grep -qx 'package/assets/console-viewer/lifecycle.css' "${contents}"

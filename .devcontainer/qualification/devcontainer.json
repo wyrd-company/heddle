@@ -4,9 +4,7 @@
   "features": {
     "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
     "../features/heddle": {
-      "statePath": "/var/lib/heddle",
-      "boardPath": "/workspaces/kanban",
-      "port": "4317",
+      "configDirectory": "/home/vscode/.heddle",
       "dnsName": "heddle.localhost"
     }
   },
@@ -25,9 +23,16 @@
       "source": "${localEnv:HEDDLE_QUALIFICATION_KANBAN}",
       "target": "/usr/local/bin/kanban-md",
       "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_CONFIG}",
+      "target": "/home/vscode/.heddle",
+      "type": "bind"
     }
   ],
   "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/heddle",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind",
   "runArgs": ["--add-host", "heddle.localhost:127.0.0.1"],
   "overrideCommand": false,
   "shutdownAction": "none"

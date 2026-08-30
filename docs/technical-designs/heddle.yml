@@ -290,9 +290,12 @@ proposed-design:
     Session preparation configures the Heddle MCP server for these
     long-held calls: Codex receives `tool_timeout_sec = 100000`, and
     Claude Code receives `MCP_TOOL_TIMEOUT=100000000` milliseconds. A
-    provider-specific launch-preparation port applies the setting before
-    Heddle creates the T3 thread; Codex and Claude session creation fails
-    closed when that consumer is absent.
+    configured `session.timeoutApplication` executable implements the
+    launch-preparation port because pinned T3 exposes no authenticated
+    pre-thread setting capability. Heddle invokes it without a shell through
+    a closed, versioned JSON protocol before it creates the T3 thread. Codex
+    and Claude configuration requires this executable and session creation
+    fails closed when it is absent or does not acknowledge success.
     Escalation opening and session disposition share the durable instance
     claim boundary: opening atomically advances the instance version with
     its event, while advance claims disposition authority only when neither
@@ -490,13 +493,34 @@ proposed-design:
     authority. A pending Pushover notification is retried at-least-once.
   deployment: >
     Heddle installs as a devcontainer feature in each workspace
-    container, following the t3code-server pattern: an s6-supervised
-    service, a caddy route with a workspace DNS name serving the
+    container as an s6-supervised service with a caddy route serving the
     console and the MCP endpoint, and its state directory bind-mounted
     from a workspace-specific host path so state outlives rebuilds.
     One Heddle instance serves one workspace — its board, its
     worktrees, its T3 server — and each workspace container is a
     complete, self-contained installation.
+
+    The deployed entry point reads required `config.yml` from the
+    operator-owned configuration directory selected by `--config`, then
+    `HEDDLE_CONFIG`, then `/home/vscode/.heddle`. That file is the only
+    authority for board, state, server, T3, Pushover, pacing, session,
+    threshold, product, project, and secret settings. Other `HEDDLE_*`
+    values do not affect deployed configuration. Invalid configuration fails
+    before composition or network bind and reports a secret-redacted first
+    validation failure. The operator owns the file with mode `0600`; Heddle
+    never writes or reformats it.
+
+    The root s6 launcher validates the same file, derives only its nonsecret
+    state mount target and loopback host and port, writes the Caddy snippet,
+    and then starts Heddle as the service user from the same directory.
+    Configuration changes require restart. The Feature exposes no second
+    board, state, or port option.
+
+    Configured provider usage is a separate bounded non-shell executable with
+    a closed versioned five-hour-window JSON protocol. It is required exactly
+    when provider budgets are nonempty; an empty budget catalog uses a
+    throw-if-called source. Provider authentication belongs to the executable
+    and never enters Heddle arguments or output.
 
     The installation uses one configured shared T3 project for ad-hoc tasks
     and one Heddle-managed T3 project per active epic. The product inventory is

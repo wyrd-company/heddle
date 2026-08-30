@@ -8,13 +8,87 @@ relationships:
 
 # Production composition
 
-One production composition owns one workspace. Construct it with
-`createProductionComposition`, supply it to `startHeddleServerFromEnvironment`,
-and use the same composition for the server, console, MCP endpoint, scheduler,
-attention queue, repository blueprint editor, and persistence lifetime. The
-editor is the accepted `BlueprintArtifactEditor` over the same repository root
-and mechanical effect registry as the lifecycle engine. The factory rejects a
-second live composition for the same board directory.
+One production composition owns one workspace. The deployed `heddle-server`
+loads the operator configuration, constructs that composition, and uses it for
+the server, console, MCP endpoint, scheduler, attention queue, repository
+blueprint editor, and persistence lifetime. The no-composition server boundary
+exists only for tests and console-specific composition. The editor is the
+accepted `BlueprintArtifactEditor` over the same repository root and mechanical
+effect registry as the lifecycle engine. The factory rejects a second live
+composition for the same board directory.
+
+## Configuration directory
+
+`--config <directory>` selects the configuration directory. Without that
+argument, `HEDDLE_CONFIG` selects it; the default is `/home/vscode/.heddle`.
+The required file name is `config.yml`. The service reads this file, validates
+the schema and runtime agreements, and fails before composition or network bind
+when it is missing, unreadable, or invalid. Errors name the exact file and first
+validation failure while redacting configured T3 and Pushover secrets.
+
+`config.yml` is the sole deployed runtime authority. `HEDDLE_BOARD_PATH`,
+`HEDDLE_HOST`, `HEDDLE_PORT`, and `HEDDLE_STATE_PATH` do not affect deployed
+configuration. Configuration changes require service restart. Heddle does not
+write, migrate, or reformat the file. The operator owns the directory and must make
+`config.yml` readable only by that account, normally mode `0600`.
+
+The directory may also contain `heddle.md` and `blueprints/`; their validation
+and behavior belong to their respective configuration tasks. Unknown entries
+are ignored. They are not `config.yml` fields.
+
+This complete single-product example uses Cursor and no provider budget, so it
+omits both executable adapters:
+
+```yaml
+adHocProject:
+  name: Shared records
+  projectId: shared-project
+  workspaceRoot: /workspaces/sample-workspace
+boardDirectory: /workspaces/sample-board
+cadenceMilliseconds: 60000
+observationThresholds:
+  endedMilliseconds: 60000
+  failedMilliseconds: 60000
+  stalledMilliseconds: 60000
+pacing:
+  defaultProvider: cursor
+  maxConcurrentSessions: 2
+  providerBudgets: {}
+  subagents:
+    maxDepth: 2
+    maxFanOut: 2
+  usageWindowHours: 5
+products:
+  - name: Sample collection
+    repos:
+      - name: sample-repository
+        repositoryRoot: /workspaces/sample-repository
+pushover:
+  apiUrl: https://notify.example.invalid/messages
+  applicationToken: replace-with-operator-secret
+  consoleBaseUrl: https://console.example.invalid/
+  userKey: replace-with-operator-secret
+server:
+  host: 127.0.0.1
+  port: 3774
+session:
+  baseRef: main
+  cliVersion: 2026.08.25-3e8eec8
+  driver: cursor
+  interactionMode: default
+  model: sample-model
+  runtimeMode: auto
+  skillPointer: skill://sample
+  worktreesRoot: /workspaces/worktrees
+stageThresholds:
+  implement: 900000
+  review: 900000
+stateDirectory: /var/lib/heddle
+stopTimeoutMilliseconds: 10000
+t3:
+  accessToken: replace-with-operator-secret
+  baseUrl: http://127.0.0.1:3773
+```
 
 Configuration conforms to `schemas/production-configuration.json`. The
 `products` inventory is the authority for product and repository routing. Each
@@ -30,9 +104,9 @@ these declarations; it does not inspect diffs or branches to guess.
 Other required values are the absolute board and state directories, optional
 worktree root, reconciliation cadence, bounded stop timeout, provider pacing,
 session provider settings, observation and per-stage staleness thresholds, and
-Pushover routing. Secrets enter the
-in-memory configuration from the operator's secret source and are not stored in
-the repository. The configured pacing `defaultProvider` must equal the session
+Pushover routing. T3 and Pushover secrets enter only through operator-owned
+`config.yml`; Heddle does not log, emit, or persist them. The configured pacing
+`defaultProvider` must equal the session
 `driver` used for top-level lifecycle stages. Delegated subagents carry their
 explicit provider and model through the same pacing evaluator and T3 provider
 preconditions.
@@ -66,10 +140,27 @@ For example, the routing portion has this shape:
 }
 ```
 
-The provider-usage source and session-capable T3 adapter are explicit runtime
-ports. The T3 adapter must apply the accepted Codex or Claude MCP timeout before
-thread creation. Heddle fails session start when this port is absent for either
-provider. An in-progress epic gets one T3 project titled
+The provider-usage source and session timeout application are distinct explicit
+runtime ports. A nonempty `pacing.providerBudgets` requires top-level
+`providerUsage`; an empty budget catalog forbids it. Its absolute executable is
+started without a shell, receives one version-1 JSON request on stdin containing
+the provider and fixed five-hour window, and must return exactly one version-1
+JSON response with finite nonnegative `used` and a nonnegative safe-integer
+`windowStartedAt`. The configured timeout bounds execution and response output.
+The executable owns any provider authentication; no credential belongs in its
+arguments or Heddle output.
+
+A `session.driver` of `codex` or `claudeAgent` requires nested
+`session.timeoutApplication`; other drivers forbid it. This separately
+preflighted absolute executable receives the accepted timeout-consumer input as
+one version-1 JSON request and must return exactly
+`{"version":1,"applied":true}`. Heddle invokes it before `thread.create` and
+fails closed on startup, process, timeout, output, or acknowledgement errors.
+Both executable configurations accept optional `arguments` and a bounded
+`timeoutMilliseconds` default of 10000. Heddle terminates failed or timed-out
+children and does not expose their output.
+
+An in-progress epic gets one T3 project titled
 `{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
 each declared repository at `/workspaces/worktrees/{epic-id}/{repository}` on
 `epic/{epic-id}` before project creation. Paused, stopped, and UAT epics retain

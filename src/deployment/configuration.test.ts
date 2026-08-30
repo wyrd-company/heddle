@@ -4,7 +4,15 @@
 // ---
 
 import { constants } from "node:fs";
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -438,5 +446,27 @@ describe("deployed configuration directory", () => {
     await expect(
       access(configuration.stateDirectory, constants.F_OK),
     ).rejects.toThrow();
+  });
+
+  it("keeps operator and Feature configuration guidance on the deployed contract", async () => {
+    const [operatorGuide, featureGuide] = await Promise.all([
+      readFile("docs/operators/production-composition.md", "utf8"),
+      readFile(".devcontainer/features/heddle/README.md", "utf8"),
+    ]);
+
+    for (const guide of [operatorGuide, featureGuide]) {
+      expect(guide).toContain("/home/vscode/.heddle");
+      expect(guide).toContain("config.yml");
+      expect(guide).toContain("0600");
+      expect(guide).toContain("HEDDLE_CONFIG");
+    }
+    expect(operatorGuide).toContain("providerUsage");
+    expect(operatorGuide).toContain("session.timeoutApplication");
+    expect(operatorGuide).toContain(
+      "Configuration changes require service restart",
+    );
+    expect(featureGuide).not.toContain("`boardPath`");
+    expect(featureGuide).not.toContain("`statePath`");
+    expect(featureGuide).not.toContain("`port`");
   });
 });

@@ -124,7 +124,7 @@ describe("Heddle devcontainer feature", () => {
     }
   });
 
-  it.each(["state", "board", "tools"])(
+  it.each(["state", "board", "tools", "config"])(
     "cleans scratch resources when the %s allocation fails",
     async (allocation) => {
       const scratchRoot = await mkdtemp(
@@ -174,6 +174,12 @@ describe("Heddle devcontainer feature", () => {
     expect(qualification).toContain("observedVersion !== expectedVersion");
     expect(featureQualification).toContain(
       'git -C "${repository}" diff --quiet',
+    );
+    expect(featureQualification).toContain(
+      'chmod 0600 "${config_directory}/config.yml"',
+    );
+    expect(featureQualification).toContain(
+      'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',
     );
     expect(
       featureQualification.match(

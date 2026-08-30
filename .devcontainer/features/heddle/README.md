@@ -12,32 +12,40 @@ set, add the Wyrd Company Caddy Feature to the same devcontainer.
 
 ## Options
 
-| Option        | Type   | Default              | Description                                                         |
-| ------------- | ------ | -------------------- | ------------------------------------------------------------------- |
-| `statePath`   | string | `/var/lib/heddle`    | Absolute in-container path for the persistent state bind mount.     |
-| `boardPath`   | string | `/workspaces/kanban` | Absolute in-container path to the workspace kanban-md board.        |
-| `port`        | string | `3774`               | Loopback port served by Heddle.                                     |
-| `dnsName`     | string | `""`                 | Optional fully qualified workspace DNS name served through Caddy.   |
-| `serviceUser` | string | `automatic`          | User that runs Heddle; automatic selection prefers the remote user. |
+| Option            | Type   | Default                | Description                                                         |
+| ----------------- | ------ | ---------------------- | ------------------------------------------------------------------- |
+| `configDirectory` | string | `/home/vscode/.heddle` | Operator-owned directory containing required `config.yml`.          |
+| `dnsName`         | string | `""`                   | Optional fully qualified workspace DNS name served through Caddy.   |
+| `serviceUser`     | string | `automatic`            | User that runs Heddle; automatic selection prefers the remote user. |
 
-## Workspace-specific persistence
+## Workspace configuration and persistence
 
-`statePath` must be a dedicated bind-mount target. Give every workspace its own
-host source so that a rebuild replaces the container without replacing the
-SQLite event history:
+Create `config.yml` as the operator, set mode `0600`, and mount its directory at
+`configDirectory`. The file is the sole source for board, state, loopback server,
+T3, Pushover, pacing, session, threshold, product, project, and secret settings.
+Only `HEDDLE_CONFIG` may select a different directory; other `HEDDLE_*` values do
+not configure the deployed service. Configuration changes require service
+restart.
+
+The configured `stateDirectory` must be a dedicated bind-mount target. Give
+every workspace its own host source so that a rebuild replaces the container
+without replacing SQLite history:
 
 ```json
 {
   "features": {
     "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
     "ghcr.io/boblangley/heddle:1": {
-      "statePath": "/var/lib/heddle",
-      "boardPath": "/workspaces/kanban",
-      "port": "3774",
+      "configDirectory": "/home/vscode/.heddle",
       "dnsName": "heddle.workspace.example.test"
     }
   },
   "mounts": [
+    {
+      "source": "${localWorkspaceFolder}/.devcontainer/config/heddle",
+      "target": "/home/vscode/.heddle",
+      "type": "bind"
+    },
     {
       "source": "${localWorkspaceFolder}/.devcontainer/state/heddle",
       "target": "/var/lib/heddle",
@@ -47,12 +55,14 @@ SQLite event history:
 }
 ```
 
-The service refuses to start when `statePath` is not a mount point. One Heddle
-service and one state source belong to one workspace.
+The service validates `config.yml`, derives its Caddy upstream and state target
+from that same file, and refuses to start when `stateDirectory` is not a mount
+point. The root launcher writes only the nonsecret Caddy snippet before it drops
+privileges. It never prints or copies raw YAML. One Heddle service and one state
+source belong to one workspace.
 
-`boardPath` names the board already mounted for that workspace. The deployed
-console reads that board and keeps its scope and epic lever on the accepted
-kanban-md adapter boundary.
+See [Production composition](../../../docs/operators/production-composition.md)
+for the complete schema and executable-adapter contracts.
 
 ## T3 compatibility qualification
 
