@@ -22,6 +22,8 @@ export interface BoardTask {
   dependencies: number[];
   parent?: number;
   lifecycle?: string;
+  product?: string;
+  repos?: string[];
 }
 
 export interface CreateBoardRecord {
@@ -118,13 +120,64 @@ const unquoteScalar = (value: string): string => {
   return trimmed;
 };
 
-const lifecycleFromFrontMatter = (source: string): string | undefined => {
+const frontMatterFrom = (source: string): string | undefined => {
   if (!source.startsWith("---\n")) return undefined;
   const end = source.indexOf("\n---", 4);
   if (end === -1) return undefined;
-  const frontMatter = source.slice(4, end);
+  return source.slice(4, end);
+};
+
+const scalarFromFrontMatter = (
+  frontMatter: string | undefined,
+  key: string,
+): string | undefined => {
+  if (frontMatter === undefined) return undefined;
+  const match = new RegExp(`^${key}:\\s*(.*?)\\s*$`, "m").exec(frontMatter);
+  return match?.[1] === undefined ? undefined : unquoteScalar(match[1]);
+};
+
+const lifecycleFromFrontMatter = (source: string): string | undefined => {
+  const frontMatter = frontMatterFrom(source);
+  if (frontMatter === undefined) return undefined;
   const match = /^lifecycle:\s*(.*?)\s*$/m.exec(frontMatter);
   return match?.[1] === undefined ? undefined : unquoteScalar(match[1]);
+};
+
+const repositoriesFromFrontMatter = (
+  frontMatter: string | undefined,
+): string[] | undefined => {
+  if (frontMatter === undefined) return undefined;
+  const lines = frontMatter.split("\n");
+  const index = lines.findIndex((line) => /^repos:\s*/.test(line));
+  if (index === -1) return undefined;
+  const inline = lines[index]!.replace(/^repos:\s*/, "").trim();
+  let values: string[];
+  if (inline !== "") {
+    if (!inline.startsWith("[") || !inline.endsWith("]")) {
+      throw new Error("task repos declaration must be a YAML list");
+    }
+    const body = inline.slice(1, -1).trim();
+    values = body === "" ? [] : body.split(",").map(unquoteScalar);
+  } else {
+    values = [];
+    for (const line of lines.slice(index + 1)) {
+      if (/^[^ \t]/.test(line)) break;
+      if (line.trim() === "") continue;
+      const item = /^\s+-\s+(.+?)\s*$/.exec(line)?.[1];
+      if (item === undefined) {
+        throw new Error("task repos declaration must be a YAML list");
+      }
+      values.push(unquoteScalar(item));
+    }
+  }
+  if (
+    values.length === 0 ||
+    values.some((value) => !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)) ||
+    new Set(values).size !== values.length
+  ) {
+    throw new Error("task repos declaration must name unique repositories");
+  }
+  return values;
 };
 
 const validateLifecycle = (value: string | undefined): string | undefined => {
@@ -242,9 +295,15 @@ export class KanbanBoardAdapter {
   private async normalizeTask(task: KanbanTaskJson): Promise<BoardTask> {
     const tags = task.tags ?? [];
     const source = await readFile(task.file, "utf8");
+    const frontMatter = frontMatterFrom(source);
     const lifecycle = validateLifecycle(
       lifecycleFromFrontMatter(source) ?? lifecycleFromTag(tags),
     );
+    const product = scalarFromFrontMatter(frontMatter, "product");
+    if (product !== undefined && product.trim() === "") {
+      throw new Error("task product declaration must not be empty");
+    }
+    const repos = repositoriesFromFrontMatter(frontMatter);
     return {
       blocked: task.blocked ?? false,
       id: task.id,
@@ -255,6 +314,8 @@ export class KanbanBoardAdapter {
       dependencies: task.depends_on ?? [],
       parent: task.parent,
       lifecycle,
+      ...(product === undefined ? {} : { product }),
+      ...(repos === undefined ? {} : { repos }),
     };
   }
 

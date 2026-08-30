@@ -162,6 +162,56 @@ next_id: 1
     );
   });
 
+  it("reads declared product and repository authority from front matter", async () => {
+    const taskId = await createTask("Arrange sample items");
+    const task = JSON.parse(
+      await runKanban([
+        "--dir",
+        boardDirectory,
+        "show",
+        String(taskId),
+        "--json",
+      ]),
+    ) as { file: string };
+    const source = await readFile(task.file, "utf8");
+    await writeFile(
+      task.file,
+      source.replace(
+        "class: standard\n---",
+        "class: standard\nproduct: sample-product\nrepos:\n  - sample-alpha\n  - sample-beta\n---",
+      ),
+    );
+
+    await expect(adapter.readTask(taskId)).resolves.toMatchObject({
+      product: "sample-product",
+      repos: ["sample-alpha", "sample-beta"],
+    });
+  });
+
+  it.each([
+    "repos: []",
+    "repos: [sample-alpha, sample-alpha]",
+    "repos: ../outside",
+  ])("rejects an invalid declared repository catalog: %s", async (repos) => {
+    const taskId = await createTask("Arrange sample items");
+    const task = JSON.parse(
+      await runKanban([
+        "--dir",
+        boardDirectory,
+        "show",
+        String(taskId),
+        "--json",
+      ]),
+    ) as { file: string };
+    const source = await readFile(task.file, "utf8");
+    await writeFile(
+      task.file,
+      source.replace("class: standard\n---", `class: standard\n${repos}\n---`),
+    );
+
+    await expect(adapter.readTask(taskId)).rejects.toThrow(/repos declaration/);
+  });
+
   it("reads every configured board column in board order", async () => {
     await expect(adapter.readBoardStatuses()).resolves.toEqual([
       "backlog",
