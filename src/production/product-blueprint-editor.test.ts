@@ -37,6 +37,16 @@ describe("organization blueprint artifact editor", () => {
 
   it("commits and pushes one validated edit through the central repository", async () => {
     const subject = await editor();
+    const otherRemote = join(fixture!.root, "other.git");
+    await executeGit("git", ["init", "--quiet", "--bare", otherRemote], {
+      cwd: fixture!.root,
+    });
+    await executeGit("git", ["remote", "add", "other", otherRemote], {
+      cwd: fixture!.repositoryRoot,
+    });
+    await executeGit("git", ["config", "remote.pushDefault", "other"], {
+      cwd: fixture!.repositoryRoot,
+    });
     const loaded = await subject.load("sample-process");
 
     const saved = await subject.save({

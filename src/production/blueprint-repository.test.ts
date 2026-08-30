@@ -68,6 +68,16 @@ describe("organization blueprint repository", () => {
     });
     expect(old.awaitingNodeIds).toEqual(["inspect"]);
     expect(rebaseCandidate.blueprintBlobHash).toBe(old.blueprintBlobHash);
+    await executeGit(
+      "git",
+      [
+        "config",
+        "--add",
+        "remote.origin.fetch",
+        "+refs/heads/*:refs/heddle/untrusted-fetch/*",
+      ],
+      { cwd: setup.repositoryRoot },
+    );
     const workingBytes = await readFile(
       join(setup.repositoryRoot, "blueprints", "sample-process.json"),
       "utf8",
@@ -106,6 +116,13 @@ describe("organization blueprint repository", () => {
       })
     ).stdout.trim();
     expect(localHeadAfter).toBe(localHeadBefore);
+    await expect(
+      executeGit(
+        "git",
+        ["show-ref", "--verify", "--quiet", "refs/heddle/untrusted-fetch/main"],
+        { cwd: setup.repositoryRoot },
+      ),
+    ).rejects.toMatchObject({ code: 1 });
     expect(
       await readFile(
         join(setup.repositoryRoot, "blueprints", "sample-process.json"),

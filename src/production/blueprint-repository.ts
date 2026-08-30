@@ -19,6 +19,8 @@ import type { DurableAttentionQueue } from "./durable-adapters.js";
 
 const execute = promisify(execFile);
 const sourceRef = "@{upstream}";
+const originRemoteRefPrefix = "refs/remotes/origin/";
+const originFetchRefspec = "+refs/heads/*:refs/remotes/origin/*";
 const stateAttentionPrefix = "blueprint-repository:state:";
 const pushAttentionPrefix = "blueprint-repository:push:";
 
@@ -85,9 +87,18 @@ export class OrganizationBlueprintRepository {
     try {
       await lease.assertOwned();
       try {
-        await execute("git", ["fetch", "--no-tags", "--prune", "origin"], {
-          cwd: this.repositoryRoot,
-        });
+        await execute(
+          "git",
+          [
+            "fetch",
+            "--no-tags",
+            "--prune",
+            "--refmap=",
+            "origin",
+            originFetchRefspec,
+          ],
+          { cwd: this.repositoryRoot },
+        );
       } catch {
         await this.replaceStateAttention({
           attentionId: `${stateAttentionPrefix}fetch-failed`,
@@ -169,9 +180,16 @@ export class OrganizationBlueprintRepository {
     await lease.assertOwned();
     const commit = await this.head();
     try {
-      await execute("git", ["push", "--porcelain"], {
-        cwd: this.repositoryRoot,
-      });
+      await execute(
+        "git",
+        [
+          "push",
+          "--porcelain",
+          "origin",
+          `HEAD:${await this.originBranchRef()}`,
+        ],
+        { cwd: this.repositoryRoot },
+      );
     } catch {
       await this.attention.raise({
         attentionId: `${pushAttentionPrefix}${commit}`,
@@ -248,16 +266,25 @@ export class OrganizationBlueprintRepository {
   }
 
   private async assertOriginUpstream(): Promise<void> {
+    await this.originBranchRef();
+  }
+
+  private async originBranchRef(): Promise<string> {
     const { stdout } = await execute(
       "git",
-      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", sourceRef],
+      ["rev-parse", "--symbolic-full-name", sourceRef],
       { cwd: this.repositoryRoot },
     );
-    if (!stdout.trim().startsWith("origin/")) {
+    const upstreamRef = stdout.trim();
+    if (
+      !upstreamRef.startsWith(originRemoteRefPrefix) ||
+      upstreamRef.length === originRemoteRefPrefix.length
+    ) {
       throw new BlueprintValidationError(
         "The organization blueprint repository branch must track origin",
       );
     }
+    return `refs/heads/${upstreamRef.slice(originRemoteRefPrefix.length)}`;
   }
 
   private async head(): Promise<string> {
