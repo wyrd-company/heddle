@@ -199,6 +199,12 @@ describe("Heddle devcontainer feature", () => {
       'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',
     );
     expect(featureQualification).toContain(
+      'git clone "${blueprints_origin_directory}" "${config_directory}/blueprints"',
+    );
+    expect(featureQualification).toContain(
+      'git -C "${config_directory}/blueprints" push --set-upstream origin main',
+    );
+    expect(featureQualification).toContain(
       "persistence.writeReconcilerRuntime({",
     );
     expect(featureQualification).toContain(
