@@ -88,10 +88,43 @@ a new occurrence discriminator; restart resumes an incomplete occurrence.
 All stage occurrences for one task use the same task branch and worktree so
 review, remediation, and later stages operate on the same delivery state.
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
-pinned lifecycle blueprint. Heddle reconstructs completed wait-stage outputs in
+pinned lifecycle blueprint. Each wait node also declares a `handoff-template`
+with a repository-relative Markdown path and exact Git blob hash. Heddle reads
+the pinned blob, retains it under `refs/heddle/handoff-templates/<blob-hash>`,
+and does not read the mutable working-tree file during session activation.
+Heddle reconstructs completed wait-stage outputs in
 recorded lifecycle execution order. A standard stage receives those prior
 outputs. A remediation stage receives the latest review findings through the
 canonical handoff assembler; review transcript data is not dispatched.
+
+Handoff templates are schema'd Markdown artifacts in `handoff-templates/`.
+Their YAML front matter declares the Heddle template schema, relationship,
+format version, and either `standard` or `remediation`. Template bodies use
+strict Nunjucks variables. Use `stableJson` for structured values and do not
+use `random` or `date`; Heddle disables both filters and compares two renders.
+The standard context supplies `task` and `handoff`, including the normalized
+task contract, prior outputs, skill pointer, and persisted todo lists. The
+remediation context supplies the same roots with canonical review findings in
+the handoff. Raw board front matter is available only as display input under
+`task`; normalized `handoff.taskContract` remains the machine authority.
+
+Before dispatch, Heddle renders and durably stores the exact Markdown document.
+A missing variable, invalid template, pin or kind disagreement, invalid
+identity, or nondeterministic render raises one stable
+`handoff-render-failed` lifecycle-resolution attention entry. No timeout,
+thread, or first-turn effect occurs. After T3 accepts the first turn, Heddle
+records the exact rendered document and task, instance, session, stage, and
+thread identity in `session:activated`. Restart accepts only an exact payload
+match and does not append or dispatch a second activation.
+
+Isolated pinned T3 0.0.36 qualification found no accepted, preserved per-thread
+MCP authentication-header configuration for Claude Code, Codex, or Cursor.
+For these three drivers, Heddle therefore writes the correlation token exactly
+once in the rendered Markdown identity front matter. It never writes the token
+to the canonical JSON projection or Markdown body. Do not add a second token,
+copy it into template content, or configure an unmeasured driver. A driver
+outside this set fails before dispatch. Treat the rendered handoff as secret
+material because its identity front matter contains the token.
 
 The console lifecycle source is a read-only projection over this composition's
 canonical persistence. It resolves the task through the durable reconciler

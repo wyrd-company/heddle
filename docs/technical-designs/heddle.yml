@@ -134,8 +134,9 @@ proposed-design:
     bearer tokens come from T3's pairing and RFC 8693 token exchange.
     Heddle prepares each session itself: it creates the git worktree
     under `/workspaces/worktrees/{task-id}/{repository}`, creates the
-    thread, and sends a bare `thread.turn.start` — three deterministic
-    steps it owns end to end. Provider, model, and runtime mode are
+    thread, and sends one rendered Markdown handoff with the first
+    `thread.turn.start` — three deterministic steps it owns end to end.
+    Provider, model, and runtime mode are
     per-stage configuration; Heddle pins runtime modes known to work
     with each driver and CLI version and verifies them as dispatch
     preconditions. Mid-turn steering is a second `thread.turn.start`
@@ -162,18 +163,34 @@ proposed-design:
     root with task worktrees located under their own task-first roots.
 
     Sessions are short and stage-scoped. Nothing carries between
-    stages except the handoff: a deterministically assembled bootstrap
-    containing the task contract, the outputs of prior stages (a
+    stages except the handoff. Heddle first assembles a canonical JSON
+    projection containing the task contract, the outputs of prior stages (a
     remediation session receives the review's findings, never the
     review session's transcript), the stage's instantiated todo list,
-    and a pointer to the stage's skill. Because the handoff is data on
-    the instance, retrying a stage cold means replaying the same
-    bootstrap into a fresh session. Every agent wait node declares explicit
+    and a pointer to the stage's skill. It then renders that projection and
+    the board task's raw front matter through a schema'd, strict Nunjucks
+    Markdown template. Normalized task-contract data remains the machine
+    authority; raw front matter is display input only. Undefined values,
+    disabled nondeterministic filters, invalid identity, template and stage
+    disagreement, or unequal repeated renders fail before timeout setup,
+    thread creation, or first-turn dispatch. The failure raises one durable,
+    stable lifecycle-resolution attention entry.
+
+    Every agent wait node declares explicit
     `handoff` metadata as `standard` or `remediation`; missing, invalid, or
-    non-wait metadata fails closed. Standard handoffs receive completed
+    non-wait metadata fails closed. It also declares a `handoff-template`
+    path and exact Git blob hash. Heddle reads that blob, retains it under a
+    durable Git reference, verifies its schema and declared handoff kind, and
+    never substitutes mutable working-tree content. Standard handoffs receive completed
     wait-stage outputs reconstructed in recorded lifecycle execution order.
     Remediation receives the latest canonical review output through the
     handoff assembler, which retains findings and excludes transcript data.
+    The rendered document is stored with the session handoff before any T3
+    effect. Retry and restart replay those exact bytes. After T3 accepts the
+    first turn, Heddle appends a `session:activated` event containing the exact
+    task, instance, session, stage, thread, and rendered-document payload.
+    Reconciliation accepts an existing event only when every payload value is
+    equal and never appends a second event for the same session.
   workflow-mcp: >
     Heddle exposes its actions to agents as a stateless
     streamable-HTTP MCP server, the one integration surface every
@@ -191,10 +208,17 @@ proposed-design:
     the instance's current state, generated from the blueprint's
     outgoing edges with per-disposition descriptions — the tool schema
     itself guides the agent to a legal transition. Every session's
-    bootstrap carries a correlation token minted by the reconciler,
-    binding the session to its instance so a caller can advance only
-    its own work, and `advance` is idempotent per instance and stage,
+    bootstrap binds the session to its instance with a correlation token minted
+    by the reconciler, so a caller can advance only its own work, and `advance` is idempotent per instance and stage,
     so a retried call cannot double-transition.
+
+    Isolated qualification against pinned T3 0.0.36 found no per-thread MCP
+    authentication-header input that T3 accepts and preserves for Claude Code,
+    Codex, or Cursor. For those three measured drivers, Heddle places the
+    correlation token exactly once in the rendered Markdown identity front
+    matter. The canonical JSON projection and Markdown body contain no token.
+    A driver outside that measured set fails closed. This front-matter fallback
+    is the only session content that may contain a secret.
 
     Todo lists are instantiated from templates. A todo template is a
     schema'd artifact in this repository: the checklist for one stage
