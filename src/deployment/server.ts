@@ -37,6 +37,13 @@ export type HeddleDeploymentServer = {
   readonly port: number;
 };
 
+export type HeddleDeploymentServerOptions = {
+  boardDirectory?: string;
+  host: string;
+  port: number;
+  stateDirectory?: string;
+};
+
 export interface HeddleDeploymentComposition {
   board?: ConsoleBoard;
   consoleActions?: ConsoleAttentionActionPort;
@@ -189,11 +196,35 @@ const configuredPort = (environment: DeploymentEnvironment): number => {
   return port;
 };
 
-export const startHeddleServerFromEnvironment = async (
-  environment: DeploymentEnvironment,
+const validateServerOptions = (
+  options: HeddleDeploymentServerOptions,
+  production: ProductionComposition | undefined,
+): void => {
+  if (options.host.trim() === "") {
+    throw new Error("Heddle server host must not be empty");
+  }
+  if (
+    !Number.isSafeInteger(options.port) ||
+    options.port < 0 ||
+    options.port > 65_535
+  ) {
+    throw new Error("Heddle server port must be between 0 and 65535");
+  }
+  if (production === undefined) {
+    if (options.boardDirectory === undefined) {
+      throw new Error("Heddle board directory is required");
+    }
+    if (options.stateDirectory === undefined) {
+      throw new Error("Heddle state directory is required");
+    }
+  }
+};
+
+export const startHeddleServer = async (
+  options: HeddleDeploymentServerOptions,
   composition: HeddleDeploymentComposition = {},
 ): Promise<HeddleDeploymentServer> => {
-  const port = configuredPort(environment);
+  validateServerOptions(options, composition.production);
   if (
     composition.production !== undefined &&
     (composition.board !== undefined ||
@@ -208,11 +239,11 @@ export const startHeddleServerFromEnvironment = async (
   const board =
     composition.production?.board ??
     composition.board ??
-    new KanbanBoardAdapter(requiredBoardDirectory(environment));
+    new KanbanBoardAdapter(options.boardDirectory!);
   const persistence =
     composition.production?.persistence ??
     new SqlitePersistence({
-      stateDirectory: requiredStateDirectory(environment),
+      stateDirectory: options.stateDirectory!,
     });
   const mcp: WorkflowMcpHttpHandler =
     composition.production?.mcp ??
@@ -242,7 +273,7 @@ export const startHeddleServerFromEnvironment = async (
       composition.production?.consoleState ??
       new PersistenceConsoleStateSource(persistence),
   });
-  const host = environment["HEDDLE_HOST"]?.trim() || "127.0.0.1";
+  const host = options.host.trim();
   const server = createServer(async (request, response) => {
     try {
       const url = new globalThis.URL(request.url ?? "/", `http://${host}`);
@@ -274,7 +305,7 @@ export const startHeddleServerFromEnvironment = async (
     await composition.production?.start();
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
-      server.listen(port, host, resolve);
+      server.listen(options.port, host, resolve);
     });
   } catch (error) {
     if (composition.production === undefined) {
@@ -307,3 +338,21 @@ export const startHeddleServerFromEnvironment = async (
     },
   };
 };
+
+export const startHeddleServerFromEnvironment = async (
+  environment: DeploymentEnvironment,
+  composition: HeddleDeploymentComposition = {},
+): Promise<HeddleDeploymentServer> =>
+  startHeddleServer(
+    {
+      ...(composition.production === undefined
+        ? {
+            boardDirectory: requiredBoardDirectory(environment),
+            stateDirectory: requiredStateDirectory(environment),
+          }
+        : {}),
+      host: environment["HEDDLE_HOST"]?.trim() || "127.0.0.1",
+      port: configuredPort(environment),
+    },
+    composition,
+  );

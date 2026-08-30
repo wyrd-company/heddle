@@ -6,13 +6,19 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
 
 import type { ProductionConfiguration } from "../production/index.js";
 import {
+  deploymentLaunchSettings,
   loadDeploymentConfiguration,
+  parseHeddleServerArguments,
   resolveConfigurationDirectory,
 } from "./configuration.js";
 
@@ -71,6 +77,8 @@ const fixture = (root: string): ProductionConfiguration => ({
   },
 });
 
+const execute = promisify(execFile);
+
 describe("deployed configuration directory", () => {
   let root = "";
 
@@ -90,6 +98,25 @@ describe("deployed configuration directory", () => {
       }),
     ).toBe("/tmp/environment-config");
     expect(resolveConfigurationDirectory([], {})).toBe("/home/vscode/.heddle");
+  });
+
+  it("parses serve, nonsecret launcher, and help commands without reading config", () => {
+    expect(
+      parseHeddleServerArguments(
+        ["--config", "/tmp/sample-config", "--print-launch-settings"],
+        {},
+      ),
+    ).toEqual({
+      command: "launch-settings",
+      configurationDirectory: "/tmp/sample-config",
+    });
+    expect(parseHeddleServerArguments([], {})).toEqual({
+      command: "serve",
+      configurationDirectory: "/home/vscode/.heddle",
+    });
+    expect(parseHeddleServerArguments(["--help"], {})).toEqual({
+      command: "help",
+    });
   });
 
   it("reads only config.yml, applies server defaults, and ignores other directory entries", async () => {
@@ -113,15 +140,66 @@ describe("deployed configuration directory", () => {
       join(root, "config.yml"),
       stringify({
         ...fixture(root),
-        server: { host: "127.0.0.2", port: 0 },
+        server: { host: "127.0.0.1", port: 0 },
       }),
     );
 
     const loaded = await loadDeploymentConfiguration(root);
 
-    expect(loaded.server).toEqual({ host: "127.0.0.2", port: 0 });
+    expect(loaded.server).toEqual({ host: "127.0.0.1", port: 0 });
     expect(loaded.configuration.boardDirectory).toBe(join(root, "board"));
     expect(loaded.configuration.stateDirectory).toBe(join(root, "state"));
+  });
+
+  it("projects only nonsecret root-launch settings", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+
+    const settings = deploymentLaunchSettings(
+      await loadDeploymentConfiguration(root),
+    );
+    const serialized = JSON.stringify(settings);
+
+    expect(settings).toEqual({
+      host: "127.0.0.1",
+      port: 3774,
+      stateDirectory: join(root, "state"),
+    });
+    expect(serialized).not.toContain("secret-value");
+    expect(Object.keys(settings).sort()).toEqual([
+      "host",
+      "port",
+      "stateDirectory",
+    ]);
+  });
+
+  it("prints the same nonsecret settings through the packaged entry point", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const configuration = fixture(root);
+    await writeFile(join(root, "config.yml"), stringify(configuration));
+
+    const result = await execute(
+      process.execPath,
+      ["bin/heddle-server.mjs", "--config", root, "--print-launch-settings"],
+      {
+        env: {
+          ...process.env,
+          HEDDLE_BOARD_PATH: "/tmp/deprecated-board",
+          HEDDLE_HOST: "192.0.2.10",
+          HEDDLE_PORT: "65530",
+          HEDDLE_STATE_PATH: "/tmp/deprecated-state",
+        },
+      },
+    );
+
+    expect(JSON.parse(result.stdout)).toEqual({
+      host: "127.0.0.1",
+      port: 3774,
+      stateDirectory: configuration.stateDirectory,
+    });
+    expect(result.stderr).toBe("");
+    expect(result.stdout).not.toContain("secret-value");
+    expect(result.stdout).not.toContain("deprecated");
   });
 
   it("fails missing, unreadable, malformed, and schema-invalid config.yml with the exact path", async () => {

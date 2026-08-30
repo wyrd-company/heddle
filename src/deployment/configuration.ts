@@ -32,6 +32,11 @@ export type LoadedDeploymentConfiguration = {
   server: DeploymentServerConfiguration;
 };
 
+export type HeddleServerArguments = {
+  command: "help" | "launch-settings" | "serve";
+  configurationDirectory?: string;
+};
+
 type ConfigurationDocument = ProductionConfiguration & {
   server: DeploymentServerConfiguration;
 };
@@ -71,6 +76,35 @@ export const resolveConfigurationDirectory = (
     ? defaultConfigurationDirectory
     : requireAbsoluteDirectory(configured, "HEDDLE_CONFIG");
 };
+
+export const parseHeddleServerArguments = (
+  arguments_: readonly string[],
+  environment: DeploymentEnvironment,
+): HeddleServerArguments => {
+  if (arguments_.length === 1 && arguments_[0] === "--help") {
+    return { command: "help" };
+  }
+  const launchSettingsIndex = arguments_.indexOf("--print-launch-settings");
+  const command = launchSettingsIndex === -1 ? "serve" : "launch-settings";
+  const configurationArguments = arguments_.filter(
+    (_, index) => index !== launchSettingsIndex,
+  );
+  return {
+    command,
+    configurationDirectory: resolveConfigurationDirectory(
+      configurationArguments,
+      environment,
+    ),
+  };
+};
+
+export const deploymentLaunchSettings = (
+  loaded: LoadedDeploymentConfiguration,
+): { host: string; port: number; stateDirectory: string } => ({
+  host: loaded.server.host,
+  port: loaded.server.port,
+  stateDirectory: loaded.configuration.stateDirectory,
+});
 
 const secretValues = (value: unknown): string[] => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

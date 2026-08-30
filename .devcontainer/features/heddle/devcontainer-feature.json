@@ -5,20 +5,10 @@
   "description": "Installs Heddle and configures one s6-supervised workflow service for the workspace.",
   "documentationURL": "https://github.com/boblangley/heddle/tree/main/.devcontainer/features/heddle",
   "options": {
-    "statePath": {
+    "configDirectory": {
       "type": "string",
-      "default": "/var/lib/heddle",
-      "description": "Absolute in-container path for Heddle's bind-mounted persistent state."
-    },
-    "boardPath": {
-      "type": "string",
-      "default": "/workspaces/kanban",
-      "description": "Absolute in-container path to the workspace kanban-md board."
-    },
-    "port": {
-      "type": "string",
-      "default": "3774",
-      "description": "Loopback port served by Heddle."
+      "default": "/home/vscode/.heddle",
+      "description": "Absolute operator-owned directory containing required config.yml."
     },
     "dnsName": {
       "type": "string",

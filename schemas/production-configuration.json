@@ -160,7 +160,7 @@
       "additionalProperties": false,
       "default": {},
       "properties": {
-        "host": { "type": "string", "minLength": 1, "default": "127.0.0.1" },
+        "host": { "const": "127.0.0.1", "default": "127.0.0.1" },
         "port": {
           "type": "integer",
           "minimum": 0,

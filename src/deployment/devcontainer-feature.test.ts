@@ -24,7 +24,7 @@ const featureDirectory = ".devcontainer/features/heddle";
 const execute = promisify(execFile);
 
 describe("Heddle devcontainer feature", () => {
-  it("declares the persistent-state, port, and DNS options", async () => {
+  it("declares only the configuration-directory and Caddy routing options", async () => {
     const manifest = JSON.parse(
       await readFile(`${featureDirectory}/devcontainer-feature.json`, "utf8"),
     ) as {
@@ -33,11 +33,12 @@ describe("Heddle devcontainer feature", () => {
     };
 
     expect(manifest.options).toMatchObject({
-      boardPath: { default: "/workspaces/kanban" },
+      configDirectory: { default: "/home/vscode/.heddle" },
       dnsName: { default: "" },
-      port: { default: "3774" },
-      statePath: { default: "/var/lib/heddle" },
     });
+    expect(manifest.options).not.toHaveProperty("boardPath");
+    expect(manifest.options).not.toHaveProperty("port");
+    expect(manifest.options).not.toHaveProperty("statePath");
     expect(manifest.installsAfter).toContain(
       "ghcr.io/wyrd-company/devcontainers/caddy",
     );
@@ -49,21 +50,39 @@ describe("Heddle devcontainer feature", () => {
 
     expect(common).toContain("apt-get install -y --no-install-recommends");
     expect(installer).toContain(
-      "ensure_apt_packages build-essential ca-certificates python3",
+      "ensure_apt_packages build-essential ca-certificates jq python3",
     );
     expect(installer).toContain('packages=("$(dirname "$0")"/heddle-*.tgz)');
     expect(installer).toContain("--allow-scripts=better-sqlite3");
+    expect(installer).toContain(
+      [
+        "/usr/local/bin/heddle-server \\",
+        '    --config "\\${config_directory}" \\',
+        "    --print-launch-settings",
+      ].join("\n"),
+    );
     expect(installer).toContain('mountpoint -q "\\${state_path}"');
     expect(installer).toContain("expected_kanban_version=0.37.0-fork+b9fc380");
     expect(installer).toContain(
       '/usr/local/libexec/heddle/check-kanban-version "\\${expected_kanban_version}"',
     );
-    expect(installer).toContain("export HEDDLE_BOARD_PATH=${quoted_board}");
+    expect(installer).not.toContain("export HEDDLE_BOARD_PATH");
+    expect(installer).not.toContain("export HEDDLE_HOST");
+    expect(installer).not.toContain("export HEDDLE_PORT");
+    expect(installer).not.toContain("export HEDDLE_STATE_PATH");
+    expect(installer).toContain(
+      [
+        "exec s6-setuidgid ${quoted_user} \\",
+        '    /usr/local/bin/heddle-server --config "\\${config_directory}"',
+      ].join("\n"),
+    );
     expect(installer.split("\n")).toContain(
       "touch /etc/s6-overlay/user-bundles.d/user/contents.d/heddle",
     );
-    expect(installer).toContain("cat >/etc/caddy/conf.d/heddle.caddy <<EOF");
-    expect(installer).toContain("reverse_proxy 127.0.0.1:${PORT}");
+    expect(installer).toContain(
+      'mv "\\${caddy_temp}" /etc/caddy/conf.d/heddle.caddy',
+    );
+    expect(installer).toContain('"\\${dns_name}" "\\${host}" "\\${port}"');
   });
 
   it("requires the complete supported kanban-md version output", async () => {

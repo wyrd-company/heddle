@@ -14,23 +14,12 @@ source "$(dirname "$0")/common.sh"
 require_root
 check_debian_family
 ensure_s6_overlay
-ensure_apt_packages build-essential ca-certificates python3
+ensure_apt_packages build-essential ca-certificates jq python3
 
-[[ "${PORT}" =~ ^[0-9]+$ ]] \
-    || err "port must be an integer between 1 and 65535."
-[ "${#PORT}" -le 5 ] \
-    || err "port must be an integer between 1 and 65535."
-((10#${PORT} >= 1 && 10#${PORT} <= 65535)) \
-    || err "port must be an integer between 1 and 65535."
-
-[[ "${STATEPATH}" = /* ]] || err "statePath must be an absolute path."
-case "${STATEPATH}" in
-    *$'\n'*|*$'\r'*) err "statePath contains unsupported characters." ;;
-esac
-
-[[ "${BOARDPATH}" = /* ]] || err "boardPath must be an absolute path."
-case "${BOARDPATH}" in
-    *$'\n'*|*$'\r'*) err "boardPath contains unsupported characters." ;;
+[[ "${CONFIGDIRECTORY}" = /* ]] \
+    || err "configDirectory must be an absolute path."
+case "${CONFIGDIRECTORY}" in
+    *$'\n'*|*$'\r'*) err "configDirectory contains unsupported characters." ;;
 esac
 
 if [ -n "${DNSNAME}" ]; then
@@ -51,7 +40,7 @@ fi
 
 service_user="$(pick_service_user "${SERVICEUSER}")"
 service_group="$(id -gn "${service_user}")"
-install -d -m 0750 -o "${service_user}" -g "${service_group}" "${STATEPATH}"
+install -d -m 0750 -o "${service_user}" -g "${service_group}" "${CONFIGDIRECTORY}"
 
 shopt -s nullglob
 packages=("$(dirname "$0")"/heddle-*.tgz)
@@ -69,9 +58,9 @@ env \
 [ -x /usr/local/bin/heddle-server ] \
     || err "Heddle was not installed at /usr/local/bin/heddle-server."
 
-printf -v quoted_state '%q' "${STATEPATH}"
-printf -v quoted_board '%q' "${BOARDPATH}"
-printf -v quoted_port '%q' "${PORT}"
+printf -v quoted_config '%q' "${CONFIGDIRECTORY}"
+printf -v quoted_dns '%q' "${DNSNAME}"
+printf -v quoted_user '%q' "${service_user}"
 install -D -m 0755 \
     "$(dirname "$0")/check-kanban-version.sh" \
     /usr/local/libexec/heddle/check-kanban-version
@@ -79,19 +68,32 @@ cat >/usr/local/bin/heddle-service <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-state_path=${quoted_state}
+config_directory=${quoted_config}
+dns_name=${quoted_dns}
 expected_kanban_version=0.37.0-fork+b9fc380
 /usr/local/libexec/heddle/check-kanban-version "\${expected_kanban_version}"
+launch_settings="\$(s6-setuidgid ${quoted_user} \
+    /usr/local/bin/heddle-server \
+    --config "\${config_directory}" \
+    --print-launch-settings)"
+state_path="\$(jq -er '.stateDirectory' <<<"\${launch_settings}")"
+host="\$(jq -er '.host' <<<"\${launch_settings}")"
+port="\$(jq -er '.port' <<<"\${launch_settings}")"
 mountpoint -q "\${state_path}" || {
     echo "[heddle] ERROR: \${state_path} must be a dedicated bind mount." >&2
     exit 1
 }
 
-export HEDDLE_STATE_PATH="\${state_path}"
-export HEDDLE_BOARD_PATH=${quoted_board}
-export HEDDLE_HOST=127.0.0.1
-export HEDDLE_PORT=${quoted_port}
-exec /usr/local/bin/heddle-server
+if [ -n "\${dns_name}" ]; then
+    caddy_temp="\$(mktemp /etc/caddy/conf.d/heddle.caddy.XXXXXX)"
+    printf '%s {\n    reverse_proxy %s:%s\n}\n' \
+        "\${dns_name}" "\${host}" "\${port}" >"\${caddy_temp}"
+    chmod 0644 "\${caddy_temp}"
+    mv "\${caddy_temp}" /etc/caddy/conf.d/heddle.caddy
+fi
+
+exec s6-setuidgid ${quoted_user} \
+    /usr/local/bin/heddle-server --config "\${config_directory}"
 EOF
 chmod 0755 /usr/local/bin/heddle-service
 
@@ -99,29 +101,20 @@ service_dir=/etc/s6-overlay/s6-rc.d/heddle
 install -d -m 0755 "${service_dir}/dependencies.d"
 printf 'longrun\n' >"${service_dir}/type"
 touch "${service_dir}/dependencies.d/base"
-printf -v quoted_user '%q' "${service_user}"
 cat >"${service_dir}/run" <<EOF
 #!/command/with-contenv bash
-exec s6-setuidgid ${quoted_user} /usr/local/bin/heddle-service
+exec /usr/local/bin/heddle-service
 EOF
 chmod 0755 "${service_dir}/run"
 touch /etc/s6-overlay/user-bundles.d/user/contents.d/heddle
 
 if [ -n "${DNSNAME}" ]; then
-    cat >/etc/caddy/conf.d/heddle.caddy <<EOF
-${DNSNAME} {
-    reverse_proxy 127.0.0.1:${PORT}
-}
-EOF
-    chmod 0644 /etc/caddy/conf.d/heddle.caddy
     printf '%s\n' "${DNSNAME}" >/etc/caddy/required-hosts.d/heddle.host
     chmod 0644 /etc/caddy/required-hosts.d/heddle.host
-    log "Configured https://${DNSNAME} for Heddle on 127.0.0.1:${PORT}."
+    log "Configured https://${DNSNAME} for the config.yml Heddle endpoint."
 fi
 
 runuser -u "${service_user}" -- env \
-    HEDDLE_STATE_PATH="${STATEPATH}" \
-    HEDDLE_PORT=0 \
     /usr/local/bin/heddle-server --help >/dev/null 2>&1 &
 smoke_pid=$!
 sleep 1

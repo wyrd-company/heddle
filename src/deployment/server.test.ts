@@ -20,6 +20,7 @@ import {
   SyntheticT3,
 } from "../production/composition.test-support.js";
 import {
+  startHeddleServer,
   startHeddleServerFromEnvironment,
   type HeddleDeploymentServer,
 } from "./server.js";
@@ -192,8 +193,8 @@ describe("deployed Heddle service", () => {
     ).rejects.toThrow(
       "A production composition owns its board and console state boundaries",
     );
-    service = await startHeddleServerFromEnvironment(
-      { HEDDLE_HOST: "127.0.0.1", HEDDLE_PORT: "0" },
+    service = await startHeddleServer(
+      { host: "127.0.0.1", port: 0 },
       { production },
     );
 
