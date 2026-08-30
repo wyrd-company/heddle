@@ -102,6 +102,9 @@ export class EpicProjectCoordinator {
   ): Promise<EpicProjectAction | undefined> {
     const route = this.routing.route(epic);
     let record = this.persistence.getEpicProject(epic.id);
+    if (record !== undefined && record.productName !== route.product.name) {
+      throw new Error(`Epic ${epic.id} changed durable product identity`);
+    }
     if (record?.state === "active") return undefined;
     if (record?.state === "deleting") {
       throw new Error(`Epic ${epic.id} project deletion cannot be reversed`);

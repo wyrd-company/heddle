@@ -198,4 +198,43 @@ describe("EpicProjectCoordinator", () => {
     expect(persistence.getEpicProject(101)?.state).toBe("active");
     persistence.close();
   });
+
+  it("rejects a product change after the epic project is durable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const config = configuration(root);
+    config.products.push({
+      name: "Second product",
+      repos: [
+        {
+          name: "sample-secondary",
+          repositoryRoot: join(root, "sample-secondary"),
+        },
+      ],
+    });
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const routing = new ProductRoutingCatalog(config);
+    const coordinator = new EpicProjectCoordinator(
+      config,
+      persistence,
+      routing,
+      { dispatch: async () => ({ sequence: 1 }) },
+      undefined,
+      async () => undefined,
+    );
+    await coordinator.reconcile([task("in-progress")]);
+
+    await expect(
+      coordinator.reconcile([
+        {
+          ...task("in-progress"),
+          product: "Second product",
+          repos: ["sample-secondary"],
+        },
+      ]),
+    ).rejects.toThrow("Epic 101 changed durable product identity");
+    persistence.close();
+  });
 });
