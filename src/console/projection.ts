@@ -12,7 +12,7 @@ export type ConsoleScope =
   | { epicId: number; kind: "epic" }
   | { kind: "task"; taskId: number };
 
-export interface ProjectedTask extends BoardTask {
+export interface ProjectedTask extends Omit<BoardTask, "frontMatter"> {
   deferral?: PacingDeferral;
   dwellMilliseconds?: number;
   instanceId?: string;
@@ -114,11 +114,24 @@ const enrich = (
   instance: ConsoleInstance | undefined,
   now: number,
 ): ProjectedTask => {
-  if (instance === undefined) return task;
+  const projectedTask: Omit<BoardTask, "frontMatter"> = {
+    blocked: task.blocked,
+    dependencies: [...task.dependencies],
+    id: task.id,
+    ...(task.lifecycle === undefined ? {} : { lifecycle: task.lifecycle }),
+    ...(task.parent === undefined ? {} : { parent: task.parent }),
+    priority: task.priority,
+    ...(task.product === undefined ? {} : { product: task.product }),
+    ...(task.repos === undefined ? {} : { repos: [...task.repos] }),
+    status: task.status,
+    tags: [...task.tags],
+    title: task.title,
+  };
+  if (instance === undefined) return projectedTask;
   const hasStage = task.status === "in-progress";
-  if (!hasStage && instance.deferral === undefined) return task;
+  if (!hasStage && instance.deferral === undefined) return projectedTask;
   return {
-    ...task,
+    ...projectedTask,
     instanceId: instance.instanceId,
     ...(instance.deferral === undefined ? {} : { deferral: instance.deferral }),
     ...(!hasStage || instance.stageId === undefined

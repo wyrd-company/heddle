@@ -15,6 +15,7 @@ const boardTask = (
 ): BoardTask => ({
   blocked: false,
   dependencies: [],
+  frontMatter: {},
   id,
   priority: "medium",
   status,
@@ -32,6 +33,37 @@ describe("kanban console projection", () => {
     boardTask(43, "Prepare shelf labels", "todo", { parent: 41 }),
     boardTask(90, "Repair reading-room lamp", "done"),
   ];
+
+  it("does not expose raw task front matter through the console projection", () => {
+    const projection = buildKanbanProjection({
+      instances: [],
+      now: 0,
+      scope: { kind: "all" },
+      statuses: ["todo"],
+      tasks: [
+        boardTask(17, "Arrange a sample", "todo", {
+          frontMatter: {
+            display: "template-only",
+            nested: { value: "not-console-data" },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.columns[0]?.tasks).toEqual([
+      {
+        blocked: false,
+        dependencies: [],
+        id: 17,
+        priority: "medium",
+        status: "todo",
+        tags: [],
+        title: "Arrange a sample",
+      },
+    ]);
+    expect(JSON.stringify(projection)).not.toContain("template-only");
+    expect(JSON.stringify(projection)).not.toContain("not-console-data");
+  });
 
   it("enriches only in-progress cards with lifecycle stage and dwell", () => {
     const projection = buildKanbanProjection({

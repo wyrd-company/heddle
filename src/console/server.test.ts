@@ -23,6 +23,7 @@ const task = (
 ): BoardTask => ({
   blocked: false,
   dependencies: [],
+  frontMatter: {},
   id,
   priority: "medium",
   status,
@@ -298,10 +299,17 @@ describe("console server", () => {
   });
 
   it("opens an epic-scoped projection with stage and dwell enrichment", async () => {
+    board.tasks[1]!.frontMatter = {
+      display: "template-only",
+      nested: { value: "not-console-data" },
+    };
     const response = await globalThis.fetch(
       `${baseUrl}/api/projection?scope=epic:51`,
     );
-    const projection = (await response.json()) as {
+    const serialized = await response.text();
+    expect(serialized).not.toContain("template-only");
+    expect(serialized).not.toContain("not-console-data");
+    const projection = JSON.parse(serialized) as {
       columns: Array<{ tasks: Array<Record<string, unknown>> }>;
       scope: unknown;
     };
