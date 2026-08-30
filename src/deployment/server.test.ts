@@ -3,6 +3,7 @@
 //   verifies: heddle
 // ---
 
+import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,6 +25,22 @@ import {
   startHeddleServerFromEnvironment,
   type HeddleDeploymentServer,
 } from "./server.js";
+
+const availablePort = async (): Promise<number> => {
+  const probe = createServer();
+  await new Promise<void>((resolve, reject) => {
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", resolve);
+  });
+  const address = probe.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Test HTTP server did not bind a TCP port");
+  }
+  await new Promise<void>((resolve, reject) => {
+    probe.close((error) => (error === undefined ? resolve() : reject(error)));
+  });
+  return address.port;
+};
 
 describe("deployed Heddle service", () => {
   let directory = "";
@@ -290,5 +307,79 @@ describe("deployed Heddle service", () => {
       t3: new SyntheticT3(),
     });
     await replacement.close();
+  });
+
+  it("keeps the bound endpoint unready until production startup completes", async () => {
+    const fixture = await prepareProductionFixture();
+    directory = fixture.root;
+    production = createProductionComposition({
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: async () => undefined },
+      t3: new SyntheticT3(),
+    });
+    const originalStart = production.start;
+    let releaseStart!: () => void;
+    const startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    production.start = async () => {
+      await startGate;
+      await originalStart();
+    };
+    const port = await availablePort();
+    const starting = startHeddleServer(
+      { host: "127.0.0.1", port },
+      { production },
+    );
+    let startingResponse: globalThis.Response | undefined;
+    try {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        try {
+          startingResponse = await globalThis.fetch(
+            `http://127.0.0.1:${port}/api/instances`,
+          );
+          break;
+        } catch {
+          await new Promise((resolve) => globalThis.setTimeout(resolve, 10));
+        }
+      }
+      expect(startingResponse?.status).toBe(503);
+      await expect(startingResponse?.json()).resolves.toEqual({
+        error: "Heddle service is starting",
+      });
+    } finally {
+      releaseStart();
+      service = await starting;
+    }
+
+    const ready = await globalThis.fetch(
+      `http://127.0.0.1:${port}/api/instances`,
+    );
+    expect(ready.status).toBe(200);
+  });
+
+  it("rejects simultaneous production instance and factory authorities", async () => {
+    const fixture = await prepareProductionFixture();
+    directory = fixture.root;
+    production = createProductionComposition({
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: async () => undefined },
+      t3: new SyntheticT3(),
+    });
+
+    await expect(
+      startHeddleServer(
+        { host: "127.0.0.1", port: 0 },
+        { production, productionFactory: () => production! },
+      ),
+    ).rejects.toThrow(
+      "A production composition and production factory cannot both be supplied",
+    );
   });
 });

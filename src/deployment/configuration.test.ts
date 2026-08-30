@@ -151,15 +151,40 @@ describe("deployed configuration directory", () => {
       join(root, "config.yml"),
       stringify({
         ...fixture(root),
-        server: { host: "127.0.0.1", port: 0 },
+        server: { host: "127.0.0.1", port: 4171 },
       }),
     );
 
     const loaded = await loadDeploymentConfiguration(root);
 
-    expect(loaded.server).toEqual({ host: "127.0.0.1", port: 0 });
+    expect(loaded.server).toEqual({ host: "127.0.0.1", port: 4171 });
     expect(loaded.configuration.boardDirectory).toBe(join(root, "board"));
     expect(loaded.configuration.stateDirectory).toBe(join(root, "state"));
+  });
+
+  it("rejects an ephemeral port before the launcher projects Caddy settings", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const path = join(root, "config.yml");
+    await writeFile(
+      path,
+      stringify({
+        ...fixture(root),
+        server: { host: "127.0.0.1", port: 0 },
+      }),
+    );
+
+    await expect(
+      execute(
+        process.execPath,
+        ["bin/heddle-server.mjs", "--config", root, "--print-launch-settings"],
+        { env: process.env },
+      ),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        `Configuration file '${path}' is invalid: /server/port must be >= 1`,
+      ),
+      stdout: "",
+    });
   });
 
   it("projects only nonsecret root-launch settings", async () => {
@@ -459,6 +484,8 @@ describe("deployed configuration directory", () => {
       expect(guide).toContain("config.yml");
       expect(guide).toContain("0600");
       expect(guide).toContain("HEDDLE_CONFIG");
+      expect(guide).toContain("1 through 65535");
+      expect(guide).toContain("503 Service Unavailable");
     }
     expect(operatorGuide).toContain("providerUsage");
     expect(operatorGuide).toContain("session.timeoutApplication");

@@ -232,7 +232,7 @@
         "host": { "const": "127.0.0.1", "default": "127.0.0.1" },
         "port": {
           "type": "integer",
-          "minimum": 0,
+          "minimum": 1,
           "maximum": 65535,
           "default": 3774
         }

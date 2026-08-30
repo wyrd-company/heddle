@@ -25,7 +25,8 @@ Create `config.yml` as the operator, set mode `0600`, and mount its directory at
 T3, Pushover, pacing, session, threshold, product, project, and secret settings.
 Only `HEDDLE_CONFIG` may select a different directory; other `HEDDLE_*` values do
 not configure the deployed service. Configuration changes require service
-restart.
+restart. The configured loopback port must be from 1 through 65535 so that the
+same fixed endpoint can be used by Heddle and Caddy.
 
 The configured `stateDirectory` must be a dedicated bind-mount target. Give
 every workspace its own host source so that a rebuild replaces the container
@@ -61,6 +62,10 @@ point. The root launcher writes only the nonsecret Caddy snippet, completes a
 bounded Caddy reload handshake, and then drops privileges. The watcher owns
 later Caddy reloads. The launcher never prints or copies raw YAML. One Heddle
 service and one state source belong to one workspace.
+
+Heddle binds the configured loopback endpoint before production composition
+startup. The endpoint returns `503 Service Unavailable` until startup succeeds;
+a bind failure cannot dispatch production effects or create production state.
 
 See [Production composition](../../../docs/operators/production-composition.md)
 for the complete schema and executable-adapter contracts.

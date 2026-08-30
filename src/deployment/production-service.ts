@@ -59,18 +59,11 @@ export const createConfiguredProductionComposition = (
 export const startConfiguredProductionService = async (
   loaded: LoadedDeploymentConfiguration,
   dependencies: ConfiguredProductionServiceDependencies = {},
-): Promise<HeddleDeploymentServer> => {
-  const production = createConfiguredProductionComposition(
-    loaded,
-    dependencies,
+): Promise<HeddleDeploymentServer> =>
+  startHeddleServer(
+    { host: loaded.server.host, port: loaded.server.port },
+    {
+      productionFactory: () =>
+        createConfiguredProductionComposition(loaded, dependencies),
+    },
   );
-  try {
-    return await startHeddleServer(
-      { host: loaded.server.host, port: loaded.server.port },
-      { production },
-    );
-  } catch (error) {
-    await production.close();
-    throw error;
-  }
-};

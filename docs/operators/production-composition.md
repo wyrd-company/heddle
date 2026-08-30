@@ -25,6 +25,13 @@ The required file name is `config.yml`. The service reads this file, validates
 the schema and runtime agreements, and fails before composition or network bind
 when it is missing, unreadable, or invalid. Errors name the exact file and first
 validation failure while redacting configured T3 and Pushover secrets.
+The loopback server port must be from 1 through 65535; an ephemeral port cannot
+be projected into the fixed Caddy upstream.
+
+After validation, the service binds the configured loopback endpoint before it
+constructs or starts the production composition. The bound endpoint returns
+`503 Service Unavailable` until composition startup completes. A bind failure
+therefore leaves the board, T3, Pushover, and production persistence untouched.
 
 `config.yml` is the sole deployed runtime authority. `HEDDLE_BOARD_PATH`,
 `HEDDLE_HOST`, `HEDDLE_PORT`, and `HEDDLE_STATE_PATH` do not affect deployed
@@ -104,7 +111,8 @@ these declarations; it does not inspect diffs or branches to guess.
 Other required values are the absolute board and state directories, optional
 worktree root, reconciliation cadence, bounded stop timeout, provider pacing,
 session provider settings, observation and per-stage staleness thresholds, and
-Pushover routing. T3 and Pushover secrets enter only through operator-owned
+Pushover routing. The server port is a fixed integer from 1 through 65535. T3
+and Pushover secrets enter only through operator-owned
 `config.yml`; Heddle does not log, emit, or persist them. The configured pacing
 `defaultProvider` must equal the session
 `driver` used for top-level lifecycle stages. Delegated subagents carry their

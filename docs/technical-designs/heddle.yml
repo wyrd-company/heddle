@@ -507,8 +507,9 @@ proposed-design:
     threshold, product, project, and secret settings. Other `HEDDLE_*`
     values do not affect deployed configuration. Invalid configuration fails
     before composition or network bind and reports a secret-redacted first
-    validation failure. The operator owns the file with mode `0600`; Heddle
-    never writes or reformats it.
+    validation failure. The fixed loopback server port is restricted to 1
+    through 65535 so the same value can be projected into Caddy. The operator
+    owns the file with mode `0600`; Heddle never writes or reformats it.
 
     The root s6 launcher validates the same file, derives only its nonsecret
     state mount target and loopback host and port, writes the Caddy snippet,
@@ -532,6 +533,11 @@ proposed-design:
     The deployment server accepts the canonical production composition and
     shares its board, persistence, console state, console action port,
     repository blueprint editor, MCP handler, scheduler, and shutdown lifetime.
+    The deployed service reserves the configured loopback endpoint before it
+    constructs or starts that composition. The bound endpoint remains unready
+    with a 503 response until composition startup succeeds. A bind failure
+    therefore cannot mutate the board, create production persistence, or
+    contact T3 or Pushover.
     The editor uses the lifecycle engine's repository root and mechanical effect
     registry. Supplying separate board, console state, console action, or
     blueprint-editor authorities with a production composition is rejected. Its
