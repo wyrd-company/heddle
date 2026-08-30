@@ -62,6 +62,15 @@ describe("Heddle devcontainer feature", () => {
       ].join("\n"),
     );
     expect(installer).toContain('mountpoint -q "\\${state_path}"');
+    expect(installer).toContain(
+      'state_path="\\$(jq -er \'.stateDirectory\' <<<"\\${launch_settings}")"',
+    );
+    expect(installer).toContain(
+      'host="\\$(jq -er \'.host\' <<<"\\${launch_settings}")"',
+    );
+    expect(installer).toContain(
+      'port="\\$(jq -er \'.port\' <<<"\\${launch_settings}")"',
+    );
     expect(installer).toContain("expected_kanban_version=0.37.0-fork+b9fc380");
     expect(installer).toContain(
       '/usr/local/libexec/heddle/check-kanban-version "\\${expected_kanban_version}"',
@@ -83,6 +92,7 @@ describe("Heddle devcontainer feature", () => {
       'mv "\\${caddy_temp}" /etc/caddy/conf.d/heddle.caddy',
     );
     expect(installer).toContain('"\\${dns_name}" "\\${host}" "\\${port}"');
+    expect(installer).not.toContain("reverse_proxy 127.0.0.1:");
   });
 
   it("requires the complete supported kanban-md version output", async () => {
