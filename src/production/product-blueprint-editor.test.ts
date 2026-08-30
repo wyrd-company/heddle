@@ -48,6 +48,11 @@ describe("organization blueprint artifact editor", () => {
       cwd: fixture!.repositoryRoot,
     });
     const loaded = await subject.load("sample-process");
+    const before = (
+      await executeGit("git", ["rev-parse", "HEAD"], {
+        cwd: fixture!.repositoryRoot,
+      })
+    ).stdout.trim();
 
     const saved = await subject.save({
       artifactId: "sample-process",
@@ -68,6 +73,16 @@ describe("organization blueprint artifact editor", () => {
       { cwd: fixture!.repositoryRoot },
     );
     expect(localHead).toBe(remoteHead);
+    expect(localHead.trim()).not.toBe(before);
+    expect(
+      (
+        await executeGit(
+          "git",
+          ["show", "origin/main:blueprints/sample-process.json"],
+          { cwd: fixture!.repositoryRoot },
+        )
+      ).stdout,
+    ).toContain('"x": 120');
     expect(saved.positions).toEqual({ inspect: { x: 120, y: 80 } });
     expect(fixture!.attention.list()).toEqual([]);
   });
