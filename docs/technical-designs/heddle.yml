@@ -48,11 +48,16 @@ proposed-design:
     is implement → review → remediate loop → merge → retrospective →
     finalize; other lifecycles are shorter or different blueprints
     (a trivial lifecycle omits retrospective). Blueprints are schema'd
-    artifacts in this repository. An instance records the git blob hash
-    of the blueprint it started from and runs that version to
-    completion. The operator can rebase a running instance onto a newer
-    blueprint version at a named state; the rebase validates that the
-    target state exists and raises attention when it does not.
+    artifacts in one organization repository cloned at
+    `<HEDDLE_CONFIG>/blueprints`; Heddle retains the schema and interpreter
+    validation authority. Each reconciliation pass fetches `origin` without
+    changing the clone's branch, working tree, or held refs. New instances and
+    explicit rebases resolve artifacts from the fetched upstream commit. An
+    instance records the Git blob hash of the blueprint it started from, holds
+    that blob under a Heddle ref, and runs that version to completion. The
+    operator can rebase a running instance onto a newer blueprint version at a
+    named state; the rebase validates that the target state exists and raises
+    attention when it does not.
   epic-reconciliation: >
     The reconciler is a control loop over the kanban board. Each pass
     it computes the delta between board state and instance state and
@@ -524,6 +529,13 @@ proposed-design:
     through 65535 so the same value can be projected into Caddy. The operator
     owns the file with mode `0600`; Heddle never writes or reformats it.
 
+    The configuration directory also contains the organization blueprint clone
+    at the hard-coded `blueprints` subdirectory. It is not a `config.yml` field.
+    Startup requires an exact Git worktree whose current branch tracks
+    `origin`. Fetch updates remote-tracking refs only. A dirty, unpushed,
+    behind, or diverged branch raises durable repository attention; Heddle
+    never merges, rebases, or resets it automatically.
+
     The root s6 launcher validates the same file, derives only its nonsecret
     state mount target and loopback host and port, writes the Caddy snippet,
     completes a bounded Caddy reload handshake, and then starts Heddle as the
@@ -551,8 +563,15 @@ proposed-design:
     with a 503 response until composition startup succeeds. A bind failure
     therefore cannot mutate the board, create production persistence, or
     contact T3 or Pushover.
-    The editor uses the lifecycle engine's repository root and mechanical effect
-    registry. Supplying separate board, console state, console action, or
-    blueprint-editor authorities with a production composition is rejected. Its
-    lifecycle reader projects the canonical instance, pinned blueprint, and
-    Flowcraft histories; it does not own a parallel blueprint or event store.
+    The editor uses the same organization blueprint repository and mechanical
+    effect registry as the lifecycle engine. A validated replace, exact-path
+    commit, and push execute under the repository writer lease. The service-user
+    SSH agent or scoped deploy key supplies Git credentials outside Heddle
+    configuration. The supported service-user SSH-agent path is qualified by a
+    successful dry-run push to a unique scratch ref that leaves no durable
+    remote ref. A failed push retains the local commit and raises durable
+    attention identifying that commit. Supplying separate board, console state,
+    console action, or blueprint-editor authorities with a production
+    composition is rejected. Its lifecycle reader projects the canonical
+    instance, pinned blueprint, and Flowcraft histories; it does not own a
+    parallel blueprint or event store.

@@ -21,8 +21,12 @@ set, add the Wyrd Company Caddy Feature to the same devcontainer.
 ## Workspace configuration and persistence
 
 Create `config.yml` as the operator, set mode `0600`, and mount its directory at
-`configDirectory`. The file is the sole source for board, state, loopback server,
-T3, Pushover, pacing, session, threshold, product, project, and secret settings.
+`configDirectory`. Clone the organization blueprint repository into the
+hard-coded `blueprints` subdirectory and give the service user fetch and push
+credentials through its SSH agent or a scoped deploy key. The clone path and Git
+credentials are not `config.yml` fields. The file is the sole source for board,
+state, loopback server, T3, Pushover, pacing, session, threshold, product,
+project, and secret settings.
 Only `HEDDLE_CONFIG` may select a different directory; other `HEDDLE_*` values do
 not configure the deployed service. Configuration changes require service
 restart. The configured loopback port must be from 1 through 65535 so that the
@@ -57,11 +61,13 @@ without replacing SQLite history:
 ```
 
 The service validates `config.yml`, derives its Caddy upstream and state target
-from that same file, and refuses to start when `stateDirectory` is not a mount
-point. The root launcher writes only the nonsecret Caddy snippet, completes a
-bounded Caddy reload handshake, and then drops privileges. The watcher owns
-later Caddy reloads. The launcher never prints or copies raw YAML. One Heddle
-service and one state source belong to one workspace.
+from that same file, requires the `blueprints` directory to be the exact root of
+a Git worktree whose current branch tracks `origin`, and refuses to start when
+`stateDirectory` is not a mount point. The root launcher writes only the
+nonsecret Caddy snippet, completes a bounded Caddy reload handshake, and then
+drops privileges. The watcher owns later Caddy reloads. The launcher never
+prints or copies raw YAML. One Heddle service, one blueprint clone, and one state
+source belong to one workspace.
 
 Heddle binds the configured loopback endpoint before production composition
 startup. The endpoint returns `503 Service Unavailable` until startup succeeds;

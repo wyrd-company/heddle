@@ -13,9 +13,9 @@ loads the operator configuration, constructs that composition, and uses it for
 the server, console, MCP endpoint, scheduler, attention queue, repository
 blueprint editor, and persistence lifetime. The no-composition server boundary
 exists only for tests and console-specific composition. The editor is the
-accepted `BlueprintArtifactEditor` over the same repository root and mechanical
-effect registry as the lifecycle engine. The factory rejects a second live
-composition for the same board directory.
+accepted `BlueprintArtifactEditor` over the organization blueprint clone and
+the same mechanical effect registry as the lifecycle engine. The factory
+rejects a second live composition for the same board directory.
 
 ## Configuration directory
 
@@ -39,9 +39,9 @@ configuration. Configuration changes require service restart. Heddle does not
 write, migrate, or reformat the file. The operator owns the directory and must make
 `config.yml` readable only by that account, normally mode `0600`.
 
-The directory may also contain `heddle.md` and `blueprints/`; their validation
-and behavior belong to their respective configuration tasks. Unknown entries
-are ignored. They are not `config.yml` fields.
+The directory may also contain `heddle.md` and the required organization
+blueprint clone at `blueprints/`. Unknown entries are ignored. Neither entry is
+a `config.yml` field.
 
 This complete single-product example uses Cursor and no provider budget, so it
 omits both executable adapters:
@@ -120,6 +120,46 @@ explicit provider and model through the same pacing evaluator and T3 provider
 preconditions.
 T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
 the runtime validator and configuration schema reject other schemes.
+
+## Organization blueprint repository
+
+Clone the organization's blueprint repository into
+`<HEDDLE_CONFIG>/blueprints` before service startup. The directory must be the
+exact root of a Git worktree, and its current branch must track `origin`.
+Provision the service user with a forwarded SSH agent socket or a scoped deploy
+key that can fetch and push that repository. Heddle stores no Git credential in
+`config.yml`, logs, attention payloads, or instance state. The supported
+service-user SSH-agent path is qualified with `git push --dry-run` to a unique
+scratch ref; the dry run leaves no remote ref.
+
+Each reconciliation pass runs `git fetch --no-tags --prune origin` under the
+repository writer lease. Fetch changes remote-tracking refs only. New instances
+and explicit instance rebases read the fetched upstream commit. Running
+instances keep their held blueprint blob and do not change version. Heddle does
+not merge, rebase, reset, switch, or modify the working branch during fetch.
+
+The console editor requires a clean working tree with the current branch equal
+to upstream. One successful save validates and atomically replaces the artifact,
+commits only that artifact, and pushes the commit while holding the same writer
+lease. A push failure leaves the commit local and raises durable attention with
+the repository and commit. Dirty, unpushed, behind, or diverged state also
+raises one durable repository attention entry. Resolve the state manually, then
+allow a later reconciliation pass to clear the entry; do not expect Heddle to
+integrate commits.
+
+To migrate an existing workspace, copy its authored blueprint changes into the
+organization repository, validate and commit them there, clone that repository
+at `<HEDDLE_CONFIG>/blueprints`, and then restart Heddle. Remove legacy
+per-product or Heddle-source blueprint copies only after the organization commit
+contains the required artifact bytes. Validate a clone from the blueprint
+repository with:
+
+```console
+task validate HEDDLE_REPOSITORY_ROOT=/absolute/path/to/heddle
+```
+
+Heddle owns the lifecycle blueprint schema and interpreter. The organization
+repository owns authored blueprint artifacts.
 
 For example, the routing portion has this shape:
 
