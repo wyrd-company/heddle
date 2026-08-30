@@ -117,5 +117,20 @@ describe("organization blueprint artifact editor", () => {
         scope: "all",
       }),
     ]);
+    await executeGit(
+      "git",
+      ["remote", "set-url", "origin", fixture!.remoteRoot],
+      {
+        cwd: fixture!.repositoryRoot,
+      },
+    );
+    await fixture!.repository.synchronize();
+    expect(fixture!.attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: `blueprint-repository:push:${after}`,
+        kind: "blueprint-repository",
+        message: expect.stringContaining(after),
+      }),
+    ]);
   });
 });

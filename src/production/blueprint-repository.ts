@@ -100,7 +100,7 @@ export class OrganizationBlueprintRepository {
           { cwd: this.repositoryRoot },
         );
       } catch {
-        await this.replaceStateAttention({
+        await this.replaceRepositoryAttention({
           attentionId: `${stateAttentionPrefix}fetch-failed`,
           category: "state",
           code: "blueprint-repository-fetch-failed",
@@ -116,13 +116,18 @@ export class OrganizationBlueprintRepository {
       await lease.assertOwned();
       const state = await this.state();
       if (state === undefined) {
-        await this.replaceStateAttention(undefined);
-        await this.resolveIfActive(
-          `${pushAttentionPrefix}${await this.head()}`,
-        );
+        await this.replaceRepositoryAttention(undefined);
         return;
       }
-      await this.replaceStateAttention(this.stateAttention(state));
+      const pushAttentionId = `${pushAttentionPrefix}${state.localCommit}`;
+      if (
+        state.code === "blueprint-repository-unpushed" &&
+        (await this.attention.has(pushAttentionId))
+      ) {
+        await this.replaceRepositoryAttention(undefined, pushAttentionId);
+        return;
+      }
+      await this.replaceRepositoryAttention(this.stateAttention(state));
     } finally {
       await lease.release();
     }
@@ -132,7 +137,7 @@ export class OrganizationBlueprintRepository {
     await lease.assertOwned();
     const state = await this.state();
     if (state === undefined) return;
-    await this.replaceStateAttention(this.stateAttention(state));
+    await this.replaceRepositoryAttention(this.stateAttention(state));
     throw new BlueprintValidationError(
       "The organization blueprint repository is not clean and synchronized with origin",
     );
@@ -191,7 +196,7 @@ export class OrganizationBlueprintRepository {
         { cwd: this.repositoryRoot },
       );
     } catch {
-      await this.attention.raise({
+      await this.replaceRepositoryAttention({
         attentionId: `${pushAttentionPrefix}${commit}`,
         category: "push",
         code: "blueprint-repository-push-failed",
@@ -202,6 +207,7 @@ export class OrganizationBlueprintRepository {
       });
       throw new BlueprintPushError(commit);
     }
+    await this.replaceRepositoryAttention(undefined);
   }
 
   private async state(): Promise<RepositoryState | undefined> {
@@ -307,8 +313,9 @@ export class OrganizationBlueprintRepository {
     };
   }
 
-  private async replaceStateAttention(
+  private async replaceRepositoryAttention(
     current: BlueprintRepositoryAttention | undefined,
+    retainedAttentionId = current?.attentionId,
   ): Promise<void> {
     for (const record of this.persistence.listAttention()) {
       const payload = record.payload;
@@ -317,8 +324,7 @@ export class OrganizationBlueprintRepository {
         payload !== null &&
         !Array.isArray(payload) &&
         payload["kind"] === "blueprint-repository" &&
-        payload["category"] === "state" &&
-        record.attentionId !== current?.attentionId
+        record.attentionId !== retainedAttentionId
       ) {
         this.attention.resolve(record.attentionId);
       }
@@ -328,16 +334,6 @@ export class OrganizationBlueprintRepository {
       !(await this.attention.has(current.attentionId))
     ) {
       await this.attention.raise(current);
-    }
-  }
-
-  private async resolveIfActive(attentionId: string): Promise<void> {
-    if (
-      this.persistence
-        .listAttention()
-        .some((record) => record.attentionId === attentionId)
-    ) {
-      this.attention.resolve(attentionId);
     }
   }
 }
