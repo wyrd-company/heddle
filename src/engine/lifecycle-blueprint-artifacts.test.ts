@@ -11,6 +11,7 @@ import process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { validateBlueprintRepository } from "./blueprint-repository-validation.js";
+import { deliveryBlueprintFixture } from "./lifecycle-blueprint.test-support.js";
 
 const roots: string[] = [];
 
@@ -47,12 +48,15 @@ const artifact = () => ({
   ],
 });
 
-const repository = async (value: unknown = artifact()): Promise<string> => {
+const repository = async (
+  value: unknown = artifact(),
+  artifactId = "sample-process",
+): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), "heddle-blueprint-validation-"));
   roots.push(root);
   await mkdir(join(root, "blueprints"));
   await writeFile(
-    join(root, "blueprints", "sample-process.json"),
+    join(root, "blueprints", `${artifactId}.json`),
     `${JSON.stringify(value, null, 2)}\n`,
   );
   return root;
@@ -100,4 +104,32 @@ describe("organization lifecycle blueprint artifacts", () => {
       validateBlueprintRepository(await repository(invalid)),
     ).rejects.toThrow("relationships must name its template artifacts");
   });
+
+  it.each(["standard-delivery", "trivial"] as const)(
+    "rejects inconsistent %s wait-stage handoff metadata",
+    async (artifactId) => {
+      const invalid = {
+        $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+        relationships: {
+          implements: "heddle",
+          uses: [
+            "standard-delivery-implement",
+            "standard-delivery-review",
+            "standard-delivery-remediate",
+            ...(artifactId === "standard-delivery"
+              ? ["standard-delivery-retrospective"]
+              : []),
+            "standard",
+            "remediation",
+          ],
+        },
+        ...deliveryBlueprintFixture(artifactId),
+      };
+      invalid.nodes.find(({ id }) => id === "remediate")!.handoff = "standard";
+
+      await expect(
+        validateBlueprintRepository(await repository(invalid, artifactId)),
+      ).rejects.toThrow("inconsistent delivery handoff metadata");
+    },
+  );
 });

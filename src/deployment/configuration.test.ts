@@ -218,6 +218,19 @@ describe("deployed configuration directory", () => {
     );
   });
 
+  it("rejects a blueprint clone whose current branch tracks a remote other than origin", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    await prepareBlueprintRepository(root);
+    await execute("git", ["remote", "rename", "origin", "other"], {
+      cwd: join(root, "blueprints"),
+    });
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `Blueprint repository '${join(root, "blueprints")}' must be a git clone root whose current branch tracks origin`,
+    );
+  });
+
   it("rejects an ephemeral port before the launcher projects Caddy settings", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await prepareBlueprintRepository(root);
