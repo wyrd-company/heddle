@@ -29,7 +29,9 @@ import {
   HandoffRenderError,
   isHandoffAuthenticationBinding,
   renderStageHandoff,
+  resolveEffectiveHandoffDriver,
   resolveHandoffAuthenticationBinding,
+  type MeasuredHandoffDriver,
 } from "./handoff-renderer.js";
 import {
   GitHandoffTemplateStore,
@@ -232,6 +234,7 @@ const ensureStoredHandoff = async (
   resolveStageContract: WorkflowMcpStageContractResolver,
   instantiate: typeof instantiateTodoList,
   readTemplate: HandoffTemplateResolver,
+  effectiveDriver: MeasuredHandoffDriver,
 ): Promise<{ handoff: string; renderedHandoff: string }> => {
   while (true) {
     const current = store.getInstance(input.instanceId);
@@ -281,9 +284,8 @@ const ensureStoredHandoff = async (
           `Stored handoff has no rendered payload for '${input.sessionKey}'`,
         );
       }
-      const currentAuthentication = resolveHandoffAuthenticationBinding(
-        input.providerContext.driver,
-      );
+      const currentAuthentication =
+        resolveHandoffAuthenticationBinding(effectiveDriver);
       if (
         !isHandoffAuthenticationBinding(existing.renderedHandoffAuthentication)
       ) {
@@ -385,7 +387,7 @@ const ensureStoredHandoff = async (
     const template = await readTemplate(workflowMcp.handoffTemplate, input);
     const renderedHandoff = renderStageHandoff({
       correlationToken,
-      driver: input.providerContext.driver,
+      driver: effectiveDriver,
       handoff,
       instanceId: input.instanceId,
       sessionKey: input.sessionKey,
@@ -394,9 +396,8 @@ const ensureStoredHandoff = async (
       taskId: input.taskId,
       template,
     });
-    const renderedHandoffAuthentication = resolveHandoffAuthenticationBinding(
-      input.providerContext.driver,
-    );
+    const renderedHandoffAuthentication =
+      resolveHandoffAuthenticationBinding(effectiveDriver);
     const stored: StoredStageHandoffCandidate = {
       correlationToken,
       handoff,
@@ -428,6 +429,10 @@ export const bootstrapStageSession = async (
   input: SessionBootstrapInput,
   dependencies: SessionBootstrapDependencies,
 ): Promise<SessionBootstrapResult> => {
+  const effectiveDriver = resolveEffectiveHandoffDriver(
+    input.modelSelection.instanceId,
+    input.providerContext.driver,
+  );
   const prepareWorktree = dependencies.ensureWorktree ?? ensureWorktree;
   const nextId = dependencies.nextId ?? (() => globalThis.crypto.randomUUID());
   const now = dependencies.now ?? (() => new Date().toISOString());
@@ -455,11 +460,12 @@ export const bootstrapStageSession = async (
         new GitHandoffTemplateStore(value.worktree.repositoryRoot).read(
           reference,
         )),
+    effectiveDriver,
   );
   const threadId = input.threadId ?? nextId();
   await applyHarnessToolTimeoutBeforeThread({
     consumer: dependencies.t3.applyHarnessToolTimeout,
-    driver: input.providerContext.driver,
+    driver: effectiveDriver,
     sessionKey: input.sessionKey,
     threadId,
     worktreePath: worktree.path,

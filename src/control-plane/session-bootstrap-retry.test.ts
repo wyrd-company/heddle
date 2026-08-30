@@ -12,6 +12,7 @@ import {
   type SessionBootstrapDependencies,
   type SessionBootstrapInput,
 } from "./session-bootstrap.js";
+import { HandoffRenderError } from "./handoff-renderer.js";
 import {
   readSampleHandoffTemplate,
   sampleHandoffTemplate,
@@ -151,6 +152,46 @@ const expectParentRejected = async (
 };
 
 describe("stage session cold retry guards", () => {
+  it("rejects mismatched T3 driver identities before any bootstrap effect", async () => {
+    const memory = memoryStore();
+    const ensureWorktree = vi.fn(async ({ branch }) => ({
+      branch,
+      created: false,
+      path: "/workspaces/worktrees/sample-repository/task-prepare",
+    }));
+    const mintCorrelationToken = vi.fn(() => "correlation-token");
+    const nextId = vi.fn(() => "stable-id");
+    const applyHarnessToolTimeout = vi.fn(async () => undefined);
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    const error = await bootstrapStageSession(
+      {
+        ...input,
+        modelSelection: { ...input.modelSelection, instanceId: "claudeAgent" },
+      },
+      {
+        persistence: memory.store,
+        ensureWorktree,
+        mintCorrelationToken,
+        nextId,
+        t3: { applyHarnessToolTimeout, dispatch },
+      },
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(HandoffRenderError);
+    expect(error).toMatchObject({
+      message: expect.stringContaining(
+        "model selection and provider context must name the same measured",
+      ),
+    });
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(mintCorrelationToken).not.toHaveBeenCalled();
+    expect(nextId).not.toHaveBeenCalled();
+    expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(memory.record).toMatchObject({ state: initialState(), version: 1 });
+  });
+
   it("persists parentage only for a child of a bound session", async () => {
     const parentHandoff = {
       correlationToken: "token-parent",
@@ -464,6 +505,62 @@ describe("stage session cold retry guards", () => {
     });
   });
 
+  it("rejects a cold retry whose selected T3 driver changes before any second bootstrap effect", async () => {
+    const memory = memoryStore();
+    const ensureWorktree = vi.fn(async ({ branch }) => ({
+      branch,
+      created: false,
+      path: "/workspaces/worktrees/sample-repository/task-prepare",
+    }));
+    const mintCorrelationToken = vi.fn(() => "correlation-token");
+    const nextId = vi.fn(() => "stable-id");
+    const applyHarnessToolTimeout = vi.fn(async () => undefined);
+    const dispatch = vi.fn(async () => {
+      throw new Error("stop after durable render");
+    });
+    const dependencies: SessionBootstrapDependencies = {
+      persistence: memory.store,
+      instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
+      resolveWorkflowMcpStageContract,
+      ensureWorktree,
+      mintCorrelationToken,
+      nextId,
+      t3: { applyHarnessToolTimeout, dispatch },
+    };
+
+    await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
+      /stop after durable render/,
+    );
+    expect(memory.record.state.handoffs[0]).toMatchObject({
+      renderedHandoffAuthentication: { driver: "cursor" },
+    });
+    const persistedVersion = memory.record.version;
+    const worktreeCount = ensureWorktree.mock.calls.length;
+    const mintCount = mintCorrelationToken.mock.calls.length;
+    const nextIdCount = nextId.mock.calls.length;
+    const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
+    const dispatchCount = dispatch.mock.calls.length;
+
+    const error = await bootstrapStageSession(
+      {
+        ...input,
+        modelSelection: { ...input.modelSelection, instanceId: "claudeAgent" },
+        providerContext: { ...input.providerContext, driver: "cursor" },
+      },
+      dependencies,
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(HandoffRenderError);
+    expect(ensureWorktree).toHaveBeenCalledTimes(worktreeCount);
+    expect(mintCorrelationToken).toHaveBeenCalledTimes(mintCount);
+    expect(nextId).toHaveBeenCalledTimes(nextIdCount);
+    expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
+    expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
+    expect(memory.record.version).toBe(persistedVersion);
+    expect(memory.record.state.handoffs).toHaveLength(1);
+  });
+
   it.each(["claudeAgent", "sample-driver"])(
     "rejects a cold retry under changed driver %s before timeout or T3 dispatch",
     async (driver) => {
@@ -500,6 +597,7 @@ describe("stage session cold retry guards", () => {
         bootstrapStageSession(
           {
             ...input,
+            modelSelection: { ...input.modelSelection, instanceId: driver },
             providerContext: { ...input.providerContext, driver },
           },
           dependencies,

@@ -32,8 +32,10 @@ export type HandoffRenderInput = {
 
 const measuredFallbackDrivers = ["claudeAgent", "codex", "cursor"] as const;
 
+export type MeasuredHandoffDriver = (typeof measuredFallbackDrivers)[number];
+
 export type HandoffAuthenticationBinding = {
-  driver: (typeof measuredFallbackDrivers)[number];
+  driver: MeasuredHandoffDriver;
   format: "heddle.handoff-authentication-binding";
   policy: "correlation-token-front-matter-v1";
   version: 1;
@@ -67,6 +69,24 @@ export const resolveHandoffAuthenticationBinding = (
     policy: "correlation-token-front-matter-v1",
     version: 1,
   };
+};
+
+export const resolveEffectiveHandoffDriver = (
+  modelSelectionInstanceId: string,
+  providerContextDriver: string,
+): MeasuredHandoffDriver => {
+  const selected = resolveHandoffAuthenticationBinding(
+    modelSelectionInstanceId,
+  ).driver;
+  const contextual = resolveHandoffAuthenticationBinding(
+    providerContextDriver,
+  ).driver;
+  if (selected !== contextual) {
+    throw new HandoffRenderError(
+      "T3 model selection and provider context must name the same measured Heddle MCP authentication driver",
+    );
+  }
+  return selected;
 };
 
 export const handoffAuthenticationBindingsAgree = (
