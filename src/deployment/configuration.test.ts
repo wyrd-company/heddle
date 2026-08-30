@@ -231,6 +231,22 @@ describe("deployed configuration directory", () => {
     );
   });
 
+  it("rejects a blueprintsRepository config field instead of creating a second root", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(
+      join(root, "config.yml"),
+      stringify({
+        ...fixture(root),
+        blueprintsRepository: join(root, "other-blueprints"),
+      }),
+    );
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "/ must NOT have additional properties: blueprintsRepository",
+    );
+  });
+
   it("rejects an ephemeral port before the launcher projects Caddy settings", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await prepareBlueprintRepository(root);
