@@ -561,6 +561,52 @@ describe("stage session cold retry guards", () => {
     expect(memory.record.state.handoffs).toHaveLength(1);
   });
 
+  it("rejects a cold retry when the stored prompt and rendered document disagree", async () => {
+    const memory = memoryStore();
+    const applyHarnessToolTimeout = vi.fn(async () => undefined);
+    const dispatch = vi.fn(async () => {
+      throw new Error("stop after durable render");
+    });
+    const dependencies: SessionBootstrapDependencies = {
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: false,
+        path: "/workspaces/worktrees/sample-repository/task-prepare",
+      }),
+      instantiateTodoList,
+      mintCorrelationToken: () => "correlation-token",
+      nextId: () => "stable-id",
+      persistence: memory.store,
+      readHandoffTemplate: readSampleHandoffTemplate,
+      resolveWorkflowMcpStageContract,
+      t3: { applyHarnessToolTimeout, dispatch },
+    };
+
+    await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
+      "stop after durable render",
+    );
+    const persisted = memory.record;
+    memory.store.compareAndSwapInstance(
+      persisted.instanceId,
+      persisted.version,
+      {
+        ...persisted.state,
+        handoffs: persisted.state.handoffs.map((handoff) => ({
+          ...(handoff as Record<string, unknown>),
+          systemPrompt: "# Changed guidance",
+        })),
+      },
+    );
+    const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
+    const dispatchCount = dispatch.mock.calls.length;
+
+    await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
+      "Stored rendered handoff does not match its system prompt",
+    );
+    expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
+    expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
+  });
+
   it.each(["claudeAgent", "sample-driver"])(
     "rejects a cold retry under changed driver %s before timeout or T3 dispatch",
     async (driver) => {

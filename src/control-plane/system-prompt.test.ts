@@ -57,4 +57,14 @@ describe("system prompt", () => {
       ),
     ).toThrow("System prompt must not contain the correlation token");
   });
+
+  it("refuses an empty operator prompt", () => {
+    expect(() =>
+      composeSystemPrompt(
+        " \n",
+        'correlationToken: "sample-token"',
+        "sample-token",
+      ),
+    ).toThrow("System prompt must not be empty");
+  });
 });

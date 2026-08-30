@@ -3,7 +3,14 @@
 //   verifies: heddle
 // ---
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,6 +32,7 @@ describe("configuration-directory system prompt", () => {
     await expect(
       configurationDirectorySystemPromptResolver(root)(),
     ).resolves.toBe(builtInSystemPrompt);
+    await expect(readdir(root)).resolves.toEqual([]);
   });
 
   it("reads the operator override wholesale without adding provenance", async () => {
@@ -38,6 +46,9 @@ describe("configuration-directory system prompt", () => {
     expect(resolved).not.toContain(root);
     expect(resolved).not.toContain("heddle.md");
     expect(resolved).not.toContain("Heddle stage session");
+    await expect(readFile(join(root, "heddle.md"), "utf8")).resolves.toBe(
+      override,
+    );
   });
 
   it("fails closed when heddle.md exists but cannot be read as a file", async () => {
