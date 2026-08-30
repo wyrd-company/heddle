@@ -73,7 +73,7 @@ describe("production configuration", () => {
     ) as { properties: Record<string, unknown>; required: string[] };
     const configuration = fixture();
     expect(Object.keys(schema.properties).sort()).toEqual(
-      Object.keys(configuration).sort(),
+      [...Object.keys(configuration), "server"].sort(),
     );
     expect([...schema.required].sort()).toEqual(
       Object.keys(configuration).sort(),

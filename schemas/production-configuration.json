@@ -155,6 +155,20 @@
         "worktreesRoot": { "type": "string", "pattern": "^/" }
       }
     },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "host": { "type": "string", "minLength": 1, "default": "127.0.0.1" },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 3774
+        }
+      }
+    },
     "stageThresholds": {
       "type": "object",
       "additionalProperties": { "type": "integer", "minimum": 1 }
