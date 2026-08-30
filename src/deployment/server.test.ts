@@ -373,12 +373,15 @@ describe("deployed Heddle service", () => {
       t3: new SyntheticT3(),
     });
 
-    await expect(
-      startHeddleServer(
-        { host: "127.0.0.1", port: 0 },
-        { production, productionFactory: () => production! },
-      ),
-    ).rejects.toThrow(
+    const result = await startHeddleServer(
+      { host: "127.0.0.1", port: 0 },
+      { production, productionFactory: () => production! },
+    ).catch((error: unknown) => error);
+    if (typeof result === "object" && result !== null && "close" in result) {
+      await (result as HeddleDeploymentServer).close();
+    }
+    expect(result).toBeInstanceOf(Error);
+    expect(String(result)).toContain(
       "A production composition and production factory cannot both be supplied",
     );
   });
