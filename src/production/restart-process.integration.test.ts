@@ -56,8 +56,12 @@ describe("production process restart", () => {
   it("converges one instance, activation, and board write after a fresh process", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-process-restart-"));
     const repositoryRoot = join(root, "sample-repository");
+    const blueprintsRepositoryRoot = join(root, "blueprint-repository");
+    const blueprintsRemote = join(root, "blueprint-origin.git");
     const boardDirectory = join(root, "board");
-    await mkdir(join(repositoryRoot, "blueprints"), { recursive: true });
+    await mkdir(join(blueprintsRepositoryRoot, "blueprints"), {
+      recursive: true,
+    });
     await mkdir(join(repositoryRoot, "handoff-templates"), { recursive: true });
     await mkdir(join(repositoryRoot, "todo-templates"), { recursive: true });
     await mkdir(join(boardDirectory, "tasks"), { recursive: true });
@@ -86,7 +90,7 @@ kind: standard
       )
     ).stdout.trim();
     await writeFile(
-      join(repositoryRoot, "blueprints", "sample.json"),
+      join(blueprintsRepositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
         edges: [
           {
@@ -119,10 +123,39 @@ kind: standard
         items: [{ id: "deliver", text: "Deliver the sample" }],
       }),
     );
+    await execute("git", ["add", "handoff-templates", "todo-templates"], {
+      cwd: repositoryRoot,
+    });
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute("git", ["add", "blueprints"], {
+      cwd: blueprintsRepositoryRoot,
+    });
     await execute(
       "git",
-      ["add", "blueprints", "handoff-templates", "todo-templates"],
-      { cwd: repositoryRoot },
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add sample blueprint",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    await execute("git", ["init", "--quiet", "--bare", blueprintsRemote], {
+      cwd: root,
+    });
+    await execute("git", ["remote", "add", "origin", blueprintsRemote], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      ["push", "--quiet", "--set-upstream", "origin", "main"],
+      { cwd: blueprintsRepositoryRoot },
     );
     await execute(
       "git",

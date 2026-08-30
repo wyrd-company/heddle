@@ -9,6 +9,8 @@ import { basename, extname } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
+import { deliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
+
 const schemaPath = "schemas/todo-template.json";
 const templatePaths = [
   "todo-templates/standard-delivery-implement.json",
@@ -55,9 +57,7 @@ describe("todo template artifacts", () => {
   });
 
   it("contains one template for every standard-delivery binding", async () => {
-    const blueprint = (await readJson("blueprints/standard-delivery.json")) as {
-      nodes: Array<{ "todo-template"?: string }>;
-    };
+    const blueprint = deliveryBlueprintFixture("standard-delivery");
     const bindings = blueprint.nodes
       .map((node) => node["todo-template"])
       .filter((value): value is string => value !== undefined)

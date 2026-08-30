@@ -96,6 +96,7 @@ const pushoverTransport: PushoverTransport = {
 };
 
 const composition = createProductionComposition({
+  blueprintsRepositoryRoot: join(root, "blueprint-repository"),
   ...(mode === "crash-attention"
     ? {
         afterEscalationEffect: (effect: "attention" | "pushover") => {

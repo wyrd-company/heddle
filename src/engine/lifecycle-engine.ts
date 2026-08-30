@@ -56,7 +56,9 @@ export class LifecycleEngine {
   private readonly persistence: LifecycleEngineOptions["persistence"];
 
   constructor(options: LifecycleEngineOptions) {
-    this.blueprintStore = new GitBlueprintStore(options.repositoryRoot);
+    this.blueprintStore = new GitBlueprintStore(options.repositoryRoot, {
+      sourceRef: options.sourceRef,
+    });
     this.effects = { ...options.effects };
     this.persistence = options.persistence;
   }

@@ -42,6 +42,7 @@ describe("production attention actions", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage,
       pushoverTransport: { send: vi.fn(async () => undefined) },
@@ -114,6 +115,7 @@ describe("production attention actions", () => {
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage,
       pushoverTransport: { send: vi.fn(async () => undefined) },
@@ -191,6 +193,7 @@ describe("production attention actions", () => {
     cleanup = fixture.cleanup;
     const t3 = new FailingApprovalT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage,
       pushoverTransport: { send: vi.fn(async () => undefined) },
@@ -269,6 +272,7 @@ describe("production attention actions", () => {
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();
     let composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage,
       pushoverTransport: { send: vi.fn(async () => undefined) },
@@ -293,6 +297,7 @@ describe("production attention actions", () => {
     await composition.close();
 
     composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage,
       pushoverTransport: { send: vi.fn(async () => undefined) },

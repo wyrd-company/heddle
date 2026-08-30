@@ -27,8 +27,9 @@ describe("production console lifecycle source", () => {
   it("reads pinned blueprint and Task-683-ordered history through one cursor", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
-    const { configuration, taskId } = fixture;
+    const { blueprintsRepositoryRoot, configuration, taskId } = fixture;
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -59,7 +60,7 @@ describe("production console lifecycle source", () => {
     );
 
     const blueprintPath = join(
-      configuration.products[0]!.repos[0]!.repositoryRoot,
+      blueprintsRepositoryRoot,
       "blueprints/sample.json",
     );
     const workingBlueprint = JSON.parse(
@@ -115,6 +116,7 @@ describe("production console lifecycle source", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),

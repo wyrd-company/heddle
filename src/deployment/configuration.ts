@@ -4,9 +4,11 @@
 // ---
 
 import { constants } from "node:fs";
-import { access, readFile, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { URL } from "node:url";
+import { promisify } from "node:util";
 
 import { Ajv2020, type AnySchema, type ErrorObject } from "ajv/dist/2020.js";
 import { parseDocument } from "yaml";
@@ -18,6 +20,8 @@ import {
 
 const defaultConfigurationDirectory = "/home/vscode/.heddle";
 const configurationFileName = "config.yml";
+const blueprintsDirectoryName = "blueprints";
+const execute = promisify(execFile);
 
 type DeploymentEnvironment = Record<string, string | undefined>;
 
@@ -27,6 +31,7 @@ export type DeploymentServerConfiguration = {
 };
 
 export type LoadedDeploymentConfiguration = {
+  blueprintsRepositoryRoot: string;
   configuration: ProductionConfiguration;
   configurationDirectory: string;
   configurationPath: string;
@@ -208,6 +213,37 @@ const preflightExecutable = async (
   }
 };
 
+const preflightBlueprintRepository = async (
+  configurationDirectory: string,
+): Promise<string> => {
+  const repositoryRoot = join(configurationDirectory, blueprintsDirectoryName);
+  try {
+    const metadata = await stat(repositoryRoot);
+    if (!metadata.isDirectory()) throw new Error("not a directory");
+    const [{ stdout: topLevel }, { stdout: upstream }] = await Promise.all([
+      execute("git", ["rev-parse", "--show-toplevel"], {
+        cwd: repositoryRoot,
+      }),
+      execute(
+        "git",
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        { cwd: repositoryRoot },
+      ),
+    ]);
+    if (
+      (await realpath(topLevel.trim())) !== (await realpath(repositoryRoot)) ||
+      !upstream.trim().startsWith("origin/")
+    ) {
+      throw new Error("not the tracked organization clone root");
+    }
+    return repositoryRoot;
+  } catch {
+    throw new TypeError(
+      `Blueprint repository '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
+    );
+  }
+};
+
 export const validateTimeoutApplicationConfiguration = (
   configuration: ProductionConfiguration,
   timeoutApplication: ExecutableTimeoutApplicationConfiguration | undefined,
@@ -282,7 +318,10 @@ export const loadDeploymentConfiguration = async (
     validateTimeoutApplicationConfiguration(validated, timeoutApplication);
     await preflightExecutable("providerUsage", providerUsage);
     await preflightExecutable("session.timeoutApplication", timeoutApplication);
+    const blueprintsRepositoryRoot =
+      await preflightBlueprintRepository(directory);
     return {
+      blueprintsRepositoryRoot,
       configuration: validated,
       configurationDirectory: directory,
       configurationPath,

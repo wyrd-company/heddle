@@ -137,6 +137,7 @@ export class SyntheticT3 implements ProductionT3Client {
 }
 
 export type ProductionFixture = {
+  blueprintsRepositoryRoot: string;
   cleanup(): Promise<void>;
   configuration: ProductionConfiguration;
   root: string;
@@ -149,13 +150,17 @@ export const prepareProductionFixture =
   async (): Promise<ProductionFixture> => {
     const root = await mkdtemp(join(tmpdir(), "heddle-production-"));
     const repositoryRoot = join(root, "sample-repository");
+    const blueprintsRepositoryRoot = join(root, "blueprint-repository");
+    const blueprintsRemote = join(root, "blueprint-origin.git");
     const boardDirectory = join(root, "sample-board");
     const stateDirectory = join(root, "state");
-    await mkdir(join(repositoryRoot, "blueprints"), { recursive: true });
+    await mkdir(join(blueprintsRepositoryRoot, "blueprints"), {
+      recursive: true,
+    });
     await mkdir(join(repositoryRoot, "handoff-templates"), { recursive: true });
     await mkdir(join(repositoryRoot, "todo-templates"), { recursive: true });
     await writeFile(
-      join(repositoryRoot, "blueprints", "sample.json"),
+      join(blueprintsRepositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
         $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
         relationships: {
@@ -249,13 +254,9 @@ export const prepareProductionFixture =
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: repositoryRoot,
     });
-    await execute(
-      "git",
-      ["add", "blueprints", "handoff-templates", "todo-templates"],
-      {
-        cwd: repositoryRoot,
-      },
-    );
+    await execute("git", ["add", "handoff-templates", "todo-templates"], {
+      cwd: repositoryRoot,
+    });
     await execute(
       "git",
       [
@@ -269,6 +270,39 @@ export const prepareProductionFixture =
         "Add sample lifecycle",
       ],
       { cwd: repositoryRoot },
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute("git", ["add", "blueprints"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add sample lifecycle",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    await execute("git", ["init", "--quiet", "--bare", blueprintsRemote], {
+      cwd: root,
+    });
+    await execute("git", ["remote", "add", "origin", blueprintsRemote], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      ["push", "--quiet", "--set-upstream", "origin", "main"],
+      {
+        cwd: blueprintsRepositoryRoot,
+      },
     );
     await mkdir(join(boardDirectory, "tasks"), { recursive: true });
     await writeFile(
@@ -319,6 +353,7 @@ next_id: 1
     );
     const taskId = (JSON.parse(created.stdout) as { id: number }).id;
     return {
+      blueprintsRepositoryRoot,
       cleanup: () => rm(root, { force: true, recursive: true }),
       root,
       taskId,

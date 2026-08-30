@@ -26,10 +26,11 @@ describe("production composition", () => {
   };
 
   it("releases a full production WIP gate on a later serialized pass", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     configuration.pacing.maxConcurrentSessions = 1;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -75,11 +76,12 @@ describe("production composition", () => {
   });
 
   it("releases a closed provider window on a later serialized pass", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     configuration.pacing.providerBudgets = { codex: { usageLimit: 1 } };
     let used = 1;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used, windowStartedAt: Date.now() }),
@@ -107,8 +109,9 @@ describe("production composition", () => {
   });
 
   it("persists configured over-threshold attention and ignores under-threshold work", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -139,6 +142,7 @@ describe("production composition", () => {
     await composition.close();
 
     const restarted = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -151,7 +155,7 @@ describe("production composition", () => {
   });
 
   it("preserves epic, blocked, absent-dependency, standalone, and write boundaries", async () => {
-    const { configuration, root } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, root } = await prepare();
     configuration.pacing.maxConcurrentSessions = 10;
     const create = async (arguments_: string[]): Promise<number> => {
       const result = await execute(
@@ -249,6 +253,7 @@ describe("production composition", () => {
       { cwd: root },
     );
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),

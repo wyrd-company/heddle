@@ -28,6 +28,7 @@ import {
   type LifecycleBlueprint,
   type LifecycleEffect,
 } from "../engine/index.js";
+import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import {
   claimTodoAssignment,
@@ -1436,10 +1437,7 @@ describe("workflow MCP HTTP server", () => {
   it("keeps an earlier session replay-only when the same wait stage recurs", async () => {
     const fixture = await makeFixture();
     const blueprintPath = "blueprints/standard-delivery.json";
-    await copyFile(
-      join(cwd(), blueprintPath),
-      join(fixture.repositoryRoot, blueprintPath),
-    );
+    await writeDeliveryBlueprintFixture(fixture.repositoryRoot);
     await copyFile(
       join(cwd(), "handoff-templates/standard.md"),
       join(fixture.repositoryRoot, "handoff-templates/standard.md"),

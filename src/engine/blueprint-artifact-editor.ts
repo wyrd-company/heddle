@@ -17,6 +17,7 @@ import { isBlueprintArtifactId } from "./blueprint-artifact.js";
 import { preserveUnchangedGraphBytes } from "./blueprint-graph-serialization.js";
 import { BlueprintValidationError } from "./errors.js";
 import { GitBlueprintStore } from "./git-blueprint-store.js";
+import type { BlueprintRepositoryTransaction } from "./git-blueprint-store.js";
 import type {
   LifecycleBlueprint,
   LifecycleEdge,
@@ -118,14 +119,17 @@ const schemaError = (error: ErrorObject): string => {
 export class BlueprintArtifactEditor {
   private readonly effects: Record<string, LifecycleEffect>;
   private readonly store: GitBlueprintStore;
+  private readonly transaction: BlueprintRepositoryTransaction;
   private validator?: ValidateFunction;
 
   constructor(options: {
     effects: Record<string, LifecycleEffect>;
     repositoryRoot: string;
+    transaction?: BlueprintRepositoryTransaction;
   }) {
     this.effects = { ...options.effects };
     this.store = new GitBlueprintStore(options.repositoryRoot);
+    this.transaction = options.transaction ?? {};
   }
 
   async load(artifactId: string): Promise<BlueprintArtifactRevision> {
@@ -179,6 +183,7 @@ export class BlueprintArtifactEditor {
       path,
       input.expectedBlobHash,
       serialized,
+      this.transaction,
     );
     return {
       blobHash: saved.blobHash,

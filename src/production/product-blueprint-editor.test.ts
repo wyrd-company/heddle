@@ -3,81 +3,109 @@
 //   verifies: heddle
 // ---
 
-import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ProductConfiguration } from "./configuration.js";
-import { ProductBlueprintArtifactEditor } from "./product-blueprint-editor.js";
+import { BlueprintPushError } from "./blueprint-repository.js";
+import {
+  prepareBlueprintRepositoryFixture,
+  type BlueprintRepositoryFixture,
+  executeGit,
+} from "./blueprint-repository.test-support.js";
+import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
 
-const execute = promisify(execFile);
-const scratch: string[] = [];
+describe("organization blueprint artifact editor", () => {
+  let fixture: BlueprintRepositoryFixture | undefined;
 
-afterEach(async () => {
-  await Promise.all(
-    scratch.splice(0).map((path) => rm(path, { force: true, recursive: true })),
-  );
-});
-
-const repository = async (root: string, name: string): Promise<string> => {
-  const path = join(root, name);
-  await mkdir(join(path, "blueprints"), { recursive: true });
-  await execute("git", ["init", "--quiet"], { cwd: path });
-  return path;
-};
-
-const products = (
-  roots: Array<{ name: string; repositoryRoot: string }>,
-): ProductConfiguration[] => [{ name: "Sample product", repos: roots }];
-
-describe("ProductBlueprintArtifactEditor", () => {
-  it("loads the one configured repository that contains the artifact", async () => {
-    const root = await mkdtemp(join(tmpdir(), "heddle-product-editor-"));
-    scratch.push(root);
-    const alpha = await repository(root, "sample-alpha");
-    const beta = await repository(root, "sample-beta");
-    await writeFile(
-      join(beta, "blueprints", "sample-process.json"),
-      '{"nodes":[],"edges":[]}\n',
-    );
-
-    await expect(
-      new ProductBlueprintArtifactEditor({
-        effects: {},
-        products: products([
-          { name: "sample-alpha", repositoryRoot: alpha },
-          { name: "sample-beta", repositoryRoot: beta },
-        ]),
-      }).load("sample-process"),
-    ).resolves.toMatchObject({ path: "blueprints/sample-process.json" });
+  afterEach(async () => {
+    await fixture?.cleanup();
+    fixture = undefined;
   });
 
-  it("does not hide an invalid matching artifact in another repository", async () => {
-    const root = await mkdtemp(join(tmpdir(), "heddle-product-editor-"));
-    scratch.push(root);
-    const alpha = await repository(root, "sample-alpha");
-    const beta = await repository(root, "sample-beta");
-    await writeFile(
-      join(alpha, "blueprints", "sample-process.json"),
-      "not-json\n",
+  const editor = async () => {
+    fixture = await prepareBlueprintRepositoryFixture();
+    return new OrganizationBlueprintArtifactEditor({
+      effects: {
+        finish: async () => ({}),
+        prepare: async () => ({}),
+      },
+      repository: fixture.repository,
+    });
+  };
+
+  it("commits and pushes one validated edit through the central repository", async () => {
+    const subject = await editor();
+    const loaded = await subject.load("sample-process");
+
+    const saved = await subject.save({
+      artifactId: "sample-process",
+      edges: loaded.blueprint.edges,
+      expectedBlobHash: loaded.blobHash,
+      nodes: loaded.blueprint.nodes,
+      positions: { inspect: { x: 120, y: 80 } },
+    });
+
+    const { stdout: localHead } = await executeGit(
+      "git",
+      ["rev-parse", "HEAD"],
+      { cwd: fixture!.repositoryRoot },
     );
-    await writeFile(
-      join(beta, "blueprints", "sample-process.json"),
-      '{"nodes":[],"edges":[]}\n',
+    const { stdout: remoteHead } = await executeGit(
+      "git",
+      ["rev-parse", "origin/main"],
+      { cwd: fixture!.repositoryRoot },
+    );
+    expect(localHead).toBe(remoteHead);
+    expect(saved.positions).toEqual({ inspect: { x: 120, y: 80 } });
+    expect(fixture!.attention.list()).toEqual([]);
+  });
+
+  it("retains the local commit and raises one durable attention when push fails", async () => {
+    const subject = await editor();
+    const loaded = await subject.load("sample-process");
+    const before = (
+      await executeGit("git", ["rev-parse", "HEAD"], {
+        cwd: fixture!.repositoryRoot,
+      })
+    ).stdout.trim();
+    await executeGit(
+      "git",
+      ["remote", "set-url", "origin", join(fixture!.root, "absent-origin.git")],
+      { cwd: fixture!.repositoryRoot },
     );
 
-    await expect(
-      new ProductBlueprintArtifactEditor({
-        effects: {},
-        products: products([
-          { name: "sample-alpha", repositoryRoot: alpha },
-          { name: "sample-beta", repositoryRoot: beta },
-        ]),
-      }).load("sample-process"),
-    ).rejects.toThrow("Blueprint is not valid JSON");
+    const error = await subject
+      .save({
+        artifactId: "sample-process",
+        edges: loaded.blueprint.edges,
+        expectedBlobHash: loaded.blobHash,
+        nodes: loaded.blueprint.nodes,
+        positions: { inspect: { x: 240, y: 160 } },
+      })
+      .catch((value: unknown) => value);
+
+    expect(error).toBeInstanceOf(BlueprintPushError);
+    const after = (
+      await executeGit("git", ["rev-parse", "HEAD"], {
+        cwd: fixture!.repositoryRoot,
+      })
+    ).stdout.trim();
+    expect(after).not.toBe(before);
+    expect(
+      await readFile(
+        join(fixture!.repositoryRoot, "blueprints", "sample-process.json"),
+        "utf8",
+      ),
+    ).toContain('"x": 240');
+    expect(fixture!.attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: `blueprint-repository:push:${after}`,
+        kind: "blueprint-repository",
+        message: expect.stringContaining(after),
+        scope: "all",
+      }),
+    ]);
   });
 });

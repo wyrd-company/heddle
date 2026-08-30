@@ -53,9 +53,10 @@ import {
   productionSessionTargets,
 } from "./subagent-composition.js";
 import { ProductionAttentionActions } from "./attention-actions.js";
+import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
-import { ProductBlueprintArtifactEditor } from "./product-blueprint-editor.js";
+import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
 import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
 
@@ -69,6 +70,7 @@ export type ProductionCompositionOptions = {
   afterPushoverTransportSuccess?: (
     message: Parameters<PushoverTransport["send"]>[0],
   ) => Promise<void> | void;
+  blueprintsRepositoryRoot: string;
   configuration: ProductionConfiguration;
   onSchedulerError?: (error: unknown) => void;
   providerUsage: ProviderUsageSource;
@@ -114,6 +116,11 @@ export const createProductionComposition = (
     const resolveSystemPrompt =
       options.resolveSystemPrompt ?? resolveBuiltInSystemPrompt;
     const attention = new DurableAttentionQueue(persistence);
+    const blueprintRepository = new OrganizationBlueprintRepository(
+      resolve(options.blueprintsRepositoryRoot),
+      persistence,
+      attention,
+    );
     const pushover = new DurablePushoverNotifier(
       persistence,
       configuration.pushover,
@@ -127,7 +134,8 @@ export const createProductionComposition = (
     const lifecycle = new ProductionLifecycleRouter({
       effects,
       persistence,
-      products: configuration.products,
+      repositoryRoot: blueprintRepository.repositoryRoot,
+      sourceRef: blueprintRepository.sourceRef,
     });
     const projects = new EpicProjectCoordinator(
       configuration,
@@ -144,6 +152,7 @@ export const createProductionComposition = (
       attention,
       t3,
       resolveSystemPrompt,
+      blueprintRepository.repositoryRoot,
     );
     const escalation = new EscalationCoordinator({
       attention: {
@@ -206,6 +215,7 @@ export const createProductionComposition = (
     });
     const coordinator = createProductionSubagentCoordinator({
       attention,
+      blueprintsRepositoryRoot: blueprintRepository.repositoryRoot,
       board,
       configuration,
       observer,
@@ -225,7 +235,10 @@ export const createProductionComposition = (
       attention,
       board,
       instances,
-      lifecycleResolver: new ProductLifecycleResolver(routing),
+      lifecycleResolver: new ProductLifecycleResolver(
+        routing,
+        blueprintRepository,
+      ),
       pacing: {
         evaluator: pacing,
       },
@@ -235,6 +248,7 @@ export const createProductionComposition = (
       cadenceMilliseconds: configuration.cadenceMilliseconds,
       onError: options.onSchedulerError,
       pass: async () => {
+        await blueprintRepository.synchronize();
         const before = await board.readBoard();
         await projects.reconcile(before);
         routing.update(before);
@@ -263,29 +277,15 @@ export const createProductionComposition = (
     return {
       attention,
       board,
-      blueprintEditor: new ProductBlueprintArtifactEditor({
+      blueprintEditor: new OrganizationBlueprintArtifactEditor({
         effects,
-        products: configuration.products,
+        repository: blueprintRepository,
       }),
       consoleActions,
       consoleState: new ProductionConsoleState(
         persistence,
         attention,
-        (instanceId) => {
-          const runtime = persistence!
-            .listReconcilerRuntime()
-            .find((candidate) => candidate.instanceId === instanceId);
-          const repositoryName = runtime?.lifecycleRepositoryName;
-          const repository = configuration.products
-            .flatMap(({ repos }) => repos)
-            .find(({ name }) => name === repositoryName);
-          if (repository === undefined) {
-            throw new Error(
-              `Instance '${instanceId}' has no configured lifecycle repository`,
-            );
-          }
-          return repository.repositoryRoot;
-        },
+        blueprintRepository.repositoryRoot,
       ),
       escalation,
       lifecycle,

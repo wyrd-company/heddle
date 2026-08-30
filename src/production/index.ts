@@ -24,6 +24,11 @@ export {
 } from "./durable-adapters.js";
 export { ProductionInstanceController } from "./instance-controller.js";
 export {
+  BlueprintPushError,
+  OrganizationBlueprintRepository,
+  type BlueprintRepositoryAttention,
+} from "./blueprint-repository.js";
+export {
   heddleSessionTitle,
   MAXIMUM_SESSION_TITLE_LENGTH,
 } from "./session-title.js";

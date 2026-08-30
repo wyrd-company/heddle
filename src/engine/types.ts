@@ -73,6 +73,7 @@ export interface LifecycleEngineOptions {
   effects: Record<string, LifecycleEffect>;
   persistence: LifecyclePersistence;
   repositoryRoot: string;
+  sourceRef?: string;
 }
 
 export interface StartLifecycleInput {

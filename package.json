@@ -17,6 +17,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "browser:qualification": "node scripts/browser/qualify-console.mjs",
+    "blueprints:validate": "node scripts/validate-blueprints.mjs",
     "build": "tsc --project tsconfig.json && tsc --project tsconfig.viewer.json && vite build",
     "test": "vitest run --config vitest.config.ts",
     "lint": "eslint src bin scripts/deployment scripts/browser eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer scripts/deployment scripts/browser",

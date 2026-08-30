@@ -132,6 +132,7 @@ const t3 = {
 } satisfies ProductionT3Client;
 
 const composition = createProductionComposition({
+  blueprintsRepositoryRoot: join(root, "blueprint-repository"),
   configuration,
   providerUsage: {
     readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),

@@ -102,6 +102,7 @@ describe("configured production composition", () => {
       },
     };
     const loaded: LoadedDeploymentConfiguration = {
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration,
       configurationDirectory: commandDirectory,
       configurationPath: join(commandDirectory, "config.yml"),
@@ -140,6 +141,7 @@ describe("configured production composition", () => {
       access(fixture.configuration.stateDirectory),
     ).rejects.toMatchObject({ code: "ENOENT" });
     const loaded: LoadedDeploymentConfiguration = {
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
@@ -180,6 +182,7 @@ describe("configured production composition", () => {
     await writeFile(join(fixture.root, "heddle.md"), override);
     const t3 = new SyntheticT3();
     const loaded: LoadedDeploymentConfiguration = {
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
@@ -206,6 +209,7 @@ describe("configured production composition", () => {
     await mkdir(join(fixture.root, "heddle.md"));
     const t3 = new SyntheticT3();
     const loaded: LoadedDeploymentConfiguration = {
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),

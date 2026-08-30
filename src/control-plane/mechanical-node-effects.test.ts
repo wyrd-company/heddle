@@ -4,14 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import {
-  copyFile,
-  lstat,
-  mkdir,
-  mkdtemp,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -19,6 +12,7 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { LifecycleEngine, UnexpectedLandingError } from "../engine/index.js";
+import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { ensureWorktree } from "./worktree-creator.js";
 import {
@@ -114,11 +108,7 @@ const makeLifecycle = async (
 ) => {
   const fixture = await makeChange();
   fixture.change.taskId = taskId;
-  await mkdir(join(fixture.sourcePath, "blueprints"));
-  await copyFile(
-    "blueprints/standard-delivery.json",
-    join(fixture.sourcePath, "blueprints", "standard-delivery.json"),
-  );
+  await writeDeliveryBlueprintFixture(fixture.sourcePath);
   await git(fixture.sourcePath, "add", "blueprints/standard-delivery.json");
   await git(fixture.sourcePath, "commit", "--quiet", "-m", "add lifecycle");
   const persistence = new SqlitePersistence({

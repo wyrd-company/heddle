@@ -32,6 +32,7 @@ import type { LifecycleBlueprint } from "./types.js";
 import { BlueprintValidationError } from "./errors.js";
 import { BlueprintEditConflictError } from "./errors.js";
 import { acquireRepositoryWriterLease } from "./repository-writer-lease.js";
+import type { RepositoryWriterLease } from "./repository-writer-lease.js";
 
 const execFileAsync = promisify(execFile);
 const gitObjectId = /^[0-9a-f]{40,64}$/;
@@ -99,11 +100,21 @@ export interface WorkingBlueprintArtifact {
   serialized: string;
 }
 
+export interface BlueprintRepositoryTransaction {
+  afterReplace?(
+    artifact: WorkingBlueprintArtifact,
+    lease: RepositoryWriterLease,
+  ): Promise<void>;
+  beforeReplace?(lease: RepositoryWriterLease): Promise<void>;
+}
+
 export class GitBlueprintStore {
   private readonly repositoryRoot: string;
+  private readonly sourceRef?: string;
 
-  constructor(repositoryRoot: string) {
+  constructor(repositoryRoot: string, options: { sourceRef?: string } = {}) {
     this.repositoryRoot = resolve(repositoryRoot);
+    this.sourceRef = options.sourceRef;
   }
 
   async pin(path: string): Promise<{
@@ -112,11 +123,10 @@ export class GitBlueprintStore {
     path: string;
   }> {
     const inspected = await this.inspect(path);
-    const blobHash = await this.hashSerialized(
-      inspected.serialized,
-      inspected.path,
-      true,
-    );
+    const blobHash =
+      this.sourceRef === undefined
+        ? await this.hashSerialized(inspected.serialized, inspected.path, true)
+        : inspected.blobHash;
     await execFileAsync(
       "git",
       ["update-ref", `refs/heddle/blueprints/${blobHash}`, blobHash],
@@ -134,12 +144,109 @@ export class GitBlueprintStore {
   }
 
   async inspect(path: string): Promise<WorkingBlueprintArtifact> {
+    if (this.sourceRef !== undefined) return this.inspectFromSourceRef(path);
     const directory = await this.openBlueprintDirectory(path);
     try {
       return await this.inspectFromDirectory(directory);
     } finally {
       await directory.directory.close();
     }
+  }
+
+  async has(path: string): Promise<boolean> {
+    const normalizedPath = this.normalizeArtifactPath(path);
+    if (this.sourceRef === undefined) {
+      try {
+        await lstat(join(this.repositoryRoot, normalizedPath));
+        await this.inspect(normalizedPath);
+        return true;
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    }
+    const commit = await this.resolveSourceCommit();
+    try {
+      await execFileAsync(
+        "git",
+        ["cat-file", "-e", `${commit}:${normalizedPath}`],
+        { cwd: this.repositoryRoot },
+      );
+      return true;
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === 128
+      ) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private async inspectFromSourceRef(
+    path: string,
+  ): Promise<WorkingBlueprintArtifact> {
+    const normalizedPath = this.normalizeArtifactPath(path);
+    const commit = await this.resolveSourceCommit();
+    const { stdout: objectIdOutput } = await execFileAsync(
+      "git",
+      [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        `${commit}:${normalizedPath}`,
+      ],
+      { cwd: this.repositoryRoot },
+    );
+    const blobHash = objectIdOutput.trim();
+    if (!gitObjectId.test(blobHash)) {
+      throw new BlueprintValidationError(
+        "Blueprint source ref did not resolve to a git blob",
+      );
+    }
+    const { stdout: serialized } = await execFileAsync(
+      "git",
+      ["cat-file", "blob", blobHash],
+      { cwd: this.repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
+    );
+    const artifactId = artifactIdFromPath(normalizedPath);
+    return {
+      artifact: JSON.parse(serialized) as Record<string, unknown>,
+      blobHash,
+      blueprint: parseBlueprint(serialized, artifactId),
+      path: normalizedPath,
+      serialized,
+    };
+  }
+
+  private async resolveSourceCommit(): Promise<string> {
+    const { stdout } = await execFileAsync(
+      "git",
+      [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        `${this.sourceRef!}^{commit}`,
+      ],
+      { cwd: this.repositoryRoot },
+    );
+    const commit = stdout.trim();
+    if (!gitObjectId.test(commit)) {
+      throw new BlueprintValidationError(
+        "Blueprint source ref did not resolve to a git commit",
+      );
+    }
+    return commit;
   }
 
   private async inspectFromDirectory(
@@ -176,6 +283,7 @@ export class GitBlueprintStore {
     path: string,
     expectedBlobHash: string,
     serialized: string,
+    transaction: BlueprintRepositoryTransaction = {},
   ): Promise<WorkingBlueprintArtifact> {
     if (!gitObjectId.test(expectedBlobHash)) {
       throw new BlueprintValidationError(
@@ -185,6 +293,8 @@ export class GitBlueprintStore {
     const lease = await acquireRepositoryWriterLease(this.repositoryRoot);
     let replaced: WorkingBlueprintArtifact;
     try {
+      await lease.assertOwned();
+      await transaction.beforeReplace?.(lease);
       const directory = await this.openBlueprintDirectory(path);
       try {
         const current = await this.inspectFromDirectory(directory);
@@ -215,6 +325,8 @@ export class GitBlueprintStore {
           await rename(temporaryPath, directory.artifactPath);
           await directory.directory.sync();
           replaced = await this.inspectFromDirectory(directory);
+          await lease.assertOwned();
+          await transaction.afterReplace?.(replaced, lease);
         } finally {
           await rm(temporaryPath, { force: true });
         }

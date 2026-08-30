@@ -90,6 +90,43 @@ const fixture = (root: string): ProductionConfiguration => ({
 
 const execute = promisify(execFile);
 
+const prepareBlueprintRepository = async (root: string): Promise<string> => {
+  const repositoryRoot = join(root, "blueprints");
+  const remote = join(root, "blueprints-origin.git");
+  await mkdir(repositoryRoot);
+  await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+    cwd: repositoryRoot,
+  });
+  await writeFile(join(repositoryRoot, "README.md"), "# Sample artifacts\n");
+  await execute("git", ["add", "README.md"], { cwd: repositoryRoot });
+  await execute(
+    "git",
+    [
+      "-c",
+      "user.name=Fixture User",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "Add sample artifacts",
+    ],
+    { cwd: repositoryRoot },
+  );
+  await execute("git", ["init", "--quiet", "--bare", remote], { cwd: root });
+  await execute("git", ["remote", "add", "origin", remote], {
+    cwd: repositoryRoot,
+  });
+  await execute(
+    "git",
+    ["push", "--quiet", "--set-upstream", "origin", "main"],
+    {
+      cwd: repositoryRoot,
+    },
+  );
+  return repositoryRoot;
+};
+
 describe("deployed configuration directory", () => {
   let root = "";
 
@@ -135,10 +172,11 @@ describe("deployed configuration directory", () => {
     await writeFile(join(root, "config.yml"), stringify(fixture(root)));
     await writeFile(join(root, "heddle.md"), "resolved only at dispatch\n");
     await writeFile(join(root, "operator-note.txt"), "ignored\n");
-    await mkdir(join(root, "blueprints"));
+    await prepareBlueprintRepository(root);
 
     await expect(loadDeploymentConfiguration(root)).resolves.toEqual({
       configuration: fixture(root),
+      blueprintsRepositoryRoot: join(root, "blueprints"),
       configurationDirectory: root,
       configurationPath: join(root, "config.yml"),
       server: { host: "127.0.0.1", port: 3774 },
@@ -147,6 +185,7 @@ describe("deployed configuration directory", () => {
 
   it("loads explicit server settings without reading deprecated HEDDLE variables", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
     await writeFile(
       join(root, "config.yml"),
       stringify({
@@ -162,8 +201,26 @@ describe("deployed configuration directory", () => {
     expect(loaded.configuration.stateDirectory).toBe(join(root, "state"));
   });
 
+  it("fails closed when the derived blueprint directory is absent or not the tracked clone root", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const configurationPath = join(root, "config.yml");
+    const repositoryRoot = join(root, "blueprints");
+    await writeFile(configurationPath, stringify(fixture(root)));
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `Blueprint repository '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
+    );
+
+    await mkdir(repositoryRoot);
+    await writeFile(join(repositoryRoot, "sample.txt"), "not a clone\n");
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `Blueprint repository '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
+    );
+  });
+
   it("rejects an ephemeral port before the launcher projects Caddy settings", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
     const path = join(root, "config.yml");
     await writeFile(
       path,
@@ -189,6 +246,7 @@ describe("deployed configuration directory", () => {
 
   it("projects only nonsecret root-launch settings", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
     await writeFile(join(root, "config.yml"), stringify(fixture(root)));
 
     const settings = deploymentLaunchSettings(
@@ -211,6 +269,7 @@ describe("deployed configuration directory", () => {
 
   it("prints the same nonsecret settings through the packaged entry point", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
     const configuration = fixture(root);
     await writeFile(join(root, "config.yml"), stringify(configuration));
 
@@ -264,6 +323,7 @@ describe("deployed configuration directory", () => {
 
   it("requires one available executable adapter exactly when provider budgets exist", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
     const path = join(root, "config.yml");
     const budgeted = fixture(root);
     budgeted.pacing.providerBudgets = { codex: { usageLimit: 80 } };
@@ -320,6 +380,7 @@ describe("deployed configuration directory", () => {
 
   it("requires a preflighted timeout application exactly for codex and claudeAgent", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
     const path = join(root, "config.yml");
     const executable = join(root, "timeout-application-command");
     await writeFile(executable, "#!/bin/sh\nexit 0\n");

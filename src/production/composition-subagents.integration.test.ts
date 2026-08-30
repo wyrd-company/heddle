@@ -50,6 +50,7 @@ describe("production subagent composition", () => {
     const systemPrompt = "# Operator session guidance";
     const resolveSystemPrompt = vi.fn(async () => systemPrompt);
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -209,6 +210,7 @@ describe("production subagent composition", () => {
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -270,6 +272,7 @@ describe("production subagent composition", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),

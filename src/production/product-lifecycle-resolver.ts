@@ -13,6 +13,7 @@ import {
   ProductRoutingCatalog,
   TaskRoutingAttentionError,
 } from "./product-routing.js";
+import type { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 
 const routingAttention = (
   task: BoardTask,
@@ -27,57 +28,28 @@ const routingAttention = (
 });
 
 export class ProductLifecycleResolver {
-  constructor(private readonly routing: ProductRoutingCatalog) {}
+  constructor(
+    private readonly routing: ProductRoutingCatalog,
+    private readonly repository: OrganizationBlueprintRepository,
+  ) {}
 
   async resolve(task: BoardTask): Promise<LifecycleResolution> {
-    let route;
     try {
-      route = this.routing.route(task);
+      this.routing.route(task);
     } catch (error) {
       if (error instanceof TaskRoutingAttentionError) {
         return routingAttention(task, error);
       }
       throw error;
     }
-    const resolutions = await Promise.all(
-      route.repositories.map(async (repository) => ({
-        repository,
-        resolution: await new LifecycleResolver(
-          repository.repositoryRoot,
-        ).resolve(task),
-      })),
-    );
-    const declarationAttention = resolutions.find(
-      ({ resolution }) =>
-        resolution.kind === "attention-required" &&
-        resolution.attention.code !== "lifecycle-blueprint-not-found",
-    );
-    if (declarationAttention !== undefined) {
-      return declarationAttention.resolution;
-    }
-    const resolved = resolutions.filter(
-      (
-        candidate,
-      ): candidate is typeof candidate & {
-        resolution: Extract<LifecycleResolution, { kind: "resolved" }>;
-      } => candidate.resolution.kind === "resolved",
-    );
-    if (resolved.length === 0) return resolutions[0]!.resolution;
-    if (resolved.length > 1) {
-      return {
-        attention: {
-          artifactId: resolved[0]!.resolution.artifactId,
-          code: "lifecycle-blueprint-ambiguous",
-          message: `Task ${task.id} lifecycle exists in more than one declared repository`,
-          taskId: task.id,
-        },
-        kind: "attention-required",
-      };
-    }
-    const selected = resolved[0]!;
-    const pinned = await new GitBlueprintStore(
-      selected.repository.repositoryRoot,
-    ).pin(selected.resolution.blueprintPath);
+    const resolution = await new LifecycleResolver(
+      this.repository.repositoryRoot,
+      { sourceRef: this.repository.sourceRef },
+    ).resolve(task);
+    if (resolution.kind === "attention-required") return resolution;
+    const pinned = await new GitBlueprintStore(this.repository.repositoryRoot, {
+      sourceRef: this.repository.sourceRef,
+    }).pin(resolution.blueprintPath);
     try {
       for (const node of pinned.blueprint.nodes.filter(
         ({ uses }) => uses === "wait",
@@ -90,9 +62,6 @@ export class ProductLifecycleResolver {
       }
       throw error;
     }
-    return {
-      ...selected.resolution,
-      repositoryName: selected.repository.name,
-    };
+    return resolution;
   }
 }

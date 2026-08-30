@@ -9,11 +9,15 @@ import type { EscalationAttention } from "../mcp-server/index.js";
 import type { SessionObservationAttention } from "../control-plane/index.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
 import type { ReconcilerAttention } from "../reconciler/index.js";
+import type { BlueprintRepositoryAttention } from "./blueprint-repository.js";
 import type { PushoverConfiguration } from "./configuration.js";
 import { projectProductionAttention } from "./attention-projection.js";
 
 export type DurableAttention =
-  EscalationAttention | ReconcilerAttention | SessionObservationAttention;
+  | BlueprintRepositoryAttention
+  | EscalationAttention
+  | ReconcilerAttention
+  | SessionObservationAttention;
 
 export class DurableAttentionQueue {
   public constructor(private readonly persistence: SqlitePersistence) {}

@@ -3,86 +3,28 @@
 //   verifies: heddle
 // ---
 
-import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import type { LifecycleBlueprint } from "../engine/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
+import {
+  executeGit,
+  prepareBlueprintRepositoryFixture,
+  type BlueprintRepositoryFixture,
+} from "./blueprint-repository.test-support.js";
 import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
-
-const execute = promisify(execFile);
-const scratch: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    scratch.splice(0).map((path) => rm(path, { recursive: true })),
-  );
-});
-
-const repository = async (
-  root: string,
-  name: string,
-  requiredRepository: string,
-): Promise<string> => {
-  const path = join(root, name);
-  await mkdir(join(path, "blueprints"), { recursive: true });
-  const blueprint: LifecycleBlueprint = {
-    edges: [
-      {
-        condition: "result.output.dispositions.complete",
-        description: "Complete the sample stage.",
-        disposition: "complete",
-        source: "prepare",
-        target: "finish",
-      },
-    ],
-    id: "sample",
-    nodes: [
-      {
-        handoff: "standard",
-        id: "prepare",
-        repo: requiredRepository,
-        "todo-template": "sample-stage",
-        tools: ["sample_tool"],
-        uses: "wait",
-      },
-      { id: "finish", uses: "sample-effect" },
-    ],
-  };
-  const artifact = { ...blueprint } as Partial<LifecycleBlueprint>;
-  delete artifact.id;
-  await writeFile(
-    join(path, "blueprints", "sample.json"),
-    `${JSON.stringify(artifact, null, 2)}\n`,
-  );
-  await execute("git", ["init", "--quiet", "--initial-branch=main"], {
-    cwd: path,
-  });
-  await execute("git", ["config", "user.email", "test@example.invalid"], {
-    cwd: path,
-  });
-  await execute("git", ["config", "user.name", "Test Operator"], { cwd: path });
-  await execute("git", ["add", "."], { cwd: path });
-  await execute("git", ["commit", "--quiet", "-m", "add sample blueprint"], {
-    cwd: path,
-  });
-  return path;
-};
 
 const task = (): BoardTask => ({
   blocked: false,
   dependencies: [],
   id: 101,
-  lifecycle: "sample",
+  lifecycle: "sample-process",
   priority: "medium",
-  product: "Sample product",
+  product: "Sample collection",
   repos: ["sample-alpha"],
   status: "todo",
   tags: [],
@@ -90,20 +32,46 @@ const task = (): BoardTask => ({
 });
 
 describe("ProductLifecycleResolver", () => {
-  it("routes an undeclared stage repository to attention before dispatch", async () => {
-    const root = await mkdtemp(join(tmpdir(), "heddle-product-lifecycle-"));
-    scratch.push(root);
-    const alpha = await repository(root, "sample-alpha", "sample-beta");
+  let fixture: BlueprintRepositoryFixture | undefined;
+
+  afterEach(async () => {
+    await fixture?.cleanup();
+    fixture = undefined;
+  });
+
+  const prepare = async (requiredRepository: string) => {
+    fixture = await prepareBlueprintRepositoryFixture();
+    const artifactPath = join(
+      fixture.repositoryRoot,
+      "blueprints",
+      "sample-process.json",
+    );
+    const artifact = JSON.parse(await readFile(artifactPath, "utf8")) as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    artifact.nodes.find(({ uses }) => uses === "wait")!.repo =
+      requiredRepository;
+    await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`);
+    await executeGit("git", ["add", "blueprints/sample-process.json"], {
+      cwd: fixture.repositoryRoot,
+    });
+    await executeGit("git", ["commit", "--quiet", "-m", "Route sample stage"], {
+      cwd: fixture.repositoryRoot,
+    });
+    await executeGit("git", ["push", "--quiet"], {
+      cwd: fixture.repositoryRoot,
+    });
+    const alpha = join(fixture.root, "sample-alpha");
+    const beta = join(fixture.root, "sample-beta");
+    await mkdir(join(alpha, "blueprints"), { recursive: true });
+    await mkdir(beta);
     const configuration = {
       products: [
         {
-          name: "Sample product",
+          name: "Sample collection",
           repos: [
             { name: "sample-alpha", repositoryRoot: alpha },
-            {
-              name: "sample-beta",
-              repositoryRoot: join(root, "sample-beta"),
-            },
+            { name: "sample-beta", repositoryRoot: beta },
           ],
         },
       ],
@@ -111,12 +79,33 @@ describe("ProductLifecycleResolver", () => {
     const routing = new ProductRoutingCatalog(configuration);
     const selected = task();
     routing.update([selected]);
+    return {
+      alpha,
+      resolver: new ProductLifecycleResolver(routing, fixture.repository),
+      selected,
+    };
+  };
 
-    await expect(
-      new ProductLifecycleResolver(routing).resolve(selected),
-    ).resolves.toMatchObject({
+  it("routes an undeclared stage repository to attention before dispatch", async () => {
+    const { resolver, selected } = await prepare("sample-beta");
+
+    await expect(resolver.resolve(selected)).resolves.toMatchObject({
       attention: { code: "stage-repository-undeclared", taskId: 101 },
       kind: "attention-required",
+    });
+  });
+
+  it("resolves only the central blueprint root even when a product repository carries a conflicting artifact", async () => {
+    const { alpha, resolver, selected } = await prepare("sample-alpha");
+    await writeFile(
+      join(alpha, "blueprints", "sample-process.json"),
+      "not valid json\n",
+    );
+
+    await expect(resolver.resolve(selected)).resolves.toEqual({
+      artifactId: "sample-process",
+      blueprintPath: "blueprints/sample-process.json",
+      kind: "resolved",
     });
   });
 });

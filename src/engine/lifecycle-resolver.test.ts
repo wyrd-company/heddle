@@ -6,17 +6,20 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cwd } from "node:process";
-
 import { afterEach, describe, expect, it } from "vitest";
 
+import { writeDeliveryBlueprintFixture } from "./lifecycle-blueprint.test-support.js";
 import { LifecycleResolver } from "./lifecycle-resolver.js";
 
 const temporaryDirectories: string[] = [];
 
-const repositoryFixture = async (): Promise<string> => {
+const repositoryFixture = async (withBlueprints = false): Promise<string> => {
   const repositoryRoot = await mkdtemp(join(tmpdir(), "lifecycle-resolver-"));
   temporaryDirectories.push(repositoryRoot);
+  if (withBlueprints) {
+    await writeDeliveryBlueprintFixture(repositoryRoot);
+    await writeDeliveryBlueprintFixture(repositoryRoot, "trivial");
+  }
   return repositoryRoot;
 };
 
@@ -30,7 +33,7 @@ afterEach(async () => {
 
 describe("LifecycleResolver", () => {
   it("resolves a lifecycle property to its blueprint artifact", async () => {
-    const resolver = new LifecycleResolver(cwd());
+    const resolver = new LifecycleResolver(await repositoryFixture(true));
 
     await expect(
       resolver.resolve({
@@ -46,7 +49,7 @@ describe("LifecycleResolver", () => {
   });
 
   it("uses the lifecycle tag when the property is absent", async () => {
-    const resolver = new LifecycleResolver(cwd());
+    const resolver = new LifecycleResolver(await repositoryFixture(true));
 
     await expect(
       resolver.resolve({ id: 102, tags: ["lifecycle:trivial"] }),
@@ -58,7 +61,7 @@ describe("LifecycleResolver", () => {
   });
 
   it("raises attention when no lifecycle property or tag exists", async () => {
-    const resolver = new LifecycleResolver(cwd());
+    const resolver = new LifecycleResolver(await repositoryFixture());
 
     await expect(
       resolver.resolve({
@@ -98,7 +101,7 @@ describe("LifecycleResolver", () => {
   });
 
   it("raises attention for ambiguous lifecycle tags", async () => {
-    const resolver = new LifecycleResolver(cwd());
+    const resolver = new LifecycleResolver(await repositoryFixture(true));
 
     await expect(
       resolver.resolve({
@@ -115,7 +118,7 @@ describe("LifecycleResolver", () => {
   });
 
   it("raises attention for an invalid lifecycle property", async () => {
-    const resolver = new LifecycleResolver(cwd());
+    const resolver = new LifecycleResolver(await repositoryFixture(true));
 
     await expect(
       resolver.resolve({ id: 106, lifecycle: "not_valid", tags: [] }),

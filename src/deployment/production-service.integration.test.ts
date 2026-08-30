@@ -3,12 +3,17 @@
 //   verifies: heddle
 // ---
 
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  execFile,
+  spawn,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { URL } from "node:url";
+import { promisify } from "node:util";
 
 import {
   Client,
@@ -19,6 +24,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
 
 import { prepareProductionFixture } from "../production/composition.test-support.js";
+
+const execute = promisify(execFile);
 
 const timeoutCommand = `
 import { appendFileSync, writeFileSync } from "node:fs";
@@ -99,6 +106,23 @@ describe("configured production service entry point", () => {
     const orderPath = join(fixture.root, "dispatch-order.txt");
     await import("node:fs/promises").then(({ mkdir }) =>
       mkdir(configurationDirectory, { recursive: true }),
+    );
+    const { stdout: blueprintOrigin } = await execute(
+      "git",
+      ["remote", "get-url", "origin"],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute(
+      "git",
+      [
+        "clone",
+        "--quiet",
+        "--branch",
+        "main",
+        blueprintOrigin.trim(),
+        join(configurationDirectory, "blueprints"),
+      ],
+      { cwd: configurationDirectory },
     );
     await writeFile(timeoutScript, timeoutCommand);
     await writeFile(orderPath, "");

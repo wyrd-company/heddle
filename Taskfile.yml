@@ -18,6 +18,14 @@ tasks:
     cmds:
       - npm run browser:qualification
 
+  blueprints:validate:
+    desc: Validate one organization blueprint repository with the Heddle schema and interpreter
+    deps: [build]
+    requires:
+      vars: [BLUEPRINTS_REPOSITORY_ROOT]
+    cmds:
+      - npm run blueprints:validate -- "{{.BLUEPRINTS_REPOSITORY_ROOT}}"
+
   test:
     desc: Run the repository test path
     deps: [build]

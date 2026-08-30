@@ -160,6 +160,17 @@ export const projectProductionAttention = (
   const payload = recordPayload(record);
   const attentionId = record.attentionId;
   const kind = payload["kind"];
+  if (kind === "blueprint-repository") {
+    requiredIdentifier(payload, "code", attentionId);
+    requiredString(payload, "repositoryRoot", attentionId);
+    return createConsoleAttention({
+      actions: [],
+      attentionId,
+      kind,
+      message: requiredString(payload, "message", attentionId),
+      scope: "all",
+    });
+  }
   if (kind === undefined) {
     const instanceId = requiredIdentifier(payload, "instanceId", attentionId);
     return projectEscalation(

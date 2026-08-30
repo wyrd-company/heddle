@@ -3,178 +3,101 @@
 //   verifies: heddle
 // ---
 
-import { readFile } from "node:fs/promises";
-import { basename, extname } from "node:path";
+import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
 
-import Ajv2020 from "ajv/dist/2020.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-const schemaPath = "schemas/lifecycle-blueprint.json";
-const blueprintPaths = [
-  "blueprints/standard-delivery.json",
-  "blueprints/trivial.json",
-] as const;
+import { validateBlueprintRepository } from "./blueprint-repository-validation.js";
 
-const readJson = async (path: string): Promise<unknown> =>
-  JSON.parse(await readFile(path, "utf8")) as unknown;
+const roots: string[] = [];
 
-const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
-describe("lifecycle blueprint artifacts", () => {
-  it.each(blueprintPaths)("validates %s against its schema", async (path) => {
-    const schema = await readJson(schemaPath);
-    const artifact = await readJson(path);
-    const ajv = new Ajv2020({ allErrors: true, strict: false });
-    const validate = ajv.compile(schema);
-
-    expect(validate(artifact), JSON.stringify(validate.errors)).toBe(true);
-  });
-
-  it("binds every artifact schema declaration to the schema identity", async () => {
-    const schema = (await readJson(schemaPath)) as {
-      $id?: unknown;
-      relationships?: unknown;
-    };
-
-    expect(schema.$id).toBe(
-      "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
-    );
-    expect(schema.relationships).toEqual({ implements: "heddle" });
-    expect(basename(schemaPath, extname(schemaPath))).toMatch(
-      /^[a-z]+(?:-[a-z]+)*$/,
-    );
-    for (const path of blueprintPaths) {
-      const artifact = (await readJson(path)) as { $schema?: unknown };
-      expect(artifact.$schema).toBe(schema.$id);
-    }
-  });
-
-  it("derives kebab artifact IDs from filenames instead of authored fields", async () => {
-    for (const path of blueprintPaths) {
-      const artifact = await readJson(path);
-      expect(artifact).not.toHaveProperty("id");
-      expect(basename(path, extname(path))).toMatch(/^[a-z]+(?:-[a-z]+)*$/);
-    }
-  });
-
-  it.each(blueprintPaths)(
-    "binds %s relationships to its todo templates",
-    async (path) => {
-      const artifact = (await readJson(path)) as {
-        nodes: Array<{
-          "handoff-template"?: { path: string };
-          "todo-template"?: string;
-        }>;
-        relationships: { uses?: string[] };
-      };
-      const boundTemplates = [
-        ...artifact.nodes
-          .map((node) => node["todo-template"])
-          .filter((value): value is string => value !== undefined),
-        ...artifact.nodes
-          .map((node) => node["handoff-template"]?.path)
-          .filter((value): value is string => value !== undefined)
-          .map((value) => basename(value, extname(value))),
-      ];
-
-      expect([...(artifact.relationships.uses ?? [])].sort()).toEqual(
-        [...new Set(boundTemplates)].sort(),
-      );
+const artifact = () => ({
+  $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+  relationships: {
+    implements: "heddle",
+    uses: ["sample-checklist", "sample-handoff"],
+  },
+  nodes: [
+    { id: "prepare", uses: "prepare" },
+    {
+      handoff: "standard",
+      "handoff-template": {
+        blobHash: "a".repeat(40),
+        path: "handoff-templates/sample-handoff.md",
+      },
+      id: "inspect",
+      tools: ["advance"],
+      "todo-template": "sample-checklist",
+      uses: "wait",
     },
+    { id: "finish", uses: "finish" },
+  ],
+  edges: [
+    { source: "prepare", target: "inspect" },
+    {
+      condition: "result.output.dispositions.complete",
+      description: "Complete the sample inspection",
+      disposition: "complete",
+      source: "inspect",
+      target: "finish",
+    },
+  ],
+});
+
+const repository = async (value: unknown = artifact()): Promise<string> => {
+  const root = await mkdtemp(join(tmpdir(), "heddle-blueprint-validation-"));
+  roots.push(root);
+  await mkdir(join(root, "blueprints"));
+  await writeFile(
+    join(root, "blueprints", "sample-process.json"),
+    `${JSON.stringify(value, null, 2)}\n`,
   );
+  return root;
+};
 
-  it("marks only the standard-delivery remediation wait as remediation", async () => {
-    const artifact = (await readJson(blueprintPaths[0])) as {
-      nodes: Array<{ handoff?: string; id: string; uses: string }>;
-    };
-    const agentWaits = artifact.nodes.filter(({ uses }) => uses === "wait");
+afterEach(async () => {
+  await Promise.all(
+    roots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
+  );
+});
 
-    expect(agentWaits.map(({ handoff, id }) => ({ handoff, id }))).toEqual([
-      { handoff: "standard", id: "implement" },
-      { handoff: "standard", id: "review" },
-      { handoff: "remediation", id: "remediate" },
-      { handoff: "standard", id: "retrospective" },
-    ]);
+describe("organization lifecycle blueprint artifacts", () => {
+  it("keeps authored blueprints outside the Heddle source repository", async () => {
+    await expect(
+      lstat(join(process.cwd(), "blueprints")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("accepts repository metadata only as a safe wait-stage declaration", async () => {
-    const schema = await readJson(schemaPath);
-    const artifact = (await readJson(blueprintPaths[0])) as {
-      nodes: Array<Record<string, unknown>>;
-    };
-    const validate = new Ajv2020({ allErrors: true, strict: false }).compile(
-      schema,
-    );
-    const valid = cloneJson(artifact);
-    valid.nodes.find(({ uses }) => uses === "wait")!.repo = "sample-repository";
-    expect(validate(valid), JSON.stringify(validate.errors)).toBe(true);
-
-    const invalid = cloneJson(valid);
-    invalid.nodes.find(({ uses }) => uses === "wait")!.repo = "../outside";
-    expect(validate(invalid)).toBe(false);
-
-    const inconsistent = cloneJson(artifact);
-    inconsistent.nodes.find(({ uses }) => uses !== "wait")!.repo =
-      "sample-repository";
-    expect(validate(inconsistent)).toBe(false);
+  it("validates a generated repository with the authoritative schema and interpreter", async () => {
+    await expect(
+      validateBlueprintRepository(await repository()),
+    ).resolves.toEqual(["sample-process"]);
   });
 
-  it("requires refinery relationships and session-stage bindings", async () => {
-    const schema = await readJson(schemaPath);
-    const artifact = (await readJson(blueprintPaths[0])) as {
-      nodes: Array<Record<string, unknown>>;
-      relationships?: unknown;
-    };
-    const ajv = new Ajv2020({ allErrors: true, strict: false });
-    const validate = ajv.compile(schema);
+  it("rejects schema-invalid artifacts", async () => {
+    const invalid = artifact() as Record<string, unknown>;
+    invalid["id"] = "authored-id";
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow("violates the lifecycle schema");
+  });
 
-    const withoutRelationships = cloneJson(artifact);
-    delete withoutRelationships.relationships;
-    expect(validate(withoutRelationships)).toBe(false);
+  it("rejects interpreter-invalid graphs", async () => {
+    const invalid = artifact();
+    invalid.edges = [];
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow('Wait node "inspect" has no disposition edges');
+  });
 
-    const withoutToolSet = cloneJson(artifact);
-    const waitNode = withoutToolSet.nodes.find(({ uses }) => uses === "wait");
-    if (waitNode === undefined) throw new Error("wait node fixture is missing");
-    delete waitNode.tools;
-    expect(validate(withoutToolSet)).toBe(false);
-
-    const withoutTodoTemplate = cloneJson(artifact);
-    const otherWaitNode = withoutTodoTemplate.nodes.find(
-      ({ uses }) => uses === "wait",
-    );
-    if (otherWaitNode === undefined) {
-      throw new Error("wait node fixture is missing");
-    }
-    delete otherWaitNode["todo-template"];
-    expect(validate(withoutTodoTemplate)).toBe(false);
-
-    const withoutHandoff = cloneJson(artifact);
-    const handoffWaitNode = withoutHandoff.nodes.find(
-      ({ uses }) => uses === "wait",
-    );
-    if (handoffWaitNode === undefined) {
-      throw new Error("wait node fixture is missing");
-    }
-    delete handoffWaitNode.handoff;
-    expect(validate(withoutHandoff)).toBe(false);
-
-    const withoutHandoffTemplate = cloneJson(artifact);
-    delete withoutHandoffTemplate.nodes.find(({ uses }) => uses === "wait")![
-      "handoff-template"
-    ];
-    expect(validate(withoutHandoffTemplate)).toBe(false);
-
-    const invalidHandoff = cloneJson(artifact);
-    invalidHandoff.nodes.find(({ uses }) => uses === "wait")!.handoff =
-      "private";
-    expect(validate(invalidHandoff)).toBe(false);
-
-    const inconsistentHandoff = cloneJson(artifact);
-    inconsistentHandoff.nodes.find(({ uses }) => uses !== "wait")!.handoff =
-      "standard";
-    expect(validate(inconsistentHandoff)).toBe(false);
-
-    const withAuthoredArtifactId = { ...artifact, id: "standard-delivery" };
-    expect(validate(withAuthoredArtifactId)).toBe(false);
+  it("binds declared relationships to todo and handoff template artifacts", async () => {
+    const invalid = artifact();
+    invalid.relationships.uses = ["sample-checklist"];
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow("relationships must name its template artifacts");
   });
 });

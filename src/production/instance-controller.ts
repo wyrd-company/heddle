@@ -61,6 +61,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly attention: ReconcilerAttentionQueue,
     private readonly t3: SessionT3Client,
     private readonly resolveSystemPrompt: SystemPromptResolver,
+    private readonly blueprintsRepositoryRoot: string,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -94,9 +95,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   }
 
   async start(input: StartReconcilerInstanceInput): Promise<void> {
-    if (input.repositoryName === undefined) {
-      throw new Error(`Task ${input.task.id} has no lifecycle repository`);
-    }
     const previous = this.persistence
       .listReconcilerRuntime()
       .find(({ instanceId }) => instanceId === input.instanceId);
@@ -105,7 +103,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       ...(previous?.state === "starting" ? previous : {}),
       boardStatus: input.task.status,
       instanceId: input.instanceId,
-      lifecycleRepositoryName: input.repositoryName,
       ...(provider === undefined ? {} : { provider }),
       state: "starting",
       taskId: input.task.id,
@@ -120,7 +117,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       existingContext?.pendingTransition?.kind === "start"
         ? await this.lifecycle.start({
             blueprintPath: input.blueprintPath,
-            repositoryName: input.repositoryName,
             ...(existing === undefined
               ? {
                   initialContext: {
@@ -240,7 +236,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const stage = await readProductionHandoffStage({
       instanceId,
       persistence: this.persistence,
-      repositoryRoot: this.repositoryRoot(starting.lifecycleRepositoryName),
+      repositoryRoot: this.blueprintsRepositoryRoot,
       stageId,
     });
     const repository = this.routing.repositoryForStage(
@@ -292,6 +288,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         },
         {
           activationEvents: this.persistence,
+          blueprintsRepositoryRoot: this.blueprintsRepositoryRoot,
           nextId,
           persistence: this.persistence,
           resolveSystemPrompt: this.resolveSystemPrompt,
@@ -336,20 +333,5 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       state: "waiting",
       threadId,
     });
-  }
-
-  private repositoryRoot(repositoryName: string | undefined): string {
-    if (repositoryName === undefined) {
-      throw new Error("Lifecycle repository identity is absent");
-    }
-    const repository = this.configuration.products
-      .flatMap(({ repos }) => repos)
-      .find(({ name }) => name === repositoryName);
-    if (repository === undefined) {
-      throw new Error(
-        `Lifecycle repository '${repositoryName}' is not configured`,
-      );
-    }
-    return repository.repositoryRoot;
   }
 }

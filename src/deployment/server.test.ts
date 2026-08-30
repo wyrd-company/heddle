@@ -166,6 +166,7 @@ describe("deployed Heddle service", () => {
     directory = fixture.root;
     const t3 = new SyntheticT3();
     production = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -286,6 +287,7 @@ describe("deployed Heddle service", () => {
     expect(unavailableLifecycle.status).toBe(503);
     expect(() =>
       createProductionComposition({
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
         configuration: fixture.configuration,
         providerUsage: {
           readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -299,6 +301,7 @@ describe("deployed Heddle service", () => {
     service = undefined;
     production = undefined;
     const replacement = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -313,6 +316,7 @@ describe("deployed Heddle service", () => {
     const fixture = await prepareProductionFixture();
     directory = fixture.root;
     production = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -365,6 +369,7 @@ describe("deployed Heddle service", () => {
     const fixture = await prepareProductionFixture();
     directory = fixture.root;
     production = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),

@@ -19,8 +19,12 @@ export {
   type SaveBlueprintArtifactInput,
 } from "./blueprint-artifact-editor.js";
 export { isBlueprintArtifactId } from "./blueprint-artifact.js";
+export { validateBlueprintRepository } from "./blueprint-repository-validation.js";
 export { GitBlueprintStore } from "./git-blueprint-store.js";
-export type { WorkingBlueprintArtifact } from "./git-blueprint-store.js";
+export type {
+  BlueprintRepositoryTransaction,
+  WorkingBlueprintArtifact,
+} from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
 export { LifecycleResolver } from "./lifecycle-resolver.js";
 export { readLifecycleContext } from "./lifecycle-state.js";

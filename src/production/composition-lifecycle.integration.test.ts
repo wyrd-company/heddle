@@ -33,10 +33,11 @@ describe("production lifecycle composition", () => {
   };
 
   it("starts one durable instance and one project-grouped titled session across restart", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const firstT3 = new SyntheticT3();
     const transport = { send: vi.fn(async () => undefined) };
     const first = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -87,6 +88,7 @@ describe("production lifecycle composition", () => {
 
     const secondT3 = new SyntheticT3();
     const second = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -106,7 +108,7 @@ describe("production lifecycle composition", () => {
   });
 
   it("raises durable attention and performs no partial dispatch when strict rendering fails", async () => {
-    const { configuration } = await prepare();
+    const { blueprintsRepositoryRoot, configuration } = await prepare();
     const repositoryRoot = configuration.products[0]!.repos[0]!.repositoryRoot;
     const invalidTemplate = `---
 $schema: https://wyrd.company/heddle/handoff-template.schema.json
@@ -125,7 +127,11 @@ kind: standard
         cwd: repositoryRoot,
       })
     ).stdout.trim();
-    const blueprintPath = join(repositoryRoot, "blueprints", "sample.json");
+    const blueprintPath = join(
+      blueprintsRepositoryRoot,
+      "blueprints",
+      "sample.json",
+    );
     const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
       nodes: Array<Record<string, unknown>>;
     };
@@ -134,8 +140,29 @@ kind: standard
       path: "handoff-templates/invalid.md",
     };
     await writeFile(blueprintPath, JSON.stringify(blueprint));
+    await execute("git", ["add", "--", "blueprints/sample.json"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Use invalid sample template",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet"], {
+      cwd: blueprintsRepositoryRoot,
+    });
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -162,7 +189,7 @@ kind: standard
   });
 
   it("raises durable attention without partial dispatch when a cold retry changes handoff authentication policy", async () => {
-    const { configuration } = await prepare();
+    const { blueprintsRepositoryRoot, configuration } = await prepare();
     class InterruptedT3 extends SyntheticT3 {
       override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
         await super.dispatch(command);
@@ -171,6 +198,7 @@ kind: standard
     }
     const firstT3 = new InterruptedT3();
     const first = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -191,6 +219,7 @@ kind: standard
     };
     const secondT3 = new SyntheticT3();
     const second = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration: changedConfiguration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -217,9 +246,10 @@ kind: standard
   });
 
   it("activates the next accepted lifecycle wait stage without losing prior observation", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -266,9 +296,10 @@ kind: standard
   });
 
   it("uses a new deterministic activation identity when a stage recurs", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -338,8 +369,9 @@ kind: standard
   });
 
   it("fails closed when remediation has no canonical review findings", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -367,9 +399,10 @@ kind: standard
   });
 
   it("rejects handoff input that disagrees with pinned stage metadata", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -418,7 +451,11 @@ kind: standard
             worktreesRoot: configuration.session.worktreesRoot,
           },
         },
-        { persistence: composition.persistence, t3 },
+        {
+          blueprintsRepositoryRoot,
+          persistence: composition.persistence,
+          t3,
+        },
       ),
     ).rejects.toThrow(
       "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
@@ -428,8 +465,9 @@ kind: standard
   });
 
   it("keeps the intended occurrence after a crash before session intent persistence", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const first = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -455,6 +493,7 @@ kind: standard
 
     const t3 = new SyntheticT3();
     const restarted = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -479,8 +518,9 @@ kind: standard
   });
 
   it("keeps a double-digit occurrence identity after session intent persistence", async () => {
-    const { configuration, taskId } = await prepare();
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const first = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
@@ -517,6 +557,7 @@ kind: standard
 
     const t3 = new SyntheticT3();
     const restarted = createProductionComposition({
+      blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),

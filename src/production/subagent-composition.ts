@@ -161,6 +161,7 @@ const activeSessions = async (
 
 export const createProductionSubagentCoordinator = (options: {
   attention: DurableAttentionQueue;
+  blueprintsRepositoryRoot: string;
   board: Pick<KanbanBoardAdapter, "readTask">;
   configuration: ProductionConfiguration;
   observer: SessionObserver;
@@ -171,6 +172,7 @@ export const createProductionSubagentCoordinator = (options: {
 }): SubagentCoordinator => {
   const {
     attention,
+    blueprintsRepositoryRoot,
     board,
     configuration,
     observer,
@@ -183,6 +185,7 @@ export const createProductionSubagentCoordinator = (options: {
     activeSessions: () => activeSessions(configuration, persistence, t3),
     bootstrapDependencies: {
       activationEvents: persistence,
+      blueprintsRepositoryRoot,
       persistence,
       resolveSystemPrompt,
       t3: {

@@ -126,6 +126,7 @@ export const harnessConfiguration = (): HarnessConfiguration => ({
 
 export type SessionBootstrapDependencies = {
   activationEvents?: SessionActivationEventStore;
+  blueprintsRepositoryRoot?: string;
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
   instantiateTodoList?: typeof instantiateTodoList;
   mintCorrelationToken?: () => string;
@@ -165,75 +166,79 @@ export type SessionSteeringDependencies = {
   t3: SessionT3Client;
 };
 
-const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
-  async (input, record) => {
-    const context = record.state.flowcraftContext;
-    if (
-      typeof context !== "object" ||
-      context === null ||
-      Array.isArray(context) ||
-      typeof context["blueprintBlobHash"] !== "string" ||
-      typeof context["blueprintPath"] !== "string" ||
-      !Array.isArray(context["awaitingNodeIds"]) ||
-      context["awaitingNodeIds"].length !== 1 ||
-      context["awaitingNodeIds"][0] !== input.handoff.stage.name
-    ) {
-      throw new Error(
-        "Stage session bootstrap does not match the awaiting lifecycle stage",
-      );
-    }
-    const blueprint = await new GitBlueprintStore(
-      input.worktree.repositoryRoot,
-    ).read(context["blueprintBlobHash"], context["blueprintPath"]);
-    const stage = blueprint.nodes.find(
-      ({ id }) => id === input.handoff.stage.name,
+const resolveWorkflowMcpStageContract = async (
+  input: SessionBootstrapInput,
+  record: InstanceRecord,
+  repositoryRoot: string,
+): Promise<WorkflowMcpStageContract> => {
+  const context = record.state.flowcraftContext;
+  if (
+    typeof context !== "object" ||
+    context === null ||
+    Array.isArray(context) ||
+    typeof context["blueprintBlobHash"] !== "string" ||
+    typeof context["blueprintPath"] !== "string" ||
+    !Array.isArray(context["awaitingNodeIds"]) ||
+    context["awaitingNodeIds"].length !== 1 ||
+    context["awaitingNodeIds"][0] !== input.handoff.stage.name
+  ) {
+    throw new Error(
+      "Stage session bootstrap does not match the awaiting lifecycle stage",
     );
-    if (
-      stage?.uses !== "wait" ||
-      stage.handoff !== input.handoff.stage.kind ||
-      !Array.isArray(stage.tools) ||
-      typeof stage["todo-template"] !== "string" ||
-      typeof stage["handoff-template"] !== "object" ||
-      stage["handoff-template"] === null ||
-      Array.isArray(stage["handoff-template"]) ||
-      typeof stage["handoff-template"]["blobHash"] !== "string" ||
-      typeof stage["handoff-template"]["path"] !== "string"
-    ) {
-      throw new Error(
-        "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
-      );
-    }
-    const dispositions = blueprint.edges
-      .filter(
-        ({ disposition, source }) =>
-          source === stage.id && disposition !== undefined,
-      )
-      .map(({ description, disposition }) => {
-        if (
-          disposition === undefined ||
-          description === undefined ||
-          description.trim() === ""
-        ) {
-          throw new Error(
-            "Stage session bootstrap requires a description for every disposition",
-          );
-        }
-        return { description, name: disposition };
-      })
-      .sort((left, right) => left.name.localeCompare(right.name));
-    return {
-      blueprintBlobHash: context["blueprintBlobHash"],
-      blueprintPath: context["blueprintPath"],
-      dispositions,
-      handoffTemplate: {
-        blobHash: stage["handoff-template"]["blobHash"],
-        path: stage["handoff-template"]["path"],
-      },
-      stage: stage.id,
-      todoTemplate: stage["todo-template"],
-      tools: [...stage.tools],
-    };
+  }
+  const blueprint = await new GitBlueprintStore(repositoryRoot).read(
+    context["blueprintBlobHash"],
+    context["blueprintPath"],
+  );
+  const stage = blueprint.nodes.find(
+    ({ id }) => id === input.handoff.stage.name,
+  );
+  if (
+    stage?.uses !== "wait" ||
+    stage.handoff !== input.handoff.stage.kind ||
+    !Array.isArray(stage.tools) ||
+    typeof stage["todo-template"] !== "string" ||
+    typeof stage["handoff-template"] !== "object" ||
+    stage["handoff-template"] === null ||
+    Array.isArray(stage["handoff-template"]) ||
+    typeof stage["handoff-template"]["blobHash"] !== "string" ||
+    typeof stage["handoff-template"]["path"] !== "string"
+  ) {
+    throw new Error(
+      "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
+    );
+  }
+  const dispositions = blueprint.edges
+    .filter(
+      ({ disposition, source }) =>
+        source === stage.id && disposition !== undefined,
+    )
+    .map(({ description, disposition }) => {
+      if (
+        disposition === undefined ||
+        description === undefined ||
+        description.trim() === ""
+      ) {
+        throw new Error(
+          "Stage session bootstrap requires a description for every disposition",
+        );
+      }
+      return { description, name: disposition };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+  return {
+    blueprintBlobHash: context["blueprintBlobHash"],
+    blueprintPath: context["blueprintPath"],
+    dispositions,
+    handoffTemplate: {
+      blobHash: stage["handoff-template"]["blobHash"],
+      path: stage["handoff-template"]["path"],
+    },
+    stage: stage.id,
+    todoTemplate: stage["todo-template"],
+    tools: [...stage.tools],
   };
+};
 
 const ensureStoredHandoff = async (
   store: InstanceStateStore,
@@ -491,7 +496,13 @@ export const bootstrapStageSession = async (
     input,
     correlationToken,
     dependencies.resolveWorkflowMcpStageContract ??
-      resolveWorkflowMcpStageContract,
+      ((value, record) =>
+        resolveWorkflowMcpStageContract(
+          value,
+          record,
+          dependencies.blueprintsRepositoryRoot ??
+            value.worktree.repositoryRoot,
+        )),
     dependencies.instantiateTodoList ?? instantiateTodoList,
     dependencies.readHandoffTemplate ??
       ((reference, value) =>

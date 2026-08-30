@@ -4,6 +4,7 @@
 // ---
 
 import { appendFile, readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import process from "node:process";
 
 import type { T3DispatchCommand } from "../control-plane/t3-control-plane-client.js";
@@ -68,6 +69,10 @@ const t3: ProductionT3Client = {
   respondToUserInput: async () => ({ sequence: 1 }),
 };
 const composition = createProductionComposition({
+  blueprintsRepositoryRoot: join(
+    dirname(configurationPath),
+    "blueprint-repository",
+  ),
   configuration,
   providerUsage: {
     readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),

@@ -4,14 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import {
-  copyFile,
-  lstat,
-  mkdir,
-  mkdtemp,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -19,6 +12,7 @@ import { promisify } from "node:util";
 import { expect } from "vitest";
 
 import { LifecycleEngine, type ResumeLifecycleInput } from "../engine/index.js";
+import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import {
   createMechanicalNodeEffects,
@@ -91,10 +85,7 @@ export const makeLifecycleAtReview = async (
   await git(repositoryRoot, "config", "user.email", "fixture@example.invalid");
   await git(repositoryRoot, "config", "user.name", "Fixture Operator");
   await writeFile(join(repositoryRoot, "inventory.txt"), "one\n");
-  await copyFile(
-    "blueprints/standard-delivery.json",
-    join(repositoryRoot, "blueprints", "standard-delivery.json"),
-  );
+  await writeDeliveryBlueprintFixture(repositoryRoot);
   await git(repositoryRoot, "add", ".");
   await git(repositoryRoot, "commit", "--quiet", "-m", "add initial item");
 

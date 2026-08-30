@@ -3,10 +3,10 @@
 //   implements: heddle
 // ---
 
-import { stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { isBlueprintArtifactId } from "./blueprint-artifact.js";
+import { GitBlueprintStore } from "./git-blueprint-store.js";
 
 const lifecycleTagPrefix = "lifecycle:";
 
@@ -65,7 +65,14 @@ const lifecycleTagValues = (tags: readonly string[]): string[] =>
     .map((tag) => tag.slice(lifecycleTagPrefix.length));
 
 export class LifecycleResolver {
-  public constructor(private readonly repositoryRoot: string) {}
+  private readonly store: GitBlueprintStore;
+
+  public constructor(
+    repositoryRoot: string,
+    options: { sourceRef?: string } = {},
+  ) {
+    this.store = new GitBlueprintStore(repositoryRoot, options);
+  }
 
   public async resolve(
     task: LifecycleSelectorTask,
@@ -95,21 +102,7 @@ export class LifecycleResolver {
     }
 
     const blueprintPath = join("blueprints", `${artifactId}.json`);
-    let blueprintExists = false;
-    try {
-      blueprintExists = (
-        await stat(join(this.repositoryRoot, blueprintPath))
-      ).isFile();
-    } catch (error) {
-      if (
-        typeof error !== "object" ||
-        error === null ||
-        !("code" in error) ||
-        error.code !== "ENOENT"
-      ) {
-        throw error;
-      }
-    }
+    const blueprintExists = await this.store.has(blueprintPath);
     if (!blueprintExists) {
       return attention(
         task.id,

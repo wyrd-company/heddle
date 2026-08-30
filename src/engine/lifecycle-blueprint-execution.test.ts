@@ -25,6 +25,7 @@ import {
   UnexpectedLandingError,
 } from "./index.js";
 import type { LifecycleEffect } from "./types.js";
+import { writeDeliveryBlueprintFixture } from "./lifecycle-blueprint.test-support.js";
 
 const executeFile = promisify(execFile);
 const blueprintPaths = [
@@ -41,7 +42,10 @@ const makeEngine = async (
   temporaryDirectories.push(repositoryRoot);
   await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
   await mkdir(join(repositoryRoot, "blueprints"));
-  await copyFile(blueprintPath, join(repositoryRoot, blueprintPath));
+  await writeDeliveryBlueprintFixture(
+    repositoryRoot,
+    blueprintPath.includes("trivial") ? "trivial" : "standard-delivery",
+  );
   const persistence = new SqlitePersistence({
     stateDirectory: join(repositoryRoot, "state"),
   });

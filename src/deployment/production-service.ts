@@ -52,6 +52,7 @@ export const createConfiguredProductionComposition = (
 ): ProductionComposition =>
   createProductionComposition({
     ...dependencies,
+    blueprintsRepositoryRoot: loaded.blueprintsRepositoryRoot,
     configuration: loaded.configuration,
     providerUsage: providerUsageSource(loaded),
     resolveSystemPrompt: configurationDirectorySystemPromptResolver(

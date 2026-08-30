@@ -24,6 +24,7 @@ describe("production project routing", () => {
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
