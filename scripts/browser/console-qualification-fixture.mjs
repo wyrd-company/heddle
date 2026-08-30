@@ -3,10 +3,19 @@
 //   validates: heddle
 // ---
 
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
 import {
   createConsoleAttention,
   createConsoleServer,
 } from "../../dist/console/index.js";
+import { BlueprintArtifactEditor } from "../../dist/engine/index.js";
+
+const executeFile = promisify(execFile);
 
 const initialTasks = [
   {
@@ -94,6 +103,24 @@ const lifecycleBlueprint = {
     { id: "arrange", uses: "wait" },
   ],
   path: "blueprints/room-refresh.json",
+};
+
+const editableArtifact = {
+  $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+  edges: [{ source: "measure", target: "arrange" }],
+  metadata: {
+    canvas: {
+      positions: {
+        arrange: { x: 340, y: 40 },
+        measure: { x: 40, y: 140 },
+      },
+    },
+  },
+  nodes: [
+    { id: "measure", uses: "step" },
+    { id: "arrange", uses: "step" },
+  ],
+  relationships: { implements: "heddle" },
 };
 
 const question = ({ header, id, prompt }) => ({
@@ -234,12 +261,64 @@ const attentionCatalog = () => [
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-export const createConsoleQualificationFixture = () => {
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+};
+
+export const createConsoleQualificationFixture = async () => {
+  const repositoryRoot = await mkdtemp(
+    join(tmpdir(), "heddle-console-editor-"),
+  );
+  try {
+    await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
+    await mkdir(join(repositoryRoot, "blueprints"));
+    await writeFile(
+      join(repositoryRoot, "blueprints", "room-refresh.json"),
+      `${JSON.stringify(editableArtifact, null, 2)}\n`,
+    );
+  } catch (error) {
+    await rm(repositoryRoot, { force: true, recursive: true });
+    throw error;
+  }
+
   let tasks = clone(initialTasks);
   let resolvedAttention = new Set();
   let lifecycleTrace = [];
   let actions = [];
   let boardWrites = [];
+  let blueprintLoads = [];
+  let blueprintLoadResults = [];
+  let blueprintSaves = [];
+  let blueprintSaveResults = [];
+  let loadGate = deferred();
+  let saveGate = deferred();
+
+  const repositoryEditor = new BlueprintArtifactEditor({
+    effects: {
+      step: async () => ({ complete: true }),
+    },
+    repositoryRoot,
+  });
+  const blueprintEditor = {
+    async load(artifactId) {
+      blueprintLoads.push(artifactId);
+      await loadGate.promise;
+      const revision = await repositoryEditor.load(artifactId);
+      blueprintLoadResults.push(clone(revision));
+      return revision;
+    },
+    async save(input) {
+      blueprintSaves.push(clone(input));
+      await saveGate.promise;
+      const revision = await repositoryEditor.save(input);
+      blueprintSaveResults.push(clone(revision));
+      return revision;
+    },
+  };
 
   const state = {
     async listAttention() {
@@ -317,14 +396,37 @@ export const createConsoleQualificationFixture = () => {
   const server = createConsoleServer({
     actions: actionPort,
     board,
+    blueprintEditor,
     now: () => 18_000_000_000,
     state,
   });
 
   return {
     actions: () => clone(actions),
+    blueprintRequests: () =>
+      clone({
+        loadResults: blueprintLoadResults,
+        loads: blueprintLoads,
+        saveResults: blueprintSaveResults,
+        saves: blueprintSaves,
+      }),
     boardWrites: () => clone(boardWrites),
+    cleanup: () => rm(repositoryRoot, { force: true, recursive: true }),
     lifecycleTrace: () => clone(lifecycleTrace),
+    prepareBlueprintEditor() {
+      blueprintLoads = [];
+      blueprintLoadResults = [];
+      blueprintSaves = [];
+      blueprintSaveResults = [];
+      loadGate = deferred();
+      saveGate = deferred();
+    },
+    releaseBlueprintLoad() {
+      loadGate.resolve();
+    },
+    releaseBlueprintSave() {
+      saveGate.resolve();
+    },
     reset() {
       tasks = clone(initialTasks);
       resolvedAttention = new Set();

@@ -16,7 +16,7 @@ import { createConsoleQualificationFixture } from "./console-qualification-fixtu
 
 const session = `heddle-console-qualification-${process.pid}`;
 const phase = process.env.HEDDLE_BROWSER_PHASE ?? "all";
-const fixture = createConsoleQualificationFixture();
+const fixture = await createConsoleQualificationFixture();
 const observations = [];
 let browserStarted = false;
 
@@ -670,15 +670,71 @@ const assertDependencyKeyboard = async (baseUrl) => {
   );
 };
 
-const assertReadOnlySurface = async () => {
+const editorControlRosters = {
+  closed: [{ disabled: false, label: "EDIT BLUEPRINT", type: "button" }],
+  unavailable: [{ disabled: true, label: "EDIT BLUEPRINT", type: "button" }],
+  open: [
+    { disabled: false, label: "SAVE ARTIFACT", type: "button" },
+    { disabled: false, label: "CLOSE EDITOR", type: "button" },
+  ],
+  saving: [
+    { disabled: true, label: "SAVING…", type: "button" },
+    { disabled: true, label: "CLOSE EDITOR", type: "button" },
+  ],
+};
+
+const editorControlRoster = () =>
+  evaluate(`(() => {
+    const actions = document.querySelector(".blueprint-editor-actions");
+    const control = (element) => ({
+      disabled: element.disabled,
+      label: element.textContent.trim().replace(/\\s+/g, " "),
+      type: element.getAttribute("type"),
+    });
+    return {
+      all: [...actions.querySelectorAll("button")].map(control),
+      direct: [...actions.querySelectorAll(":scope > button")].map(control),
+    };
+  })()`);
+
+const assertEditorControlRoster = async (
+  state,
+  guard = "editor-control-roster",
+) => {
+  const expected = editorControlRosters[state];
+  const actual = await editorControlRoster();
+  invariant(
+    JSON.stringify(actual) ===
+      JSON.stringify({ all: expected, direct: expected }),
+    guard,
+    `${state} editor controls are ${JSON.stringify(actual)} instead of ${JSON.stringify(expected)}`,
+  );
+};
+
+const assertReadOnlySurface = async (editorState = "closed") => {
+  const expectedEditorControls = editorControlRosters[editorState];
   const result = await evaluate(`(() => {
+    const expectedEditorControls = ${JSON.stringify(expectedEditorControls)};
+    const editorActions = document.querySelector(".blueprint-editor-actions");
+    const editorButtons = [...editorActions.querySelectorAll("button")];
+    const editorControl = (element) => ({
+      disabled: element.disabled,
+      label: element.textContent.trim().replace(/\\s+/g, " "),
+      type: element.getAttribute("type"),
+    });
+    const acceptedEditorButtons =
+      JSON.stringify(editorButtons.map(editorControl)) === JSON.stringify(expectedEditorControls) &&
+      JSON.stringify([...editorActions.querySelectorAll(":scope > button")].map(editorControl)) === JSON.stringify(expectedEditorControls)
+        ? new Set(editorButtons)
+        : new Set();
     const tabbableMutation = [...document.querySelectorAll(
       "#board button, #board input, #board textarea, #dependency-graph button, #dependency-graph input, #dependency-graph textarea, #lifecycle-view button, #lifecycle-view input, #lifecycle-view textarea, [contenteditable='true']",
     )].filter((element) => {
       if (
         element.disabled ||
         element.tabIndex < 0 ||
-        element.matches(".epic-lever, .blueprint-editor-actions button")
+        element.matches(".epic-lever") ||
+        acceptedEditorButtons.has(element)
       ) {
         return false;
       }
@@ -699,6 +755,196 @@ const assertReadOnlySurface = async () => {
     result.prohibited.length === 0,
     "read-only-console",
     `a prohibited mutation control is keyboard reachable: ${result.prohibited.join(", ")}`,
+  );
+};
+
+const waitForBlueprintRequestCount = async (field, count, guard) => {
+  const deadline = Date.now() + 5_000;
+  while (
+    fixture.blueprintRequests()[field].length < count &&
+    Date.now() < deadline
+  ) {
+    await delay(20);
+  }
+  const requests = fixture.blueprintRequests();
+  invariant(
+    requests[field].length === count,
+    guard,
+    `expected ${count} editor ${field}, observed ${JSON.stringify(requests)}`,
+  );
+  return requests;
+};
+
+const editorStatus = () =>
+  evaluate(`(() => ({
+    activeLabel: document.activeElement?.textContent?.trim().replace(/\\s+/g, " ") ?? "",
+    activeTag: document.activeElement?.tagName ?? "",
+    error: document.querySelector(".blueprint-editor-status").dataset.error,
+    text: document.querySelector(".blueprint-editor-status").textContent.trim().replace(/\\s+/g, " "),
+  }))()`);
+
+const assertBlueprintNetwork = async () => {
+  const network = await command("network", "requests");
+  const requests = (network.requests ?? [])
+    .filter(
+      ({ url }) => new URL(url).pathname === "/api/blueprints/room-refresh",
+    )
+    .map((request) => ({
+      method: request.method ?? request.requestMethod,
+      status: request.status ?? request.responseStatus,
+    }));
+  invariant(
+    JSON.stringify(requests.map(({ method }) => method)) ===
+      JSON.stringify(["GET", "PUT"]),
+    "editor-network-contract",
+    `editor request methods are ${JSON.stringify(requests)}`,
+  );
+  invariant(
+    requests.every(
+      ({ status }) => status !== undefined && status >= 200 && status < 300,
+    ),
+    "editor-network-contract",
+    `editor request statuses are ${JSON.stringify(requests)}`,
+  );
+};
+
+const beginBlueprintEditing = async (
+  baseUrl,
+  guard = "editor-edit-activation",
+) => {
+  fixture.reset();
+  fixture.prepareBlueprintEditor();
+  await setViewport({ height: 1000, width: 1440 });
+  await resetPageEvidence();
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await assertEditorControlRoster("closed");
+  await assertReadOnlySurface("closed");
+  await command("focus", ".blueprint-editor-actions button");
+  await assertFocused(
+    ".blueprint-editor-actions button:first-child",
+    "edit blueprint activation",
+  );
+  await press("Enter");
+  await waitForBlueprintRequestCount("loads", 1, guard);
+  await waitFor(
+    `document.querySelector(".blueprint-editor-status")?.textContent === "Loading repository artifact…"`,
+  );
+  const loading = await editorStatus();
+  invariant(
+    loading.activeLabel === "EDIT BLUEPRINT" && loading.error === "false",
+    guard,
+    `loading state or focus is ${JSON.stringify(loading)}`,
+  );
+  await assertEditorControlRoster("closed");
+  await assertReadOnlySurface("closed");
+
+  fixture.releaseBlueprintLoad();
+  await waitFor(
+    `document.querySelector(".blueprint-editor-status")?.textContent?.startsWith("Editing blueprints/room-refresh.json") && document.querySelectorAll(".blueprint-editor-actions button").length === 2`,
+  );
+  await assertEditorControlRoster("open");
+  await assertReadOnlySurface("open");
+  const opened = await editorStatus();
+  invariant(
+    opened.activeTag === "BUTTON" &&
+      opened.activeLabel === "SAVE ARTIFACT" &&
+      opened.error === "false" &&
+      opened.text ===
+        "Editing blueprints/room-refresh.json · running instance stays pinned to aaaaaaaaaaaa",
+    guard,
+    `opened state or focus is ${JSON.stringify(opened)}`,
+  );
+  const loaded = await waitForBlueprintRequestCount("loadResults", 1, guard);
+  invariant(
+    JSON.stringify(loaded.loads) === JSON.stringify(["room-refresh"]),
+    guard,
+    `editor load target is ${JSON.stringify(loaded.loads)}`,
+  );
+  return loaded.loadResults[0];
+};
+
+const exerciseBlueprintEditor = async (baseUrl) => {
+  const loaded = await beginBlueprintEditing(baseUrl);
+  await command("focus", ".blueprint-editor-actions button:first-child");
+  await assertFocused(
+    ".blueprint-editor-actions button:first-child",
+    "save artifact activation",
+  );
+  await press("Enter");
+  let requests = await waitForBlueprintRequestCount(
+    "saves",
+    1,
+    "editor-save-activation",
+  );
+  await waitFor(
+    `document.querySelector(".blueprint-editor-status")?.textContent === "Validating and saving repository artifact…"`,
+  );
+  await assertEditorControlRoster("saving");
+  await assertReadOnlySurface("saving");
+  const saving = await editorStatus();
+  invariant(
+    saving.activeTag === "BODY" && saving.error === "false",
+    "editor-save-activation",
+    `saving state or focus is ${JSON.stringify(saving)}`,
+  );
+  const [save] = requests.saves;
+  invariant(
+    save.artifactId === "room-refresh" &&
+      save.expectedBlobHash === loaded.blobHash &&
+      JSON.stringify(save.nodes) === JSON.stringify(loaded.blueprint.nodes) &&
+      JSON.stringify(save.edges) === JSON.stringify(loaded.blueprint.edges) &&
+      JSON.stringify(save.positions) === JSON.stringify(loaded.positions),
+    "editor-save-activation",
+    `no-change save contract is ${JSON.stringify(save)}`,
+  );
+
+  fixture.releaseBlueprintSave();
+  requests = await waitForBlueprintRequestCount(
+    "saveResults",
+    1,
+    "editor-save-activation",
+  );
+  const saved = requests.saveResults[0];
+  await waitFor(
+    `document.querySelector(".blueprint-editor-status")?.textContent === ${JSON.stringify(`Saved blueprints/room-refresh.json · artifact ${saved.blobHash.slice(0, 12)}`)}`,
+  );
+  await assertEditorControlRoster("open");
+  await assertReadOnlySurface("open");
+  const savedState = await editorStatus();
+  invariant(
+    savedState.activeTag === "BODY" && savedState.error === "false",
+    "editor-save-activation",
+    `saved state or focus is ${JSON.stringify(savedState)}`,
+  );
+
+  await command("focus", ".blueprint-editor-actions button:last-child");
+  await assertFocused(
+    ".blueprint-editor-actions button:last-child",
+    "close editor activation",
+  );
+  await press("Enter");
+  await waitFor(
+    `document.querySelector(".blueprint-editor-status")?.textContent === "" && document.querySelectorAll(".blueprint-editor-actions button").length === 1`,
+  );
+  await assertEditorControlRoster("closed");
+  await assertReadOnlySurface("closed");
+  const closed = await editorStatus();
+  invariant(
+    closed.activeTag === "BODY" && closed.error === "false",
+    "editor-close-activation",
+    `closed state or focus is ${JSON.stringify(closed)}`,
+  );
+  invariant(
+    fixture.blueprintRequests().loads.length === 1 &&
+      fixture.blueprintRequests().saves.length === 1,
+    "editor-close-activation",
+    `close triggered an unexpected repository request: ${JSON.stringify(fixture.blueprintRequests())}`,
+  );
+  await assertBlueprintNetwork();
+  await assertNoRuntimeOrNetworkErrors(
+    new URL(baseUrl).origin,
+    "blueprint editor keyboard contract",
   );
 };
 
@@ -966,7 +1212,9 @@ const auditView = async (baseUrl, viewport, view) => {
     );
     invariant(badge === "5", "attention-badge-count", `badge reports ${badge}`);
   }
-  await assertReadOnlySurface();
+  const editorState = view === "lifecycle" ? "closed" : "unavailable";
+  await assertEditorControlRoster(editorState);
+  await assertReadOnlySurface(editorState);
   await assertNoRuntimeOrNetworkErrors(
     new URL(baseUrl).origin,
     `${view} ${viewport.width}x${viewport.height}`,
@@ -1134,10 +1382,88 @@ const mutationBattery = async (baseUrl) => {
       evaluate(`(() => {
         const button = document.createElement("button");
         button.textContent = "ALTER VIEW";
-        document.querySelector("#lifecycle-view").append(button);
+        document.querySelector(".blueprint-editor-actions").append(button);
       })()`),
     assertReadOnlySurface,
   );
+
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "editor-control-roster",
+    () =>
+      evaluate(
+        `document.querySelector(".blueprint-editor-actions button").textContent = "EDIT ARTIFACT"`,
+      ),
+    () => assertEditorControlRoster("closed"),
+  );
+
+  fixture.reset();
+  fixture.prepareBlueprintEditor();
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "editor-edit-activation",
+    () =>
+      evaluate(`document.querySelector(".blueprint-editor-actions button").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, true)`),
+    async () => {
+      await command("focus", ".blueprint-editor-actions button");
+      await press("Enter");
+      await delay(100);
+      invariant(
+        fixture.blueprintRequests().loads.length === 1,
+        "editor-edit-activation",
+        "broken Edit blueprint activation was accepted",
+      );
+    },
+  );
+
+  await beginBlueprintEditing(baseUrl);
+  await expectSoleKill(
+    "editor-save-activation",
+    () =>
+      evaluate(`document.querySelector(".blueprint-editor-actions button:first-child").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, true)`),
+    async () => {
+      await command("focus", ".blueprint-editor-actions button:first-child");
+      await press("Enter");
+      await delay(100);
+      invariant(
+        fixture.blueprintRequests().saves.length === 1,
+        "editor-save-activation",
+        "broken Save artifact activation was accepted",
+      );
+    },
+  );
+
+  await beginBlueprintEditing(baseUrl);
+  await expectSoleKill(
+    "editor-close-activation",
+    () =>
+      evaluate(`document.querySelector(".blueprint-editor-actions button:last-child").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, true)`),
+    async () => {
+      await command("focus", ".blueprint-editor-actions button:last-child");
+      await press("Enter");
+      await delay(100);
+      const state = await editorStatus();
+      invariant(
+        state.text === "" &&
+          JSON.stringify((await editorControlRoster()).direct) ===
+            JSON.stringify(editorControlRosters.closed),
+        "editor-close-activation",
+        `broken Close editor activation was accepted: ${JSON.stringify(state)}`,
+      );
+    },
+  );
+  await setViewport({ height: 844, width: 390 });
 
   await open(`${baseUrl}/?scope=epic%3A40`);
   await assertPageReady("4 visible records");
@@ -1345,6 +1671,7 @@ const main = async () => {
     await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
     await assertLifecycleSettled();
     await assertLifecycleTrace();
+    await exerciseBlueprintEditor(baseUrl);
     await open(`${baseUrl}/?scope=epic%3A40`);
   }
 
@@ -1377,8 +1704,18 @@ const main = async () => {
 try {
   await main();
 } finally {
-  if (browserStarted) {
-    await command("close").catch(() => undefined);
+  try {
+    if (browserStarted) {
+      await command("close").catch(() => undefined);
+    }
+    if (fixture.server.listening) {
+      await new Promise((resolve, reject) =>
+        fixture.server.close((error) =>
+          error === undefined ? resolve() : reject(error),
+        ),
+      );
+    }
+  } finally {
+    await fixture.cleanup();
   }
-  fixture.server.close();
 }
