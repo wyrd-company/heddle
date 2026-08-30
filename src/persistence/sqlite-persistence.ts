@@ -415,7 +415,8 @@ export class SqlitePersistence {
     return this.database
       .prepare(
         `SELECT epic_id AS epicId, product_name AS productName,
-                project_id AS projectId, state,
+                project_id AS projectId,
+                CASE WHEN deleted = 1 THEN 'deleted' ELSE state END AS state,
                 create_command_id AS createCommandId,
                 created_at AS createdAt,
                 delete_command_id AS deleteCommandId
@@ -429,7 +430,8 @@ export class SqlitePersistence {
     return this.database
       .prepare(
         `SELECT epic_id AS epicId, product_name AS productName,
-                project_id AS projectId, state,
+                project_id AS projectId,
+                CASE WHEN deleted = 1 THEN 'deleted' ELSE state END AS state,
                 create_command_id AS createCommandId,
                 created_at AS createdAt,
                 delete_command_id AS deleteCommandId
@@ -461,30 +463,30 @@ export class SqlitePersistence {
     ) {
       throw new Error(`Epic ${record.epicId} changed durable project identity`);
     }
+    if (prior?.state === "deleted" && record.state !== "deleted") {
+      throw new Error(`Epic ${record.epicId} project deletion is terminal`);
+    }
+    const storedState = record.state === "deleted" ? "deleting" : record.state;
     this.database
       .prepare(
         `INSERT INTO heddle_epic_projects
-           (epic_id, product_name, project_id, state,
+           (epic_id, product_name, project_id, state, deleted,
             create_command_id, created_at, delete_command_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(epic_id) DO UPDATE SET state = excluded.state`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(epic_id) DO UPDATE SET
+           state = excluded.state,
+           deleted = excluded.deleted`,
       )
       .run(
         record.epicId,
         record.productName,
         record.projectId,
-        record.state,
+        storedState,
+        record.state === "deleted" ? 1 : 0,
         record.createCommandId,
         record.createdAt,
         record.deleteCommandId,
       );
-  }
-
-  deleteEpicProject(epicId: number): void {
-    this.assertTaskId("epicId", epicId);
-    this.database
-      .prepare("DELETE FROM heddle_epic_projects WHERE epic_id = ?")
-      .run(epicId);
   }
 
   listReconcilerRuntime(): ReconcilerRuntimeRecord[] {

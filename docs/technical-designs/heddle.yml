@@ -75,7 +75,9 @@ proposed-design:
     `in-progress` pauses it: no new dispatches for its children, while
     in-flight instances run to their next wait state and hold. Paused,
     stopped, and UAT epics retain their project. Completion deletes the
-    project after child dispatch is no longer possible. The
+    project after child dispatch is no longer possible. Successful deletion
+    retains a local durable tombstone so restart cannot reseed the configured
+    project or dispatch deletion again. The
     reconciler advances the epic itself to `uat` when its last non-UAT
     child completes and to `done` when UAT is accepted.
 

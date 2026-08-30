@@ -106,7 +106,7 @@ export class EpicProjectCoordinator {
       throw new Error(`Epic ${epic.id} changed durable product identity`);
     }
     if (record?.state === "active") return undefined;
-    if (record?.state === "deleting") {
+    if (record?.state === "deleting" || record?.state === "deleted") {
       throw new Error(`Epic ${epic.id} project deletion cannot be reversed`);
     }
     if (record === undefined) {
@@ -149,7 +149,8 @@ export class EpicProjectCoordinator {
     epicId: number,
   ): Promise<EpicProjectAction | undefined> {
     const existing = this.persistence.getEpicProject(epicId);
-    if (existing === undefined) return undefined;
+    if (existing === undefined || existing.state === "deleted")
+      return undefined;
     const deleting = { ...existing, state: "deleting" as const };
     this.persistence.writeEpicProject(deleting);
     await this.t3.dispatch({
@@ -158,7 +159,7 @@ export class EpicProjectCoordinator {
       projectId: deleting.projectId,
       type: "project.delete",
     });
-    this.persistence.deleteEpicProject(epicId);
+    this.persistence.writeEpicProject({ ...deleting, state: "deleted" });
     return { epicId, kind: "deleted", projectId: deleting.projectId };
   }
 

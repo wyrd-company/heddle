@@ -80,6 +80,7 @@ export const initializePersistenceSchema = (
       product_name TEXT NOT NULL,
       project_id TEXT NOT NULL UNIQUE,
       state TEXT NOT NULL CHECK (state IN ('creating', 'active', 'deleting')),
+      deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
       create_command_id TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL,
       delete_command_id TEXT NOT NULL UNIQUE
@@ -133,6 +134,14 @@ export const initializePersistenceSchema = (
   if (!sessionColumns.some(({ name }) => name === "repository_name")) {
     database.exec(
       "ALTER TABLE heddle_session_runtime ADD COLUMN repository_name TEXT",
+    );
+  }
+  const epicProjectColumns = database
+    .prepare("PRAGMA table_info(heddle_epic_projects)")
+    .all() as Array<{ name: string }>;
+  if (!epicProjectColumns.some(({ name }) => name === "deleted")) {
+    database.exec(
+      "ALTER TABLE heddle_epic_projects ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1))",
     );
   }
 };

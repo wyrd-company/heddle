@@ -114,7 +114,7 @@ describe("EpicProjectCoordinator", () => {
       projectId: created.projectId,
       type: "project.delete",
     });
-    expect(persistence.getEpicProject(101)).toBeUndefined();
+    expect(persistence.getEpicProject(101)?.state).toBe("deleted");
     persistence.close();
   });
 
@@ -236,5 +236,54 @@ describe("EpicProjectCoordinator", () => {
       ]),
     ).rejects.toThrow("Epic 101 changed durable product identity");
     persistence.close();
+  });
+
+  it("retains a configured deletion tombstone across process restart", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const config = configuration(root);
+    config.products[0]!.epicProject = {
+      epicId: 101,
+      projectId: "retained-project",
+    };
+    const stateDirectory = join(root, "state");
+    const commands: T3DispatchCommand[] = [];
+    const t3 = {
+      dispatch: async (command: T3DispatchCommand) => (
+        commands.push(command),
+        { sequence: commands.length }
+      ),
+    };
+    const firstPersistence = new SqlitePersistence({ stateDirectory });
+    const first = new EpicProjectCoordinator(
+      config,
+      firstPersistence,
+      new ProductRoutingCatalog(config),
+      t3,
+      undefined,
+      async () => undefined,
+    );
+
+    await expect(first.reconcile([task("done")])).resolves.toMatchObject([
+      { epicId: 101, kind: "deleted", projectId: "retained-project" },
+    ]);
+    firstPersistence.close();
+
+    const restartedPersistence = new SqlitePersistence({ stateDirectory });
+    const restarted = new EpicProjectCoordinator(
+      config,
+      restartedPersistence,
+      new ProductRoutingCatalog(config),
+      t3,
+      undefined,
+      async () => undefined,
+    );
+    await expect(restarted.reconcile([task("done")])).resolves.toEqual([]);
+    expect(restartedPersistence.getEpicProject(101)?.state).toBe("deleted");
+    expect(() =>
+      restarted.projectForTask({ ...task("todo"), id: 102, parent: 101 }),
+    ).toThrow("has no active T3 project");
+    expect(commands).toHaveLength(1);
+    restartedPersistence.close();
   });
 });

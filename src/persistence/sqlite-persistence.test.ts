@@ -76,6 +76,44 @@ afterEach(async () => {
 });
 
 describe("SqlitePersistence", () => {
+  it("migrates legacy epic projects to durable tombstone storage", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_epic_projects (
+        epic_id INTEGER PRIMARY KEY,
+        product_name TEXT NOT NULL,
+        project_id TEXT NOT NULL UNIQUE,
+        state TEXT NOT NULL CHECK (state IN ('creating', 'active', 'deleting')),
+        create_command_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        delete_command_id TEXT NOT NULL UNIQUE
+      );
+      INSERT INTO heddle_epic_projects VALUES
+        (101, 'Sample product', 'sample-project', 'active',
+         'sample-create', '2026-01-01T00:00:00.000Z', 'sample-delete');
+    `);
+    legacy.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+    expect(persistence.getEpicProject(101)).toMatchObject({
+      epicId: 101,
+      projectId: "sample-project",
+      state: "active",
+    });
+    const migrated = new Database(databasePath, { readonly: true });
+    expect(
+      (
+        migrated
+          .prepare("PRAGMA table_info(heddle_epic_projects)")
+          .all() as Array<{ name: string }>
+      ).map(({ name }) => name),
+    ).toContain("deleted");
+    migrated.close();
+    persistence.close();
+  });
+
   it("creates, reads, updates, lists, and deletes instances", async () => {
     const stateDirectory = await makeStateDirectory();
     const persistence = new SqlitePersistence({ stateDirectory });

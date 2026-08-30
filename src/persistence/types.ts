@@ -74,7 +74,7 @@ export interface EpicProjectRecord {
   epicId: number;
   productName: string;
   projectId: string;
-  state: "active" | "creating" | "deleting";
+  state: "active" | "creating" | "deleted" | "deleting";
 }
 
 export type EventRow = {

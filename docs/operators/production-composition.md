@@ -74,8 +74,10 @@ provider. An in-progress epic gets one T3 project titled
 each declared repository at `/workspaces/worktrees/{epic-id}/{repository}` on
 `epic/{epic-id}` before project creation. Paused, stopped, and UAT epics retain
 their project; a done epic's project is deleted. Child task threads use that
-epic project. Ad-hoc threads use `adHocProject.projectId`. Subagents reuse the
-parent's project and worktree.
+epic project. Successful deletion leaves a durable local tombstone; restart
+does not seed a configured tombstoned project as active or repeat its deletion.
+Ad-hoc threads use `adHocProject.projectId`. Subagents reuse the parent's project
+and worktree.
 
 Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
 repo-first worktrees are not migrated. Every thread has a bounded deterministic
