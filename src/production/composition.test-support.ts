@@ -254,6 +254,11 @@ next_id: 1
       root,
       taskId,
       configuration: {
+        adHocProject: {
+          name: "Shared tasks",
+          projectId: "workspace-project",
+          workspaceRoot: root,
+        },
         boardDirectory,
         cadenceMilliseconds: 60_000,
         observationThresholds: {
@@ -268,21 +273,29 @@ next_id: 1
           subagents: { maxDepth: 1, maxFanOut: 1 },
           usageWindowHours: 5,
         },
-        projectId: "workspace-project",
+        products: [
+          {
+            name: "Sample product",
+            repos: [
+              {
+                name: "sample-repository",
+                repositoryRoot,
+              },
+            ],
+          },
+        ],
         pushover: {
           apiUrl: "https://notify.invalid/messages",
           applicationToken: "application-token",
           consoleBaseUrl: "https://console.invalid/",
           userKey: "operator-key",
         },
-        repositoryRoot,
         session: {
           baseRef: "main",
           cliVersion: "0.91.0",
           driver: "codex",
           interactionMode: "default",
           model: "sample-model",
-          repositoryName: "sample-repository",
           runtimeMode: "auto-accept-edits",
           skillPointer: "skill://sample",
           worktreesRoot: join(root, "worktrees"),

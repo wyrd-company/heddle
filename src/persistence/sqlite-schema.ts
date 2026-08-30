@@ -39,6 +39,7 @@ export const initializePersistenceSchema = (
       board_status TEXT NOT NULL,
       state TEXT NOT NULL,
       provider TEXT,
+      lifecycle_repository_name TEXT,
       deferral_json TEXT,
       stage_id TEXT,
       stage_entered_at INTEGER,
@@ -57,6 +58,8 @@ export const initializePersistenceSchema = (
       session_key TEXT PRIMARY KEY,
       activation INTEGER NOT NULL CHECK (activation > 0),
       instance_id TEXT NOT NULL,
+      project_id TEXT,
+      repository_name TEXT,
       stage_id TEXT NOT NULL,
       thread_id TEXT NOT NULL UNIQUE,
       UNIQUE(instance_id, stage_id, activation)
@@ -70,6 +73,16 @@ export const initializePersistenceSchema = (
       recorded_at TEXT NOT NULL,
       completed_at TEXT,
       PRIMARY KEY (effect_kind, stable_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS heddle_epic_projects (
+      epic_id INTEGER PRIMARY KEY,
+      product_name TEXT NOT NULL,
+      project_id TEXT NOT NULL UNIQUE,
+      state TEXT NOT NULL CHECK (state IN ('creating', 'active', 'deleting')),
+      create_command_id TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      delete_command_id TEXT NOT NULL UNIQUE
     );
 
     CREATE TRIGGER IF NOT EXISTS heddle_instance_events_no_update
@@ -97,6 +110,29 @@ export const initializePersistenceSchema = (
   if (!effectColumns.some(({ name }) => name === "payload_json")) {
     database.exec(
       "ALTER TABLE heddle_completed_effects ADD COLUMN payload_json TEXT NOT NULL DEFAULT 'null'",
+    );
+  }
+  const reconcilerColumns = database
+    .prepare("PRAGMA table_info(heddle_reconciler_runtime)")
+    .all() as Array<{ name: string }>;
+  if (
+    !reconcilerColumns.some(({ name }) => name === "lifecycle_repository_name")
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_reconciler_runtime ADD COLUMN lifecycle_repository_name TEXT",
+    );
+  }
+  const sessionColumns = database
+    .prepare("PRAGMA table_info(heddle_session_runtime)")
+    .all() as Array<{ name: string }>;
+  if (!sessionColumns.some(({ name }) => name === "project_id")) {
+    database.exec(
+      "ALTER TABLE heddle_session_runtime ADD COLUMN project_id TEXT",
+    );
+  }
+  if (!sessionColumns.some(({ name }) => name === "repository_name")) {
+    database.exec(
+      "ALTER TABLE heddle_session_runtime ADD COLUMN repository_name TEXT",
     );
   }
 };

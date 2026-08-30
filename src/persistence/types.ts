@@ -47,6 +47,7 @@ export interface ReconcilerRuntimeRecord {
   boardStatus: string;
   deferral?: JsonValue;
   instanceId: string;
+  lifecycleRepositoryName?: string;
   provider?: string;
   sessionKey?: string;
   stageEnteredAt?: number;
@@ -59,9 +60,21 @@ export interface ReconcilerRuntimeRecord {
 export interface SessionRuntimeRecord {
   activation: number;
   instanceId: string;
+  projectId?: string;
+  repositoryName?: string;
   sessionKey: string;
   stageId: string;
   threadId: string;
+}
+
+export interface EpicProjectRecord {
+  createCommandId: string;
+  createdAt: string;
+  deleteCommandId: string;
+  epicId: number;
+  productName: string;
+  projectId: string;
+  state: "active" | "creating" | "deleting";
 }
 
 export type EventRow = {

@@ -117,7 +117,7 @@ describe("production subagent composition", () => {
     );
     expect(childCreate).toMatchObject({
       branch: `heddle/task-${fixture.taskId}`,
-      projectId: fixture.configuration.projectId,
+      projectId: fixture.configuration.adHocProject.projectId,
       title: expect.stringContaining(`task-${fixture.taskId}`),
     });
     expect(childCreate?.worktreePath).toBe(

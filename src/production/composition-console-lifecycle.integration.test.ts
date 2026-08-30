@@ -59,7 +59,7 @@ describe("production console lifecycle source", () => {
     );
 
     const blueprintPath = join(
-      configuration.repositoryRoot,
+      configuration.products[0]!.repos[0]!.repositoryRoot,
       "blueprints/sample.json",
     );
     const workingBlueprint = JSON.parse(

@@ -5,13 +5,13 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "adHocProject",
     "boardDirectory",
     "cadenceMilliseconds",
     "observationThresholds",
     "pacing",
-    "projectId",
+    "products",
     "pushover",
-    "repositoryRoot",
     "session",
     "stageThresholds",
     "stateDirectory",
@@ -19,6 +19,16 @@
     "t3"
   ],
   "properties": {
+    "adHocProject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "projectId", "workspaceRoot"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "workspaceRoot": { "type": "string", "pattern": "^/" }
+      }
+    },
     "boardDirectory": { "type": "string", "pattern": "^/" },
     "cadenceMilliseconds": { "type": "integer", "minimum": 1 },
     "observationThresholds": {
@@ -69,7 +79,40 @@
         "usageWindowHours": { "const": 5 }
       }
     },
-    "projectId": { "type": "string", "minLength": 1 },
+    "products": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "repos"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "repos": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "repositoryRoot"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "repositoryRoot": { "type": "string", "pattern": "^/" }
+              }
+            }
+          },
+          "epicProject": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["epicId", "projectId"],
+            "properties": {
+              "epicId": { "type": "integer", "minimum": 1 },
+              "projectId": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
     "pushover": {
       "type": "object",
       "additionalProperties": false,
@@ -89,7 +132,6 @@
         "userKey": { "type": "string", "minLength": 1 }
       }
     },
-    "repositoryRoot": { "type": "string", "pattern": "^/" },
     "session": {
       "type": "object",
       "additionalProperties": false,
@@ -99,7 +141,6 @@
         "driver",
         "interactionMode",
         "model",
-        "repositoryName",
         "runtimeMode",
         "skillPointer"
       ],
@@ -109,7 +150,6 @@
         "driver": { "type": "string", "minLength": 1 },
         "interactionMode": { "type": "string", "minLength": 1 },
         "model": { "type": "string", "minLength": 1 },
-        "repositoryName": { "type": "string", "minLength": 1 },
         "runtimeMode": { "type": "string", "minLength": 1 },
         "skillPointer": { "type": "string", "minLength": 1 },
         "worktreesRoot": { "type": "string", "pattern": "^/" }

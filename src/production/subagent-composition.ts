@@ -29,6 +29,45 @@ const assignments = (persistence: SqlitePersistence): TodoAssignment[] =>
         : [],
     );
 
+const parentSessionRoute = (
+  persistence: SqlitePersistence,
+  sessionKey: string,
+): { projectId: string; repositoryName: string } => {
+  const sessions = new Map(
+    persistence
+      .listSessionRuntime()
+      .map((session) => [session.sessionKey, session]),
+  );
+  const delegated = new Map(
+    assignments(persistence).map((assignment) => [
+      assignment.sessionKey,
+      assignment,
+    ]),
+  );
+  let current = sessionKey;
+  const visited = new Set<string>();
+  while (!visited.has(current)) {
+    visited.add(current);
+    const session = sessions.get(current);
+    if (session !== undefined) {
+      if (
+        session.projectId === undefined ||
+        session.repositoryName === undefined
+      ) {
+        throw new Error("Subagent parent has no durable production route");
+      }
+      return {
+        projectId: session.projectId,
+        repositoryName: session.repositoryName,
+      };
+    }
+    const assignment = delegated.get(current);
+    if (assignment === undefined) break;
+    current = assignment.parentSessionKey;
+  }
+  throw new Error("Subagent parent has no canonical production route");
+};
+
 const uniqueTarget = (
   targets: SessionObservationTarget[],
   sessionKey: string,
@@ -150,10 +189,17 @@ export const createProductionSubagentCoordinator = (options: {
       }
       const taskId = runtimes[0]!.taskId;
       const session = configuration.session;
+      const route = parentSessionRoute(persistence, binding.sessionKey);
+      const repository = configuration.products
+        .flatMap(({ repos }) => repos)
+        .find(({ name }) => name === route.repositoryName);
+      if (repository === undefined) {
+        throw new Error("Subagent parent repository is not configured");
+      }
       return {
         interactionMode: session.interactionMode,
         modelSelection: { instanceId: provider, model },
-        projectId: configuration.projectId,
+        projectId: route.projectId,
         providerContext: {
           cliVersion: session.cliVersion,
           driver: provider,
@@ -167,9 +213,9 @@ export const createProductionSubagentCoordinator = (options: {
         worktree: {
           baseRef: session.baseRef,
           branch: `heddle/task-${taskId}`,
-          repositoryName: session.repositoryName,
-          repositoryRoot: configuration.repositoryRoot,
-          worktreeName: `task-${taskId}`,
+          repositoryName: repository.name,
+          repositoryRoot: repository.repositoryRoot,
+          worktreeName: String(taskId),
           ...(session.worktreesRoot === undefined
             ? {}
             : { worktreesRoot: session.worktreesRoot }),

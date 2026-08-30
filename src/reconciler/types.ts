@@ -36,6 +36,7 @@ export interface StartReconcilerInstanceInput {
     provider: string;
   };
   instanceId: string;
+  repositoryName?: string;
   task: BoardTask;
 }
 
@@ -106,6 +107,7 @@ export type ReconciliationAction =
       blueprintPath: string;
       instanceId: string;
       kind: "instance-start";
+      repositoryName?: string;
       taskId: number;
     }
   | {

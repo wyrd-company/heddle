@@ -31,6 +31,11 @@ const attemptsPath = join(root, "attempts.jsonl");
 const outcomePath = join(root, "outcome.json");
 
 const configuration: ProductionConfiguration = {
+  adHocProject: {
+    name: "Shared tasks",
+    projectId: "workspace-project",
+    workspaceRoot: root,
+  },
   boardDirectory: join(root, "board"),
   cadenceMilliseconds: 60_000,
   observationThresholds: {
@@ -45,21 +50,29 @@ const configuration: ProductionConfiguration = {
     subagents: { maxDepth: 1, maxFanOut: 1 },
     usageWindowHours: 5,
   },
-  projectId: "workspace-project",
+  products: [
+    {
+      name: "Sample product",
+      repos: [
+        {
+          name: "sample-repository",
+          repositoryRoot: join(root, "repository"),
+        },
+      ],
+    },
+  ],
   pushover: {
     apiUrl: "https://notify.invalid/messages",
     applicationToken: "application-token",
     consoleBaseUrl: "https://console.invalid/",
     userKey: "operator-key",
   },
-  repositoryRoot: join(root, "repository"),
   session: {
     baseRef: "main",
     cliVersion: "0.91.0",
     driver: "codex",
     interactionMode: "default",
     model: "sample-model",
-    repositoryName: "sample-repository",
     runtimeMode: "auto-accept-edits",
     skillPointer: "skill://sample",
   },

@@ -78,6 +78,10 @@
         "handoff": {
           "enum": ["standard", "remediation"]
         },
+        "repo": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+        },
         "todo-template": {
           "$ref": "#/$defs/artifact-id"
         },
@@ -146,6 +150,9 @@
                 },
                 {
                   "required": ["handoff"]
+                },
+                {
+                  "required": ["repo"]
                 }
               ]
             }

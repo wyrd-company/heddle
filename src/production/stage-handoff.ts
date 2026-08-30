@@ -13,13 +13,17 @@ import { advanceOperationId } from "../mcp-server/operations.js";
 import type { SqlitePersistence } from "../persistence/index.js";
 
 export type ProductionHandoffStage = StageHandoffInput["stage"];
+export type ProductionStageMetadata = {
+  handoff: ProductionHandoffStage;
+  repositoryName?: string;
+};
 
 export const readProductionHandoffStage = async (input: {
   instanceId: string;
   persistence: SqlitePersistence;
   repositoryRoot: string;
   stageId: string;
-}): Promise<ProductionHandoffStage> => {
+}): Promise<ProductionStageMetadata> => {
   const record = input.persistence.getInstance(input.instanceId);
   if (record === undefined) {
     throw new Error(`Instance does not exist: ${input.instanceId}`);
@@ -55,9 +59,12 @@ export const readProductionHandoffStage = async (input: {
   );
   if (node.handoff === "standard") {
     return {
-      kind: "standard",
-      name: input.stageId,
-      priorStageOutputs: outputs.map(({ output }) => output),
+      handoff: {
+        kind: "standard",
+        name: input.stageId,
+        priorStageOutputs: outputs.map(({ output }) => output),
+      },
+      ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
     };
   }
   const review = outputs.at(-1)?.output;
@@ -67,13 +74,16 @@ export const readProductionHandoffStage = async (input: {
     );
   }
   return {
-    kind: "remediation",
-    name: input.stageId,
-    review: {
-      findings: review["findings"],
-      ...(review["transcript"] === undefined
-        ? {}
-        : { transcript: review["transcript"] }),
+    handoff: {
+      kind: "remediation",
+      name: input.stageId,
+      review: {
+        findings: review["findings"],
+        ...(review["transcript"] === undefined
+          ? {}
+          : { transcript: review["transcript"] }),
+      },
     },
+    ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
   };
 };

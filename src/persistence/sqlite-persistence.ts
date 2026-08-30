@@ -31,8 +31,9 @@ import {
   protectFlowcraftHistory,
 } from "./sqlite-schema.js";
 import type {
-  EventRow,
   DurableAttentionRecord,
+  EpicProjectRecord,
+  EventRow,
   InstanceEventClaim,
   InstanceRecord,
   InstanceRow,
@@ -409,10 +410,88 @@ export class SqlitePersistence {
     );
   }
 
+  getEpicProject(epicId: number): EpicProjectRecord | undefined {
+    this.assertTaskId("epicId", epicId);
+    return this.database
+      .prepare(
+        `SELECT epic_id AS epicId, product_name AS productName,
+                project_id AS projectId, state,
+                create_command_id AS createCommandId,
+                created_at AS createdAt,
+                delete_command_id AS deleteCommandId
+         FROM heddle_epic_projects
+         WHERE epic_id = ?`,
+      )
+      .get(epicId) as EpicProjectRecord | undefined;
+  }
+
+  listEpicProjects(): EpicProjectRecord[] {
+    return this.database
+      .prepare(
+        `SELECT epic_id AS epicId, product_name AS productName,
+                project_id AS projectId, state,
+                create_command_id AS createCommandId,
+                created_at AS createdAt,
+                delete_command_id AS deleteCommandId
+         FROM heddle_epic_projects
+         ORDER BY epic_id`,
+      )
+      .all() as EpicProjectRecord[];
+  }
+
+  writeEpicProject(record: EpicProjectRecord): void {
+    this.assertTaskId("epicId", record.epicId);
+    for (const name of [
+      "productName",
+      "projectId",
+      "createCommandId",
+      "createdAt",
+      "deleteCommandId",
+    ] as const) {
+      this.assertStableId(name, record[name]);
+    }
+    const prior = this.getEpicProject(record.epicId);
+    if (
+      prior !== undefined &&
+      (prior.productName !== record.productName ||
+        prior.projectId !== record.projectId ||
+        prior.createCommandId !== record.createCommandId ||
+        prior.createdAt !== record.createdAt ||
+        prior.deleteCommandId !== record.deleteCommandId)
+    ) {
+      throw new Error(`Epic ${record.epicId} changed durable project identity`);
+    }
+    this.database
+      .prepare(
+        `INSERT INTO heddle_epic_projects
+           (epic_id, product_name, project_id, state,
+            create_command_id, created_at, delete_command_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(epic_id) DO UPDATE SET state = excluded.state`,
+      )
+      .run(
+        record.epicId,
+        record.productName,
+        record.projectId,
+        record.state,
+        record.createCommandId,
+        record.createdAt,
+        record.deleteCommandId,
+      );
+  }
+
+  deleteEpicProject(epicId: number): void {
+    this.assertTaskId("epicId", epicId);
+    this.database
+      .prepare("DELETE FROM heddle_epic_projects WHERE epic_id = ?")
+      .run(epicId);
+  }
+
   listReconcilerRuntime(): ReconcilerRuntimeRecord[] {
     const rows = this.database
       .prepare(
         `SELECT instance_id, task_id, board_status, state, provider,
+                lifecycle_repository_name,
                 deferral_json, stage_id, stage_entered_at, session_key, thread_id
          FROM heddle_reconciler_runtime
          ORDER BY task_id`,
@@ -421,6 +500,7 @@ export class SqlitePersistence {
       board_status: string;
       deferral_json: string | null;
       instance_id: string;
+      lifecycle_repository_name: string | null;
       provider: string | null;
       session_key: string | null;
       stage_entered_at: number | null;
@@ -435,6 +515,9 @@ export class SqlitePersistence {
         ? {}
         : { deferral: JSON.parse(row.deferral_json) as JsonValue }),
       instanceId: row.instance_id,
+      ...(row.lifecycle_repository_name === null
+        ? {}
+        : { lifecycleRepositoryName: row.lifecycle_repository_name }),
       ...(row.provider === null ? {} : { provider: row.provider }),
       ...(row.session_key === null ? {} : { sessionKey: row.session_key }),
       ...(row.stage_entered_at === null
@@ -452,14 +535,16 @@ export class SqlitePersistence {
     this.database
       .prepare(
         `INSERT INTO heddle_reconciler_runtime
-           (instance_id, task_id, board_status, state, provider, deferral_json,
-            stage_id, stage_entered_at, session_key, thread_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (instance_id, task_id, board_status, state, provider,
+            lifecycle_repository_name, deferral_json, stage_id,
+            stage_entered_at, session_key, thread_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(instance_id) DO UPDATE SET
            task_id = excluded.task_id,
            board_status = excluded.board_status,
            state = excluded.state,
            provider = excluded.provider,
+           lifecycle_repository_name = excluded.lifecycle_repository_name,
            deferral_json = excluded.deferral_json,
            stage_id = excluded.stage_id,
            stage_entered_at = excluded.stage_entered_at,
@@ -472,6 +557,7 @@ export class SqlitePersistence {
         record.boardStatus,
         record.state,
         record.provider ?? null,
+        record.lifecycleRepositoryName ?? null,
         record.deferral === undefined ? null : serialize(record.deferral),
         record.stageId ?? null,
         record.stageEnteredAt ?? null,
@@ -481,14 +567,25 @@ export class SqlitePersistence {
   }
 
   listSessionRuntime(): SessionRuntimeRecord[] {
-    return this.database
+    const rows = this.database
       .prepare(
-        `SELECT activation, instance_id AS instanceId, session_key AS sessionKey,
+        `SELECT activation, instance_id AS instanceId, project_id AS projectId,
+                repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
          ORDER BY instance_id, stage_id, activation`,
       )
-      .all() as SessionRuntimeRecord[];
+      .all() as Array<
+      Omit<SessionRuntimeRecord, "projectId" | "repositoryName"> & {
+        projectId: string | null;
+        repositoryName: string | null;
+      }
+    >;
+    return rows.map(({ projectId, repositoryName, ...row }) => ({
+      ...row,
+      ...(projectId === null ? {} : { projectId }),
+      ...(repositoryName === null ? {} : { repositoryName }),
+    }));
   }
 
   writeSessionRuntime(record: SessionRuntimeRecord): void {
@@ -503,32 +600,90 @@ export class SqlitePersistence {
     ] as const) {
       this.assertStableId(name, record[name]);
     }
-    const prior = this.database
+    if (record.projectId !== undefined) {
+      this.assertStableId("projectId", record.projectId);
+    }
+    if (record.repositoryName !== undefined) {
+      this.assertStableId("repositoryName", record.repositoryName);
+    }
+    const priorRow = this.database
       .prepare(
-        `SELECT activation, instance_id AS instanceId, session_key AS sessionKey,
+        `SELECT activation, instance_id AS instanceId, project_id AS projectId,
+                repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
          WHERE session_key = ?`,
       )
-      .get(record.sessionKey) as SessionRuntimeRecord | undefined;
+      .get(record.sessionKey) as
+      | (Omit<SessionRuntimeRecord, "projectId" | "repositoryName"> & {
+          projectId: string | null;
+          repositoryName: string | null;
+        })
+      | undefined;
+    const prior =
+      priorRow === undefined
+        ? undefined
+        : {
+            ...priorRow,
+            ...(priorRow.projectId === null
+              ? { projectId: undefined }
+              : { projectId: priorRow.projectId }),
+            ...(priorRow.repositoryName === null
+              ? { repositoryName: undefined }
+              : { repositoryName: priorRow.repositoryName }),
+          };
     if (prior !== undefined) {
-      if (JSON.stringify(prior) !== JSON.stringify(record)) {
+      const coreChanged =
+        prior.activation !== record.activation ||
+        prior.instanceId !== record.instanceId ||
+        prior.sessionKey !== record.sessionKey ||
+        prior.stageId !== record.stageId ||
+        prior.threadId !== record.threadId;
+      const routeChanged =
+        (prior.projectId !== undefined &&
+          record.projectId !== undefined &&
+          prior.projectId !== record.projectId) ||
+        (prior.repositoryName !== undefined &&
+          record.repositoryName !== undefined &&
+          prior.repositoryName !== record.repositoryName);
+      if (coreChanged || routeChanged) {
         throw new Error(
           `Session '${record.sessionKey}' changed durable identity`,
         );
+      }
+      if (
+        (prior.projectId === undefined && record.projectId !== undefined) ||
+        (prior.repositoryName === undefined &&
+          record.repositoryName !== undefined)
+      ) {
+        this.database
+          .prepare(
+            `UPDATE heddle_session_runtime
+             SET project_id = COALESCE(project_id, ?),
+                 repository_name = COALESCE(repository_name, ?)
+             WHERE session_key = ?`,
+          )
+          .run(
+            record.projectId ?? null,
+            record.repositoryName ?? null,
+            record.sessionKey,
+          );
       }
       return;
     }
     this.database
       .prepare(
         `INSERT INTO heddle_session_runtime
-           (session_key, activation, instance_id, stage_id, thread_id)
-         VALUES (?, ?, ?, ?, ?)`,
+           (session_key, activation, instance_id, project_id, repository_name,
+            stage_id, thread_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.sessionKey,
         record.activation,
         record.instanceId,
+        record.projectId ?? null,
+        record.repositoryName ?? null,
         record.stageId,
         record.threadId,
       );
@@ -544,6 +699,12 @@ export class SqlitePersistence {
   private assertInstanceId(instanceId: string): void {
     if (instanceId.trim() === "") {
       throw new TypeError("instanceId must not be empty");
+    }
+  }
+
+  private assertTaskId(name: string, value: number): void {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new TypeError(`${name} must be a positive safe integer`);
     }
   }
 

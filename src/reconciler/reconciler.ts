@@ -228,6 +228,9 @@ export class Reconciler {
         blueprintPath: resolution.blueprintPath,
         ...(dispatch === undefined ? {} : { dispatch }),
         instanceId,
+        ...(resolution.repositoryName === undefined
+          ? {}
+          : { repositoryName: resolution.repositoryName }),
         task: { ...task },
       });
       if (dispatch !== undefined) {
@@ -241,6 +244,9 @@ export class Reconciler {
         blueprintPath: resolution.blueprintPath,
         instanceId,
         kind: "instance-start",
+        ...(resolution.repositoryName === undefined
+          ? {}
+          : { repositoryName: resolution.repositoryName }),
         taskId: task.id,
       });
     }

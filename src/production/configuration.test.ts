@@ -14,6 +14,11 @@ import {
 } from "./configuration.js";
 
 const fixture = (): ProductionConfiguration => ({
+  adHocProject: {
+    name: "Shared tasks",
+    projectId: "shared-project",
+    workspaceRoot: "/tmp/sample-workspace",
+  },
   boardDirectory: "/tmp/sample-board",
   cadenceMilliseconds: 1_000,
   observationThresholds: {
@@ -28,21 +33,30 @@ const fixture = (): ProductionConfiguration => ({
     subagents: { maxDepth: 1, maxFanOut: 1 },
     usageWindowHours: 5,
   },
-  projectId: "workspace-project",
+  products: [
+    {
+      epicProject: { epicId: 101, projectId: "epic-project" },
+      name: "Sample product",
+      repos: [
+        {
+          name: "sample-repository",
+          repositoryRoot: "/tmp/sample-repository",
+        },
+      ],
+    },
+  ],
   pushover: {
     apiUrl: "https://notify.invalid/messages",
     applicationToken: "application-token",
     consoleBaseUrl: "https://console.invalid/",
     userKey: "operator-key",
   },
-  repositoryRoot: "/tmp/sample-repository",
   session: {
     baseRef: "main",
     cliVersion: "1.0.0",
     driver: "provider-a",
     interactionMode: "default",
     model: "sample-model",
-    repositoryName: "sample-repository",
     runtimeMode: "sample-mode",
     skillPointer: "skill://sample",
   },
@@ -97,6 +111,28 @@ describe("production configuration", () => {
 
     expect(() => validateProductionConfiguration(invalid)).toThrow(
       "pacing.defaultProvider must equal session.driver",
+    );
+  });
+
+  it("rejects a repository referenced by more than one product", () => {
+    const invalid: ProductionConfiguration = {
+      ...fixture(),
+      products: [
+        ...fixture().products,
+        {
+          name: "Second product",
+          repos: [
+            {
+              name: "sample-repository",
+              repositoryRoot: "/tmp/second-repository",
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() => validateProductionConfiguration(invalid)).toThrow(
+      "must belong to exactly one product",
     );
   });
 

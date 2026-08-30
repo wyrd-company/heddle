@@ -19,11 +19,7 @@ import {
   type SessionObservationT3Client,
   type SessionT3Client,
 } from "../control-plane/index.js";
-import {
-  BlueprintArtifactEditor,
-  LifecycleEngine,
-  LifecycleResolver,
-} from "../engine/index.js";
+import { type LifecycleEffect } from "../engine/index.js";
 import {
   createWorkflowMcpHttpHandler,
   EscalationCoordinator,
@@ -55,6 +51,11 @@ import {
   productionSessionTargets,
 } from "./subagent-composition.js";
 import { ProductionAttentionActions } from "./attention-actions.js";
+import { EpicProjectCoordinator } from "./epic-projects.js";
+import { ProductionLifecycleRouter } from "./lifecycle-router.js";
+import { ProductBlueprintArtifactEditor } from "./product-blueprint-editor.js";
+import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
+import { ProductRoutingCatalog } from "./product-routing.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -81,7 +82,7 @@ export type ProductionComposition = {
   consoleActions: ConsoleAttentionActionPort;
   consoleState: ConsoleStateSource;
   escalation: EscalationCoordinator;
-  lifecycle: LifecycleEngine;
+  lifecycle: ProductionLifecycleRouter;
   mcp: WorkflowMcpHttpHandler;
   persistence: SqlitePersistence;
   scheduler: ProductionScheduler;
@@ -115,16 +116,26 @@ export const createProductionComposition = (
         new HttpPushoverTransport(configuration.pushover.apiUrl),
       options.afterPushoverTransportSuccess,
     );
-    const effects = createMechanicalNodeEffects({ board });
-    const lifecycle = new LifecycleEngine({
+    const effects: Record<string, LifecycleEffect> =
+      createMechanicalNodeEffects({ board });
+    const routing = new ProductRoutingCatalog(configuration);
+    const lifecycle = new ProductionLifecycleRouter({
       effects,
       persistence,
-      repositoryRoot: configuration.repositoryRoot,
+      products: configuration.products,
     });
+    const projects = new EpicProjectCoordinator(
+      configuration,
+      persistence,
+      routing,
+      t3,
+    );
     const instances = new ProductionInstanceController(
       configuration,
       persistence,
       lifecycle,
+      routing,
+      projects,
       t3,
     );
     const escalation = new EscalationCoordinator({
@@ -204,7 +215,7 @@ export const createProductionComposition = (
       attention,
       board,
       instances,
-      lifecycleResolver: new LifecycleResolver(configuration.repositoryRoot),
+      lifecycleResolver: new ProductLifecycleResolver(routing),
       pacing: {
         evaluator: pacing,
       },
@@ -214,8 +225,14 @@ export const createProductionComposition = (
       cadenceMilliseconds: configuration.cadenceMilliseconds,
       onError: options.onSchedulerError,
       pass: async () => {
+        const before = await board.readBoard();
+        await projects.reconcile(before);
+        routing.update(before);
         await reconciler.reconcile();
-        await instances.synchronize(await board.readBoard());
+        const after = await board.readBoard();
+        await projects.reconcile(after);
+        routing.update(after);
+        await instances.synchronize(after);
         for (const session of productionSessionTargets(persistence!)) {
           await observer.observe({
             instanceId: session.instanceId,
@@ -236,15 +253,29 @@ export const createProductionComposition = (
     return {
       attention,
       board,
-      blueprintEditor: new BlueprintArtifactEditor({
+      blueprintEditor: new ProductBlueprintArtifactEditor({
         effects,
-        repositoryRoot: configuration.repositoryRoot,
+        products: configuration.products,
       }),
       consoleActions,
       consoleState: new ProductionConsoleState(
         persistence,
         attention,
-        configuration.repositoryRoot,
+        (instanceId) => {
+          const runtime = persistence!
+            .listReconcilerRuntime()
+            .find((candidate) => candidate.instanceId === instanceId);
+          const repositoryName = runtime?.lifecycleRepositoryName;
+          const repository = configuration.products
+            .flatMap(({ repos }) => repos)
+            .find(({ name }) => name === repositoryName);
+          if (repository === undefined) {
+            throw new Error(
+              `Instance '${instanceId}' has no configured lifecycle repository`,
+            );
+          }
+          return repository.repositoryRoot;
+        },
       ),
       escalation,
       lifecycle,

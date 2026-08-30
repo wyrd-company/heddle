@@ -275,7 +275,7 @@ describe("production lifecycle composition", () => {
             instanceId: configuration.session.driver,
             model: configuration.session.model,
           },
-          projectId: configuration.projectId,
+          projectId: configuration.adHocProject.projectId,
           providerContext: {
             cliVersion: configuration.session.cliVersion,
             driver: configuration.session.driver,
@@ -287,9 +287,9 @@ describe("production lifecycle composition", () => {
           worktree: {
             baseRef: configuration.session.baseRef,
             branch: `heddle/task-${taskId}`,
-            repositoryName: configuration.session.repositoryName,
-            repositoryRoot: configuration.repositoryRoot,
-            worktreeName: `task-${taskId}`,
+            repositoryName: configuration.products[0]!.repos[0]!.name,
+            repositoryRoot: configuration.products[0]!.repos[0]!.repositoryRoot,
+            worktreeName: String(taskId),
             worktreesRoot: configuration.session.worktreesRoot,
           },
         },
@@ -373,6 +373,8 @@ describe("production lifecycle composition", () => {
       first.persistence.writeSessionRuntime({
         activation,
         instanceId: `task-${taskId}`,
+        projectId: configuration.adHocProject.projectId,
+        repositoryName: configuration.products[0]!.repos[0]!.name,
         sessionKey: `task-${taskId}:review:${activation}`,
         stageId: "review",
         threadId: `review-thread-${activation}`,

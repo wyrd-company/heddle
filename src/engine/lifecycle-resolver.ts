@@ -20,6 +20,7 @@ export interface ResolvedLifecycle {
   artifactId: string;
   blueprintPath: string;
   kind: "resolved";
+  repositoryName?: string;
 }
 
 export interface LifecycleResolutionAttention {
@@ -28,7 +29,12 @@ export interface LifecycleResolutionAttention {
     code:
       | "lifecycle-not-declared"
       | "lifecycle-declaration-invalid"
-      | "lifecycle-blueprint-not-found";
+      | "lifecycle-blueprint-not-found"
+      | "lifecycle-blueprint-ambiguous"
+      | "product-not-declared"
+      | "repository-not-declared"
+      | "stage-repository-not-declared"
+      | "stage-repository-undeclared";
     message: string;
     taskId: number;
   };

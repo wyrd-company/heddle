@@ -87,6 +87,14 @@ export const validateBlueprint = (
         `Non-wait node ${JSON.stringify(node.id)} must not declare handoff metadata`,
       );
     }
+    if (
+      node.repo !== undefined &&
+      (node.uses !== "wait" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(node.repo))
+    ) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} has invalid repository metadata`,
+      );
+    }
     const dispositions = new Set<string>();
     const edges = outgoingEdges(blueprint, node.id);
     const usesDispositionRouting = edges.some(

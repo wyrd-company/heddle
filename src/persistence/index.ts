@@ -8,6 +8,7 @@ export {
   type FlowcraftHistory,
 } from "./sqlite-persistence.js";
 export type {
+  EpicProjectRecord,
   InstanceRecord,
   InstanceEventClaim,
   InstanceState,

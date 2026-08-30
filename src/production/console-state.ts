@@ -20,7 +20,7 @@ export class ProductionConsoleState implements ConsoleStateSource {
   public constructor(
     private readonly persistence: SqlitePersistence,
     private readonly attention: DurableAttentionQueue,
-    private readonly repositoryRoot: string,
+    private readonly repositoryRoot: string | ((instanceId: string) => string),
   ) {}
 
   async listAttention(): Promise<ConsoleAttention[]> {
@@ -82,7 +82,11 @@ export class ProductionConsoleState implements ConsoleStateSource {
       );
     }
     const context = readLifecycleContext(instance);
-    const blueprint = await new GitBlueprintStore(this.repositoryRoot).read(
+    const repositoryRoot =
+      typeof this.repositoryRoot === "string"
+        ? this.repositoryRoot
+        : this.repositoryRoot(instance.instanceId);
+    const blueprint = await new GitBlueprintStore(repositoryRoot).read(
       context.blueprintBlobHash,
       context.blueprintPath,
     );

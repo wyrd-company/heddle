@@ -10,7 +10,7 @@ import {
   bootstrapStageSession,
   type SessionT3Client,
 } from "../control-plane/index.js";
-import { readLifecycleContext, type LifecycleEngine } from "../engine/index.js";
+import { readLifecycleContext } from "../engine/index.js";
 import type { PacingDeferral } from "../pacing/index.js";
 import type {
   JsonValue,
@@ -26,6 +26,9 @@ import type {
 import type { ProductionConfiguration } from "./configuration.js";
 import { heddleSessionTitle } from "./session-title.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
+import type { EpicProjectCoordinator } from "./epic-projects.js";
+import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
+import type { ProductRoutingCatalog } from "./product-routing.js";
 
 const json = (value: unknown): JsonValue =>
   JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -42,7 +45,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   public constructor(
     private readonly configuration: ProductionConfiguration,
     private readonly persistence: SqlitePersistence,
-    private readonly lifecycle: LifecycleEngine,
+    private readonly lifecycle: ProductionLifecycleRouter,
+    private readonly routing: ProductRoutingCatalog,
+    private readonly projects: EpicProjectCoordinator,
     private readonly t3: SessionT3Client,
     private readonly now: () => number = Date.now,
   ) {}
@@ -77,6 +82,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   }
 
   async start(input: StartReconcilerInstanceInput): Promise<void> {
+    if (input.repositoryName === undefined) {
+      throw new Error(`Task ${input.task.id} has no lifecycle repository`);
+    }
     const previous = this.persistence
       .listReconcilerRuntime()
       .find(({ instanceId }) => instanceId === input.instanceId);
@@ -85,6 +93,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       ...(previous?.state === "starting" ? previous : {}),
       boardStatus: input.task.status,
       instanceId: input.instanceId,
+      lifecycleRepositoryName: input.repositoryName,
       ...(provider === undefined ? {} : { provider }),
       state: "starting",
       taskId: input.task.id,
@@ -99,6 +108,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       existingContext?.pendingTransition?.kind === "start"
         ? await this.lifecycle.start({
             blueprintPath: input.blueprintPath,
+            repositoryName: input.repositoryName,
             ...(existing === undefined
               ? {
                   initialContext: {
@@ -205,13 +215,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       stageId,
       threadId,
     });
-    this.persistence.writeSessionRuntime({
-      activation,
-      instanceId,
-      sessionKey,
-      stageId,
-      threadId,
-    });
     let idIndex = 0;
     const nextId = (): string => {
       const value =
@@ -222,23 +225,37 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       return value;
     };
     const session = this.configuration.session;
-    const handoffStage = await readProductionHandoffStage({
+    const stage = await readProductionHandoffStage({
       instanceId,
       persistence: this.persistence,
-      repositoryRoot: this.configuration.repositoryRoot,
+      repositoryRoot: this.repositoryRoot(starting.lifecycleRepositoryName),
       stageId,
+    });
+    const repository = this.routing.repositoryForStage(
+      task,
+      stage.repositoryName,
+    );
+    const projectId = this.projects.projectForTask(task);
+    this.persistence.writeSessionRuntime({
+      activation,
+      instanceId,
+      projectId,
+      repositoryName: repository.name,
+      sessionKey,
+      stageId,
+      threadId,
     });
     await bootstrapStageSession(
       {
         handoff: {
           skillPointer: session.skillPointer,
-          stage: handoffStage,
+          stage: stage.handoff,
           taskContract: json(task),
         },
         instanceId,
         interactionMode: session.interactionMode,
         modelSelection: { instanceId: session.driver, model: session.model },
-        projectId: this.configuration.projectId,
+        projectId,
         providerContext: {
           cliVersion: session.cliVersion,
           driver: session.driver,
@@ -250,9 +267,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         worktree: {
           baseRef: session.baseRef,
           branch: `heddle/task-${task.id}`,
-          repositoryName: session.repositoryName,
-          repositoryRoot: this.configuration.repositoryRoot,
-          worktreeName: `task-${task.id}`,
+          repositoryName: repository.name,
+          repositoryRoot: repository.repositoryRoot,
+          worktreeName: String(task.id),
           ...(session.worktreesRoot === undefined
             ? {}
             : { worktreesRoot: session.worktreesRoot }),
@@ -282,5 +299,20 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       state: "waiting",
       threadId,
     });
+  }
+
+  private repositoryRoot(repositoryName: string | undefined): string {
+    if (repositoryName === undefined) {
+      throw new Error("Lifecycle repository identity is absent");
+    }
+    const repository = this.configuration.products
+      .flatMap(({ repos }) => repos)
+      .find(({ name }) => name === repositoryName);
+    if (repository === undefined) {
+      throw new Error(
+        `Lifecycle repository '${repositoryName}' is not configured`,
+      );
+    }
+    return repository.repositoryRoot;
   }
 }
