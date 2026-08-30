@@ -141,7 +141,7 @@ describe("Heddle devcontainer feature", () => {
     }
   });
 
-  it.each(["state", "board", "tools", "config"])(
+  it.each(["state", "board", "tools", "config", "blueprints-origin"])(
     "cleans scratch resources when the %s allocation fails",
     async (allocation) => {
       const scratchRoot = await mkdtemp(
@@ -199,12 +199,6 @@ describe("Heddle devcontainer feature", () => {
       'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',
     );
     expect(featureQualification).toContain(
-      'git clone "${blueprints_origin_directory}" "${config_directory}/blueprints"',
-    );
-    expect(featureQualification).toContain(
-      'git -C "${config_directory}/blueprints" push --set-upstream origin main',
-    );
-    expect(featureQualification).toContain(
       "persistence.writeReconcilerRuntime({",
     );
     expect(featureQualification).toContain(
@@ -221,6 +215,20 @@ describe("Heddle devcontainer feature", () => {
     ).toHaveLength(2);
     expect(qualification).toContain(
       "dist/control-plane/t3-control-plane-client.js",
+    );
+  });
+
+  it("provisions the derived qualification clone with an origin upstream", async () => {
+    const qualification = await readFile(
+      "scripts/deployment/qualify-feature.sh",
+      "utf8",
+    );
+
+    expect(qualification).toContain(
+      'git clone "${blueprints_origin_directory}" "${config_directory}/blueprints"',
+    );
+    expect(qualification).toContain(
+      'git -C "${config_directory}/blueprints" push --set-upstream origin main',
     );
   });
 });
