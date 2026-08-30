@@ -7,12 +7,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   heddleSessionTitle,
-  MAXIMUM_HEDDLE_TITLE_LENGTH,
+  MAXIMUM_SESSION_TITLE_LENGTH,
 } from "./session-title.js";
 
 describe("production session title", () => {
-  it("contains the Heddle marker", () => {
-    expect(heddleSessionTitle(42, "implement")).toContain("Heddle");
+  it("uses only the task and stage-occurrence identities", () => {
+    expect(heddleSessionTitle(42, "implement-3")).toBe("task-42 · implement-3");
+    expect(heddleSessionTitle(42, "implement-3")).not.toMatch(/Heddle|epic-/);
   });
 
   it("contains the complete task identity", () => {
@@ -20,14 +21,14 @@ describe("production session title", () => {
   });
 
   it("distinguishes stages deterministically", () => {
-    const implement = heddleSessionTitle(42, "implement");
-    expect(implement).toBe(heddleSessionTitle(42, "implement"));
-    expect(implement).not.toBe(heddleSessionTitle(42, "review"));
+    const implement = heddleSessionTitle(42, "implement-1");
+    expect(implement).toBe(heddleSessionTitle(42, "implement-1"));
+    expect(implement).not.toBe(heddleSessionTitle(42, "implement-2"));
   });
 
   it("is bounded independently of the stage input length", () => {
     expect(
       heddleSessionTitle(42, "a".repeat(10_000)).length,
-    ).toBeLessThanOrEqual(MAXIMUM_HEDDLE_TITLE_LENGTH);
+    ).toBeLessThanOrEqual(MAXIMUM_SESSION_TITLE_LENGTH);
   });
 });

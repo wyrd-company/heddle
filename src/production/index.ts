@@ -25,6 +25,6 @@ export {
 export { ProductionInstanceController } from "./instance-controller.js";
 export {
   heddleSessionTitle,
-  MAXIMUM_HEDDLE_TITLE_LENGTH,
+  MAXIMUM_SESSION_TITLE_LENGTH,
 } from "./session-title.js";
 export { ProductionScheduler } from "./scheduler.js";

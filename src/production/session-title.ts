@@ -6,27 +6,39 @@
 
 import { createHash } from "node:crypto";
 
-export const MAXIMUM_HEDDLE_TITLE_LENGTH = 72;
+export const MAXIMUM_SESSION_TITLE_LENGTH = 72;
 
-const stageDiscriminator = (stageId: string): string => {
-  const readable = stageId
+const occurrenceDiscriminator = (
+  occurrence: string,
+  maximumLength: number,
+): string => {
+  const readable = occurrence
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 24);
-  const digest = createHash("sha256").update(stageId).digest("hex").slice(0, 8);
-  return `${readable || "stage"}-${digest}`;
+    .replace(/^-|-$/g, "");
+  const normalized = readable || "stage";
+  if (normalized.length <= maximumLength) return normalized;
+  const digest = createHash("sha256")
+    .update(occurrence)
+    .digest("hex")
+    .slice(0, 8);
+  return `${normalized.slice(0, maximumLength - digest.length - 1)}-${digest}`;
 };
 
-export const heddleSessionTitle = (taskId: number, stageId: string): string => {
+export const heddleSessionTitle = (
+  taskId: number,
+  occurrence: string,
+): string => {
   if (!Number.isSafeInteger(taskId) || taskId <= 0) {
     throw new TypeError("taskId must be a positive safe integer");
   }
-  if (stageId.trim() === "") throw new TypeError("stageId must not be empty");
-  const title = `Heddle · task-${taskId} · ${stageDiscriminator(stageId)}`;
-  if (title.length > MAXIMUM_HEDDLE_TITLE_LENGTH) {
-    throw new Error("Heddle session title exceeds its length bound");
+  if (occurrence.trim() === "") {
+    throw new TypeError("occurrence must not be empty");
   }
-  return title;
+  const prefix = `task-${taskId} · `;
+  return `${prefix}${occurrenceDiscriminator(
+    occurrence,
+    MAXIMUM_SESSION_TITLE_LENGTH - prefix.length,
+  )}`;
 };
