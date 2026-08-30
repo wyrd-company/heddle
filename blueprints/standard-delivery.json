@@ -20,7 +20,7 @@
       "id": "implement",
       "handoff": "standard",
       "handoff-template": {
-        "blobHash": "e3efeb16549bf1f562806aa6d992902c8027fac3",
+        "blobHash": "8f266fe406517c891633d8ef90ca3716f1356f37",
         "path": "handoff-templates/standard.md"
       },
       "uses": "wait",
@@ -53,7 +53,7 @@
       "id": "review",
       "handoff": "standard",
       "handoff-template": {
-        "blobHash": "e3efeb16549bf1f562806aa6d992902c8027fac3",
+        "blobHash": "8f266fe406517c891633d8ef90ca3716f1356f37",
         "path": "handoff-templates/standard.md"
       },
       "uses": "wait",
@@ -82,7 +82,7 @@
       "id": "remediate",
       "handoff": "remediation",
       "handoff-template": {
-        "blobHash": "26c4fb448d95f96dc9cd63de8cd5bcedf2cae7f6",
+        "blobHash": "3ed4e911f9ea17b7116ca49ea90b2136cdb57817",
         "path": "handoff-templates/remediation.md"
       },
       "uses": "wait",
@@ -118,7 +118,7 @@
       "id": "retrospective",
       "handoff": "standard",
       "handoff-template": {
-        "blobHash": "e3efeb16549bf1f562806aa6d992902c8027fac3",
+        "blobHash": "8f266fe406517c891633d8ef90ca3716f1356f37",
         "path": "handoff-templates/standard.md"
       },
       "uses": "wait",

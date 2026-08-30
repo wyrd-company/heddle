@@ -6,6 +6,7 @@ format: heddle.handoff-template
 version: 1
 kind: standard
 ---
+
 # {{ task.title }}
 
 Work on task {{ task.id }} at stage `{{ handoff.stage.name }}`. Use the stage skill at `{{ handoff.skillPointer }}`.
