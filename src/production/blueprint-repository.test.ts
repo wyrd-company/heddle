@@ -68,6 +68,19 @@ describe("organization blueprint repository", () => {
     });
     expect(old.awaitingNodeIds).toEqual(["inspect"]);
     expect(rebaseCandidate.blueprintBlobHash).toBe(old.blueprintBlobHash);
+    expect(
+      (
+        await executeGit(
+          "git",
+          [
+            "rev-parse",
+            "--verify",
+            `refs/heddle/blueprints/${old.blueprintBlobHash}`,
+          ],
+          { cwd: setup.repositoryRoot },
+        )
+      ).stdout.trim(),
+    ).toBe(old.blueprintBlobHash);
     await executeGit(
       "git",
       [
@@ -116,6 +129,19 @@ describe("organization blueprint repository", () => {
       })
     ).stdout.trim();
     expect(localHeadAfter).toBe(localHeadBefore);
+    expect(
+      (
+        await executeGit(
+          "git",
+          [
+            "rev-parse",
+            "--verify",
+            `refs/heddle/blueprints/${old.blueprintBlobHash}`,
+          ],
+          { cwd: setup.repositoryRoot },
+        )
+      ).stdout.trim(),
+    ).toBe(old.blueprintBlobHash);
     await expect(
       executeGit(
         "git",
