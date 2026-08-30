@@ -38,10 +38,17 @@ export {
   type HarnessToolTimeoutLaunchInput,
 } from "./harness-tool-timeout.js";
 export {
+  assertComposedSystemPrompt,
+  composeSystemPrompt,
   HandoffRenderError,
   renderStageHandoff,
   type HandoffRenderInput,
 } from "./handoff-renderer.js";
+export {
+  builtInSystemPrompt,
+  resolveBuiltInSystemPrompt,
+  type SystemPromptResolver,
+} from "./system-prompt.js";
 export {
   GitHandoffTemplateStore,
   HandoffTemplateError,

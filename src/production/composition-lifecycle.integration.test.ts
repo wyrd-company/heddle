@@ -7,7 +7,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { bootstrapStageSession } from "../control-plane/index.js";
+import {
+  bootstrapStageSession,
+  builtInSystemPrompt,
+} from "../control-plane/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -61,6 +64,9 @@ describe("production lifecycle composition", () => {
     });
     expect(turn).not.toHaveProperty("titleSeed");
     const renderedDocument = (turn?.["message"] as { text: string }).text;
+    expect(renderedDocument.startsWith(`${builtInSystemPrompt}\n\n`)).toBe(
+      true,
+    );
     expect(renderedDocument).toContain('format: "heddle.stage-handoff"');
     expect(
       first.persistence
@@ -70,6 +76,7 @@ describe("production lifecycle composition", () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           renderedDocument,
+          systemPrompt: builtInSystemPrompt,
           sessionKey: `task-${taskId}:implement:1`,
           taskId,
         }),

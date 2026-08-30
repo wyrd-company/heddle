@@ -25,6 +25,8 @@ import {
   type StageHandoffInput,
 } from "./handoff-assembler.js";
 import {
+  assertComposedSystemPrompt,
+  composeSystemPrompt,
   handoffAuthenticationBindingsAgree,
   HandoffRenderError,
   isHandoffAuthenticationBinding,
@@ -38,6 +40,10 @@ import {
   type PinnedHandoffTemplate,
   type PinnedHandoffTemplateReference,
 } from "./handoff-template-store.js";
+import {
+  resolveBuiltInSystemPrompt,
+  type SystemPromptResolver,
+} from "./system-prompt.js";
 import {
   applyHarnessToolTimeoutBeforeThread,
   type HarnessToolTimeoutConsumer,
@@ -99,6 +105,7 @@ export type SessionBootstrapResult = {
   harnessConfiguration: HarnessConfiguration;
   handoff: string;
   renderedHandoff: string;
+  systemPrompt: string;
   threadId: string;
   worktree: PreparedWorktree;
 };
@@ -127,6 +134,7 @@ export type SessionBootstrapDependencies = {
   persistence: InstanceStateStore;
   readHandoffTemplate?: HandoffTemplateResolver;
   resolveWorkflowMcpStageContract?: WorkflowMcpStageContractResolver;
+  resolveSystemPrompt?: SystemPromptResolver;
   t3: SessionT3Client;
 };
 
@@ -235,7 +243,13 @@ const ensureStoredHandoff = async (
   instantiate: typeof instantiateTodoList,
   readTemplate: HandoffTemplateResolver,
   effectiveDriver: MeasuredHandoffDriver,
-): Promise<{ handoff: string; renderedHandoff: string }> => {
+  resolveSystemPrompt: SystemPromptResolver,
+): Promise<{
+  handoff: string;
+  renderedHandoff: string;
+  systemPrompt: string;
+}> => {
+  let resolvedSystemPrompt: string | undefined;
   while (true) {
     const current = store.getInstance(input.instanceId);
     if (current === undefined) {
@@ -284,6 +298,16 @@ const ensureStoredHandoff = async (
           `Stored handoff has no rendered payload for '${input.sessionKey}'`,
         );
       }
+      if (typeof existing.systemPrompt !== "string") {
+        throw new HandoffRenderError(
+          `Stored handoff has no system prompt for '${input.sessionKey}'`,
+        );
+      }
+      assertComposedSystemPrompt(
+        existing.systemPrompt,
+        existing.renderedHandoff,
+        correlationToken,
+      );
       const currentAuthentication =
         resolveHandoffAuthenticationBinding(effectiveDriver);
       if (
@@ -306,6 +330,7 @@ const ensureStoredHandoff = async (
       return {
         handoff: existing.handoff,
         renderedHandoff: existing.renderedHandoff,
+        systemPrompt: existing.systemPrompt,
       };
     }
 
@@ -385,7 +410,7 @@ const ensureStoredHandoff = async (
       todoList: todoState,
     });
     const template = await readTemplate(workflowMcp.handoffTemplate, input);
-    const renderedHandoff = renderStageHandoff({
+    const renderedStageHandoff = renderStageHandoff({
       correlationToken,
       driver: effectiveDriver,
       handoff,
@@ -396,6 +421,12 @@ const ensureStoredHandoff = async (
       taskId: input.taskId,
       template,
     });
+    resolvedSystemPrompt ??= await resolveSystemPrompt();
+    const renderedHandoff = composeSystemPrompt(
+      resolvedSystemPrompt,
+      renderedStageHandoff,
+      correlationToken,
+    );
     const renderedHandoffAuthentication =
       resolveHandoffAuthenticationBinding(effectiveDriver);
     const stored: StoredStageHandoffCandidate = {
@@ -404,6 +435,7 @@ const ensureStoredHandoff = async (
       kind: "stage-handoff",
       renderedHandoff,
       renderedHandoffAuthentication,
+      systemPrompt: resolvedSystemPrompt,
       ...(input.parentSessionKey === undefined
         ? {}
         : { parentSessionKey: input.parentSessionKey }),
@@ -421,7 +453,13 @@ const ensureStoredHandoff = async (
         handoffs: [...refreshed.state.handoffs, stored],
       },
     );
-    if (claimed !== undefined) return { handoff, renderedHandoff };
+    if (claimed !== undefined) {
+      return {
+        handoff,
+        renderedHandoff,
+        systemPrompt: resolvedSystemPrompt,
+      };
+    }
   }
 };
 
@@ -448,7 +486,7 @@ export const bootstrapStageSession = async (
     input.sessionKey,
     dependencies.mintCorrelationToken,
   );
-  const { handoff, renderedHandoff } = await ensureStoredHandoff(
+  const { handoff, renderedHandoff, systemPrompt } = await ensureStoredHandoff(
     dependencies.persistence,
     input,
     correlationToken,
@@ -461,6 +499,7 @@ export const bootstrapStageSession = async (
           reference,
         )),
     effectiveDriver,
+    dependencies.resolveSystemPrompt ?? resolveBuiltInSystemPrompt,
   );
   const threadId = input.threadId ?? nextId();
   await applyHarnessToolTimeoutBeforeThread({
@@ -509,6 +548,7 @@ export const bootstrapStageSession = async (
       renderedDocument: renderedHandoff,
       sessionKey: input.sessionKey,
       stage: input.handoff.stage.name,
+      systemPrompt,
       taskId: input.taskId,
       threadId,
       version: 1,
@@ -519,6 +559,7 @@ export const bootstrapStageSession = async (
     correlationToken,
     handoff,
     renderedHandoff,
+    systemPrompt,
     harnessConfiguration: harnessConfiguration(),
     threadId,
     worktree,

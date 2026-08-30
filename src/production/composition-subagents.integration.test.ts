@@ -47,12 +47,15 @@ describe("production subagent composition", () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();
+    const systemPrompt = "# Operator session guidance";
+    const resolveSystemPrompt = vi.fn(async () => systemPrompt);
     const composition = createProductionComposition({
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
+      resolveSystemPrompt,
       t3,
     });
     await composition.start();
@@ -137,6 +140,19 @@ describe("production subagent composition", () => {
         command.threadId === spawned.assignment.threadId,
     );
     expect(childTurn).not.toHaveProperty("titleSeed");
+    const parentTurn = t3.commands.find(
+      (command) =>
+        command.type === "thread.turn.start" &&
+        command.threadId === parentRuntime.threadId,
+    );
+    for (const turn of [parentTurn, childTurn]) {
+      expect(
+        (turn?.["message"] as { text: string }).text.startsWith(
+          `${systemPrompt}\n\n`,
+        ),
+      ).toBe(true);
+    }
+    expect(resolveSystemPrompt).toHaveBeenCalledTimes(2);
 
     await expect(
       composition.subagents.spawn(parent, {

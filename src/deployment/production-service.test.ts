@@ -6,6 +6,7 @@
 import { createServer, type Server as HttpServer } from "node:http";
 import {
   access,
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
@@ -170,5 +171,62 @@ describe("configured production composition", () => {
     expect(t3.commands).toEqual([]);
     expect(t3.timeouts).toEqual([]);
     expect(notifications).toEqual([]);
+  });
+
+  it("dispatches the wholesale override without prompt-source path or provenance", async () => {
+    fixture = await prepareProductionFixture();
+    const override =
+      "# Operator session guidance\n\nUse the configured workflow.";
+    await writeFile(join(fixture.root, "heddle.md"), override);
+    const t3 = new SyntheticT3();
+    const loaded: LoadedDeploymentConfiguration = {
+      configuration: fixture.configuration,
+      configurationDirectory: fixture.root,
+      configurationPath: join(fixture.root, "config.yml"),
+      server: { host: "127.0.0.1", port: 3774 },
+      timeoutApplication: {
+        arguments: [],
+        executable: process.execPath,
+        timeoutMilliseconds: 1_000,
+      },
+    };
+    production = createConfiguredProductionComposition(loaded, { t3 });
+
+    await production.start();
+
+    const turn = t3.commands.find(({ type }) => type === "thread.turn.start");
+    const rendered = (turn?.["message"] as { text: string }).text;
+    expect(rendered.startsWith(`${override}\n\n`)).toBe(true);
+    expect(rendered).not.toContain("# Heddle stage session");
+    expect(rendered).not.toContain(fixture.root);
+  });
+
+  it("raises durable attention without dispatch when heddle.md is unreadable", async () => {
+    fixture = await prepareProductionFixture();
+    await mkdir(join(fixture.root, "heddle.md"));
+    const t3 = new SyntheticT3();
+    const loaded: LoadedDeploymentConfiguration = {
+      configuration: fixture.configuration,
+      configurationDirectory: fixture.root,
+      configurationPath: join(fixture.root, "config.yml"),
+      server: { host: "127.0.0.1", port: 3774 },
+      timeoutApplication: {
+        arguments: [],
+        executable: process.execPath,
+        timeoutMilliseconds: 1_000,
+      },
+    };
+    production = createConfiguredProductionComposition(loaded, { t3 });
+
+    await expect(production.start()).rejects.toThrow("System prompt override");
+
+    expect(t3.commands).toEqual([]);
+    expect(t3.timeouts).toEqual([]);
+    expect(production.attention.list()).toEqual([
+      expect.objectContaining({
+        kind: "lifecycle-resolution",
+        message: expect.stringContaining("System prompt override"),
+      }),
+    ]);
   });
 });

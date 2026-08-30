@@ -13,6 +13,7 @@ export type SessionActivationPayload = {
   renderedDocument: string;
   sessionKey: string;
   stage: string;
+  systemPrompt: string;
   taskId: number;
   threadId: string;
   version: 1;
@@ -33,6 +34,7 @@ const payloadFor = (input: SessionActivationPayload): JsonValue => ({
   renderedDocument: input.renderedDocument,
   sessionKey: input.sessionKey,
   stage: input.stage,
+  systemPrompt: input.systemPrompt,
   taskId: input.taskId,
   threadId: input.threadId,
   version: input.version,

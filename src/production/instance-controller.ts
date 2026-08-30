@@ -11,6 +11,7 @@ import {
   HandoffRenderError,
   HandoffTemplateError,
   type SessionT3Client,
+  type SystemPromptResolver,
 } from "../control-plane/index.js";
 import { readLifecycleContext } from "../engine/index.js";
 import type { PacingDeferral } from "../pacing/index.js";
@@ -59,6 +60,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly projects: EpicProjectCoordinator,
     private readonly attention: ReconcilerAttentionQueue,
     private readonly t3: SessionT3Client,
+    private readonly resolveSystemPrompt: SystemPromptResolver,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -292,6 +294,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           activationEvents: this.persistence,
           nextId,
           persistence: this.persistence,
+          resolveSystemPrompt: this.resolveSystemPrompt,
           t3: {
             ...(this.t3.applyHarnessToolTimeout === undefined
               ? {}

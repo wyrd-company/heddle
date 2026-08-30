@@ -130,10 +130,10 @@ describe("deployed configuration directory", () => {
     });
   });
 
-  it("reads only config.yml, applies server defaults, and ignores other directory entries", async () => {
+  it("keeps config.yml as configuration authority while prompt discovery stays at dispatch", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await writeFile(join(root, "config.yml"), stringify(fixture(root)));
-    await writeFile(join(root, "heddle.md"), "not consumed by Task 703\n");
+    await writeFile(join(root, "heddle.md"), "resolved only at dispatch\n");
     await writeFile(join(root, "operator-note.txt"), "ignored\n");
     await mkdir(join(root, "blueprints"));
 

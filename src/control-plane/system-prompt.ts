@@ -1,0 +1,20 @@
+// ---
+// relationships:
+//   implements: heddle
+// ---
+
+export const builtInSystemPrompt = `# Heddle stage session
+
+You are one stage-scoped session in a Heddle workflow. The handoff below carries the task contract and the current stage state that you must act on.
+
+Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path; do not use a harness-native todo tool.
+
+Use \`advance\` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
+
+Use \`escalate\` for a blocking question that requires attention outside this session.
+`;
+
+export type SystemPromptResolver = () => Promise<string>;
+
+export const resolveBuiltInSystemPrompt: SystemPromptResolver = async () =>
+  builtInSystemPrompt;

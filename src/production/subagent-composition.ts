@@ -8,6 +8,7 @@ import {
   HandoffTemplateError,
   type SessionObservationTarget,
   type SessionObserver,
+  type SystemPromptResolver,
   steerStageSession,
 } from "../control-plane/index.js";
 import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
@@ -165,15 +166,25 @@ export const createProductionSubagentCoordinator = (options: {
   observer: SessionObserver;
   pacing: DispatchPacingEvaluator;
   persistence: SqlitePersistence;
+  resolveSystemPrompt: SystemPromptResolver;
   t3: ProductionT3Client;
 }): SubagentCoordinator => {
-  const { attention, board, configuration, observer, pacing, persistence, t3 } =
-    options;
+  const {
+    attention,
+    board,
+    configuration,
+    observer,
+    pacing,
+    persistence,
+    resolveSystemPrompt,
+    t3,
+  } = options;
   return new SubagentCoordinator({
     activeSessions: () => activeSessions(configuration, persistence, t3),
     bootstrapDependencies: {
       activationEvents: persistence,
       persistence,
+      resolveSystemPrompt,
       t3: {
         ...(t3.applyHarnessToolTimeout === undefined
           ? {}

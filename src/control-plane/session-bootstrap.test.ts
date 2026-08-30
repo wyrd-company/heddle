@@ -21,6 +21,7 @@ import {
   type SessionBootstrapDependencies,
 } from "./session-bootstrap.js";
 import { harnessToolTimeoutConfiguration } from "./harness-tool-timeout.js";
+import { builtInSystemPrompt } from "./system-prompt.js";
 import {
   readSampleHandoffTemplate,
   sampleHandoffTemplate,
@@ -287,6 +288,10 @@ describe("stage session bootstrap", () => {
       instantiateTodoList,
       readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract,
+      resolveSystemPrompt: vi
+        .fn()
+        .mockResolvedValueOnce("# Operator session guidance")
+        .mockResolvedValueOnce("# Changed guidance"),
       t3: {
         dispatch: async (command) => {
           commands.push(command);
@@ -344,6 +349,10 @@ describe("stage session bootstrap", () => {
     expect(first.threadId).toBe("thread-1");
     expect(retry.threadId).toBe("thread-2");
     expect(retry.handoff).toBe(first.handoff);
+    expect(first.systemPrompt).toBe("# Operator session guidance");
+    expect(retry.systemPrompt).toBe(first.systemPrompt);
+    expect(first.renderedHandoff).toContain("# Operator session guidance");
+    expect(first.renderedHandoff).not.toContain(builtInSystemPrompt);
     expect(turnCommands).toHaveLength(2);
     expect(turnCommands[0]?.["threadId"]).toBe("thread-1");
     expect(turnCommands[1]?.["threadId"]).toBe("thread-2");
@@ -368,6 +377,7 @@ describe("stage session bootstrap", () => {
       codex: { tools: { update_plan: { enabled: false } } },
     });
     expect(dependencies.mintCorrelationToken).toHaveBeenCalledOnce();
+    expect(dependencies.resolveSystemPrompt).toHaveBeenCalledOnce();
   });
 
   it("uses caller-pinned thread and command identities for delegated replay", async () => {
@@ -505,6 +515,10 @@ describe("stage session bootstrap", () => {
         worktreeName: "task-prepare-activation",
       },
     };
+    const resolveSystemPrompt = vi
+      .fn()
+      .mockResolvedValueOnce("# Original session guidance")
+      .mockResolvedValueOnce("# Changed session guidance");
     const common = {
       ensureWorktree: async ({ branch }: { branch: string }) => ({
         branch,
@@ -516,6 +530,7 @@ describe("stage session bootstrap", () => {
       persistence,
       readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract,
+      resolveSystemPrompt,
       t3: {
         dispatch: async (command: Record<string, unknown>) => {
           commands.push(command);
@@ -544,11 +559,15 @@ describe("stage session bootstrap", () => {
     const turns = commands.filter(({ type }) => type === "thread.turn.start");
     expect(turns).toHaveLength(2);
     expect(turns[0]).toEqual(turns[1]);
-    expect(
-      persistence
-        .replayEvents(input.instanceId)
-        .filter(({ type }) => type === "session:activated"),
-    ).toHaveLength(1);
+    const activations = persistence
+      .replayEvents(input.instanceId)
+      .filter(({ type }) => type === "session:activated");
+    expect(activations).toHaveLength(1);
+    expect(activations[0]?.payload).toMatchObject({
+      renderedDocument: (turns[0]?.["message"] as { text: string }).text,
+      systemPrompt: "# Original session guidance",
+    });
+    expect(resolveSystemPrompt).toHaveBeenCalledOnce();
     persistence.close();
   });
 
@@ -668,6 +687,7 @@ describe("stage session bootstrap", () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           renderedDocument: result.renderedHandoff,
+          systemPrompt: builtInSystemPrompt,
         }),
       }),
     ]);

@@ -13,11 +13,13 @@ import type {
 } from "../console/index.js";
 import {
   createMechanicalNodeEffects,
+  resolveBuiltInSystemPrompt,
   SessionObserver,
   steerStageSession,
   T3ControlPlaneClient,
   type SessionObservationT3Client,
   type SessionT3Client,
+  type SystemPromptResolver,
 } from "../control-plane/index.js";
 import { type LifecycleEffect } from "../engine/index.js";
 import {
@@ -71,6 +73,7 @@ export type ProductionCompositionOptions = {
   onSchedulerError?: (error: unknown) => void;
   providerUsage: ProviderUsageSource;
   pushoverTransport?: PushoverTransport;
+  resolveSystemPrompt?: SystemPromptResolver;
   t3?: ProductionT3Client;
 };
 
@@ -108,6 +111,8 @@ export const createProductionComposition = (
       stateDirectory: configuration.stateDirectory,
     });
     const t3 = options.t3 ?? new T3ControlPlaneClient(configuration.t3);
+    const resolveSystemPrompt =
+      options.resolveSystemPrompt ?? resolveBuiltInSystemPrompt;
     const attention = new DurableAttentionQueue(persistence);
     const pushover = new DurablePushoverNotifier(
       persistence,
@@ -138,6 +143,7 @@ export const createProductionComposition = (
       projects,
       attention,
       t3,
+      resolveSystemPrompt,
     );
     const escalation = new EscalationCoordinator({
       attention: {
@@ -205,6 +211,7 @@ export const createProductionComposition = (
       observer,
       pacing,
       persistence,
+      resolveSystemPrompt,
       t3,
     });
     subagents = coordinator;

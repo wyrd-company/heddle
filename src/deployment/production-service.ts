@@ -18,6 +18,7 @@ import {
 } from "./provider-usage.js";
 import { startHeddleServer, type HeddleDeploymentServer } from "./server.js";
 import { ConfiguredT3ControlPlaneClient } from "./timeout-application.js";
+import { configurationDirectorySystemPromptResolver } from "./system-prompt.js";
 
 export type ConfiguredProductionServiceDependencies = Partial<
   Pick<
@@ -53,6 +54,9 @@ export const createConfiguredProductionComposition = (
     ...dependencies,
     configuration: loaded.configuration,
     providerUsage: providerUsageSource(loaded),
+    resolveSystemPrompt: configurationDirectorySystemPromptResolver(
+      loaded.configurationDirectory,
+    ),
     t3: dependencies.t3 ?? t3Client(loaded),
   });
 

@@ -19,6 +19,7 @@ export type StoredStageHandoffCandidate = {
   sessionKey: string;
   renderedHandoffAuthentication?: HandoffAuthenticationBinding;
   renderedHandoff?: string;
+  systemPrompt?: string;
   todoAssignment?: {
     listSessionKey: string;
     rootItemId: string;

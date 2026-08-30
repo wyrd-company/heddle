@@ -99,6 +99,40 @@ export const handoffAuthenticationBindingsAgree = (
   stored.policy === current.policy &&
   stored.version === current.version;
 
+export const composeSystemPrompt = (
+  systemPrompt: string,
+  renderedHandoff: string,
+  correlationToken: string,
+): string => {
+  if (systemPrompt.trim() === "") {
+    throw new HandoffRenderError("System prompt must not be empty");
+  }
+  if (systemPrompt.includes(correlationToken)) {
+    throw new HandoffRenderError(
+      "System prompt must not contain the correlation token",
+    );
+  }
+  return `${systemPrompt}\n\n${renderedHandoff}`;
+};
+
+export const assertComposedSystemPrompt = (
+  systemPrompt: string,
+  renderedDocument: string,
+  correlationToken: string,
+): void => {
+  const prefix = `${systemPrompt}\n\n`;
+  if (
+    systemPrompt.trim() === "" ||
+    systemPrompt.includes(correlationToken) ||
+    !renderedDocument.startsWith(prefix) ||
+    renderedDocument.split(correlationToken).length !== 2
+  ) {
+    throw new HandoffRenderError(
+      "Stored rendered handoff does not match its system prompt",
+    );
+  }
+};
+
 const sortedJson = (value: JsonValue): JsonValue => {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(sortedJson);
