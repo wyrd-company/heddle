@@ -91,6 +91,13 @@ describe("Heddle devcontainer feature", () => {
     expect(installer).toContain(
       'mv "\\${caddy_temp}" /etc/caddy/conf.d/heddle.caddy',
     );
+    expect(installer).toContain(
+      "timeout --signal=TERM --kill-after=1 10 \\\n" +
+        "        bash -c 'until /usr/local/bin/caddy-reload >/dev/null 2>&1; do sleep 0.1; done'",
+    );
+    expect(installer).toContain(
+      "Caddy did not accept the configured Heddle endpoint.",
+    );
     expect(installer).toContain('"\\${dns_name}" "\\${host}" "\\${port}"');
     expect(installer).not.toContain("reverse_proxy 127.0.0.1:");
   });

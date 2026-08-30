@@ -512,9 +512,11 @@ proposed-design:
 
     The root s6 launcher validates the same file, derives only its nonsecret
     state mount target and loopback host and port, writes the Caddy snippet,
-    and then starts Heddle as the service user from the same directory.
-    Configuration changes require restart. The Feature exposes no second
-    board, state, or port option.
+    completes a bounded Caddy reload handshake, and then starts Heddle as the
+    service user from the same directory. The handshake removes the startup
+    race between snippet creation and watcher registration; the Caddy watcher
+    owns later reloads. Configuration changes require restart. The Feature
+    exposes no second board, state, or port option.
 
     Configured provider usage is a separate bounded non-shell executable with
     a closed versioned five-hour-window JSON protocol. It is required exactly

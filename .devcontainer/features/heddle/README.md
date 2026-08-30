@@ -57,9 +57,10 @@ without replacing SQLite history:
 
 The service validates `config.yml`, derives its Caddy upstream and state target
 from that same file, and refuses to start when `stateDirectory` is not a mount
-point. The root launcher writes only the nonsecret Caddy snippet before it drops
-privileges. It never prints or copies raw YAML. One Heddle service and one state
-source belong to one workspace.
+point. The root launcher writes only the nonsecret Caddy snippet, completes a
+bounded Caddy reload handshake, and then drops privileges. The watcher owns
+later Caddy reloads. The launcher never prints or copies raw YAML. One Heddle
+service and one state source belong to one workspace.
 
 See [Production composition](../../../docs/operators/production-composition.md)
 for the complete schema and executable-adapter contracts.

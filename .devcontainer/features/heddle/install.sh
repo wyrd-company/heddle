@@ -90,6 +90,11 @@ if [ -n "\${dns_name}" ]; then
         "\${dns_name}" "\${host}" "\${port}" >"\${caddy_temp}"
     chmod 0644 "\${caddy_temp}"
     mv "\${caddy_temp}" /etc/caddy/conf.d/heddle.caddy
+    if ! timeout --signal=TERM --kill-after=1 10 \
+        bash -c 'until /usr/local/bin/caddy-reload >/dev/null 2>&1; do sleep 0.1; done'; then
+        echo "[heddle] ERROR: Caddy did not accept the configured Heddle endpoint." >&2
+        exit 1
+    fi
 fi
 
 exec s6-setuidgid ${quoted_user} \
