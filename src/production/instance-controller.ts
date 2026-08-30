@@ -10,6 +10,7 @@ import {
   bootstrapStageSession,
   HandoffRenderError,
   HandoffTemplateError,
+  mechanicalChangeContextKey,
   type SessionT3Client,
   type SystemPromptResolver,
 } from "../control-plane/index.js";
@@ -32,7 +33,10 @@ import { heddleSessionTitle } from "./session-title.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
-import type { ProductRoutingCatalog } from "./product-routing.js";
+import {
+  TaskRoutingAttentionError,
+  type ProductRoutingCatalog,
+} from "./product-routing.js";
 
 const json = (value: unknown): JsonValue =>
   JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -120,6 +124,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             ...(existing === undefined
               ? {
                   initialContext: {
+                    ...this.#mechanicalChange(input.task, input.repositoryName),
                     taskContract: taskContract(input.task),
                     taskId: input.task.id,
                   },
@@ -141,6 +146,38 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       return;
     }
     await this.#activate(input.task, input.instanceId, stageId, starting);
+  }
+
+  #mechanicalChange(
+    task: BoardTask,
+    repositoryName?: string,
+  ): Record<string, JsonValue> {
+    const repository = (() => {
+      try {
+        return this.routing.repositoryForStage(task, repositoryName);
+      } catch (error) {
+        if (error instanceof TaskRoutingAttentionError) return undefined;
+        throw error;
+      }
+    })();
+    if (repository === undefined) return {};
+    const session = this.configuration.session;
+    return {
+      [mechanicalChangeContextKey]: json({
+        baseBranch:
+          task.parent === undefined ? session.baseRef : `epic/${task.parent}`,
+        branch: `heddle/task-${task.id}`,
+        repositoryName: repository.name,
+        repositoryRoot: repository.repositoryRoot,
+        reviewDescription: `Task ${task.id}: ${task.title}`,
+        reviewTitle: task.title,
+        taskId: task.id,
+        worktreeName: String(task.id),
+        ...(session.worktreesRoot === undefined
+          ? {}
+          : { worktreesRoot: session.worktreesRoot }),
+      }),
+    };
   }
 
   async synchronize(tasks: readonly BoardTask[]): Promise<void> {

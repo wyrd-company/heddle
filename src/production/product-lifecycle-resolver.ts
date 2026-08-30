@@ -4,6 +4,7 @@
 // ---
 
 import type { BoardTask } from "../board-adapter/index.js";
+import { mechanicalNodeUses } from "../control-plane/index.js";
 import {
   GitBlueprintStore,
   LifecycleResolver,
@@ -50,9 +51,13 @@ export class ProductLifecycleResolver {
     const pinned = await new GitBlueprintStore(this.repository.repositoryRoot, {
       sourceRef: this.repository.sourceRef,
     }).pin(resolution.blueprintPath);
+    const repositoryBoundUses = new Set<string>([
+      "wait",
+      ...mechanicalNodeUses,
+    ]);
     try {
-      for (const node of pinned.blueprint.nodes.filter(
-        ({ uses }) => uses === "wait",
+      for (const node of pinned.blueprint.nodes.filter(({ uses }) =>
+        repositoryBoundUses.has(uses),
       )) {
         this.routing.repositoryForStage(task, node.repo);
       }

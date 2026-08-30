@@ -32,6 +32,12 @@ export {
 };
 
 export const mechanicalChangeContextKey = "_heddleMechanicalChange";
+export const mechanicalNodeUses = [
+  "finalize",
+  "merge",
+  "prepare-worktree",
+  "review-snapshot",
+] as const;
 const reviewSnapshotOutputKey = "_outputs.review-snapshot";
 
 export interface MechanicalBoardMirror {

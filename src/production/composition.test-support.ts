@@ -238,6 +238,42 @@ export const prepareProductionFixture =
       }),
     );
     await writeFile(
+      join(blueprintsRepositoryRoot, "blueprints", "mechanical.json"),
+      JSON.stringify({
+        $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+        relationships: {
+          implements: "heddle",
+          uses: ["sample-stage"],
+        },
+        edges: [
+          { source: "prepare-worktree", target: "implement" },
+          {
+            condition: "result.output.dispositions.complete",
+            description: "Complete the mechanical sample",
+            disposition: "complete",
+            source: "implement",
+            target: "finalize",
+          },
+        ],
+        nodes: [
+          { id: "prepare-worktree", uses: "prepare-worktree" },
+          {
+            handoff: "standard",
+            "handoff-template": {
+              blobHash: gitBlobHash(standardHandoffTemplate),
+              path: "handoff-templates/standard.md",
+            },
+            id: "implement",
+            repo: "sample-repository",
+            tools: ["advance", "answer", "liveness", "spawn"],
+            "todo-template": "sample-stage",
+            uses: "wait",
+          },
+          { id: "finalize", uses: "finalize" },
+        ],
+      }),
+    );
+    await writeFile(
       join(repositoryRoot, "handoff-templates", "standard.md"),
       standardHandoffTemplate,
     );
@@ -411,6 +447,26 @@ next_id: 1
       },
     };
   };
+
+export const useMechanicalLifecycle = async (
+  fixture: ProductionFixture,
+): Promise<void> => {
+  await execute(
+    "kanban-md",
+    [
+      "--dir",
+      fixture.configuration.boardDirectory,
+      "edit",
+      String(fixture.taskId),
+      "--remove-tag",
+      "lifecycle:sample",
+      "--add-tag",
+      "lifecycle:mechanical",
+      "--json",
+    ],
+    { cwd: fixture.root },
+  );
+};
 
 export const prepareProductionEpicFixture =
   async (): Promise<ProductionEpicFixture> => {

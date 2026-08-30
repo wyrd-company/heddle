@@ -67,6 +67,7 @@ export {
   createMechanicalNodeEffects,
   ensureReviewSnapshot,
   mechanicalChangeContextKey,
+  mechanicalNodeUses,
   mergeReviewSnapshot,
   type CleanupMergedChangeResult,
   type CommandRunner,
