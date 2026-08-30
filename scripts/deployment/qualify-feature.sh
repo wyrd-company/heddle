@@ -15,7 +15,6 @@ state_directory=""
 board_directory=""
 tools_directory=""
 config_directory=""
-blueprints_origin_directory=""
 container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
@@ -34,7 +33,6 @@ cleanup() {
     [ -z "${board_directory}" ] || rm -rf "${board_directory}"
     [ -z "${tools_directory}" ] || rm -rf "${tools_directory}"
     [ -z "${config_directory}" ] || rm -rf "${config_directory}"
-    [ -z "${blueprints_origin_directory}" ] || rm -rf "${blueprints_origin_directory}"
 }
 trap cleanup EXIT
 
@@ -51,12 +49,12 @@ state_directory="$(allocate_scratch_directory state)"
 board_directory="$(allocate_scratch_directory board)"
 tools_directory="$(allocate_scratch_directory tools)"
 config_directory="$(allocate_scratch_directory config)"
-blueprints_origin_directory="$(allocate_scratch_directory blueprints-origin)"
 
 install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
 
-git init --bare --initial-branch=main "${blueprints_origin_directory}" >/dev/null
-git clone "${blueprints_origin_directory}" "${config_directory}/blueprints" >/dev/null
+git init --bare --initial-branch=main "${config_directory}/blueprints-origin.git" >/dev/null
+git clone "${config_directory}/blueprints-origin.git" "${config_directory}/blueprints" >/dev/null
+git -C "${config_directory}/blueprints" remote set-url origin ../blueprints-origin.git
 git -C "${config_directory}/blueprints" config user.name "Qualification Fixture"
 git -C "${config_directory}/blueprints" config user.email "fixture@example.invalid"
 printf '# Qualification blueprint repository\n' \

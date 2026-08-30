@@ -141,7 +141,7 @@ describe("Heddle devcontainer feature", () => {
     }
   });
 
-  it.each(["state", "board", "tools", "config", "blueprints-origin"])(
+  it.each(["state", "board", "tools", "config"])(
     "cleans scratch resources when the %s allocation fails",
     async (allocation) => {
       const scratchRoot = await mkdtemp(
@@ -225,7 +225,10 @@ describe("Heddle devcontainer feature", () => {
     );
 
     expect(qualification).toContain(
-      'git clone "${blueprints_origin_directory}" "${config_directory}/blueprints"',
+      'git clone "${config_directory}/blueprints-origin.git" "${config_directory}/blueprints"',
+    );
+    expect(qualification).toContain(
+      'git -C "${config_directory}/blueprints" remote set-url origin ../blueprints-origin.git',
     );
     expect(qualification).toContain(
       'git -C "${config_directory}/blueprints" push --set-upstream origin main',
