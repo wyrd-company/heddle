@@ -154,6 +154,61 @@ kind: standard
     await composition.close();
   });
 
+  it("raises durable attention without partial dispatch when a cold retry changes handoff authentication policy", async () => {
+    const { configuration } = await prepare();
+    class InterruptedT3 extends SyntheticT3 {
+      override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
+        await super.dispatch(command);
+        throw new Error("synthetic dispatch interruption");
+      }
+    }
+    const firstT3 = new InterruptedT3();
+    const first = createProductionComposition({
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: firstT3,
+    });
+    await expect(first.start()).rejects.toThrow(
+      /synthetic dispatch interruption/,
+    );
+    expect(firstT3.commands).toHaveLength(1);
+    await first.close();
+
+    const changedConfiguration = {
+      ...configuration,
+      pacing: { ...configuration.pacing, defaultProvider: "claudeAgent" },
+      session: { ...configuration.session, driver: "claudeAgent" },
+    };
+    const secondT3 = new SyntheticT3();
+    const second = createProductionComposition({
+      configuration: changedConfiguration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: secondT3,
+    });
+
+    await expect(second.start()).rejects.toThrow(
+      /authentication binding is incompatible/,
+    );
+    expect(secondT3.commands).toHaveLength(0);
+    expect(secondT3.timeouts).toHaveLength(0);
+    expect(second.attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: expect.stringContaining(":handoff-render"),
+        kind: "lifecycle-resolution",
+        message: expect.stringContaining(
+          "authentication binding is incompatible",
+        ),
+      }),
+    ]);
+    await second.close();
+  });
+
   it("activates the next accepted lifecycle wait stage without losing prior observation", async () => {
     const { configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();

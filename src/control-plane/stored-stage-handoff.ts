@@ -9,6 +9,7 @@ import {
   resolveWorkflowMcpSessionBinding,
 } from "../mcp-server/session-binding.js";
 import type { InstanceStateStore } from "./correlation-token.js";
+import type { HandoffAuthenticationBinding } from "./handoff-renderer.js";
 
 export type StoredStageHandoffCandidate = {
   correlationToken: string;
@@ -16,6 +17,7 @@ export type StoredStageHandoffCandidate = {
   kind: "stage-handoff";
   parentSessionKey?: string;
   sessionKey: string;
+  renderedHandoffAuthentication?: HandoffAuthenticationBinding;
   renderedHandoff?: string;
   todoAssignment?: {
     listSessionKey: string;

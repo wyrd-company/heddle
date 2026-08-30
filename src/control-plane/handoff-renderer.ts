@@ -30,7 +30,56 @@ export type HandoffRenderInput = {
   template: PinnedHandoffTemplate;
 };
 
-const fallbackDrivers = new Set(["claudeAgent", "codex", "cursor"]);
+const measuredFallbackDrivers = ["claudeAgent", "codex", "cursor"] as const;
+
+export type HandoffAuthenticationBinding = {
+  driver: (typeof measuredFallbackDrivers)[number];
+  format: "heddle.handoff-authentication-binding";
+  policy: "correlation-token-front-matter-v1";
+  version: 1;
+};
+
+export const isHandoffAuthenticationBinding = (
+  value: JsonValue | undefined,
+): value is HandoffAuthenticationBinding =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.keys(value).length === 4 &&
+  measuredFallbackDrivers.some((driver) => value["driver"] === driver) &&
+  value["format"] === "heddle.handoff-authentication-binding" &&
+  value["policy"] === "correlation-token-front-matter-v1" &&
+  value["version"] === 1;
+
+export const resolveHandoffAuthenticationBinding = (
+  driver: string,
+): HandoffAuthenticationBinding => {
+  if (
+    !measuredFallbackDrivers.some(
+      (measuredDriver) => measuredDriver === driver,
+    )
+  ) {
+    throw new HandoffRenderError(
+      `Driver '${driver}' has no measured Heddle MCP authentication policy`,
+    );
+  }
+  return {
+    driver: driver as HandoffAuthenticationBinding["driver"],
+    format: "heddle.handoff-authentication-binding",
+    policy: "correlation-token-front-matter-v1",
+    version: 1,
+  };
+};
+
+export const handoffAuthenticationBindingsAgree = (
+  stored: JsonValue | undefined,
+  current: HandoffAuthenticationBinding,
+): stored is HandoffAuthenticationBinding =>
+  isHandoffAuthenticationBinding(stored) &&
+  stored.driver === current.driver &&
+  stored.format === current.format &&
+  stored.policy === current.policy &&
+  stored.version === current.version;
 
 const sortedJson = (value: JsonValue): JsonValue => {
   if (value === null || typeof value !== "object") return value;
@@ -83,11 +132,7 @@ const parseHandoff = (serialized: string): Record<string, JsonValue> => {
 };
 
 const identityFrontMatter = (input: HandoffRenderInput): string => {
-  if (!fallbackDrivers.has(input.driver)) {
-    throw new HandoffRenderError(
-      `Driver '${input.driver}' has no measured Heddle MCP authentication policy`,
-    );
-  }
+  resolveHandoffAuthenticationBinding(input.driver);
   const strings = [input.instanceId, input.sessionKey, input.stage];
   if (
     strings.some((value) => value.trim() === "") ||

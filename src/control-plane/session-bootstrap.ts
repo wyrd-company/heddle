@@ -24,7 +24,13 @@ import {
   assembleStageHandoff,
   type StageHandoffInput,
 } from "./handoff-assembler.js";
-import { renderStageHandoff } from "./handoff-renderer.js";
+import {
+  handoffAuthenticationBindingsAgree,
+  HandoffRenderError,
+  isHandoffAuthenticationBinding,
+  renderStageHandoff,
+  resolveHandoffAuthenticationBinding,
+} from "./handoff-renderer.js";
 import {
   GitHandoffTemplateStore,
   type PinnedHandoffTemplate,
@@ -275,6 +281,28 @@ const ensureStoredHandoff = async (
           `Stored handoff has no rendered payload for '${input.sessionKey}'`,
         );
       }
+      const currentAuthentication = resolveHandoffAuthenticationBinding(
+        input.providerContext.driver,
+      );
+      if (
+        !isHandoffAuthenticationBinding(
+          existing.renderedHandoffAuthentication,
+        )
+      ) {
+        throw new HandoffRenderError(
+          `Stored handoff has no valid authentication binding for '${input.sessionKey}'`,
+        );
+      }
+      if (
+        !handoffAuthenticationBindingsAgree(
+          existing.renderedHandoffAuthentication,
+          currentAuthentication,
+        )
+      ) {
+        throw new HandoffRenderError(
+          `Stored handoff authentication binding is incompatible for '${input.sessionKey}'`,
+        );
+      }
       return {
         handoff: existing.handoff,
         renderedHandoff: existing.renderedHandoff,
@@ -368,11 +396,14 @@ const ensureStoredHandoff = async (
       taskId: input.taskId,
       template,
     });
+    const renderedHandoffAuthentication =
+      resolveHandoffAuthenticationBinding(input.providerContext.driver);
     const stored: StoredStageHandoffCandidate = {
       correlationToken,
       handoff,
       kind: "stage-handoff",
       renderedHandoff,
+      renderedHandoffAuthentication,
       ...(input.parentSessionKey === undefined
         ? {}
         : { parentSessionKey: input.parentSessionKey }),

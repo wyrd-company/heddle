@@ -454,6 +454,115 @@ describe("stage session cold retry guards", () => {
       (turnCommands[1]?.["message"] as { text: string }).text,
     );
     expect(memory.record.state.handoffs).toHaveLength(1);
+    expect(memory.record.state.handoffs[0]).toMatchObject({
+      renderedHandoffAuthentication: {
+        driver: "cursor",
+        format: "heddle.handoff-authentication-binding",
+        policy: "correlation-token-front-matter-v1",
+        version: 1,
+      },
+    });
+  });
+
+  it.each(["claudeAgent", "sample-driver"])(
+    "rejects a cold retry under changed driver %s before timeout or T3 dispatch",
+    async (driver) => {
+      const memory = memoryStore();
+      const applyHarnessToolTimeout = vi.fn(async () => undefined);
+      const dispatch = vi.fn(async () => {
+        throw new Error("stop after durable render");
+      });
+      const dependencies: SessionBootstrapDependencies = {
+        persistence: memory.store,
+        instantiateTodoList,
+        readHandoffTemplate: readSampleHandoffTemplate,
+        resolveWorkflowMcpStageContract,
+        t3: { applyHarnessToolTimeout, dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+        mintCorrelationToken: () => "correlation-token",
+        nextId: () => "stable-id",
+      };
+
+      await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
+        /stop after durable render/,
+      );
+      expect(memory.record.state.handoffs[0]).toMatchObject({
+        renderedHandoffAuthentication: { driver: "cursor" },
+      });
+      const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
+      const dispatchCount = dispatch.mock.calls.length;
+
+      await expect(
+        bootstrapStageSession(
+          {
+            ...input,
+            providerContext: { ...input.providerContext, driver },
+          },
+          dependencies,
+        ),
+      ).rejects.toThrow(
+        driver === "sample-driver"
+          ? /no measured Heddle MCP authentication policy/
+          : /authentication binding is incompatible/,
+      );
+      expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
+      expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
+    },
+  );
+
+  it("rejects a cold retry when the stored authentication policy differs before timeout or T3 dispatch", async () => {
+    const memory = memoryStore();
+    const applyHarnessToolTimeout = vi.fn(async () => undefined);
+    const dispatch = vi.fn(async () => {
+      throw new Error("stop after durable render");
+    });
+    const dependencies: SessionBootstrapDependencies = {
+      persistence: memory.store,
+      instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
+      resolveWorkflowMcpStageContract,
+      t3: { applyHarnessToolTimeout, dispatch },
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: false,
+        path: "/workspaces/worktrees/sample-repository/task-prepare",
+      }),
+      mintCorrelationToken: () => "correlation-token",
+      nextId: () => "stable-id",
+    };
+
+    await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
+      /stop after durable render/,
+    );
+    const persisted = memory.record;
+    memory.store.compareAndSwapInstance(
+      persisted.instanceId,
+      persisted.version,
+      {
+        ...persisted.state,
+        handoffs: persisted.state.handoffs.map((handoff) => ({
+          ...(handoff as Record<string, unknown>),
+          renderedHandoffAuthentication: {
+            driver: "cursor",
+            format: "heddle.handoff-authentication-binding",
+            policy: "correlation-token-header-v1",
+            version: 1,
+          },
+        })),
+      },
+    );
+    const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
+    const dispatchCount = dispatch.mock.calls.length;
+
+    await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
+      /no valid authentication binding/,
+    );
+    expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
+    expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
   });
 
   it("assembles the handoff from the todo state committed at its CAS version", async () => {
