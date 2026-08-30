@@ -16,11 +16,21 @@ editor is the accepted `BlueprintArtifactEditor` over the same repository root
 and mechanical effect registry as the lifecycle engine. The factory rejects a
 second live composition for the same board directory.
 
-Configuration conforms to `schemas/production-configuration.json`. Required
-workspace values are the absolute board, repository, state, and optional
-worktree roots; the existing T3 project ID; reconciliation cadence; bounded
-stop timeout; provider pacing; session provider settings; observation and
-per-stage staleness thresholds; and Pushover routing. Secrets enter the
+Configuration conforms to `schemas/production-configuration.json`. The
+`products` inventory is the authority for product and repository routing. Each
+product declares a unique name and one or more globally unique repository names
+with absolute roots. Its optional `epicProject` records the one active epic's
+ID and existing T3 project ID when composition starts with that project already
+provisioned. `adHocProject` declares the existing shared project name, ID, and
+absolute workspace root. Board tasks may declare `product` and `repos` in front
+matter. Child tasks inherit omitted declarations from their epic. Heddle raises
+attention when a task, epic, or lifecycle stage refers to authority outside
+these declarations; it does not inspect diffs or branches to guess.
+
+Other required values are the absolute board and state directories, optional
+worktree root, reconciliation cadence, bounded stop timeout, provider pacing,
+session provider settings, observation and per-stage staleness thresholds, and
+Pushover routing. Secrets enter the
 in-memory configuration from the operator's secret source and are not stored in
 the repository. The configured pacing `defaultProvider` must equal the session
 `driver` used for top-level lifecycle stages. Delegated subagents carry their
@@ -29,12 +39,48 @@ preconditions.
 T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
 the runtime validator and configuration schema reject other schemes.
 
+For example, the routing portion has this shape:
+
+```json
+{
+  "adHocProject": {
+    "name": "Shared tasks",
+    "projectId": "shared-project-id",
+    "workspaceRoot": "/workspaces/sample-workspace"
+  },
+  "products": [
+    {
+      "name": "Sample product",
+      "repos": [
+        {
+          "name": "sample-repository",
+          "repositoryRoot": "/workspaces/sample-repository"
+        }
+      ],
+      "epicProject": {
+        "epicId": 101,
+        "projectId": "epic-project-id"
+      }
+    }
+  ]
+}
+```
+
 The provider-usage source and session-capable T3 adapter are explicit runtime
 ports. The T3 adapter must apply the accepted Codex or Claude MCP timeout before
 thread creation. Heddle fails session start when this port is absent for either
-provider. Every thread uses the configured workspace `projectId`, a bounded
-deterministic `Heddle · task-<id> · <stage-discriminator>` title, and no
-`titleSeed` on its first turn. Each occurrence of a wait stage has one durable
+provider. An in-progress epic gets one T3 project titled
+`{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
+each declared repository at `/workspaces/worktrees/{epic-id}/{repository}` on
+`epic/{epic-id}` before project creation. Paused, stopped, and UAT epics retain
+their project; a done epic's project is deleted. Child task threads use that
+epic project. Ad-hoc threads use `adHocProject.projectId`. Subagents reuse the
+parent's project and worktree.
+
+Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
+repo-first worktrees are not migrated. Every thread has a bounded deterministic
+`task-<id> · <stage-occurrence>` title and no `titleSeed` on its first turn.
+Each occurrence of a wait stage has one durable
 session and thread identity. A recurring review or remediation stage receives
 a new occurrence discriminator; restart resumes an incomplete occurrence.
 All stage occurrences for one task use the same task branch and worktree so

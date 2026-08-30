@@ -67,11 +67,27 @@ proposed-design:
     an epic to `in-progress` starts it: the reconciler promotes the
     epic's children from `backlog` to `todo` — including children
     added later — and dispatches them as readiness allows, with
-    sequencing carried by dependency edges. Moving an epic out of
+    sequencing carried by dependency edges. It also prepares each declared
+    repository at `/workspaces/worktrees/{epic-id}/{repository}` on the
+    `epic/{epic-id}` branch and creates a T3 project titled
+    `{product} - epic-{epic-id}` with `/workspaces/worktrees/{epic-id}` as
+    its workspace root. Moving an epic out of
     `in-progress` pauses it: no new dispatches for its children, while
-    in-flight instances run to their next wait state and hold. The
+    in-flight instances run to their next wait state and hold. Paused,
+    stopped, and UAT epics retain their project. Completion deletes the
+    project after child dispatch is no longer possible. The
     reconciler advances the epic itself to `uat` when its last non-UAT
     child completes and to `done` when UAT is accepted.
+
+    Production configuration declares a complete product inventory. Each
+    product owns one or more named repositories and may carry the durable T3
+    identity of its active epic project. One separately named ad-hoc project
+    supplies its existing project ID and workspace root. A task or epic may
+    narrow its repository set in board front matter. Child tasks inherit their
+    epic's product and repository declarations. Heddle never infers repository
+    authority from a diff, branch, session, or filesystem scan. An unknown
+    product, a repository outside the product, or a stage `repo` outside the
+    task declaration raises attention before lifecycle dispatch.
 
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else
@@ -115,7 +131,7 @@ proposed-design:
     `POST /api/orchestration/dispatch` carries every command, and
     bearer tokens come from T3's pairing and RFC 8693 token exchange.
     Heddle prepares each session itself: it creates the git worktree
-    under `/workspaces/worktrees/{repository}/{worktree}`, creates the
+    under `/workspaces/worktrees/{task-id}/{repository}`, creates the
     thread, and sends a bare `thread.turn.start` — three deterministic
     steps it owns end to end. Provider, model, and runtime mode are
     per-stage configuration; Heddle pins runtime modes known to work
@@ -123,15 +139,25 @@ proposed-design:
     preconditions. Mid-turn steering is a second `thread.turn.start`
     on the same thread.
 
-    Every production thread uses the configured existing workspace
-    `projectId`. Its bounded deterministic title contains the Heddle marker,
-    complete task identity, and a stable stage-occurrence discriminator. Each
+    A child task thread uses its epic project's durable ID. An ad-hoc task uses
+    the configured shared project. A delegated subagent inherits its parent's
+    project, repository, branch, and worktree. Its bounded deterministic title
+    is `task-{id} · {stage-occurrence}`: it contains the complete task identity
+    and a stable occurrence discriminator, with no service marker or epic
+    prefix. Each
     wait-stage occurrence has one durable session and thread identity; a stage
     reached again through a lifecycle loop receives a new occurrence identity,
     while restart resumes an incomplete occurrence. Stage-scoped sessions for
     one task share its task-scoped branch and worktree so each stage receives
     the delivery state produced by prior stages. First-turn dispatch omits
     `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived seed.
+
+    Qualification against isolated pinned T3 0.0.36 creates a project and a
+    thread whose worktree is a sibling of, and therefore outside, the project
+    workspace root. T3 accepts the command and reports the thread through its
+    authenticated shell. A thread's worktree is its working directory; the
+    project workspace root is only its fallback. This permits one epic project
+    root with task worktrees located under their own task-first roots.
 
     Sessions are short and stage-scoped. Nothing carries between
     stages except the handoff: a deterministically assembled bootstrap
@@ -445,6 +471,11 @@ proposed-design:
     One Heddle instance serves one workspace — its board, its
     worktrees, its T3 server — and each workspace container is a
     complete, self-contained installation.
+
+    The installation uses one configured shared T3 project for ad-hoc tasks
+    and one Heddle-managed T3 project per active epic. The product inventory is
+    the repository and project-routing authority. Existing repo-first worktrees
+    remain usable; Heddle does not move or rewrite them.
 
     The deployment server accepts the canonical production composition and
     shares its board, persistence, console state, console action port,
