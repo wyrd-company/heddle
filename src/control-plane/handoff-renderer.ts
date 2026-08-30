@@ -55,9 +55,7 @@ export const resolveHandoffAuthenticationBinding = (
   driver: string,
 ): HandoffAuthenticationBinding => {
   if (
-    !measuredFallbackDrivers.some(
-      (measuredDriver) => measuredDriver === driver,
-    )
+    !measuredFallbackDrivers.some((measuredDriver) => measuredDriver === driver)
   ) {
     throw new HandoffRenderError(
       `Driver '${driver}' has no measured Heddle MCP authentication policy`,

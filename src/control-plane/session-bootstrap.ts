@@ -285,9 +285,7 @@ const ensureStoredHandoff = async (
         input.providerContext.driver,
       );
       if (
-        !isHandoffAuthenticationBinding(
-          existing.renderedHandoffAuthentication,
-        )
+        !isHandoffAuthenticationBinding(existing.renderedHandoffAuthentication)
       ) {
         throw new HandoffRenderError(
           `Stored handoff has no valid authentication binding for '${input.sessionKey}'`,
@@ -396,8 +394,9 @@ const ensureStoredHandoff = async (
       taskId: input.taskId,
       template,
     });
-    const renderedHandoffAuthentication =
-      resolveHandoffAuthenticationBinding(input.providerContext.driver);
+    const renderedHandoffAuthentication = resolveHandoffAuthenticationBinding(
+      input.providerContext.driver,
+    );
     const stored: StoredStageHandoffCandidate = {
       correlationToken,
       handoff,
