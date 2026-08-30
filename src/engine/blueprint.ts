@@ -67,7 +67,9 @@ export const validateBlueprint = (
     }
     const isAgentWait =
       node.uses === "wait" &&
-      (node.tools !== undefined || node["todo-template"] !== undefined);
+      (node.tools !== undefined ||
+        node["todo-template"] !== undefined ||
+        node["handoff-template"] !== undefined);
     if (
       node.handoff !== undefined &&
       node.handoff !== "standard" &&
@@ -82,9 +84,26 @@ export const validateBlueprint = (
         `Agent wait node ${JSON.stringify(node.id)} has no handoff metadata`,
       );
     }
+    if (
+      isAgentWait &&
+      (node["handoff-template"] === undefined ||
+        !/^[0-9a-f]{40,64}$/.test(node["handoff-template"].blobHash) ||
+        !/^handoff-templates\/[a-z]+(?:-[a-z]+)*\.md$/.test(
+          node["handoff-template"].path,
+        ))
+    ) {
+      throw new BlueprintValidationError(
+        `Agent wait node ${JSON.stringify(node.id)} has no valid pinned handoff template`,
+      );
+    }
     if (node.uses !== "wait" && node.handoff !== undefined) {
       throw new BlueprintValidationError(
         `Non-wait node ${JSON.stringify(node.id)} must not declare handoff metadata`,
+      );
+    }
+    if (node.uses !== "wait" && node["handoff-template"] !== undefined) {
+      throw new BlueprintValidationError(
+        `Non-wait node ${JSON.stringify(node.id)} must not declare handoff template metadata`,
       );
     }
     if (

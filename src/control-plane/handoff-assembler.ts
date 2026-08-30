@@ -30,7 +30,7 @@ export type StageHandoffInput = {
   todoList: JsonValue;
 };
 
-const canonicalJson = (value: JsonValue): string => {
+export const canonicalJson = (value: JsonValue): string => {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
   }
@@ -58,7 +58,6 @@ export const assembleStageHandoff = (input: StageHandoffInput): string => {
         };
 
   return canonicalJson({
-    correlationToken: input.correlationToken,
     format: "heddle.stage-handoff",
     skillPointer: input.skillPointer,
     stage,

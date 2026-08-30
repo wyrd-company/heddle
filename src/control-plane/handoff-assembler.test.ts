@@ -68,5 +68,6 @@ describe("assembleStageHandoff", () => {
     });
     expect(handoff).not.toContain("private review discussion");
     expect(handoff).not.toContain("transcript");
+    expect(handoff).not.toContain("correlation-token");
   });
 });

@@ -61,16 +61,24 @@ describe("lifecycle blueprint artifacts", () => {
     "binds %s relationships to its todo templates",
     async (path) => {
       const artifact = (await readJson(path)) as {
-        nodes: Array<{ "todo-template"?: string }>;
+        nodes: Array<{
+          "handoff-template"?: { path: string };
+          "todo-template"?: string;
+        }>;
         relationships: { uses?: string[] };
       };
-      const boundTemplates = artifact.nodes
-        .map((node) => node["todo-template"])
-        .filter((value): value is string => value !== undefined)
-        .sort();
+      const boundTemplates = [
+        ...artifact.nodes
+          .map((node) => node["todo-template"])
+          .filter((value): value is string => value !== undefined),
+        ...artifact.nodes
+          .map((node) => node["handoff-template"]?.path)
+          .filter((value): value is string => value !== undefined)
+          .map((value) => basename(value, extname(value))),
+      ];
 
       expect([...(artifact.relationships.uses ?? [])].sort()).toEqual(
-        boundTemplates,
+        [...new Set(boundTemplates)].sort(),
       );
     },
   );
@@ -149,6 +157,12 @@ describe("lifecycle blueprint artifacts", () => {
     }
     delete handoffWaitNode.handoff;
     expect(validate(withoutHandoff)).toBe(false);
+
+    const withoutHandoffTemplate = cloneJson(artifact);
+    delete withoutHandoffTemplate.nodes.find(({ uses }) => uses === "wait")![
+      "handoff-template"
+    ];
+    expect(validate(withoutHandoffTemplate)).toBe(false);
 
     const invalidHandoff = cloneJson(artifact);
     invalidHandoff.nodes.find(({ uses }) => uses === "wait")!.handoff =

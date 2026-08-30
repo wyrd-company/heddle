@@ -32,6 +32,18 @@ export {
   type HarnessToolTimeoutLaunchInput,
 } from "./harness-tool-timeout.js";
 export {
+  HandoffRenderError,
+  renderStageHandoff,
+  type HandoffRenderInput,
+} from "./handoff-renderer.js";
+export {
+  GitHandoffTemplateStore,
+  HandoffTemplateError,
+  type HandoffTemplateKind,
+  type PinnedHandoffTemplate,
+  type PinnedHandoffTemplateReference,
+} from "./handoff-template-store.js";
+export {
   ensureWorktree,
   type GitRunner,
   type PreparedWorktree,

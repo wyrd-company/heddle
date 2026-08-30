@@ -21,6 +21,10 @@ const blueprint = (): LifecycleBlueprint => ({
   nodes: [
     {
       handoff: "standard",
+      "handoff-template": {
+        blobHash: "a".repeat(40),
+        path: "handoff-templates/standard.md",
+      },
       id: "prepare",
       tools: ["advance"],
       "todo-template": "sample-prepare",
@@ -49,6 +53,15 @@ describe("lifecycle blueprint handoff metadata", () => {
 
     expect(() => validate(value)).toThrow(
       'Node "prepare" has invalid handoff metadata',
+    );
+  });
+
+  it("rejects an agent wait without a pinned handoff template", () => {
+    const value = blueprint();
+    delete value.nodes[0]!["handoff-template"];
+
+    expect(() => validate(value)).toThrow(
+      'Agent wait node "prepare" has no valid pinned handoff template',
     );
   });
 

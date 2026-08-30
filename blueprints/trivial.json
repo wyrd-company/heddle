@@ -5,7 +5,9 @@
     "uses": [
       "standard-delivery-implement",
       "standard-delivery-review",
-      "standard-delivery-remediate"
+      "standard-delivery-remediate",
+      "standard",
+      "remediation"
     ]
   },
   "nodes": [
@@ -16,6 +18,10 @@
     {
       "id": "implement",
       "handoff": "standard",
+      "handoff-template": {
+        "blobHash": "e3efeb16549bf1f562806aa6d992902c8027fac3",
+        "path": "handoff-templates/standard.md"
+      },
       "uses": "wait",
       "tools": [
         "advance",
@@ -45,6 +51,10 @@
     {
       "id": "review",
       "handoff": "standard",
+      "handoff-template": {
+        "blobHash": "e3efeb16549bf1f562806aa6d992902c8027fac3",
+        "path": "handoff-templates/standard.md"
+      },
       "uses": "wait",
       "tools": [
         "advance",
@@ -70,6 +80,10 @@
     {
       "id": "remediate",
       "handoff": "remediation",
+      "handoff-template": {
+        "blobHash": "26c4fb448d95f96dc9cd63de8cd5bcedf2cae7f6",
+        "path": "handoff-templates/remediation.md"
+      },
       "uses": "wait",
       "tools": [
         "advance",

@@ -78,6 +78,21 @@
         "handoff": {
           "enum": ["standard", "remediation"]
         },
+        "handoff-template": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["blobHash", "path"],
+          "properties": {
+            "blobHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40,64}$"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^handoff-templates/[a-z]+(?:-[a-z]+)*\\.md$"
+            }
+          }
+        },
         "repo": {
           "type": "string",
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
@@ -137,7 +152,12 @@
             "required": ["uses"]
           },
           "then": {
-            "required": ["handoff", "tools", "todo-template"]
+            "required": [
+              "handoff",
+              "handoff-template",
+              "tools",
+              "todo-template"
+            ]
           },
           "else": {
             "not": {
@@ -150,6 +170,9 @@
                 },
                 {
                   "required": ["handoff"]
+                },
+                {
+                  "required": ["handoff-template"]
                 },
                 {
                   "required": ["repo"]

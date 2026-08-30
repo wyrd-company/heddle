@@ -26,6 +26,10 @@ export interface LifecycleEdge extends EdgeDefinition {
 
 export interface LifecycleNode extends NodeDefinition {
   handoff?: "remediation" | "standard";
+  "handoff-template"?: {
+    blobHash: string;
+    path: string;
+  };
   repo?: string;
   "todo-template"?: string;
   tools?: string[];
