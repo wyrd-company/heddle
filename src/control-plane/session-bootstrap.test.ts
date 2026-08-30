@@ -21,6 +21,10 @@ import {
   type SessionBootstrapDependencies,
 } from "./session-bootstrap.js";
 import { harnessToolTimeoutConfiguration } from "./harness-tool-timeout.js";
+import {
+  readSampleHandoffTemplate,
+  sampleHandoffTemplate,
+} from "./session-bootstrap.test-support.js";
 
 const initialState = (): InstanceState => ({
   correlationTokens: {},
@@ -33,6 +37,7 @@ const resolveWorkflowMcpStageContract = async () => ({
   blueprintBlobHash: "a".repeat(40),
   blueprintPath: "blueprints/sample-process.json",
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
+  handoffTemplate: sampleHandoffTemplate,
   stage: "prepare",
   todoTemplate: "sample-prepare",
   tools: ["advance", "get_task_context"],
@@ -135,6 +140,8 @@ describe("stage session bootstrap", () => {
           },
           runtimeMode: "default",
           sessionKey: "prepare-launch",
+          task: { id: 1, title: "Prepare inventory" },
+          taskId: 1,
           title: "Prepare inventory",
           worktree: {
             baseRef: "main",
@@ -160,6 +167,7 @@ describe("stage session bootstrap", () => {
               return record;
             },
           },
+          readHandoffTemplate: readSampleHandoffTemplate,
           resolveWorkflowMcpStageContract,
           t3: { applyHarnessToolTimeout, dispatch },
         },
@@ -214,6 +222,8 @@ describe("stage session bootstrap", () => {
             },
             runtimeMode: "default",
             sessionKey: "prepare-missing-consumer",
+            task: { id: 1, title: "Prepare inventory" },
+            taskId: 1,
             title: "Prepare inventory",
             worktree: {
               baseRef: "main",
@@ -238,6 +248,7 @@ describe("stage session bootstrap", () => {
                 return record;
               },
             },
+            readHandoffTemplate: readSampleHandoffTemplate,
             resolveWorkflowMcpStageContract,
             t3: { dispatch },
           },
@@ -274,6 +285,7 @@ describe("stage session bootstrap", () => {
         },
       },
       instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract,
       t3: {
         dispatch: async (command) => {
@@ -311,6 +323,8 @@ describe("stage session bootstrap", () => {
       },
       runtimeMode: "auto",
       sessionKey: "prepare-1",
+      task: { id: 1, title: "Prepare inventory" },
+      taskId: 1,
       title: "Prepare inventory",
       worktree: {
         baseRef: "main",
@@ -385,6 +399,8 @@ describe("stage session bootstrap", () => {
       },
       runtimeMode: "auto",
       sessionKey: "prepare-delegated",
+      task: { id: 1, title: "Prepare inventory" },
+      taskId: 1,
       threadCreateCommandId: "create-delegated",
       threadId: "thread-delegated",
       title: "Prepare inventory",
@@ -416,6 +432,7 @@ describe("stage session bootstrap", () => {
         },
         getInstance: () => record,
       },
+      readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract,
       t3: { dispatch },
     };
@@ -443,6 +460,96 @@ describe("stage session bootstrap", () => {
         message: expect.objectContaining({ messageId: "message-delegated" }),
       }),
     ]);
+  });
+
+  it("replays the exact rendered payload after turn acceptance precedes activation recording", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "heddle-activation-"));
+    scratchDirectories.push(stateDirectory);
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.createInstance("instance-activation", initialState());
+    const commands: Record<string, unknown>[] = [];
+    const input = {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      handoff: {
+        skillPointer: "skill://prepare",
+        stage: {
+          kind: "standard" as const,
+          name: "prepare",
+          priorStageOutputs: [],
+        },
+        taskContract: { id: 1, title: "Prepare inventory" },
+      },
+      instanceId: "instance-activation",
+      interactionMode: "default",
+      modelSelection: { instanceId: "cursor", model: "default" },
+      projectId: "project-activation",
+      providerContext: {
+        cliVersion: "sample-version",
+        driver: "cursor",
+        lifecycle: "independent" as const,
+      },
+      runtimeMode: "auto",
+      sessionKey: "prepare-activation",
+      task: { id: 1, title: "Prepare inventory" },
+      taskId: 1,
+      threadCreateCommandId: "create-activation",
+      threadId: "thread-activation",
+      title: "Prepare inventory",
+      turnCommandId: "turn-activation",
+      turnMessageId: "message-activation",
+      worktree: {
+        baseRef: "main",
+        branch: "task/prepare-activation",
+        repositoryName: "sample-repository",
+        repositoryRoot: "/workspaces/sample-repository",
+        worktreeName: "task-prepare-activation",
+      },
+    };
+    const common = {
+      ensureWorktree: async ({ branch }: { branch: string }) => ({
+        branch,
+        created: false,
+        path: "/workspaces/worktrees/sample-repository/task-prepare-activation",
+      }),
+      instantiateTodoList,
+      mintCorrelationToken: () => "correlation-token",
+      persistence,
+      readHandoffTemplate: readSampleHandoffTemplate,
+      resolveWorkflowMcpStageContract,
+      t3: {
+        dispatch: async (command: Record<string, unknown>) => {
+          commands.push(command);
+          return { sequence: commands.length };
+        },
+      },
+    };
+
+    await expect(
+      bootstrapStageSession(input, {
+        ...common,
+        activationEvents: {
+          appendEvent: () => {
+            throw new Error("simulated crash before activation event");
+          },
+          replayEvents: (instanceId, afterSequence) =>
+            persistence.replayEvents(instanceId, afterSequence),
+        },
+      }),
+    ).rejects.toThrow("simulated crash before activation event");
+    await bootstrapStageSession(input, {
+      ...common,
+      activationEvents: persistence,
+    });
+
+    const turns = commands.filter(({ type }) => type === "thread.turn.start");
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toEqual(turns[1]);
+    expect(
+      persistence
+        .replayEvents(input.instanceId)
+        .filter(({ type }) => type === "session:activated"),
+    ).toHaveLength(1);
+    persistence.close();
   });
 
   it("steers with a second bare turn on the existing thread", async () => {
@@ -487,8 +594,10 @@ describe("stage session bootstrap", () => {
     let persistence = new SqlitePersistence({ stateDirectory });
     persistence.createInstance("instance-1", initialState());
     const dependencies: SessionBootstrapDependencies = {
+      activationEvents: persistence,
       persistence,
       instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({
@@ -523,6 +632,8 @@ describe("stage session bootstrap", () => {
         },
         runtimeMode: "auto",
         sessionKey: "prepare-1",
+        task: { id: 1, title: "Prepare inventory" },
+        taskId: 1,
         title: "Prepare inventory",
         worktree: {
           baseRef: "main",
@@ -544,10 +655,22 @@ describe("stage session bootstrap", () => {
         correlationToken: "correlation-token",
         handoff: result.handoff,
         kind: "stage-handoff",
+        renderedHandoff: result.renderedHandoff,
         sessionKey: "prepare-1",
         workflowMcp: await resolveWorkflowMcpStageContract(),
       }),
     );
+    expect(
+      persistence
+        .replayEvents("instance-1")
+        .filter(({ type }) => type === "session:activated"),
+    ).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          renderedDocument: result.renderedHandoff,
+        }),
+      }),
+    ]);
     persistence.close();
   });
 });

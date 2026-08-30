@@ -4,6 +4,8 @@
 // ---
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { bootstrapStageSession } from "../control-plane/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
@@ -11,6 +13,7 @@ import { createProductionComposition } from "./composition.js";
 import {
   prepareProductionFixture,
   SyntheticT3,
+  execute,
 } from "./composition.test-support.js";
 
 describe("production lifecycle composition", () => {
@@ -57,6 +60,21 @@ describe("production lifecycle composition", () => {
       type: "thread.create",
     });
     expect(turn).not.toHaveProperty("titleSeed");
+    const renderedDocument = (turn?.["message"] as { text: string }).text;
+    expect(renderedDocument).toContain('format: "heddle.stage-handoff"');
+    expect(
+      first.persistence
+        .replayEvents(`task-${taskId}`)
+        .filter(({ type }) => type === "session:activated"),
+    ).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          renderedDocument,
+          sessionKey: `task-${taskId}:implement:1`,
+          taskId,
+        }),
+      }),
+    ]);
     expect(firstT3.timeouts).toHaveLength(1);
     await first.close();
 
@@ -72,7 +90,68 @@ describe("production lifecycle composition", () => {
     await second.start();
     expect(second.persistence.listInstances()).toHaveLength(1);
     expect(secondT3.commands).toHaveLength(0);
+    expect(
+      second.persistence
+        .replayEvents(`task-${taskId}`)
+        .filter(({ type }) => type === "session:activated"),
+    ).toHaveLength(1);
     await second.close();
+  });
+
+  it("raises durable attention and performs no partial dispatch when strict rendering fails", async () => {
+    const { configuration } = await prepare();
+    const repositoryRoot = configuration.products[0]!.repos[0]!.repositoryRoot;
+    const invalidTemplate = `---
+$schema: https://wyrd.company/heddle/handoff-template.schema.json
+relationships:
+  implements: heddle
+format: heddle.handoff-template
+version: 1
+kind: standard
+---
+# {{ task.absentTitle }}
+`;
+    const invalidPath = join(repositoryRoot, "handoff-templates", "invalid.md");
+    await writeFile(invalidPath, invalidTemplate);
+    const invalidHash = (
+      await execute("git", ["hash-object", "-w", invalidPath], {
+        cwd: repositoryRoot,
+      })
+    ).stdout.trim();
+    const blueprintPath = join(repositoryRoot, "blueprints", "sample.json");
+    const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    blueprint.nodes[0]!["handoff-template"] = {
+      blobHash: invalidHash,
+      path: "handoff-templates/invalid.md",
+    };
+    await writeFile(blueprintPath, JSON.stringify(blueprint));
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await expect(composition.start()).rejects.toThrow(
+      /Handoff template render failed/,
+    );
+    await expect(composition.scheduler.trigger()).rejects.toThrow(
+      /Handoff template render failed/,
+    );
+
+    expect(t3.commands).toHaveLength(0);
+    expect(t3.timeouts).toHaveLength(0);
+    expect(composition.attention.list()).toEqual([
+      expect.objectContaining({
+        kind: "lifecycle-resolution",
+        message: expect.stringContaining("Handoff template render failed"),
+      }),
+    ]);
+    await composition.close();
   });
 
   it("activates the next accepted lifecycle wait stage without losing prior observation", async () => {
@@ -111,14 +190,9 @@ describe("production lifecycle composition", () => {
     const reviewTurn = t3.commands.filter(
       ({ type }) => type === "thread.turn.start",
     )[1];
-    const reviewHandoff = JSON.parse(
-      (reviewTurn?.["message"] as { text: string }).text,
-    ) as { stage: unknown };
-    expect(reviewHandoff.stage).toEqual({
-      kind: "standard",
-      name: "review",
-      priorStageOutputs: [{ result: { count: 2 } }],
-    });
+    const reviewHandoff = (reviewTurn?.["message"] as { text: string }).text;
+    expect(reviewHandoff).toContain("Stage: review");
+    expect(reviewHandoff).toContain('"count": 2');
     expect(
       await composition.consoleState.listEvents({ afterSequence: 0 }),
     ).toEqual(
@@ -162,15 +236,8 @@ describe("production lifecycle composition", () => {
     )[2];
     const remediationText = (remediationTurn?.["message"] as { text: string })
       .text;
-    expect(JSON.parse(remediationText)).toMatchObject({
-      stage: {
-        kind: "remediation",
-        name: "remediate",
-        reviewFindings: [
-          { code: "P1", summary: "The recorded count is unchecked" },
-        ],
-      },
-    });
+    expect(remediationText).toContain("Stage: remediate");
+    expect(remediationText).toContain("The recorded count is unchecked");
     expect(remediationText).not.toContain("private discussion");
     expect(remediationText).not.toContain("transcript");
     await composition.lifecycle.resume({
@@ -200,17 +267,11 @@ describe("production lifecycle composition", () => {
     const repeatedReviewTurn = t3.commands.filter(
       ({ type }) => type === "thread.turn.start",
     )[3];
-    const repeatedReviewHandoff = JSON.parse(
-      (repeatedReviewTurn?.["message"] as { text: string }).text,
-    ) as { stage: { priorStageOutputs: unknown[] } };
-    expect(repeatedReviewHandoff.stage.priorStageOutputs).toEqual([
-      {},
-      {
-        findings: [{ code: "P1", summary: "The recorded count is unchecked" }],
-        transcript: ["private discussion"],
-      },
-      { correction: { count: 3 } },
-    ]);
+    const repeatedReviewHandoff = (
+      repeatedReviewTurn?.["message"] as { text: string }
+    ).text;
+    expect(repeatedReviewHandoff).toContain('"correction": {');
+    expect(repeatedReviewHandoff).toContain('"count": 3');
     await composition.close();
   });
 
@@ -283,6 +344,8 @@ describe("production lifecycle composition", () => {
           },
           runtimeMode: configuration.session.runtimeMode,
           sessionKey: `task-${taskId}:mismatch:1`,
+          task: { id: taskId, title: "Example Item" },
+          taskId,
           title: "Metadata agreement probe",
           worktree: {
             baseRef: configuration.session.baseRef,

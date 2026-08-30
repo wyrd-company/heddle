@@ -177,5 +177,12 @@ describe("GitHandoffTemplateStore", () => {
 
     expect(template.body).toBe("Pinned {{ task.title }}\n");
     expect(template.body).not.toContain("Live changed");
+    await expect(
+      execute(
+        "git",
+        ["rev-parse", `refs/heddle/handoff-templates/${stdout.trim()}`],
+        { cwd: root },
+      ),
+    ).resolves.toMatchObject({ stdout: `${stdout.trim()}\n` });
   });
 });

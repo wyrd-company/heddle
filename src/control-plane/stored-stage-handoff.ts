@@ -16,6 +16,7 @@ export type StoredStageHandoffCandidate = {
   kind: "stage-handoff";
   parentSessionKey?: string;
   sessionKey: string;
+  renderedHandoff?: string;
   todoAssignment?: {
     listSessionKey: string;
     rootItemId: string;

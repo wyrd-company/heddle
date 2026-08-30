@@ -21,6 +21,10 @@ import {
   steerStageSession,
 } from "./session-bootstrap.js";
 import { T3ControlPlaneClient } from "./t3-control-plane-client.js";
+import {
+  readSampleHandoffTemplate,
+  sampleHandoffTemplate,
+} from "./session-bootstrap.test-support.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
 const cursorWrapper = resolve("bin/heddle-cursor-agent.mjs");
@@ -190,6 +194,8 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
         providerContext,
         runtimeMode: "auto",
         sessionKey: "prepare-1",
+        task: { id: 1, title: "Prepare inventory" },
+        taskId: 1,
         title: "Prepare inventory",
         worktree: {
           baseRef: "main",
@@ -201,13 +207,16 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
         },
       },
       {
+        activationEvents: persistence,
         persistence,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract: async () => ({
           blueprintBlobHash: "a".repeat(40),
           blueprintPath: "blueprints/sample-process.json",
           dispositions: [
             { description: "Finish the preparation", name: "complete" },
           ],
+          handoffTemplate: sampleHandoffTemplate,
           stage: "prepare",
           todoTemplate: "sample-prepare",
           tools: ["advance", "get_task_context"],

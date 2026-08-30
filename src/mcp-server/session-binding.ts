@@ -72,10 +72,7 @@ const isStoredStageHandoff = (value: JsonValue): value is StoredStageHandoff =>
   value["workflowMcp"] !== undefined &&
   isWorkflowMcpStageContract(value["workflowMcp"]);
 
-const parseHandoff = (
-  serialized: string,
-  expectedToken: string,
-): StageHandoffDocument => {
+const parseHandoff = (serialized: string): StageHandoffDocument => {
   let value: unknown;
   try {
     value = JSON.parse(serialized) as unknown;
@@ -88,12 +85,7 @@ const parseHandoff = (
     (value as Partial<StageHandoffDocument>).format !==
       "heddle.stage-handoff" ||
     (value as Partial<StageHandoffDocument>).version !== 1 ||
-    typeof (value as Partial<StageHandoffDocument>).correlationToken !==
-      "string" ||
-    !tokenEquals(
-      (value as Partial<StageHandoffDocument>).correlationToken!,
-      expectedToken,
-    ) ||
+    Object.hasOwn(value, "correlationToken") ||
     typeof (value as Partial<StageHandoffDocument>).stage !== "object" ||
     (value as Partial<StageHandoffDocument>).stage === null ||
     typeof (value as StageHandoffDocument).stage.name !== "string" ||
@@ -109,10 +101,7 @@ export const isAuthorityValidStoredStageHandoff = (
 ): value is StoredStageHandoff => {
   if (!isStoredStageHandoff(value)) return false;
   try {
-    return (
-      parseHandoff(value.handoff, value.correlationToken).stage.name ===
-      value.workflowMcp.stage
-    );
+    return parseHandoff(value.handoff).stage.name === value.workflowMcp.stage;
   } catch {
     return false;
   }
@@ -161,7 +150,7 @@ export const resolveWorkflowMcpSessionBinding = (
     token,
   );
   if (storedHandoffs.length !== 1) throw new CorrelationTokenError();
-  const handoff = parseHandoff(storedHandoffs[0]!.handoff, token);
+  const handoff = parseHandoff(storedHandoffs[0]!.handoff);
   const context = match.instance.state.flowcraftContext;
   if (
     typeof context !== "object" ||

@@ -4,7 +4,7 @@
 //   references: t3-headless
 // ---
 
-import type { InstanceRecord } from "../persistence/index.js";
+import type { InstanceRecord, JsonValue } from "../persistence/index.js";
 import { GitBlueprintStore } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
@@ -24,6 +24,12 @@ import {
   assembleStageHandoff,
   type StageHandoffInput,
 } from "./handoff-assembler.js";
+import { renderStageHandoff } from "./handoff-renderer.js";
+import {
+  GitHandoffTemplateStore,
+  type PinnedHandoffTemplate,
+  type PinnedHandoffTemplateReference,
+} from "./handoff-template-store.js";
 import {
   applyHarnessToolTimeoutBeforeThread,
   type HarnessToolTimeoutConsumer,
@@ -33,6 +39,10 @@ import {
   isStoredHandoff,
   type StoredStageHandoffCandidate,
 } from "./stored-stage-handoff.js";
+import {
+  recordSessionActivation,
+  type SessionActivationEventStore,
+} from "./session-activation.js";
 import type {
   T3DispatchCommand,
   T3ProviderDispatchContext,
@@ -62,6 +72,8 @@ export type SessionBootstrapInput = {
   providerContext: T3ProviderDispatchContext;
   runtimeMode: string;
   sessionKey: string;
+  task: JsonValue;
+  taskId: number;
   title: string;
   threadCreateCommandId?: string;
   threadId?: string;
@@ -78,6 +90,7 @@ export type SessionBootstrapResult = {
   correlationToken: string;
   harnessConfiguration: HarnessConfiguration;
   handoff: string;
+  renderedHandoff: string;
   threadId: string;
   worktree: PreparedWorktree;
 };
@@ -97,15 +110,22 @@ export const harnessConfiguration = (): HarnessConfiguration => ({
 });
 
 export type SessionBootstrapDependencies = {
+  activationEvents?: SessionActivationEventStore;
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
   instantiateTodoList?: typeof instantiateTodoList;
   mintCorrelationToken?: () => string;
   nextId?: () => string;
   now?: () => string;
   persistence: InstanceStateStore;
+  readHandoffTemplate?: HandoffTemplateResolver;
   resolveWorkflowMcpStageContract?: WorkflowMcpStageContractResolver;
   t3: SessionT3Client;
 };
+
+export type HandoffTemplateResolver = (
+  reference: PinnedHandoffTemplateReference,
+  input: SessionBootstrapInput,
+) => Promise<PinnedHandoffTemplate>;
 
 export type WorkflowMcpStageContractResolver = (
   input: SessionBootstrapInput,
@@ -156,7 +176,12 @@ const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
       stage?.uses !== "wait" ||
       stage.handoff !== input.handoff.stage.kind ||
       !Array.isArray(stage.tools) ||
-      typeof stage["todo-template"] !== "string"
+      typeof stage["todo-template"] !== "string" ||
+      typeof stage["handoff-template"] !== "object" ||
+      stage["handoff-template"] === null ||
+      Array.isArray(stage["handoff-template"]) ||
+      typeof stage["handoff-template"]["blobHash"] !== "string" ||
+      typeof stage["handoff-template"]["path"] !== "string"
     ) {
       throw new Error(
         "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
@@ -184,6 +209,10 @@ const resolveWorkflowMcpStageContract: WorkflowMcpStageContractResolver =
       blueprintBlobHash: context["blueprintBlobHash"],
       blueprintPath: context["blueprintPath"],
       dispositions,
+      handoffTemplate: {
+        blobHash: stage["handoff-template"]["blobHash"],
+        path: stage["handoff-template"]["path"],
+      },
       stage: stage.id,
       todoTemplate: stage["todo-template"],
       tools: [...stage.tools],
@@ -196,7 +225,8 @@ const ensureStoredHandoff = async (
   correlationToken: string,
   resolveStageContract: WorkflowMcpStageContractResolver,
   instantiate: typeof instantiateTodoList,
-): Promise<string> => {
+  readTemplate: HandoffTemplateResolver,
+): Promise<{ handoff: string; renderedHandoff: string }> => {
   while (true) {
     const current = store.getInstance(input.instanceId);
     if (current === undefined) {
@@ -240,7 +270,15 @@ const ensureStoredHandoff = async (
           `Stored handoff and workflow MCP stage disagree for '${input.sessionKey}'`,
         );
       }
-      return existing.handoff;
+      if (typeof existing.renderedHandoff !== "string") {
+        throw new Error(
+          `Stored handoff has no rendered payload for '${input.sessionKey}'`,
+        );
+      }
+      return {
+        handoff: existing.handoff,
+        renderedHandoff: existing.renderedHandoff,
+      };
     }
 
     const templateContract = await resolveStageContract(input, current);
@@ -318,10 +356,23 @@ const ensureStoredHandoff = async (
       correlationToken,
       todoList: todoState,
     });
+    const template = await readTemplate(workflowMcp.handoffTemplate, input);
+    const renderedHandoff = renderStageHandoff({
+      correlationToken,
+      driver: input.providerContext.driver,
+      handoff,
+      instanceId: input.instanceId,
+      sessionKey: input.sessionKey,
+      stage: input.handoff.stage.name,
+      task: input.task,
+      taskId: input.taskId,
+      template,
+    });
     const stored: StoredStageHandoffCandidate = {
       correlationToken,
       handoff,
       kind: "stage-handoff",
+      renderedHandoff,
       ...(input.parentSessionKey === undefined
         ? {}
         : { parentSessionKey: input.parentSessionKey }),
@@ -339,7 +390,7 @@ const ensureStoredHandoff = async (
         handoffs: [...refreshed.state.handoffs, stored],
       },
     );
-    if (claimed !== undefined) return handoff;
+    if (claimed !== undefined) return { handoff, renderedHandoff };
   }
 };
 
@@ -362,13 +413,18 @@ export const bootstrapStageSession = async (
     input.sessionKey,
     dependencies.mintCorrelationToken,
   );
-  const handoff = await ensureStoredHandoff(
+  const { handoff, renderedHandoff } = await ensureStoredHandoff(
     dependencies.persistence,
     input,
     correlationToken,
     dependencies.resolveWorkflowMcpStageContract ??
       resolveWorkflowMcpStageContract,
     dependencies.instantiateTodoList ?? instantiateTodoList,
+    dependencies.readHandoffTemplate ??
+      ((reference, value) =>
+        new GitHandoffTemplateStore(value.worktree.repositoryRoot).read(
+          reference,
+        )),
   );
   const threadId = input.threadId ?? nextId();
   await applyHarnessToolTimeoutBeforeThread({
@@ -400,7 +456,7 @@ export const bootstrapStageSession = async (
       message: {
         messageId: input.turnMessageId ?? nextId(),
         role: "user",
-        text: handoff,
+        text: renderedHandoff,
         attachments: [],
       },
       modelSelection: input.modelSelection,
@@ -410,10 +466,23 @@ export const bootstrapStageSession = async (
     },
     input.providerContext,
   );
+  if (dependencies.activationEvents !== undefined) {
+    recordSessionActivation(dependencies.activationEvents, {
+      format: "heddle.session-activation",
+      instanceId: input.instanceId,
+      renderedDocument: renderedHandoff,
+      sessionKey: input.sessionKey,
+      stage: input.handoff.stage.name,
+      taskId: input.taskId,
+      threadId,
+      version: 1,
+    });
+  }
 
   return {
     correlationToken,
     handoff,
+    renderedHandoff,
     harnessConfiguration: harnessConfiguration(),
     threadId,
     worktree,

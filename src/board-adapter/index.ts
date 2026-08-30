@@ -7,6 +7,10 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
+import { parse } from "yaml";
+
+import type { JsonValue } from "../persistence/index.js";
+
 const executeFile = promisify(execFile);
 const lifecycleName = /^[a-z][a-z-]*$/;
 
@@ -14,6 +18,7 @@ export type KanbanCommandRunner = (arguments_: string[]) => Promise<string>;
 
 export interface BoardTask {
   blocked: boolean;
+  frontMatter: JsonValue;
   id: number;
   title: string;
   status: string;
@@ -125,6 +130,42 @@ const frontMatterFrom = (source: string): string | undefined => {
   const end = source.indexOf("\n---", 4);
   if (end === -1) return undefined;
   return source.slice(4, end);
+};
+
+const isJsonValue = (value: unknown): value is JsonValue => {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  if (typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return (
+    (prototype === Object.prototype || prototype === null) &&
+    Object.values(value as Record<string, unknown>).every(isJsonValue)
+  );
+};
+
+const rawFrontMatter = (serialized: string | undefined): JsonValue => {
+  if (serialized === undefined) {
+    throw new Error("task has no YAML front matter");
+  }
+  let value: unknown;
+  try {
+    value = parse(serialized);
+  } catch (error) {
+    throw new Error(
+      `task front matter is invalid YAML: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!isJsonValue(value) || Array.isArray(value) || value === null) {
+    throw new Error("task front matter must be a JSON-compatible object");
+  }
+  return value;
 };
 
 const scalarFromFrontMatter = (
@@ -306,6 +347,7 @@ export class KanbanBoardAdapter {
     const repos = repositoriesFromFrontMatter(frontMatter);
     return {
       blocked: task.blocked ?? false,
+      frontMatter: rawFrontMatter(frontMatter),
       id: task.id,
       title: task.title,
       status: task.status,

@@ -23,6 +23,12 @@ export {
   type SessionT3Client,
 } from "./session-bootstrap.js";
 export {
+  recordSessionActivation,
+  sessionActivatedEvent,
+  type SessionActivationEventStore,
+  type SessionActivationPayload,
+} from "./session-activation.js";
+export {
   applyHarnessToolTimeoutBeforeThread,
   harnessToolTimeoutConfiguration,
   harnessToolTimeoutLaunchConfiguration,

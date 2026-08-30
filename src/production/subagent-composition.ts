@@ -4,6 +4,8 @@
 // ---
 
 import {
+  HandoffRenderError,
+  HandoffTemplateError,
   type SessionObservationTarget,
   type SessionObserver,
   steerStageSession,
@@ -18,6 +20,8 @@ import { SubagentCoordinator } from "../subagents/index.js";
 import { isTodoState, type TodoAssignment } from "../todo/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
+import type { KanbanBoardAdapter } from "../board-adapter/index.js";
+import type { DurableAttentionQueue } from "./durable-adapters.js";
 import { heddleSessionTitle } from "./session-title.js";
 
 const assignments = (persistence: SqlitePersistence): TodoAssignment[] =>
@@ -155,16 +159,20 @@ const activeSessions = async (
 };
 
 export const createProductionSubagentCoordinator = (options: {
+  attention: DurableAttentionQueue;
+  board: Pick<KanbanBoardAdapter, "readTask">;
   configuration: ProductionConfiguration;
   observer: SessionObserver;
   pacing: DispatchPacingEvaluator;
   persistence: SqlitePersistence;
   t3: ProductionT3Client;
 }): SubagentCoordinator => {
-  const { configuration, observer, pacing, persistence, t3 } = options;
+  const { attention, board, configuration, observer, pacing, persistence, t3 } =
+    options;
   return new SubagentCoordinator({
     activeSessions: () => activeSessions(configuration, persistence, t3),
     bootstrapDependencies: {
+      activationEvents: persistence,
       persistence,
       t3: {
         ...(t3.applyHarnessToolTimeout === undefined
@@ -178,6 +186,25 @@ export const createProductionSubagentCoordinator = (options: {
       },
     },
     observeChild: (target) => observer.observe(target),
+    onBootstrapFailure: async ({ error, instanceId, sessionKey, taskId }) => {
+      if (
+        !(error instanceof HandoffRenderError) &&
+        !(error instanceof HandoffTemplateError)
+      ) {
+        return;
+      }
+      const attentionId = `${sessionKey}:handoff-render`;
+      if (!(await attention.has(attentionId))) {
+        await attention.raise({
+          attentionId,
+          code: "handoff-render-failed",
+          instanceId,
+          kind: "lifecycle-resolution",
+          message: error.message,
+          taskId,
+        });
+      }
+    },
     pacing,
     persistence,
     prepareSession: async ({ binding, identity, model, provider }) => {
@@ -188,6 +215,7 @@ export const createProductionSubagentCoordinator = (options: {
         throw new Error("Subagent parent has no canonical reconciler runtime");
       }
       const taskId = runtimes[0]!.taskId;
+      const task = await board.readTask(taskId);
       const session = configuration.session;
       const route = parentSessionRoute(persistence, binding.sessionKey);
       const repository = configuration.products
@@ -206,6 +234,8 @@ export const createProductionSubagentCoordinator = (options: {
           lifecycle: "independent",
         },
         runtimeMode: session.runtimeMode,
+        task: task.frontMatter,
+        taskId,
         title: heddleSessionTitle(
           taskId,
           `${binding.stage.id}-subagent-${identity.sessionKey.slice(0, 8)}`,

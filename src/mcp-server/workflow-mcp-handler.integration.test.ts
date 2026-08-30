@@ -45,6 +45,19 @@ const claudeHarnessTest =
 const codexHarnessTest =
   env["HEDDLE_MCP_CODEX_INTEGRATION"] === "1" ? it : it.skip;
 
+const sampleHandoffTemplate = `---
+$schema: https://wyrd.company/heddle/handoff-template.schema.json
+relationships:
+  implements: heddle
+format: heddle.handoff-template
+version: 1
+kind: standard
+---
+# {{ task.title }}
+
+Stage: {{ handoff.stage.name }}
+`;
+
 type HttpObservation = {
   contentType: string | null;
   method: string;
@@ -89,6 +102,7 @@ const runHarness = (
 const blueprint = (
   tools: string[],
   acceptDescription: string,
+  handoffTemplateBlobHash: string,
   acceptDisposition = "accept",
 ): LifecycleBlueprint => ({
   id: "sample-process",
@@ -97,6 +111,10 @@ const blueprint = (
     {
       id: "assess",
       handoff: "standard",
+      "handoff-template": {
+        blobHash: handoffTemplateBlobHash,
+        path: "handoff-templates/standard.md",
+      },
       uses: "wait",
       tools,
       "todo-template": "sample-stage",
@@ -104,6 +122,10 @@ const blueprint = (
     {
       id: "inspect",
       handoff: "standard",
+      "handoff-template": {
+        blobHash: handoffTemplateBlobHash,
+        path: "handoff-templates/standard.md",
+      },
       uses: "wait",
       tools: ["get_task_context"],
       "todo-template": "sample-stage",
@@ -201,6 +223,7 @@ const makeFixture = async () => {
   temporaryDirectories.push(repositoryRoot);
   await execFileAsync("git", ["init", "--quiet"], { cwd: repositoryRoot });
   await mkdir(join(repositoryRoot, "blueprints"));
+  await mkdir(join(repositoryRoot, "handoff-templates"));
   await mkdir(join(repositoryRoot, "todo-templates"));
   await writeFile(
     join(repositoryRoot, "todo-templates", "sample-stage.json"),
@@ -208,6 +231,17 @@ const makeFixture = async () => {
       items: [{ id: "orient", text: "Orient on {{task.title}}" }],
     }),
   );
+  await writeFile(
+    join(repositoryRoot, "handoff-templates", "standard.md"),
+    sampleHandoffTemplate,
+  );
+  const handoffTemplateBlobHash = (
+    await execFileAsync(
+      "git",
+      ["hash-object", "-w", "handoff-templates/standard.md"],
+      { cwd: repositoryRoot },
+    )
+  ).stdout.trim();
   const alphaPath = await writeBlueprint(
     repositoryRoot,
     "alpha-sample",
@@ -223,12 +257,17 @@ const makeFixture = async () => {
         "todo_reorder",
       ],
       "Accept the prepared sample",
+      handoffTemplateBlobHash,
     ),
   );
   const betaPath = await writeBlueprint(
     repositoryRoot,
     "beta-sample",
-    blueprint(["get_task_context", "report_blocked"], "Accept the sample"),
+    blueprint(
+      ["get_task_context", "report_blocked"],
+      "Accept the sample",
+      handoffTemplateBlobHash,
+    ),
   );
   const persistence = new SqlitePersistence({
     stateDirectory: join(repositoryRoot, "state"),
@@ -291,15 +330,17 @@ const makeFixture = async () => {
         },
         instanceId,
         interactionMode: "default",
-        modelSelection: { instanceId: "sample", model: "default" },
+        modelSelection: { instanceId: "codex", model: "default" },
         projectId: "sample-project",
         providerContext: {
           cliVersion: "1.0.0",
-          driver: "sample",
+          driver: "codex",
           lifecycle: "independent",
         },
         runtimeMode: "default",
         sessionKey,
+        task: taskContract,
+        taskId: Number(taskContract["id"]),
         title: "Sample session",
         worktree: {
           baseRef: "main",
@@ -310,6 +351,7 @@ const makeFixture = async () => {
         },
       },
       {
+        activationEvents: persistence,
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -317,7 +359,10 @@ const makeFixture = async () => {
         }),
         mintCorrelationToken: () => token,
         persistence,
-        t3: { dispatch: async () => ({ sequence: 1 }) },
+        t3: {
+          applyHarnessToolTimeout: async () => undefined,
+          dispatch: async () => ({ sequence: 1 }),
+        },
       },
     );
   await bootstrap("instance-alpha", "stage-alpha", alphaToken, {
@@ -340,6 +385,7 @@ const makeFixture = async () => {
     betaToken,
     bootstrap,
     handler,
+    handoffTemplateBlobHash,
     lifecycle,
     persistence,
     repositoryRoot,
@@ -645,7 +691,11 @@ describe("workflow MCP HTTP server", () => {
     await writeBlueprint(
       fixture.repositoryRoot,
       "alpha-sample",
-      blueprint(["advance", "report_blocked"], ""),
+      blueprint(
+        ["advance", "report_blocked"],
+        "",
+        fixture.handoffTemplateBlobHash,
+      ),
     );
     await fixture.lifecycle.rebase({
       instanceId: "instance-alpha",
@@ -663,7 +713,7 @@ describe("workflow MCP HTTP server", () => {
     ).toHaveLength(1);
   });
 
-  it("rejects a handoff document carrying a different correlation token", async () => {
+  it("rejects a legacy handoff document carrying an embedded correlation token", async () => {
     const fixture = await makeFixture();
     const record = fixture.persistence.getInstance("instance-alpha");
     if (record === undefined) throw new Error("alpha fixture is missing");
@@ -677,7 +727,7 @@ describe("workflow MCP HTTP server", () => {
       throw new Error("alpha handoff fixture is invalid");
     }
     const handoff = JSON.parse(stored["handoff"]) as {
-      correlationToken: string;
+      correlationToken?: string;
     };
     handoff.correlationToken = "token-mismatch";
     fixture.persistence.updateInstance("instance-alpha", {
@@ -771,6 +821,7 @@ describe("workflow MCP HTTP server", () => {
       blueprint(
         ["advance", "report_blocked"],
         "Approve the rebased sample",
+        fixture.handoffTemplateBlobHash,
         "approve",
       ),
     );
@@ -1388,6 +1439,15 @@ describe("workflow MCP HTTP server", () => {
     await copyFile(
       join(cwd(), blueprintPath),
       join(fixture.repositoryRoot, blueprintPath),
+    );
+    await copyFile(
+      join(cwd(), "handoff-templates/standard.md"),
+      join(fixture.repositoryRoot, "handoff-templates/standard.md"),
+    );
+    await execFileAsync(
+      "git",
+      ["hash-object", "-w", "handoff-templates/standard.md"],
+      { cwd: fixture.repositoryRoot },
     );
     await copyFile(
       join(cwd(), "todo-templates/standard-delivery-review.json"),

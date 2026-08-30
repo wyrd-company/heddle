@@ -41,6 +41,10 @@ const artifact = {
     { id: "prepare", uses: "prepare" },
     {
       handoff: "standard",
+      "handoff-template": {
+        blobHash: "a".repeat(40),
+        path: "handoff-templates/sample.md",
+      },
       id: "inspect",
       uses: "wait",
       tools: ["advance"],

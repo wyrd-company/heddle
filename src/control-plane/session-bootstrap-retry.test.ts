@@ -12,6 +12,10 @@ import {
   type SessionBootstrapDependencies,
   type SessionBootstrapInput,
 } from "./session-bootstrap.js";
+import {
+  readSampleHandoffTemplate,
+  sampleHandoffTemplate,
+} from "./session-bootstrap.test-support.js";
 
 const input: SessionBootstrapInput = {
   handoff: {
@@ -30,6 +34,8 @@ const input: SessionBootstrapInput = {
   },
   runtimeMode: "auto",
   sessionKey: "prepare-1",
+  task: { id: 1, title: "Prepare inventory" },
+  taskId: 1,
   title: "Prepare inventory",
   worktree: {
     baseRef: "main",
@@ -51,6 +57,7 @@ const workflowMcp = {
   blueprintBlobHash: "a".repeat(40),
   blueprintPath: "blueprints/sample-process.json",
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
+  handoffTemplate: sampleHandoffTemplate,
   stage: "prepare",
   todoTemplate: "sample-prepare",
   tools: ["advance", "answer", "get_task_context"],
@@ -60,7 +67,6 @@ const resolveWorkflowMcpStageContract = async () => workflowMcp;
 
 const handoffDocument = (token: string, stage = "prepare") =>
   JSON.stringify({
-    correlationToken: token,
     format: "heddle.stage-handoff",
     stage: { name: stage },
     taskContract: { title: "Prepare a sample" },
@@ -130,6 +136,7 @@ const expectParentRejected = async (
       {
         instantiateTodoList,
         persistence: memory.store,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -166,6 +173,7 @@ describe("stage session cold retry guards", () => {
       {
         instantiateTodoList,
         persistence: memory.store,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -297,6 +305,7 @@ describe("stage session cold retry guards", () => {
         {
           instantiateTodoList,
           persistence: memory.store,
+          readHandoffTemplate: readSampleHandoffTemplate,
           resolveWorkflowMcpStageContract,
           t3: { dispatch },
           ensureWorktree: async ({ branch }) => ({
@@ -322,6 +331,7 @@ describe("stage session cold retry guards", () => {
         {
           instantiateTodoList,
           persistence: memory.store,
+          readHandoffTemplate: readSampleHandoffTemplate,
           resolveWorkflowMcpStageContract,
           t3: { dispatch },
           ensureWorktree: async ({ branch }) => ({
@@ -379,6 +389,7 @@ describe("stage session cold retry guards", () => {
         { ...input, parentSessionKey: "parent-b", sessionKey: "child" },
         {
           persistence: memory.store,
+          readHandoffTemplate: readSampleHandoffTemplate,
           resolveWorkflowMcpStageContract,
           t3: { dispatch },
           ensureWorktree: async ({ branch }) => ({
@@ -409,6 +420,7 @@ describe("stage session cold retry guards", () => {
     const dependencies: SessionBootstrapDependencies = {
       persistence: memory.store,
       instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract,
       t3: {
         dispatch: async (command) => {
@@ -479,6 +491,7 @@ describe("stage session cold retry guards", () => {
     const result = await bootstrapStageSession(input, {
       persistence,
       instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({
@@ -518,6 +531,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -549,6 +563,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -582,6 +597,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -619,6 +635,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({

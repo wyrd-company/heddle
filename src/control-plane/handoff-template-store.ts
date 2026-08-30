@@ -118,6 +118,22 @@ export class GitHandoffTemplateStore {
         `Pinned handoff template blob is unavailable: ${reference.blobHash}`,
       );
     }
-    return parseTemplate(stdout, reference);
+    const template = parseTemplate(stdout, reference);
+    try {
+      await execute(
+        "git",
+        [
+          "update-ref",
+          `refs/heddle/handoff-templates/${reference.blobHash}`,
+          reference.blobHash,
+        ],
+        { cwd: this.repositoryRoot },
+      );
+    } catch {
+      throw new HandoffTemplateError(
+        `Pinned handoff template ref could not be retained: ${reference.blobHash}`,
+      );
+    }
+    return template;
   }
 }

@@ -72,6 +72,10 @@ export interface WorkflowMcpStageContract {
   blueprintBlobHash: string;
   blueprintPath: string;
   dispositions: WorkflowMcpDisposition[];
+  handoffTemplate: {
+    blobHash: string;
+    path: string;
+  };
   stage: string;
   todoTemplate: string;
   tools: string[];
@@ -109,6 +113,7 @@ export type StoredStageHandoff = {
   kind: "stage-handoff";
   parentSessionKey?: string;
   sessionKey: string;
+  renderedHandoff?: string;
   todoAssignment?: {
     listSessionKey: string;
     rootItemId: string;
@@ -117,7 +122,6 @@ export type StoredStageHandoff = {
 };
 
 export type StageHandoffDocument = {
-  correlationToken: string;
   format: "heddle.stage-handoff";
   stage: {
     name: string;

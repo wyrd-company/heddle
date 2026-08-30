@@ -65,6 +65,8 @@ export type SubagentSessionPreparation = Pick<
   | "projectId"
   | "providerContext"
   | "runtimeMode"
+  | "task"
+  | "taskId"
   | "title"
   | "worktree"
 >;
@@ -78,6 +80,12 @@ export type SubagentCoordinatorOptions = {
   observeChild(
     target: SessionObservationTarget,
   ): Promise<SessionObservationResult>;
+  onBootstrapFailure?(input: {
+    error: unknown;
+    instanceId: string;
+    sessionKey: string;
+    taskId: number;
+  }): Promise<void>;
   pacing: DispatchPacingEvaluator;
   persistence: DelegationStateStore;
   prepareSession(input: {
@@ -205,37 +213,47 @@ export class SubagentCoordinator {
       provider: assignment.provider,
       rootItemId: assignment.rootItemId,
     });
-    await this.#bootstrap(
-      {
-        ...preparation,
-        handoff: {
-          skillPointer: this.#skillPointer(binding),
-          stage: {
-            kind: "standard",
-            name: binding.stage.id,
-            priorStageOutputs: [],
+    try {
+      await this.#bootstrap(
+        {
+          ...preparation,
+          handoff: {
+            skillPointer: this.#skillPointer(binding),
+            stage: {
+              kind: "standard",
+              name: binding.stage.id,
+              priorStageOutputs: [],
+            },
+            taskContract: binding.taskContext,
           },
-          taskContract: binding.taskContext,
+          instanceId: binding.instance.instanceId,
+          parentSessionKey: binding.sessionKey,
+          sessionKey: assignment.sessionKey,
+          createdAt: assignment.bootstrap.createdAt,
+          threadCreateCommandId: assignment.bootstrap.createCommandId,
+          threadId: assignment.threadId,
+          todoAssignment: {
+            listSessionKey:
+              binding.todoAssignment?.listSessionKey ?? binding.sessionKey,
+            rootItemId: assignment.rootItemId,
+          },
+          turnCommandId: assignment.bootstrap.turnCommandId,
+          turnMessageId: assignment.bootstrap.messageId,
         },
+        {
+          ...this.options.bootstrapDependencies,
+          mintCorrelationToken: () => assignment.correlationToken,
+        },
+      );
+    } catch (error) {
+      await this.options.onBootstrapFailure?.({
+        error,
         instanceId: binding.instance.instanceId,
-        parentSessionKey: binding.sessionKey,
         sessionKey: assignment.sessionKey,
-        createdAt: assignment.bootstrap.createdAt,
-        threadCreateCommandId: assignment.bootstrap.createCommandId,
-        threadId: assignment.threadId,
-        todoAssignment: {
-          listSessionKey:
-            binding.todoAssignment?.listSessionKey ?? binding.sessionKey,
-          rootItemId: assignment.rootItemId,
-        },
-        turnCommandId: assignment.bootstrap.turnCommandId,
-        turnMessageId: assignment.bootstrap.messageId,
-      },
-      {
-        ...this.options.bootstrapDependencies,
-        mintCorrelationToken: () => assignment.correlationToken,
-      },
-    );
+        taskId: preparation.taskId,
+      });
+      throw error;
+    }
     return { assignment, kind: "spawned" };
   }
 

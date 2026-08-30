@@ -58,8 +58,33 @@ describe("production process restart", () => {
     const repositoryRoot = join(root, "sample-repository");
     const boardDirectory = join(root, "board");
     await mkdir(join(repositoryRoot, "blueprints"), { recursive: true });
+    await mkdir(join(repositoryRoot, "handoff-templates"), { recursive: true });
     await mkdir(join(repositoryRoot, "todo-templates"), { recursive: true });
     await mkdir(join(boardDirectory, "tasks"), { recursive: true });
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: repositoryRoot,
+    });
+    const handoffTemplate = `---
+$schema: https://wyrd.company/heddle/handoff-template.schema.json
+relationships:
+  implements: heddle
+format: heddle.handoff-template
+version: 1
+kind: standard
+---
+# {{ task.title }}
+`;
+    await writeFile(
+      join(repositoryRoot, "handoff-templates", "standard.md"),
+      handoffTemplate,
+    );
+    const handoffTemplateBlobHash = (
+      await execute(
+        "git",
+        ["hash-object", "-w", "handoff-templates/standard.md"],
+        { cwd: repositoryRoot },
+      )
+    ).stdout.trim();
     await writeFile(
       join(repositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
@@ -75,6 +100,10 @@ describe("production process restart", () => {
         nodes: [
           {
             handoff: "standard",
+            "handoff-template": {
+              blobHash: handoffTemplateBlobHash,
+              path: "handoff-templates/standard.md",
+            },
             id: "implement",
             tools: ["advance"],
             "todo-template": "sample-stage",
@@ -90,12 +119,11 @@ describe("production process restart", () => {
         items: [{ id: "deliver", text: "Deliver the sample" }],
       }),
     );
-    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
-      cwd: repositoryRoot,
-    });
-    await execute("git", ["add", "blueprints", "todo-templates"], {
-      cwd: repositoryRoot,
-    });
+    await execute(
+      "git",
+      ["add", "blueprints", "handoff-templates", "todo-templates"],
+      { cwd: repositoryRoot },
+    );
     await execute(
       "git",
       [

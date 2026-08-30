@@ -25,6 +25,11 @@ export const isWorkflowMcpStageContract = (
   !Array.isArray(value) &&
   typeof value["blueprintBlobHash"] === "string" &&
   typeof value["blueprintPath"] === "string" &&
+  typeof value["handoffTemplate"] === "object" &&
+  value["handoffTemplate"] !== null &&
+  !Array.isArray(value["handoffTemplate"]) &&
+  typeof value["handoffTemplate"]["blobHash"] === "string" &&
+  typeof value["handoffTemplate"]["path"] === "string" &&
   typeof value["stage"] === "string" &&
   typeof value["todoTemplate"] === "string" &&
   Array.isArray(value["tools"]) &&

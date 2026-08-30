@@ -12,6 +12,10 @@ import {
   type SessionBootstrapDependencies,
   type SessionBootstrapInput,
 } from "./session-bootstrap.js";
+import {
+  readSampleHandoffTemplate,
+  sampleHandoffTemplate,
+} from "./session-bootstrap.test-support.js";
 
 const input: SessionBootstrapInput = {
   handoff: {
@@ -30,6 +34,8 @@ const input: SessionBootstrapInput = {
   },
   runtimeMode: "auto",
   sessionKey: "prepare-1",
+  task: { id: 1, title: "Prepare inventory" },
+  taskId: 1,
   title: "Prepare inventory",
   worktree: {
     baseRef: "main",
@@ -44,6 +50,7 @@ const workflowMcp = {
   blueprintBlobHash: "a".repeat(40),
   blueprintPath: "blueprints/sample-process.json",
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
+  handoffTemplate: sampleHandoffTemplate,
   stage: "prepare",
   todoTemplate: "sample-prepare",
   tools: ["advance", "get_task_context"],
@@ -129,6 +136,7 @@ describe("abandoned activation todo state", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList: instantiateAcrossAdvance,
+        readHandoffTemplate: readSampleHandoffTemplate,
         resolveWorkflowMcpStageContract: resolveAwaitingStage,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -162,6 +170,7 @@ describe("abandoned activation todo state", () => {
     const next = await bootstrapStageSession(nextInput, {
       persistence: memory.store,
       instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract: async () => ({
         ...workflowMcp,
         stage: "next",
@@ -253,6 +262,7 @@ describe("abandoned activation todo state", () => {
     const result = await bootstrapStageSession(input, {
       persistence: memory.store,
       instantiateTodoList,
+      readHandoffTemplate: readSampleHandoffTemplate,
       resolveWorkflowMcpStageContract: async () => workflowMcp,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({

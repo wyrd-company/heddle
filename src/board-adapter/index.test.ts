@@ -183,6 +183,12 @@ next_id: 1
     );
 
     await expect(adapter.readTask(taskId)).resolves.toMatchObject({
+      frontMatter: {
+        id: taskId,
+        product: "sample-product",
+        repos: ["sample-alpha", "sample-beta"],
+        title: "Arrange sample items",
+      },
       product: "sample-product",
       repos: ["sample-alpha", "sample-beta"],
     });

@@ -211,11 +211,11 @@ describe("production subagent composition", () => {
     const spawned = await composition.subagents.spawn(parent, {
       model: "sample-model",
       operationId: "delegated-provider",
-      provider: "other-provider",
+      provider: "cursor",
       rootItemId: "deliver",
     });
     expect(spawned).toMatchObject({
-      assignment: { model: "sample-model", provider: "other-provider" },
+      assignment: { model: "sample-model", provider: "cursor" },
       kind: "spawned",
     });
     if (spawned.kind !== "spawned") throw new Error("Child was deferred");
@@ -230,7 +230,7 @@ describe("production subagent composition", () => {
       expect.arrayContaining([
         expect.objectContaining({
           model: "sample-model",
-          provider: "other-provider",
+          provider: "cursor",
           sessionKey: spawned.assignment.sessionKey,
         }),
       ]),
@@ -239,7 +239,7 @@ describe("production subagent composition", () => {
       expect.arrayContaining([
         expect.objectContaining({
           modelSelection: {
-            instanceId: "other-provider",
+            instanceId: "cursor",
             model: "sample-model",
           },
           threadId: spawned.assignment.threadId,

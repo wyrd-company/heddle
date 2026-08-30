@@ -8,6 +8,8 @@ import { createHash } from "node:crypto";
 import type { BoardTask } from "../board-adapter/index.js";
 import {
   bootstrapStageSession,
+  HandoffRenderError,
+  HandoffTemplateError,
   type SessionT3Client,
 } from "../control-plane/index.js";
 import { readLifecycleContext } from "../engine/index.js";
@@ -20,6 +22,7 @@ import type {
 import type {
   DeferReconcilerInstanceInput,
   ReconcilerInstance,
+  ReconcilerAttentionQueue,
   ReconcilerInstanceController,
   StartReconcilerInstanceInput,
 } from "../reconciler/index.js";
@@ -32,6 +35,12 @@ import type { ProductRoutingCatalog } from "./product-routing.js";
 
 const json = (value: unknown): JsonValue =>
   JSON.parse(JSON.stringify(value)) as JsonValue;
+
+const taskContract = (task: BoardTask): JsonValue => {
+  const contract = { ...task } as Partial<BoardTask>;
+  delete contract.frontMatter;
+  return json(contract);
+};
 
 const stableUuid = (seed: string): string => {
   const hex = createHash("sha256").update(seed).digest("hex").slice(0, 32);
@@ -48,6 +57,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly lifecycle: ProductionLifecycleRouter,
     private readonly routing: ProductRoutingCatalog,
     private readonly projects: EpicProjectCoordinator,
+    private readonly attention: ReconcilerAttentionQueue,
     private readonly t3: SessionT3Client,
     private readonly now: () => number = Date.now,
   ) {}
@@ -112,7 +122,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             ...(existing === undefined
               ? {
                   initialContext: {
-                    taskContract: json(input.task),
+                    taskContract: taskContract(input.task),
                     taskId: input.task.id,
                   },
                 }
@@ -245,51 +255,75 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       stageId,
       threadId,
     });
-    await bootstrapStageSession(
-      {
-        handoff: {
-          skillPointer: session.skillPointer,
-          stage: stage.handoff,
-          taskContract: json(task),
+    try {
+      await bootstrapStageSession(
+        {
+          handoff: {
+            skillPointer: session.skillPointer,
+            stage: stage.handoff,
+            taskContract: taskContract(task),
+          },
+          instanceId,
+          interactionMode: session.interactionMode,
+          modelSelection: { instanceId: session.driver, model: session.model },
+          projectId,
+          providerContext: {
+            cliVersion: session.cliVersion,
+            driver: session.driver,
+            lifecycle: "independent",
+          },
+          runtimeMode: session.runtimeMode,
+          sessionKey,
+          task: task.frontMatter,
+          taskId: task.id,
+          title: heddleSessionTitle(task.id, `${stageId}-${activation}`),
+          worktree: {
+            baseRef: session.baseRef,
+            branch: `heddle/task-${task.id}`,
+            repositoryName: repository.name,
+            repositoryRoot: repository.repositoryRoot,
+            worktreeName: String(task.id),
+            ...(session.worktreesRoot === undefined
+              ? {}
+              : { worktreesRoot: session.worktreesRoot }),
+          },
         },
-        instanceId,
-        interactionMode: session.interactionMode,
-        modelSelection: { instanceId: session.driver, model: session.model },
-        projectId,
-        providerContext: {
-          cliVersion: session.cliVersion,
-          driver: session.driver,
-          lifecycle: "independent",
+        {
+          activationEvents: this.persistence,
+          nextId,
+          persistence: this.persistence,
+          t3: {
+            ...(this.t3.applyHarnessToolTimeout === undefined
+              ? {}
+              : {
+                  applyHarnessToolTimeout: (value) =>
+                    this.t3.applyHarnessToolTimeout!(value),
+                }),
+            dispatch: (command, providerContext) =>
+              this.t3.dispatch(command, providerContext),
+          },
         },
-        runtimeMode: session.runtimeMode,
-        sessionKey,
-        title: heddleSessionTitle(task.id, `${stageId}-${activation}`),
-        worktree: {
-          baseRef: session.baseRef,
-          branch: `heddle/task-${task.id}`,
-          repositoryName: repository.name,
-          repositoryRoot: repository.repositoryRoot,
-          worktreeName: String(task.id),
-          ...(session.worktreesRoot === undefined
-            ? {}
-            : { worktreesRoot: session.worktreesRoot }),
-        },
-      },
-      {
-        nextId,
-        persistence: this.persistence,
-        t3: {
-          ...(this.t3.applyHarnessToolTimeout === undefined
-            ? {}
-            : {
-                applyHarnessToolTimeout: (value) =>
-                  this.t3.applyHarnessToolTimeout!(value),
-              }),
-          dispatch: (command, providerContext) =>
-            this.t3.dispatch(command, providerContext),
-        },
-      },
-    );
+      );
+    } catch (error) {
+      if (
+        !(error instanceof HandoffRenderError) &&
+        !(error instanceof HandoffTemplateError)
+      ) {
+        throw error;
+      }
+      const attentionId = `${sessionKey}:handoff-render`;
+      if (!(await this.attention.has(attentionId))) {
+        await this.attention.raise({
+          attentionId,
+          code: "handoff-render-failed",
+          instanceId,
+          kind: "lifecycle-resolution",
+          message: error.message,
+          taskId: task.id,
+        });
+      }
+      throw error;
+    }
     this.persistence.writeReconcilerRuntime({
       ...starting,
       boardStatus: "in-progress",

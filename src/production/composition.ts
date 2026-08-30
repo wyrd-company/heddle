@@ -136,6 +136,7 @@ export const createProductionComposition = (
       lifecycle,
       routing,
       projects,
+      attention,
       t3,
     );
     const escalation = new EscalationCoordinator({
@@ -198,6 +199,8 @@ export const createProductionComposition = (
       thresholds: configuration.observationThresholds,
     });
     const coordinator = createProductionSubagentCoordinator({
+      attention,
+      board,
       configuration,
       observer,
       pacing,
