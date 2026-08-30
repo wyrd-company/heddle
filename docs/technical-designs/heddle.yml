@@ -163,7 +163,19 @@ proposed-design:
     root with task worktrees located under their own task-first roots.
 
     Sessions are short and stage-scoped. Nothing carries between
-    stages except the handoff. Heddle first assembles a canonical JSON
+    stages except the handoff. Every session opens with one stable system
+    prompt that describes the Heddle session and its workflow tool contract.
+    Heddle bundles the built-in Markdown prompt into the compiled service. The
+    configured service reads `heddle.md` from the configuration directory as a
+    wholesale operator override; a missing file selects the built-in prompt.
+    The resolver receives no task or stage input, reads at most once while a
+    new durable handoff is created, and is not consulted during retry. Heddle
+    stores the effective prompt with the exact composed document. It never
+    creates, rewrites, or migrates the override. The prompt contains no
+    correlation token, task content, stage content, source path, or source
+    provenance marker.
+
+    Heddle first assembles a canonical JSON
     projection containing the task contract, the outputs of prior stages (a
     remediation session receives the review's findings, never the
     review session's transcript), the stage's instantiated todo list,
@@ -188,7 +200,8 @@ proposed-design:
     The rendered document is stored with the session handoff before any T3
     effect. Retry and restart replay those exact bytes. After T3 accepts the
     first turn, Heddle appends a `session:activated` event containing the exact
-    task, instance, session, stage, thread, and rendered-document payload.
+    task, instance, session, stage, thread, effective-system-prompt, and
+    rendered-document payload.
     Reconciliation accepts an existing event only when every payload value is
     equal and never appends a second event for the same session.
   workflow-mcp: >

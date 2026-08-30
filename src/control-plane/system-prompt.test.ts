@@ -29,6 +29,15 @@ describe("system prompt", () => {
     expect(builtInSystemPrompt).not.toContain("relationships:");
   });
 
+  it("publishes the exact built-in prompt in the operator guide", async () => {
+    const guide = await readFile(
+      "docs/operators/production-composition.md",
+      "utf8",
+    );
+
+    expect(guide).toContain(`\`\`\`md\n${builtInSystemPrompt}\`\`\``);
+  });
+
   it("prepends one effective prompt without moving the identity token", () => {
     const prompt = "# Session guidance\n\nUse the workflow tools.";
     const handoff = '---\ncorrelationToken: "sample-token"\n---\n\n# Work';

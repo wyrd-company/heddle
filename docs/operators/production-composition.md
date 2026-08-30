@@ -186,6 +186,35 @@ session and thread identity. A recurring review or remediation stage receives
 a new occurrence discriminator; restart resumes an incomplete occurrence.
 All stage occurrences for one task use the same task branch and worktree so
 review, remediation, and later stages operate on the same delivery state.
+
+## System prompt
+
+Every stage session starts with a system prompt followed by its rendered stage
+handoff. The compiled service contains the built-in prompt. To replace it,
+create `<HEDDLE_CONFIG>/heddle.md`; Heddle reads that file wholesale and does
+not concatenate the built-in prompt. A missing file selects the built-in
+prompt. Heddle never creates, writes, or migrates `heddle.md`.
+
+The prompt is resolved once when Heddle creates the durable session handoff.
+Retry and restart use the stored prompt and exact composed document even when
+the operator file changes later. The override is plain Markdown, not a
+template or `config.yml` field. Do not put secrets, task details, stage details,
+correlation tokens, or source-provenance markers in it.
+
+The documented built-in default is:
+
+```md
+# Heddle stage session
+
+You are one stage-scoped session in a Heddle workflow. The handoff below carries the task contract and the current stage state that you must act on.
+
+Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path; do not use a harness-native todo tool.
+
+Use `advance` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
+
+Use `escalate` for a blocking question that requires attention outside this session.
+```
+
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
 pinned lifecycle blueprint. Each wait node also declares a `handoff-template`
 with a repository-relative Markdown path and exact Git blob hash. Heddle reads
@@ -207,14 +236,16 @@ remediation context supplies the same roots with canonical review findings in
 the handoff. Raw board front matter is available only as display input under
 `task`; normalized `handoff.taskContract` remains the machine authority.
 
-Before dispatch, Heddle renders and durably stores the exact Markdown document.
+Before dispatch, Heddle resolves the effective system prompt, prepends it to
+the rendered handoff, and durably stores both the prompt and exact composed
+Markdown document.
 A missing variable, invalid template, pin or kind disagreement, invalid
 identity, or nondeterministic render raises one stable
 `handoff-render-failed` lifecycle-resolution attention entry. No timeout,
 thread, or first-turn effect occurs. After T3 accepts the first turn, Heddle
-records the exact rendered document and task, instance, session, stage, and
-thread identity in `session:activated`. Restart accepts only an exact payload
-match and does not append or dispatch a second activation.
+records the effective prompt, exact rendered document, and task, instance,
+session, stage, and thread identity in `session:activated`. Restart accepts
+only an exact payload match and does not append or dispatch a second activation.
 
 Isolated pinned T3 0.0.36 qualification found no accepted, preserved per-thread
 MCP authentication-header configuration for Claude Code, Codex, or Cursor.
