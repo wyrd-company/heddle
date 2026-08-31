@@ -224,8 +224,9 @@ and worktree.
 An epic in `uat` requires at least one child tagged `uat`. Without one, Heddle
 raises one stable epic-scoped attention and keeps the epic in `uat`; it does not
 create an acceptance task. Add the intended UAT child to the epic. A later
-reconciliation pass promotes and dispatches that child and can complete the
-epic after acceptance.
+reconciliation pass resolves the current missing-child attention without
+deleting its stable durable identity, promotes and dispatches that child, and
+can complete the epic after acceptance.
 
 Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
 repo-first worktrees are not migrated. Every thread has a bounded deterministic

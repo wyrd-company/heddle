@@ -90,8 +90,9 @@ proposed-design:
     have at least one child tagged `uat`. When none exists, reconciliation
     raises one stable durable epic-scoped attention and leaves acceptance
     blocked; Heddle does not author an acceptance task. The operator adds the
-    intended UAT child, after which ordinary promotion, dispatch, and epic
-    completion continue.
+    intended UAT child. Reconciliation then resolves the current missing-child
+    attention without deleting its stable durable identity, and ordinary
+    promotion, dispatch, and epic completion continue.
 
     Production configuration declares a complete product inventory. Each
     product owns one or more named repositories and may carry the durable T3
