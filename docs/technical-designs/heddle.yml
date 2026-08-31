@@ -274,6 +274,9 @@ proposed-design:
     missing field, renders an empty findings list, and continues activation.
     This gives mechanical base drift a remediation handoff without inventing
     reviewer findings.
+    A standard handoff also carries persisted outputs from completed mechanical
+    nodes between the preceding wait stage and the activating wait stage. The
+    review handoff therefore names the exact review snapshot created for it.
     Every session's
     bootstrap binds the session to its instance with a correlation token minted
     by the reconciler, so a caller can advance only its own work, and `advance` is idempotent per instance and stage,

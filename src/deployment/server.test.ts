@@ -536,7 +536,10 @@ correlationToken: "${correlationToken}"
     const unavailableLifecycle = await globalThis.fetch(
       `http://127.0.0.1:${service.port}/api/lifecycle?task=999&after=0`,
     );
-    expect(unavailableLifecycle.status).toBe(503);
+    expect(unavailableLifecycle.status).toBe(404);
+    await expect(unavailableLifecycle.json()).resolves.toMatchObject({
+      code: "lifecycle-not-started",
+    });
     expect(() =>
       createProductionComposition({
         blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,

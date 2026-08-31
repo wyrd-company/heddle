@@ -9,11 +9,15 @@ export {
   projectPublicBoardTask,
   serializeConsoleScope,
 } from "./projection.js";
-export { buildDependencyGraphProjection } from "./dependency-graph.js";
+export {
+  buildDependencyGraphProjection,
+  projectDependencyGraphAttention,
+} from "./dependency-graph.js";
 export { buildConsoleLifecycleSnapshot } from "./lifecycle-read-model.js";
 export type { ConsoleBlueprintEditor } from "./blueprint-editor.js";
 export type { ConsoleLifecycleReadInput } from "./lifecycle-read-model.js";
 export type {
+  DependencyGraphAttention,
   DependencyGraphEdge,
   DependencyGraphNode,
   DependencyGraphProjection,
@@ -55,6 +59,9 @@ export type {
   ConsoleLifecycleSnapshot,
   ConsoleStateSource,
 } from "./types.js";
-export { ConsoleLifecycleUnavailableError } from "./types.js";
+export {
+  ConsoleLifecycleNotStartedError,
+  ConsoleLifecycleUnavailableError,
+} from "./types.js";
 
 export const console = "console" as const;

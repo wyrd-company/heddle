@@ -6,8 +6,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import { createConsoleAttention } from "./attention-contract.js";
-import { buildDependencyGraphProjection } from "./dependency-graph.js";
+import {
+  consoleAttentionFingerprint,
+  createConsoleAttention,
+} from "./attention-contract.js";
+import {
+  buildDependencyGraphProjection,
+  projectDependencyGraphAttention,
+} from "./dependency-graph.js";
 
 const task = (
   id: number,
@@ -56,7 +62,10 @@ describe("dependency graph projection", () => {
           scope: "task:11",
         }),
       ],
-      instances: [{ instanceId: "instance-11", taskId: 11 }],
+      instances: [
+        { instanceId: "instance-10", taskId: 10 },
+        { instanceId: "instance-11", taskId: 11 },
+      ],
       scope: { epicId: 10, kind: "epic" },
       tasks,
     });
@@ -75,6 +84,49 @@ describe("dependency graph projection", () => {
       { from: 12, to: 13, trace: true },
       { from: 13, to: 14, trace: false },
     ]);
+  });
+
+  it("renders backlog and todo tasks without lifecycle instances as idle", () => {
+    const graph = buildDependencyGraphProjection({
+      attention: [],
+      instances: [{ instanceId: "instance-23", taskId: 23 }],
+      scope: { kind: "all" },
+      tasks: [
+        task(21, "Collect examples", "backlog"),
+        task(22, "Sort examples", "todo"),
+        task(23, "Label examples", "todo"),
+      ],
+    });
+
+    expect(graph.nodes).toEqual([
+      expect.objectContaining({ id: 21, treatment: "idle" }),
+      expect.objectContaining({ id: 22, treatment: "idle" }),
+      expect.objectContaining({ id: 23, treatment: "running" }),
+    ]);
+  });
+
+  it("projects attention into the closed dependency identity shape", () => {
+    const correlationToken = "correlation-token-closed-graph";
+    const sourceState = {
+      actions: [],
+      attentionId: "attention-11",
+      futurePrivateField: `future-${correlationToken}`,
+      instanceId: "instance-11",
+      kind: "stale-instance",
+      message: `Inspection requires ${correlationToken}`,
+      scope: "task:11" as const,
+      taskId: 11,
+    };
+    const source = {
+      ...sourceState,
+      fingerprint: consoleAttentionFingerprint(sourceState),
+    };
+
+    expect(projectDependencyGraphAttention(source)).toEqual({
+      attentionId: "attention-11",
+      instanceId: "instance-11",
+      taskId: 11,
+    });
   });
 
   it("uses the same all, epic, and task scope agreement as the board", () => {

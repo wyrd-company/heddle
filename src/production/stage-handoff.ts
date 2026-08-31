@@ -8,9 +8,10 @@ import {
   GitBlueprintStore,
   readCompletedStageOutputs,
   readLifecycleContext,
+  type LifecycleBlueprint,
 } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
-import type { SqlitePersistence } from "../persistence/index.js";
+import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
 
 export type ProductionHandoffStage = StageHandoffInput["stage"];
 export type ProductionHandoffContractIssue = {
@@ -21,6 +22,45 @@ export type ProductionStageMetadata = {
   contractIssue?: ProductionHandoffContractIssue;
   handoff: ProductionHandoffStage;
   repositoryName?: string;
+};
+
+const mechanicalOutputsForStage = (
+  blueprint: LifecycleBlueprint,
+  serializedContext: string | null,
+  stageId: string,
+): JsonValue[] => {
+  if (serializedContext === null) return [];
+  const serialized = JSON.parse(serializedContext) as unknown;
+  if (
+    typeof serialized !== "object" ||
+    serialized === null ||
+    Array.isArray(serialized)
+  ) {
+    throw new Error("Serialized lifecycle context must be an object");
+  }
+  const context = serialized as Record<string, unknown>;
+  const nodesById = new Map(blueprint.nodes.map((node) => [node.id, node]));
+  const mechanicalIds = new Set<string>();
+  const pending = [stageId];
+  while (pending.length > 0) {
+    const target = pending.pop();
+    if (target === undefined) continue;
+    for (const edge of blueprint.edges.filter(
+      ({ target: edgeTarget }) => edgeTarget === target,
+    )) {
+      const source = nodesById.get(edge.source);
+      if (source === undefined || source.uses === "wait") continue;
+      if (mechanicalIds.has(source.id)) continue;
+      mechanicalIds.add(source.id);
+      pending.push(source.id);
+    }
+  }
+  return blueprint.nodes.flatMap(({ id }) => {
+    const key = `_outputs.${id}`;
+    return mechanicalIds.has(id) && Object.hasOwn(context, key)
+      ? [context[key] as JsonValue]
+      : [];
+  });
 };
 
 export const readProductionHandoffStage = async (input: {
@@ -62,12 +102,20 @@ export const readProductionHandoffStage = async (input: {
     context,
     completedStages,
   );
+  const mechanicalOutputs = mechanicalOutputsForStage(
+    blueprint,
+    context.serializedContext,
+    input.stageId,
+  );
   if (node.handoff === "standard") {
     return {
       handoff: {
         kind: "standard",
         name: input.stageId,
-        priorStageOutputs: outputs.map(({ output }) => output),
+        priorStageOutputs: [
+          ...outputs.map(({ output }) => output),
+          ...mechanicalOutputs,
+        ],
       },
       ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
     };

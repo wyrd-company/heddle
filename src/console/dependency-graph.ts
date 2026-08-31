@@ -8,7 +8,12 @@ import { type ConsoleScope, projectTasksForScope } from "./projection.js";
 import type { ConsoleAttention, ConsoleInstance } from "./types.js";
 
 export type DependencyNodeTreatment =
-  "attention" | "blocked" | "done" | "running";
+  "attention" | "blocked" | "done" | "idle" | "running";
+
+export type DependencyGraphAttention = Pick<
+  ConsoleAttention,
+  "attentionId" | "instanceId" | "taskId"
+>;
 
 export interface DependencyGraphNode {
   id: number;
@@ -58,10 +63,9 @@ const instanceTasks = (instances: ConsoleInstance[]): Map<string, number> => {
 };
 
 const attentionTasks = (
-  attention: ConsoleAttention[],
-  instances: ConsoleInstance[],
+  attention: DependencyGraphAttention[],
+  byInstance: Map<string, number>,
 ): Set<number> => {
-  const byInstance = instanceTasks(instances);
   const result = new Set<number>();
   for (const item of attention) {
     const instanceTask =
@@ -83,10 +87,21 @@ const attentionTasks = (
   return result;
 };
 
+export const projectDependencyGraphAttention = (
+  attention: ConsoleAttention,
+): DependencyGraphAttention => ({
+  attentionId: attention.attentionId,
+  ...(attention.instanceId === undefined
+    ? {}
+    : { instanceId: attention.instanceId }),
+  ...(attention.taskId === undefined ? {} : { taskId: attention.taskId }),
+});
+
 const treatmentFor = (
   task: BoardTask,
   allTasks: Map<number, BoardTask>,
   awaitingAttention: Set<number>,
+  runningTasks: Set<number>,
 ): DependencyNodeTreatment => {
   if (awaitingAttention.has(task.id)) return "attention";
   if (task.status === "done") return "done";
@@ -99,7 +114,7 @@ const treatmentFor = (
   ) {
     return "blocked";
   }
-  return "running";
+  return runningTasks.has(task.id) ? "running" : "idle";
 };
 
 const layersFor = (
@@ -133,7 +148,7 @@ const layersFor = (
 };
 
 export const buildDependencyGraphProjection = (input: {
-  attention: ConsoleAttention[];
+  attention: DependencyGraphAttention[];
   instances: ConsoleInstance[];
   scope: ConsoleScope;
   tasks: BoardTask[];
@@ -141,7 +156,9 @@ export const buildDependencyGraphProjection = (input: {
   const allTasks = uniqueTasks(input.tasks);
   const tasks = projectTasksForScope(input.tasks, input.scope);
   const visibleIds = new Set(tasks.map(({ id }) => id));
-  const awaitingAttention = attentionTasks(input.attention, input.instances);
+  const tasksByInstance = instanceTasks(input.instances);
+  const awaitingAttention = attentionTasks(input.attention, tasksByInstance);
+  const runningTasks = new Set(tasksByInstance.values());
   const layers = layersFor(tasks, visibleIds);
   const rowByLayer = new Map<number, number>();
 
@@ -158,7 +175,12 @@ export const buildDependencyGraphProjection = (input: {
         row,
         status: task.status,
         title: task.title,
-        treatment: treatmentFor(task, allTasks, awaitingAttention),
+        treatment: treatmentFor(
+          task,
+          allTasks,
+          awaitingAttention,
+          runningTasks,
+        ),
       };
     });
   const nodeById = new Map(nodes.map((node) => [node.id, node]));

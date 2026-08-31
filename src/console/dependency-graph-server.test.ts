@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import { createConsoleAttention } from "./attention-contract.js";
+import { consoleAttentionFingerprint } from "./attention-contract.js";
 import { createConsoleServer } from "./server.js";
 import type { ConsoleBoard, ConsoleStateSource } from "./types.js";
 
@@ -41,18 +41,25 @@ class GraphBoard implements ConsoleBoard {
   }
 }
 
+const correlationToken = "correlation-token-dependency-http";
+const attentionState = {
+  actions: [],
+  attentionId: "attention-31",
+  futurePrivateField: `future-${correlationToken}`,
+  kind: "stale-instance",
+  message: `A record carrying ${correlationToken} requires inspection`,
+  scope: "task:31" as const,
+  taskId: 31,
+};
+
 const state: ConsoleStateSource = {
   listAttention: async () => [
-    createConsoleAttention({
-      actions: [],
-      attentionId: "attention-31",
-      kind: "stale-instance",
-      message: "A record has waited for inspection",
-      scope: "task:31",
-      taskId: 31,
-    }),
+    {
+      ...attentionState,
+      fingerprint: consoleAttentionFingerprint(attentionState),
+    },
   ],
-  listCorrelationTokens: async () => [],
+  listCorrelationTokens: async () => [correlationToken],
   listEvents: async () => [],
   listInstances: async () => [],
   readLifecycle: async ({ taskId }) => ({
@@ -92,12 +99,15 @@ describe("dependency graph server route", () => {
     );
   });
 
-  it("serves a read-only scoped dependency graph", async () => {
-    const graph = await globalThis.fetch(
+  it("serves token-free attention treatment through the real HTTP route", async () => {
+    const response = await globalThis.fetch(
       `${baseUrl}/api/dependency-graph?scope=epic:31`,
     );
+    const serialized = await response.text();
+    const graph = JSON.parse(serialized) as Record<string, unknown>;
 
-    await expect(graph.json()).resolves.toMatchObject({
+    expect(response.status).toBe(200);
+    expect(graph).toMatchObject({
       edges: [{ from: 31, to: 32, trace: true }],
       nodes: [
         expect.objectContaining({ id: 31, treatment: "attention" }),
@@ -105,6 +115,8 @@ describe("dependency graph server route", () => {
       ],
       scope: { epicId: 31, kind: "epic" },
     });
+    expect(serialized).not.toContain(correlationToken);
+    expect(serialized).not.toContain("futurePrivateField");
     await expect(
       globalThis.fetch(`${baseUrl}/api/dependency-graph?scope=all`, {
         method: "POST",

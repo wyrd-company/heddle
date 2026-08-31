@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { BoardTask } from "../board-adapter/index.js";
 import { createConsoleAttention } from "./attention-contract.js";
 import { createConsoleServer } from "./server.js";
-import { ConsoleLifecycleUnavailableError } from "./types.js";
+import {
+  ConsoleLifecycleNotStartedError,
+  ConsoleLifecycleUnavailableError,
+} from "./types.js";
 import type {
   ConsoleAttention,
   ConsoleBoard,
@@ -402,6 +405,37 @@ correlationToken: "${correlationToken}"
       error: "Lifecycle history composition is unavailable",
     });
     expect(board.writes).toEqual([]);
+  });
+
+  it("distinguishes a task whose lifecycle has not started", async () => {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      ),
+    );
+    class NotStartedState extends FixtureState {
+      override async readLifecycle(): Promise<ConsoleLifecycleSnapshot> {
+        throw new ConsoleLifecycleNotStartedError(
+          "Task 52 has no production lifecycle instance",
+        );
+      }
+    }
+    server = createConsoleServer({ board, state: new NotStartedState() });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=52&after=0`,
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      code: "lifecycle-not-started",
+      error: "Task 52 has no production lifecycle instance",
+    });
   });
 
   it("opens an epic-scoped projection with stage and dwell enrichment", async () => {

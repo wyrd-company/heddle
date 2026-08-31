@@ -275,7 +275,9 @@ working-tree file during session activation. Product repositories receive no
 template-retention refs.
 Heddle reconstructs completed wait-stage outputs in
 recorded lifecycle execution order. A standard stage receives those prior
-outputs. A remediation stage receives the latest review findings through the
+outputs plus the persisted outputs of completed mechanical nodes on the path
+from the preceding wait stage, including the review snapshot identity. A
+remediation stage receives the latest review findings through the
 canonical handoff assembler; review transcript data is not dispatched.
 
 Handoff templates are schema'd Markdown artifacts in `handoff-templates/`.

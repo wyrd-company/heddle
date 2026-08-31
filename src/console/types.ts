@@ -137,6 +137,8 @@ export interface ConsoleLifecycleSnapshot {
 
 export class ConsoleLifecycleUnavailableError extends Error {}
 
+export class ConsoleLifecycleNotStartedError extends ConsoleLifecycleUnavailableError {}
+
 export interface ConsoleStateSource {
   listAttention(): Promise<ConsoleAttention[]>;
   listCorrelationTokens(): Promise<string[]>;

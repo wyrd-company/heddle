@@ -32,7 +32,10 @@ import {
   parseConsoleAttentionActionRequest,
   validateConsoleAttentionCatalog,
 } from "./attention-contract.js";
-import { buildDependencyGraphProjection } from "./dependency-graph.js";
+import {
+  buildDependencyGraphProjection,
+  projectDependencyGraphAttention,
+} from "./dependency-graph.js";
 import { projectPublicConsoleEvent } from "./event-projection.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
 import {
@@ -45,7 +48,10 @@ import type {
   ConsoleBoard,
   ConsoleStateSource,
 } from "./types.js";
-import { ConsoleLifecycleUnavailableError } from "./types.js";
+import {
+  ConsoleLifecycleNotStartedError,
+  ConsoleLifecycleUnavailableError,
+} from "./types.js";
 import type { ConsoleBlueprintEditor } from "./blueprint-editor.js";
 
 const lifecycleClient = readFileSync(
@@ -414,7 +420,7 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
           response,
           200,
           buildDependencyGraphProjection({
-            attention,
+            attention: attention.map(projectDependencyGraphAttention),
             instances,
             scope: requestScope(url.searchParams.get("scope")),
             tasks,
@@ -484,6 +490,13 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
     } catch (error) {
       if (error instanceof RequestError || error instanceof ConsoleScopeError) {
         json(response, 400, { error: error.message });
+        return;
+      }
+      if (error instanceof ConsoleLifecycleNotStartedError) {
+        json(response, 404, {
+          code: "lifecycle-not-started",
+          error: error.message,
+        });
         return;
       }
       if (error instanceof ConsoleLifecycleUnavailableError) {

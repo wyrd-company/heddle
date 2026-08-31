@@ -8,6 +8,7 @@ import {
   type ConsoleAttention,
   type ConsoleEvent,
   type ConsoleInstance,
+  ConsoleLifecycleNotStartedError,
   ConsoleLifecycleUnavailableError,
   type ConsoleLifecycleSnapshot,
   type ConsoleStateSource,
@@ -71,7 +72,7 @@ export class ProductionConsoleState implements ConsoleStateSource {
       .listReconcilerRuntime()
       .filter(({ taskId }) => taskId === input.taskId);
     if (runtimes.length === 0) {
-      throw new ConsoleLifecycleUnavailableError(
+      throw new ConsoleLifecycleNotStartedError(
         `Task ${input.taskId} has no production lifecycle instance`,
       );
     }

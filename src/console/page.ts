@@ -70,6 +70,7 @@ export const consolePage = `<!doctype html>
           </div>
           <ul class="graph-legend" aria-label="Node status legend">
             <li data-treatment="done"><span aria-hidden="true"></span>Done</li>
+            <li data-treatment="idle"><span aria-hidden="true"></span>Idle</li>
             <li data-treatment="running"><span aria-hidden="true"></span>Running</li>
             <li data-treatment="attention"><span aria-hidden="true"></span>Attention</li>
             <li data-treatment="blocked"><span aria-hidden="true"></span>Blocked</li>
@@ -87,6 +88,7 @@ export const consolePage = `<!doctype html>
           </div>
           <p id="lifecycle-task" class="lifecycle-task"></p>
         </header>
+        <p id="lifecycle-empty" class="lifecycle-empty" hidden>No lifecycle instance exists for this task. It has not started yet.</p>
         <div id="lifecycle-canvas-root"></div>
       </section>
     </main>
@@ -425,6 +427,7 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .graph-legend li { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .graph-legend span { width: 11px; height: 11px; background: var(--paper-raised); border: 2px solid var(--rule-dark); }
 .graph-legend [data-treatment="done"] span { background: #356b51; border-color: #356b51; }
+.graph-legend [data-treatment="idle"] span { background: var(--paper-raised); border-color: var(--rule-dark); }
 .graph-legend [data-treatment="running"] span { background: var(--active); border-color: var(--active); }
 .graph-legend [data-treatment="attention"] span { background: var(--signal); border-color: var(--signal); }
 .graph-legend [data-treatment="blocked"] span { background: #8b6511; border-color: #5f4305; }
@@ -459,6 +462,7 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 }
 .graph-node:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 rgba(25, 26, 23, 0.19); }
 .graph-node[data-treatment="done"] { border-color: #356b51; }
+.graph-node[data-treatment="idle"] { border-color: var(--rule-dark); background: #f6f4ec; }
 .graph-node[data-treatment="running"] { border-color: var(--active); }
 .graph-node[data-treatment="attention"] { border-color: var(--signal); box-shadow: 4px 4px 0 rgba(180, 51, 33, 0.23); }
 .graph-node[data-treatment="blocked"] { border-color: #5f4305; background: #f6f0df; }
@@ -472,6 +476,7 @@ main { padding: 16px clamp(18px, 3vw, 42px) 42px; }
 .lifecycle-header { min-height: 76px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .lifecycle-header .eyebrow { margin-bottom: 4px; }
 .lifecycle-task { margin: 0; color: var(--muted); font-size: 10px; text-align: right; }
+.lifecycle-empty { margin: 48px auto; max-width: 560px; padding: 24px; color: var(--muted); text-align: center; border: 1px dashed var(--rule-dark); }
 
 @media (max-width: 680px) {
   .masthead-state > span:not(.live-mark), .attention-toggle > span:first-child { display: none; }
@@ -503,6 +508,7 @@ const graphViewportElement = document.querySelector("#graph-viewport");
 const graphCanvasElement = document.querySelector("#graph-canvas");
 const lifecycleElement = document.querySelector("#lifecycle-view");
 const lifecycleTaskElement = document.querySelector("#lifecycle-task");
+const lifecycleEmptyElement = document.querySelector("#lifecycle-empty");
 const viewEyebrowElement = document.querySelector("#view-eyebrow");
 const viewTitleElement = document.querySelector("#view-title");
 const boardViewLink = document.querySelector("#board-view-link");
@@ -539,7 +545,21 @@ const consoleUrl = (view, scope) => {
 
 const fetchJson = async (url, options) => {
   const response = await fetch(url, { cache: "no-store", ...options });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const serialized = await response.text();
+    let details;
+    try {
+      details = JSON.parse(serialized);
+    } catch {
+      details = {};
+    }
+    const error = new Error(
+      typeof details.error === "string" ? details.error : serialized,
+    );
+    error.code = details.code;
+    error.status = response.status;
+    throw error;
+  }
   return response.status === 204 ? null : response.json();
 };
 
@@ -981,6 +1001,7 @@ const renderLoadFailure = (error) => {
   boardElement.replaceChildren();
   graphCanvasElement.replaceChildren();
   lifecycleTaskElement.textContent = "";
+  lifecycleEmptyElement.hidden = true;
   attentionListElement.replaceChildren();
   statusElement.dataset.error = "true";
   statusElement.textContent = error instanceof Error ? error.message : "Console load failed";
@@ -1065,7 +1086,10 @@ async function load() {
     if (generation !== loadGeneration) return;
     addScopeOptions(board.tasks, requestedScope);
     selectView(view, requestedScope);
-    if (view !== "lifecycle") window.heddleLifecycleViewer?.clear();
+    if (view !== "lifecycle") {
+      lifecycleEmptyElement.hidden = true;
+      window.heddleLifecycleViewer?.clear();
+    }
     renderAttention(attention, true);
     if (view === "board") {
       const projection = await fetchJson("/api/projection?scope=" + encodeURIComponent(requestedScope));
@@ -1087,11 +1111,24 @@ async function load() {
       if (!match) throw new Error("lifecycle view requires task:<id> scope");
       const task = board.tasks.find(({ id }) => id === Number(match[1]));
       if (!task) throw new Error("lifecycle task does not exist");
-      const lifecycle = await fetchJson(
-        "/api/lifecycle?task=" + task.id + "&after=0",
-      );
-      if (generation !== loadGeneration) return;
       lifecycleTaskElement.textContent = "Task #" + task.id + " · " + task.title;
+      lifecycleEmptyElement.hidden = true;
+      let lifecycle;
+      try {
+        lifecycle = await fetchJson(
+          "/api/lifecycle?task=" + task.id + "&after=0",
+        );
+      } catch (error) {
+        if (error?.code !== "lifecycle-not-started") throw error;
+        if (generation !== loadGeneration) return;
+        lifecycleViewer().clear();
+        lifecycleEmptyElement.hidden = false;
+        statusElement.textContent =
+          "Lifecycle has not started for task #" + task.id;
+        setLiveBoardHealth("snapshot");
+        return;
+      }
+      if (generation !== loadGeneration) return;
       lifecycleViewer().replace(lifecycle);
       statusElement.textContent = "Lifecycle view for task #" + task.id;
       setLiveBoardHealth("snapshot");

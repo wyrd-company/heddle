@@ -53,7 +53,7 @@ describe("console page state", () => {
 
   it("clears stale projection and scope state when a scoped reload fails", () => {
     expect(consoleClient).toMatch(
-      /const renderLoadFailure = \(error\) => \{\s*scopeElement\.selectedIndex = -1;\s*boardElement\.replaceChildren\(\);\s*graphCanvasElement\.replaceChildren\(\);\s*lifecycleTaskElement\.textContent = "";\s*attentionListElement\.replaceChildren\(\);\s*statusElement\.dataset\.error = "true";\s*statusElement\.textContent = error instanceof Error \? error\.message : "Console load failed";\s*\};/,
+      /const renderLoadFailure = \(error\) => \{\s*scopeElement\.selectedIndex = -1;\s*boardElement\.replaceChildren\(\);\s*graphCanvasElement\.replaceChildren\(\);\s*lifecycleTaskElement\.textContent = "";\s*lifecycleEmptyElement\.hidden = true;\s*attentionListElement\.replaceChildren\(\);\s*statusElement\.dataset\.error = "true";\s*statusElement\.textContent = error instanceof Error \? error\.message : "Console load failed";\s*\};/,
     );
     expect(consoleClient).toMatch(
       /catch \(error\) \{\s*if \(generation !== loadGeneration\) return;\s*window\.heddleLifecycleViewer\?\.clear\(\);\s*renderLoadFailure\(error\);\s*\}/,
@@ -73,7 +73,13 @@ describe("console page state", () => {
     expect(consolePage).toContain(
       '<ul class="graph-legend" aria-label="Node status legend">',
     );
-    for (const treatment of ["done", "running", "attention", "blocked"]) {
+    for (const treatment of [
+      "done",
+      "idle",
+      "running",
+      "attention",
+      "blocked",
+    ]) {
       expect(consolePage).toContain(`data-treatment="${treatment}"`);
       expect(consoleStyles).toContain(
         `.graph-node[data-treatment="${treatment}"]`,

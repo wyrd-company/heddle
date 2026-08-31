@@ -79,7 +79,40 @@ describe("console client request ownership", () => {
 
     expect(harness.lifecycle.hidden).toBe(false);
     expect(harness.lifecycleTask.textContent).toBe("Task #11 · Example item");
+    expect(harness.scope.value).toBe("task:11");
+    expect(
+      harness.scope.options.map(({ textContent }) => textContent),
+    ).toContain("Task #11 · Example item");
     expect(harness.status.textContent).toBe("Lifecycle view for task #11");
+  });
+
+  it("shows an identified not-yet-started state for an undispatched task", async () => {
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?view=lifecycle&scope=task%3A11",
+      undefined,
+      response(
+        {
+          code: "lifecycle-not-started",
+          error: "Task 11 has no production lifecycle instance",
+        },
+        { ok: false, status: 404 },
+      ),
+    );
+
+    expect(harness.lifecycle.hidden).toBe(false);
+    expect(harness.lifecycleTask.textContent).toBe("Task #11 · Example item");
+    expect(harness.scope.value).toBe("task:11");
+    expect(harness.lifecycleEmpty.hidden).toBe(false);
+    expect(harness.lifecycleEmpty.textContent).toBe(
+      "No lifecycle instance exists for this task. It has not started yet.",
+    );
+    expect(harness.lifecycleSnapshots).toEqual([]);
+    expect(harness.status.dataset.error).toBe("false");
+    expect(harness.status.textContent).toBe(
+      "Lifecycle has not started for task #11",
+    );
+    expect(harness.liveBoardStatus.textContent).toBe("BOARD SNAPSHOT");
   });
 
   it("keeps ordinary long titles in non-overlapping graph rows", async () => {

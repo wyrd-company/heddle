@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConsoleLifecycleUnavailableError } from "../console/index.js";
+import { ConsoleLifecycleNotStartedError } from "../console/index.js";
 import { readLifecycleContext } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
@@ -130,7 +130,7 @@ describe("production console lifecycle source", () => {
         afterSequence: 0,
         taskId: fixture.taskId,
       }),
-    ).rejects.toBeInstanceOf(ConsoleLifecycleUnavailableError);
+    ).rejects.toBeInstanceOf(ConsoleLifecycleNotStartedError);
     await composition.close();
   });
 });

@@ -180,6 +180,14 @@ export const response = (
   text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
 });
 
+const isBrowserResponse = (value: unknown): value is BrowserResponse =>
+  typeof value === "object" &&
+  value !== null &&
+  "ok" in value &&
+  "status" in value &&
+  "json" in value &&
+  "text" in value;
+
 export const deferred = <T>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((complete) => {
@@ -250,6 +258,10 @@ export const clientHarness = async (
   const graphCanvas = new FakeElement("div");
   const lifecycle = new FakeElement("section");
   const lifecycleTask = new FakeElement("p");
+  const lifecycleEmpty = new FakeElement("p");
+  lifecycleEmpty.hidden = true;
+  lifecycleEmpty.textContent =
+    "No lifecycle instance exists for this task. It has not started yet.";
   const viewEyebrow = new FakeElement("p");
   const viewTitle = new FakeElement("h1");
   const boardViewLink = new FakeElement("a");
@@ -276,7 +288,13 @@ export const clientHarness = async (
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
   const projectionRequests: string[] = [];
   const lifecycleResponses: BrowserResponse[] =
-    initialLifecycle === undefined ? [] : [response(initialLifecycle)];
+    initialLifecycle === undefined
+      ? []
+      : [
+          isBrowserResponse(initialLifecycle)
+            ? initialLifecycle
+            : response(initialLifecycle),
+        ];
   const lifecycleRequests: string[] = [];
   const lifecycleSnapshots: unknown[] = [];
   const attentionRequests: Array<{
@@ -410,6 +428,7 @@ export const clientHarness = async (
       if (selector === "#graph-canvas") return graphCanvas;
       if (selector === "#lifecycle-view") return lifecycle;
       if (selector === "#lifecycle-task") return lifecycleTask;
+      if (selector === "#lifecycle-empty") return lifecycleEmpty;
       if (selector === "#view-eyebrow") return viewEyebrow;
       if (selector === "#view-title") return viewTitle;
       if (selector === "#board-view-link") return boardViewLink;
@@ -510,6 +529,7 @@ export const clientHarness = async (
     graphViewport,
     graphRequests,
     lifecycle,
+    lifecycleEmpty,
     lifecycleTask,
     lifecycleSnapshots,
     lifecycleRequests,
