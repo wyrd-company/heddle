@@ -17,6 +17,20 @@ import { GitBlueprintStore, readLifecycleContext } from "../engine/index.js";
 import type { SqlitePersistence } from "../persistence/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
 
+const inspectUpstreamRebaseTarget = async (
+  repositoryRoot: string,
+  sourceRef: string,
+  blueprintPath: string,
+) => {
+  try {
+    return await new GitBlueprintStore(repositoryRoot, {
+      sourceRef,
+    }).inspect(blueprintPath);
+  } catch {
+    return undefined;
+  }
+};
+
 export class ProductionConsoleState implements ConsoleStateSource {
   public constructor(
     private readonly persistence: SqlitePersistence,
@@ -99,9 +113,11 @@ export class ProductionConsoleState implements ConsoleStateSource {
         context.blueprintBlobHash,
         context.blueprintPath,
       ),
-      new GitBlueprintStore(repositoryRoot, {
-        sourceRef: this.sourceRef,
-      }).inspect(context.blueprintPath),
+      inspectUpstreamRebaseTarget(
+        repositoryRoot,
+        this.sourceRef,
+        context.blueprintPath,
+      ),
     ]);
     const executionHistories = await Promise.all(
       context.executionIds.map(async (executionId) => ({
@@ -118,10 +134,11 @@ export class ProductionConsoleState implements ConsoleStateSource {
       executionHistories,
       instanceId: instance.instanceId,
       rebase: {
-        targetBlueprintBlobHash: target.blobHash,
-        targetStateIds: target.blueprint.nodes
-          .filter(({ uses }) => uses === "wait")
-          .map(({ id }) => id),
+        targetBlueprintBlobHash: target?.blobHash ?? context.blueprintBlobHash,
+        targetStateIds:
+          target?.blueprint.nodes
+            .filter(({ uses }) => uses === "wait")
+            .map(({ id }) => id) ?? [],
       },
       status: context.status,
       taskId: input.taskId,

@@ -247,4 +247,110 @@ describe("production console lifecycle rebase", () => {
     ).toBe(localHeadBefore);
     expect(await readFile(workingPath, "utf8")).toBe(workingBytesBefore);
   }, 20_000);
+
+  it("keeps the pinned lifecycle view available when upstream removes its blueprint", async () => {
+    const prepared = await prepareProductionFixture();
+    fixture = prepared;
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: prepared.blueprintsRepositoryRoot,
+      configuration: prepared.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    server = await startHeddleServer(
+      { host: "127.0.0.1", port: 0 },
+      { production: composition },
+    );
+    const baseUrl = `http://127.0.0.1:${server.port}`;
+    const initialResponse = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=${prepared.taskId}&after=0`,
+    );
+    const initial = (await initialResponse.json()) as {
+      blueprint: { blobHash: string };
+      currentStageIds: string[];
+      events: unknown[];
+      instanceId: string;
+      nextSequence: number;
+      status: string;
+      taskId: number;
+    };
+    expect(initialResponse.status).toBe(200);
+
+    const remote = (
+      await execute("git", ["remote", "get-url", "origin"], {
+        cwd: prepared.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    const publisher = join(prepared.root, "blueprint-removal-publisher");
+    await execute(
+      "git",
+      ["clone", "--quiet", "--branch", "main", remote, publisher],
+      { cwd: prepared.root },
+    );
+    await execute("git", ["config", "user.name", "Fixture User"], {
+      cwd: publisher,
+    });
+    await execute("git", ["config", "user.email", "fixture@example.invalid"], {
+      cwd: publisher,
+    });
+    await execute("git", ["rm", "--quiet", "blueprints/sample.json"], {
+      cwd: publisher,
+    });
+    await execute(
+      "git",
+      ["commit", "--quiet", "-m", "Remove sample lifecycle"],
+      { cwd: publisher },
+    );
+    await execute("git", ["push", "--quiet"], { cwd: publisher });
+    await composition.scheduler.trigger();
+
+    const lifecycleResponse = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=${prepared.taskId}&after=0`,
+    );
+    const lifecycle = (await lifecycleResponse.json()) as {
+      rebase: {
+        available: boolean;
+        targetBlueprintBlobHash: string;
+        targetStateIds: string[];
+      };
+    } & typeof initial;
+    expect(lifecycleResponse.status).toBe(200);
+    expect(lifecycle).toMatchObject({
+      blueprint: initial.blueprint,
+      currentStageIds: initial.currentStageIds,
+      events: initial.events,
+      instanceId: initial.instanceId,
+      nextSequence: initial.nextSequence,
+      rebase: {
+        available: false,
+        targetBlueprintBlobHash: initial.blueprint.blobHash,
+        targetStateIds: [],
+      },
+      status: initial.status,
+      taskId: initial.taskId,
+    });
+
+    const rejectedResponse = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle/${prepared.taskId}/rebase`,
+      {
+        body: JSON.stringify({
+          expectedInstanceId: initial.instanceId,
+          expectedPinnedBlobHash: initial.blueprint.blobHash,
+          expectedTargetBlobHash: initial.blueprint.blobHash,
+          targetState: initial.currentStageIds[0],
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+    expect(rejectedResponse.status).toBe(409);
+    expect(
+      readLifecycleContext(
+        composition.persistence.getInstance(initial.instanceId)!,
+      ).blueprintBlobHash,
+    ).toBe(initial.blueprint.blobHash);
+  }, 20_000);
 });
