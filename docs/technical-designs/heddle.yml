@@ -639,8 +639,13 @@ proposed-design:
     never merges, rebases, or resets it automatically. That attention names the
     local and origin commits and takes its stable identity from the repository
     condition and a digest of the same two commits, so one unchanged condition
-    keeps one identity across passes and every attention identity stays inside
-    the console attention identity bound.
+    keeps one identity across passes and the repository attention identity stays
+    inside the 128-character console attention identity bound. Each pass
+    replaces every other repository attention, so a repository attention
+    identity the console cannot carry holds the attention and dependency-graph
+    reads at 500 for at most one scheduler cadence — and for as long as the
+    condition holds when the pass cannot read the repository state at all,
+    because such a pass leaves the attention untouched.
 
     The root s6 launcher validates the same file, derives only its nonsecret
     state mount target and loopback host and port, writes the Caddy snippet,
