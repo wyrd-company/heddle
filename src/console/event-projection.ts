@@ -103,7 +103,7 @@ const redactRenderedDocument = (
   if (
     activation.renderedDocument.split(token).length !== 2 ||
     activation.systemPrompt.includes(token) ||
-    activation.threadId === token
+    activation.threadId.includes(token)
   ) {
     return undefined;
   }

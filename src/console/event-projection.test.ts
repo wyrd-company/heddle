@@ -107,6 +107,29 @@ describe("public console event projection", () => {
     });
   });
 
+  it("fails closed when the thread identity contains the correlation token", () => {
+    const publicEvent = projectPublicConsoleEvent(
+      activation({
+        format: "heddle.session-activation",
+        instanceId: "instance-41",
+        renderedDocument,
+        sessionKey: "session-41",
+        stage: "inspect",
+        systemPrompt,
+        taskId: 41,
+        threadId: `thread-${token}-suffix`,
+        version: 1,
+      }),
+    );
+
+    expect(JSON.stringify(publicEvent)).not.toContain(token);
+    expect(publicEvent.payload).toEqual({
+      format: "heddle.session-activation",
+      redaction: "session-activation-payload-unavailable",
+      version: 1,
+    });
+  });
+
   it.each([
     ["changed identity", renderedDocument.replace("taskId: 41", "taskId: 42")],
     [
