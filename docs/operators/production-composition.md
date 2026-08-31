@@ -226,7 +226,8 @@ raises one stable epic-scoped attention and keeps the epic in `uat`; it does not
 create an acceptance task. Add the intended UAT child to the epic. A later
 reconciliation pass resolves the current missing-child attention without
 deleting its stable durable identity, promotes and dispatches that child, and
-can complete the epic after acceptance.
+can complete the epic after acceptance. Removing the UAT child while the epic
+remains in `uat` makes the same missing-child attention current again.
 
 Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
 repo-first worktrees are not migrated. Every thread has a bounded deterministic
