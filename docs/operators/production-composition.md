@@ -43,6 +43,11 @@ The directory may also contain `heddle.md` and the required organization
 blueprint clone at `blueprints/`. Unknown entries are ignored. Neither entry is
 a `config.yml` field.
 
+The service-user `PATH` must provide `git`, `gitpr`, and `kanban-md`.
+Mechanical worktree preparation, review snapshots, review landing, and board
+status mirroring invoke these tools without a shell. Startup does not replace
+or infer their locations.
+
 This complete single-product example uses Cursor and no provider budget, so it
 omits both executable adapters:
 
