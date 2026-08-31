@@ -174,4 +174,13 @@ describe("workflow MCP board tools", () => {
     ).rejects.toThrow("is not a direct child of an epic");
     expect(fixture.createRecord).not.toHaveBeenCalled();
   });
+
+  it("rejects a board write whose bound parent is not an epic", async () => {
+    const fixture = authority([task(10), task(12, { parent: 10 })]);
+
+    await expect(
+      handlerFor(fixture.authority, "create_finding")(input),
+    ).rejects.toThrow("parent 10 is not an epic");
+    expect(fixture.createRecord).not.toHaveBeenCalled();
+  });
 });
