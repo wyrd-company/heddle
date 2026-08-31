@@ -20,7 +20,6 @@ import {
   SessionObserver,
   steerStageSession,
   T3ControlPlaneClient,
-  type MechanicalBoardStatuses,
   type SessionObservationT3Client,
   type SessionTemplateAuthority,
   type SessionT3Client,

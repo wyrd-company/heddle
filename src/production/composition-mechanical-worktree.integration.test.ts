@@ -285,7 +285,10 @@ describe("production mechanical worktree preparation", () => {
     await useMechanicalLifecycle(fixture);
     const configPath = join(fixture.configuration.boardDirectory, "config.yml");
     const configuration = await readFile(configPath, "utf8");
-    await writeFile(configPath, configuration.replace("  - name: review\n", ""));
+    await writeFile(
+      configPath,
+      configuration.replace("  - name: review\n", ""),
+    );
     const composition = compose(fixture, new SyntheticT3());
     const statusWrites = vi.spyOn(composition.board, "mirrorTaskStatus");
 

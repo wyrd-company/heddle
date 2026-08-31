@@ -67,7 +67,9 @@ const deferral = (value: JsonValue | undefined): PacingDeferral | undefined =>
   value as PacingDeferral | undefined;
 
 const defaultMechanicalBoardStatuses =
-  async (): Promise<MechanicalBoardStatuses> => ({ ...mechanicalBoardStatusNames });
+  async (): Promise<MechanicalBoardStatuses> => ({
+    ...mechanicalBoardStatusNames,
+  });
 
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(
