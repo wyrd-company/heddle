@@ -636,7 +636,11 @@ proposed-design:
     Startup requires an exact Git worktree whose current branch tracks
     `origin`. Fetch updates remote-tracking refs only. A dirty, unpushed,
     behind, or diverged branch raises durable repository attention; Heddle
-    never merges, rebases, or resets it automatically.
+    never merges, rebases, or resets it automatically. That attention names the
+    local and origin commits and takes its stable identity from the repository
+    condition and a digest of the same two commits, so one unchanged condition
+    keeps one identity across passes and every attention identity stays inside
+    the console attention identity bound.
 
     The root s6 launcher validates the same file, derives only its nonsecret
     state mount target and loopback host and port, writes the Caddy snippet,
