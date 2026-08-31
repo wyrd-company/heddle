@@ -11,7 +11,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   composeSystemPrompt,
-  GitHandoffTemplateStore,
   renderStageHandoff,
 } from "../control-plane/index.js";
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
@@ -121,9 +120,23 @@ describe("production composition", () => {
     ) {
       throw new Error("Standard delivery activation has no stored handoff");
     }
-    const template = await new GitHandoffTemplateStore(
-      fixture.blueprintsRepositoryRoot,
-    ).read(stored.workflowMcp.handoffTemplate);
+    const pinnedBlob = await execute(
+      "git",
+      ["cat-file", "blob", stored.workflowMcp.handoffTemplate.blobHash],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    const expectedTemplateBytes = await readFile(
+      join(cwd(), "handoff-templates/standard.md"),
+      "utf8",
+    );
+    expect(pinnedBlob.stdout).toBe(expectedTemplateBytes);
+    const bodyBoundary = expectedTemplateBytes.indexOf("\n---\n", 4);
+    expect(bodyBoundary).toBeGreaterThan(0);
+    const template = {
+      ...stored.workflowMcp.handoffTemplate,
+      body: expectedTemplateBytes.slice(bodyBoundary + "\n---\n".length),
+      kind: "standard" as const,
+    };
     const task = await composition.board.readTask(fixture.taskId);
     const expectedHandoff = renderStageHandoff({
       correlationToken: stored.correlationToken,
@@ -143,14 +156,6 @@ describe("production composition", () => {
         expectedHandoff,
         stored.correlationToken,
       ),
-    );
-    const pinnedBlob = await execute(
-      "git",
-      ["cat-file", "blob", stored.workflowMcp.handoffTemplate.blobHash],
-      { cwd: fixture.blueprintsRepositoryRoot },
-    );
-    expect(pinnedBlob.stdout).toBe(
-      await readFile(join(cwd(), "handoff-templates/standard.md"), "utf8"),
     );
     await expect(
       execute(
