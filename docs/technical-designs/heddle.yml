@@ -462,6 +462,17 @@ proposed-design:
     state. Deployments without a composed lifecycle reader return an
     unavailable response instead of substituting partial state.
 
+    Durable instance events remain the exact recovery authority and may
+    contain correlation tokens. The console and deployed HTTP event feed
+    serialize those records through one public projection. The projection
+    omits complete `instance:created` and `instance:updated` state payloads.
+    For `session:activated`, it validates the activation identity and the
+    canonical Markdown identity front matter, then removes the
+    `correlationToken` field while preserving the system prompt and handoff
+    body. Invalid, inconsistent, duplicated, or unrecognized activation
+    structure yields only a fixed unavailable marker. Redaction never mutates
+    the stored event or the bytes used for restart replay.
+
     An attention queue overlays every view and lists each instance
     awaiting a human: adjudications, escalations, stale work, UAT,
     and pending T3 approvals. Each entry offers the dispositions

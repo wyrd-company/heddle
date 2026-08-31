@@ -301,6 +301,15 @@ copy it into template content, or configure an unmeasured driver. A driver
 outside this set fails before dispatch. Treat the rendered handoff as secret
 material because its identity front matter contains the token.
 
+The deployed `/api/events` feed is not a durable-state export. It omits the
+payloads of `instance:created` and `instance:updated` records, structurally
+validates each `session:activated` identity front matter, and removes its
+`correlationToken` field before serialization. An activation record that does
+not match the canonical structure is served only as an unavailable marker. The
+SQLite event remains exact for restart replay. Inspect the database only
+through operator-controlled access and treat the stored activation document and
+instance state as secret material.
+
 The console lifecycle source is a read-only projection over this composition's
 canonical persistence. It resolves the task through the durable reconciler
 runtime and instance records, reads the blueprint from the pinned Git blob, and
