@@ -475,6 +475,9 @@ export const clientHarness = async (
     holdBoard: (held: Promise<BrowserResponse>) => {
       heldBoardResponse = held;
     },
+    releaseBoard: () => {
+      heldBoardResponse = undefined;
+    },
     holdGraph: (name: string, held: Promise<BrowserResponse>) => {
       graphResponses.set(name, held);
     },

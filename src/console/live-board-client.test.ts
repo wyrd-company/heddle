@@ -10,6 +10,8 @@ import {
   childTask,
   clientHarness,
   deferred,
+  projection,
+  response,
   rootTask,
 } from "./page-client.test-support.js";
 
@@ -118,5 +120,34 @@ describe("console live board polling", () => {
       expect(harness.liveBoardStatus.textContent).toBe("BOARD STALE"),
     );
     expect(harness.liveBoardMark.dataset.health).toBe("stale");
+  });
+
+  it("does not let an old live poll overwrite a newer scoped view", async () => {
+    const harness = await clientHarness();
+    const heldBoard = deferred<BrowserResponse>();
+    harness.holdBoard(heldBoard.promise);
+    harness.runNextTimeout();
+    harness.releaseBoard();
+
+    harness.navigate("task:11");
+    await vi.waitFor(() => expect(harness.cardIds()).toEqual(["11"]));
+    heldBoard.resolve(response({ tasks: [rootTask, childTask] }));
+
+    await vi.waitFor(() => expect(harness.scope.value).toBe("task:11"));
+    expect(harness.cardIds()).toEqual(["11"]);
+  });
+
+  it("does not render an old live projection after scope navigation", async () => {
+    const harness = await clientHarness();
+    const heldProjection = deferred<BrowserResponse>();
+    harness.holdProjection("all", heldProjection.promise);
+    harness.runNextTimeout();
+
+    harness.navigate("task:11");
+    await vi.waitFor(() => expect(harness.cardIds()).toEqual(["11"]));
+    heldProjection.resolve(projection([rootTask, childTask, refreshedTask]));
+
+    await vi.waitFor(() => expect(harness.scope.value).toBe("task:11"));
+    expect(harness.cardIds()).toEqual(["11"]);
   });
 });
