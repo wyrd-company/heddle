@@ -532,22 +532,30 @@ describe("SessionObserver operator actions", () => {
       );
     };
 
-    await stopSession(test.options, {
-      ...target,
-      approvalDecisions: { "approval-one": "reject" },
-      operationId: "stop-one",
-      userInputAnswers: { "question-one": { quantity: "Large" } },
-    }, () => "id");
+    await stopSession(
+      test.options,
+      {
+        ...target,
+        approvalDecisions: { "approval-one": "reject" },
+        operationId: "stop-one",
+        userInputAnswers: { "question-one": { quantity: "Large" } },
+      },
+      () => "id",
+    );
 
     expect(test.t3.commands.at(-1)?.type).toBe("thread.session.stop");
 
     test.t3.shell.threads[0]!.hasPendingUserInput = true;
-    await stopSession(test.options, {
-      ...target,
-      approvalDecisions: { "approval-one": "reject" },
-      operationId: "stop-one",
-      userInputAnswers: { "question-one": { quantity: "Large" } },
-    }, () => "id");
+    await stopSession(
+      test.options,
+      {
+        ...target,
+        approvalDecisions: { "approval-one": "reject" },
+        operationId: "stop-one",
+        userInputAnswers: { "question-one": { quantity: "Large" } },
+      },
+      () => "id",
+    );
     expect(test.t3.userInputAnswers).toHaveLength(1);
     expect(
       test.t3.commands.filter(({ type }) => type === "thread.session.stop"),
@@ -575,11 +583,15 @@ describe("SessionObserver operator actions", () => {
     };
 
     await expect(
-      stopSession(test.options, {
-        ...target,
-        operationId: "stop-one",
-        userInputAnswers: { "question-one": {} },
-      }, () => "id"),
+      stopSession(
+        test.options,
+        {
+          ...target,
+          operationId: "stop-one",
+          userInputAnswers: { "question-one": {} },
+        },
+        () => "id",
+      ),
     ).rejects.toThrow("Explicit disposition");
     expect(test.t3.commands).toHaveLength(0);
   });
@@ -598,7 +610,11 @@ describe("SessionObserver operator actions", () => {
     ];
 
     await expect(
-      stopSession(test.options, { ...target, operationId: "stop-one" }, () => "id"),
+      stopSession(
+        test.options,
+        { ...target, operationId: "stop-one" },
+        () => "id",
+      ),
     ).rejects.toThrow("pending escalation");
     expect(test.t3.commands).toHaveLength(0);
   });
