@@ -463,15 +463,21 @@ proposed-design:
     unavailable response instead of substituting partial state.
 
     Durable instance events remain the exact recovery authority and may
-    contain correlation tokens. The console and deployed HTTP event feed
-    serialize those records through one public projection. The projection
-    omits complete `instance:created` and `instance:updated` state payloads.
-    For `session:activated`, it validates the activation identity and the
-    canonical Markdown identity front matter, then removes the
-    `correlationToken` field while preserving the system prompt and handoff
-    body. Invalid, inconsistent, duplicated, or unrecognized activation
-    structure yields only a fixed unavailable marker. Redaction never mutates
-    the stored event or the bytes used for restart replay.
+    contain correlation tokens. The production console source supplies the
+    current durable token catalog only to the HTTP projection boundary. The
+    console and deployed event feed omit complete `instance:created` and
+    `instance:updated` state payloads. For `session:activated`, the projection
+    validates the activation identity and canonical Markdown identity front
+    matter, then removes the `correlationToken` field while preserving the
+    system prompt and handoff body. Invalid, inconsistent, duplicated, or
+    unrecognized activation structure yields only a fixed unavailable marker.
+    Every projected event is then checked structurally against the token
+    catalog. A token in any other event payload makes the complete read
+    unavailable. The same structural check gates the complete attention and
+    lifecycle reads because session-authored messages, questions, and
+    lifecycle outputs can repeat a token. A gated read returns a fixed error
+    with no protected value. These checks never mutate the durable event,
+    attention, lifecycle history, or bytes used for restart replay.
 
     An attention queue overlays every view and lists each instance
     awaiting a human: adjudications, escalations, stale work, UAT,

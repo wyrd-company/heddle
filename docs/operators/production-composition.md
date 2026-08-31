@@ -305,10 +305,17 @@ The deployed `/api/events` feed is not a durable-state export. It omits the
 payloads of `instance:created` and `instance:updated` records, structurally
 validates each `session:activated` identity front matter, and removes its
 `correlationToken` field before serialization. An activation record that does
-not match the canonical structure is served only as an unavailable marker. The
-SQLite event remains exact for restart replay. Inspect the database only
-through operator-controlled access and treat the stored activation document and
-instance state as secret material.
+not match the canonical structure is served only as an unavailable marker.
+After projection, Heddle checks the complete event result against the current
+durable correlation-token catalog. A token in a generic event makes the read
+unavailable instead of serving a partial history. Heddle applies the same check
+to complete `/api/attention` and `/api/lifecycle` results because messages,
+questions, and lifecycle outputs originate outside the console boundary. A
+protected result returns HTTP 503 with only `Console data is unavailable`.
+Resolve the source content through operator-controlled storage access; retrying
+the console read does not remove or rewrite it. The SQLite event, attention,
+and Flowcraft history remain exact for restart replay. Treat the stored
+activation document and instance state as secret material.
 
 The console lifecycle source is a read-only projection over this composition's
 canonical persistence. It resolves the task through the durable reconciler
