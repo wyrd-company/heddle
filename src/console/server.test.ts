@@ -271,6 +271,7 @@ describe("console server", () => {
 
   it("does not expose an activation correlation token through the console event API", async () => {
     const correlationToken = "console-fixture-credential";
+    const futurePrivateValue = "console-future-private-fixture";
     const systemPrompt = "# Generic console fixture instructions";
     const renderedDocument = `${systemPrompt}\n\n---
 format: "heddle.stage-handoff"
@@ -286,6 +287,7 @@ correlationToken: "${correlationToken}"
       instanceId: "instance-52",
       payload: {
         format: "heddle.session-activation",
+        futurePrivateField: futurePrivateValue,
         instanceId: "instance-52",
         renderedDocument,
         sessionKey: "session-52",
@@ -307,6 +309,7 @@ correlationToken: "${correlationToken}"
 
     expect(response.status).toBe(200);
     expect(serialized).not.toContain(correlationToken);
+    expect(serialized).not.toContain(futurePrivateValue);
     expect(serialized).not.toContain("correlationToken:");
     expect(serialized).toContain("# Inspect the generated sample");
   });

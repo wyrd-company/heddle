@@ -145,6 +145,7 @@ describe("deployed Heddle service", () => {
   it("redacts the deployed event feed while preserving the exact durable activation bytes", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-deployment-server-"));
     const correlationToken = "deployment-fixture-credential";
+    const futurePrivateValue = "deployment-future-private-fixture";
     const systemPrompt = "# Generic deployment fixture instructions";
     const renderedDocument = `${systemPrompt}\n\n---
 format: "heddle.stage-handoff"
@@ -165,6 +166,7 @@ correlationToken: "${correlationToken}"
     });
     writer.appendEvent("task-101", "session:activated", {
       format: "heddle.session-activation",
+      futurePrivateField: futurePrivateValue,
       instanceId: "task-101",
       renderedDocument,
       sessionKey: "session-101",
@@ -209,6 +211,7 @@ correlationToken: "${correlationToken}"
 
     expect(response.status).toBe(200);
     expect(serialized).not.toContain(correlationToken);
+    expect(serialized).not.toContain(futurePrivateValue);
     expect(serialized).not.toContain("correlationToken:");
     expect(serialized).toContain("# Inspect the generated sample");
 

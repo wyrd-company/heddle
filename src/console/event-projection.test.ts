@@ -82,6 +82,31 @@ describe("public console event projection", () => {
     ).not.toContain("correlationToken:");
   });
 
+  it("omits an unrecognized activation field from an otherwise canonical payload", () => {
+    const futurePrivateValue = "future-private-fixture";
+    const publicEvent = projectPublicConsoleEvent(
+      activation({
+        format: "heddle.session-activation",
+        futurePrivateField: futurePrivateValue,
+        instanceId: "instance-41",
+        renderedDocument,
+        sessionKey: "session-41",
+        stage: "inspect",
+        systemPrompt,
+        taskId: 41,
+        threadId: "thread-41",
+        version: 1,
+      }),
+    );
+
+    expect(JSON.stringify(publicEvent)).not.toContain(futurePrivateValue);
+    expect(publicEvent.payload).toMatchObject({
+      renderedDocument: expect.stringContaining(
+        "# Inspect the generated sample",
+      ),
+    });
+  });
+
   it.each([
     ["changed identity", renderedDocument.replace("taskId: 41", "taskId: 42")],
     [
