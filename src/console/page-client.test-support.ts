@@ -29,11 +29,21 @@ class FakeElement {
   replaceCount = 0;
   scrollLeft = 0;
   scrollWidth = 800;
-  textContent = "";
+  textContentWriteCount = 0;
   type = "";
   value = "";
+  private content = "";
 
   constructor(readonly tagName: string) {}
+
+  get textContent(): string {
+    return this.content;
+  }
+
+  set textContent(value: string) {
+    this.content = value;
+    this.textContentWriteCount += 1;
+  }
 
   addEventListener(name: string, listener: (event?: unknown) => void): void {
     this.listeners.set(name, listener);

@@ -515,6 +515,7 @@ let loadGeneration = 0;
 let boardHealthTimer;
 let boardPollTimer;
 let lifecyclePollTimer;
+let liveBoardHealth = "connecting";
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
 const attentionFromUrl = () => new URL(window.location.href).searchParams.get("attention");
@@ -543,6 +544,8 @@ const fetchJson = async (url, options) => {
 };
 
 const setLiveBoardHealth = (health) => {
+  if (liveBoardHealth === health) return;
+  liveBoardHealth = health;
   const label =
     health === "live"
       ? "LIVE BOARD"
@@ -695,11 +698,12 @@ const createAttentionAction = (entry, action) => {
   return container;
 };
 
-const renderAttention = (entries, focusRequested = false) => {
+const renderAttention = (entries, focusRequested = false, refreshEntries = true) => {
   attentionElement.textContent = String(entries.length);
-  attentionListElement.replaceChildren();
+  if (!refreshEntries) return;
   attentionStatusElement.dataset.error = "false";
   attentionStatusElement.textContent = entries.length + (entries.length === 1 ? " item requires" : " items require") + " operator attention";
+  attentionListElement.replaceChildren();
   const requested = attentionFromUrl();
   if (entries.length === 0) {
     attentionListElement.append(text("p", "No work is waiting for you.", "attention-empty"));
@@ -1019,7 +1023,7 @@ const pollBoard = (view, scope, generation) => {
       ]);
       if (generation !== loadGeneration) return;
       addScopeOptions(board.tasks, scope);
-      renderAttention(attention);
+      renderAttention(attention, false, !attentionOverlayElement.open);
       if (view === "board") {
         const projection = await fetchJson(
           "/api/projection?scope=" + encodeURIComponent(scope),

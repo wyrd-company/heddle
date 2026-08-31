@@ -76,6 +76,43 @@ const informationalAttention = (attentionId: string) =>
     taskId: 11,
   });
 
+const answerableAttention = () =>
+  createConsoleAttention({
+    actions: [
+      {
+        actionId: "answer",
+        contract: {
+          escalationId: "sample-choice",
+          instanceId: "instance-11",
+          kind: "escalation.answer",
+          ownerSessionKey: "sample-session",
+        },
+        input: {
+          kind: "questions",
+          questions: [
+            {
+              header: "Batch size",
+              id: "batch-size",
+              multiSelect: false,
+              options: [
+                { label: "Small", value: "small" },
+                { label: "Large", value: "large" },
+              ],
+              prompt: "Which batch size should be used?",
+            },
+          ],
+        },
+        label: "Answer",
+      },
+    ],
+    attentionId: "attention-11",
+    instanceId: "instance-11",
+    kind: "escalation",
+    message: "A sample choice is required",
+    scope: "task:11",
+    taskId: 11,
+  });
+
 describe("console live board polling", () => {
   it("updates the scoped board without navigation or scroll reset", async () => {
     const harness = await clientHarness(
@@ -120,6 +157,20 @@ describe("console live board polling", () => {
     );
     expect(harness.scope.value).toBe("epic:10");
     expect(harness.graphViewport.scrollLeft).toBe(224);
+  });
+
+  it("does not announce a steady live board at each poll", async () => {
+    const harness = await clientHarness();
+    const statusWrites = harness.liveBoardStatus.textContentWriteCount;
+    harness.replaceTasks([rootTask, childTask, refreshedTask]);
+
+    harness.runNextTimeout();
+
+    await vi.waitFor(() =>
+      expect(harness.cardIds()).toEqual(["10", "11", "12"]),
+    );
+    expect(harness.liveBoardStatus.textContent).toBe("LIVE BOARD");
+    expect(harness.liveBoardStatus.textContentWriteCount).toBe(statusWrites);
   });
 
   it("marks the board stale when scheduled updates stop", async () => {
@@ -208,6 +259,37 @@ describe("console live board polling", () => {
     expect(refreshedEntry.scrollIntoViewCount).toBe(0);
     expect(initialFocusCount).toBe(1);
     expect(initialScrollIntoViewCount).toBe(1);
+  });
+
+  it("retains an open attention disposition selection during a live refresh", async () => {
+    const entry = answerableAttention();
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?scope=all&attention=attention-11",
+      undefined,
+      undefined,
+      [entry],
+    );
+    const selected = harness
+      .attentionElements()
+      .find(({ tagName }) => tagName === "input")!;
+    const action = harness
+      .attentionElements()
+      .find(({ className }) => className === "attention-action")!;
+    const initialReplaceCount = harness.attentionList.replaceCount;
+    selected.checked = true;
+    harness.replaceAttention([entry, informationalAttention("attention-12")]);
+
+    harness.runNextTimeout();
+
+    await vi.waitFor(() => expect(harness.attention.textContent).toBe("2"));
+    expect(harness.attentionList.replaceCount).toBe(initialReplaceCount);
+    expect(selected.checked).toBe(true);
+    action.dispatch("click");
+    await vi.waitFor(() => expect(harness.attentionRequests).toHaveLength(1));
+    expect(
+      JSON.parse(String(harness.attentionRequests[0]?.options?.body)),
+    ).toMatchObject({ answers: { "batch-size": "small" } });
   });
 
   it("does not render an old live dependency graph after scope navigation", async () => {
