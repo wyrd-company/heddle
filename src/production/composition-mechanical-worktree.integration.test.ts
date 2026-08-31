@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
