@@ -37,7 +37,7 @@ describe("lifecycle blueprint editor contract", () => {
     expect(styles).toContain("flex-wrap: wrap");
   });
 
-  it("invalidates artifact responses when the lifecycle selection changes", async () => {
+  it("invalidates artifact and rebase responses when the lifecycle selection changes", async () => {
     const source = await readFile("src/console/lifecycle-viewer.tsx", "utf8");
 
     expect(source).toContain(
@@ -48,11 +48,17 @@ describe("lifecycle blueprint editor contract", () => {
         /if \(generation !== editRequestGeneration\.current\) return;/g,
       ),
     ).toHaveLength(4);
+    expect(
+      source.match(
+        /if \(generation !== rebaseRequestGeneration\.current\) return;/g,
+      ),
+    ).toHaveLength(2);
     expect(source).toMatch(
-      /clear: \(\) => \{\s*resetEditing\(\);\s*snapshotRef\.current = null;/,
+      /clear: \(\) => \{\s*resetEditing\(\);\s*resetRebase\(\);\s*snapshotRef\.current = null;/,
     );
     const replaceStart = source.indexOf("const replace = useCallback");
     const replaceReset = source.indexOf("resetEditing();", replaceStart);
+    const replaceRebaseReset = source.indexOf("resetRebase();", replaceStart);
     const replaceSnapshot = source.indexOf(
       "snapshotRef.current = next;",
       replaceStart,
@@ -60,5 +66,7 @@ describe("lifecycle blueprint editor contract", () => {
     expect(replaceStart).toBeGreaterThan(-1);
     expect(replaceReset).toBeGreaterThan(replaceStart);
     expect(replaceReset).toBeLessThan(replaceSnapshot);
+    expect(replaceRebaseReset).toBeGreaterThan(replaceReset);
+    expect(replaceRebaseReset).toBeLessThan(replaceSnapshot);
   });
 });
