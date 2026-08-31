@@ -76958,7 +76958,7 @@ function Sce() {
 		let t = C.current;
 		if (t === null) throw Error("Lifecycle tail arrived before replay");
 		let n = vce(t, e);
-		C.current = n, (e.events.length > 0 || t.status !== e.status || t.currentStageIds.join("\0") !== e.currentStageIds.join("\0")) && r(n);
+		C.current = n, (e.events.length > 0 || t.status !== e.status || t.currentStageIds.join("\0") !== e.currentStageIds.join("\0") || t.rebase.available !== e.rebase.available || t.rebase.targetBlueprintBlobHash !== e.rebase.targetBlueprintBlobHash || t.rebase.targetStateIds.join("\0") !== e.rebase.targetStateIds.join("\0")) && r(n);
 	}, []);
 	(0, _.useEffect)(() => {
 		let e = {

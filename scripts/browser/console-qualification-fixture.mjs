@@ -289,6 +289,7 @@ export const createConsoleQualificationFixture = async () => {
   let resolvedAttention = new Set();
   let lifecycleTrace = [];
   let lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
+  let lifecycleTargetBlobHash = lifecycleBlueprint.blobHash;
   let lifecycleRebases = [];
   let actions = [];
   let boardWrites = [];
@@ -372,8 +373,8 @@ export const createConsoleQualificationFixture = async () => {
         instanceId: "instance-43",
         nextSequence: events.at(-1)?.sequence ?? 5,
         rebase: {
-          available: lifecyclePinnedBlobHash !== "b".repeat(40),
-          targetBlueprintBlobHash: "b".repeat(40),
+          available: lifecyclePinnedBlobHash !== lifecycleTargetBlobHash,
+          targetBlueprintBlobHash: lifecycleTargetBlobHash,
           targetStateIds: ["arrange"],
         },
         status: "awaiting",
@@ -408,7 +409,7 @@ export const createConsoleQualificationFixture = async () => {
   const lifecycleActions = {
     async rebase(input) {
       lifecycleRebases.push(clone(input));
-      lifecyclePinnedBlobHash = "b".repeat(40);
+      lifecyclePinnedBlobHash = lifecycleTargetBlobHash;
     },
   };
 
@@ -423,6 +424,9 @@ export const createConsoleQualificationFixture = async () => {
 
   return {
     actions: () => clone(actions),
+    advanceLifecycleBlueprint() {
+      lifecycleTargetBlobHash = "b".repeat(40);
+    },
     blueprintRequests: () =>
       clone({
         loadResults: blueprintLoadResults,
@@ -453,6 +457,7 @@ export const createConsoleQualificationFixture = async () => {
       resolvedAttention = new Set();
       lifecycleTrace = [];
       lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
+      lifecycleTargetBlobHash = lifecycleBlueprint.blobHash;
       lifecycleRebases = [];
       actions = [];
       boardWrites = [];

@@ -1164,6 +1164,14 @@ const exerciseLifecycleRebase = async (baseUrl) => {
   await resetPageEvidence();
   await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
   await assertLifecycleSettled();
+  invariant(
+    (await evaluate(
+      `document.querySelector(".lifecycle-rebase")?.dataset.available`,
+    )) === "false",
+    "lifecycle-rebase-availability",
+    "rebase was available before the fetched upstream artifact advanced",
+  );
+  fixture.advanceLifecycleBlueprint();
   await waitFor(
     `document.querySelector(".lifecycle-rebase")?.dataset.available === "true"`,
   );

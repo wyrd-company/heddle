@@ -179,7 +179,12 @@ function LifecycleViewer() {
       next.events.length > 0 ||
       current.status !== next.status ||
       current.currentStageIds.join("\u0000") !==
-        next.currentStageIds.join("\u0000")
+        next.currentStageIds.join("\u0000") ||
+      current.rebase.available !== next.rebase.available ||
+      current.rebase.targetBlueprintBlobHash !==
+        next.rebase.targetBlueprintBlobHash ||
+      current.rebase.targetStateIds.join("\u0000") !==
+        next.rebase.targetStateIds.join("\u0000")
     ) {
       setSnapshot(combined);
     }
