@@ -19,6 +19,7 @@ import {
   cleanupMergedChange,
   createMechanicalNodeEffects,
   ensureReviewSnapshot,
+  resolveMechanicalBoardStatuses,
   mechanicalChangeContextKey,
   mergeReviewSnapshot,
   type CommandRunner,
@@ -147,6 +148,14 @@ afterEach(async () => {
 });
 
 describe("delivery mechanical nodes", () => {
+  it("requires every declared board status before mirroring delivery", () => {
+    expect(() =>
+      resolveMechanicalBoardStatuses(["done", "in-progress", "review"]),
+    ).toThrow(
+      "Board configuration is missing required mechanical status 'retrospective'",
+    );
+  });
+
   it("re-runs worktree, snapshot, merge, and cleanup effects without duplicates", async () => {
     const fixture = await prepareCommittedChange();
     expect(fixture.prepared.map(({ created }) => created)).toEqual([

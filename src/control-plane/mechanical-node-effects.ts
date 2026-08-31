@@ -51,6 +51,29 @@ export interface MechanicalBoardStatuses {
   review: string;
 }
 
+export const mechanicalBoardStatusNames = {
+  completed: "done",
+  inProgress: "in-progress",
+  merged: "retrospective",
+  review: "review",
+} as const satisfies MechanicalBoardStatuses;
+
+export const resolveMechanicalBoardStatuses = (
+  configuredStatuses: Iterable<string>,
+): MechanicalBoardStatuses => {
+  const configured = new Set(configuredStatuses);
+  const statuses = {} as MechanicalBoardStatuses;
+  for (const [stage, status] of Object.entries(mechanicalBoardStatusNames)) {
+    if (!configured.has(status)) {
+      throw new Error(
+        `Board configuration is missing required mechanical status '${status}'`,
+      );
+    }
+    statuses[stage as keyof MechanicalBoardStatuses] = status;
+  }
+  return statuses;
+};
+
 export type MechanicalBoardStatusSource =
   MechanicalBoardStatuses | (() => Promise<MechanicalBoardStatuses>);
 

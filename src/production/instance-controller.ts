@@ -13,6 +13,7 @@ import {
   HandoffRenderError,
   HandoffTemplateError,
   mechanicalChangeContextKey,
+  mechanicalBoardStatusNames,
   type MechanicalBoardStatuses,
   type SessionT3Client,
   type SessionTemplateAuthority,
@@ -65,12 +66,7 @@ const deferral = (value: JsonValue | undefined): PacingDeferral | undefined =>
   value as PacingDeferral | undefined;
 
 const defaultMechanicalBoardStatuses =
-  async (): Promise<MechanicalBoardStatuses> => ({
-    completed: "done",
-    inProgress: "in-progress",
-    merged: "retrospective",
-    review: "review",
-  });
+  async (): Promise<MechanicalBoardStatuses> => ({ ...mechanicalBoardStatusNames });
 
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(

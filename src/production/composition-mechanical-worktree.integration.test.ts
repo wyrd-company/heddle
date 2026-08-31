@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { stat, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -278,6 +278,22 @@ describe("production mechanical worktree preparation", () => {
     ]);
     await composition.close();
   }, 20_000);
+
+  it("fails closed before a board write when a required delivery status is absent", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    await useMechanicalLifecycle(fixture);
+    const configPath = join(fixture.configuration.boardDirectory, "config.yml");
+    const configuration = await readFile(configPath, "utf8");
+    await writeFile(configPath, configuration.replace("  - name: review\n", ""));
+    const composition = compose(fixture, new SyntheticT3());
+    const statusWrites = vi.spyOn(composition.board, "mirrorTaskStatus");
+
+    await expect(composition.start()).rejects.toThrow();
+
+    expect(statusWrites).not.toHaveBeenCalled();
+    await composition.close();
+  });
 
   it("prepares a parentless task worktree from the configured base ref at instance start", async () => {
     const fixture = await prepareProductionFixture();

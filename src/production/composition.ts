@@ -15,6 +15,7 @@ import type {
 import {
   createMechanicalNodeEffects,
   GitHandoffTemplateStore,
+  resolveMechanicalBoardStatuses,
   resolveBuiltInSystemPrompt,
   SessionObserver,
   steerStageSession,
@@ -108,26 +109,6 @@ export type ProductionComposition = {
 
 const activeWorkspaces = new Set<string>();
 
-const mechanicalBoardStatuses = async (
-  board: KanbanBoardAdapter,
-): Promise<MechanicalBoardStatuses> => {
-  const configured = new Set(await board.readBoardStatuses());
-  const requireStatus = (status: string): string => {
-    if (!configured.has(status)) {
-      throw new Error(
-        `Board configuration is missing required mechanical status '${status}'`,
-      );
-    }
-    return status;
-  };
-  return {
-    completed: requireStatus("done"),
-    inProgress: requireStatus("in-progress"),
-    merged: requireStatus("retrospective"),
-    review: requireStatus("review"),
-  };
-};
-
 export const createProductionComposition = (
   options: ProductionCompositionOptions,
 ): ProductionComposition => {
@@ -140,7 +121,8 @@ export const createProductionComposition = (
   let persistence: SqlitePersistence | undefined;
   try {
     const board = new KanbanBoardAdapter(configuration.boardDirectory);
-    const boardStatuses = () => mechanicalBoardStatuses(board);
+    const boardStatuses = async () =>
+      resolveMechanicalBoardStatuses(await board.readBoardStatuses());
     persistence = new SqlitePersistence({
       stateDirectory: configuration.stateDirectory,
     });
