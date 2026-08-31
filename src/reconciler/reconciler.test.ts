@@ -352,6 +352,27 @@ describe("Reconciler", () => {
     await expect(subject.reconciler.reconcile()).resolves.toEqual([]);
   });
 
+  it("does not infer a staleness deadline for an unconfigured stage", async () => {
+    const standalone = task(71, "in-progress", {
+      lifecycle: "index-refresh",
+    });
+    const subject = fixture([standalone], {
+      now: () => 50_000,
+      staleThresholds: {},
+    });
+    subject.instances.instances.push({
+      boardStatus: "in-progress",
+      instanceId: "task-71",
+      stageEnteredAt: 0,
+      stageId: "inspect",
+      state: "waiting",
+      taskId: standalone.id,
+    });
+
+    await expect(subject.reconciler.reconcile()).resolves.toEqual([]);
+    expect(subject.attention.entries).toEqual(new Map());
+  });
+
   it("preserves ready work as a visible deferral until WIP capacity is freed", async () => {
     const underway = task(80, "in-progress", {
       lifecycle: "inventory-count",

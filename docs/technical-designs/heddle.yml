@@ -77,8 +77,9 @@ proposed-design:
     The reconciler is a control loop over the kanban board. Each pass
     it computes the delta between board state and instance state and
     acts on it: a ready task with satisfied dependencies and no
-    instance gets one started; an instance past its stage's staleness
-    threshold raises attention; when every non-UAT child of an epic is
+    instance gets one started; an instance past its configured stage staleness
+    threshold raises attention. A stage absent from that configuration has no
+    reconciler staleness deadline. When every non-UAT child of an epic is
     done, the epic's UAT stage opens. Task dependency edges gate
     readiness, so the epic's dependency graph is an input to
     scheduling, not only a view.
