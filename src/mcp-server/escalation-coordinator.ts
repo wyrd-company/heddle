@@ -124,6 +124,14 @@ export class EscalationCoordinator {
     return this.#history.pending(instanceId);
   }
 
+  async replayPendingRoutes(): Promise<void> {
+    for (const { instanceId } of this.#persistence.listInstances()) {
+      for (const opened of this.#history.pending(instanceId)) {
+        await this.#ensureRouted(opened);
+      }
+    }
+  }
+
   requireNoPendingForSession(instanceId: string, sessionKey: string): void {
     if (
       this.pendingEscalations(instanceId).some(

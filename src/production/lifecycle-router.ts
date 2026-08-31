@@ -14,6 +14,7 @@ import {
 import type { SqlitePersistence } from "../persistence/index.js";
 
 export class ProductionLifecycleRouter {
+  private readonly activeTransitions = new Map<string, number>();
   private readonly engine: LifecycleEngine;
 
   constructor(options: {
@@ -31,14 +32,35 @@ export class ProductionLifecycleRouter {
   }
 
   start(input: StartLifecycleInput): Promise<LifecycleSnapshot> {
-    return this.engine.start(input);
+    return this.#track(input.instanceId, () => this.engine.start(input));
   }
 
   resume(input: ResumeLifecycleInput): Promise<LifecycleSnapshot> {
-    return this.engine.resume(input);
+    return this.#track(input.instanceId, () => this.engine.resume(input));
   }
 
   rebase(input: RebaseLifecycleInput): Promise<LifecycleSnapshot> {
     return this.engine.rebase(input);
+  }
+
+  isTransitionActive(instanceId: string): boolean {
+    return (this.activeTransitions.get(instanceId) ?? 0) > 0;
+  }
+
+  async #track(
+    instanceId: string,
+    operation: () => Promise<LifecycleSnapshot>,
+  ): Promise<LifecycleSnapshot> {
+    this.activeTransitions.set(
+      instanceId,
+      (this.activeTransitions.get(instanceId) ?? 0) + 1,
+    );
+    try {
+      return await operation();
+    } finally {
+      const remaining = (this.activeTransitions.get(instanceId) ?? 1) - 1;
+      if (remaining === 0) this.activeTransitions.delete(instanceId);
+      else this.activeTransitions.set(instanceId, remaining);
+    }
   }
 }

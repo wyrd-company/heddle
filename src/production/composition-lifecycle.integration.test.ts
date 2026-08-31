@@ -622,6 +622,77 @@ kind: standard
     await restarted.close();
   });
 
+  it("keeps a starting occurrence identity when restart pacing defers dispatch", async () => {
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    const first = createProductionComposition({
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await first.start();
+    await first.lifecycle.resume({
+      disposition: "complete",
+      instanceId: `task-${taskId}`,
+      operationId: advanceOperationId(`task-${taskId}:implement:1`),
+    });
+    const intendedSessionKey = `task-${taskId}:review:1`;
+    const intendedThreadId = "review-thread-1";
+    first.persistence.writeReconcilerRuntime({
+      ...first.persistence.listReconcilerRuntime()[0]!,
+      boardStatus: "todo",
+      sessionKey: intendedSessionKey,
+      stageId: "review",
+      state: "starting",
+      threadId: intendedThreadId,
+    });
+    await first.close();
+
+    configuration.pacing.maxConcurrentSessions = 0;
+    const t3 = new SyntheticT3();
+    const restarted = createProductionComposition({
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await restarted.start();
+
+    expect(
+      restarted.persistence
+        .listSessionRuntime()
+        .filter(({ stageId }) => stageId === "review"),
+    ).toEqual([
+      expect.objectContaining({
+        activation: 1,
+        sessionKey: intendedSessionKey,
+        threadId: intendedThreadId,
+      }),
+    ]);
+    expect(t3.commands.filter(({ type }) => type === "thread.create")).toEqual([
+      expect.objectContaining({ threadId: intendedThreadId }),
+    ]);
+    expect(
+      restarted.persistence
+        .replayEvents(`task-${taskId}`)
+        .filter(
+          ({ payload, type }) =>
+            type === "session:activated" &&
+            typeof payload === "object" &&
+            payload !== null &&
+            !Array.isArray(payload) &&
+            payload["stage"] === "review",
+        ),
+    ).toHaveLength(1);
+    await restarted.close();
+  });
+
   it("keeps a double-digit occurrence identity after session intent persistence", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const first = createProductionComposition({

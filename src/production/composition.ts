@@ -295,6 +295,7 @@ export const createProductionComposition = (
           blueprintRepository.repositoryRoot,
           mcp.toolNames,
         );
+        await escalation.replayPendingRoutes();
         const before = await board.readBoard();
         await projects.reconcile(before);
         routing.update(before);

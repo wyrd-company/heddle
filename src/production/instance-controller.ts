@@ -20,6 +20,8 @@ import {
 import {
   readLifecycleContext,
   UnexpectedLandingError,
+  type LifecycleContextRecord,
+  type LifecycleSnapshot,
 } from "../engine/index.js";
 import type { PacingDeferral } from "../pacing/index.js";
 import type {
@@ -94,7 +96,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   }
 
   async defer(input: DeferReconcilerInstanceInput): Promise<void> {
+    const previous = this.persistence
+      .listReconcilerRuntime()
+      .find(({ instanceId }) => instanceId === input.instanceId);
     this.persistence.writeReconcilerRuntime({
+      ...(previous?.state === "starting" ? previous : {}),
       boardStatus: input.boardStatus,
       deferral: json(input.deferral),
       instanceId: input.instanceId,
@@ -231,31 +237,20 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         }
         const context = readLifecycleContext(record);
         if (context.pendingTransition !== null) {
-          this.persistence.writeReconcilerRuntime({
-            ...runtime,
-            state: "running",
+          if (this.lifecycle.isTransitionActive(runtime.instanceId)) continue;
+          const snapshot = await this.#replayPendingTransition(
+            runtime.instanceId,
+            context,
+          ).catch((error: unknown) => {
+            if (error instanceof UnexpectedLandingError) {
+              throw new AttentionVisibleError(error);
+            }
+            throw error;
           });
+          await this.#synchronizeSnapshot(task, runtime, snapshot);
           continue;
         }
-        const stageId = context.awaitingNodeIds[0];
-        if (stageId === undefined) {
-          this.persistence.writeReconcilerRuntime({
-            ...runtime,
-            boardStatus:
-              context.status === "completed" ? "done" : "in-progress",
-            state: context.status === "completed" ? "done" : "running",
-          });
-          continue;
-        }
-        if (runtime.stageId === stageId && runtime.state === "waiting") {
-          continue;
-        }
-        const starting: ReconcilerRuntimeRecord = {
-          ...runtime,
-          state: "starting",
-        };
-        this.persistence.writeReconcilerRuntime(starting);
-        await this.#activate(task, runtime.instanceId, stageId, starting);
+        await this.#synchronizeSnapshot(task, runtime, context);
       } catch (error) {
         if (error instanceof AttentionVisibleError) continue;
         await this.#raiseSynchronizationError(
@@ -265,6 +260,56 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         );
       }
     }
+  }
+
+  async #replayPendingTransition(
+    instanceId: string,
+    context: LifecycleContextRecord,
+  ): Promise<LifecycleSnapshot> {
+    const pending = context.pendingTransition;
+    if (pending === null) {
+      throw new Error(`Instance ${instanceId} has no pending transition`);
+    }
+    if (pending.kind === "start") {
+      return this.lifecycle.start({
+        blueprintPath: context.blueprintPath,
+        instanceId,
+      });
+    }
+    if (pending.disposition === null || pending.operationId === null) {
+      throw new Error(
+        `Instance ${instanceId} pending resume transition is incomplete`,
+      );
+    }
+    return this.lifecycle.resume({
+      disposition: pending.disposition,
+      instanceId,
+      operationId: pending.operationId,
+      ...(pending.output === null ? {} : { output: pending.output }),
+    });
+  }
+
+  async #synchronizeSnapshot(
+    task: BoardTask,
+    runtime: ReconcilerRuntimeRecord,
+    snapshot: Pick<LifecycleContextRecord, "awaitingNodeIds" | "status">,
+  ): Promise<void> {
+    const stageId = snapshot.awaitingNodeIds[0];
+    if (stageId === undefined) {
+      this.persistence.writeReconcilerRuntime({
+        ...runtime,
+        boardStatus: snapshot.status === "completed" ? "done" : "in-progress",
+        state: snapshot.status === "completed" ? "done" : "running",
+      });
+      return;
+    }
+    if (runtime.stageId === stageId && runtime.state === "waiting") return;
+    const starting: ReconcilerRuntimeRecord = {
+      ...runtime,
+      state: "starting",
+    };
+    this.persistence.writeReconcilerRuntime(starting);
+    await this.#activate(task, runtime.instanceId, stageId, starting);
   }
 
   async #raiseSynchronizationError(

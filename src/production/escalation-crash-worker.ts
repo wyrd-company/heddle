@@ -13,11 +13,7 @@ import {
   type ProductionT3Client,
 } from "./composition.js";
 import type { ProductionConfiguration } from "./configuration.js";
-import {
-  DurablePushoverNotifier,
-  type PushoverMessage,
-  type PushoverTransport,
-} from "./durable-adapters.js";
+import type { PushoverMessage, PushoverTransport } from "./durable-adapters.js";
 
 const [mode, root, deliveriesPath] = process.argv.slice(2);
 if (
@@ -145,12 +141,8 @@ const binding: WorkflowMcpSessionBinding = {
 };
 const controller = new globalThis.AbortController();
 if (mode === "resume") {
-  globalThis.setTimeout(
-    () => controller.abort(new Error("probe complete")),
-    50,
-  );
-}
-try {
+  await composition.start();
+} else {
   await composition.escalation.escalate(
     binding,
     {
@@ -168,22 +160,6 @@ try {
     },
     controller.signal,
   );
-} catch (error) {
-  if (mode !== "resume" || !controller.signal.aborted) throw error;
-}
-
-if (mode === "resume") {
-  const pending = composition.escalation
-    .pendingEscalations("task-17")
-    .find(({ escalationId }) => escalationId === "delivery-choice");
-  if (pending === undefined) {
-    throw new Error("Replay probe lost its pending escalation");
-  }
-  await new DurablePushoverNotifier(
-    composition.persistence,
-    configuration.pushover,
-    pushoverTransport,
-  ).send(pending);
 }
 
 const deliveries = (await readFile(deliveriesPath, "utf8").catch(() => ""))
@@ -192,7 +168,9 @@ const deliveries = (await readFile(deliveriesPath, "utf8").catch(() => ""))
   .map((line) => JSON.parse(line) as PushoverMessage);
 process.stdout.write(
   JSON.stringify({
-    attentionCount: composition.attention.list().length,
+    attentionIds: composition.attention
+      .list()
+      .map(({ attentionId }) => attentionId),
     deliveries,
     effectCompleted: composition.persistence.effectCompleted(
       "pushover",
