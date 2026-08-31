@@ -363,34 +363,89 @@ next_id: 1
       body: "Use labels that remain readable under gallery lighting.",
       parent: collectionId,
       lifecycle: "small-maintenance",
+      operationKey: "stage-one:create-follow-up:labels",
+      status: "backlog",
     });
     const finding = await adapter.createRecord({
       kind: "finding",
       title: "Document crate has a loose hinge",
       body: "The rear hinge moves when the lid opens.",
       parent: collectionId,
-      dependsOn: [followUp.id],
+      dependsOn: [followUp.task.id],
       lifecycle: "inspection-response",
+      operationKey: "stage-one:create-finding:hinge",
       priority: "high",
+      status: "backlog",
     });
 
     const tasks = await adapter.readBoard();
     expect(tasks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: followUp.id,
+          id: followUp.task.id,
           tags: expect.arrayContaining([
             "type:follow-up",
             "lifecycle:small-maintenance",
           ]),
         }),
         expect.objectContaining({
-          id: finding.id,
-          dependencies: [followUp.id],
+          id: finding.task.id,
+          dependencies: [followUp.task.id],
           lifecycle: "inspection-response",
           tags: expect.arrayContaining(["type:finding"]),
         }),
       ]),
     );
+    expect(followUp.replayed).toBe(false);
+    expect(finding.replayed).toBe(false);
+  });
+
+  it("replays one board-write occurrence without creating another task", async () => {
+    const collectionId = await createTask("Seasonal collection");
+    const record = {
+      kind: "follow-up" as const,
+      title: "Replace worn shelf labels",
+      body: "Use labels that remain readable under gallery lighting.",
+      parent: collectionId,
+      lifecycle: "small-maintenance",
+      operationKey: "stage-one:create-follow-up:labels",
+      status: "backlog",
+    };
+
+    const [first, replay] = await Promise.all([
+      adapter.createRecord(record),
+      adapter.createRecord(record),
+    ]);
+
+    expect(first.task.id).toBe(replay.task.id);
+    expect([first.replayed, replay.replayed].sort()).toEqual([false, true]);
+    expect(
+      (await adapter.readBoard()).filter(
+        ({ parent }) => parent === collectionId,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("rejects changed input for an existing board-write occurrence", async () => {
+    const collectionId = await createTask("Seasonal collection");
+    const record = {
+      kind: "finding" as const,
+      title: "Document crate has a loose hinge",
+      body: "The rear hinge moves when the lid opens.",
+      parent: collectionId,
+      lifecycle: "inspection-response",
+      operationKey: "stage-one:create-finding:hinge",
+      status: "backlog",
+    };
+    await adapter.createRecord(record);
+
+    await expect(
+      adapter.createRecord({ ...record, title: "Changed title" }),
+    ).rejects.toThrow("does not match its existing board task");
+    expect(
+      (await adapter.readBoard()).filter(
+        ({ parent }) => parent === collectionId,
+      ),
+    ).toHaveLength(1);
   });
 });

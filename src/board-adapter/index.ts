@@ -4,6 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
@@ -37,9 +38,15 @@ export interface CreateBoardRecord {
   body: string;
   parent: number;
   lifecycle: string;
+  operationKey: string;
   dependsOn?: number[];
   priority?: string;
   status?: string;
+}
+
+export interface BoardRecordWriteResult {
+  replayed: boolean;
+  task: BoardTask;
 }
 
 interface KanbanTaskJson {
@@ -228,7 +235,29 @@ const validateLifecycle = (value: string | undefined): string | undefined => {
   return value;
 };
 
+const sha256 = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
+
+const operationTag = (operationKey: string): string =>
+  `heddle-operation:${sha256(operationKey)}`;
+
+const recordTag = (record: CreateBoardRecord): string =>
+  `heddle-record:${sha256(
+    JSON.stringify({
+      body: record.body,
+      dependsOn: record.dependsOn ?? [],
+      kind: record.kind,
+      lifecycle: record.lifecycle,
+      parent: record.parent,
+      priority: record.priority ?? null,
+      status: record.status ?? null,
+      title: record.title,
+    }),
+  )}`;
+
 export class KanbanBoardAdapter {
+  private recordWriteQueue: Promise<void> = Promise.resolve();
+
   public constructor(
     private readonly boardDirectory: string,
     private readonly run: KanbanCommandRunner = defaultRunner,
@@ -306,8 +335,46 @@ export class KanbanBoardAdapter {
     );
   }
 
-  public async createRecord(record: CreateBoardRecord): Promise<BoardTask> {
+  public createRecord(
+    record: CreateBoardRecord,
+  ): Promise<BoardRecordWriteResult> {
+    if (record.operationKey.trim() === "") {
+      return Promise.reject(new Error("board record operation key is empty"));
+    }
+    const write = this.recordWriteQueue.then(
+      () => this.writeRecord(record),
+      () => this.writeRecord(record),
+    );
+    this.recordWriteQueue = write.then(
+      () => undefined,
+      () => undefined,
+    );
+    return write;
+  }
+
+  private async writeRecord(
+    record: CreateBoardRecord,
+  ): Promise<BoardRecordWriteResult> {
     validateLifecycle(record.lifecycle);
+    const occurrenceTag = operationTag(record.operationKey);
+    const requestTag = recordTag(record);
+    const matches = (await this.readBoard()).filter(({ tags }) =>
+      tags.includes(occurrenceTag),
+    );
+    if (matches.length > 1) {
+      throw new Error(
+        `Board record operation '${record.operationKey}' has more than one board task`,
+      );
+    }
+    if (matches.length === 1) {
+      const existing = matches[0]!;
+      if (!existing.tags.includes(requestTag)) {
+        throw new Error(
+          `Board record operation '${record.operationKey}' does not match its existing board task`,
+        );
+      }
+      return { replayed: true, task: existing };
+    }
     const arguments_ = [
       "create",
       record.title,
@@ -316,7 +383,7 @@ export class KanbanBoardAdapter {
       "--parent",
       String(record.parent),
       "--tags",
-      `type:${record.kind},lifecycle:${record.lifecycle}`,
+      `type:${record.kind},lifecycle:${record.lifecycle},${occurrenceTag},${requestTag}`,
     ];
     if (record.dependsOn !== undefined && record.dependsOn.length > 0) {
       arguments_.push("--depends-on", record.dependsOn.join(","));
@@ -330,7 +397,7 @@ export class KanbanBoardAdapter {
     arguments_.push("--json");
 
     const created = requireTask(parseJson(await this.command(...arguments_)));
-    return this.normalizeTask(created);
+    return { replayed: false, task: await this.normalizeTask(created) };
   }
 
   private async normalizeTask(task: KanbanTaskJson): Promise<BoardTask> {
