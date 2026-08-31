@@ -13,6 +13,10 @@ import type {
 } from "../persistence/index.js";
 import type { PendingEscalation } from "../mcp-server/index.js";
 import { SessionObserver } from "./session-observation.js";
+import {
+  interruptSession,
+  stopSession,
+} from "./session-observation-effects.js";
 import { sessionObservationEventTypes } from "./session-observation-events.js";
 import type {
   SessionObservationAttention,
@@ -220,7 +224,7 @@ const fixture = (childStops?: {
   const t3 = new MemoryT3();
   let now = 1_000;
   let next = 0;
-  const observer = new SessionObserver({
+  const options: SessionObservationOptions = {
     attention,
     ...(childStops === undefined ? {} : { childStops }),
     escalations,
@@ -233,11 +237,13 @@ const fixture = (childStops?: {
       failedMilliseconds: 20,
       stalledMilliseconds: 40,
     },
-  });
+  };
+  const observer = new SessionObserver(options);
   return {
     attention,
     escalations,
     observer,
+    options,
     persistence,
     setNow(value: number) {
       now = value;
@@ -475,8 +481,8 @@ describe("SessionObserver operator actions", () => {
       );
     };
 
-    await test.observer.interrupt(target, "interrupt-one");
-    await test.observer.interrupt(target, "interrupt-one");
+    await interruptSession(test.options, target, "interrupt-one", () => "id");
+    await interruptSession(test.options, target, "interrupt-one", () => "id");
 
     expect(
       test.t3.commands.filter(({ type }) => type === "thread.turn.interrupt"),
@@ -526,22 +532,22 @@ describe("SessionObserver operator actions", () => {
       );
     };
 
-    await test.observer.stop({
+    await stopSession(test.options, {
       ...target,
       approvalDecisions: { "approval-one": "reject" },
       operationId: "stop-one",
       userInputAnswers: { "question-one": { quantity: "Large" } },
-    });
+    }, () => "id");
 
     expect(test.t3.commands.at(-1)?.type).toBe("thread.session.stop");
 
     test.t3.shell.threads[0]!.hasPendingUserInput = true;
-    await test.observer.stop({
+    await stopSession(test.options, {
       ...target,
       approvalDecisions: { "approval-one": "reject" },
       operationId: "stop-one",
       userInputAnswers: { "question-one": { quantity: "Large" } },
-    });
+    }, () => "id");
     expect(test.t3.userInputAnswers).toHaveLength(1);
     expect(
       test.t3.commands.filter(({ type }) => type === "thread.session.stop"),
@@ -569,11 +575,11 @@ describe("SessionObserver operator actions", () => {
     };
 
     await expect(
-      test.observer.stop({
+      stopSession(test.options, {
         ...target,
         operationId: "stop-one",
         userInputAnswers: { "question-one": {} },
-      }),
+      }, () => "id"),
     ).rejects.toThrow("Explicit disposition");
     expect(test.t3.commands).toHaveLength(0);
   });
@@ -592,7 +598,7 @@ describe("SessionObserver operator actions", () => {
     ];
 
     await expect(
-      test.observer.stop({ ...target, operationId: "stop-one" }),
+      stopSession(test.options, { ...target, operationId: "stop-one" }, () => "id"),
     ).rejects.toThrow("pending escalation");
     expect(test.t3.commands).toHaveLength(0);
   });

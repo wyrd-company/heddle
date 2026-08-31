@@ -13,10 +13,6 @@ import {
   type RequestAttentionKind,
 } from "./session-observation-attention.js";
 import {
-  interruptSession,
-  stopSession,
-} from "./session-observation-effects.js";
-import {
   eventsForSession,
   sessionObservationEventTypes,
 } from "./session-observation-events.js";
@@ -27,7 +23,6 @@ import type {
   SessionObservationOptions,
   SessionObservationResult,
   SessionObservationTarget,
-  StopSessionInput,
 } from "./session-observation-types.js";
 import type { T3ShellThread } from "./t3-control-plane-client.js";
 import {
@@ -135,17 +130,6 @@ export class SessionObserver {
       requestId,
       answers,
     );
-  }
-
-  async interrupt(
-    target: SessionObservationTarget,
-    operationId: string,
-  ): Promise<void> {
-    await interruptSession(this.options, target, operationId, this.#nextId);
-  }
-
-  async stop(input: StopSessionInput): Promise<void> {
-    await stopSession(this.options, input, this.#nextId);
   }
 
   #record(instanceId: string): InstanceRecord {

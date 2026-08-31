@@ -93,7 +93,6 @@ export {
   type SessionObservationT3Client,
   type SessionObservationTarget,
   type SessionObservationThresholds,
-  type StopSessionInput,
 } from "./session-observation.js";
 export {
   T3ControlPlaneClient,
