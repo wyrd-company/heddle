@@ -388,6 +388,8 @@ statuses:
   - name: backlog
   - name: todo
   - name: in-progress
+  - name: review
+  - name: retrospective
   - name: uat
   - name: done
 priorities:

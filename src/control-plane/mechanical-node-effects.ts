@@ -41,18 +41,23 @@ export const mechanicalNodeUses = [
 const reviewSnapshotOutputKey = "_outputs.review-snapshot";
 
 export interface MechanicalBoardMirror {
-  mirrorChildStatus(taskId: number, status: string): Promise<void>;
+  mirrorTaskStatus(taskId: number, status: string): Promise<void>;
 }
+
+export interface MechanicalBoardStatuses {
+  completed: string;
+  inProgress: string;
+  merged: string;
+  review: string;
+}
+
+export type MechanicalBoardStatusSource =
+  MechanicalBoardStatuses | (() => Promise<MechanicalBoardStatuses>);
 
 export interface MechanicalNodeEffectOptions {
   board?: MechanicalBoardMirror;
   command?: CommandRunner;
-  statuses?: {
-    completed: string;
-    inProgress: string;
-    merged: string;
-    review: string;
-  };
+  statuses?: MechanicalBoardStatusSource;
 }
 
 const requireChange = async (
@@ -97,13 +102,15 @@ const requireSnapshotOutput = async (
 const mirror = async (
   options: MechanicalNodeEffectOptions,
   change: MechanicalChangeContext,
-  status: string | undefined,
+  status: (statuses: MechanicalBoardStatuses) => string,
 ): Promise<void> => {
-  if (options.board === undefined || status === undefined) return;
-  if (change.taskId === undefined) {
-    throw new Error("Mechanical change context is missing taskId");
-  }
-  await options.board.mirrorChildStatus(change.taskId, status);
+  if (options.board === undefined || options.statuses === undefined) return;
+  if (change.taskId === undefined) return;
+  const statuses =
+    typeof options.statuses === "function"
+      ? await options.statuses()
+      : options.statuses;
+  await options.board.mirrorTaskStatus(change.taskId, status(statuses));
 };
 
 export const createMechanicalNodeEffects = (
@@ -129,13 +136,13 @@ export const createMechanicalNodeEffects = (
         },
         git,
       );
-      await mirror(options, change, options.statuses?.inProgress);
+      await mirror(options, change, ({ inProgress }) => inProgress);
       return prepared;
     },
     "review-snapshot": async (input) => {
       const change = await requireChange(input);
       const snapshot = await ensureReviewSnapshot(change, command);
-      await mirror(options, change, options.statuses?.review);
+      await mirror(options, change, ({ review }) => review);
       return snapshot;
     },
     merge: async (input) => {
@@ -147,7 +154,7 @@ export const createMechanicalNodeEffects = (
         command,
       );
       if (result.merged || result.alreadyMerged) {
-        await mirror(options, change, options.statuses?.merged);
+        await mirror(options, change, ({ merged }) => merged);
       }
       return result;
     },
@@ -159,7 +166,7 @@ export const createMechanicalNodeEffects = (
         snapshot.snapshotId,
         command,
       );
-      await mirror(options, change, options.statuses?.completed);
+      await mirror(options, change, ({ completed }) => completed);
       return result;
     },
   };

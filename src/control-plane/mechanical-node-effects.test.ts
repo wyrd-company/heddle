@@ -963,7 +963,7 @@ describe("delivery mechanical nodes", () => {
     const fixture = await makeLifecycle(
       {
         board: {
-          mirrorChildStatus: async (taskId, status) => {
+          mirrorTaskStatus: async (taskId, status) => {
             mirrored.push({ status, taskId });
           },
         },

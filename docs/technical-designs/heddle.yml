@@ -105,7 +105,10 @@ proposed-design:
 
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else
-    moves those cards.
+    moves those cards. The board configuration is the authority for
+    the standard delivery columns `in-progress`, `review`,
+    `retrospective`, and `done`; production reads that declaration
+    before every mechanical status mirror.
     Agents create follow-up tasks and findings through MCP tools;
     Heddle applies the writes, so new child tasks are visible to the
     reconciler the moment they exist. The reconciler also enforces

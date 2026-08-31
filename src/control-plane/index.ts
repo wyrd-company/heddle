@@ -73,6 +73,8 @@ export {
   type CleanupMergedChangeResult,
   type CommandRunner,
   type MechanicalBoardMirror,
+  type MechanicalBoardStatuses,
+  type MechanicalBoardStatusSource,
   type MechanicalChangeContext,
   type MechanicalNodeEffectOptions,
   type MergeSnapshotResult,

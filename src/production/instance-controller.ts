@@ -13,6 +13,7 @@ import {
   HandoffRenderError,
   HandoffTemplateError,
   mechanicalChangeContextKey,
+  type MechanicalBoardStatuses,
   type SessionT3Client,
   type SessionTemplateAuthority,
   type SystemPromptResolver,
@@ -63,6 +64,14 @@ const stableUuid = (seed: string): string => {
 const deferral = (value: JsonValue | undefined): PacingDeferral | undefined =>
   value as PacingDeferral | undefined;
 
+const defaultMechanicalBoardStatuses =
+  async (): Promise<MechanicalBoardStatuses> => ({
+    completed: "done",
+    inProgress: "in-progress",
+    merged: "retrospective",
+    review: "review",
+  });
+
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(
     private readonly configuration: ProductionConfiguration,
@@ -74,6 +83,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly t3: SessionT3Client,
     private readonly resolveSystemPrompt: SystemPromptResolver,
     private readonly templateAuthority: SessionTemplateAuthority,
+    private readonly boardStatuses: () => Promise<MechanicalBoardStatuses> = defaultMechanicalBoardStatuses,
+    private readonly mirrorBoardStatus: (
+      taskId: number,
+      status: string,
+    ) => Promise<void> = async () => undefined,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -167,7 +181,15 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       });
       return;
     }
-    await this.#activate(input.task, input.instanceId, stageId, starting);
+    await this.#activate(
+      input.task,
+      input.instanceId,
+      stageId,
+      starting,
+      existing === undefined
+        ? (await this.boardStatuses()).inProgress
+        : starting.boardStatus,
+    );
   }
 
   #mechanicalChange(
@@ -298,18 +320,35 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     if (stageId === undefined) {
       this.persistence.writeReconcilerRuntime({
         ...runtime,
-        boardStatus: snapshot.status === "completed" ? "done" : "in-progress",
+        boardStatus:
+          snapshot.status === "completed"
+            ? (await this.boardStatuses()).completed
+            : runtime.boardStatus,
         state: snapshot.status === "completed" ? "done" : "running",
       });
       return;
     }
-    if (runtime.stageId === stageId && runtime.state === "waiting") return;
+    const sameStage = runtime.stageId === stageId;
+    if (sameStage && runtime.state === "waiting") return;
+    const restoreInitialBoardStatus =
+      runtime.state === "starting" && task.status === "todo";
     const starting: ReconcilerRuntimeRecord = {
       ...runtime,
+      boardStatus: sameStage ? runtime.boardStatus : task.status,
       state: "starting",
     };
     this.persistence.writeReconcilerRuntime(starting);
-    await this.#activate(task, runtime.instanceId, stageId, starting);
+    const boardStatus = restoreInitialBoardStatus
+      ? (await this.boardStatuses()).inProgress
+      : starting.boardStatus;
+    await this.#activate(
+      task,
+      runtime.instanceId,
+      stageId,
+      starting,
+      boardStatus,
+      restoreInitialBoardStatus,
+    );
   }
 
   async #raiseSynchronizationError(
@@ -335,6 +374,8 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     instanceId: string,
     stageId: string,
     starting: ReconcilerRuntimeRecord,
+    boardStatus: string = starting.boardStatus,
+    mirrorBoardStatus: boolean = false,
   ): Promise<void> {
     const retryingIntent =
       starting.state === "starting" &&
@@ -471,6 +512,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         },
       );
     } catch (error) {
+      await this.mirrorBoardStatus(task.id, starting.boardStatus).catch(
+        () => undefined,
+      );
       if (
         !(error instanceof HandoffRenderError) &&
         !(error instanceof HandoffTemplateError)
@@ -492,12 +536,15 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     }
     this.persistence.writeReconcilerRuntime({
       ...starting,
-      boardStatus: "in-progress",
+      boardStatus,
       sessionKey,
       stageEnteredAt: this.now(),
       stageId,
       state: "waiting",
       threadId,
     });
+    if (mirrorBoardStatus) {
+      await this.mirrorBoardStatus(task.id, boardStatus);
+    }
   }
 }

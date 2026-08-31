@@ -18,6 +18,7 @@ import {
   SessionObserver,
   steerStageSession,
   T3ControlPlaneClient,
+  type MechanicalBoardStatuses,
   type SessionObservationT3Client,
   type SessionTemplateAuthority,
   type SessionT3Client,
@@ -105,6 +106,26 @@ export type ProductionComposition = {
 
 const activeWorkspaces = new Set<string>();
 
+const mechanicalBoardStatuses = async (
+  board: KanbanBoardAdapter,
+): Promise<MechanicalBoardStatuses> => {
+  const configured = new Set(await board.readBoardStatuses());
+  const requireStatus = (status: string): string => {
+    if (!configured.has(status)) {
+      throw new Error(
+        `Board configuration is missing required mechanical status '${status}'`,
+      );
+    }
+    return status;
+  };
+  return {
+    completed: requireStatus("done"),
+    inProgress: requireStatus("in-progress"),
+    merged: requireStatus("retrospective"),
+    review: requireStatus("review"),
+  };
+};
+
 export const createProductionComposition = (
   options: ProductionCompositionOptions,
 ): ProductionComposition => {
@@ -117,6 +138,7 @@ export const createProductionComposition = (
   let persistence: SqlitePersistence | undefined;
   try {
     const board = new KanbanBoardAdapter(configuration.boardDirectory);
+    const boardStatuses = () => mechanicalBoardStatuses(board);
     persistence = new SqlitePersistence({
       stateDirectory: configuration.stateDirectory,
     });
@@ -144,7 +166,7 @@ export const createProductionComposition = (
       options.afterPushoverTransportSuccess,
     );
     const effects: Record<string, LifecycleEffect> =
-      createMechanicalNodeEffects({ board });
+      createMechanicalNodeEffects({ board, statuses: boardStatuses });
     const routing = new ProductRoutingCatalog(configuration);
     const lifecycle = new ProductionLifecycleRouter({
       effects,
@@ -171,6 +193,8 @@ export const createProductionComposition = (
       t3,
       resolveSystemPrompt,
       templateAuthority,
+      boardStatuses,
+      (taskId, status) => board.mirrorTaskStatus(taskId, status),
     );
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(
       persistence,
@@ -304,6 +328,7 @@ export const createProductionComposition = (
         const before = await board.readBoard();
         await projects.reconcile(before);
         routing.update(before);
+        await instances.synchronize(before);
         await reconciler.reconcile();
         const after = await board.readBoard();
         await projects.reconcile(after);
