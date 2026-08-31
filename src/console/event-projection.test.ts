@@ -131,13 +131,35 @@ describe("public console event projection", () => {
   });
 
   it.each([
+    [
+      "changed handoff format",
+      renderedDocument.replace(
+        'format: "heddle.stage-handoff"',
+        'format: "fixture.changed-handoff"',
+      ),
+    ],
+    [
+      "unsupported handoff version",
+      renderedDocument.replace("version: 1", "version: 2"),
+    ],
     ["changed identity", renderedDocument.replace("taskId: 41", "taskId: 42")],
+    [
+      "unrecognized front-matter field",
+      renderedDocument.replace(
+        `correlationToken: "${token}"`,
+        `correlationToken: "${token}"\nfuturePrivateField: "fixture"`,
+      ),
+    ],
     [
       "duplicate token field",
       renderedDocument.replace(
         `correlationToken: "${token}"`,
         `correlationToken: "${token}"\ncorrelationToken: "second"`,
       ),
+    ],
+    [
+      "whitespace in the token",
+      renderedDocument.replace(token, `${token} suffix`),
     ],
     ["token copied into the body", `${renderedDocument}\n${token}`],
   ])(
