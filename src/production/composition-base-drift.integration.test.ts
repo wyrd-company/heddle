@@ -8,6 +8,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { deliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -58,105 +59,31 @@ describe("production concurrent review landing", () => {
       "hash-object",
       "handoff-templates/remediation.md",
     );
+    const blueprint = deliveryBlueprintFixture("trivial");
+    for (const node of blueprint.nodes) {
+      if (node.uses !== "wait") continue;
+      node.tools = ["advance"];
+      node["todo-template"] = "sample-stage";
+      node["handoff-template"] =
+        node.handoff === "remediation"
+          ? {
+              blobHash: remediationHash,
+              path: "handoff-templates/remediation.md",
+            }
+          : {
+              blobHash: standardHash,
+              path: "handoff-templates/standard.md",
+            };
+    }
     await writeFile(
       join(fixture.blueprintsRepositoryRoot, "blueprints", "concurrent.json"),
       JSON.stringify({
         $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+        ...blueprint,
         relationships: {
           implements: "heddle",
           uses: ["remediation", "sample-stage", "standard"],
         },
-        edges: [
-          { source: "prepare-worktree", target: "implement" },
-          {
-            condition: "result.output.dispositions.complete",
-            description: "Complete the generic change",
-            disposition: "complete",
-            source: "implement",
-            target: "review-snapshot",
-          },
-          { source: "review-snapshot", target: "review" },
-          {
-            condition: "result.output.dispositions.approve",
-            description: "Approve the reviewed change",
-            disposition: "approve",
-            source: "review",
-            target: "merge",
-          },
-          {
-            condition: "result.output.dispositions.reject",
-            description: "Return the reviewed change for remediation",
-            disposition: "reject",
-            source: "review",
-            target: "remediate",
-          },
-          {
-            condition: "result.output.dispositions.complete",
-            description: "Complete remediation",
-            disposition: "complete",
-            source: "remediate",
-            target: "review-snapshot",
-          },
-          {
-            condition: "result.output.dispositions.merged",
-            description: "Finish after exact-head integration",
-            disposition: "merged",
-            source: "merge",
-            target: "finalize",
-          },
-          {
-            condition: "result.output.dispositions.remediate",
-            description: "Return base drift for remediation",
-            disposition: "remediate",
-            source: "merge",
-            target: "remediate",
-          },
-        ],
-        nodes: [
-          { id: "prepare-worktree", uses: "prepare-worktree" },
-          {
-            handoff: "standard",
-            "handoff-template": {
-              blobHash: standardHash,
-              path: "handoff-templates/standard.md",
-            },
-            id: "implement",
-            tools: ["advance"],
-            "todo-template": "sample-stage",
-            uses: "wait",
-          },
-          {
-            config: { joinStrategy: "any" },
-            id: "review-snapshot",
-            uses: "review-snapshot",
-          },
-          {
-            config: { joinStrategy: "any" },
-            handoff: "standard",
-            "handoff-template": {
-              blobHash: standardHash,
-              path: "handoff-templates/standard.md",
-            },
-            id: "review",
-            tools: ["advance"],
-            "todo-template": "sample-stage",
-            uses: "wait",
-          },
-          {
-            config: { joinStrategy: "any" },
-            handoff: "remediation",
-            "handoff-template": {
-              blobHash: remediationHash,
-              path: "handoff-templates/remediation.md",
-            },
-            id: "remediate",
-            tools: ["advance"],
-            "todo-template": "sample-stage",
-            uses: "wait",
-          },
-          { config: { joinStrategy: "any" }, id: "merge", uses: "merge" },
-          { id: "finalize", uses: "finalize" },
-        ],
       }),
     );
     await git(
