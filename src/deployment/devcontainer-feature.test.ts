@@ -234,4 +234,24 @@ describe("Heddle devcontainer feature", () => {
       'git -C "${config_directory}/blueprints" push --set-upstream origin main',
     );
   });
+
+  it("creates the nested artifact directory inside the generated blueprint repository", async () => {
+    const qualification = await readFile(
+      "scripts/deployment/qualify-feature.sh",
+      "utf8",
+    );
+    const clone = qualification.indexOf(
+      'git clone "${config_directory}/blueprints-origin.git" "${config_directory}/blueprints"',
+    );
+    const artifactDirectory = qualification.indexOf(
+      'install -d -m 0755 "${config_directory}/blueprints/blueprints"',
+    );
+    const packageGate = qualification.indexOf(
+      'task -d "${repository}" deployment:package',
+    );
+
+    expect(clone).toBeGreaterThan(-1);
+    expect(artifactDirectory).toBeGreaterThan(clone);
+    expect(artifactDirectory).toBeLessThan(packageGate);
+  });
 });

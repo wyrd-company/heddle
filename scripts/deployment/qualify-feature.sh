@@ -57,6 +57,7 @@ git clone "${config_directory}/blueprints-origin.git" "${config_directory}/bluep
 git -C "${config_directory}/blueprints" remote set-url origin ../blueprints-origin.git
 git -C "${config_directory}/blueprints" config user.name "Qualification Fixture"
 git -C "${config_directory}/blueprints" config user.email "fixture@example.invalid"
+install -d -m 0755 "${config_directory}/blueprints/blueprints"
 printf '# Qualification blueprint repository\n' \
     >"${config_directory}/blueprints/README.md"
 git -C "${config_directory}/blueprints" add -- README.md
