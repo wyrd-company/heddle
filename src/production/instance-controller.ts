@@ -38,6 +38,7 @@ import type {
   ReconcilerInstanceController,
   StartReconcilerInstanceInput,
 } from "../reconciler/index.js";
+import { isTodoState } from "../todo/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
 import { heddleSessionTitle } from "./session-title.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
@@ -88,7 +89,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   ) {}
 
   async listInstances(): Promise<ReconcilerInstance[]> {
-    return this.persistence.listReconcilerRuntime().map((runtime) => ({
+    const runtimes = this.persistence.listReconcilerRuntime();
+    const runtimeByInstanceId = new Map(
+      runtimes.map((runtime) => [runtime.instanceId, runtime]),
+    );
+    const topLevel = runtimes.map((runtime) => ({
       boardStatus: runtime.boardStatus,
       ...(runtime.deferral === undefined
         ? {}
@@ -103,6 +108,26 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       state: runtime.state,
       taskId: runtime.taskId,
     }));
+    const delegated = this.persistence.listInstances().flatMap((instance) => {
+      const runtime = runtimeByInstanceId.get(instance.instanceId);
+      if (runtime === undefined || !isTodoState(instance.state.todoState)) {
+        return [];
+      }
+      return instance.state.todoState.lists.flatMap((list) =>
+        (list.assignments ?? [])
+          .filter(({ status }) => status === "active")
+          .map((assignment) => ({
+            boardStatus: runtime.boardStatus,
+            depth: assignment.depth,
+            instanceId: assignment.sessionKey,
+            parentSessionId: assignment.parentSessionKey,
+            provider: assignment.provider,
+            state: "waiting" as const,
+            taskId: runtime.taskId,
+          })),
+      );
+    });
+    return [...topLevel, ...delegated];
   }
 
   async defer(input: DeferReconcilerInstanceInput): Promise<void> {

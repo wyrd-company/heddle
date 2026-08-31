@@ -53,6 +53,7 @@ export class Reconciler {
       orderedTasks,
       tasksById,
       instancesByTask,
+      instances,
       actions,
     );
     await this.raiseStaleAttention(instances, actions);
@@ -65,6 +66,7 @@ export class Reconciler {
   ): Map<number, ReconcilerInstance> {
     const indexed = new Map<number, ReconcilerInstance>();
     for (const instance of instances) {
+      if (instance.parentSessionId !== undefined) continue;
       if (indexed.has(instance.taskId)) {
         throw new Error(
           `More than one instance exists for task ${instance.taskId}`,
@@ -196,10 +198,14 @@ export class Reconciler {
     tasks: readonly BoardTask[],
     tasksById: ReadonlyMap<number, BoardTask>,
     instances: ReadonlyMap<number, ReconcilerInstance>,
+    instanceRecords: readonly ReconcilerInstance[],
     actions: ReconciliationAction[],
   ): Promise<void> {
-    const activeSessions: PacingSession[] = [...instances.values()]
-      .filter(({ state }) => state === "running" || state === "waiting")
+    const activeSessions: PacingSession[] = instanceRecords
+      .filter(
+        ({ state }) =>
+          state === "running" || state === "starting" || state === "waiting",
+      )
       .map((instance) => ({
         depth: instance.depth ?? 0,
         sessionId: instance.instanceId,

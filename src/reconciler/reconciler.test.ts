@@ -11,11 +11,12 @@ import { fixture, task } from "./reconciler.test-support.js";
 const pacing = (
   usage: { used: number; windowStartedAt: number },
   now: () => number = () => 2_000,
+  maxConcurrentSessions: number = 1,
 ) => ({
   evaluator: new DispatchPacingGate(
     {
       defaultProvider: "provider-a",
-      maxConcurrentSessions: 1,
+      maxConcurrentSessions,
       providerBudgets: { "provider-a": { usageLimit: 80 } },
       subagents: { maxDepth: 2, maxFanOut: 2 },
       usageWindowHours: 5,
@@ -413,6 +414,47 @@ describe("Reconciler", () => {
     });
     expect(dispatched).toContainEqual(
       expect.objectContaining({ kind: "instance-start", taskId: ready.id }),
+    );
+  });
+
+  it("counts starting parent and delegated child sessions against WIP", async () => {
+    const starting = task(82, "in-progress", { lifecycle: "inventory-count" });
+    const ready = task(83, "todo", { lifecycle: "label-replacement" });
+    const subject = fixture([starting, ready], {
+      pacing: pacing({ used: 0, windowStartedAt: 1_000 }, () => 2_000, 2),
+    });
+    subject.instances.instances.push(
+      {
+        boardStatus: "in-progress",
+        depth: 0,
+        instanceId: "task-82",
+        provider: "provider-a",
+        state: "starting",
+        taskId: starting.id,
+      },
+      {
+        boardStatus: "in-progress",
+        depth: 1,
+        instanceId: "delegated-82",
+        parentSessionId: "task-82",
+        provider: "provider-a",
+        state: "waiting",
+        taskId: starting.id,
+      },
+    );
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts).toEqual([]);
+    expect(subject.instances.instances).toContainEqual(
+      expect.objectContaining({
+        deferral: {
+          activeSessions: 2,
+          limit: 2,
+          reason: "work-in-progress-limit",
+        },
+        taskId: ready.id,
+      }),
     );
   });
 
