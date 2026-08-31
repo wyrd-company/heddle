@@ -36,8 +36,10 @@ proposed-design:
     declare `joinStrategy: any` so loops such as review → remediate →
     review traverse repeatedly. After every resume, Heddle asserts that
     the instance landed in an expected state and raises attention when
-    it did not. Node execution is at-least-once, so every node effect
-    is idempotent.
+    it did not. The lifecycle attention event preserves the Flowcraft error and
+    its cause chain as JSON data, and the production bridge projects it into one
+    durable task attention entry per transition. Node execution is at-least-once,
+    so every node effect is idempotent.
 
     Each task names its lifecycle: a `lifecycle` property on the
     task — front matter where the board stores it, a `lifecycle:`
@@ -123,7 +125,13 @@ proposed-design:
     durable attention queue, Pushover notifier, pacing evaluator, and stage
     thresholds. A serialized scheduler coalesces ticks while one pass runs;
     start performs an immediate pass and stop cancels its timer and drains the
-    current pass within a configured bound. Active delegated sessions join the
+    current pass within a configured bound. Task, epic-project, instance, and
+    session operations are isolated inside the pass. A failure raises one stable,
+    task-scoped attention entry and does not prevent later work in the pass. This
+    includes an unrouted epic, a live instance whose board task disappeared,
+    lifecycle activation, and session bootstrap or observation. A pass-wide
+    failure raises global durable attention and is written to the service error
+    log by the deployed entry point. Active delegated sessions join the
     same persisted session inventory, shell-derived pacing view, and observation
     pass. The production MCP handler supplies the accepted subagent coordinator
     with the same SQLite store, global correlation-token catalog, stage

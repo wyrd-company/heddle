@@ -421,4 +421,37 @@ describe("Reconciler", () => {
     ]);
     expect(subject.instances.deferrals).toHaveLength(1);
   });
+
+  it("isolates a task start failure and dispatches later ready work", async () => {
+    const failing = task(110, "todo", { lifecycle: "surface-cleaning" });
+    const later = task(111, "todo", { lifecycle: "label-replacement" });
+    const subject = fixture([failing, later], {
+      failingStartTaskId: failing.id,
+    });
+
+    const actions = await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      later.id,
+    ]);
+    expect([...subject.attention.entries.values()]).toContainEqual(
+      expect.objectContaining({
+        attentionId: `production:task-reconciliation-failed:task:${failing.id}`,
+        code: "task-reconciliation-failed",
+        error: expect.objectContaining({
+          message: `Injected start failure for task ${failing.id}`,
+        }),
+        kind: "production-error",
+        taskId: failing.id,
+      }),
+    );
+    expect(actions.map(({ kind }) => kind)).toEqual([
+      "attention-raised",
+      "instance-start",
+    ]);
+
+    await subject.reconciler.reconcile();
+
+    expect(subject.attention.entries).toHaveLength(1);
+  });
 });

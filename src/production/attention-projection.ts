@@ -221,5 +221,39 @@ export const projectProductionAttention = (
       taskId,
     });
   }
+  if (kind === "production-error") {
+    requiredIdentifier(payload, "code", attentionId);
+    const taskIdValue = payload["taskId"];
+    const instanceIdValue = payload["instanceId"];
+    const taskId =
+      taskIdValue === null ? undefined : validTaskId(taskIdValue, attentionId);
+    if (
+      instanceIdValue !== null &&
+      instanceIdValue !== undefined &&
+      (typeof instanceIdValue !== "string" || instanceIdValue.trim() === "")
+    ) {
+      throw new Error(`Attention '${attentionId}' has no valid instanceId`);
+    }
+    if (
+      typeof instanceIdValue === "string" &&
+      (taskId === undefined ||
+        taskForInstance(instanceIdValue, runtimes, attentionId) !== taskId)
+    ) {
+      throw new Error(
+        `Attention '${attentionId}' disagrees with its production task`,
+      );
+    }
+    return createConsoleAttention({
+      actions: [],
+      attentionId,
+      ...(typeof instanceIdValue === "string"
+        ? { instanceId: instanceIdValue }
+        : {}),
+      kind,
+      message: requiredString(payload, "message", attentionId),
+      scope: taskId === undefined ? "all" : `task:${taskId}`,
+      ...(taskId === undefined ? {} : { taskId }),
+    });
+  }
   throw new Error(`Attention '${attentionId}' has an unknown kind`);
 };

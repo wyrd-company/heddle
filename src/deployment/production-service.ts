@@ -3,7 +3,10 @@
 //   implements: heddle
 // ---
 
+import process from "node:process";
+
 import { T3ControlPlaneClient } from "../control-plane/index.js";
+import { describeError } from "../error-details.js";
 import type { ProviderUsageSource } from "../pacing/index.js";
 import {
   createProductionComposition,
@@ -69,6 +72,15 @@ export const startConfiguredProductionService = async (
     { host: loaded.server.host, port: loaded.server.port },
     {
       productionFactory: () =>
-        createConfiguredProductionComposition(loaded, dependencies),
+        createConfiguredProductionComposition(loaded, {
+          ...dependencies,
+          onSchedulerError:
+            dependencies.onSchedulerError ??
+            ((error) => {
+              process.stderr.write(
+                `Heddle reconciliation pass failed: ${describeError(error)}\n`,
+              );
+            }),
+        }),
     },
   );

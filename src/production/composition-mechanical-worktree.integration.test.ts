@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { stat } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -165,6 +165,73 @@ describe("production mechanical worktree preparation", () => {
         ),
       ),
     ).rejects.toMatchObject({ code: "ENOENT" });
+    await composition.close();
+  });
+
+  it("bridges a mechanical failure through the scheduler once across cadence passes", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    await useMechanicalLifecycle(fixture);
+    fixture.configuration.cadenceMilliseconds = 750;
+    await writeFile(
+      fixture.configuration.session.worktreesRoot!,
+      "not a directory",
+    );
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+
+    await composition.start();
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Additional Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const additionalTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+    await vi.waitFor(
+      () => {
+        expect(
+          composition.persistence
+            .listReconcilerRuntime()
+            .some(({ taskId }) => taskId === additionalTaskId),
+        ).toBe(true);
+      },
+      { timeout: 3_000 },
+    );
+
+    expect(
+      composition.attention
+        .list()
+        .filter(({ taskId }) => taskId === fixture.taskId),
+    ).toEqual([
+      expect.objectContaining({
+        attentionId: expect.stringContaining(
+          `production:lifecycle-execution-failed:task:${fixture.taskId}:task-${fixture.taskId}`,
+        ),
+        instanceId: `task-${fixture.taskId}`,
+        kind: "production-error",
+        message: expect.stringMatching(
+          /prepare-worktree|file already exists|EEXIST/i,
+        ),
+        taskId: fixture.taskId,
+      }),
+    ]);
     await composition.close();
   });
 });

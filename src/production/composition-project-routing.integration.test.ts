@@ -64,4 +64,45 @@ describe("production project routing", () => {
     ).resolves.toBeDefined();
     await composition.close();
   });
+
+  it("turns an unrouted epic into attention without freezing the scheduler", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    fixture.configuration.products.push({
+      name: "Secondary product",
+      repos: [
+        {
+          name: "secondary-repository",
+          repositoryRoot: fixture.blueprintsRepositoryRoot,
+        },
+      ],
+    });
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining(
+          `Task ${fixture.epicId} does not identify one configured product`,
+        ),
+        scope: `task:${fixture.epicId}`,
+        taskId: fixture.epicId,
+      }),
+    );
+    expect(
+      t3.commands.filter(({ type }) => type === "project.create"),
+    ).toHaveLength(0);
+    await composition.close();
+  });
 });

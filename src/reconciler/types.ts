@@ -9,6 +9,7 @@ import type {
   DispatchPacingEvaluator,
   PacingDeferral,
 } from "../pacing/index.js";
+import type { ErrorDetail } from "../error-details.js";
 
 export interface ReconcilerBoard {
   mirrorTaskStatus(taskId: number, status: string): Promise<void>;
@@ -63,8 +64,9 @@ export interface ReconcilerAttention {
   artifactId?: string;
   attentionId: string;
   code: string;
+  error?: ErrorDetail;
   instanceId?: string;
-  kind: "lifecycle-resolution" | "stale-instance";
+  kind: "lifecycle-resolution" | "production-error" | "stale-instance";
   message: string;
   taskId: number;
 }

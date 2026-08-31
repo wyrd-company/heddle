@@ -4,6 +4,8 @@
 // ---
 
 import type { BoardTask } from "../board-adapter/index.js";
+import { AttentionVisibleError } from "../attention-visible-error.js";
+import { describeError, errorDetail } from "../error-details.js";
 import type { PacingDeferral, PacingSession } from "../pacing/index.js";
 import type {
   ReconcilerAttention,
@@ -85,7 +87,18 @@ export class Reconciler {
       ) {
         continue;
       }
-      await this.transitionTask(task, instance.boardStatus, actions);
+      try {
+        await this.transitionTask(task, instance.boardStatus, actions);
+      } catch (error) {
+        await this.raiseTaskError(
+          task.id,
+          "task-status-mirror-failed",
+          `Task ${task.id} status mirroring failed`,
+          error,
+          actions,
+          instance.instanceId,
+        );
+      }
     }
   }
 
@@ -95,28 +108,40 @@ export class Reconciler {
     actions: ReconciliationAction[],
   ): Promise<void> {
     for (const epic of tasks.filter(isEpic)) {
-      const children = tasks.filter(({ parent }) => parent === epic.id);
-      const deliveryChildren = children.filter((child) => !isUat(child));
-      if (
-        epic.status === "in-progress" &&
-        deliveryChildren.length > 0 &&
-        deliveryChildren.every(({ id }) => tasksById.get(id)?.status === "done")
-      ) {
-        await this.transitionEpic(epic, "uat", actions);
-      }
+      try {
+        const children = tasks.filter(({ parent }) => parent === epic.id);
+        const deliveryChildren = children.filter((child) => !isUat(child));
+        if (
+          epic.status === "in-progress" &&
+          deliveryChildren.length > 0 &&
+          deliveryChildren.every(
+            ({ id }) => tasksById.get(id)?.status === "done",
+          )
+        ) {
+          await this.transitionEpic(epic, "uat", actions);
+        }
 
-      const acceptanceChildren = children.filter(isUat);
-      if (
-        epic.status === "uat" &&
-        deliveryChildren.every(
-          ({ id }) => tasksById.get(id)?.status === "done",
-        ) &&
-        acceptanceChildren.length > 0 &&
-        acceptanceChildren.every(
-          ({ id }) => tasksById.get(id)?.status === "done",
-        )
-      ) {
-        await this.transitionEpic(epic, "done", actions);
+        const acceptanceChildren = children.filter(isUat);
+        if (
+          epic.status === "uat" &&
+          deliveryChildren.every(
+            ({ id }) => tasksById.get(id)?.status === "done",
+          ) &&
+          acceptanceChildren.length > 0 &&
+          acceptanceChildren.every(
+            ({ id }) => tasksById.get(id)?.status === "done",
+          )
+        ) {
+          await this.transitionEpic(epic, "done", actions);
+        }
+      } catch (error) {
+        await this.raiseTaskError(
+          epic.id,
+          "epic-status-transition-failed",
+          `Epic ${epic.id} status transition failed`,
+          error,
+          actions,
+        );
       }
     }
   }
@@ -134,7 +159,18 @@ export class Reconciler {
         isEpic(epic) &&
         ((epic.status === "in-progress" && !isUat(child)) ||
           (epic.status === "uat" && isUat(child)));
-      if (shouldPromote) await this.transitionTask(child, "todo", actions);
+      if (!shouldPromote) continue;
+      try {
+        await this.transitionTask(child, "todo", actions);
+      } catch (error) {
+        await this.raiseTaskError(
+          child.id,
+          "child-promotion-failed",
+          `Task ${child.id} promotion failed`,
+          error,
+          actions,
+        );
+      }
     }
   }
 
@@ -172,83 +208,97 @@ export class Reconciler {
         continue;
       }
 
-      const resolution = await this.options.lifecycleResolver.resolve(task);
-      if (resolution.kind === "attention-required") {
-        await this.raiseAttention(
-          {
-            ...(resolution.attention.artifactId === undefined
-              ? {}
-              : { artifactId: resolution.attention.artifactId }),
-            attentionId: this.lifecycleAttentionId(task, resolution.attention),
-            code: resolution.attention.code,
-            kind: "lifecycle-resolution",
-            message: resolution.attention.message,
-            taskId: task.id,
-          },
-          actions,
-        );
-        continue;
-      }
-
       const instanceId = instanceIdForTask(task.id);
-      let dispatch: { depth: 0; provider: string } | undefined;
-      if (this.options.pacing !== undefined) {
-        const provider =
-          this.options.pacing.providerFor === undefined
-            ? this.options.pacing.evaluator.defaultProvider
-            : await this.options.pacing.providerFor(task, resolution);
-        const decision = await this.options.pacing.evaluator.evaluate(
-          { kind: "task", provider, sessionId: instanceId },
-          activeSessions,
-        );
-        if (decision.kind === "defer") {
-          if (!sameDeferral(existing?.deferral, decision.deferral)) {
-            await this.options.instances.defer({
-              boardStatus: task.status,
-              deferral: decision.deferral,
-              depth: 0,
-              instanceId,
-              provider,
+      try {
+        const resolution = await this.options.lifecycleResolver.resolve(task);
+        if (resolution.kind === "attention-required") {
+          await this.raiseAttention(
+            {
+              ...(resolution.attention.artifactId === undefined
+                ? {}
+                : { artifactId: resolution.attention.artifactId }),
+              attentionId: this.lifecycleAttentionId(
+                task,
+                resolution.attention,
+              ),
+              code: resolution.attention.code,
+              kind: "lifecycle-resolution",
+              message: resolution.attention.message,
               taskId: task.id,
-            });
-            actions.push({
-              deferral: decision.deferral,
-              instanceId,
-              kind: "dispatch-deferred",
-              provider,
-              taskId: task.id,
-            });
-          }
+            },
+            actions,
+          );
           continue;
         }
-        dispatch = { depth: 0, provider };
-      }
 
-      await this.options.instances.start({
-        blueprintPath: resolution.blueprintPath,
-        ...(dispatch === undefined ? {} : { dispatch }),
-        instanceId,
-        ...(resolution.repositoryName === undefined
-          ? {}
-          : { repositoryName: resolution.repositoryName }),
-        task: { ...task },
-      });
-      if (dispatch !== undefined) {
-        activeSessions.push({
-          depth: dispatch.depth,
-          provider: dispatch.provider,
-          sessionId: instanceId,
+        let dispatch: { depth: 0; provider: string } | undefined;
+        if (this.options.pacing !== undefined) {
+          const provider =
+            this.options.pacing.providerFor === undefined
+              ? this.options.pacing.evaluator.defaultProvider
+              : await this.options.pacing.providerFor(task, resolution);
+          const decision = await this.options.pacing.evaluator.evaluate(
+            { kind: "task", provider, sessionId: instanceId },
+            activeSessions,
+          );
+          if (decision.kind === "defer") {
+            if (!sameDeferral(existing?.deferral, decision.deferral)) {
+              await this.options.instances.defer({
+                boardStatus: task.status,
+                deferral: decision.deferral,
+                depth: 0,
+                instanceId,
+                provider,
+                taskId: task.id,
+              });
+              actions.push({
+                deferral: decision.deferral,
+                instanceId,
+                kind: "dispatch-deferred",
+                provider,
+                taskId: task.id,
+              });
+            }
+            continue;
+          }
+          dispatch = { depth: 0, provider };
+        }
+
+        await this.options.instances.start({
+          blueprintPath: resolution.blueprintPath,
+          ...(dispatch === undefined ? {} : { dispatch }),
+          instanceId,
+          ...(resolution.repositoryName === undefined
+            ? {}
+            : { repositoryName: resolution.repositoryName }),
+          task: { ...task },
         });
+        if (dispatch !== undefined) {
+          activeSessions.push({
+            depth: dispatch.depth,
+            provider: dispatch.provider,
+            sessionId: instanceId,
+          });
+        }
+        actions.push({
+          blueprintPath: resolution.blueprintPath,
+          instanceId,
+          kind: "instance-start",
+          ...(resolution.repositoryName === undefined
+            ? {}
+            : { repositoryName: resolution.repositoryName }),
+          taskId: task.id,
+        });
+      } catch (error) {
+        if (error instanceof AttentionVisibleError) continue;
+        await this.raiseTaskError(
+          task.id,
+          "task-reconciliation-failed",
+          `Task ${task.id} reconciliation failed`,
+          error,
+          actions,
+        );
       }
-      actions.push({
-        blueprintPath: resolution.blueprintPath,
-        instanceId,
-        kind: "instance-start",
-        ...(resolution.repositoryName === undefined
-          ? {}
-          : { repositoryName: resolution.repositoryName }),
-        taskId: task.id,
-      });
     }
   }
 
@@ -292,23 +342,34 @@ export class Reconciler {
       ) {
         continue;
       }
-      await this.raiseAttention(
-        {
-          attentionId: [
-            "instance",
-            instance.instanceId,
-            "stale",
-            instance.stageId,
-            String(instance.stageEnteredAt),
-          ].join(":"),
-          code: "stage-stale",
-          instanceId: instance.instanceId,
-          kind: "stale-instance",
-          message: `Instance ${instance.instanceId} exceeded the ${instance.stageId} stage threshold`,
-          taskId: instance.taskId,
-        },
-        actions,
-      );
+      try {
+        await this.raiseAttention(
+          {
+            attentionId: [
+              "instance",
+              instance.instanceId,
+              "stale",
+              instance.stageId,
+              String(instance.stageEnteredAt),
+            ].join(":"),
+            code: "stage-stale",
+            instanceId: instance.instanceId,
+            kind: "stale-instance",
+            message: `Instance ${instance.instanceId} exceeded the ${instance.stageId} stage threshold`,
+            taskId: instance.taskId,
+          },
+          actions,
+        );
+      } catch (error) {
+        await this.raiseTaskError(
+          instance.taskId,
+          "stale-attention-failed",
+          `Instance ${instance.instanceId} stale-attention evaluation failed`,
+          error,
+          actions,
+          instance.instanceId,
+        );
+      }
     }
   }
 
@@ -332,6 +393,28 @@ export class Reconciler {
     if (await this.options.attention.has(attention.attentionId)) return;
     await this.options.attention.raise(attention);
     actions.push({ attention, kind: "attention-raised" });
+  }
+
+  private async raiseTaskError(
+    taskId: number,
+    code: string,
+    summary: string,
+    error: unknown,
+    actions: ReconciliationAction[],
+    instanceId?: string,
+  ): Promise<void> {
+    await this.raiseAttention(
+      {
+        attentionId: `production:${code}:task:${taskId}${instanceId === undefined ? "" : `:${instanceId}`}`,
+        code,
+        error: errorDetail(error),
+        ...(instanceId === undefined ? {} : { instanceId }),
+        kind: "production-error",
+        message: `${summary}: ${describeError(error)}`,
+        taskId,
+      },
+      actions,
+    );
   }
 
   private async transitionTask(

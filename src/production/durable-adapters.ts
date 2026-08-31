@@ -12,10 +12,12 @@ import type { ReconcilerAttention } from "../reconciler/index.js";
 import type { BlueprintRepositoryAttention } from "./blueprint-repository.js";
 import type { PushoverConfiguration } from "./configuration.js";
 import { projectProductionAttention } from "./attention-projection.js";
+import type { ProductionErrorAttention } from "./error-visibility.js";
 
 export type DurableAttention =
   | BlueprintRepositoryAttention
   | EscalationAttention
+  | ProductionErrorAttention
   | ReconcilerAttention
   | SessionObservationAttention;
 

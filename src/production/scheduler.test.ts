@@ -8,6 +8,25 @@ import { describe, expect, it, vi } from "vitest";
 import { ProductionScheduler } from "./scheduler.js";
 
 describe("production reconciliation scheduler", () => {
+  it("reports a failed startup pass and preserves the original failure", async () => {
+    const failure = new Error("Injected reconciliation failure");
+    const onError = vi.fn(async () => undefined);
+    const scheduler = new ProductionScheduler({
+      cadenceMilliseconds: 60_000,
+      onError,
+      pass: async () => {
+        throw failure;
+      },
+      stopTimeoutMilliseconds: 1_000,
+    });
+
+    await expect(scheduler.start()).rejects.toBe(failure);
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith(failure);
+    await scheduler.stop().catch(() => undefined);
+  });
+
   it("serializes an overlapping tick and drains one later pass", async () => {
     let active = 0;
     let maximumActive = 0;

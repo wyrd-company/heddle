@@ -69,6 +69,8 @@ class FixtureInstances implements ReconcilerInstanceController {
   readonly instances: ReconcilerInstance[] = [];
   readonly starts: StartReconcilerInstanceInput[] = [];
 
+  constructor(private readonly failingStartTaskId?: number) {}
+
   async listInstances(): Promise<ReconcilerInstance[]> {
     return this.instances.map((instance) => ({ ...instance }));
   }
@@ -85,6 +87,9 @@ class FixtureInstances implements ReconcilerInstanceController {
   }
 
   async start(input: StartReconcilerInstanceInput): Promise<void> {
+    if (input.task.id === this.failingStartTaskId) {
+      throw new Error(`Injected start failure for task ${input.task.id}`);
+    }
     this.starts.push(input);
     this.replace({
       boardStatus: input.task.status,
@@ -137,13 +142,14 @@ const lifecycleResolver: ReconcilerLifecycleResolver = {
 export const fixture = (
   tasks: BoardTask[],
   options: {
+    failingStartTaskId?: number;
     now?: () => number;
     pacing?: ReconcilerPacing;
     staleThresholds?: Record<string, number>;
   } = {},
 ) => {
   const board = new FixtureBoard(tasks);
-  const instances = new FixtureInstances();
+  const instances = new FixtureInstances(options.failingStartTaskId);
   const attention = new FixtureAttentionQueue();
   const reconciler = new Reconciler({
     attention,

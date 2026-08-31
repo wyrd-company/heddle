@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { access, copyFile, readFile } from "node:fs/promises";
+import { access, copyFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { cwd } from "node:process";
 
@@ -242,6 +242,140 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("reports a scheduler-owned board failure as durable global attention", async () => {
+    const fixture = await prepare();
+    const onSchedulerError = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      onSchedulerError,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await rm(fixture.configuration.boardDirectory, {
+      force: true,
+      recursive: true,
+    });
+
+    await expect(composition.start()).rejects.toThrow();
+
+    expect(onSchedulerError).toHaveBeenCalledOnce();
+    expect(composition.attention.list()).toEqual([
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining(
+          "Production reconciliation pass failed",
+        ),
+        scope: "all",
+      }),
+    ]);
+    await composition.close().catch(() => undefined);
+  });
+
+  it("keeps scheduler dispatch moving after one task activation fails", async () => {
+    const fixture = await prepare();
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Secondary Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const secondTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+    class FirstTaskFailureT3 extends SyntheticT3 {
+      override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
+        if (
+          command.type === "thread.create" &&
+          command.title === `task-${fixture.taskId} · implement-1`
+        ) {
+          throw new Error("Injected first-task activation failure");
+        }
+        return super.dispatch(command);
+      }
+    }
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new FirstTaskFailureT3(),
+    });
+
+    await composition.start();
+
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === secondTaskId),
+    ).toMatchObject({ state: "waiting" });
+    expect(composition.attention.list()).toEqual([
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining(
+          "Injected first-task activation failure",
+        ),
+        scope: `task:${fixture.taskId}`,
+        taskId: fixture.taskId,
+      }),
+    ]);
+    await composition.close();
+  });
+
+  it("raises attention when a board task with a live instance disappears", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 750;
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "delete",
+        String(fixture.taskId),
+        "--yes",
+      ],
+      { cwd: fixture.root },
+    );
+
+    await vi.waitFor(
+      () => {
+        expect(composition.attention.list()).toHaveLength(1);
+      },
+      { timeout: 3_000 },
+    );
+
+    expect(composition.attention.list()).toEqual([
+      expect.objectContaining({
+        instanceId: `task-${fixture.taskId}`,
+        kind: "production-error",
+        taskId: fixture.taskId,
+      }),
+    ]);
+    await composition.close();
+  });
+
   it("releases a closed provider window on a later serialized pass", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     configuration.pacing.providerBudgets = { codex: { usageLimit: 1 } };
@@ -275,7 +409,7 @@ describe("production composition", () => {
     await composition.close();
   });
 
-  it("persists configured over-threshold attention and ignores under-threshold work", async () => {
+  it("persists configured over-threshold attention", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const composition = createProductionComposition({
       blueprintsRepositoryRoot,
@@ -294,18 +428,14 @@ describe("production composition", () => {
       ...runtime,
       stageEnteredAt: Date.now() - 120_000,
     });
-    composition.persistence.writeReconcilerRuntime({
-      boardStatus: "in-progress",
-      instanceId: "task-998",
-      stageEnteredAt: Date.now(),
-      stageId: "implement",
-      state: "waiting",
-      taskId: 998,
-    });
     await composition.scheduler.trigger();
-    expect(composition.attention.list()).toMatchObject([
-      { instanceId: `task-${taskId}`, kind: "stale-instance", taskId },
-    ]);
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        instanceId: `task-${taskId}`,
+        kind: "stale-instance",
+        taskId,
+      }),
+    );
     await composition.close();
 
     const restarted = createProductionComposition({

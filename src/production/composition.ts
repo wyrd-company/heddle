@@ -58,6 +58,8 @@ import { ProductionAttentionActions } from "./attention-actions.js";
 import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
+import { LifecycleAttentionBridge } from "./lifecycle-attention-bridge.js";
+import { productionErrorAttention } from "./error-visibility.js";
 import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
 import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
@@ -151,6 +153,9 @@ export const createProductionComposition = (
       persistence,
       routing,
       t3,
+      undefined,
+      undefined,
+      attention,
     );
     const instances = new ProductionInstanceController(
       configuration,
@@ -162,6 +167,10 @@ export const createProductionComposition = (
       t3,
       resolveSystemPrompt,
       templateAuthority,
+    );
+    const lifecycleAttentionBridge = new LifecycleAttentionBridge(
+      persistence,
+      attention,
     );
     const escalation = new EscalationCoordinator({
       attention: {
@@ -255,7 +264,21 @@ export const createProductionComposition = (
     });
     const scheduler = new ProductionScheduler({
       cadenceMilliseconds: configuration.cadenceMilliseconds,
-      onError: options.onSchedulerError,
+      onError: async (error) => {
+        const failure = productionErrorAttention({
+          code: "scheduler-pass-failed",
+          error,
+          summary: "Production reconciliation pass failed",
+          varyByError: true,
+        });
+        try {
+          if (!(await attention.has(failure.attentionId))) {
+            await attention.raise(failure);
+          }
+        } finally {
+          await options.onSchedulerError?.(error);
+        }
+      },
       pass: async () => {
         await blueprintRepository.synchronize();
         const before = await board.readBoard();
@@ -267,12 +290,30 @@ export const createProductionComposition = (
         routing.update(after);
         await instances.synchronize(after);
         for (const session of productionSessionTargets(persistence!)) {
-          await observer.observe({
-            instanceId: session.instanceId,
-            sessionKey: session.sessionKey,
-            threadId: session.threadId,
-          });
+          try {
+            await observer.observe({
+              instanceId: session.instanceId,
+              sessionKey: session.sessionKey,
+              threadId: session.threadId,
+            });
+          } catch (error) {
+            const runtime = persistence!
+              .listReconcilerRuntime()
+              .find(({ instanceId }) => instanceId === session.instanceId);
+            if (runtime === undefined) throw error;
+            const failure = productionErrorAttention({
+              code: "session-observation-failed",
+              error,
+              instanceId: session.instanceId,
+              summary: `Session ${session.sessionKey} observation failed`,
+              taskId: runtime.taskId,
+            });
+            if (!(await attention.has(failure.attentionId))) {
+              await attention.raise(failure);
+            }
+          }
         }
+        await lifecycleAttentionBridge.flush();
       },
       stopTimeoutMilliseconds: configuration.stopTimeoutMilliseconds,
     });

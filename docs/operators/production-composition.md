@@ -349,6 +349,25 @@ cadence. Ticks coalesce while a pass is active; passes never overlap. Stop
 cancels the owned timer, refuses new passes, drains the current pass, and fails
 within the configured bound if the pass cannot drain.
 
+Failures attributable to one task, epic project, lifecycle instance, or session
+raise stable task-scoped attention and stop only that item. Later tasks, stale
+checks, instance synchronization, and session observation continue in the same
+pass. An unrouted epic and a live instance whose board task was deleted use this
+path. Repeated cadence passes reuse the same attention ID while the failure
+remains unresolved.
+
+Flowcraft `lifecycle:attention-required` events enter the same durable queue.
+Their persisted error data includes the node error and nested cause messages, so
+the attention entry can diagnose a mechanical failure without source reading.
+The bridge keys the entry by task, instance, and lifecycle transition; replay or
+another cadence pass does not create another open entry.
+
+A failure that cannot be attributed to one item aborts that pass. The scheduler
+raises global durable attention and `heddle-server` writes one
+`Heddle reconciliation pass failed` line to stderr with the error cause chain.
+The immediate startup pass still fails service readiness; a later failed cadence
+does not overlap or stop future cadence passes.
+
 Attention and notification delivery use the stable attention ID from the
 accepted lifecycle or escalation contract. SQLite stores attention and adapter
 intent and completion records. Reusing an attention ID with a different payload

@@ -7,7 +7,7 @@ export type ReconciliationPass = () => Promise<void>;
 
 export type ProductionSchedulerOptions = {
   cadenceMilliseconds: number;
-  onError?: (error: unknown) => void;
+  onError?: (error: unknown) => Promise<void> | void;
   pass: ReconciliationPass;
   stopTimeoutMilliseconds: number;
 };
@@ -26,11 +26,16 @@ export class ProductionScheduler {
     if (this.#stopping) throw new Error("The scheduler is stopping");
     this.#running = true;
     this.#timer = globalThis.setInterval(() => {
-      void this.trigger().catch((error: unknown) =>
-        this.options.onError?.(error),
-      );
+      void this.trigger()
+        .catch((error: unknown) => this.#reportError(error))
+        .catch(() => undefined);
     }, this.options.cadenceMilliseconds);
-    await this.trigger();
+    try {
+      await this.trigger();
+    } catch (error) {
+      await this.#reportError(error).catch(() => undefined);
+      throw error;
+    }
   }
 
   trigger(): Promise<void> {
@@ -78,5 +83,9 @@ export class ProductionScheduler {
       this.#pending = false;
       await this.options.pass();
     }
+  }
+
+  async #reportError(error: unknown): Promise<void> {
+    await this.options.onError?.(error);
   }
 }

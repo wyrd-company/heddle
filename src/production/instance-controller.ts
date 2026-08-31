@@ -6,6 +6,8 @@
 import { createHash } from "node:crypto";
 
 import type { BoardTask } from "../board-adapter/index.js";
+import { AttentionVisibleError } from "../attention-visible-error.js";
+import { describeError, errorDetail } from "../error-details.js";
 import {
   bootstrapStageSession,
   HandoffRenderError,
@@ -15,7 +17,10 @@ import {
   type SessionTemplateAuthority,
   type SystemPromptResolver,
 } from "../control-plane/index.js";
-import { readLifecycleContext } from "../engine/index.js";
+import {
+  readLifecycleContext,
+  UnexpectedLandingError,
+} from "../engine/index.js";
 import type { PacingDeferral } from "../pacing/index.js";
 import type {
   JsonValue,
@@ -120,19 +125,29 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const snapshot =
       existing === undefined ||
       existingContext?.pendingTransition?.kind === "start"
-        ? await this.lifecycle.start({
-            blueprintPath: input.blueprintPath,
-            ...(existing === undefined
-              ? {
-                  initialContext: {
-                    ...this.#mechanicalChange(input.task, input.repositoryName),
-                    taskContract: taskContract(input.task),
-                    taskId: input.task.id,
-                  },
-                }
-              : {}),
-            instanceId: input.instanceId,
-          })
+        ? await this.lifecycle
+            .start({
+              blueprintPath: input.blueprintPath,
+              ...(existing === undefined
+                ? {
+                    initialContext: {
+                      ...this.#mechanicalChange(
+                        input.task,
+                        input.repositoryName,
+                      ),
+                      taskContract: taskContract(input.task),
+                      taskId: input.task.id,
+                    },
+                  }
+                : {}),
+              instanceId: input.instanceId,
+            })
+            .catch((error: unknown) => {
+              if (error instanceof UnexpectedLandingError) {
+                throw new AttentionVisibleError(error);
+              }
+              throw error;
+            })
         : existingContext;
     if (snapshot === undefined) {
       throw new Error(`Instance ${input.instanceId} recovery state is absent`);
@@ -184,39 +199,90 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   async synchronize(tasks: readonly BoardTask[]): Promise<void> {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
     for (const runtime of this.persistence.listReconcilerRuntime()) {
-      const record = this.persistence.getInstance(runtime.instanceId);
-      if (record === undefined) continue;
-      const context = readLifecycleContext(record);
-      if (context.pendingTransition !== null) {
-        this.persistence.writeReconcilerRuntime({
-          ...runtime,
-          state: "running",
-        });
+      if (
+        await this.attention.has(
+          `production:task-reconciliation-failed:task:${runtime.taskId}`,
+        )
+      ) {
         continue;
       }
-      const stageId = context.awaitingNodeIds[0];
-      if (stageId === undefined) {
-        this.persistence.writeReconcilerRuntime({
+      try {
+        const record = this.persistence.getInstance(runtime.instanceId);
+        if (record === undefined) {
+          await this.#raiseSynchronizationError(
+            runtime,
+            "lifecycle-instance-absent",
+            new Error(
+              `Instance ${runtime.instanceId} has runtime state but no lifecycle state`,
+            ),
+          );
+          continue;
+        }
+        const task = tasksById.get(runtime.taskId);
+        if (task === undefined) {
+          await this.#raiseSynchronizationError(
+            runtime,
+            "board-task-absent",
+            new Error(
+              `Task ${runtime.taskId} is absent during lifecycle synchronization`,
+            ),
+          );
+          continue;
+        }
+        const context = readLifecycleContext(record);
+        if (context.pendingTransition !== null) {
+          this.persistence.writeReconcilerRuntime({
+            ...runtime,
+            state: "running",
+          });
+          continue;
+        }
+        const stageId = context.awaitingNodeIds[0];
+        if (stageId === undefined) {
+          this.persistence.writeReconcilerRuntime({
+            ...runtime,
+            boardStatus:
+              context.status === "completed" ? "done" : "in-progress",
+            state: context.status === "completed" ? "done" : "running",
+          });
+          continue;
+        }
+        if (runtime.stageId === stageId && runtime.state === "waiting") {
+          continue;
+        }
+        const starting: ReconcilerRuntimeRecord = {
           ...runtime,
-          boardStatus: context.status === "completed" ? "done" : "in-progress",
-          state: context.status === "completed" ? "done" : "running",
-        });
-        continue;
-      }
-      if (runtime.stageId === stageId && runtime.state === "waiting") continue;
-      const task = tasksById.get(runtime.taskId);
-      if (task === undefined) {
-        throw new Error(
-          `Task ${runtime.taskId} is absent during lifecycle synchronization`,
+          state: "starting",
+        };
+        this.persistence.writeReconcilerRuntime(starting);
+        await this.#activate(task, runtime.instanceId, stageId, starting);
+      } catch (error) {
+        if (error instanceof AttentionVisibleError) continue;
+        await this.#raiseSynchronizationError(
+          runtime,
+          "instance-synchronization-failed",
+          error,
         );
       }
-      const starting: ReconcilerRuntimeRecord = {
-        ...runtime,
-        state: "starting",
-      };
-      this.persistence.writeReconcilerRuntime(starting);
-      await this.#activate(task, runtime.instanceId, stageId, starting);
     }
+  }
+
+  async #raiseSynchronizationError(
+    runtime: ReconcilerRuntimeRecord,
+    code: string,
+    error: unknown,
+  ): Promise<void> {
+    const attentionId = `production:${code}:task:${runtime.taskId}:${runtime.instanceId}`;
+    if (await this.attention.has(attentionId)) return;
+    await this.attention.raise({
+      attentionId,
+      code,
+      error: errorDetail(error),
+      instanceId: runtime.instanceId,
+      kind: "production-error",
+      message: `Instance ${runtime.instanceId} synchronization failed: ${describeError(error)}`,
+      taskId: runtime.taskId,
+    });
   }
 
   async #activate(
@@ -377,7 +443,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           taskId: task.id,
         });
       }
-      throw error;
+      throw new AttentionVisibleError(error);
     }
     this.persistence.writeReconcilerRuntime({
       ...starting,

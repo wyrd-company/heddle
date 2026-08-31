@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import process from "node:process";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   prepareProductionFixture,
@@ -82,9 +82,10 @@ describe("configured production composition", () => {
     if (commandDirectory !== "") {
       await rm(commandDirectory, { force: true, recursive: true });
     }
+    vi.restoreAllMocks();
   });
 
-  it("fails a configured provider-usage error before any T3 dispatch", async () => {
+  it("isolates a configured provider-usage error before any T3 dispatch", async () => {
     fixture = await prepareProductionFixture();
     commandDirectory = await mkdtemp(
       join(tmpdir(), "heddle-provider-failure-"),
@@ -119,13 +120,25 @@ describe("configured production composition", () => {
       },
     };
     const t3 = new SyntheticT3();
-    production = createConfiguredProductionComposition(loaded, { t3 });
+    const onSchedulerError = vi.fn(async () => undefined);
+    production = createConfiguredProductionComposition(loaded, {
+      onSchedulerError,
+      t3,
+    });
 
-    await expect(production.start()).rejects.toThrow(
-      "Provider usage command returned malformed or extra output",
-    );
+    await expect(production.start()).resolves.toBeUndefined();
     expect(t3.commands).toEqual([]);
     expect(t3.timeouts).toEqual([]);
+    expect(onSchedulerError).not.toHaveBeenCalled();
+    expect(production.attention.list()).toEqual([
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining(
+          "Provider usage command returned malformed or extra output",
+        ),
+        scope: `task:${fixture.taskId}`,
+      }),
+    ]);
   });
 
   it("binds before board, T3, Pushover, or persistence effects", async () => {
@@ -175,6 +188,32 @@ describe("configured production composition", () => {
     expect(notifications).toEqual([]);
   });
 
+  it("writes a scheduler-owned production failure to stderr", async () => {
+    fixture = await prepareProductionFixture();
+    const loaded: LoadedDeploymentConfiguration = {
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      configurationDirectory: fixture.root,
+      configurationPath: join(fixture.root, "config.yml"),
+      server: { host: "127.0.0.1", port: 0 },
+    };
+    await rm(fixture.configuration.boardDirectory, {
+      force: true,
+      recursive: true,
+    });
+    const write = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((() => true) as typeof process.stderr.write);
+
+    await expect(
+      startConfiguredProductionService(loaded, { t3: new SyntheticT3() }),
+    ).rejects.toThrow();
+
+    expect(write).toHaveBeenCalledWith(
+      expect.stringContaining("Heddle reconciliation pass failed:"),
+    );
+  });
+
   it("dispatches the wholesale override without prompt-source path or provenance", async () => {
     fixture = await prepareProductionFixture();
     const override =
@@ -222,7 +261,7 @@ describe("configured production composition", () => {
     };
     production = createConfiguredProductionComposition(loaded, { t3 });
 
-    await expect(production.start()).rejects.toThrow("System prompt override");
+    await expect(production.start()).resolves.toBeUndefined();
 
     expect(t3.commands).toEqual([]);
     expect(t3.timeouts).toEqual([]);

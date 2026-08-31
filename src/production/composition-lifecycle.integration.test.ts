@@ -175,12 +175,8 @@ kind: standard
       pushoverTransport: { send: vi.fn(async () => undefined) },
       t3,
     });
-    await expect(composition.start()).rejects.toThrow(
-      /Handoff template render failed/,
-    );
-    await expect(composition.scheduler.trigger()).rejects.toThrow(
-      /Handoff template render failed/,
-    );
+    await expect(composition.start()).resolves.toBeUndefined();
+    await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
 
     expect(t3.commands).toHaveLength(0);
     expect(t3.timeouts).toHaveLength(0);
@@ -211,10 +207,16 @@ kind: standard
       pushoverTransport: { send: vi.fn(async () => undefined) },
       t3: firstT3,
     });
-    await expect(first.start()).rejects.toThrow(
-      /synthetic dispatch interruption/,
-    );
+    await expect(first.start()).resolves.toBeUndefined();
     expect(firstT3.commands).toHaveLength(1);
+    const interruptedAttention = first.attention.list();
+    expect(interruptedAttention).toEqual([
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining("synthetic dispatch interruption"),
+      }),
+    ]);
+    first.attention.resolve(interruptedAttention[0]!.attentionId);
     await first.close();
 
     const changedConfiguration = {
@@ -233,9 +235,7 @@ kind: standard
       t3: secondT3,
     });
 
-    await expect(second.start()).rejects.toThrow(
-      /authentication binding is incompatible/,
-    );
+    await expect(second.start()).resolves.toBeUndefined();
     expect(secondT3.commands).toHaveLength(0);
     expect(secondT3.timeouts).toHaveLength(0);
     expect(second.attention.list()).toEqual([
@@ -430,6 +430,71 @@ kind: standard
         stage: "remediate",
       }),
     });
+    await composition.close();
+  });
+
+  it("raises durable attention when a remediation session activation fails", async () => {
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    configuration.cadenceMilliseconds = 750;
+    class RemediationFailureT3 extends SyntheticT3 {
+      override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
+        if (
+          command.type === "thread.create" &&
+          command.title === `task-${taskId} · remediate-1`
+        ) {
+          throw new Error("Injected remediation activation failure");
+        }
+        return super.dispatch(command);
+      }
+    }
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new RemediationFailureT3(),
+    });
+    await composition.start();
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId: `task-${taskId}`,
+      operationId: advanceOperationId(`task-${taskId}:implement:1`),
+    });
+    await vi.waitFor(
+      () => {
+        expect(
+          composition.persistence
+            .listReconcilerRuntime()
+            .find(({ taskId: value }) => value === taskId),
+        ).toMatchObject({ stageId: "review", state: "waiting" });
+      },
+      { timeout: 3_000 },
+    );
+    await composition.lifecycle.resume({
+      disposition: "reject",
+      instanceId: `task-${taskId}`,
+      operationId: advanceOperationId(`task-${taskId}:review:1`),
+      output: {
+        findings: [{ code: "P1", summary: "The sample value is unchecked" }],
+      },
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(composition.attention.list()).toContainEqual(
+          expect.objectContaining({
+            kind: "production-error",
+            message: expect.stringContaining(
+              "Injected remediation activation failure",
+            ),
+            taskId,
+          }),
+        );
+      },
+      { timeout: 3_000 },
+    );
     await composition.close();
   });
 
