@@ -3,20 +3,24 @@
 //   verifies: heddle
 // ---
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
 import type { LifecycleSnapshot } from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
-import type { ProductRoutingCatalog } from "./product-routing.js";
+import { ProductRoutingCatalog } from "./product-routing.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import type { ProductionConfiguration } from "./configuration.js";
-import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
+import { ProductionLifecycleRouter } from "./lifecycle-router.js";
+
+const execute = promisify(execFile);
 
 describe("production instance controller", () => {
   let root = "";
@@ -97,6 +101,105 @@ describe("production instance controller", () => {
     expect(replay).not.toHaveBeenCalled();
     expect(persistence.listReconcilerRuntime()).toMatchObject([
       { instanceId: "sample-instance", state: "waiting" },
+    ]);
+    persistence.close();
+  });
+
+  it("starts a non-mechanical lifecycle and raises attention when initial routing cannot select one repository", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-initial-routing-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    await mkdir(join(root, "blueprints"));
+    await writeFile(
+      join(root, "blueprints", "non-mechanical.json"),
+      JSON.stringify({
+        edges: [],
+        nodes: [{ id: "finish", uses: "finish" }],
+      }),
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: root,
+    });
+    await execute("git", ["add", "blueprints/non-mechanical.json"], {
+      cwd: root,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add non-mechanical lifecycle fixture",
+      ],
+      { cwd: root },
+    );
+    const task: BoardTask = {
+      blocked: false,
+      dependencies: [],
+      frontMatter: {},
+      id: 2,
+      priority: "medium",
+      status: "todo",
+      tags: [],
+      title: "Arrange inventory",
+    };
+    const routing = new ProductRoutingCatalog({
+      products: [
+        {
+          name: "Sample product",
+          repos: [
+            { name: "sample-alpha", repositoryRoot: root },
+            { name: "sample-beta", repositoryRoot: root },
+          ],
+        },
+      ],
+    } as ProductionConfiguration);
+    routing.update([task]);
+    const lifecycle = new ProductionLifecycleRouter({
+      effects: { finish: async () => ({}) },
+      persistence,
+      repositoryRoot: root,
+      sourceRef: "HEAD",
+    });
+    const start = vi.spyOn(lifecycle, "start");
+    const attention = {
+      has: vi.fn(async () => false),
+      raise: vi.fn(async () => undefined),
+    };
+    const controller = new ProductionInstanceController(
+      {} as ProductionConfiguration,
+      persistence,
+      lifecycle,
+      routing,
+      {} as EpicProjectCoordinator,
+      attention,
+      {} as never,
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+    );
+
+    await controller.start({
+      blueprintPath: "blueprints/non-mechanical.json",
+      instanceId: "task-2",
+      task,
+    });
+
+    expect(start).toHaveBeenCalledOnce();
+    expect(attention.raise).toHaveBeenCalledWith({
+      attentionId: "production:initial-routing-failed:task:2:task-2",
+      code: "stage-repository-not-declared",
+      instanceId: "task-2",
+      kind: "lifecycle-resolution",
+      message: "Task 2 targets more than one repository but its stage declares none",
+      taskId: 2,
+    });
+    expect(persistence.listReconcilerRuntime()).toMatchObject([
+      { instanceId: "task-2", state: "done", taskId: 2 },
     ]);
     persistence.close();
   });

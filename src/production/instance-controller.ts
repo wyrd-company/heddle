@@ -44,7 +44,10 @@ import { heddleSessionTitle } from "./session-title.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
-import type { ProductRoutingCatalog } from "./product-routing.js";
+import {
+  TaskRoutingAttentionError,
+  type ProductRoutingCatalog,
+} from "./product-routing.js";
 
 const json = (value: unknown): JsonValue =>
   JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -171,10 +174,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
               ...(existing === undefined
                 ? {
                     initialContext: {
-                      ...this.#mechanicalChange(
+                      ...(await this.#mechanicalChange(
                         input.task,
+                        input.instanceId,
                         input.repositoryName,
-                      ),
+                      )),
                       taskContract: taskContract(input.task),
                       taskId: input.task.id,
                     },
@@ -212,11 +216,19 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     );
   }
 
-  #mechanicalChange(
+  async #mechanicalChange(
     task: BoardTask,
+    instanceId: string,
     repositoryName?: string,
-  ): Record<string, JsonValue> {
-    const repository = this.routing.repositoryForStage(task, repositoryName);
+  ): Promise<Record<string, JsonValue>> {
+    let repository;
+    try {
+      repository = this.routing.repositoryForStage(task, repositoryName);
+    } catch (error) {
+      if (!(error instanceof TaskRoutingAttentionError)) throw error;
+      await this.#raiseInitialRoutingAttention(instanceId, error);
+      return {};
+    }
     const session = this.configuration.session;
     return {
       [mechanicalChangeContextKey]: json({
@@ -233,6 +245,22 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           : { worktreesRoot: session.worktreesRoot }),
       }),
     };
+  }
+
+  async #raiseInitialRoutingAttention(
+    instanceId: string,
+    error: TaskRoutingAttentionError,
+  ): Promise<void> {
+    const attentionId = `production:initial-routing-failed:task:${error.taskId}:${instanceId}`;
+    if (await this.attention.has(attentionId)) return;
+    await this.attention.raise({
+      attentionId,
+      code: error.code,
+      instanceId,
+      kind: "lifecycle-resolution",
+      message: error.message,
+      taskId: error.taskId,
+    });
   }
 
   async synchronize(tasks: readonly BoardTask[]): Promise<void> {
