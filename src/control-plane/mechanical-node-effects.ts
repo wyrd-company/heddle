@@ -122,17 +122,32 @@ const requireSnapshotOutput = async (
   return value as ReviewSnapshot;
 };
 
+const mirrorStatuses = async (
+  options: MechanicalNodeEffectOptions,
+  change: MechanicalChangeContext,
+): Promise<MechanicalBoardStatuses | undefined> => {
+  if (options.board === undefined || options.statuses === undefined) {
+    return undefined;
+  }
+  if (change.taskId === undefined) return;
+  return typeof options.statuses === "function"
+    ? await options.statuses()
+    : options.statuses;
+};
+
 const mirror = async (
   options: MechanicalNodeEffectOptions,
   change: MechanicalChangeContext,
+  statuses: MechanicalBoardStatuses | undefined,
   status: (statuses: MechanicalBoardStatuses) => string,
 ): Promise<void> => {
-  if (options.board === undefined || options.statuses === undefined) return;
-  if (change.taskId === undefined) return;
-  const statuses =
-    typeof options.statuses === "function"
-      ? await options.statuses()
-      : options.statuses;
+  if (
+    options.board === undefined ||
+    change.taskId === undefined ||
+    statuses === undefined
+  ) {
+    return;
+  }
   await options.board.mirrorTaskStatus(change.taskId, status(statuses));
 };
 
@@ -148,6 +163,7 @@ export const createMechanicalNodeEffects = (
   return {
     "prepare-worktree": async (input) => {
       const change = await requireChange(input);
+      const statuses = await mirrorStatuses(options, change);
       const prepared = await ensureWorktree(
         {
           baseRef: change.baseBranch,
@@ -159,37 +175,40 @@ export const createMechanicalNodeEffects = (
         },
         git,
       );
-      await mirror(options, change, ({ inProgress }) => inProgress);
+      await mirror(options, change, statuses, ({ inProgress }) => inProgress);
       return prepared;
     },
     "review-snapshot": async (input) => {
       const change = await requireChange(input);
+      const statuses = await mirrorStatuses(options, change);
       const snapshot = await ensureReviewSnapshot(change, command);
-      await mirror(options, change, ({ review }) => review);
+      await mirror(options, change, statuses, ({ review }) => review);
       return snapshot;
     },
     merge: async (input) => {
       const change = await requireChange(input);
       const snapshot = await requireSnapshotOutput(input);
+      const statuses = await mirrorStatuses(options, change);
       const result = await mergeReviewSnapshot(
         change,
         snapshot.snapshotId,
         command,
       );
       if (result.merged || result.alreadyMerged) {
-        await mirror(options, change, ({ merged }) => merged);
+        await mirror(options, change, statuses, ({ merged }) => merged);
       }
       return result;
     },
     finalize: async (input) => {
       const change = await requireChange(input);
       const snapshot = await requireSnapshotOutput(input);
+      const statuses = await mirrorStatuses(options, change);
       const result = await cleanupMergedChange(
         change,
         snapshot.snapshotId,
         command,
       );
-      await mirror(options, change, ({ completed }) => completed);
+      await mirror(options, change, statuses, ({ completed }) => completed);
       return result;
     },
   };

@@ -279,22 +279,37 @@ describe("production mechanical worktree preparation", () => {
     await composition.close();
   }, 20_000);
 
-  it("fails closed before a board write when a required delivery status is absent", async () => {
+  it("stops a mechanical lifecycle before effects and board writes when a required delivery status is absent", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     await useMechanicalLifecycle(fixture);
-    const configPath = join(fixture.configuration.boardDirectory, "config.yml");
-    const configuration = await readFile(configPath, "utf8");
-    await writeFile(
-      configPath,
-      configuration.replace("  - name: review\n", ""),
-    );
     const composition = compose(fixture, new SyntheticT3());
     const statusWrites = vi.spyOn(composition.board, "mirrorTaskStatus");
+    const statuses = await composition.board.readBoardStatuses();
+    vi.spyOn(composition.board, "readBoardStatuses").mockResolvedValue(
+      statuses.filter((status) => status !== "review"),
+    );
 
-    await expect(composition.start()).rejects.toThrow();
+    await composition.start();
 
     expect(statusWrites).not.toHaveBeenCalled();
+    await expect(
+      stat(
+        join(
+          fixture.configuration.session.worktreesRoot!,
+          String(fixture.taskId),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining(
+          "Board configuration is missing required mechanical status 'review'",
+        ),
+        taskId: fixture.taskId,
+      }),
+    );
     await composition.close();
   });
 
