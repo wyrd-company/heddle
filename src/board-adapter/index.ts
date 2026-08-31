@@ -285,17 +285,6 @@ export class KanbanBoardAdapter {
     return this.normalizeTask(requireTask(parseJson(output)));
   }
 
-  public async mirrorChildStatus(
-    taskId: number,
-    status: string,
-  ): Promise<void> {
-    const task = await this.readTask(taskId);
-    if (task.parent === undefined) {
-      throw new Error(`task ${taskId} is not a child task`);
-    }
-    await this.command("edit", String(taskId), "--status", status, "--json");
-  }
-
   public async mirrorTaskStatus(taskId: number, status: string): Promise<void> {
     const task = await this.readTask(taskId);
     if (task.tags.includes("type:epic")) {

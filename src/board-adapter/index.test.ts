@@ -228,34 +228,6 @@ next_id: 1
     ]);
   });
 
-  it("mirrors child status through kanban-md", async () => {
-    const collectionId = await createTask("Seasonal collection");
-    const childId = await createTask(
-      "Label storage crates",
-      "--parent",
-      String(collectionId),
-    );
-    commands = [];
-
-    await adapter.mirrorChildStatus(childId, "done");
-
-    expect(commands.at(-1)).toEqual([
-      "--dir",
-      boardDirectory,
-      "edit",
-      String(childId),
-      "--status",
-      "done",
-      "--json",
-    ]);
-    await expect(adapter.readTask(childId)).resolves.toMatchObject({
-      status: "done",
-    });
-    await expect(
-      adapter.mirrorChildStatus(collectionId, "done"),
-    ).rejects.toThrow("is not a child task");
-  });
-
   it("mirrors standalone status while preserving the epic status boundary", async () => {
     const collectionId = await createTask(
       "Seasonal collection",

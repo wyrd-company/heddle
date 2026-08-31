@@ -996,4 +996,40 @@ describe("delivery mechanical nodes", () => {
     ]);
     fixture.persistence.close();
   });
+
+  it("continues mechanical delivery without a task ID while skipping board mirroring", async () => {
+    const mirrored: Array<{ status: string; taskId: number }> = [];
+    const fixture = await makeLifecycle({
+      board: {
+        mirrorTaskStatus: async (taskId, status) => {
+          mirrored.push({ status, taskId });
+        },
+      },
+      statuses: {
+        completed: "done",
+        inProgress: "in-progress",
+        merged: "retrospective",
+        review: "review",
+      },
+    });
+
+    const retrospective = await fixture.engine.resume({
+      disposition: "approve",
+      instanceId: "sample-lifecycle",
+      operationId: "review-approved",
+    });
+    const completed = await fixture.engine.resume({
+      disposition: "complete",
+      instanceId: "sample-lifecycle",
+      operationId: "retrospective-complete",
+    });
+
+    expect(retrospective.awaitingNodeIds).toEqual(["retrospective"]);
+    expect(completed.status).toBe("completed");
+    await expect(lstat(fixture.worktreePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(mirrored).toEqual([]);
+    fixture.persistence.close();
+  });
 });
