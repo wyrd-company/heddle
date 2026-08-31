@@ -27,6 +27,12 @@ export class ProductionConsoleState implements ConsoleStateSource {
     return this.attention.list();
   }
 
+  async listCorrelationTokens(): Promise<string[]> {
+    return this.persistence
+      .listInstances()
+      .flatMap(({ state }) => Object.values(state.correlationTokens));
+  }
+
   async listEvents(input: {
     afterSequence: number;
     instanceId?: string;

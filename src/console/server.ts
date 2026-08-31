@@ -35,6 +35,10 @@ import {
 import { buildDependencyGraphProjection } from "./dependency-graph.js";
 import { projectPublicConsoleEvent } from "./event-projection.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
+import {
+  assertConsoleTokenAbsent,
+  ConsoleTokenDisclosureError,
+} from "./token-disclosure.js";
 import type {
   ConsoleAttention,
   ConsoleAttentionActionPort,
@@ -239,6 +243,15 @@ const readAttention = async (
   return attention;
 };
 
+const readPublicAttention = async (
+  options: ConsoleServerOptions,
+): Promise<ConsoleAttention[]> => {
+  const attention = await readAttention(options);
+  const correlationTokens = await options.state.listCorrelationTokens();
+  assertConsoleTokenAbsent(attention, correlationTokens);
+  return attention;
+};
+
 export const createConsoleServer = (options: ConsoleServerOptions) => {
   const now = options.now ?? Date.now;
   return createServer(async (request, response) => {
@@ -290,24 +303,26 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       if (url.pathname === "/api/events") {
         if (request.method !== "GET") return methodNotAllowed(response, "GET");
         const instanceId = url.searchParams.get("instance");
+        const events = await options.state.listEvents({
+          afterSequence: nonNegativeInteger(
+            url.searchParams.get("after"),
+            "after",
+          ),
+          ...(instanceId === null ? {} : { instanceId }),
+        });
+        const correlationTokens = await options.state.listCorrelationTokens();
         json(
           response,
           200,
-          (
-            await options.state.listEvents({
-              afterSequence: nonNegativeInteger(
-                url.searchParams.get("after"),
-                "after",
-              ),
-              ...(instanceId === null ? {} : { instanceId }),
-            })
-          ).map(projectPublicConsoleEvent),
+          events.map((event) =>
+            projectPublicConsoleEvent(event, correlationTokens),
+          ),
         );
         return;
       }
       if (url.pathname === "/api/attention") {
         if (request.method !== "GET") return methodNotAllowed(response, "GET");
-        json(response, 200, await readAttention(options));
+        json(response, 200, await readPublicAttention(options));
         return;
       }
       const attentionAction =
@@ -325,7 +340,7 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
           "attention id",
         );
         const actionId = decodePathSegment(attentionAction[2]!, "action id");
-        const attention = (await readAttention(options)).find(
+        const attention = (await readPublicAttention(options)).find(
           (entry) => entry.attentionId === attentionId,
         );
         if (attention === undefined) {
@@ -409,20 +424,19 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       if (url.pathname === "/api/lifecycle") {
         if (request.method !== "GET") return methodNotAllowed(response, "GET");
-        json(
-          response,
-          200,
-          await options.state.readLifecycle({
-            afterSequence: nonNegativeInteger(
-              url.searchParams.get("after"),
-              "after",
-            ),
-            taskId: positiveInteger(
-              url.searchParams.get("task") ?? "",
-              "task id",
-            ),
-          }),
-        );
+        const lifecycle = await options.state.readLifecycle({
+          afterSequence: nonNegativeInteger(
+            url.searchParams.get("after"),
+            "after",
+          ),
+          taskId: positiveInteger(
+            url.searchParams.get("task") ?? "",
+            "task id",
+          ),
+        });
+        const correlationTokens = await options.state.listCorrelationTokens();
+        assertConsoleTokenAbsent(lifecycle, correlationTokens);
+        json(response, 200, lifecycle);
         return;
       }
       const blueprintArtifact = /^\/api\/blueprints\/([^/]+)$/.exec(
@@ -474,6 +488,10 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       if (error instanceof ConsoleLifecycleUnavailableError) {
         json(response, 503, { error: error.message });
+        return;
+      }
+      if (error instanceof ConsoleTokenDisclosureError) {
+        json(response, 503, { error: "Console data is unavailable" });
         return;
       }
       if (error instanceof ConsoleAttentionActionsUnavailableError) {

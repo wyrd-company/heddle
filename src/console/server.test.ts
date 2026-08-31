@@ -58,6 +58,7 @@ class FixtureBoard implements ConsoleBoard {
 }
 
 class FixtureState implements ConsoleStateSource {
+  readonly correlationTokens: string[] = [];
   readonly attention: ConsoleAttention[] = [
     createConsoleAttention({
       actions: [],
@@ -85,9 +86,21 @@ class FixtureState implements ConsoleStateSource {
       taskId: 52,
     },
   ];
+  readonly lifecycleEvents = [
+    {
+      executionId: "execution-52",
+      payload: { nodeId: "inspect" },
+      sequence: 1,
+      type: "node:start",
+    },
+  ];
 
   async listAttention(): Promise<ConsoleAttention[]> {
     return this.attention;
+  }
+
+  async listCorrelationTokens(): Promise<string[]> {
+    return this.correlationTokens;
   }
 
   async listEvents(input: {
@@ -109,14 +122,6 @@ class FixtureState implements ConsoleStateSource {
     afterSequence: number;
     taskId: number;
   }): Promise<ConsoleLifecycleSnapshot> {
-    const events = [
-      {
-        executionId: "execution-52",
-        payload: { nodeId: "inspect" },
-        sequence: 1,
-        type: "node:start",
-      },
-    ];
     return {
       blueprint: {
         blobHash: "a".repeat(40),
@@ -126,7 +131,9 @@ class FixtureState implements ConsoleStateSource {
         path: "blueprints/sample-lifecycle.json",
       },
       currentStageIds: ["inspect"],
-      events: events.filter(({ sequence }) => sequence > input.afterSequence),
+      events: this.lifecycleEvents.filter(
+        ({ sequence }) => sequence > input.afterSequence,
+      ),
       instanceId: "instance-52",
       nextSequence: 1,
       status: "awaiting",
@@ -271,6 +278,7 @@ describe("console server", () => {
 
   it("does not expose an activation correlation token through the console event API", async () => {
     const correlationToken = "console-fixture-credential";
+    state.correlationTokens.push(correlationToken);
     const futurePrivateValue = "console-future-private-fixture";
     const systemPrompt = "# Generic console fixture instructions";
     const renderedDocument = `${systemPrompt}\n\n---
@@ -312,6 +320,24 @@ correlationToken: "${correlationToken}"
     expect(serialized).not.toContain(futurePrivateValue);
     expect(serialized).not.toContain("correlationToken:");
     expect(serialized).toContain("# Inspect the generated sample");
+  });
+
+  it("gates lifecycle output that contains a correlation token", async () => {
+    const correlationToken = "lifecycle-fixture-credential";
+    state.correlationTokens.push(correlationToken);
+    state.lifecycleEvents[0]!.payload = {
+      nodeId: "inspect",
+      result: { output: { evidence: correlationToken } },
+    };
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=52&after=0`,
+    );
+    const serialized = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(serialized).not.toContain(correlationToken);
+    expect(serialized).toContain("Console data is unavailable");
   });
 
   it("does not expose raw or future board task fields through the board HTTP API", async () => {

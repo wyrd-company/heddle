@@ -52,6 +52,7 @@ const state: ConsoleStateSource = {
       taskId: 31,
     }),
   ],
+  listCorrelationTokens: async () => [],
   listEvents: async () => [],
   listInstances: async () => [],
   readLifecycle: async ({ taskId }) => ({

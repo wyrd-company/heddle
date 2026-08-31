@@ -56,6 +56,7 @@ const board: ConsoleBoard = {
 
 const state: ConsoleStateSource = {
   listAttention: async () => [],
+  listCorrelationTokens: async () => [],
   listEvents: async () => [],
   listInstances: async () => [],
   readLifecycle: async () => {

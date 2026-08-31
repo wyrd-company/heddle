@@ -392,6 +392,7 @@ describe.skipIf(!t3Binary)(
       };
       const state: ConsoleStateSource = {
         listAttention: async () => current,
+        listCorrelationTokens: async () => [],
         listEvents: async () => [],
         listInstances: async () => [],
         readLifecycle: async () => {

@@ -6,6 +6,7 @@
 import { parseDocument } from "yaml";
 
 import type { JsonValue } from "../persistence/index.js";
+import { assertConsoleTokenAbsent } from "./token-disclosure.js";
 import type { ConsoleEvent } from "./types.js";
 
 const activationType = "session:activated";
@@ -28,6 +29,9 @@ type SessionActivationIdentity = {
   threadId: string;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const unavailableActivation = (): JsonValue => ({
   format: activationFormat,
   redaction: "session-activation-payload-unavailable",
@@ -38,9 +42,7 @@ const sessionActivationIdentity = (
   payload: JsonValue,
 ): SessionActivationIdentity | undefined => {
   if (
-    typeof payload !== "object" ||
-    payload === null ||
-    Array.isArray(payload) ||
+    !isRecord(payload) ||
     payload["format"] !== activationFormat ||
     payload["version"] !== 1 ||
     typeof payload["instanceId"] !== "string" ||
@@ -67,9 +69,7 @@ const parsedIdentityFrontMatter = (
     return undefined;
   }
   const value = document.toJS() as unknown;
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? value : undefined;
 };
 
 const redactRenderedDocument = (
@@ -94,7 +94,6 @@ const redactRenderedDocument = (
     frontMatter["taskId"] !== activation.taskId ||
     frontMatter["stage"] !== activation.stage ||
     typeof frontMatter["correlationToken"] !== "string" ||
-    frontMatter["correlationToken"].trim() === "" ||
     /\s/.test(frontMatter["correlationToken"])
   ) {
     return undefined;
@@ -102,7 +101,6 @@ const redactRenderedDocument = (
   const token = frontMatter["correlationToken"];
   if (
     activation.renderedDocument.split(token).length !== 2 ||
-    activation.systemPrompt.includes(token) ||
     activation.threadId.includes(token)
   ) {
     return undefined;
@@ -139,8 +137,11 @@ const projectSessionActivation = (payload: JsonValue): JsonValue => {
   };
 };
 
-export const projectPublicConsoleEvent = (event: ConsoleEvent): ConsoleEvent =>
-  instanceStateEventTypes.has(event.type)
+export const projectPublicConsoleEvent = (
+  event: ConsoleEvent,
+  correlationTokens: readonly string[],
+): ConsoleEvent => {
+  const projected = instanceStateEventTypes.has(event.type)
     ? {
         ...event,
         payload: { redaction: "instance-state-payload-unavailable" },
@@ -148,3 +149,6 @@ export const projectPublicConsoleEvent = (event: ConsoleEvent): ConsoleEvent =>
     : event.type === activationType
       ? { ...event, payload: projectSessionActivation(event.payload) }
       : event;
+  assertConsoleTokenAbsent(projected, correlationTokens);
+  return projected;
+};

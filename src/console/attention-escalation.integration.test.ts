@@ -110,6 +110,7 @@ describe("console escalation disposition", () => {
     let current: ConsoleAttention[] = [entry];
     const state: ConsoleStateSource = {
       listAttention: async () => current,
+      listCorrelationTokens: async () => [],
       listEvents: async () => [],
       listInstances: async () => [],
       readLifecycle: async () => {

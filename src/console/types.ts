@@ -139,6 +139,7 @@ export class ConsoleLifecycleUnavailableError extends Error {}
 
 export interface ConsoleStateSource {
   listAttention(): Promise<ConsoleAttention[]>;
+  listCorrelationTokens(): Promise<string[]>;
   listEvents(input: {
     afterSequence: number;
     instanceId?: string;

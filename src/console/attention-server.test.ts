@@ -58,8 +58,12 @@ const actionable = (message = "A delivery choice is required") =>
     taskId: 12,
   });
 
-const state = (read: () => ConsoleAttention[]): ConsoleStateSource => ({
+const state = (
+  read: () => ConsoleAttention[],
+  correlationTokens: string[] = [],
+): ConsoleStateSource => ({
   listAttention: async () => read(),
+  listCorrelationTokens: async () => correlationTokens,
   listEvents: async () => [],
   listInstances: async () => [],
   readLifecycle: async () => {
@@ -82,11 +86,12 @@ describe("console attention action endpoint", () => {
   const start = async (
     attention: () => ConsoleAttention[],
     actions?: ConsoleAttentionActionPort,
+    correlationTokens: string[] = [],
   ): Promise<string> => {
     server = createConsoleServer({
       ...(actions === undefined ? {} : { actions }),
       board,
-      state: state(attention),
+      state: state(attention, correlationTokens),
     });
     await new Promise<void>((resolve) =>
       server!.listen(0, "127.0.0.1", resolve),
@@ -181,5 +186,35 @@ describe("console attention action endpoint", () => {
     ).resolves.toMatchObject({
       status: 503,
     });
+  });
+
+  it("gates attention text that contains a correlation token before read or action", async () => {
+    const correlationToken = "attention-fixture-credential";
+    const current = actionable(`Blocked by ${correlationToken}`);
+    const execute = vi.fn<ConsoleAttentionActionPort["execute"]>(
+      async () => undefined,
+    );
+    const baseUrl = await start(() => [current], { execute }, [
+      correlationToken,
+    ]);
+
+    const read = await globalThis.fetch(`${baseUrl}/api/attention`);
+    const serialized = await read.text();
+    const action = await globalThis.fetch(
+      `${baseUrl}/api/attention/attention-12/actions/answer`,
+      {
+        body: JSON.stringify({
+          answers: { "delivery-window": "continue" },
+          fingerprint: current.fingerprint,
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(read.status).toBe(503);
+    expect(serialized).not.toContain(correlationToken);
+    expect(action.status).toBe(503);
+    expect(execute).not.toHaveBeenCalled();
   });
 });

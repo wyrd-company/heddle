@@ -4,13 +4,19 @@
 // ---
 
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { URL } from "node:url";
 
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { readLifecycleContext } from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import type { ConsoleBoard } from "../console/index.js";
 import {
@@ -19,7 +25,9 @@ import {
 } from "../production/index.js";
 import {
   prepareProductionFixture,
+  execute,
   SyntheticT3,
+  type ProductionFixture,
 } from "../production/composition.test-support.js";
 import {
   startHeddleServer,
@@ -44,6 +52,7 @@ const availablePort = async (): Promise<number> => {
 };
 
 describe("deployed Heddle service", () => {
+  const clients: Client[] = [];
   let directory = "";
   let production: ProductionComposition | undefined;
   let service: HeddleDeploymentServer | undefined;
@@ -64,10 +73,92 @@ describe("deployed Heddle service", () => {
   };
 
   afterEach(async () => {
+    await Promise.all(clients.splice(0).map((client) => client.close()));
     await service?.close();
     await production?.close();
     if (directory) await rm(directory, { force: true, recursive: true });
   });
+
+  const enableBlockedReportTool = async (
+    fixture: ProductionFixture,
+  ): Promise<void> => {
+    const path = join(
+      fixture.blueprintsRepositoryRoot,
+      "blueprints",
+      "sample.json",
+    );
+    const artifact = JSON.parse(await readFile(path, "utf8")) as {
+      nodes: Array<{ id: string; tools?: string[] }>;
+    };
+    const implement = artifact.nodes.find(({ id }) => id === "implement");
+    if (implement?.tools === undefined) {
+      throw new Error("fixture implement stage has no tool catalog");
+    }
+    implement.tools.push("report_blocked");
+    await writeFile(path, JSON.stringify(artifact));
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Enable blocked report fixture",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet", "origin", "main"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+  };
+
+  const startDisclosureFixture = async (input?: {
+    reportBlocked?: boolean;
+  }) => {
+    const fixture = await prepareProductionFixture();
+    directory = fixture.root;
+    if (input?.reportBlocked === true) {
+      await enableBlockedReportTool(fixture);
+    }
+    production = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: async () => undefined },
+      t3: new SyntheticT3(),
+    });
+    service = await startHeddleServer(
+      { host: "127.0.0.1", port: 0 },
+      { production },
+    );
+    const runtime = production.persistence.listReconcilerRuntime()[0]!;
+    const instance = production.persistence.getInstance(runtime.instanceId)!;
+    const correlationToken =
+      instance.state.correlationTokens[runtime.sessionKey!];
+    if (correlationToken === undefined) {
+      throw new Error("fixture session has no correlation token");
+    }
+    const origin = `http://127.0.0.1:${service.port}`;
+    const client = new Client({
+      name: "console-disclosure-fixture",
+      version: "1.0.0",
+    });
+    clients.push(client);
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+        authProvider: { token: async () => correlationToken },
+      }),
+    );
+    return { client, correlationToken, fixture, origin, runtime };
+  };
 
   it("serves the console, recovered instances, and the MCP endpoint", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-deployment-server-"));
@@ -216,6 +307,90 @@ correlationToken: "${correlationToken}"
     expect(serialized).toContain("# Inspect the generated sample");
 
     expect(activationPayloadBytes()).toBe(before);
+  });
+
+  it("gates a correlation token written by the real MCP blocked-report tool", async () => {
+    const subject = await startDisclosureFixture({ reportBlocked: true });
+    await expect(
+      subject.client.callTool({
+        arguments: {
+          message: `A generated dependency contains ${subject.correlationToken}`,
+        },
+        name: "report_blocked",
+      }),
+    ).resolves.toMatchObject({ structuredContent: { recorded: true } });
+
+    const response = await globalThis.fetch(`${subject.origin}/api/events`);
+    const serialized = await response.text();
+    const durable = production!.persistence
+      .replayEvents(subject.runtime.instanceId)
+      .find(({ type }) => type === "mcp:blocked-reported");
+
+    expect(response.status).toBe(503);
+    expect(serialized).not.toContain(subject.correlationToken);
+    expect(JSON.stringify(durable)).toContain(subject.correlationToken);
+  });
+
+  it("gates a correlation token written by the production attention queue", async () => {
+    const subject = await startDisclosureFixture();
+    await production!.attention.raise({
+      attentionId: "fixture-user-input-attention",
+      instanceId: subject.runtime.instanceId,
+      kind: "user-input",
+      message: `Generated input contains ${subject.correlationToken}`,
+      questions: [
+        {
+          id: "fixture-question",
+          multiSelect: false,
+          options: [{ label: "Continue" }, { label: "Wait" }],
+          question: `Choose without exposing ${subject.correlationToken}`,
+        },
+      ],
+      requestId: "fixture-request",
+      sessionKey: subject.runtime.sessionKey!,
+      threadId: subject.runtime.threadId!,
+    });
+
+    const response = await globalThis.fetch(`${subject.origin}/api/attention`);
+    const serialized = await response.text();
+    const durable = production!.persistence.listAttention();
+
+    expect(response.status).toBe(503);
+    expect(serialized).not.toContain(subject.correlationToken);
+    expect(JSON.stringify(durable)).toContain(subject.correlationToken);
+  });
+
+  it("gates a correlation token written by the real MCP advance output", async () => {
+    const subject = await startDisclosureFixture();
+    await expect(
+      subject.client.callTool({
+        arguments: {
+          disposition: "complete",
+          output: { evidence: subject.correlationToken },
+        },
+        name: "advance",
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: { instanceId: subject.runtime.instanceId },
+    });
+
+    const response = await globalThis.fetch(
+      `${subject.origin}/api/lifecycle?task=${subject.fixture.taskId}&after=0`,
+    );
+    const serialized = await response.text();
+    const instance = production!.persistence.getInstance(
+      subject.runtime.instanceId,
+    )!;
+    const context = readLifecycleContext(instance);
+    const durable = await Promise.all(
+      context.executionIds.map((executionId) =>
+        production!.persistence.flowcraftHistory.replay(executionId),
+      ),
+    );
+
+    expect(response.status).toBe(503);
+    expect(serialized).not.toContain(subject.correlationToken);
+    expect(JSON.stringify(durable)).toContain(subject.correlationToken);
   });
 
   it.each([

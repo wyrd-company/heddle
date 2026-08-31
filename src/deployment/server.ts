@@ -67,6 +67,12 @@ class PersistenceConsoleStateSource implements ConsoleStateSource {
     return [];
   }
 
+  public async listCorrelationTokens(): Promise<string[]> {
+    return this.persistence
+      .listInstances()
+      .flatMap(({ state }) => Object.values(state.correlationTokens));
+  }
+
   public async listEvents(input: {
     afterSequence: number;
     instanceId?: string;
