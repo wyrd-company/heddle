@@ -12,6 +12,7 @@ import type {
   WorkflowMcpToolContext,
   WorkflowMcpToolContributor,
 } from "./types.js";
+import { assertAdvanceOutput } from "./advance-output.js";
 import { advanceOperationId } from "./operations.js";
 
 const jsonObject = z.record(z.string(), z.json());
@@ -57,6 +58,19 @@ const registerAdvance = (
         .strict(),
     },
     async ({ disposition, output }) => {
+      const selected = context.binding.dispositions.find(
+        ({ name }) => name === disposition,
+      );
+      if (selected === undefined) {
+        throw new TypeError(
+          `Advance disposition ${JSON.stringify(disposition)} has no bound output contract`,
+        );
+      }
+      assertAdvanceOutput(
+        disposition,
+        selected.outputContract ?? "optional",
+        output as Record<string, JsonValue> | undefined,
+      );
       const operationId = advanceOperationId(context.binding.sessionKey);
       const snapshot = await context.escalationCoordinator.resumeAfterNoPending(
         context.binding.instance.instanceId,

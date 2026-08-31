@@ -13,7 +13,12 @@ import { advanceOperationId } from "../mcp-server/operations.js";
 import type { SqlitePersistence } from "../persistence/index.js";
 
 export type ProductionHandoffStage = StageHandoffInput["stage"];
+export type ProductionHandoffContractIssue = {
+  field: "findings";
+  priorStageId?: string;
+};
 export type ProductionStageMetadata = {
+  contractIssue?: ProductionHandoffContractIssue;
   handoff: ProductionHandoffStage;
   repositoryName?: string;
 };
@@ -67,19 +72,29 @@ export const readProductionHandoffStage = async (input: {
       ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
     };
   }
-  const review = outputs.at(-1)?.output;
-  if (review === undefined || !Array.isArray(review["findings"])) {
-    throw new Error(
-      `Remediation stage ${JSON.stringify(input.stageId)} has no canonical review findings`,
-    );
-  }
+  const priorStage = outputs.at(-1);
+  const review = priorStage?.output;
+  const findings =
+    review !== undefined && Array.isArray(review["findings"])
+      ? review["findings"]
+      : [];
   return {
+    ...(review !== undefined && Array.isArray(review["findings"])
+      ? {}
+      : {
+          contractIssue: {
+            field: "findings" as const,
+            ...(priorStage === undefined
+              ? {}
+              : { priorStageId: priorStage.stageId }),
+          },
+        }),
     handoff: {
       kind: "remediation",
       name: input.stageId,
       review: {
-        findings: review["findings"],
-        ...(review["transcript"] === undefined
+        findings,
+        ...(review?.["transcript"] === undefined
           ? {}
           : { transcript: review["transcript"] }),
       },

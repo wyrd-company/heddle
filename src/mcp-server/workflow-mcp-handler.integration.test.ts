@@ -1441,6 +1441,84 @@ describe("workflow MCP HTTP server", () => {
     ).toBe(false);
   });
 
+  it("rejects findings-less review rejection before lifecycle persistence", async () => {
+    const fixture = await makeFixture();
+    const blueprintPath = "blueprints/standard-delivery.json";
+    await writeDeliveryBlueprintFixture(fixture.repositoryRoot);
+    await copyFile(
+      join(cwd(), "handoff-templates/standard.md"),
+      join(fixture.repositoryRoot, "handoff-templates/standard.md"),
+    );
+    await execFileAsync(
+      "git",
+      ["hash-object", "-w", "handoff-templates/standard.md"],
+      { cwd: fixture.repositoryRoot },
+    );
+    await copyFile(
+      join(cwd(), "todo-templates/standard-delivery-review.json"),
+      join(
+        fixture.repositoryRoot,
+        "todo-templates/standard-delivery-review.json",
+      ),
+    );
+    await fixture.lifecycle.start({
+      blueprintPath,
+      instanceId: "instance-output-contract",
+      state: { correlationTokens: {}, handoffs: [], todoState: null },
+    });
+    await fixture.lifecycle.resume({
+      disposition: "complete",
+      instanceId: "instance-output-contract",
+      operationId: "implementation-complete",
+    });
+    const token = "token-output-contract";
+    await fixture.bootstrap(
+      "instance-output-contract",
+      "review-output-contract",
+      token,
+      { id: 18, title: "Review a generic change" },
+      "review",
+    );
+    const review = await connect(fixture.url, token, "output-contract-client");
+
+    await expect(
+      review.callTool({
+        name: "advance",
+        arguments: { disposition: "reject" },
+      }),
+    ).resolves.toMatchObject({
+      content: [
+        expect.objectContaining({
+          text: expect.stringMatching(/review-findings.*output/),
+        }),
+      ],
+      isError: true,
+    });
+    expect(
+      fixture.persistence.getInstance("instance-output-contract")?.state
+        .flowcraftContext,
+    ).toMatchObject({ awaitingNodeIds: ["review"] });
+
+    await expect(
+      review.callTool({
+        name: "advance",
+        arguments: {
+          disposition: "reject",
+          output: {
+            findings: [
+              { code: "P1", summary: "A recorded value is unchecked" },
+            ],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        awaitingNodeIds: ["remediate"],
+        instanceId: "instance-output-contract",
+      },
+    });
+  });
+
   it("keeps an earlier session replay-only when the same wait stage recurs", async () => {
     const fixture = await makeFixture();
     const blueprintPath = "blueprints/standard-delivery.json";
@@ -1485,10 +1563,16 @@ describe("workflow MCP HTTP server", () => {
       firstToken,
       "first-review-client",
     );
-    const firstResult = await firstReview.callTool({
+    const rejection = {
       name: "advance",
-      arguments: { disposition: "reject" },
-    });
+      arguments: {
+        disposition: "reject",
+        output: {
+          findings: [{ code: "P1", summary: "A recorded value is unchecked" }],
+        },
+      },
+    };
+    const firstResult = await firstReview.callTool(rejection);
     await fixture.lifecycle.resume({
       disposition: "complete",
       instanceId: "instance-recurring",
@@ -1559,10 +1643,7 @@ describe("workflow MCP HTTP server", () => {
         },
       ]),
     );
-    const replay = await firstRetry.callTool({
-      name: "advance",
-      arguments: { disposition: "reject" },
-    });
+    const replay = await firstRetry.callTool(rejection);
     expect(replay.structuredContent).toEqual(firstResult.structuredContent);
     const current = fixture.persistence.getInstance("instance-recurring");
     expect(current?.state.flowcraftContext).toMatchObject({

@@ -15,7 +15,10 @@ const isDisposition = (value: JsonValue): value is WorkflowMcpDisposition =>
   !Array.isArray(value) &&
   typeof value["name"] === "string" &&
   typeof value["description"] === "string" &&
-  value["description"].trim() !== "";
+  value["description"].trim() !== "" &&
+  (value["outputContract"] === undefined ||
+    value["outputContract"] === "optional" ||
+    value["outputContract"] === "review-findings");
 
 export const isWorkflowMcpStageContract = (
   value: JsonValue,

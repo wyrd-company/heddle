@@ -227,6 +227,18 @@ proposed-design:
     the instance's current state, generated from the blueprint's
     outgoing edges with per-disposition descriptions — the tool schema
     itself guides the agent to a legal transition. Every session's
+    stored contract classifies each disposition's output as `optional` or
+    `review-findings`. A disposition whose edge targets a remediation handoff
+    requires a non-empty `output.findings` array; the MCP boundary validates
+    this schema before recording the lifecycle transition. Every other
+    disposition accepts an omitted output or a JSON object. A stored contract
+    without an output classification remains replayable as `optional`.
+    When remediation reads a completed stage output without `findings`, it
+    raises one durable attention entry keyed by the remediation session and
+    missing field, renders an empty findings list, and continues activation.
+    This gives mechanical base drift a remediation handoff without inventing
+    reviewer findings.
+    Every session's
     bootstrap binds the session to its instance with a correlation token minted
     by the reconciler, so a caller can advance only its own work, and `advance` is idempotent per instance and stage,
     so a retried call cannot double-transition.

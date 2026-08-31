@@ -373,7 +373,7 @@ kind: standard
     await composition.close();
   });
 
-  it("fails closed when remediation has no canonical review findings", async () => {
+  it("raises durable attention and activates remediation for a legacy findings-less review", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const composition = createProductionComposition({
       blueprintsRepositoryRoot,
@@ -397,9 +397,39 @@ kind: standard
       operationId: advanceOperationId(`task-${taskId}:review:1`),
     });
 
-    await expect(composition.scheduler.trigger()).rejects.toThrow(
-      'Remediation stage "remediate" has no canonical review findings',
-    );
+    await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
+    expect(composition.attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: `task-${taskId}:remediate:1:advance-output:findings`,
+        instanceId: `task-${taskId}`,
+        message: expect.stringContaining(
+          'Remediation stage "remediate" received no findings field from stage "review"',
+        ),
+        taskId,
+      }),
+    ]);
+    expect(composition.persistence.listAttention()).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "advance-output-contract-missing",
+        }),
+      }),
+    ]);
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find((runtime) => runtime.instanceId === `task-${taskId}`),
+    ).toMatchObject({ stageId: "remediate", state: "waiting" });
+    const remediationTurn = composition.persistence
+      .replayEvents(`task-${taskId}`)
+      .filter(({ type }) => type === "session:activated")
+      .at(-1);
+    expect(remediationTurn).toMatchObject({
+      payload: expect.objectContaining({
+        renderedDocument: expect.stringContaining("Review findings: []"),
+        stage: "remediate",
+      }),
+    });
     await composition.close();
   });
 

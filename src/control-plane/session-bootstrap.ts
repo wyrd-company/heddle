@@ -216,7 +216,7 @@ const resolveWorkflowMcpStageContract = async (
       ({ disposition, source }) =>
         source === stage.id && disposition !== undefined,
     )
-    .map(({ description, disposition }) => {
+    .map(({ description, disposition, target }) => {
       if (
         disposition === undefined ||
         description === undefined ||
@@ -226,7 +226,20 @@ const resolveWorkflowMcpStageContract = async (
           "Stage session bootstrap requires a description for every disposition",
         );
       }
-      return { description, name: disposition };
+      const targetNode = blueprint.nodes.find(({ id }) => id === target);
+      if (targetNode === undefined) {
+        throw new Error(
+          `Stage disposition ${JSON.stringify(disposition)} has no target node`,
+        );
+      }
+      return {
+        description,
+        name: disposition,
+        outputContract:
+          targetNode.handoff === "remediation"
+            ? ("review-findings" as const)
+            : ("optional" as const),
+      };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
   return {

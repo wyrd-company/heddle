@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wyrd.company/heddle/advance-output.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "title": "Heddle advance output",
+  "description": "The output accepted for one workflow disposition contract.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract"],
+      "properties": {
+        "contract": {
+          "const": "optional"
+        },
+        "output": {
+          "$ref": "#/$defs/json-object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "output"],
+      "properties": {
+        "contract": {
+          "const": "review-findings"
+        },
+        "output": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/json-object"
+            },
+            {
+              "required": ["findings"],
+              "properties": {
+                "findings": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/json-value"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "json-object": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/json-value"
+      }
+    },
+    "json-value": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/json-value"
+          }
+        },
+        {
+          "$ref": "#/$defs/json-object"
+        }
+      ]
+    }
+  }
+}

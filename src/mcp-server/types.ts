@@ -14,6 +14,7 @@ import type {
 } from "../persistence/index.js";
 import type { EscalationCoordinator } from "./escalation-coordinator.js";
 import type { SubagentCoordinator } from "../subagents/coordinator.js";
+import type { AdvanceOutputContract } from "./advance-output.js";
 
 export interface WorkflowMcpPersistence {
   appendEvent(
@@ -51,6 +52,8 @@ export interface WorkflowMcpDisposition {
   [key: string]: JsonValue;
   description: string;
   name: string;
+  /** Null is reserved for stored contracts created before output enforcement. */
+  outputContract: AdvanceOutputContract | null;
 }
 
 export interface WorkflowMcpSessionBinding {

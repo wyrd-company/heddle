@@ -205,7 +205,10 @@ export const resolveWorkflowMcpSessionBinding = (
   }
 
   return {
-    dispositions: stageContract.dispositions,
+    dispositions: stageContract.dispositions.map((disposition) => ({
+      ...disposition,
+      outputContract: disposition.outputContract ?? null,
+    })),
     instance: match.instance,
     ...(storedHandoffs[0]!.parentSessionKey === undefined
       ? {}
