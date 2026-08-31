@@ -199,12 +199,17 @@ describe("organization blueprint repository", () => {
         operationId: "rebased-completion",
       }),
     ).resolves.toMatchObject({ status: "completed" });
+    const originCommit = (
+      await executeGit("git", ["rev-parse", "origin/main"], {
+        cwd: setup.repositoryRoot,
+      })
+    ).stdout.trim();
     expect(setup.attention.list()).toEqual([
       expect.objectContaining({
         kind: "blueprint-repository",
-        message: expect.stringContaining(
-          "The organization blueprint repository branch is behind origin",
-        ),
+        message:
+          "The organization blueprint repository branch is behind origin " +
+          `(local commit '${localHeadAfter}', origin commit '${originCommit}')`,
       }),
     ]);
   });
@@ -230,20 +235,19 @@ describe("organization blueprint repository", () => {
     ).toBe(before);
     expect(await readFile(path, "utf8")).toBe("local note\n");
     const catalog = setup.attention.list();
-    expect(catalog).toEqual([
-      expect.objectContaining({
-        kind: "blueprint-repository",
-        message: expect.stringContaining(
-          "The organization blueprint repository working tree has local changes",
-        ),
-      }),
-    ]);
     const head = (
       await executeGit("git", ["rev-parse", "HEAD"], {
         cwd: setup.repositoryRoot,
       })
     ).stdout.trim();
-    expect(catalog[0]!.message).toContain(head);
+    expect(catalog).toEqual([
+      expect.objectContaining({
+        kind: "blueprint-repository",
+        message:
+          "The organization blueprint repository working tree has local changes " +
+          `(local commit '${head}', origin commit '${head}')`,
+      }),
+    ]);
     expect(catalog[0]!.attentionId.length).toBeLessThanOrEqual(
       MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
     );
@@ -264,6 +268,37 @@ describe("organization blueprint repository", () => {
       }),
     ).rejects.toThrow("exceeds the console attention identity bound");
     expect(setup.attention.list()).toEqual([]);
+  });
+
+  it("carries an attention identity of exactly the bound and refuses one past it", async () => {
+    const setup = await prepare();
+    const identity = (length: number) => "a".repeat(length);
+
+    await expect(
+      setup.attention.raise({
+        attentionId: identity(MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH),
+        category: "state",
+        code: "blueprint-repository-dirty",
+        kind: "blueprint-repository",
+        message: "The organization blueprint repository needs attention",
+        repositoryRoot: setup.repositoryRoot,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      setup.attention.raise({
+        attentionId: identity(MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH + 1),
+        category: "state",
+        code: "blueprint-repository-dirty",
+        kind: "blueprint-repository",
+        message: "The organization blueprint repository needs attention",
+        repositoryRoot: setup.repositoryRoot,
+      }),
+    ).rejects.toThrow("exceeds the console attention identity bound");
+    expect(setup.attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: identity(MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH),
+      }),
+    ]);
   });
 
   it("fails closed with one durable attention when origin cannot be fetched", async () => {
@@ -343,9 +378,9 @@ describe("organization blueprint repository", () => {
     expect(setup.attention.list()).toEqual([
       expect.objectContaining({
         kind: "blueprint-repository",
-        message: expect.stringContaining(
-          "The organization blueprint repository has diverged from origin",
-        ),
+        message:
+          "The organization blueprint repository has diverged from origin " +
+          `(local commit '${localCommit}', origin commit '${remoteCommit}')`,
       }),
     ]);
   });

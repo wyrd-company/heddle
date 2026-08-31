@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   consoleAttentionDeepLink,
   createConsoleAttention,
+  MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
   parseConsoleAttentionActionRequest,
   validateConsoleAttentionCatalog,
 } from "./attention-contract.js";
@@ -95,6 +96,32 @@ describe("console attention action contract", () => {
         action,
       ),
     ).toThrow("does not name an offered option");
+  });
+
+  it("carries an identity of exactly the bound and refuses one past it", () => {
+    const sized = (length: number) =>
+      createConsoleAttention({
+        actions: [],
+        attentionId: "a".repeat(length),
+        kind: "blueprint-repository",
+        message: "The organization blueprint repository needs attention",
+        scope: "all",
+      });
+
+    expect(() =>
+      validateConsoleAttentionCatalog(
+        [sized(MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH)],
+        false,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateConsoleAttentionCatalog(
+        [sized(MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH + 1)],
+        false,
+      ),
+    ).toThrow(
+      `attentionId must be a non-empty string of at most ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
+    );
   });
 
   it("fails closed for duplicate identities and missing action composition", () => {
