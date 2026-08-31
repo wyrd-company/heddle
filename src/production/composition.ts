@@ -401,11 +401,17 @@ export const createProductionComposition = (
       start: () => scheduler.start(),
       close: async () => {
         if (closed) return;
-        await scheduler.stop();
-        await mcp.close();
-        persistence!.close();
-        activeWorkspaces.delete(workspaceId);
-        closed = true;
+        try {
+          await scheduler.stop();
+        } finally {
+          try {
+            await mcp.close();
+          } finally {
+            persistence!.close();
+            activeWorkspaces.delete(workspaceId);
+            closed = true;
+          }
+        }
       },
     };
   } catch (error) {

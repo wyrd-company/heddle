@@ -72,6 +72,42 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("releases composition resources when scheduler draining times out", async () => {
+    const fixture = await prepare();
+    fixture.configuration.stopTimeoutMilliseconds = 1;
+    class HangingDispatchT3 extends SyntheticT3 {
+      override async dispatch(): Promise<{ sequence: number }> {
+        return new Promise(() => undefined);
+      }
+    }
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new HangingDispatchT3(),
+    });
+
+    void composition.start().catch(() => undefined);
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+
+    await expect(composition.close()).rejects.toThrow(
+      "Timed out draining the reconciliation pass",
+    );
+    const replacement = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await replacement.close();
+  });
+
   it("reports a session-observation rejection without a page-delivery failure", async () => {
     const fixture = await prepare();
     class ObservationFailureT3 extends SyntheticT3 {
