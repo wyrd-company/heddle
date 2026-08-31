@@ -57,9 +57,16 @@ proposed-design:
     explicit rebases resolve artifacts from the fetched upstream commit. An
     instance records the Git blob hash of the blueprint it started from, holds
     that blob under a Heddle ref, and runs that version to completion. The
-    operator can rebase a running instance onto a newer blueprint version at a
-    named state; the rebase validates that the target state exists and raises
-    attention when it does not.
+    lifecycle viewer compares the running instance's pinned blob with the
+    fetched upstream artifact. When they differ, it identifies the newer blob
+    and offers only that artifact's named wait states. The operator selects a
+    state and explicitly rebases the instance. The action endpoint re-reads the
+    task, instance, pinned blob, and upstream target blob before delegating to
+    the production lifecycle router. A successful action replaces the viewer
+    with the rebased snapshot and reports the selected state and target blob.
+    Fetch alone only changes rebase availability; an instance that is not
+    explicitly rebased stays pinned. The rebase validates that the target state
+    exists and raises attention when it does not.
   epic-reconciliation: >
     The reconciler is a control loop over the kanban board. Each pass
     it computes the delta between board state and instance state and
