@@ -44,10 +44,7 @@ import { heddleSessionTitle } from "./session-title.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
-import {
-  TaskRoutingAttentionError,
-  type ProductRoutingCatalog,
-} from "./product-routing.js";
+import type { ProductRoutingCatalog } from "./product-routing.js";
 
 const json = (value: unknown): JsonValue =>
   JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -219,15 +216,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     task: BoardTask,
     repositoryName?: string,
   ): Record<string, JsonValue> {
-    const repository = (() => {
-      try {
-        return this.routing.repositoryForStage(task, repositoryName);
-      } catch (error) {
-        if (error instanceof TaskRoutingAttentionError) return undefined;
-        throw error;
-      }
-    })();
-    if (repository === undefined) return {};
+    const repository = this.routing.repositoryForStage(task, repositoryName);
     const session = this.configuration.session;
     return {
       [mechanicalChangeContextKey]: json({
