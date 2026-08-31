@@ -5,11 +5,13 @@
 
 import type { JsonValue } from "../persistence/index.js";
 import type {
-  WorkflowMcpDisposition,
-  WorkflowMcpStageContract,
+  StoredWorkflowMcpDisposition,
+  StoredWorkflowMcpStageContract,
 } from "./types.js";
 
-const isDisposition = (value: JsonValue): value is WorkflowMcpDisposition =>
+const isDisposition = (
+  value: JsonValue,
+): value is StoredWorkflowMcpDisposition =>
   typeof value === "object" &&
   value !== null &&
   !Array.isArray(value) &&
@@ -22,7 +24,7 @@ const isDisposition = (value: JsonValue): value is WorkflowMcpDisposition =>
 
 export const isWorkflowMcpStageContract = (
   value: JsonValue,
-): value is WorkflowMcpStageContract =>
+): value is StoredWorkflowMcpStageContract =>
   typeof value === "object" &&
   value !== null &&
   !Array.isArray(value) &&

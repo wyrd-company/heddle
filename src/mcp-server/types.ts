@@ -48,12 +48,14 @@ export interface WorkflowMcpLifecycle {
   }): Promise<LifecycleSnapshot>;
 }
 
-export interface WorkflowMcpDisposition {
+export interface StoredWorkflowMcpDisposition {
   [key: string]: JsonValue;
   description: string;
   name: string;
-  /** Readers normalize an absent pre-contract value to null. */
-  outputContract: AdvanceOutputContract | null;
+}
+
+export interface WorkflowMcpDisposition extends StoredWorkflowMcpDisposition {
+  outputContract: AdvanceOutputContract;
 }
 
 export interface WorkflowMcpSessionBinding {
@@ -70,11 +72,11 @@ export interface WorkflowMcpSessionBinding {
   token: string;
 }
 
-export interface WorkflowMcpStageContract {
+export interface StoredWorkflowMcpStageContract {
   [key: string]: JsonValue;
   blueprintBlobHash: string;
   blueprintPath: string;
-  dispositions: WorkflowMcpDisposition[];
+  dispositions: StoredWorkflowMcpDisposition[];
   handoffTemplate: {
     blobHash: string;
     path: string;
@@ -82,6 +84,10 @@ export interface WorkflowMcpStageContract {
   stage: string;
   todoTemplate: string;
   tools: string[];
+}
+
+export interface WorkflowMcpStageContract extends StoredWorkflowMcpStageContract {
+  dispositions: WorkflowMcpDisposition[];
 }
 
 export interface WorkflowMcpToolContext {
@@ -121,7 +127,7 @@ export type StoredStageHandoff = {
     listSessionKey: string;
     rootItemId: string;
   };
-  workflowMcp: WorkflowMcpStageContract;
+  workflowMcp: StoredWorkflowMcpStageContract;
 };
 
 export type StageHandoffDocument = {

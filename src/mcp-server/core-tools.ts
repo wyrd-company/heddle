@@ -68,7 +68,7 @@ const registerAdvance = (
       }
       assertAdvanceOutput(
         disposition,
-        selected.outputContract ?? "optional",
+        selected.outputContract,
         output as Record<string, JsonValue> | undefined,
       );
       const operationId = advanceOperationId(context.binding.sessionKey);
