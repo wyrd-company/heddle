@@ -117,12 +117,31 @@ const assertTemplateArtifacts = async (
   for (const node of nodes) {
     const pinned = node["handoff-template"];
     if (pinned !== undefined) {
+      if (!/^(?:[\da-f]{40}|[\da-f]{64})$/i.test(pinned.blobHash)) {
+        throw new BlueprintValidationError(
+          `Blueprint '${artifactId}' node '${node.id}' pins an invalid handoff template blob hash`,
+        );
+      }
       let content: Buffer;
       try {
         content = await readFile(join(repositoryRoot, pinned.path));
-      } catch {
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          throw new BlueprintValidationError(
+            `Blueprint '${artifactId}' node '${node.id}' pins handoff template '${pinned.path}' that is not in the repository`,
+          );
+        }
         throw new BlueprintValidationError(
-          `Blueprint '${artifactId}' node '${node.id}' pins handoff template '${pinned.path}' that is not in the repository`,
+          `Blueprint '${artifactId}' node '${node.id}' could not read handoff template '${pinned.path}': ${
+            typeof error === "object" && error !== null && "code" in error
+              ? String(error.code)
+              : String(error)
+          }`,
         );
       }
       if (gitBlobHash(content, pinned.blobHash) !== pinned.blobHash) {

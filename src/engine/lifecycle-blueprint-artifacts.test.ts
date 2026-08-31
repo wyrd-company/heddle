@@ -189,6 +189,28 @@ describe("organization lifecycle blueprint artifacts", () => {
     );
   });
 
+  it("rejects a pinned handoff template blob hash whose length is not a Git object ID", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as { "handoff-template": { blobHash: string } })[
+      "handoff-template"
+    ].blobHash = "a".repeat(41);
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow("pins an invalid handoff template blob hash");
+  });
+
+  it("reports a non-absence handoff template read failure without relabeling it as missing", async () => {
+    const root = await repository();
+    const path = join(root, "handoff-templates", "sample-handoff.md");
+    await rm(path);
+    await mkdir(path);
+
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      "could not read handoff template 'handoff-templates/sample-handoff.md': EISDIR",
+    );
+  });
+
   it("rejects a named todo template with no repository artifact", async () => {
     const root = await repository();
     await rm(join(root, "todo-templates", "sample-checklist.json"));
