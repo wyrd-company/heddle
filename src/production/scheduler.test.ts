@@ -3,6 +3,8 @@
 //   verifies: heddle
 // ---
 
+import process from "node:process";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { ProductionScheduler } from "./scheduler.js";
@@ -25,6 +27,36 @@ describe("production reconciliation scheduler", () => {
     expect(onError).toHaveBeenCalledOnce();
     expect(onError).toHaveBeenCalledWith(failure);
     await scheduler.stop().catch(() => undefined);
+  });
+
+  it("consumes a rejected cadence error sink and continues later passes", async () => {
+    const failure = new Error("Injected cadence failure");
+    const sinkFailure = new Error("Injected sink failure");
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    let passes = 0;
+    const onError = vi.fn(async () => {
+      throw sinkFailure;
+    });
+    const scheduler = new ProductionScheduler({
+      cadenceMilliseconds: 20,
+      onError,
+      pass: async () => {
+        passes += 1;
+        if (passes === 2) throw failure;
+      },
+      stopTimeoutMilliseconds: 1_000,
+    });
+
+    try {
+      await scheduler.start();
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+      await vi.waitFor(() => expect(passes).toBeGreaterThanOrEqual(3));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      await scheduler.stop();
+    }
   });
 
   it("serializes an overlapping tick and drains one later pass", async () => {
