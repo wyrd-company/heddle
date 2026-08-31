@@ -635,6 +635,58 @@ describe("workflow MCP HTTP server", () => {
     ).rejects.toThrow();
   });
 
+  it("normalizes a stored pre-contract disposition as optional for exact replay", async () => {
+    const fixture = await makeFixture();
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const stored = record.state.handoffs[0];
+    if (
+      typeof stored !== "object" ||
+      stored === null ||
+      Array.isArray(stored) ||
+      typeof stored["workflowMcp"] !== "object" ||
+      stored["workflowMcp"] === null ||
+      Array.isArray(stored["workflowMcp"]) ||
+      !Array.isArray(stored["workflowMcp"]["dispositions"])
+    ) {
+      throw new Error("alpha MCP contract fixture is invalid");
+    }
+    const dispositions = stored["workflowMcp"]["dispositions"].map((value) => {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        throw new Error("alpha disposition fixture is invalid");
+      }
+      const legacy = { ...value };
+      delete legacy["outputContract"];
+      return legacy;
+    });
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [
+        {
+          ...stored,
+          workflowMcp: { ...stored["workflowMcp"], dispositions },
+        },
+      ],
+    });
+    const client = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "legacy-output-contract-client",
+    );
+
+    await expect(
+      client.callTool({
+        name: "advance",
+        arguments: { disposition: "accept" },
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        instanceId: "instance-alpha",
+        status: "completed",
+      },
+    });
+  });
+
   it("rejects a handoff with no static MCP contract", async () => {
     const fixture = await makeFixture();
     const record = fixture.persistence.getInstance("instance-alpha");
@@ -1480,6 +1532,9 @@ describe("workflow MCP HTTP server", () => {
       "review",
     );
     const review = await connect(fixture.url, token, "output-contract-client");
+    const beforeInvalidAdvance = fixture.persistence.getInstance(
+      "instance-output-contract",
+    );
 
     await expect(
       review.callTool({
@@ -1494,10 +1549,9 @@ describe("workflow MCP HTTP server", () => {
       ],
       isError: true,
     });
-    expect(
-      fixture.persistence.getInstance("instance-output-contract")?.state
-        .flowcraftContext,
-    ).toMatchObject({ awaitingNodeIds: ["review"] });
+    expect(fixture.persistence.getInstance("instance-output-contract")).toEqual(
+      beforeInvalidAdvance,
+    );
 
     await expect(
       review.callTool({

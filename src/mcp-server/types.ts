@@ -52,7 +52,7 @@ export interface WorkflowMcpDisposition {
   [key: string]: JsonValue;
   description: string;
   name: string;
-  /** Null is reserved for stored contracts created before output enforcement. */
+  /** Readers normalize an absent pre-contract value to null. */
   outputContract: AdvanceOutputContract | null;
 }
 
