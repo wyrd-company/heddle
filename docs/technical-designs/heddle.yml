@@ -86,7 +86,12 @@ proposed-design:
     retains a local durable tombstone so restart cannot reseed the configured
     project or dispatch deletion again. The
     reconciler advances the epic itself to `uat` when its last non-UAT
-    child completes and to `done` when UAT is accepted.
+    child completes and to `done` when UAT is accepted. An epic in `uat` must
+    have at least one child tagged `uat`. When none exists, reconciliation
+    raises one stable durable epic-scoped attention and leaves acceptance
+    blocked; Heddle does not author an acceptance task. The operator adds the
+    intended UAT child, after which ordinary promotion, dispatch, and epic
+    completion continue.
 
     Production configuration declares a complete product inventory. Each
     product owns one or more named repositories and may carry the durable T3
@@ -365,7 +370,12 @@ proposed-design:
     tool.
 
     Top-level routing composes one durable attention adapter and one Pushover
-    adapter. Both consume the escalation's stable attention ID. Adapter
+    adapter. Escalations page through Pushover. Session observation also pages
+    `ended`, `failed`, and `stalled` attention; `ended` and `failed` are the
+    dead-session states. Approval, user-input, stale-instance, lifecycle,
+    repository, production-error, and epic-acceptance attention remain in the
+    console without a page. Both adapters consume each pageable entry's stable
+    attention ID. Adapter
     persistence rejects a different payload fingerprint under the same stable
     ID. Attention insertion is idempotent. Pushover delivery is at-least-once:
     the provider has no idempotency or outcome-reconciliation key, so pending

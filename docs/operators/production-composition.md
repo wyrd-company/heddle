@@ -221,6 +221,12 @@ does not seed a configured tombstoned project as active or repeat its deletion.
 Ad-hoc threads use `adHocProject.projectId`. Subagents reuse the parent's project
 and worktree.
 
+An epic in `uat` requires at least one child tagged `uat`. Without one, Heddle
+raises one stable epic-scoped attention and keeps the epic in `uat`; it does not
+create an acceptance task. Add the intended UAT child to the epic. A later
+reconciliation pass promotes and dispatches that child and can complete the
+epic after acceptance.
+
 Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
 repo-first worktrees are not migrated. Every thread has a bounded deterministic
 `task-<id> · <stage-occurrence>` title and no `titleSeed` on its first turn.
@@ -396,6 +402,10 @@ accepts the request but before Heddle records completion can produce one
 duplicate per ambiguous attempt. Durable completion suppresses later replay.
 The stable attention ID remains the local outbox and console deep-link identity;
 the HTTP transport does not represent it as provider deduplication.
+Pushover receives escalations and session-observation attention of kind
+`ended`, `failed`, or `stalled`. The first two are dead-session states. Approval,
+user-input, stale-instance, lifecycle, repository, production-error, and
+epic-acceptance attention remain console-only.
 
 Qualification uses generated boards, repositories, state directories,
 worktrees, and synthetic notification transport. It does not use the shared
