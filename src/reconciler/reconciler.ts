@@ -125,7 +125,7 @@ export class Reconciler {
 
         const acceptanceChildren = children.filter(isUat);
         if (epic.status === "uat" && acceptanceChildren.length === 0) {
-          await this.raiseAttention(
+          await this.ensureConditionAttention(
             {
               attentionId: epicAcceptanceAttentionId(epic.id),
               code: "uat-child-missing",
@@ -411,6 +411,18 @@ export class Reconciler {
     if (await this.options.attention.has(attention.attentionId)) return;
     await this.options.attention.raise(attention);
     actions.push({ attention, kind: "attention-raised" });
+  }
+
+  private async ensureConditionAttention(
+    attention: ReconcilerAttention,
+    actions: ReconciliationAction[],
+  ): Promise<void> {
+    if (!(await this.options.attention.has(attention.attentionId))) {
+      await this.options.attention.raise(attention);
+      actions.push({ attention, kind: "attention-raised" });
+      return;
+    }
+    this.options.attention.reopen(attention.attentionId);
   }
 
   private async resolveAttention(attentionId: string): Promise<void> {

@@ -111,20 +111,32 @@ class FixtureInstances implements ReconcilerInstanceController {
 
 class FixtureAttentionQueue {
   readonly entries = new Map<string, ReconcilerAttention>();
-  readonly identities = new Set<string>();
+  readonly records = new Map<string, ReconcilerAttention>();
+  readonly reopenings: string[] = [];
   readonly resolutions: string[] = [];
 
   async has(attentionId: string): Promise<boolean> {
-    return this.identities.has(attentionId);
+    return this.records.has(attentionId);
   }
 
   async raise(attention: ReconcilerAttention): Promise<void> {
-    this.identities.add(attention.attentionId);
+    this.records.set(attention.attentionId, attention);
     this.entries.set(attention.attentionId, attention);
   }
 
+  reopen(attentionId: string): boolean {
+    const attention = this.records.get(attentionId);
+    if (attention === undefined) {
+      throw new Error(`Fixture attention ${attentionId} does not exist`);
+    }
+    if (this.entries.has(attentionId)) return false;
+    this.entries.set(attentionId, attention);
+    this.reopenings.push(attentionId);
+    return true;
+  }
+
   resolve(attentionId: string): boolean {
-    if (!this.identities.has(attentionId)) {
+    if (!this.records.has(attentionId)) {
       throw new Error(`Fixture attention ${attentionId} does not exist`);
     }
     if (!this.entries.delete(attentionId)) return false;

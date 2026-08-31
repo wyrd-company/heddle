@@ -35,6 +35,10 @@ export class DurableAttentionQueue {
     );
   }
 
+  reopen(attentionId: string): boolean {
+    return this.persistence.reopenAttention(attentionId);
+  }
+
   resolve(attentionId: string): boolean {
     return this.persistence.resolveAttention(attentionId);
   }

@@ -245,6 +245,18 @@ describe("Reconciler", () => {
       "epic:54:acceptance:uat-child-missing",
     ]);
     expect(subject.board.tasks.map(({ id }) => id)).toEqual([54, 55, 56]);
+
+    subject.board.tasks.splice(subject.board.tasks.indexOf(acceptance), 1);
+    await subject.reconciler.reconcile();
+
+    expect([...subject.attention.entries.values()]).toEqual([
+      expect.objectContaining({
+        attentionId: "epic:54:acceptance:uat-child-missing",
+      }),
+    ]);
+    expect(subject.attention.reopenings).toEqual([
+      "epic:54:acceptance:uat-child-missing",
+    ]);
   });
 
   it("does not promote or dispatch blocked child and standalone tasks", async () => {

@@ -337,6 +337,21 @@ export class SqlitePersistence {
     throw new Error(`Attention ${JSON.stringify(attentionId)} does not exist`);
   }
 
+  reopenAttention(attentionId: string): boolean {
+    this.assertStableId("attentionId", attentionId);
+    const reopened =
+      this.database
+        .prepare(
+          `UPDATE heddle_attention
+           SET resolved_at = NULL
+           WHERE attention_id = ? AND resolved_at IS NOT NULL`,
+        )
+        .run(attentionId).changes > 0;
+    if (reopened) return true;
+    if (this.hasAttention(attentionId)) return false;
+    throw new Error(`Attention ${JSON.stringify(attentionId)} does not exist`);
+  }
+
   effectCompleted(effectKind: string, stableId: string): boolean {
     this.assertStableId("effectKind", effectKind);
     this.assertStableId("stableId", stableId);

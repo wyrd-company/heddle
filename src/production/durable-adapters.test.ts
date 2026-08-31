@@ -106,6 +106,14 @@ describe("durable production adapters", () => {
     );
     expect(second.list()).toEqual([]);
     expect(await second.has(attention.attentionId)).toBe(true);
+    expect(second.reopen(attention.attentionId)).toBe(true);
+    expect(second.list()).toMatchObject([
+      { attentionId: attention.attentionId },
+    ]);
+    expect(second.reopen(attention.attentionId)).toBe(false);
+    expect(() => second.reopen("task-21:session:unknown")).toThrow(
+      'Attention "task-21:session:unknown" does not exist',
+    );
     secondPersistence.close();
   });
 
