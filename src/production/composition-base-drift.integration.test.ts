@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { lstat, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,16 +20,6 @@ import {
 const git = async (cwd: string, ...arguments_: string[]): Promise<string> =>
   (await execute("git", arguments_, { cwd })).stdout.trim();
 
-const exists = async (path: string): Promise<boolean> => {
-  try {
-    await lstat(path);
-    return true;
-  } catch (error) {
-    if ((error as { code?: string }).code === "ENOENT") return false;
-    throw error;
-  }
-};
-
 describe("production concurrent review landing", () => {
   let cleanup: (() => Promise<void>) | undefined;
 
@@ -40,15 +30,7 @@ describe("production concurrent review landing", () => {
     cleanup = fixture.cleanup;
     const repositoryRoot =
       fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
-    const templateRoot = (await exists(
-      join(
-        fixture.blueprintsRepositoryRoot,
-        "handoff-templates",
-        "standard.md",
-      ),
-    ))
-      ? fixture.blueprintsRepositoryRoot
-      : repositoryRoot;
+    const templateRoot = fixture.blueprintsRepositoryRoot;
     const standardHash = await git(
       templateRoot,
       "hash-object",
