@@ -3,7 +3,10 @@
 //   implements: heddle
 // ---
 
-import type { ConsoleAttentionQuestion } from "../console/index.js";
+import {
+  MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
+  type ConsoleAttentionQuestion,
+} from "../console/index.js";
 
 export type AttentionPayload = Record<string, unknown>;
 
@@ -25,7 +28,7 @@ export const requiredAttentionIdentifier = (
   attentionId: string,
 ): string => {
   const value = requiredAttentionString(payload, field, attentionId);
-  if (value.length > 128) {
+  if (value.length > MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH) {
     throw new Error(`Attention '${attentionId}' has no valid ${field}`);
   }
   return value;
