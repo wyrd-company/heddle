@@ -3,7 +3,10 @@
 //   verifies: heddle
 // ---
 
-import type { HandoffTemplateResolver } from "./session-bootstrap.js";
+import type {
+  HandoffTemplateResolver,
+  SessionTemplateAuthority,
+} from "./session-bootstrap.js";
 
 export const sampleHandoffTemplate = {
   blobHash: "b".repeat(40),
@@ -18,3 +21,8 @@ export const readSampleHandoffTemplate: HandoffTemplateResolver = async (
   body: "# {{ task.title }}\n\nStage: {{ handoff.stage.name }}\n",
   kind: input.handoff.stage.kind,
 });
+
+export const sampleTemplateAuthority: SessionTemplateAuthority = {
+  readHandoffTemplate: readSampleHandoffTemplate,
+  repositoryRoot: "/workspaces/sample-blueprints",
+};

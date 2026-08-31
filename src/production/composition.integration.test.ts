@@ -3,8 +3,20 @@
 //   verifies: heddle
 // ---
 
+import { access, copyFile, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { cwd } from "node:process";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  composeSystemPrompt,
+  GitHandoffTemplateStore,
+  renderStageHandoff,
+} from "../control-plane/index.js";
+import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
+import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
+import { isWorkflowMcpStageContract } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
   execute,
@@ -24,6 +36,156 @@ describe("production composition", () => {
     cleanup = fixture.cleanup;
     return fixture;
   };
+
+  it("activates standard delivery from the organization template authority without product templates", async () => {
+    const fixture = await prepare();
+    const artifactPaths = [
+      "handoff-templates/remediation.md",
+      "handoff-templates/standard.md",
+      "todo-templates/standard-delivery-implement.json",
+      "todo-templates/standard-delivery-remediate.json",
+      "todo-templates/standard-delivery-retrospective.json",
+      "todo-templates/standard-delivery-review.json",
+    ];
+    await writeDeliveryBlueprintFixture(
+      fixture.blueprintsRepositoryRoot,
+      "standard-delivery",
+    );
+    for (const path of artifactPaths) {
+      await copyFile(
+        join(cwd(), path),
+        join(fixture.blueprintsRepositoryRoot, path),
+      );
+    }
+    await execute("git", ["add", "blueprints", ...artifactPaths], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add standard delivery artifacts",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet", "origin", "main"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--remove-tag",
+        "lifecycle:sample",
+        "--add-tag",
+        "lifecycle:standard-delivery",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    await expect(
+      access(join(fixture.repositoryRoot, "handoff-templates")),
+    ).rejects.toThrow();
+    await expect(
+      access(join(fixture.repositoryRoot, "todo-templates")),
+    ).rejects.toThrow();
+
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+
+    const instanceId = `task-${fixture.taskId}`;
+    const record = composition.persistence.getInstance(instanceId)!;
+    const stored = record.state.handoffs.find(isStoredHandoff);
+    if (
+      stored === undefined ||
+      typeof stored.systemPrompt !== "string" ||
+      !isWorkflowMcpStageContract(stored.workflowMcp)
+    ) {
+      throw new Error("Standard delivery activation has no stored handoff");
+    }
+    const template = await new GitHandoffTemplateStore(
+      fixture.blueprintsRepositoryRoot,
+    ).read(stored.workflowMcp.handoffTemplate);
+    const task = await composition.board.readTask(fixture.taskId);
+    const expectedHandoff = renderStageHandoff({
+      correlationToken: stored.correlationToken,
+      driver: "codex",
+      handoff: stored.handoff,
+      instanceId,
+      sessionKey: stored.sessionKey,
+      stage: "implement",
+      task: task.frontMatter,
+      taskId: fixture.taskId,
+      template,
+    });
+    const turn = t3.commands.find(({ type }) => type === "thread.turn.start");
+    expect((turn?.["message"] as { text?: string }).text).toBe(
+      composeSystemPrompt(
+        stored.systemPrompt,
+        expectedHandoff,
+        stored.correlationToken,
+      ),
+    );
+    const pinnedBlob = await execute(
+      "git",
+      ["cat-file", "blob", stored.workflowMcp.handoffTemplate.blobHash],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    expect(pinnedBlob.stdout).toBe(
+      await readFile(join(cwd(), "handoff-templates/standard.md"), "utf8"),
+    );
+    await expect(
+      execute(
+        "git",
+        ["cat-file", "-e", stored.workflowMcp.handoffTemplate.blobHash],
+        { cwd: fixture.repositoryRoot },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      execute(
+        "git",
+        [
+          "rev-parse",
+          `refs/heddle/handoff-templates/${stored.workflowMcp.handoffTemplate.blobHash}`,
+        ],
+        { cwd: fixture.blueprintsRepositoryRoot },
+      ),
+    ).resolves.toMatchObject({
+      stdout: `${stored.workflowMcp.handoffTemplate.blobHash}\n`,
+    });
+    const productRefs = await execute(
+      "git",
+      ["for-each-ref", "--format=%(refname)", "refs/heddle/"],
+      { cwd: fixture.repositoryRoot },
+    );
+    expect(productRefs.stdout).toBe("");
+    expect(composition.persistence.listReconcilerRuntime()).toContainEqual(
+      expect.objectContaining({
+        instanceId,
+        stageId: "implement",
+        state: "waiting",
+      }),
+    );
+    await composition.close();
+  });
 
   it("releases a full production WIP gate on a later serialized pass", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();

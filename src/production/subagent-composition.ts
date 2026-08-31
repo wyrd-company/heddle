@@ -8,6 +8,7 @@ import {
   HandoffTemplateError,
   type SessionObservationTarget,
   type SessionObserver,
+  type SessionTemplateAuthority,
   type SystemPromptResolver,
   steerStageSession,
 } from "../control-plane/index.js";
@@ -161,7 +162,6 @@ const activeSessions = async (
 
 export const createProductionSubagentCoordinator = (options: {
   attention: DurableAttentionQueue;
-  blueprintsRepositoryRoot: string;
   board: Pick<KanbanBoardAdapter, "readTask">;
   configuration: ProductionConfiguration;
   observer: SessionObserver;
@@ -169,10 +169,10 @@ export const createProductionSubagentCoordinator = (options: {
   persistence: SqlitePersistence;
   resolveSystemPrompt: SystemPromptResolver;
   t3: ProductionT3Client;
+  templateAuthority: SessionTemplateAuthority;
 }): SubagentCoordinator => {
   const {
     attention,
-    blueprintsRepositoryRoot,
     board,
     configuration,
     observer,
@@ -180,14 +180,15 @@ export const createProductionSubagentCoordinator = (options: {
     persistence,
     resolveSystemPrompt,
     t3,
+    templateAuthority,
   } = options;
   return new SubagentCoordinator({
     activeSessions: () => activeSessions(configuration, persistence, t3),
     bootstrapDependencies: {
       activationEvents: persistence,
-      blueprintsRepositoryRoot,
       persistence,
       resolveSystemPrompt,
+      templateAuthority,
       t3: {
         ...(t3.applyHarnessToolTimeout === undefined
           ? {}

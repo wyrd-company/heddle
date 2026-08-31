@@ -261,8 +261,10 @@ Use `escalate` for a blocking question that requires attention outside this sess
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
 pinned lifecycle blueprint. Each wait node also declares a `handoff-template`
 with a repository-relative Markdown path and exact Git blob hash. Heddle reads
-the pinned blob, retains it under `refs/heddle/handoff-templates/<blob-hash>`,
-and does not read the mutable working-tree file during session activation.
+the pinned blob from the organization blueprint clone, retains it there under
+`refs/heddle/handoff-templates/<blob-hash>`, and does not read the mutable
+working-tree file during session activation. Product repositories receive no
+template-retention refs.
 Heddle reconstructs completed wait-stage outputs in
 recorded lifecycle execution order. A standard stage receives those prior
 outputs. A remediation stage receives the latest review findings through the

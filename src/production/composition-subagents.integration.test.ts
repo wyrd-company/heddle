@@ -43,7 +43,7 @@ describe("production subagent composition", () => {
     await cleanup?.();
   });
 
-  it("shares persistence, pacing, bootstrap, observation, and token authority", async () => {
+  it("shares organization template authority, persistence, pacing, observation, and tokens", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();

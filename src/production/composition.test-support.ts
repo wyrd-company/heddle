@@ -140,6 +140,7 @@ export type ProductionFixture = {
   blueprintsRepositoryRoot: string;
   cleanup(): Promise<void>;
   configuration: ProductionConfiguration;
+  repositoryRoot: string;
   root: string;
   taskId: number;
 };
@@ -157,8 +158,13 @@ export const prepareProductionFixture =
     await mkdir(join(blueprintsRepositoryRoot, "blueprints"), {
       recursive: true,
     });
-    await mkdir(join(repositoryRoot, "handoff-templates"), { recursive: true });
-    await mkdir(join(repositoryRoot, "todo-templates"), { recursive: true });
+    await mkdir(join(blueprintsRepositoryRoot, "handoff-templates"), {
+      recursive: true,
+    });
+    await mkdir(join(blueprintsRepositoryRoot, "todo-templates"), {
+      recursive: true,
+    });
+    await mkdir(repositoryRoot, { recursive: true });
     await writeFile(
       join(blueprintsRepositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
@@ -274,23 +280,24 @@ export const prepareProductionFixture =
       }),
     );
     await writeFile(
-      join(repositoryRoot, "handoff-templates", "standard.md"),
+      join(blueprintsRepositoryRoot, "handoff-templates", "standard.md"),
       standardHandoffTemplate,
     );
     await writeFile(
-      join(repositoryRoot, "handoff-templates", "remediation.md"),
+      join(blueprintsRepositoryRoot, "handoff-templates", "remediation.md"),
       remediationHandoffTemplate,
     );
     await writeFile(
-      join(repositoryRoot, "todo-templates", "sample-stage.json"),
+      join(blueprintsRepositoryRoot, "todo-templates", "sample-stage.json"),
       JSON.stringify({
         items: [{ id: "deliver", text: "Deliver the sample" }],
       }),
     );
+    await writeFile(join(repositoryRoot, "README.md"), "# Sample repository\n");
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: repositoryRoot,
     });
-    await execute("git", ["add", "handoff-templates", "todo-templates"], {
+    await execute("git", ["add", "README.md"], {
       cwd: repositoryRoot,
     });
     await execute(
@@ -310,9 +317,11 @@ export const prepareProductionFixture =
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: blueprintsRepositoryRoot,
     });
-    await execute("git", ["add", "blueprints"], {
-      cwd: blueprintsRepositoryRoot,
-    });
+    await execute(
+      "git",
+      ["add", "blueprints", "handoff-templates", "todo-templates"],
+      { cwd: blueprintsRepositoryRoot },
+    );
     await execute(
       "git",
       [
@@ -391,6 +400,7 @@ next_id: 1
     return {
       blueprintsRepositoryRoot,
       cleanup: () => rm(root, { force: true, recursive: true }),
+      repositoryRoot,
       root,
       taskId,
       configuration: {

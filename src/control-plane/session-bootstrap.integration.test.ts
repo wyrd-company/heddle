@@ -22,8 +22,8 @@ import {
 } from "./session-bootstrap.js";
 import { T3ControlPlaneClient } from "./t3-control-plane-client.js";
 import {
-  readSampleHandoffTemplate,
   sampleHandoffTemplate,
+  sampleTemplateAuthority,
 } from "./session-bootstrap.test-support.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
@@ -69,6 +69,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
   let persistence: SqlitePersistence;
   let projectId = "";
   let projectPath = "";
+  let templateRepositoryRoot = "";
   let requestLog = "";
 
   beforeAll(async () => {
@@ -77,6 +78,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
     const stateDirectory = join(scratch, "state");
     requestLog = join(scratch, "cursor-requests.jsonl");
     projectPath = join(scratch, "project");
+    templateRepositoryRoot = join(scratch, "blueprint-repository");
     await mkdir(join(home, "userdata"), { recursive: true });
     await writeFile(
       join(home, "userdata", "settings.json"),
@@ -85,9 +87,11 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
       }),
     );
     await mkdir(projectPath, { recursive: true });
-    await mkdir(join(projectPath, "todo-templates"));
+    await mkdir(join(templateRepositoryRoot, "todo-templates"), {
+      recursive: true,
+    });
     await writeFile(
-      join(projectPath, "todo-templates", "sample-prepare.json"),
+      join(templateRepositoryRoot, "todo-templates", "sample-prepare.json"),
       JSON.stringify({
         items: [{ id: "orient", text: "Orient on {{task.title}}" }],
       }),
@@ -209,7 +213,10 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
       {
         activationEvents: persistence,
         persistence,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: {
+          ...sampleTemplateAuthority,
+          repositoryRoot: templateRepositoryRoot,
+        },
         resolveWorkflowMcpStageContract: async () => ({
           blueprintBlobHash: "a".repeat(40),
           blueprintPath: "blueprints/sample-process.json",

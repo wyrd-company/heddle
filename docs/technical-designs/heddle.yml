@@ -196,9 +196,10 @@ proposed-design:
     Every agent wait node declares explicit
     `handoff` metadata as `standard` or `remediation`; missing, invalid, or
     non-wait metadata fails closed. It also declares a `handoff-template`
-    path and exact Git blob hash. Heddle reads that blob, retains it under a
-    durable Git reference, verifies its schema and declared handoff kind, and
-    never substitutes mutable working-tree content. Standard handoffs receive completed
+    path and exact Git blob hash. Heddle reads that blob from the organization
+    blueprint repository, retains it there under a durable Git reference,
+    verifies its schema and declared handoff kind, and never substitutes mutable
+    working-tree content. Standard handoffs receive completed
     wait-stage outputs reconstructed in recorded lifecycle execution order.
     Remediation receives the latest canonical review output through the
     handoff assembler, which retains findings and excludes transcript data.
@@ -239,10 +240,11 @@ proposed-design:
     is the only session content that may contain a secret.
 
     Todo lists are instantiated from templates. A todo template is a
-    schema'd artifact in this repository: the checklist for one stage
-    of one task type, with placeholders for task context. Each
+    schema'd artifact in the organization blueprint repository: the checklist
+    for one stage of one task type, with placeholders for task context. Each
     blueprint stage that starts an agent session names its template;
-    at bootstrap, Heddle fills the template from the task contract
+    at bootstrap, Heddle resolves that repository as the sole todo-template and
+    pinned handoff-template authority and fills the template from the task contract
     and stores the resulting list on the instance. The instantiated
     list belongs to the stage's agent, which can add, edit, and
     reorder items; the template itself never changes. The todo tools

@@ -36,7 +36,6 @@ import {
   type MeasuredHandoffDriver,
 } from "./handoff-renderer.js";
 import {
-  GitHandoffTemplateStore,
   type PinnedHandoffTemplate,
   type PinnedHandoffTemplateReference,
 } from "./handoff-template-store.js";
@@ -126,23 +125,27 @@ export const harnessConfiguration = (): HarnessConfiguration => ({
 
 export type SessionBootstrapDependencies = {
   activationEvents?: SessionActivationEventStore;
-  blueprintsRepositoryRoot?: string;
   ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
   instantiateTodoList?: typeof instantiateTodoList;
   mintCorrelationToken?: () => string;
   nextId?: () => string;
   now?: () => string;
   persistence: InstanceStateStore;
-  readHandoffTemplate?: HandoffTemplateResolver;
   resolveWorkflowMcpStageContract?: WorkflowMcpStageContractResolver;
   resolveSystemPrompt?: SystemPromptResolver;
   t3: SessionT3Client;
+  templateAuthority?: SessionTemplateAuthority;
 };
 
 export type HandoffTemplateResolver = (
   reference: PinnedHandoffTemplateReference,
   input: SessionBootstrapInput,
 ) => Promise<PinnedHandoffTemplate>;
+
+export type SessionTemplateAuthority = {
+  readHandoffTemplate: HandoffTemplateResolver;
+  repositoryRoot: string;
+};
 
 export type WorkflowMcpStageContractResolver = (
   input: SessionBootstrapInput,
@@ -246,7 +249,7 @@ const ensureStoredHandoff = async (
   correlationToken: string,
   resolveStageContract: WorkflowMcpStageContractResolver,
   instantiate: typeof instantiateTodoList,
-  readTemplate: HandoffTemplateResolver,
+  templateAuthority: SessionTemplateAuthority,
   effectiveDriver: MeasuredHandoffDriver,
   resolveSystemPrompt: SystemPromptResolver,
 ): Promise<{
@@ -345,7 +348,7 @@ const ensureStoredHandoff = async (
         store,
         {
           instanceId: input.instanceId,
-          repositoryRoot: input.worktree.repositoryRoot,
+          repositoryRoot: templateAuthority.repositoryRoot,
           sessionKey: input.sessionKey,
           stage: templateContract.stage,
           taskContract: input.handoff.taskContract,
@@ -414,7 +417,10 @@ const ensureStoredHandoff = async (
       correlationToken,
       todoList: todoState,
     });
-    const template = await readTemplate(workflowMcp.handoffTemplate, input);
+    const template = await templateAuthority.readHandoffTemplate(
+      workflowMcp.handoffTemplate,
+      input,
+    );
     const renderedStageHandoff = renderStageHandoff({
       correlationToken,
       driver: effectiveDriver,
@@ -476,6 +482,15 @@ export const bootstrapStageSession = async (
     input.modelSelection.instanceId,
     input.providerContext.driver,
   );
+  const templateAuthority = dependencies.templateAuthority;
+  if (
+    templateAuthority === undefined ||
+    templateAuthority.repositoryRoot.trim() === ""
+  ) {
+    throw new Error(
+      "Stage session bootstrap requires one organization template authority",
+    );
+  }
   const prepareWorktree = dependencies.ensureWorktree ?? ensureWorktree;
   const nextId = dependencies.nextId ?? (() => globalThis.crypto.randomUUID());
   const now = dependencies.now ?? (() => new Date().toISOString());
@@ -500,15 +515,10 @@ export const bootstrapStageSession = async (
         resolveWorkflowMcpStageContract(
           value,
           record,
-          dependencies.blueprintsRepositoryRoot ??
-            value.worktree.repositoryRoot,
+          templateAuthority.repositoryRoot,
         )),
     dependencies.instantiateTodoList ?? instantiateTodoList,
-    dependencies.readHandoffTemplate ??
-      ((reference, value) =>
-        new GitHandoffTemplateStore(value.worktree.repositoryRoot).read(
-          reference,
-        )),
+    templateAuthority,
     effectiveDriver,
     dependencies.resolveSystemPrompt ?? resolveBuiltInSystemPrompt,
   );

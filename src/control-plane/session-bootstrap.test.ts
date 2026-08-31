@@ -23,8 +23,8 @@ import {
 import { harnessToolTimeoutConfiguration } from "./harness-tool-timeout.js";
 import { builtInSystemPrompt } from "./system-prompt.js";
 import {
-  readSampleHandoffTemplate,
   sampleHandoffTemplate,
+  sampleTemplateAuthority,
 } from "./session-bootstrap.test-support.js";
 
 const initialState = (): InstanceState => ({
@@ -168,7 +168,7 @@ describe("stage session bootstrap", () => {
               return record;
             },
           },
-          readHandoffTemplate: readSampleHandoffTemplate,
+          templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
           t3: { applyHarnessToolTimeout, dispatch },
         },
@@ -249,7 +249,7 @@ describe("stage session bootstrap", () => {
                 return record;
               },
             },
-            readHandoffTemplate: readSampleHandoffTemplate,
+            templateAuthority: sampleTemplateAuthority,
             resolveWorkflowMcpStageContract,
             t3: { dispatch },
           },
@@ -286,7 +286,7 @@ describe("stage session bootstrap", () => {
         },
       },
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       resolveSystemPrompt: vi
         .fn()
@@ -442,7 +442,7 @@ describe("stage session bootstrap", () => {
         },
         getInstance: () => record,
       },
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       t3: { dispatch },
     };
@@ -528,7 +528,7 @@ describe("stage session bootstrap", () => {
       instantiateTodoList,
       mintCorrelationToken: () => "correlation-token",
       persistence,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       resolveSystemPrompt,
       t3: {
@@ -616,7 +616,7 @@ describe("stage session bootstrap", () => {
       activationEvents: persistence,
       persistence,
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({

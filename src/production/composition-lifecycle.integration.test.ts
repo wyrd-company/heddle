@@ -109,7 +109,6 @@ describe("production lifecycle composition", () => {
 
   it("raises durable attention and performs no partial dispatch when strict rendering fails", async () => {
     const { blueprintsRepositoryRoot, configuration } = await prepare();
-    const repositoryRoot = configuration.products[0]!.repos[0]!.repositoryRoot;
     const invalidTemplate = `---
 $schema: https://wyrd.company/heddle/handoff-template.schema.json
 relationships:
@@ -120,11 +119,15 @@ kind: standard
 ---
 # {{ task.absentTitle }}
 `;
-    const invalidPath = join(repositoryRoot, "handoff-templates", "invalid.md");
+    const invalidPath = join(
+      blueprintsRepositoryRoot,
+      "handoff-templates",
+      "invalid.md",
+    );
     await writeFile(invalidPath, invalidTemplate);
     const invalidHash = (
       await execute("git", ["hash-object", "-w", invalidPath], {
-        cwd: repositoryRoot,
+        cwd: blueprintsRepositoryRoot,
       })
     ).stdout.trim();
     const blueprintPath = join(
@@ -140,9 +143,11 @@ kind: standard
       path: "handoff-templates/invalid.md",
     };
     await writeFile(blueprintPath, JSON.stringify(blueprint));
-    await execute("git", ["add", "--", "blueprints/sample.json"], {
-      cwd: blueprintsRepositoryRoot,
-    });
+    await execute(
+      "git",
+      ["add", "--", "blueprints/sample.json", "handoff-templates/invalid.md"],
+      { cwd: blueprintsRepositoryRoot },
+    );
     await execute(
       "git",
       [
@@ -452,8 +457,13 @@ kind: standard
           },
         },
         {
-          blueprintsRepositoryRoot,
           persistence: composition.persistence,
+          templateAuthority: {
+            readHandoffTemplate: async () => {
+              throw new Error("Unexpected template read");
+            },
+            repositoryRoot: blueprintsRepositoryRoot,
+          },
           t3,
         },
       ),

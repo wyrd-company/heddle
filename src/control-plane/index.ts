@@ -20,6 +20,7 @@ export {
   type SessionBootstrapResult,
   type SessionSteeringDependencies,
   type SessionSteeringInput,
+  type SessionTemplateAuthority,
   type SessionT3Client,
 } from "./session-bootstrap.js";
 export {

@@ -22,6 +22,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assembleStageHandoff,
   bootstrapStageSession,
+  GitHandoffTemplateStore,
 } from "../control-plane/index.js";
 import {
   LifecycleEngine,
@@ -317,8 +318,9 @@ const makeFixture = async () => {
     token: string,
     taskContract: Record<string, string | number>,
     stage = "assess",
-  ) =>
-    bootstrapStageSession(
+  ) => {
+    const handoffTemplates = new GitHandoffTemplateStore(repositoryRoot);
+    return bootstrapStageSession(
       {
         handoff: {
           skillPointer: "skills/sample.md",
@@ -360,12 +362,17 @@ const makeFixture = async () => {
         }),
         mintCorrelationToken: () => token,
         persistence,
+        templateAuthority: {
+          readHandoffTemplate: (reference) => handoffTemplates.read(reference),
+          repositoryRoot,
+        },
         t3: {
           applyHarnessToolTimeout: async () => undefined,
           dispatch: async () => ({ sequence: 1 }),
         },
       },
     );
+  };
   await bootstrap("instance-alpha", "stage-alpha", alphaToken, {
     id: 11,
     title: "Prepare a sample",

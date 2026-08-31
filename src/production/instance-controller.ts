@@ -12,6 +12,7 @@ import {
   HandoffTemplateError,
   mechanicalChangeContextKey,
   type SessionT3Client,
+  type SessionTemplateAuthority,
   type SystemPromptResolver,
 } from "../control-plane/index.js";
 import { readLifecycleContext } from "../engine/index.js";
@@ -66,6 +67,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly t3: SessionT3Client,
     private readonly resolveSystemPrompt: SystemPromptResolver,
     private readonly blueprintsRepositoryRoot: string,
+    private readonly templateAuthority: SessionTemplateAuthority,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -325,10 +327,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         },
         {
           activationEvents: this.persistence,
-          blueprintsRepositoryRoot: this.blueprintsRepositoryRoot,
           nextId,
           persistence: this.persistence,
           resolveSystemPrompt: this.resolveSystemPrompt,
+          templateAuthority: this.templateAuthority,
           t3: {
             ...(this.t3.applyHarnessToolTimeout === undefined
               ? {}

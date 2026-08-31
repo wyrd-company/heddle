@@ -13,11 +13,13 @@ import type {
 } from "../console/index.js";
 import {
   createMechanicalNodeEffects,
+  GitHandoffTemplateStore,
   resolveBuiltInSystemPrompt,
   SessionObserver,
   steerStageSession,
   T3ControlPlaneClient,
   type SessionObservationT3Client,
+  type SessionTemplateAuthority,
   type SessionT3Client,
   type SystemPromptResolver,
 } from "../control-plane/index.js";
@@ -121,6 +123,13 @@ export const createProductionComposition = (
       persistence,
       attention,
     );
+    const handoffTemplateStore = new GitHandoffTemplateStore(
+      blueprintRepository.repositoryRoot,
+    );
+    const templateAuthority: SessionTemplateAuthority = {
+      readHandoffTemplate: (reference) => handoffTemplateStore.read(reference),
+      repositoryRoot: blueprintRepository.repositoryRoot,
+    };
     const pushover = new DurablePushoverNotifier(
       persistence,
       configuration.pushover,
@@ -153,6 +162,7 @@ export const createProductionComposition = (
       t3,
       resolveSystemPrompt,
       blueprintRepository.repositoryRoot,
+      templateAuthority,
     );
     const escalation = new EscalationCoordinator({
       attention: {
@@ -215,7 +225,6 @@ export const createProductionComposition = (
     });
     const coordinator = createProductionSubagentCoordinator({
       attention,
-      blueprintsRepositoryRoot: blueprintRepository.repositoryRoot,
       board,
       configuration,
       observer,
@@ -223,6 +232,7 @@ export const createProductionComposition = (
       persistence,
       resolveSystemPrompt,
       t3,
+      templateAuthority,
     });
     subagents = coordinator;
     const consoleActions = new ProductionAttentionActions(

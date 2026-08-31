@@ -13,8 +13,8 @@ import {
   type SessionBootstrapInput,
 } from "./session-bootstrap.js";
 import {
-  readSampleHandoffTemplate,
   sampleHandoffTemplate,
+  sampleTemplateAuthority,
 } from "./session-bootstrap.test-support.js";
 
 const input: SessionBootstrapInput = {
@@ -136,7 +136,7 @@ describe("abandoned activation todo state", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList: instantiateAcrossAdvance,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract: resolveAwaitingStage,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -170,7 +170,7 @@ describe("abandoned activation todo state", () => {
     const next = await bootstrapStageSession(nextInput, {
       persistence: memory.store,
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract: async () => ({
         ...workflowMcp,
         stage: "next",
@@ -262,7 +262,7 @@ describe("abandoned activation todo state", () => {
     const result = await bootstrapStageSession(input, {
       persistence: memory.store,
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract: async () => workflowMcp,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({

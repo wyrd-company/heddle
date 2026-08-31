@@ -14,8 +14,8 @@ import {
 } from "./session-bootstrap.js";
 import { HandoffRenderError } from "./handoff-renderer.js";
 import {
-  readSampleHandoffTemplate,
   sampleHandoffTemplate,
+  sampleTemplateAuthority,
 } from "./session-bootstrap.test-support.js";
 
 const input: SessionBootstrapInput = {
@@ -137,7 +137,7 @@ const expectParentRejected = async (
       {
         instantiateTodoList,
         persistence: memory.store,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -214,7 +214,7 @@ describe("stage session cold retry guards", () => {
       {
         instantiateTodoList,
         persistence: memory.store,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -346,7 +346,7 @@ describe("stage session cold retry guards", () => {
         {
           instantiateTodoList,
           persistence: memory.store,
-          readHandoffTemplate: readSampleHandoffTemplate,
+          templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
           t3: { dispatch },
           ensureWorktree: async ({ branch }) => ({
@@ -372,7 +372,7 @@ describe("stage session cold retry guards", () => {
         {
           instantiateTodoList,
           persistence: memory.store,
-          readHandoffTemplate: readSampleHandoffTemplate,
+          templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
           t3: { dispatch },
           ensureWorktree: async ({ branch }) => ({
@@ -430,7 +430,7 @@ describe("stage session cold retry guards", () => {
         { ...input, parentSessionKey: "parent-b", sessionKey: "child" },
         {
           persistence: memory.store,
-          readHandoffTemplate: readSampleHandoffTemplate,
+          templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
           t3: { dispatch },
           ensureWorktree: async ({ branch }) => ({
@@ -461,7 +461,7 @@ describe("stage session cold retry guards", () => {
     const dependencies: SessionBootstrapDependencies = {
       persistence: memory.store,
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       t3: {
         dispatch: async (command) => {
@@ -521,7 +521,7 @@ describe("stage session cold retry guards", () => {
     const dependencies: SessionBootstrapDependencies = {
       persistence: memory.store,
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       ensureWorktree,
       mintCorrelationToken,
@@ -577,7 +577,7 @@ describe("stage session cold retry guards", () => {
       mintCorrelationToken: () => "correlation-token",
       nextId: () => "stable-id",
       persistence: memory.store,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       t3: { applyHarnessToolTimeout, dispatch },
     };
@@ -618,7 +618,7 @@ describe("stage session cold retry guards", () => {
       const dependencies: SessionBootstrapDependencies = {
         persistence: memory.store,
         instantiateTodoList,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
         t3: { applyHarnessToolTimeout, dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -667,7 +667,7 @@ describe("stage session cold retry guards", () => {
     const dependencies: SessionBootstrapDependencies = {
       persistence: memory.store,
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       t3: { applyHarnessToolTimeout, dispatch },
       ensureWorktree: async ({ branch }) => ({
@@ -744,7 +744,7 @@ describe("stage session cold retry guards", () => {
     const result = await bootstrapStageSession(input, {
       persistence,
       instantiateTodoList,
-      readHandoffTemplate: readSampleHandoffTemplate,
+      templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       t3: { dispatch: async () => ({ sequence: 1 }) },
       ensureWorktree: async ({ branch }) => ({
@@ -784,7 +784,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -816,7 +816,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -850,7 +850,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -888,7 +888,7 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         instantiateTodoList,
-        readHandoffTemplate: readSampleHandoffTemplate,
+        templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
         t3: { dispatch },
         ensureWorktree: async ({ branch }) => ({
@@ -908,12 +908,34 @@ describe("stage session cold retry guards", () => {
     await expect(
       bootstrapStageSession(input, {
         persistence: memory.store,
+        templateAuthority: sampleTemplateAuthority,
         t3: { dispatch },
         ensureWorktree: async () => {
           throw new Error("worktree rejected");
         },
       }),
     ).rejects.toThrow(/worktree rejected/);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(memory.record.state).toEqual(initialState());
+  });
+
+  it("does not fall back to the product repository when template authority is absent", async () => {
+    const memory = memoryStore();
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+    const ensureWorktree = vi.fn(async () => {
+      throw new Error("Product worktree must not be inspected");
+    });
+
+    await expect(
+      bootstrapStageSession(input, {
+        ensureWorktree,
+        persistence: memory.store,
+        t3: { dispatch },
+      }),
+    ).rejects.toThrow(
+      "Stage session bootstrap requires one organization template authority",
+    );
+    expect(ensureWorktree).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
     expect(memory.record.state).toEqual(initialState());
   });
