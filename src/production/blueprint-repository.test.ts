@@ -8,6 +8,10 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  validateConsoleAttentionCatalog,
+  MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
+} from "../console/index.js";
 import { InvalidDispositionError, LifecycleEngine } from "../engine/index.js";
 import {
   executeGit,
@@ -198,8 +202,9 @@ describe("organization blueprint repository", () => {
     expect(setup.attention.list()).toEqual([
       expect.objectContaining({
         kind: "blueprint-repository",
-        message:
+        message: expect.stringContaining(
           "The organization blueprint repository branch is behind origin",
+        ),
       }),
     ]);
   });
@@ -224,13 +229,41 @@ describe("organization blueprint repository", () => {
       ).stdout.trim(),
     ).toBe(before);
     expect(await readFile(path, "utf8")).toBe("local note\n");
-    expect(setup.attention.list()).toEqual([
+    const catalog = setup.attention.list();
+    expect(catalog).toEqual([
       expect.objectContaining({
         kind: "blueprint-repository",
-        message:
+        message: expect.stringContaining(
           "The organization blueprint repository working tree has local changes",
+        ),
       }),
     ]);
+    const head = (
+      await executeGit("git", ["rev-parse", "HEAD"], {
+        cwd: setup.repositoryRoot,
+      })
+    ).stdout.trim();
+    expect(catalog[0]!.message).toContain(head);
+    expect(catalog[0]!.attentionId.length).toBeLessThanOrEqual(
+      MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
+    );
+    expect(() => validateConsoleAttentionCatalog(catalog, false)).not.toThrow();
+  });
+
+  it("refuses an attention identity the console cannot carry", async () => {
+    const setup = await prepare();
+
+    await expect(
+      setup.attention.raise({
+        attentionId: `blueprint-repository:state:${"a".repeat(MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH)}`,
+        category: "state",
+        code: "blueprint-repository-dirty",
+        kind: "blueprint-repository",
+        message: "The organization blueprint repository needs attention",
+        repositoryRoot: setup.repositoryRoot,
+      }),
+    ).rejects.toThrow("exceeds the console attention identity bound");
+    expect(setup.attention.list()).toEqual([]);
   });
 
   it("fails closed with one durable attention when origin cannot be fetched", async () => {
@@ -310,8 +343,9 @@ describe("organization blueprint repository", () => {
     expect(setup.attention.list()).toEqual([
       expect.objectContaining({
         kind: "blueprint-repository",
-        message:
+        message: expect.stringContaining(
           "The organization blueprint repository has diverged from origin",
+        ),
       }),
     ]);
   });

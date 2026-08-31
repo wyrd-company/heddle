@@ -4,6 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -24,7 +25,7 @@ const originFetchRefspec = "+refs/heads/*:refs/remotes/origin/*";
 const stateAttentionPrefix = "blueprint-repository:state:";
 const pushAttentionPrefix = "blueprint-repository:push:";
 
-type RepositoryState = {
+export type BlueprintRepositoryState = {
   code:
     | "blueprint-repository-behind"
     | "blueprint-repository-diverged"
@@ -41,9 +42,27 @@ export type BlueprintRepositoryAttention = {
   code: string;
   commit?: string;
   kind: "blueprint-repository";
+  localCommit?: string;
   message: string;
   repositoryRoot: string;
+  upstreamCommit?: string;
 };
+
+export const blueprintRepositoryStateAttention = (
+  repositoryRoot: string,
+  state: BlueprintRepositoryState,
+): BlueprintRepositoryAttention => ({
+  attentionId: `${stateAttentionPrefix}${state.code}:${createHash("sha256")
+    .update(`${state.code}:${state.localCommit}:${state.upstreamCommit}`)
+    .digest("hex")}`,
+  category: "state",
+  code: state.code,
+  kind: "blueprint-repository",
+  localCommit: state.localCommit,
+  message: `${state.message} (local commit '${state.localCommit}', origin commit '${state.upstreamCommit}')`,
+  repositoryRoot,
+  upstreamCommit: state.upstreamCommit,
+});
 
 export class BlueprintPushError extends Error {
   public constructor(public readonly commit: string) {
@@ -127,7 +146,9 @@ export class OrganizationBlueprintRepository {
         await this.replaceRepositoryAttention(undefined, pushAttentionId);
         return;
       }
-      await this.replaceRepositoryAttention(this.stateAttention(state));
+      await this.replaceRepositoryAttention(
+        blueprintRepositoryStateAttention(this.repositoryRoot, state),
+      );
     } finally {
       await lease.release();
     }
@@ -137,7 +158,9 @@ export class OrganizationBlueprintRepository {
     await lease.assertOwned();
     const state = await this.state();
     if (state === undefined) return;
-    await this.replaceRepositoryAttention(this.stateAttention(state));
+    await this.replaceRepositoryAttention(
+      blueprintRepositoryStateAttention(this.repositoryRoot, state),
+    );
     throw new BlueprintValidationError(
       "The organization blueprint repository is not clean and synchronized with origin",
     );
@@ -210,7 +233,7 @@ export class OrganizationBlueprintRepository {
     await this.replaceRepositoryAttention(undefined);
   }
 
-  private async state(): Promise<RepositoryState | undefined> {
+  private async state(): Promise<BlueprintRepositoryState | undefined> {
     await this.assertOriginUpstream();
     const [{ stdout: status }, localCommit, { stdout: countOutput }] =
       await Promise.all([
@@ -300,17 +323,6 @@ export class OrganizationBlueprintRepository {
       { cwd: this.repositoryRoot },
     );
     return stdout.trim();
-  }
-
-  private stateAttention(state: RepositoryState): BlueprintRepositoryAttention {
-    return {
-      attentionId: `${stateAttentionPrefix}${state.code}:${state.localCommit}:${state.upstreamCommit}`,
-      category: "state",
-      code: state.code,
-      kind: "blueprint-repository",
-      message: state.message,
-      repositoryRoot: this.repositoryRoot,
-    };
   }
 
   private async replaceRepositoryAttention(

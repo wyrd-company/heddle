@@ -14,10 +14,16 @@ import type {
   ConsoleAttentionScope,
 } from "./types.js";
 
+export const MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH = 128;
+
 const identifier = (value: unknown, name: string): string => {
-  if (typeof value !== "string" || value.trim() === "" || value.length > 128) {
+  if (
+    typeof value !== "string" ||
+    value.trim() === "" ||
+    value.length > MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH
+  ) {
     throw new TypeError(
-      `${name} must be a non-empty string of at most 128 characters`,
+      `${name} must be a non-empty string of at most ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
     );
   }
   return value;

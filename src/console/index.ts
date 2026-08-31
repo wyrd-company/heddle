@@ -44,6 +44,7 @@ export {
   createConsoleAttention,
   ConsoleAttentionActionsUnavailableError,
   ConsoleAttentionConflictError,
+  MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
   parseConsoleAttentionActionRequest,
   validateConsoleAttentionCatalog,
 } from "./attention-contract.js";

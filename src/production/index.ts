@@ -24,9 +24,11 @@ export {
 } from "./durable-adapters.js";
 export { ProductionInstanceController } from "./instance-controller.js";
 export {
+  blueprintRepositoryStateAttention,
   BlueprintPushError,
   OrganizationBlueprintRepository,
   type BlueprintRepositoryAttention,
+  type BlueprintRepositoryState,
 } from "./blueprint-repository.js";
 export {
   heddleSessionTitle,

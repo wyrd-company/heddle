@@ -5,6 +5,7 @@
 
 import { createHash } from "node:crypto";
 
+import { MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH } from "../console/index.js";
 import type { EscalationAttention } from "../mcp-server/index.js";
 import type { SessionObservationAttention } from "../control-plane/index.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
@@ -29,6 +30,13 @@ export class DurableAttentionQueue {
   }
 
   async raise(attention: DurableAttention): Promise<void> {
+    if (
+      attention.attentionId.length > MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH
+    ) {
+      throw new Error(
+        `Attention '${attention.attentionId}' exceeds the console attention identity bound of ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
+      );
+    }
     this.persistence.raiseAttention(
       attention.attentionId,
       JSON.parse(JSON.stringify(attention)) as JsonValue,
