@@ -3,6 +3,8 @@
 //   validates: heddle
 // ---
 
+import { setTimeout as delay } from "node:timers/promises";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -133,8 +135,10 @@ describe("console live board polling", () => {
     await vi.waitFor(() => expect(harness.cardIds()).toEqual(["11"]));
     heldBoard.resolve(response({ tasks: [rootTask, childTask] }));
 
-    await vi.waitFor(() => expect(harness.scope.value).toBe("task:11"));
+    await delay(20);
     expect(harness.cardIds()).toEqual(["11"]);
+    expect(harness.board.replaceCount).toBe(2);
+    expect(harness.scope.value).toBe("task:11");
   });
 
   it("does not render an old live projection after scope navigation", async () => {
@@ -142,12 +146,19 @@ describe("console live board polling", () => {
     const heldProjection = deferred<BrowserResponse>();
     harness.holdProjection("all", heldProjection.promise);
     harness.runNextTimeout();
+    await vi.waitFor(() =>
+      expect(
+        harness.projectionRequests.filter((scope) => scope === "all"),
+      ).toHaveLength(2),
+    );
 
     harness.navigate("task:11");
     await vi.waitFor(() => expect(harness.cardIds()).toEqual(["11"]));
     heldProjection.resolve(projection([rootTask, childTask, refreshedTask]));
 
-    await vi.waitFor(() => expect(harness.scope.value).toBe("task:11"));
+    await delay(20);
     expect(harness.cardIds()).toEqual(["11"]);
+    expect(harness.board.replaceCount).toBe(2);
+    expect(harness.scope.value).toBe("task:11");
   });
 });

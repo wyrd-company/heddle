@@ -25,6 +25,7 @@ class FakeElement {
   href = "";
   name = "";
   open = false;
+  replaceCount = 0;
   scrollLeft = 0;
   scrollWidth = 800;
   textContent = "";
@@ -74,6 +75,7 @@ class FakeElement {
   }
 
   replaceChildren(...children: FakeElement[]): void {
+    this.replaceCount += 1;
     this.children.splice(0, this.children.length, ...children);
   }
 }
@@ -254,6 +256,7 @@ export const clientHarness = async (
   const windowListeners = new Map<string, () => void>();
   const graphResponses = new Map<string, Promise<BrowserResponse>>();
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
+  const projectionRequests: string[] = [];
   const lifecycleResponses: BrowserResponse[] =
     initialLifecycle === undefined ? [] : [response(initialLifecycle)];
   const lifecycleRequests: string[] = [];
@@ -337,6 +340,7 @@ export const clientHarness = async (
       const requestedScope = new URL(input, locationHref).searchParams.get(
         "scope",
       )!;
+      projectionRequests.push(requestedScope);
       const heldResponse = projectionResponses.get(requestedScope);
       if (heldResponse !== undefined) return heldResponse;
       const scopedTasks =
@@ -472,6 +476,7 @@ export const clientHarness = async (
     holdProjection: (name: string, held: Promise<BrowserResponse>) => {
       projectionResponses.set(name, held);
     },
+    projectionRequests,
     holdBoard: (held: Promise<BrowserResponse>) => {
       heldBoardResponse = held;
     },
