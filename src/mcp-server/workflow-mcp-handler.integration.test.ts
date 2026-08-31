@@ -1559,7 +1559,10 @@ describe("workflow MCP HTTP server", () => {
     const blueprintPath = "blueprints/standard-delivery.json";
     await writeDeliveryBlueprintFixture(fixture.repositoryRoot);
     await copyFile(
-      join(cwd(), "handoff-templates/standard.md"),
+      join(
+        cwd(),
+        "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
+      ),
       join(fixture.repositoryRoot, "handoff-templates/standard.md"),
     );
     await execFileAsync(
@@ -1568,7 +1571,10 @@ describe("workflow MCP HTTP server", () => {
       { cwd: fixture.repositoryRoot },
     );
     await copyFile(
-      join(cwd(), "todo-templates/standard-delivery-review.json"),
+      join(
+        cwd(),
+        "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-review.json",
+      ),
       join(
         fixture.repositoryRoot,
         "todo-templates/standard-delivery-review.json",
@@ -1639,7 +1645,10 @@ describe("workflow MCP HTTP server", () => {
     const blueprintPath = "blueprints/standard-delivery.json";
     await writeDeliveryBlueprintFixture(fixture.repositoryRoot);
     await copyFile(
-      join(cwd(), "handoff-templates/standard.md"),
+      join(
+        cwd(),
+        "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
+      ),
       join(fixture.repositoryRoot, "handoff-templates/standard.md"),
     );
     await execFileAsync(
@@ -1648,7 +1657,10 @@ describe("workflow MCP HTTP server", () => {
       { cwd: fixture.repositoryRoot },
     );
     await copyFile(
-      join(cwd(), "todo-templates/standard-delivery-review.json"),
+      join(
+        cwd(),
+        "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-review.json",
+      ),
       join(
         fixture.repositoryRoot,
         "todo-templates/standard-delivery-review.json",

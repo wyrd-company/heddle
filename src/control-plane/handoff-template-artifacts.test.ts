@@ -12,8 +12,8 @@ import { parse } from "yaml";
 
 const schemaPath = "schemas/handoff-template.json";
 const templatePaths = [
-  "handoff-templates/standard.md",
-  "handoff-templates/remediation.md",
+  "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
+  "src/test-fixtures/standard-delivery/handoff-templates/remediation.md",
 ] as const;
 
 const metadata = async (path: string): Promise<Record<string, unknown>> => {

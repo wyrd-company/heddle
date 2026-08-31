@@ -240,7 +240,7 @@ describe("production composition", () => {
     );
     for (const path of artifactPaths) {
       await copyFile(
-        join(cwd(), path),
+        join(cwd(), "src/test-fixtures/standard-delivery", path),
         join(fixture.blueprintsRepositoryRoot, path),
       );
     }
@@ -314,7 +314,10 @@ describe("production composition", () => {
       { cwd: fixture.blueprintsRepositoryRoot },
     );
     const expectedTemplateBytes = await readFile(
-      join(cwd(), "handoff-templates/standard.md"),
+      join(
+        cwd(),
+        "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
+      ),
       "utf8",
     );
     expect(pinnedBlob.stdout).toBe(expectedTemplateBytes);

@@ -13,10 +13,10 @@ import { deliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-sup
 
 const schemaPath = "schemas/todo-template.json";
 const templatePaths = [
-  "todo-templates/standard-delivery-implement.json",
-  "todo-templates/standard-delivery-review.json",
-  "todo-templates/standard-delivery-remediate.json",
-  "todo-templates/standard-delivery-retrospective.json",
+  "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-implement.json",
+  "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-review.json",
+  "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-remediate.json",
+  "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-retrospective.json",
 ] as const;
 
 const readJson = async (path: string): Promise<unknown> =>
