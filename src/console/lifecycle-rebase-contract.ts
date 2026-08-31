@@ -88,6 +88,11 @@ export const assertConsoleLifecycleRebaseCurrent = (
       "Pinned lifecycle blueprint changed before rebase",
     );
   }
+  if (lifecycle.rebase.state === "upstream-target-unavailable") {
+    throw new ConsoleLifecycleRebaseConflictError(
+      "Upstream lifecycle rebase target is unavailable",
+    );
+  }
   if (
     lifecycle.rebase.targetBlueprintBlobHash !== request.expectedTargetBlobHash
   ) {
@@ -95,9 +100,14 @@ export const assertConsoleLifecycleRebaseCurrent = (
       "Upstream lifecycle blueprint changed before rebase",
     );
   }
-  if (!lifecycle.rebase.available) {
+  if (lifecycle.rebase.state === "current") {
     throw new ConsoleLifecycleRebaseConflictError(
       "Lifecycle instance is already on the current upstream blueprint",
+    );
+  }
+  if (lifecycle.status !== "awaiting") {
+    throw new ConsoleLifecycleRebaseConflictError(
+      "Lifecycle instance is not at an awaiting state",
     );
   }
   if (!lifecycle.rebase.targetStateIds.includes(request.targetState)) {

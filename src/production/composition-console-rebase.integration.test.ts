@@ -51,13 +51,13 @@ describe("production console lifecycle rebase", () => {
       blueprint: { blobHash: string };
       instanceId: string;
       rebase: {
-        available: boolean;
+        state: "available" | "current";
         targetBlueprintBlobHash: string;
       };
     };
     expect(initialResponse.status).toBe(200);
     expect(initial.rebase).toMatchObject({
-      available: false,
+      state: "current",
       targetBlueprintBlobHash: initial.blueprint.blobHash,
     });
     const control = await composition.lifecycle.start({
@@ -134,7 +134,7 @@ describe("production console lifecycle rebase", () => {
     );
     await expect(beforeFetch.json()).resolves.toMatchObject({
       blueprint: { blobHash: initial.blueprint.blobHash },
-      rebase: { available: false },
+      rebase: { state: "current" },
     });
 
     await composition.scheduler.trigger();
@@ -146,7 +146,7 @@ describe("production console lifecycle rebase", () => {
       blueprint: { blobHash: string };
       instanceId: string;
       rebase: {
-        available: boolean;
+        state: "available";
         targetBlueprintBlobHash: string;
         targetStateIds: string[];
       };
@@ -155,7 +155,7 @@ describe("production console lifecycle rebase", () => {
       blueprint: { blobHash: initial.blueprint.blobHash },
       instanceId: initial.instanceId,
       rebase: {
-        available: true,
+        state: "available",
         targetStateIds: expect.arrayContaining(["verify"]),
       },
     });
@@ -197,7 +197,7 @@ describe("production console lifecycle rebase", () => {
     const rebased = (await rebaseResponse.json()) as {
       blueprint: { blobHash: string };
       currentStageIds: string[];
-      rebase: { available: boolean };
+      rebase: { state: string };
     };
     expect(rebaseResponse.status).toBe(200);
     expect(rebased).toMatchObject({
@@ -205,7 +205,7 @@ describe("production console lifecycle rebase", () => {
         blobHash: available.rebase.targetBlueprintBlobHash,
       },
       currentStageIds: ["verify"],
-      rebase: { available: false },
+      rebase: { state: "current" },
     });
     expect(
       readLifecycleContext(
@@ -278,6 +278,16 @@ describe("production console lifecycle rebase", () => {
       taskId: number;
     };
     expect(initialResponse.status).toBe(200);
+    const localHeadBefore = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: prepared.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    const workingPath = join(
+      prepared.blueprintsRepositoryRoot,
+      "blueprints/sample.json",
+    );
+    const workingBytesBefore = await readFile(workingPath, "utf8");
 
     const remote = (
       await execute("git", ["remote", "get-url", "origin"], {
@@ -311,11 +321,7 @@ describe("production console lifecycle rebase", () => {
       `${baseUrl}/api/lifecycle?task=${prepared.taskId}&after=0`,
     );
     const lifecycle = (await lifecycleResponse.json()) as {
-      rebase: {
-        available: boolean;
-        targetBlueprintBlobHash: string;
-        targetStateIds: string[];
-      };
+      rebase: { state: string };
     } & typeof initial;
     expect(lifecycleResponse.status).toBe(200);
     expect(lifecycle).toMatchObject({
@@ -325,13 +331,13 @@ describe("production console lifecycle rebase", () => {
       instanceId: initial.instanceId,
       nextSequence: initial.nextSequence,
       rebase: {
-        available: false,
-        targetBlueprintBlobHash: initial.blueprint.blobHash,
-        targetStateIds: [],
+        state: "upstream-target-unavailable",
       },
       status: initial.status,
       taskId: initial.taskId,
     });
+    expect(lifecycle.rebase).not.toHaveProperty("targetBlueprintBlobHash");
+    expect(lifecycle.rebase).not.toHaveProperty("targetStateIds");
 
     const rejectedResponse = await globalThis.fetch(
       `${baseUrl}/api/lifecycle/${prepared.taskId}/rebase`,
@@ -352,5 +358,107 @@ describe("production console lifecycle rebase", () => {
         composition.persistence.getInstance(initial.instanceId)!,
       ).blueprintBlobHash,
     ).toBe(initial.blueprint.blobHash);
+    expect(
+      (
+        await execute("git", ["rev-parse", "HEAD"], {
+          cwd: prepared.blueprintsRepositoryRoot,
+        })
+      ).stdout.trim(),
+    ).toBe(localHeadBefore);
+    expect(await readFile(workingPath, "utf8")).toBe(workingBytesBefore);
+  }, 20_000);
+
+  it("keeps the pinned lifecycle view available when its upstream source is unresolvable", async () => {
+    const prepared = await prepareProductionFixture();
+    fixture = prepared;
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: prepared.blueprintsRepositoryRoot,
+      configuration: prepared.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    server = await startHeddleServer(
+      { host: "127.0.0.1", port: 0 },
+      { production: composition },
+    );
+    const baseUrl = `http://127.0.0.1:${server.port}`;
+    const initialResponse = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=${prepared.taskId}&after=0`,
+    );
+    const initial = (await initialResponse.json()) as {
+      blueprint: { blobHash: string };
+      currentStageIds: string[];
+      events: unknown[];
+      instanceId: string;
+      nextSequence: number;
+      status: string;
+      taskId: number;
+    };
+    expect(initialResponse.status).toBe(200);
+    const localHeadBefore = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: prepared.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    const workingPath = join(
+      prepared.blueprintsRepositoryRoot,
+      "blueprints/sample.json",
+    );
+    const workingBytesBefore = await readFile(workingPath, "utf8");
+
+    await execute("git", ["branch", "--unset-upstream"], {
+      cwd: prepared.blueprintsRepositoryRoot,
+    });
+
+    const lifecycleResponse = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=${prepared.taskId}&after=0`,
+    );
+    const lifecycle = (await lifecycleResponse.json()) as {
+      rebase: { state: string };
+    } & typeof initial;
+    expect(lifecycleResponse.status).toBe(200);
+    expect(lifecycle).toMatchObject({
+      blueprint: initial.blueprint,
+      currentStageIds: initial.currentStageIds,
+      events: initial.events,
+      instanceId: initial.instanceId,
+      nextSequence: initial.nextSequence,
+      rebase: { state: "upstream-target-unavailable" },
+      status: initial.status,
+      taskId: initial.taskId,
+    });
+    expect(lifecycle.rebase).not.toHaveProperty("targetBlueprintBlobHash");
+    expect(lifecycle.rebase).not.toHaveProperty("targetStateIds");
+
+    const rejectedResponse = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle/${prepared.taskId}/rebase`,
+      {
+        body: JSON.stringify({
+          expectedInstanceId: initial.instanceId,
+          expectedPinnedBlobHash: initial.blueprint.blobHash,
+          expectedTargetBlobHash: initial.blueprint.blobHash,
+          targetState: initial.currentStageIds[0],
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+    expect(rejectedResponse.status).toBe(409);
+    expect(
+      readLifecycleContext(
+        composition.persistence.getInstance(initial.instanceId)!,
+      ).blueprintBlobHash,
+    ).toBe(initial.blueprint.blobHash);
+    expect(
+      (
+        await execute("git", ["rev-parse", "HEAD"], {
+          cwd: prepared.blueprintsRepositoryRoot,
+        })
+      ).stdout.trim(),
+    ).toBe(localHeadBefore);
+    expect(await readFile(workingPath, "utf8")).toBe(workingBytesBefore);
   }, 20_000);
 });

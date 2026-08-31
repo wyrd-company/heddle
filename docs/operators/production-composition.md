@@ -138,14 +138,22 @@ and explicit instance rebases read the fetched upstream commit. Running
 instances keep their held blueprint blob and do not change version. Heddle does
 not merge, rebase, reset, switch, or modify the working branch during fetch.
 
-Open a running task's lifecycle view to inspect rebase availability. When its
-pinned blob differs from the fetched upstream artifact, the view identifies the
-newer blob and offers that artifact's named wait states. Select the intended
-state and use `REBASE INSTANCE`. Heddle re-reads the task, instance, pinned blob,
-and upstream target blob before it calls the lifecycle router. A successful
-action replaces the lifecycle view and reports the selected state and new blob.
-A stale or rejected action reports the error and leaves the instance pinned.
-Fetching a newer artifact without using this action never moves the instance.
+Open a running task's lifecycle view to inspect rebase availability. The view
+reports `current` when the inspected upstream artifact is the pinned blob and
+`available` when it is a different blob. An available target identifies the
+newer blob and, while the instance is awaiting, offers that artifact's named
+wait states. The view reports `upstream-target-unavailable` when the upstream
+source or artifact path cannot be inspected. This state keeps the pinned
+blueprint, instance identity, and ordered history visible and offers no rebase
+action. A pinned artifact, persistence, identity, or history failure remains an
+error instead of being reported as an unavailable target.
+
+Select the intended state and use `REBASE INSTANCE`. Heddle re-reads the task,
+instance, pinned blob, and upstream target blob before it calls the lifecycle
+router. A successful action replaces the lifecycle view and reports the
+selected state and new blob. A stale, unavailable-target, or rejected action
+reports the error and leaves the instance pinned. Fetching a newer artifact
+without using this action never moves the instance.
 
 The console editor requires a clean working tree with the current branch equal
 to upstream. One successful save validates and atomically replaces the artifact,

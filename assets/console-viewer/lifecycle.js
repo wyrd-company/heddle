@@ -76958,7 +76958,7 @@ function Sce() {
 		let t = C.current;
 		if (t === null) throw Error("Lifecycle tail arrived before replay");
 		let n = vce(t, e);
-		C.current = n, (e.events.length > 0 || t.status !== e.status || t.currentStageIds.join("\0") !== e.currentStageIds.join("\0") || t.rebase.available !== e.rebase.available || t.rebase.targetBlueprintBlobHash !== e.rebase.targetBlueprintBlobHash || t.rebase.targetStateIds.join("\0") !== e.rebase.targetStateIds.join("\0")) && r(n);
+		C.current = n, (e.events.length > 0 || t.status !== e.status || t.currentStageIds.join("\0") !== e.currentStageIds.join("\0") || t.rebase.state !== e.rebase.state || t.rebase.state !== "upstream-target-unavailable" && e.rebase.state !== "upstream-target-unavailable" && (t.rebase.targetBlueprintBlobHash !== e.rebase.targetBlueprintBlobHash || t.rebase.targetStateIds.join("\0") !== e.rebase.targetStateIds.join("\0"))) && r(n);
 	}, []);
 	(0, _.useEffect)(() => {
 		let e = {
@@ -77030,8 +77030,8 @@ function Sce() {
 			if (e !== b.current) return;
 			l(t instanceof Error ? t.message : "Blueprint load failed");
 		}
-	}, [n]), k = w, A = n?.rebase.targetStateIds ?? [], j = A.includes(f) ? f : A[0] ?? "", M = (0, _.useCallback)(async () => {
-		if (n === null || !n.rebase.available || j === "" || i !== null) return;
+	}, [n]), k = w, A = n?.rebase.state === "available" ? n.rebase.targetStateIds : [], j = A.includes(f) ? f : A[0] ?? "", M = (0, _.useCallback)(async () => {
+		if (n === null || n.rebase.state !== "available" || n.status !== "awaiting" || j === "" || i !== null) return;
 		let e = ++x.current, t = n.rebase.targetBlueprintBlobHash;
 		h(!0), d(`Rebasing to ${j}…`);
 		try {
@@ -77130,7 +77130,8 @@ function Sce() {
 					/* @__PURE__ */ (0, V.jsxs)("section", {
 						"aria-labelledby": "lifecycle-rebase-title",
 						className: "lifecycle-rebase",
-						"data-available": n?.rebase.available === !0,
+						"data-available": n?.rebase.state === "available" && n.status === "awaiting",
+						"data-state": n?.rebase.state,
 						children: [
 							/* @__PURE__ */ (0, V.jsx)("p", {
 								className: "eyebrow",
@@ -77140,7 +77141,7 @@ function Sce() {
 							n === null ? /* @__PURE__ */ (0, V.jsx)("p", {
 								className: "lifecycle-rebase-summary",
 								children: "Select a running lifecycle to inspect its blueprint version."
-							}) : n.rebase.available ? /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsxs)("p", {
+							}) : n.rebase.state === "available" && n.status === "awaiting" ? /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsxs)("p", {
 								className: "lifecycle-rebase-summary",
 								children: [
 									"NEW BLUEPRINT ·",
@@ -77171,9 +77172,12 @@ function Sce() {
 										children: m ? "REBASING…" : "REBASE INSTANCE"
 									})
 								]
-							})] }) : /* @__PURE__ */ (0, V.jsx)("p", {
+							})] }) : n.rebase.state === "upstream-target-unavailable" ? /* @__PURE__ */ (0, V.jsx)("p", {
 								className: "lifecycle-rebase-summary",
-								children: n.blueprint.blobHash === n.rebase.targetBlueprintBlobHash ? "PINNED BLUEPRINT IS CURRENT" : "INSTANCE IS NOT AT AN AWAITING STATE"
+								children: "UPSTREAM REBASE TARGET IS UNAVAILABLE"
+							}) : /* @__PURE__ */ (0, V.jsx)("p", {
+								className: "lifecycle-rebase-summary",
+								children: n.rebase.state === "current" ? "PINNED BLUEPRINT IS CURRENT" : "INSTANCE IS NOT AT AN AWAITING STATE"
 							}),
 							/* @__PURE__ */ (0, V.jsx)("p", {
 								"aria-live": "polite",

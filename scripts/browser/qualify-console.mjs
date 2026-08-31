@@ -1166,14 +1166,14 @@ const exerciseLifecycleRebase = async (baseUrl) => {
   await assertLifecycleSettled();
   invariant(
     (await evaluate(
-      `document.querySelector(".lifecycle-rebase")?.dataset.available`,
-    )) === "false",
+      `document.querySelector(".lifecycle-rebase")?.dataset.state`,
+    )) === "current",
     "lifecycle-rebase-availability",
     "rebase was available before the fetched upstream artifact advanced",
   );
   fixture.advanceLifecycleBlueprint();
   await waitFor(
-    `document.querySelector(".lifecycle-rebase")?.dataset.available === "true"`,
+    `document.querySelector(".lifecycle-rebase")?.dataset.state === "available" && document.querySelector(".lifecycle-rebase")?.dataset.available === "true"`,
   );
   const before = await evaluate(`(() => ({
     button: document.querySelector(".lifecycle-rebase-controls button")?.textContent.trim(),
@@ -1198,7 +1198,7 @@ const exerciseLifecycleRebase = async (baseUrl) => {
     await delay(20);
   }
   await waitFor(
-    `document.querySelector(".lifecycle-rebase")?.dataset.available === "false" && document.querySelector(".lifecycle-rebase-status")?.textContent === "Rebased to arrange · artifact bbbbbbbbbbbb"`,
+    `document.querySelector(".lifecycle-rebase")?.dataset.state === "current" && document.querySelector(".lifecycle-rebase-status")?.textContent === "Rebased to arrange · artifact bbbbbbbbbbbb"`,
   );
   invariant(
     JSON.stringify(fixture.lifecycleRebases()) ===
@@ -1216,6 +1216,57 @@ const exerciseLifecycleRebase = async (baseUrl) => {
     `rebase outcome is ${JSON.stringify(after)}`,
   );
   await assertReadOnlySurface("closed");
+};
+
+const assertUnavailableLifecycleReason = async (guard) => {
+  const state = await evaluate(`(() => ({
+    available: document.querySelector(".lifecycle-rebase")?.dataset.available,
+    controls: document.querySelectorAll(".lifecycle-rebase-controls button, .lifecycle-rebase-controls select").length,
+    reason: document.querySelector(".lifecycle-rebase-summary")?.textContent.trim().replace(/\\s+/g, " "),
+    state: document.querySelector(".lifecycle-rebase")?.dataset.state,
+  }))()`);
+  invariant(
+    state.state === "upstream-target-unavailable" &&
+      state.available === "false" &&
+      state.controls === 0 &&
+      state.reason === "UPSTREAM REBASE TARGET IS UNAVAILABLE",
+    guard,
+    `unavailable lifecycle target rendered ${JSON.stringify(state)}`,
+  );
+};
+
+const exerciseUnavailableLifecycleTarget = async (baseUrl, cause) => {
+  fixture.reset();
+  await setViewport({ height: 1000, width: 1440 });
+  await resetPageEvidence();
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  if (cause === "missing-path") {
+    fixture.removeLifecycleBlueprintFromUpstream();
+  } else {
+    fixture.makeLifecycleSourceUnresolvable();
+  }
+  await waitFor(
+    `document.querySelector(".lifecycle-rebase")?.dataset.state === "upstream-target-unavailable"`,
+  );
+  await assertUnavailableLifecycleReason(`lifecycle-rebase-${cause}`);
+  await command("focus", ".lifecycle-history");
+  await press("Tab");
+  await assertFocused(
+    ".blueprint-editor-actions > button",
+    `${cause} unavailable target keyboard continuation`,
+  );
+  invariant(
+    fixture.lifecycleRebases().length === 0,
+    `lifecycle-rebase-${cause}`,
+    `unavailable target invoked ${JSON.stringify(fixture.lifecycleRebases())}`,
+  );
+  await assertLifecycleAxe(await axe(), `lifecycle ${cause} unavailable`);
+  await assertReadOnlySurface("closed");
+  await assertNoRuntimeOrNetworkErrors(
+    new URL(baseUrl).origin,
+    `lifecycle ${cause} unavailable`,
+  );
 };
 
 const auditView = async (baseUrl, viewport, view) => {
@@ -1357,6 +1408,19 @@ const mutationBattery = async (baseUrl) => {
         "axe-prohibited-aria",
       ),
   );
+
+  for (const cause of ["missing-path", "unresolvable-source"]) {
+    await exerciseUnavailableLifecycleTarget(baseUrl, cause);
+    await expectSoleKill(
+      `lifecycle-rebase-${cause}`,
+      () =>
+        evaluate(
+          `document.querySelector(".lifecycle-rebase-summary").textContent = "PINNED BLUEPRINT IS CURRENT"`,
+        ),
+      () => assertUnavailableLifecycleReason(`lifecycle-rebase-${cause}`),
+    );
+  }
+  await setViewport({ height: 844, width: 390 });
 
   await open(`${baseUrl}/?view=dependencies&scope=epic%3A40`);
   await assertPageReady("4 visible nodes");
@@ -1744,6 +1808,8 @@ const main = async () => {
     await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
     await assertLifecycleSettled();
     await assertLifecycleTrace();
+    await exerciseUnavailableLifecycleTarget(baseUrl, "missing-path");
+    await exerciseUnavailableLifecycleTarget(baseUrl, "unresolvable-source");
     await exerciseLifecycleRebase(baseUrl);
     await exerciseBlueprintEditor(baseUrl);
     await open(`${baseUrl}/?scope=epic%3A40`);

@@ -142,8 +142,10 @@ class FixtureState implements ConsoleStateSource {
       instanceId: "instance-52",
       nextSequence: 1,
       rebase: {
-        available:
-          this.lifecycleBlueprintBlobHash !== this.lifecycleTargetBlobHash,
+        state:
+          this.lifecycleBlueprintBlobHash !== this.lifecycleTargetBlobHash
+            ? "available"
+            : "current",
         targetBlueprintBlobHash: this.lifecycleTargetBlobHash,
         targetStateIds: ["inspect"],
       },
@@ -336,7 +338,7 @@ describe("console server", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       blueprint: { blobHash: "b".repeat(40) },
-      rebase: { available: false },
+      rebase: { state: "current" },
     });
     expect(repeated.status).toBe(409);
     expect(rebases).toEqual([

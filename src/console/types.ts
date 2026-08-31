@@ -136,11 +136,18 @@ export interface ConsoleLifecycleSnapshot {
   taskId: number;
 }
 
-export interface ConsoleLifecycleRebaseAvailability {
-  available: boolean;
-  targetBlueprintBlobHash: string;
-  targetStateIds: string[];
-}
+export type ConsoleLifecycleRebaseAvailability =
+  | {
+      state: "current";
+      targetBlueprintBlobHash: string;
+      targetStateIds: string[];
+    }
+  | {
+      state: "available";
+      targetBlueprintBlobHash: string;
+      targetStateIds: string[];
+    }
+  | { state: "upstream-target-unavailable" };
 
 export type ConsoleLifecycleRebaseRequest = {
   expectedInstanceId: string;

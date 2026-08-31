@@ -25,7 +25,7 @@ const snapshot = (): ConsoleLifecycleSnapshot => ({
   instanceId: "instance-31",
   nextSequence: 0,
   rebase: {
-    available: true,
+    state: "available",
     targetBlueprintBlobHash: "b".repeat(40),
     targetStateIds: ["inspect", "approve"],
   },
@@ -84,5 +84,22 @@ describe("console lifecycle rebase contract", () => {
         targetState: "inspect",
       }),
     ).toThrow("unknown fields");
+  });
+
+  it("rejects explicit rebase when the upstream target is unavailable", () => {
+    const lifecycle = {
+      ...snapshot(),
+      rebase: { state: "upstream-target-unavailable" as const },
+    };
+    const request = parseConsoleLifecycleRebaseRequest({
+      expectedInstanceId: lifecycle.instanceId,
+      expectedPinnedBlobHash: lifecycle.blueprint.blobHash,
+      expectedTargetBlobHash: lifecycle.blueprint.blobHash,
+      targetState: "inspect",
+    });
+
+    expect(() =>
+      assertConsoleLifecycleRebaseCurrent(lifecycle, request),
+    ).toThrow("Upstream lifecycle rebase target is unavailable");
   });
 });

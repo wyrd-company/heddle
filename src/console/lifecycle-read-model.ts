@@ -21,10 +21,13 @@ export interface ConsoleLifecycleReadInput {
     executionId: string;
   }>;
   instanceId: string;
-  rebase: {
-    targetBlueprintBlobHash: string;
-    targetStateIds: string[];
-  };
+  rebase:
+    | {
+        state: "inspected";
+        targetBlueprintBlobHash: string;
+        targetStateIds: string[];
+      }
+    | { state: "upstream-target-unavailable" };
   status: string;
   taskId: number;
 }
@@ -139,13 +142,17 @@ export const buildConsoleLifecycleSnapshot = (
       .filter(({ sequence }) => sequence > input.afterSequence),
     instanceId: input.instanceId,
     nextSequence,
-    rebase: {
-      available:
-        input.status === "awaiting" &&
-        input.blueprintBlobHash !== input.rebase.targetBlueprintBlobHash,
-      targetBlueprintBlobHash: input.rebase.targetBlueprintBlobHash,
-      targetStateIds: [...input.rebase.targetStateIds],
-    },
+    rebase:
+      input.rebase.state === "upstream-target-unavailable"
+        ? { state: "upstream-target-unavailable" }
+        : {
+            state:
+              input.blueprintBlobHash === input.rebase.targetBlueprintBlobHash
+                ? "current"
+                : "available",
+            targetBlueprintBlobHash: input.rebase.targetBlueprintBlobHash,
+            targetStateIds: [...input.rebase.targetStateIds],
+          },
     status: input.status,
     taskId: input.taskId,
   };

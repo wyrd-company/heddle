@@ -31,7 +31,7 @@ const snapshot = (
   instanceId: "instance-41",
   nextSequence: events.at(-1)?.sequence ?? 0,
   rebase: {
-    available: false,
+    state: "current",
     targetBlueprintBlobHash: "a".repeat(40),
     targetStateIds: ["inspect"],
   },

@@ -23,11 +23,18 @@ const inspectUpstreamRebaseTarget = async (
   blueprintPath: string,
 ) => {
   try {
-    return await new GitBlueprintStore(repositoryRoot, {
+    const target = await new GitBlueprintStore(repositoryRoot, {
       sourceRef,
     }).inspect(blueprintPath);
+    return {
+      state: "inspected" as const,
+      targetBlueprintBlobHash: target.blobHash,
+      targetStateIds: target.blueprint.nodes
+        .filter(({ uses }) => uses === "wait")
+        .map(({ id }) => id),
+    };
   } catch {
-    return undefined;
+    return { state: "upstream-target-unavailable" as const };
   }
 };
 
@@ -133,13 +140,7 @@ export class ProductionConsoleState implements ConsoleStateSource {
       currentStageIds: [...context.awaitingNodeIds],
       executionHistories,
       instanceId: instance.instanceId,
-      rebase: {
-        targetBlueprintBlobHash: target?.blobHash ?? context.blueprintBlobHash,
-        targetStateIds:
-          target?.blueprint.nodes
-            .filter(({ uses }) => uses === "wait")
-            .map(({ id }) => id) ?? [],
-      },
+      rebase: target,
       status: context.status,
       taskId: input.taskId,
     });

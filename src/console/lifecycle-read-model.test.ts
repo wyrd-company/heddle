@@ -47,6 +47,7 @@ describe("console lifecycle read model", () => {
       ],
       instanceId: "instance-91",
       rebase: {
+        state: "inspected",
         targetBlueprintBlobHash: "c".repeat(40),
         targetStateIds: ["inspect"],
       },
@@ -67,9 +68,42 @@ describe("console lifecycle read model", () => {
       path: "blueprints/sample-lifecycle.json",
     });
     expect(snapshot.rebase).toEqual({
-      available: true,
+      state: "available",
       targetBlueprintBlobHash: "c".repeat(40),
       targetStateIds: ["inspect"],
+    });
+  });
+
+  it("represents current and unavailable upstream targets without hash aliasing", () => {
+    const make = (
+      rebase: Parameters<typeof buildConsoleLifecycleSnapshot>[0]["rebase"],
+    ) =>
+      buildConsoleLifecycleSnapshot({
+        afterSequence: 0,
+        blueprint,
+        blueprintBlobHash: "a".repeat(40),
+        blueprintPath: "blueprints/sample-lifecycle.json",
+        currentStageIds: ["inspect"],
+        executionHistories: [],
+        instanceId: "instance-93",
+        rebase,
+        status: "awaiting",
+        taskId: 93,
+      });
+
+    expect(
+      make({
+        state: "inspected",
+        targetBlueprintBlobHash: "a".repeat(40),
+        targetStateIds: ["inspect"],
+      }).rebase,
+    ).toEqual({
+      state: "current",
+      targetBlueprintBlobHash: "a".repeat(40),
+      targetStateIds: ["inspect"],
+    });
+    expect(make({ state: "upstream-target-unavailable" }).rebase).toEqual({
+      state: "upstream-target-unavailable",
     });
   });
 
@@ -88,6 +122,7 @@ describe("console lifecycle read model", () => {
         executionHistories: [],
         instanceId: "instance-92",
         rebase: {
+          state: "inspected",
           targetBlueprintBlobHash: "b".repeat(40),
           targetStateIds: ["inspect"],
         },

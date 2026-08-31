@@ -180,11 +180,13 @@ function LifecycleViewer() {
       current.status !== next.status ||
       current.currentStageIds.join("\u0000") !==
         next.currentStageIds.join("\u0000") ||
-      current.rebase.available !== next.rebase.available ||
-      current.rebase.targetBlueprintBlobHash !==
-        next.rebase.targetBlueprintBlobHash ||
-      current.rebase.targetStateIds.join("\u0000") !==
-        next.rebase.targetStateIds.join("\u0000")
+      current.rebase.state !== next.rebase.state ||
+      (current.rebase.state !== "upstream-target-unavailable" &&
+        next.rebase.state !== "upstream-target-unavailable" &&
+        (current.rebase.targetBlueprintBlobHash !==
+          next.rebase.targetBlueprintBlobHash ||
+          current.rebase.targetStateIds.join("\u0000") !==
+            next.rebase.targetStateIds.join("\u0000")))
     ) {
       setSnapshot(combined);
     }
@@ -290,7 +292,10 @@ function LifecycleViewer() {
 
   const stopEditing = resetEditing;
 
-  const rebaseTargets = snapshot?.rebase.targetStateIds ?? [];
+  const rebaseTargets =
+    snapshot?.rebase.state === "available"
+      ? snapshot.rebase.targetStateIds
+      : [];
   const selectedRebaseTarget = rebaseTargets.includes(rebaseTarget)
     ? rebaseTarget
     : (rebaseTargets[0] ?? "");
@@ -298,7 +303,8 @@ function LifecycleViewer() {
   const rebaseInstance = useCallback(async () => {
     if (
       snapshot === null ||
-      !snapshot.rebase.available ||
+      snapshot.rebase.state !== "available" ||
+      snapshot.status !== "awaiting" ||
       selectedRebaseTarget === "" ||
       editing !== null
     ) {
@@ -417,7 +423,11 @@ function LifecycleViewer() {
           <section
             aria-labelledby="lifecycle-rebase-title"
             className="lifecycle-rebase"
-            data-available={snapshot?.rebase.available === true}
+            data-available={
+              snapshot?.rebase.state === "available" &&
+              snapshot.status === "awaiting"
+            }
+            data-state={snapshot?.rebase.state}
           >
             <p className="eyebrow" id="lifecycle-rebase-title">
               INSTANCE REBASE
@@ -426,7 +436,8 @@ function LifecycleViewer() {
               <p className="lifecycle-rebase-summary">
                 Select a running lifecycle to inspect its blueprint version.
               </p>
-            ) : snapshot.rebase.available ? (
+            ) : snapshot.rebase.state === "available" &&
+              snapshot.status === "awaiting" ? (
               <>
                 <p className="lifecycle-rebase-summary">
                   NEW BLUEPRINT ·{" "}
@@ -459,10 +470,13 @@ function LifecycleViewer() {
                   </button>
                 </div>
               </>
+            ) : snapshot.rebase.state === "upstream-target-unavailable" ? (
+              <p className="lifecycle-rebase-summary">
+                UPSTREAM REBASE TARGET IS UNAVAILABLE
+              </p>
             ) : (
               <p className="lifecycle-rebase-summary">
-                {snapshot.blueprint.blobHash ===
-                snapshot.rebase.targetBlueprintBlobHash
+                {snapshot.rebase.state === "current"
                   ? "PINNED BLUEPRINT IS CURRENT"
                   : "INSTANCE IS NOT AT AN AWAITING STATE"}
               </p>

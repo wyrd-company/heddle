@@ -290,6 +290,7 @@ export const createConsoleQualificationFixture = async () => {
   let lifecycleTrace = [];
   let lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
   let lifecycleTargetBlobHash = lifecycleBlueprint.blobHash;
+  let lifecycleTargetState = "inspected";
   let lifecycleRebases = [];
   let actions = [];
   let boardWrites = [];
@@ -372,11 +373,17 @@ export const createConsoleQualificationFixture = async () => {
         events,
         instanceId: "instance-43",
         nextSequence: events.at(-1)?.sequence ?? 5,
-        rebase: {
-          available: lifecyclePinnedBlobHash !== lifecycleTargetBlobHash,
-          targetBlueprintBlobHash: lifecycleTargetBlobHash,
-          targetStateIds: ["arrange"],
-        },
+        rebase:
+          lifecycleTargetState === "upstream-target-unavailable"
+            ? { state: "upstream-target-unavailable" }
+            : {
+                state:
+                  lifecyclePinnedBlobHash === lifecycleTargetBlobHash
+                    ? "current"
+                    : "available",
+                targetBlueprintBlobHash: lifecycleTargetBlobHash,
+                targetStateIds: ["arrange"],
+              },
         status: "awaiting",
         taskId,
       };
@@ -408,6 +415,9 @@ export const createConsoleQualificationFixture = async () => {
   };
   const lifecycleActions = {
     async rebase(input) {
+      if (lifecycleTargetState === "upstream-target-unavailable") {
+        throw new Error("fixture upstream target is unavailable");
+      }
       lifecycleRebases.push(clone(input));
       lifecyclePinnedBlobHash = lifecycleTargetBlobHash;
     },
@@ -425,6 +435,7 @@ export const createConsoleQualificationFixture = async () => {
   return {
     actions: () => clone(actions),
     advanceLifecycleBlueprint() {
+      lifecycleTargetState = "inspected";
       lifecycleTargetBlobHash = "b".repeat(40);
     },
     blueprintRequests: () =>
@@ -438,6 +449,9 @@ export const createConsoleQualificationFixture = async () => {
     cleanup: () => rm(repositoryRoot, { force: true, recursive: true }),
     lifecycleRebases: () => clone(lifecycleRebases),
     lifecycleTrace: () => clone(lifecycleTrace),
+    removeLifecycleBlueprintFromUpstream() {
+      lifecycleTargetState = "upstream-target-unavailable";
+    },
     prepareBlueprintEditor() {
       blueprintLoads = [];
       blueprintLoadResults = [];
@@ -458,9 +472,13 @@ export const createConsoleQualificationFixture = async () => {
       lifecycleTrace = [];
       lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
       lifecycleTargetBlobHash = lifecycleBlueprint.blobHash;
+      lifecycleTargetState = "inspected";
       lifecycleRebases = [];
       actions = [];
       boardWrites = [];
+    },
+    makeLifecycleSourceUnresolvable() {
+      lifecycleTargetState = "upstream-target-unavailable";
     },
     server,
     stableAttentionIds: attentionCatalog().map(
