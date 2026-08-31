@@ -202,6 +202,43 @@ describe("Reconciler", () => {
     });
   });
 
+  it("keeps acceptance blocked, raises one stable attention, and continues after a UAT child is added", async () => {
+    const epic = task(54, "in-progress", { tags: ["type:epic"] });
+    const delivery = task(55, "done", { parent: epic.id });
+    const subject = fixture([epic, delivery]);
+
+    await subject.reconciler.reconcile();
+    await subject.reconciler.reconcile();
+
+    expect(epic.status).toBe("uat");
+    expect(subject.board.epicWrites).toEqual([
+      { status: "uat", taskId: epic.id },
+    ]);
+    expect([...subject.attention.entries.values()]).toEqual([
+      {
+        attentionId: "epic:54:acceptance:uat-child-missing",
+        code: "uat-child-missing",
+        kind: "epic-acceptance",
+        message: "Epic 54 requires a UAT child before acceptance",
+        taskId: epic.id,
+      },
+    ]);
+
+    const acceptance = task(56, "backlog", {
+      lifecycle: "room-inspection",
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    subject.board.tasks.push(acceptance);
+
+    await subject.reconciler.reconcile();
+
+    expect(acceptance.status).toBe("todo");
+    expect(subject.instances.starts.at(-1)?.task.id).toBe(acceptance.id);
+    expect(subject.board.epicWrites).toHaveLength(1);
+    expect(subject.attention.entries).toHaveLength(1);
+  });
+
   it("does not promote or dispatch blocked child and standalone tasks", async () => {
     const epic = task(55, "in-progress", { tags: ["type:epic"] });
     const child = task(56, "backlog", {

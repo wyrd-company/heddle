@@ -122,6 +122,19 @@ export class Reconciler {
         }
 
         const acceptanceChildren = children.filter(isUat);
+        if (epic.status === "uat" && acceptanceChildren.length === 0) {
+          await this.raiseAttention(
+            {
+              attentionId: `epic:${epic.id}:acceptance:uat-child-missing`,
+              code: "uat-child-missing",
+              kind: "epic-acceptance",
+              message: `Epic ${epic.id} requires a UAT child before acceptance`,
+              taskId: epic.id,
+            },
+            actions,
+          );
+          continue;
+        }
         if (
           epic.status === "uat" &&
           deliveryChildren.every(

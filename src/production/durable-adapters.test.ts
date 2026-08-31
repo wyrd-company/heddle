@@ -153,7 +153,7 @@ describe("durable production adapters", () => {
     persistence.close();
   });
 
-  it("does not repeat a completed Pushover effect after restart", async () => {
+  it("does not repeat a completed dead-session Pushover effect after restart", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-"));
     const sent: PushoverMessage[] = [];
     const transport = {
@@ -167,12 +167,8 @@ describe("durable production adapters", () => {
     };
     const attention = {
       attentionId: "task-17:session:choice",
-      escalationId: "choice",
       instanceId: "task-17",
-      openedAt: "2030-01-01T00:00:00.000Z",
-      ownerSessionKey: "task-17:implement",
-      questions: [],
-      stage: "implement",
+      message: "Session sample-one is ended without lifecycle advance",
     };
     const firstPersistence = new SqlitePersistence({
       stateDirectory: directory,
@@ -232,12 +228,8 @@ describe("durable production adapters", () => {
     );
     const attention = {
       attentionId: "task-18:session:choice",
-      escalationId: "choice",
       instanceId: "task-18",
-      openedAt: "2030-01-01T00:00:00.000Z",
-      ownerSessionKey: "task-18:implement",
-      questions: [],
-      stage: "implement",
+      message: "Session sample-two is stalled without lifecycle advance",
     };
 
     await expect(notifier.send(attention)).rejects.toThrow(
@@ -268,12 +260,8 @@ describe("durable production adapters", () => {
     });
     const attention = {
       attentionId: "task-20:session:choice",
-      escalationId: "choice",
       instanceId: "task-20",
-      openedAt: "2030-01-01T00:00:00.000Z",
-      ownerSessionKey: "task-20:implement",
-      questions: [],
-      stage: "implement",
+      message: "Session sample-three is failed without lifecycle advance",
     };
     const firstTransport = {
       send: vi.fn(async () => {
@@ -332,12 +320,8 @@ describe("durable production adapters", () => {
     await expect(
       notifier.send({
         attentionId: "instance-19:session:choice",
-        escalationId: "choice",
         instanceId: "instance-19",
-        openedAt: "2030-01-01T00:00:00.000Z",
-        ownerSessionKey: "instance-19:implement",
-        questions: [],
-        stage: "implement",
+        message: "Session sample-four is ended without lifecycle advance",
       }),
     ).rejects.toThrow("does not resolve to one production task");
     expect(transport.send).not.toHaveBeenCalled();

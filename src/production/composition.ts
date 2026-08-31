@@ -66,6 +66,7 @@ import { productionErrorAttention } from "./error-visibility.js";
 import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
 import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
+import { pageSessionAttentions } from "./session-attention-paging.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -209,7 +210,11 @@ export const createProductionComposition = (
       persistence,
       pushover: {
         send: async (value) => {
-          await pushover.send(value);
+          await pushover.send({
+            attentionId: value.attentionId,
+            instanceId: value.instanceId,
+            message: `Heddle escalation in ${value.stage}`,
+          });
           await options.afterEscalationEffect?.("pushover", value.attentionId);
         },
       },
@@ -306,11 +311,12 @@ export const createProductionComposition = (
         await instances.synchronize(after);
         for (const session of productionSessionTargets(persistence!)) {
           try {
-            await observer.observe({
+            const observation = await observer.observe({
               instanceId: session.instanceId,
               sessionKey: session.sessionKey,
               threadId: session.threadId,
             });
+            await pageSessionAttentions(observation.attentions, pushover);
           } catch (error) {
             const runtime = persistence!
               .listReconcilerRuntime()

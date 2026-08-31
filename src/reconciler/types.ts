@@ -66,7 +66,11 @@ export interface ReconcilerAttention {
   code: string;
   error?: ErrorDetail;
   instanceId?: string;
-  kind: "lifecycle-resolution" | "production-error" | "stale-instance";
+  kind:
+    | "epic-acceptance"
+    | "lifecycle-resolution"
+    | "production-error"
+    | "stale-instance";
   message: string;
   taskId: number;
 }

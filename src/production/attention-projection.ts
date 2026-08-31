@@ -196,7 +196,11 @@ export const projectProductionAttention = (
       kind,
     );
   }
-  if (kind === "lifecycle-resolution" || kind === "stale-instance") {
+  if (
+    kind === "epic-acceptance" ||
+    kind === "lifecycle-resolution" ||
+    kind === "stale-instance"
+  ) {
     const taskId = validTaskId(payload["taskId"], attentionId);
     requiredIdentifier(payload, "code", attentionId);
     const instanceId = payload["instanceId"];
@@ -217,7 +221,7 @@ export const projectProductionAttention = (
       ...(typeof instanceId === "string" ? { instanceId } : {}),
       kind,
       message: requiredString(payload, "message", attentionId),
-      scope: `task:${taskId}`,
+      scope: `${kind === "epic-acceptance" ? "epic" : "task"}:${taskId}`,
       taskId,
     });
   }

@@ -189,6 +189,17 @@ describe("production attention projection", () => {
         [],
       ),
     ).toMatchObject({ actions: [], scope: "task:43", taskId: 43 });
+    expect(
+      projectProductionAttention(
+        record("attention-acceptance", {
+          code: "uat-child-missing",
+          kind: "epic-acceptance",
+          message: "Epic requires a UAT child",
+          taskId: 45,
+        }),
+        [],
+      ),
+    ).toMatchObject({ actions: [], scope: "epic:45", taskId: 45 });
   });
 
   it("fails closed on identity, task, and catalog disagreement", () => {

@@ -36,6 +36,42 @@ describe("production composition", () => {
     return fixture;
   };
 
+  it("pages one stalled-session attention through the durable production route", async () => {
+    const fixture = await prepare();
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    const deliveries = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: deliveries },
+      t3: new SyntheticT3(),
+    });
+
+    await composition.start();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
+    await composition.scheduler.trigger();
+
+    expect(deliveries).toHaveBeenCalledTimes(1);
+    expect(deliveries.mock.calls[0]?.[0]).toMatchObject({
+      message: expect.stringContaining("is stalled without lifecycle advance"),
+      stableId: expect.any(String),
+    });
+    const stableId = deliveries.mock.calls[0]?.[0].stableId;
+    if (typeof stableId !== "string") throw new Error("Page has no stable ID");
+    expect(composition.persistence.effectCompleted("pushover", stableId)).toBe(
+      true,
+    );
+    await composition.close();
+  });
+
   it("activates standard delivery from the organization template authority without product templates", async () => {
     const fixture = await prepare();
     const artifactPaths = [

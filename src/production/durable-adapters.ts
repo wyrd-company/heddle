@@ -60,6 +60,12 @@ export interface PushoverTransport {
   send(message: PushoverMessage): Promise<void>;
 }
 
+export type OperatorPage = {
+  attentionId: string;
+  instanceId: string;
+  message: string;
+};
+
 export class HttpPushoverTransport implements PushoverTransport {
   public constructor(
     private readonly apiUrl: string,
@@ -94,26 +100,26 @@ export class DurablePushoverNotifier {
     ) => Promise<void> | void,
   ) {}
 
-  async send(attention: EscalationAttention): Promise<void> {
-    if (this.persistence.effectCompleted("pushover", attention.attentionId)) {
+  async send(page: OperatorPage): Promise<void> {
+    if (this.persistence.effectCompleted("pushover", page.attentionId)) {
       return;
     }
     const runtimes = this.persistence
       .listReconcilerRuntime()
-      .filter(({ instanceId }) => instanceId === attention.instanceId);
+      .filter(({ instanceId }) => instanceId === page.instanceId);
     if (runtimes.length !== 1) {
       throw new Error(
-        `Escalation '${attention.attentionId}' does not resolve to one production task`,
+        `Attention '${page.attentionId}' does not resolve to one production task`,
       );
     }
     const scope = new globalThis.URL(this.configuration.consoleBaseUrl);
     scope.searchParams.set("view", "lifecycle");
     scope.searchParams.set("scope", `task:${runtimes[0]!.taskId}`);
-    scope.searchParams.set("attention", attention.attentionId);
+    scope.searchParams.set("attention", page.attentionId);
     const message: PushoverMessage = {
       applicationToken: this.configuration.applicationToken,
-      message: `Heddle escalation in ${attention.stage}`,
-      stableId: attention.attentionId,
+      message: page.message,
+      stableId: page.attentionId,
       title: "Heddle needs attention",
       url: scope.toString(),
       userKey: this.configuration.userKey,
@@ -121,17 +127,14 @@ export class DurablePushoverNotifier {
     const messageFingerprint = createHash("sha256")
       .update(JSON.stringify(message))
       .digest("hex");
-    this.persistence.recordEffectIntent("pushover", attention.attentionId, {
+    this.persistence.recordEffectIntent("pushover", page.attentionId, {
       messageFingerprint,
     });
     await this.transport.send(message);
     await this.afterTransportSuccess?.(message);
     if (
-      !this.persistence.recordEffectCompleted(
-        "pushover",
-        attention.attentionId,
-      ) &&
-      !this.persistence.effectCompleted("pushover", attention.attentionId)
+      !this.persistence.recordEffectCompleted("pushover", page.attentionId) &&
+      !this.persistence.effectCompleted("pushover", page.attentionId)
     ) {
       throw new Error("Pushover completion lost its durable intent");
     }
