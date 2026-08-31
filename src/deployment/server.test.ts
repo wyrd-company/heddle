@@ -8,6 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqlitePersistence } from "../persistence/index.js";
@@ -141,7 +142,7 @@ describe("deployed Heddle service", () => {
     expect(oversized.status).toBe(413);
   });
 
-  it("redacts the deployed event feed without changing the durable activation payload", async () => {
+  it("redacts the deployed event feed while preserving the exact durable activation bytes", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-deployment-server-"));
     const correlationToken = "deployment-fixture-credential";
     const systemPrompt = "# Generic deployment fixture instructions";
@@ -173,8 +174,24 @@ correlationToken: "${correlationToken}"
       threadId: "thread-101",
       version: 1,
     });
-    const durableEvents = writer.replayEvents("task-101");
     writer.close();
+    const activationPayloadBytes = (): string => {
+      const database = new Database(join(directory, "heddle-state.sqlite"), {
+        readonly: true,
+      });
+      const row = database
+        .prepare(
+          `SELECT payload_json
+           FROM heddle_instance_events
+           WHERE instance_id = ? AND type = ?`,
+        )
+        .get("task-101", "session:activated") as
+        { payload_json: string } | undefined;
+      database.close();
+      if (row === undefined) throw new Error("fixture activation is absent");
+      return row.payload_json;
+    };
+    const before = activationPayloadBytes();
 
     service = await startHeddleServer(
       {
@@ -195,9 +212,7 @@ correlationToken: "${correlationToken}"
     expect(serialized).not.toContain("correlationToken:");
     expect(serialized).toContain("# Inspect the generated sample");
 
-    const observer = new SqlitePersistence({ stateDirectory: directory });
-    expect(observer.replayEvents("task-101")).toEqual(durableEvents);
-    observer.close();
+    expect(activationPayloadBytes()).toBe(before);
   });
 
   it.each([
