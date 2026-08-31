@@ -326,6 +326,9 @@ export const createConsoleQualificationFixture = async () => {
         ({ attentionId }) => !resolvedAttention.has(attentionId),
       );
     },
+    async listCorrelationTokens() {
+      return [];
+    },
     async listEvents() {
       return [];
     },
