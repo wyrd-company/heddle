@@ -66,7 +66,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly attention: ReconcilerAttentionQueue,
     private readonly t3: SessionT3Client,
     private readonly resolveSystemPrompt: SystemPromptResolver,
-    private readonly blueprintsRepositoryRoot: string,
     private readonly templateAuthority: SessionTemplateAuthority,
     private readonly now: () => number = Date.now,
   ) {}
@@ -275,7 +274,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const stage = await readProductionHandoffStage({
       instanceId,
       persistence: this.persistence,
-      repositoryRoot: this.blueprintsRepositoryRoot,
+      repositoryRoot: this.templateAuthority.repositoryRoot,
       stageId,
     });
     const repository = this.routing.repositoryForStage(

@@ -161,7 +161,6 @@ export const createProductionComposition = (
       attention,
       t3,
       resolveSystemPrompt,
-      blueprintRepository.repositoryRoot,
       templateAuthority,
     );
     const escalation = new EscalationCoordinator({
