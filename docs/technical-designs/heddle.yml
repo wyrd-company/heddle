@@ -406,6 +406,15 @@ proposed-design:
     the current console catalog but retain their stable identity for restart
     deduplication.
 
+    Session observation and session page delivery fail independently. An
+    observer rejection raises the stable task-scoped production error
+    `session-observation-failed`. A failed Pushover effect after successful
+    observation raises the distinct stable task-scoped production error
+    `session-page-delivery-failed`. The latter leaves the original Pushover
+    intent pending under its pageable attention ID for at-least-once retry; it
+    never relabels a notification transport failure as a T3 observation
+    failure.
+
     Harness-native question tools serve assistive tasks, where the
     operator already works in T3's UI. The provider adapters map
     those tools to pending-user-input state on the thread shell,

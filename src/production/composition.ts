@@ -301,6 +301,30 @@ export const createProductionComposition = (
       persistence,
       subagentCoordinator: coordinator,
     });
+    const raiseSessionProductionError = async (
+      code: "session-observation-failed" | "session-page-delivery-failed",
+      error: unknown,
+      session: { instanceId: string; sessionKey: string },
+    ): Promise<void> => {
+      const runtime = persistence!
+        .listReconcilerRuntime()
+        .find(({ instanceId }) => instanceId === session.instanceId);
+      if (runtime === undefined) throw error;
+      const summary =
+        code === "session-observation-failed"
+          ? `Session ${session.sessionKey} observation failed`
+          : `Session ${session.sessionKey} page delivery failed`;
+      const failure = productionErrorAttention({
+        code,
+        error,
+        instanceId: session.instanceId,
+        summary,
+        taskId: runtime.taskId,
+      });
+      if (!(await attention.has(failure.attentionId))) {
+        await attention.raise(failure);
+      }
+    };
     const scheduler = new ProductionScheduler({
       cadenceMilliseconds: configuration.cadenceMilliseconds,
       onError: async (error) => {
@@ -335,28 +359,29 @@ export const createProductionComposition = (
         routing.update(after);
         await instances.synchronize(after);
         for (const session of productionSessionTargets(persistence!)) {
+          let observation: Awaited<ReturnType<SessionObserver["observe"]>>;
           try {
-            const observation = await observer.observe({
+            observation = await observer.observe({
               instanceId: session.instanceId,
               sessionKey: session.sessionKey,
               threadId: session.threadId,
             });
+          } catch (error) {
+            await raiseSessionProductionError(
+              "session-observation-failed",
+              error,
+              session,
+            );
+            continue;
+          }
+          try {
             await pageSessionAttentions(observation.attentions, pushover);
           } catch (error) {
-            const runtime = persistence!
-              .listReconcilerRuntime()
-              .find(({ instanceId }) => instanceId === session.instanceId);
-            if (runtime === undefined) throw error;
-            const failure = productionErrorAttention({
-              code: "session-observation-failed",
+            await raiseSessionProductionError(
+              "session-page-delivery-failed",
               error,
-              instanceId: session.instanceId,
-              summary: `Session ${session.sessionKey} observation failed`,
-              taskId: runtime.taskId,
-            });
-            if (!(await attention.has(failure.attentionId))) {
-              await attention.raise(failure);
-            }
+              session,
+            );
           }
         }
         await lifecycleAttentionBridge.flush();

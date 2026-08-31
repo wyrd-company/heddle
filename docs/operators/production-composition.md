@@ -411,6 +411,14 @@ Pushover receives escalations and session-observation attention of kind
 user-input, stale-instance, lifecycle, repository, production-error, and
 epic-acceptance attention remain console-only.
 
+Session observation and Pushover page delivery have separate production-error
+entries. `session-observation-failed` means Heddle could not read the session
+from T3. `session-page-delivery-failed` means observation succeeded but the
+Pushover effect failed. The page-delivery entry does not replace the original
+pageable attention: its durable Pushover intent remains pending under the same
+stable attention ID and a later serialized pass retries the same payload. A
+completed effect does not send again.
+
 Qualification uses generated boards, repositories, state directories,
 worktrees, and synthetic notification transport. It does not use the shared
 board, the live T3 server, ambient T3 state, or live Pushover.

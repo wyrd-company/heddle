@@ -72,6 +72,122 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("reports a session-observation rejection without a page-delivery failure", async () => {
+    const fixture = await prepare();
+    class ObservationFailureT3 extends SyntheticT3 {
+      override async getShell() {
+        throw new Error("synthetic observation rejection");
+      }
+    }
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new ObservationFailureT3(),
+    });
+
+    await composition.start();
+
+    expect(composition.persistence.listAttention()).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "session-observation-failed",
+          kind: "production-error",
+          message: expect.stringContaining("observation failed"),
+          taskId: fixture.taskId,
+        }),
+      }),
+    ]);
+    expect(composition.persistence.listAttention()).not.toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "session-page-delivery-failed",
+        }),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("retries a failed session page delivery without relabeling it as observation failure", async () => {
+    const fixture = await prepare();
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    class AbsentSessionT3 extends SyntheticT3 {
+      override async getShell() {
+        return { threads: [] };
+      }
+    }
+    let rejectTransport = true;
+    const deliveries = vi.fn(async () => {
+      if (rejectTransport) {
+        throw new Error("synthetic page delivery rejection");
+      }
+    });
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: deliveries },
+      t3: new AbsentSessionT3(),
+    });
+
+    await composition.start();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
+
+    const pageable = composition.attention
+      .list()
+      .find(({ kind }) => kind === "ended");
+    if (pageable === undefined) throw new Error("Missing pageable attention");
+    expect(
+      composition.persistence.effectIntentRecorded(
+        "pushover",
+        pageable.attentionId,
+      ),
+    ).toBe(true);
+    expect(
+      composition.persistence.effectCompleted("pushover", pageable.attentionId),
+    ).toBe(false);
+    expect(composition.persistence.listAttention()).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "session-page-delivery-failed",
+          kind: "production-error",
+          message: expect.stringContaining("page delivery failed"),
+          taskId: fixture.taskId,
+        }),
+      }),
+    );
+    expect(composition.persistence.listAttention()).not.toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "session-observation-failed",
+        }),
+      }),
+    );
+
+    rejectTransport = false;
+    await composition.scheduler.trigger();
+    expect(deliveries).toHaveBeenCalledTimes(2);
+    expect(deliveries.mock.calls[1]?.[0]).toEqual(
+      deliveries.mock.calls[0]?.[0],
+    );
+    expect(
+      composition.persistence.effectCompleted("pushover", pageable.attentionId),
+    ).toBe(true);
+    await composition.scheduler.trigger();
+    expect(deliveries).toHaveBeenCalledTimes(2);
+    await composition.close();
+  });
+
   it("activates standard delivery from the organization template authority without product templates", async () => {
     const fixture = await prepare();
     const artifactPaths = [
