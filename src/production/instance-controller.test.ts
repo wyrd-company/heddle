@@ -195,7 +195,8 @@ describe("production instance controller", () => {
       code: "stage-repository-not-declared",
       instanceId: "task-2",
       kind: "lifecycle-resolution",
-      message: "Task 2 targets more than one repository but its stage declares none",
+      message:
+        "Task 2 targets more than one repository but its stage declares none",
       taskId: 2,
     });
     expect(persistence.listReconcilerRuntime()).toMatchObject([
