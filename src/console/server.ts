@@ -33,6 +33,7 @@ import {
   validateConsoleAttentionCatalog,
 } from "./attention-contract.js";
 import { buildDependencyGraphProjection } from "./dependency-graph.js";
+import { projectPublicConsoleEvent } from "./event-projection.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
 import type {
   ConsoleAttention,
@@ -292,13 +293,15 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
         json(
           response,
           200,
-          await options.state.listEvents({
-            afterSequence: nonNegativeInteger(
-              url.searchParams.get("after"),
-              "after",
-            ),
-            ...(instanceId === null ? {} : { instanceId }),
-          }),
+          (
+            await options.state.listEvents({
+              afterSequence: nonNegativeInteger(
+                url.searchParams.get("after"),
+                "after",
+              ),
+              ...(instanceId === null ? {} : { instanceId }),
+            })
+          ).map(projectPublicConsoleEvent),
         );
         return;
       }

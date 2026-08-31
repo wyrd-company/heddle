@@ -141,6 +141,65 @@ describe("deployed Heddle service", () => {
     expect(oversized.status).toBe(413);
   });
 
+  it("redacts the deployed event feed without changing the durable activation payload", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-deployment-server-"));
+    const correlationToken = "deployment-fixture-credential";
+    const systemPrompt = "# Generic deployment fixture instructions";
+    const renderedDocument = `${systemPrompt}\n\n---
+format: "heddle.stage-handoff"
+version: 1
+instanceId: "task-101"
+sessionKey: "session-101"
+taskId: 101
+stage: "inspect"
+correlationToken: "${correlationToken}"
+---
+# Inspect the generated sample`;
+    const writer = new SqlitePersistence({ stateDirectory: directory });
+    writer.createInstance("task-101", {
+      correlationTokens: { "session-101": correlationToken },
+      flowcraftContext: { awaitingNodeIds: ["inspect"] },
+      handoffs: [],
+      todoState: null,
+    });
+    writer.appendEvent("task-101", "session:activated", {
+      format: "heddle.session-activation",
+      instanceId: "task-101",
+      renderedDocument,
+      sessionKey: "session-101",
+      stage: "inspect",
+      systemPrompt,
+      taskId: 101,
+      threadId: "thread-101",
+      version: 1,
+    });
+    const durableEvents = writer.replayEvents("task-101");
+    writer.close();
+
+    service = await startHeddleServer(
+      {
+        boardDirectory: join(directory, "unused-board"),
+        host: "127.0.0.1",
+        port: 0,
+        stateDirectory: directory,
+      },
+      { board },
+    );
+    const response = await globalThis.fetch(
+      `http://127.0.0.1:${service.port}/api/events?instance=task-101&after=0`,
+    );
+    const serialized = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(serialized).not.toContain(correlationToken);
+    expect(serialized).not.toContain("correlationToken:");
+    expect(serialized).toContain("# Inspect the generated sample");
+
+    const observer = new SqlitePersistence({ stateDirectory: directory });
+    expect(observer.replayEvents("task-101")).toEqual(durableEvents);
+    observer.close();
+  });
+
   it.each([
     [{ HEDDLE_PORT: "3774" }, "HEDDLE_STATE_PATH must not be empty"],
     [

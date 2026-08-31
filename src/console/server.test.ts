@@ -139,13 +139,15 @@ describe("console server", () => {
   let baseUrl: string;
   let board: FixtureBoard;
   let server: ReturnType<typeof createConsoleServer>;
+  let state: FixtureState;
 
   beforeEach(async () => {
     board = new FixtureBoard();
+    state = new FixtureState();
     server = createConsoleServer({
       board,
       now: () => 180_000,
-      state: new FixtureState(),
+      state,
     });
     await new Promise<void>((resolve) =>
       server.listen(0, "127.0.0.1", resolve),
@@ -265,6 +267,48 @@ describe("console server", () => {
     expect(malformedTask.status).toBe(400);
     expect(malformedCursor.status).toBe(400);
     expect(board.writes).toEqual([]);
+  });
+
+  it("does not expose an activation correlation token through the console event API", async () => {
+    const correlationToken = "console-fixture-credential";
+    const systemPrompt = "# Generic console fixture instructions";
+    const renderedDocument = `${systemPrompt}\n\n---
+format: "heddle.stage-handoff"
+version: 1
+instanceId: "instance-52"
+sessionKey: "session-52"
+taskId: 52
+stage: "inspect"
+correlationToken: "${correlationToken}"
+---
+# Inspect the generated sample`;
+    state.events.push({
+      instanceId: "instance-52",
+      payload: {
+        format: "heddle.session-activation",
+        instanceId: "instance-52",
+        renderedDocument,
+        sessionKey: "session-52",
+        stage: "inspect",
+        systemPrompt,
+        taskId: 52,
+        threadId: "thread-52",
+        version: 1,
+      },
+      recordedAt: "2026-01-01T00:03:00.000Z",
+      sequence: 8,
+      type: "session:activated",
+    });
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/events?instance=instance-52&after=7`,
+    );
+    const serialized = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(serialized).not.toContain(correlationToken);
+    expect(serialized).not.toContain("correlationToken:");
+    expect(serialized).toContain("# Inspect the generated sample");
   });
 
   it("does not expose raw or future board task fields through the board HTTP API", async () => {
