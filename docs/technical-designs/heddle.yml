@@ -470,7 +470,11 @@ proposed-design:
     so every view carries a scope filter: all work, one epic (its
     children and its own lifecycle), or one task. The filter is part
     of the console URL, so a pushover deep link lands already scoped
-    to the entry that raised it.
+    to the entry that raised it. The board and dependency projections
+    poll their existing read endpoints every second without changing
+    the current scope or viewport position. The header reports LIVE
+    BOARD while updates arrive and BOARD STALE when no update arrives
+    within two polling intervals.
 
     The lifecycle view consumes one canonical read model assembled
     outside the viewer from the production composition's durable reconciler

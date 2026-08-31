@@ -20,8 +20,8 @@ export const consolePage = `<!doctype html>
         <span><strong>HEDDLE</strong><small>WORKFLOW CONSOLE</small></span>
       </a>
       <div class="masthead-state">
-        <span class="live-mark" aria-hidden="true"></span>
-        <span>LIVE BOARD</span>
+        <span class="live-mark" id="live-board-mark" data-health="connecting" aria-hidden="true"></span>
+        <span id="live-board-status" role="status" aria-live="polite">BOARD CONNECTING</span>
         <button class="attention-toggle" id="attention-toggle" type="button" aria-controls="attention-overlay" aria-expanded="false">
           <span>ATTENTION</span>
           <span class="attention-count" id="attention-count" role="status" aria-label="Attention items">0</span>
@@ -193,6 +193,9 @@ button, input, select { font: inherit; }
   background: #62c99b;
   box-shadow: 0 0 0 3px rgba(98, 201, 155, 0.17);
 }
+.live-mark[data-health="connecting"] { background: #d5d3cc; }
+.live-mark[data-health="stale"] { background: var(--signal-on-dark); }
+.live-mark[data-health="snapshot"] { background: #d5d3cc; }
 
 .attention-count {
   min-width: 25px;
@@ -504,7 +507,13 @@ const viewEyebrowElement = document.querySelector("#view-eyebrow");
 const viewTitleElement = document.querySelector("#view-title");
 const boardViewLink = document.querySelector("#board-view-link");
 const dependenciesViewLink = document.querySelector("#dependencies-view-link");
+const liveBoardMarkElement = document.querySelector("#live-board-mark");
+const liveBoardStatusElement = document.querySelector("#live-board-status");
+const boardPollIntervalMilliseconds = 1000;
+const boardStaleAfterMilliseconds = boardPollIntervalMilliseconds * 2;
 let loadGeneration = 0;
+let boardHealthTimer;
+let boardPollTimer;
 let lifecyclePollTimer;
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
@@ -531,6 +540,28 @@ const fetchJson = async (url, options) => {
   const response = await fetch(url, { cache: "no-store", ...options });
   if (!response.ok) throw new Error(await response.text());
   return response.status === 204 ? null : response.json();
+};
+
+const setLiveBoardHealth = (health) => {
+  const label =
+    health === "live"
+      ? "LIVE BOARD"
+      : health === "stale"
+        ? "BOARD STALE"
+        : health === "snapshot"
+          ? "BOARD SNAPSHOT"
+          : "BOARD CONNECTING";
+  liveBoardMarkElement.dataset.health = health;
+  liveBoardStatusElement.textContent = label;
+};
+
+const markLiveBoardUpdate = () => {
+  window.clearTimeout(boardHealthTimer);
+  setLiveBoardHealth("live");
+  boardHealthTimer = window.setTimeout(
+    () => setLiveBoardHealth("stale"),
+    boardStaleAfterMilliseconds,
+  );
 };
 
 const duration = (milliseconds) => {
@@ -975,12 +1006,49 @@ const pollLifecycle = (taskId, generation, afterSequence) => {
       window.heddleLifecycleViewer?.clear();
       renderLoadFailure(error);
     }
-  }, 1000);
+  }, boardPollIntervalMilliseconds);
+};
+
+const pollBoard = (view, scope, generation) => {
+  boardPollTimer = window.setTimeout(async () => {
+    if (generation !== loadGeneration) return;
+    try {
+      const [board, attention] = await Promise.all([
+        fetchJson("/api/board"),
+        fetchJson("/api/attention"),
+      ]);
+      if (generation !== loadGeneration) return;
+      addScopeOptions(board.tasks, scope);
+      renderAttention(attention);
+      if (view === "board") {
+        const projection = await fetchJson(
+          "/api/projection?scope=" + encodeURIComponent(scope),
+        );
+        if (generation !== loadGeneration) return;
+        renderProjection(projection);
+        updateDwells();
+      } else {
+        const graph = await fetchJson(
+          "/api/dependency-graph?scope=" + encodeURIComponent(scope),
+        );
+        if (generation !== loadGeneration) return;
+        renderDependencyGraph(graph);
+      }
+      markLiveBoardUpdate();
+    } catch {
+      if (generation !== loadGeneration) return;
+      setLiveBoardHealth("stale");
+    }
+    if (generation === loadGeneration) pollBoard(view, scope, generation);
+  }, boardPollIntervalMilliseconds);
 };
 
 async function load() {
   const generation = ++loadGeneration;
+  window.clearTimeout(boardHealthTimer);
+  window.clearTimeout(boardPollTimer);
   window.clearTimeout(lifecyclePollTimer);
+  setLiveBoardHealth("connecting");
   statusElement.dataset.error = "false";
   statusElement.textContent = "Loading board…";
   const requestedScope = scopeFromUrl();
@@ -1001,11 +1069,15 @@ async function load() {
       renderProjection(projection);
       statusElement.textContent = projection.columns.reduce((count, column) => count + column.tasks.length, 0) + " visible records";
       updateDwells();
+      markLiveBoardUpdate();
+      pollBoard(view, requestedScope, generation);
     } else if (view === "dependencies") {
       const graph = await fetchJson("/api/dependency-graph?scope=" + encodeURIComponent(requestedScope));
       if (generation !== loadGeneration) return;
       renderDependencyGraph(graph);
       statusElement.textContent = graph.nodes.length + " visible nodes · " + graph.edges.length + " dependency edges";
+      markLiveBoardUpdate();
+      pollBoard(view, requestedScope, generation);
     } else {
       const match = /^task:([1-9][0-9]*)$/.exec(requestedScope);
       if (!match) throw new Error("lifecycle view requires task:<id> scope");
@@ -1018,11 +1090,13 @@ async function load() {
       lifecycleTaskElement.textContent = "Task #" + task.id + " · " + task.title;
       lifecycleViewer().replace(lifecycle);
       statusElement.textContent = "Lifecycle view for task #" + task.id;
+      setLiveBoardHealth("snapshot");
       pollLifecycle(task.id, generation, lifecycle.nextSequence);
     }
   } catch (error) {
     if (generation !== loadGeneration) return;
     window.heddleLifecycleViewer?.clear();
+    setLiveBoardHealth("stale");
     renderLoadFailure(error);
   }
 }

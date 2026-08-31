@@ -245,6 +245,11 @@ export const clientHarness = async (
   const attentionClose = new FakeElement("button");
   const attentionStatus = new FakeElement("p");
   const attentionList = new FakeElement("div");
+  const liveBoardMark = new FakeElement("span");
+  const liveBoardStatus = new FakeElement("span");
+  let boardTasks = initialTasks;
+  let heldBoardResponse: Promise<BrowserResponse> | undefined;
+  let graphFixture = initialGraph;
   let locationHref = initialUrl;
   const windowListeners = new Map<string, () => void>();
   const graphResponses = new Map<string, Promise<BrowserResponse>>();
@@ -257,14 +262,17 @@ export const clientHarness = async (
     input: string;
     options?: BrowserRequestOptions;
   }> = [];
-  const timeouts: Array<() => void> = [];
+  const timeouts = new Map<number, { callback: () => void; due: number }>();
+  let clock = 0;
+  let nextTimeout = 0;
 
   const fetch = async (
     input: string,
     options?: BrowserRequestOptions,
   ): Promise<BrowserResponse> => {
     if (input === "/api/board") {
-      return response({ tasks: initialTasks });
+      if (heldBoardResponse !== undefined) return heldBoardResponse;
+      return response({ tasks: boardTasks });
     }
     if (input === "/api/attention") return response(initialAttention);
     if (input.startsWith("/api/attention/") && options?.method === "POST") {
@@ -297,7 +305,7 @@ export const clientHarness = async (
       );
       const heldResponse = graphResponses.get(requestedScope!);
       if (heldResponse !== undefined) return heldResponse;
-      const graph = initialGraph ?? {
+      const graph = graphFixture ?? {
         edges: [{ from: 10, to: 11, trace: true }],
         nodes: [
           {
@@ -331,13 +339,26 @@ export const clientHarness = async (
       )!;
       const heldResponse = projectionResponses.get(requestedScope);
       if (heldResponse !== undefined) return heldResponse;
-      if (requestedScope === "task:11")
-        return response(projection([childTask]));
+      const scopedTasks =
+        requestedScope === "all"
+          ? boardTasks
+          : requestedScope.startsWith("epic:")
+            ? boardTasks.filter(
+                (task) =>
+                  task.id === Number(requestedScope.slice("epic:".length)) ||
+                  task.parent === Number(requestedScope.slice("epic:".length)),
+              )
+            : boardTasks.filter(
+                (task) =>
+                  task.id === Number(requestedScope.slice("task:".length)),
+              );
+      if (requestedScope.startsWith("task:"))
+        return response(projection(scopedTasks));
       if (requestedScope === "epic:10") {
-        return response(projection([rootTask, childTask]));
+        return response(projection(scopedTasks));
       }
       if (requestedScope === "all") {
-        return response(projection(initialTasks));
+        return response(projection(scopedTasks));
       }
       return response(`scope ${requestedScope} is invalid`, {
         ok: false,
@@ -370,6 +391,8 @@ export const clientHarness = async (
       if (selector === "#view-title") return viewTitle;
       if (selector === "#board-view-link") return boardViewLink;
       if (selector === "#dependencies-view-link") return dependenciesViewLink;
+      if (selector === "#live-board-mark") return liveBoardMark;
+      if (selector === "#live-board-status") return liveBoardStatus;
       throw new Error(`unexpected selector ${selector}`);
     },
     querySelectorAll: () => [],
@@ -389,16 +412,19 @@ export const clientHarness = async (
         return locationHref;
       },
     },
-    clearTimeout: () => undefined,
+    clearTimeout: (id: number) => {
+      timeouts.delete(id);
+    },
     heddleLifecycleViewer: {
       append: (value: unknown) => lifecycleSnapshots.push(value),
       clear: () => lifecycleSnapshots.splice(0),
       replace: (value: unknown) => lifecycleSnapshots.push(value),
     },
     setInterval: () => 0,
-    setTimeout: (callback: () => void) => {
-      timeouts.push(callback);
-      return timeouts.length;
+    setTimeout: (callback: () => void, delay = 0) => {
+      const id = ++nextTimeout;
+      timeouts.set(id, { callback, due: clock + delay });
+      return id;
     },
   };
 
@@ -446,6 +472,9 @@ export const clientHarness = async (
     holdProjection: (name: string, held: Promise<BrowserResponse>) => {
       projectionResponses.set(name, held);
     },
+    holdBoard: (held: Promise<BrowserResponse>) => {
+      heldBoardResponse = held;
+    },
     holdGraph: (name: string, held: Promise<BrowserResponse>) => {
       graphResponses.set(name, held);
     },
@@ -456,6 +485,8 @@ export const clientHarness = async (
     lifecycleTask,
     lifecycleSnapshots,
     lifecycleRequests,
+    liveBoardMark,
+    liveBoardStatus,
     location: () => locationHref,
     navigate: (name: string) => {
       locationHref = `http://console.test/?scope=${encodeURIComponent(name)}`;
@@ -468,9 +499,21 @@ export const clientHarness = async (
     queueLifecycle: (body: unknown) => {
       lifecycleResponses.push(response(body));
     },
+    replaceGraph: (value: GraphFixture) => {
+      graphFixture = value;
+    },
+    replaceTasks: (value: typeof initialTasks) => {
+      boardTasks = value;
+    },
     runNextTimeout: () => {
-      const callback = timeouts.shift();
-      if (callback === undefined) throw new Error("no timeout is scheduled");
+      const next = [...timeouts.entries()].sort(
+        ([leftId, left], [rightId, right]) =>
+          left.due - right.due || leftId - rightId,
+      )[0];
+      if (next === undefined) throw new Error("no timeout is scheduled");
+      const [id, { callback, due }] = next;
+      timeouts.delete(id);
+      clock = due;
       callback();
     },
     scope,

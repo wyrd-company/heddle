@@ -38,6 +38,19 @@ const contrastRatio = (first: string, second: string): number => {
 };
 
 describe("console page state", () => {
+  it("binds the live board label to the one-second polling contract", () => {
+    expect(consolePage).toContain(
+      '<span id="live-board-status" role="status" aria-live="polite">BOARD CONNECTING</span>',
+    );
+    expect(consoleClient).toContain(
+      "const boardPollIntervalMilliseconds = 1000;",
+    );
+    expect(consoleClient).toContain(
+      "const boardStaleAfterMilliseconds = boardPollIntervalMilliseconds * 2;",
+    );
+    expect(consoleClient).toContain('setLiveBoardHealth("stale")');
+  });
+
   it("clears stale projection and scope state when a scoped reload fails", () => {
     expect(consoleClient).toMatch(
       /const renderLoadFailure = \(error\) => \{\s*scopeElement\.selectedIndex = -1;\s*boardElement\.replaceChildren\(\);\s*graphCanvasElement\.replaceChildren\(\);\s*lifecycleTaskElement\.textContent = "";\s*attentionListElement\.replaceChildren\(\);\s*statusElement\.dataset\.error = "true";\s*statusElement\.textContent = error instanceof Error \? error\.message : "Console load failed";\s*\};/,
