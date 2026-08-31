@@ -18,6 +18,7 @@ import type {
   JsonValue,
   PersistedEvent,
 } from "../persistence/index.js";
+import type { ErrorDetail } from "../error-details.js";
 
 export interface LifecycleEdge extends EdgeDefinition {
   description?: string;
@@ -126,6 +127,8 @@ export interface LifecycleAttention extends Record<string, JsonValue> {
   actualAwaitingNodeIds: string[];
   actualStatus: WorkflowStatus;
   attentionId: string;
+  errors: ErrorDetail[];
+  executionId: string | null;
   expectedAwaitingNodeIds: string[];
   expectedTerminalNodeIds: string[];
   transitionId: string;

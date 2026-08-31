@@ -143,6 +143,38 @@ describe("LifecycleEngine", () => {
     await expect(
       fixture.engine.start({ blueprintPath, instanceId: "sample-a" }),
     ).rejects.toThrow(UnexpectedLandingError);
+    const attention = fixture.persistence
+      .replayEvents("sample-a")
+      .find(({ type }) => type === "lifecycle:attention-required");
+    expect(attention?.payload).toMatchObject({
+      errors: [
+        {
+          cause: { cause: null, message: "interrupted", name: "Error" },
+          message: "Node 'mix' execution failed",
+          name: "FlowcraftError",
+        },
+      ],
+      executionId: expect.any(String),
+    });
+    const executionId = (attention?.payload as { executionId?: unknown })
+      ?.executionId;
+    if (typeof executionId !== "string") {
+      throw new Error("Lifecycle attention has no execution identity");
+    }
+    expect(
+      await fixture.persistence.flowcraftHistory.replay(executionId),
+    ).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          error: {
+            cause: { cause: null, message: "interrupted", name: "Error" },
+            message: "Node 'mix' execution failed",
+            name: "FlowcraftError",
+          },
+        }),
+        type: "node:error",
+      }),
+    );
     const recovered = await fixture.engine.start({
       blueprintPath,
       instanceId: "sample-a",

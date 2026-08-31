@@ -12,6 +12,7 @@ import {
   type WorkflowResult,
 } from "flowcraft";
 
+import { errorDetail } from "../error-details.js";
 import type { FlowcraftHistory } from "../persistence/index.js";
 import { internalNodeIdParameter } from "./blueprint.js";
 import { BlueprintValidationError } from "./errors.js";
@@ -166,7 +167,19 @@ export const createLifecycleRuntime = (
       history.replayMultiple(executionIds) as Promise<
         Map<string, FlowcraftEvent[]>
       >,
-    store: (event, executionId) => history.append(event, executionId),
+    store: (event, executionId) =>
+      history.append(
+        (event.type === "node:error"
+          ? {
+              ...event,
+              payload: {
+                ...event.payload,
+                error: errorDetail(event.payload.error),
+              },
+            }
+          : event) as FlowcraftEvent,
+        executionId,
+      ),
   };
   return new FlowRuntime({
     eventBus: new PersistentEventBusAdapter(eventStore),

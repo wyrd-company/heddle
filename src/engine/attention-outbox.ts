@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 
 import type { WorkflowResult } from "flowcraft";
 
+import { errorDetail } from "../error-details.js";
 import { awaitingNodeIdsFrom } from "./flowcraft-runtime.js";
 import {
   readLifecycleContext,
@@ -44,6 +45,10 @@ export const attentionFor = (
     actualAwaitingNodeIds,
     actualStatus: result.status,
     attentionId,
+    errors: (result.errors ?? []).map((error) =>
+      errorDetail(error.originalError ?? error),
+    ),
+    executionId: executionId ?? null,
     expectedAwaitingNodeIds: [
       ...new Set(expected.flatMap(({ awaitingNodeIds }) => awaitingNodeIds)),
     ].sort(),
