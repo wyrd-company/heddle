@@ -9,6 +9,7 @@ import { KanbanBoardAdapter } from "../board-adapter/index.js";
 import type {
   ConsoleAttentionActionPort,
   ConsoleBlueprintEditor,
+  ConsoleLifecycleActionPort,
   ConsoleStateSource,
 } from "../console/index.js";
 import {
@@ -94,6 +95,7 @@ export type ProductionComposition = {
   blueprintEditor: ConsoleBlueprintEditor;
   close(): Promise<void>;
   consoleActions: ConsoleAttentionActionPort;
+  consoleLifecycleActions: ConsoleLifecycleActionPort;
   consoleState: ConsoleStateSource;
   escalation: EscalationCoordinator;
   lifecycle: ProductionLifecycleRouter;
@@ -174,6 +176,11 @@ export const createProductionComposition = (
       repositoryRoot: blueprintRepository.repositoryRoot,
       sourceRef: blueprintRepository.sourceRef,
     });
+    const consoleLifecycleActions: ConsoleLifecycleActionPort = {
+      rebase: async (input) => {
+        await lifecycle.rebase(input);
+      },
+    };
     const projects = new EpicProjectCoordinator(
       configuration,
       persistence,
@@ -397,10 +404,12 @@ export const createProductionComposition = (
         repository: blueprintRepository,
       }),
       consoleActions,
+      consoleLifecycleActions,
       consoleState: new ProductionConsoleState(
         persistence,
         attention,
         blueprintRepository.repositoryRoot,
+        blueprintRepository.sourceRef,
       ),
       escalation,
       lifecycle,

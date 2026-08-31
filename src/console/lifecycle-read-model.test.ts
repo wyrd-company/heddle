@@ -46,6 +46,10 @@ describe("console lifecycle read model", () => {
         },
       ],
       instanceId: "instance-91",
+      rebase: {
+        targetBlueprintBlobHash: "c".repeat(40),
+        targetStateIds: ["inspect"],
+      },
       status: "awaiting",
       taskId: 91,
     });
@@ -61,6 +65,11 @@ describe("console lifecycle read model", () => {
       blobHash: "a".repeat(40),
       id: "sample-lifecycle",
       path: "blueprints/sample-lifecycle.json",
+    });
+    expect(snapshot.rebase).toEqual({
+      available: true,
+      targetBlueprintBlobHash: "c".repeat(40),
+      targetStateIds: ["inspect"],
     });
   });
 
@@ -78,6 +87,10 @@ describe("console lifecycle read model", () => {
         currentStageIds: ["inspect"],
         executionHistories: [],
         instanceId: "instance-92",
+        rebase: {
+          targetBlueprintBlobHash: "b".repeat(40),
+          targetStateIds: ["inspect"],
+        },
         status: "awaiting",
         taskId: 92,
         ...overrides,

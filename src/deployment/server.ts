@@ -19,6 +19,7 @@ import {
   type ConsoleBoard,
   type ConsoleEvent,
   type ConsoleInstance,
+  type ConsoleLifecycleActionPort,
   ConsoleLifecycleUnavailableError,
   type ConsoleLifecycleSnapshot,
   type ConsoleStateSource,
@@ -48,6 +49,7 @@ export interface HeddleDeploymentComposition {
   board?: ConsoleBoard;
   consoleActions?: ConsoleAttentionActionPort;
   blueprintEditor?: ConsoleBlueprintEditor;
+  consoleLifecycleActions?: ConsoleLifecycleActionPort;
   consoleState?: ConsoleStateSource;
   production?: ProductionComposition;
   productionFactory?: () => ProductionComposition;
@@ -248,6 +250,7 @@ export const startHeddleServer = async (
     (composition.board !== undefined ||
       composition.blueprintEditor !== undefined ||
       composition.consoleActions !== undefined ||
+      composition.consoleLifecycleActions !== undefined ||
       composition.consoleState !== undefined)
   ) {
     throw new Error(
@@ -326,6 +329,9 @@ export const startHeddleServer = async (
       board,
       blueprintEditor:
         production?.blueprintEditor ?? composition.blueprintEditor,
+      lifecycleActions:
+        production?.consoleLifecycleActions ??
+        composition.consoleLifecycleActions,
       state:
         composition.consoleState ??
         production?.consoleState ??

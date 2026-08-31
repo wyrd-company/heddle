@@ -21,6 +21,10 @@ export interface ConsoleLifecycleReadInput {
     executionId: string;
   }>;
   instanceId: string;
+  rebase: {
+    targetBlueprintBlobHash: string;
+    targetStateIds: string[];
+  };
   status: string;
   taskId: number;
 }
@@ -135,6 +139,13 @@ export const buildConsoleLifecycleSnapshot = (
       .filter(({ sequence }) => sequence > input.afterSequence),
     instanceId: input.instanceId,
     nextSequence,
+    rebase: {
+      available:
+        input.status === "awaiting" &&
+        input.blueprintBlobHash !== input.rebase.targetBlueprintBlobHash,
+      targetBlueprintBlobHash: input.rebase.targetBlueprintBlobHash,
+      targetStateIds: [...input.rebase.targetStateIds],
+    },
     status: input.status,
     taskId: input.taskId,
   };

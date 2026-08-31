@@ -131,8 +131,26 @@ export interface ConsoleLifecycleSnapshot {
   events: ConsoleLifecycleEvent[];
   instanceId: string;
   nextSequence: number;
+  rebase: ConsoleLifecycleRebaseAvailability;
   status: string;
   taskId: number;
+}
+
+export interface ConsoleLifecycleRebaseAvailability {
+  available: boolean;
+  targetBlueprintBlobHash: string;
+  targetStateIds: string[];
+}
+
+export type ConsoleLifecycleRebaseRequest = {
+  expectedInstanceId: string;
+  expectedPinnedBlobHash: string;
+  expectedTargetBlobHash: string;
+  targetState: string;
+};
+
+export interface ConsoleLifecycleActionPort {
+  rebase(input: { instanceId: string; targetState: string }): Promise<void>;
 }
 
 export class ConsoleLifecycleUnavailableError extends Error {}

@@ -14,6 +14,12 @@ export {
   projectDependencyGraphAttention,
 } from "./dependency-graph.js";
 export { buildConsoleLifecycleSnapshot } from "./lifecycle-read-model.js";
+export {
+  assertConsoleLifecycleRebaseCurrent,
+  ConsoleLifecycleActionsUnavailableError,
+  ConsoleLifecycleRebaseConflictError,
+  parseConsoleLifecycleRebaseRequest,
+} from "./lifecycle-rebase-contract.js";
 export type { ConsoleBlueprintEditor } from "./blueprint-editor.js";
 export type { ConsoleLifecycleReadInput } from "./lifecycle-read-model.js";
 export type {
@@ -54,8 +60,11 @@ export type {
   ConsoleBoard,
   ConsoleEvent,
   ConsoleInstance,
+  ConsoleLifecycleActionPort,
   ConsoleLifecycleBlueprint,
   ConsoleLifecycleEvent,
+  ConsoleLifecycleRebaseAvailability,
+  ConsoleLifecycleRebaseRequest,
   ConsoleLifecycleSnapshot,
   ConsoleStateSource,
 } from "./types.js";

@@ -727,6 +727,18 @@ const assertReadOnlySurface = async (editorState = "closed") => {
       JSON.stringify([...editorActions.querySelectorAll(":scope > button")].map(editorControl)) === JSON.stringify(expectedEditorControls)
         ? new Set(editorButtons)
         : new Set();
+    const rebaseControls = [...document.querySelectorAll(
+      ".lifecycle-rebase-controls select, .lifecycle-rebase-controls button",
+    )];
+    const acceptedRebaseControls =
+      rebaseControls.length === 2 &&
+      rebaseControls[0].matches("select#lifecycle-rebase-target") &&
+      rebaseControls[1].matches("button[type='button']") &&
+      ["REBASE INSTANCE", "REBASING…"].includes(
+        rebaseControls[1].textContent.trim(),
+      )
+        ? new Set(rebaseControls)
+        : new Set();
     const tabbableMutation = [...document.querySelectorAll(
       "#board button, #board input, #board textarea, #dependency-graph button, #dependency-graph input, #dependency-graph textarea, #lifecycle-view button, #lifecycle-view input, #lifecycle-view textarea, [contenteditable='true']",
     )].filter((element) => {
@@ -734,7 +746,8 @@ const assertReadOnlySurface = async (editorState = "closed") => {
         element.disabled ||
         element.tabIndex < 0 ||
         element.matches(".epic-lever") ||
-        acceptedEditorButtons.has(element)
+        acceptedEditorButtons.has(element) ||
+        acceptedRebaseControls.has(element)
       ) {
         return false;
       }
@@ -1143,6 +1156,58 @@ const assertLifecycleTrace = async () => {
     "lifecycle-cursor-trace",
     `observed ${fixture.lifecycleTrace().join(" → ")} instead of 0 → 3 → 4 → 5`,
   );
+};
+
+const exerciseLifecycleRebase = async (baseUrl) => {
+  fixture.reset();
+  await setViewport({ height: 1000, width: 1440 });
+  await resetPageEvidence();
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await waitFor(
+    `document.querySelector(".lifecycle-rebase")?.dataset.available === "true"`,
+  );
+  const before = await evaluate(`(() => ({
+    button: document.querySelector(".lifecycle-rebase-controls button")?.textContent.trim(),
+    option: document.querySelector("#lifecycle-rebase-target")?.value,
+    summary: document.querySelector(".lifecycle-rebase-summary")?.textContent.trim().replace(/\\s+/g, " "),
+  }))()`);
+  invariant(
+    before.button === "REBASE INSTANCE" &&
+      before.option === "arrange" &&
+      before.summary === "NEW BLUEPRINT · bbbbbbbbbbbb",
+    "lifecycle-rebase-availability",
+    `rebase availability is ${JSON.stringify(before)}`,
+  );
+  await command("focus", ".lifecycle-rebase-controls button");
+  await assertFocused(
+    ".lifecycle-rebase-controls button",
+    "rebase instance activation",
+  );
+  await press("Enter");
+  const deadline = Date.now() + 5_000;
+  while (fixture.lifecycleRebases().length < 1 && Date.now() < deadline) {
+    await delay(20);
+  }
+  await waitFor(
+    `document.querySelector(".lifecycle-rebase")?.dataset.available === "false" && document.querySelector(".lifecycle-rebase-status")?.textContent === "Rebased to arrange · artifact bbbbbbbbbbbb"`,
+  );
+  invariant(
+    JSON.stringify(fixture.lifecycleRebases()) ===
+      JSON.stringify([{ instanceId: "instance-43", targetState: "arrange" }]),
+    "lifecycle-rebase-authority",
+    `rebase authority received ${JSON.stringify(fixture.lifecycleRebases())}`,
+  );
+  const after = await evaluate(`(() => ({
+    controls: document.querySelectorAll(".lifecycle-rebase-controls button, .lifecycle-rebase-controls select").length,
+    summary: document.querySelector(".lifecycle-rebase-summary")?.textContent.trim(),
+  }))()`);
+  invariant(
+    after.controls === 0 && after.summary === "PINNED BLUEPRINT IS CURRENT",
+    "lifecycle-rebase-outcome",
+    `rebase outcome is ${JSON.stringify(after)}`,
+  );
+  await assertReadOnlySurface("closed");
 };
 
 const auditView = async (baseUrl, viewport, view) => {
@@ -1671,6 +1736,7 @@ const main = async () => {
     await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
     await assertLifecycleSettled();
     await assertLifecycleTrace();
+    await exerciseLifecycleRebase(baseUrl);
     await exerciseBlueprintEditor(baseUrl);
     await open(`${baseUrl}/?scope=epic%3A40`);
   }

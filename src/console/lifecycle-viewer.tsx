@@ -130,9 +130,13 @@ function LifecycleViewer() {
   );
   const [draft, setDraft] = useState<EditableBlueprint | null>(null);
   const [editStatus, setEditStatus] = useState("");
+  const [rebaseStatus, setRebaseStatus] = useState("");
+  const [rebaseTarget, setRebaseTarget] = useState("");
+  const [rebasing, setRebasing] = useState(false);
   const [saving, setSaving] = useState(false);
   const bus = useRef(new EventBus());
   const editRequestGeneration = useRef(0);
+  const rebaseRequestGeneration = useRef(0);
   const replayedIdentity = useRef("");
   const snapshotRef = useRef<ConsoleLifecycleSnapshot | null>(null);
 
@@ -147,14 +151,22 @@ function LifecycleViewer() {
     setSaving(false);
   }, []);
 
+  const resetRebase = useCallback(() => {
+    rebaseRequestGeneration.current += 1;
+    setRebaseStatus("");
+    setRebaseTarget("");
+    setRebasing(false);
+  }, []);
+
   const replace = useCallback(
     (next: ConsoleLifecycleSnapshot) => {
       assertLifecycleReplacement(next);
       resetEditing();
+      resetRebase();
       snapshotRef.current = next;
       setSnapshot(next);
     },
-    [resetEditing],
+    [resetEditing, resetRebase],
   );
 
   const append = useCallback((next: ConsoleLifecycleSnapshot) => {
@@ -178,6 +190,7 @@ function LifecycleViewer() {
       append,
       clear: () => {
         resetEditing();
+        resetRebase();
         snapshotRef.current = null;
         setSnapshot(null);
       },
@@ -192,7 +205,7 @@ function LifecycleViewer() {
     return () => {
       if (mountedPort === port) mountedPort = undefined;
     };
-  }, [append, replace, resetEditing]);
+  }, [append, replace, resetEditing, resetRebase]);
 
   useEffect(() => {
     if (editor === null || snapshot === null || editing !== null) return;
@@ -272,6 +285,53 @@ function LifecycleViewer() {
 
   const stopEditing = resetEditing;
 
+  const rebaseTargets = snapshot?.rebase.targetStateIds ?? [];
+  const selectedRebaseTarget = rebaseTargets.includes(rebaseTarget)
+    ? rebaseTarget
+    : (rebaseTargets[0] ?? "");
+
+  const rebaseInstance = useCallback(async () => {
+    if (
+      snapshot === null ||
+      !snapshot.rebase.available ||
+      selectedRebaseTarget === "" ||
+      editing !== null
+    ) {
+      return;
+    }
+    const generation = ++rebaseRequestGeneration.current;
+    const expectedTargetBlobHash = snapshot.rebase.targetBlueprintBlobHash;
+    setRebasing(true);
+    setRebaseStatus(`Rebasing to ${selectedRebaseTarget}…`);
+    try {
+      const rebased = await responseJson<ConsoleLifecycleSnapshot>(
+        await fetch(`/api/lifecycle/${snapshot.taskId}/rebase`, {
+          body: JSON.stringify({
+            expectedInstanceId: snapshot.instanceId,
+            expectedPinnedBlobHash: snapshot.blueprint.blobHash,
+            expectedTargetBlobHash,
+            targetState: selectedRebaseTarget,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }),
+      );
+      if (generation !== rebaseRequestGeneration.current) return;
+      replace(rebased);
+      setRebaseTarget(selectedRebaseTarget);
+      setRebaseStatus(
+        `Rebased to ${selectedRebaseTarget} · artifact ${rebased.blueprint.blobHash.slice(0, 12)}`,
+      );
+    } catch (error) {
+      if (generation !== rebaseRequestGeneration.current) return;
+      setRebaseStatus(
+        error instanceof Error ? error.message : "Lifecycle rebase failed",
+      );
+    } finally {
+      if (generation === rebaseRequestGeneration.current) setRebasing(false);
+    }
+  }, [editing, replace, selectedRebaseTarget, snapshot]);
+
   const saveEditing = useCallback(async () => {
     if (editing === null || draft === null) return;
     const generation = editRequestGeneration.current;
@@ -349,6 +409,70 @@ function LifecycleViewer() {
               {snapshot.status}
             </p>
           )}
+          <section
+            aria-labelledby="lifecycle-rebase-title"
+            className="lifecycle-rebase"
+            data-available={snapshot?.rebase.available === true}
+          >
+            <p className="eyebrow" id="lifecycle-rebase-title">
+              INSTANCE REBASE
+            </p>
+            {snapshot === null ? (
+              <p className="lifecycle-rebase-summary">
+                Select a running lifecycle to inspect its blueprint version.
+              </p>
+            ) : snapshot.rebase.available ? (
+              <>
+                <p className="lifecycle-rebase-summary">
+                  NEW BLUEPRINT ·{" "}
+                  {snapshot.rebase.targetBlueprintBlobHash.slice(0, 12)}
+                </p>
+                <div className="lifecycle-rebase-controls">
+                  <label htmlFor="lifecycle-rebase-target">Target state</label>
+                  <select
+                    disabled={editing !== null || rebasing}
+                    id="lifecycle-rebase-target"
+                    onChange={(event) => setRebaseTarget(event.target.value)}
+                    value={selectedRebaseTarget}
+                  >
+                    {rebaseTargets.map((target) => (
+                      <option key={target} value={target}>
+                        {target}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    disabled={
+                      editing !== null ||
+                      rebasing ||
+                      selectedRebaseTarget === ""
+                    }
+                    onClick={() => void rebaseInstance()}
+                    type="button"
+                  >
+                    {rebasing ? "REBASING…" : "REBASE INSTANCE"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="lifecycle-rebase-summary">
+                {snapshot.blueprint.blobHash ===
+                snapshot.rebase.targetBlueprintBlobHash
+                  ? "PINNED BLUEPRINT IS CURRENT"
+                  : "INSTANCE IS NOT AT AN AWAITING STATE"}
+              </p>
+            )}
+            <p
+              aria-live="polite"
+              className="lifecycle-rebase-status"
+              data-error={/failed|invalid|changed|not |cannot|already/i.test(
+                rebaseStatus,
+              )}
+              role="status"
+            >
+              {rebaseStatus}
+            </p>
+          </section>
           <div className="blueprint-editor-actions">
             {editing === null ? (
               <button

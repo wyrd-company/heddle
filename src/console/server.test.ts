@@ -97,6 +97,8 @@ class FixtureState implements ConsoleStateSource {
       type: "node:start",
     },
   ];
+  lifecycleBlueprintBlobHash = "a".repeat(40);
+  lifecycleTargetBlobHash = "b".repeat(40);
 
   async listAttention(): Promise<ConsoleAttention[]> {
     return this.attention;
@@ -127,7 +129,7 @@ class FixtureState implements ConsoleStateSource {
   }): Promise<ConsoleLifecycleSnapshot> {
     return {
       blueprint: {
-        blobHash: "a".repeat(40),
+        blobHash: this.lifecycleBlueprintBlobHash,
         edges: [],
         id: "sample-lifecycle",
         nodes: [{ id: "inspect", uses: "wait" }],
@@ -139,6 +141,12 @@ class FixtureState implements ConsoleStateSource {
       ),
       instanceId: "instance-52",
       nextSequence: 1,
+      rebase: {
+        available:
+          this.lifecycleBlueprintBlobHash !== this.lifecycleTargetBlobHash,
+        targetBlueprintBlobHash: this.lifecycleTargetBlobHash,
+        targetStateIds: ["inspect"],
+      },
       status: "awaiting",
       taskId: input.taskId,
     };
@@ -276,6 +284,64 @@ describe("console server", () => {
     expect(wrongMethod.headers.get("allow")).toBe("GET");
     expect(malformedTask.status).toBe(400);
     expect(malformedCursor.status).toBe(400);
+    expect(board.writes).toEqual([]);
+  });
+
+  it("re-reads lifecycle identity and delegates one explicit rebase action", async () => {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      ),
+    );
+    const rebases: Array<{ instanceId: string; targetState: string }> = [];
+    server = createConsoleServer({
+      board,
+      lifecycleActions: {
+        rebase: async (input) => {
+          rebases.push(input);
+          state.lifecycleBlueprintBlobHash = state.lifecycleTargetBlobHash;
+        },
+      },
+      state,
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+    const request = {
+      expectedInstanceId: "instance-52",
+      expectedPinnedBlobHash: "a".repeat(40),
+      expectedTargetBlobHash: "b".repeat(40),
+      targetState: "inspect",
+    };
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle/52/rebase`,
+      {
+        body: JSON.stringify(request),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+    const repeated = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle/52/rebase`,
+      {
+        body: JSON.stringify(request),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      blueprint: { blobHash: "b".repeat(40) },
+      rebase: { available: false },
+    });
+    expect(repeated.status).toBe(409);
+    expect(rebases).toEqual([
+      { instanceId: "instance-52", targetState: "inspect" },
+    ]);
     expect(board.writes).toEqual([]);
   });
 

@@ -22,6 +22,7 @@ export class ProductionConsoleState implements ConsoleStateSource {
     private readonly persistence: SqlitePersistence,
     private readonly attention: DurableAttentionQueue,
     private readonly repositoryRoot: string | ((instanceId: string) => string),
+    private readonly sourceRef: string,
   ) {}
 
   async listAttention(): Promise<ConsoleAttention[]> {
@@ -93,10 +94,15 @@ export class ProductionConsoleState implements ConsoleStateSource {
       typeof this.repositoryRoot === "string"
         ? this.repositoryRoot
         : this.repositoryRoot(instance.instanceId);
-    const blueprint = await new GitBlueprintStore(repositoryRoot).read(
-      context.blueprintBlobHash,
-      context.blueprintPath,
-    );
+    const [blueprint, target] = await Promise.all([
+      new GitBlueprintStore(repositoryRoot).read(
+        context.blueprintBlobHash,
+        context.blueprintPath,
+      ),
+      new GitBlueprintStore(repositoryRoot, {
+        sourceRef: this.sourceRef,
+      }).inspect(context.blueprintPath),
+    ]);
     const executionHistories = await Promise.all(
       context.executionIds.map(async (executionId) => ({
         events: await this.persistence.flowcraftHistory.replay(executionId),
@@ -111,6 +117,12 @@ export class ProductionConsoleState implements ConsoleStateSource {
       currentStageIds: [...context.awaitingNodeIds],
       executionHistories,
       instanceId: instance.instanceId,
+      rebase: {
+        targetBlueprintBlobHash: target.blobHash,
+        targetStateIds: target.blueprint.nodes
+          .filter(({ uses }) => uses === "wait")
+          .map(({ id }) => id),
+      },
       status: context.status,
       taskId: input.taskId,
     });

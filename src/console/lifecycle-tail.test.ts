@@ -30,6 +30,11 @@ const snapshot = (
   events,
   instanceId: "instance-41",
   nextSequence: events.at(-1)?.sequence ?? 0,
+  rebase: {
+    available: false,
+    targetBlueprintBlobHash: "a".repeat(40),
+    targetStateIds: ["inspect"],
+  },
   status: "awaiting",
   taskId: 41,
   ...overrides,

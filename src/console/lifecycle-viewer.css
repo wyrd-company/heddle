@@ -68,6 +68,100 @@ relationships:
   overflow-wrap: anywhere;
 }
 
+.lifecycle-rebase {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--rule-dark);
+}
+
+.lifecycle-rebase[data-available="true"] {
+  border-left-color: var(--signal);
+}
+
+.lifecycle-rebase .eyebrow {
+  margin: 0;
+}
+
+.lifecycle-rebase-summary {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.lifecycle-rebase[data-available="true"] .lifecycle-rebase-summary {
+  color: var(--signal);
+}
+
+.lifecycle-rebase-controls {
+  margin-top: 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 7px;
+  align-items: end;
+}
+
+.lifecycle-rebase-controls label {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.lifecycle-rebase-controls select,
+.lifecycle-rebase-controls button {
+  min-height: 34px;
+  border-radius: 0;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.lifecycle-rebase-controls select {
+  min-width: 0;
+  padding: 6px 8px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-dark);
+}
+
+.lifecycle-rebase-controls button {
+  padding: 7px 9px;
+  color: var(--paper-raised);
+  background: var(--signal);
+  border: 1px solid var(--signal);
+  cursor: pointer;
+  letter-spacing: 0.07em;
+}
+
+.lifecycle-rebase-controls select:focus-visible,
+.lifecycle-rebase-controls button:focus-visible {
+  outline: 2px solid #df5a3c;
+  outline-offset: 2px;
+}
+
+.lifecycle-rebase-controls select:disabled,
+.lifecycle-rebase-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.lifecycle-rebase-status {
+  min-height: 14px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.lifecycle-rebase-status[data-error="true"] {
+  color: var(--signal);
+  font-weight: 800;
+}
+
 .blueprint-editor-actions {
   margin-top: 12px;
   display: flex;

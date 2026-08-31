@@ -288,6 +288,8 @@ export const createConsoleQualificationFixture = async () => {
   let tasks = clone(initialTasks);
   let resolvedAttention = new Set();
   let lifecycleTrace = [];
+  let lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
+  let lifecycleRebases = [];
   let actions = [];
   let boardWrites = [];
   let blueprintLoads = [];
@@ -361,11 +363,19 @@ export const createConsoleQualificationFixture = async () => {
       if (events === undefined)
         throw new Error("fixture lifecycle cursor is unknown");
       return {
-        blueprint: lifecycleBlueprint,
+        blueprint: {
+          ...lifecycleBlueprint,
+          blobHash: lifecyclePinnedBlobHash,
+        },
         currentStageIds: ["arrange"],
         events,
         instanceId: "instance-43",
         nextSequence: events.at(-1)?.sequence ?? 5,
+        rebase: {
+          available: lifecyclePinnedBlobHash !== "b".repeat(40),
+          targetBlueprintBlobHash: "b".repeat(40),
+          targetStateIds: ["arrange"],
+        },
         status: "awaiting",
         taskId,
       };
@@ -395,11 +405,18 @@ export const createConsoleQualificationFixture = async () => {
       resolvedAttention.add(input.attention.attentionId);
     },
   };
+  const lifecycleActions = {
+    async rebase(input) {
+      lifecycleRebases.push(clone(input));
+      lifecyclePinnedBlobHash = "b".repeat(40);
+    },
+  };
 
   const server = createConsoleServer({
     actions: actionPort,
     board,
     blueprintEditor,
+    lifecycleActions,
     now: () => 18_000_000_000,
     state,
   });
@@ -415,6 +432,7 @@ export const createConsoleQualificationFixture = async () => {
       }),
     boardWrites: () => clone(boardWrites),
     cleanup: () => rm(repositoryRoot, { force: true, recursive: true }),
+    lifecycleRebases: () => clone(lifecycleRebases),
     lifecycleTrace: () => clone(lifecycleTrace),
     prepareBlueprintEditor() {
       blueprintLoads = [];
@@ -434,6 +452,8 @@ export const createConsoleQualificationFixture = async () => {
       tasks = clone(initialTasks);
       resolvedAttention = new Set();
       lifecycleTrace = [];
+      lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
+      lifecycleRebases = [];
       actions = [];
       boardWrites = [];
     },

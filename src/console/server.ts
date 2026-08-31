@@ -16,6 +16,10 @@ import { MIMEType } from "node:util";
 import {
   BlueprintEditConflictError,
   BlueprintValidationError,
+  RebaseInstanceNotAwaitingError,
+  RebaseTargetNotAwaitableError,
+  RebaseTargetNotFoundError,
+  TransitionConflictError,
   type LifecycleEdge,
   type LifecycleNode,
 } from "../engine/index.js";
@@ -36,6 +40,12 @@ import {
   buildDependencyGraphProjection,
   projectDependencyGraphAttention,
 } from "./dependency-graph.js";
+import {
+  assertConsoleLifecycleRebaseCurrent,
+  ConsoleLifecycleActionsUnavailableError,
+  ConsoleLifecycleRebaseConflictError,
+  parseConsoleLifecycleRebaseRequest,
+} from "./lifecycle-rebase-contract.js";
 import { projectPublicConsoleEvent } from "./event-projection.js";
 import { consoleClient, consolePage, consoleStyles } from "./page.js";
 import {
@@ -46,6 +56,8 @@ import type {
   ConsoleAttention,
   ConsoleAttentionActionPort,
   ConsoleBoard,
+  ConsoleLifecycleActionPort,
+  ConsoleLifecycleSnapshot,
   ConsoleStateSource,
 } from "./types.js";
 import {
@@ -67,6 +79,7 @@ export interface ConsoleServerOptions {
   actions?: ConsoleAttentionActionPort;
   board: ConsoleBoard;
   blueprintEditor?: ConsoleBlueprintEditor;
+  lifecycleActions?: ConsoleLifecycleActionPort;
   now?: () => number;
   state: ConsoleStateSource;
 }
@@ -258,6 +271,16 @@ const readPublicAttention = async (
   return attention;
 };
 
+const readPublicLifecycle = async (
+  options: ConsoleServerOptions,
+  input: { afterSequence: number; taskId: number },
+): Promise<ConsoleLifecycleSnapshot> => {
+  const lifecycle = await options.state.readLifecycle(input);
+  const correlationTokens = await options.state.listCorrelationTokens();
+  assertConsoleTokenAbsent(lifecycle, correlationTokens);
+  return lifecycle;
+};
+
 export const createConsoleServer = (options: ConsoleServerOptions) => {
   const now = options.now ?? Date.now;
   return createServer(async (request, response) => {
@@ -430,7 +453,7 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       if (url.pathname === "/api/lifecycle") {
         if (request.method !== "GET") return methodNotAllowed(response, "GET");
-        const lifecycle = await options.state.readLifecycle({
+        const lifecycle = await readPublicLifecycle(options, {
           afterSequence: nonNegativeInteger(
             url.searchParams.get("after"),
             "after",
@@ -440,9 +463,47 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
             "task id",
           ),
         });
-        const correlationTokens = await options.state.listCorrelationTokens();
-        assertConsoleTokenAbsent(lifecycle, correlationTokens);
         json(response, 200, lifecycle);
+        return;
+      }
+      const lifecycleRebase = /^\/api\/lifecycle\/([^/]+)\/rebase$/.exec(
+        url.pathname,
+      );
+      if (lifecycleRebase !== null) {
+        if (request.method !== "POST")
+          return methodNotAllowed(response, "POST");
+        if (options.lifecycleActions === undefined) {
+          throw new ConsoleLifecycleActionsUnavailableError(
+            "Console lifecycle actions are not active in this deployment composition",
+          );
+        }
+        const taskId = positiveInteger(lifecycleRebase[1]!, "task id");
+        let input;
+        try {
+          input = parseConsoleLifecycleRebaseRequest(
+            await readJsonBody(request, 2048),
+          );
+        } catch (error) {
+          throw new RequestError(
+            error instanceof Error
+              ? error.message
+              : "lifecycle rebase input is invalid",
+          );
+        }
+        const current = await readPublicLifecycle(options, {
+          afterSequence: 0,
+          taskId,
+        });
+        assertConsoleLifecycleRebaseCurrent(current, input);
+        await options.lifecycleActions.rebase({
+          instanceId: current.instanceId,
+          targetState: input.targetState,
+        });
+        json(
+          response,
+          200,
+          await readPublicLifecycle(options, { afterSequence: 0, taskId }),
+        );
         return;
       }
       const blueprintArtifact = /^\/api\/blueprints\/([^/]+)$/.exec(
@@ -511,8 +572,27 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
         json(response, 503, { error: error.message });
         return;
       }
+      if (error instanceof ConsoleLifecycleActionsUnavailableError) {
+        json(response, 503, { error: error.message });
+        return;
+      }
       if (error instanceof ConsoleAttentionConflictError) {
         json(response, 409, { error: error.message });
+        return;
+      }
+      if (
+        error instanceof ConsoleLifecycleRebaseConflictError ||
+        error instanceof TransitionConflictError ||
+        error instanceof RebaseInstanceNotAwaitingError
+      ) {
+        json(response, 409, { error: error.message });
+        return;
+      }
+      if (
+        error instanceof RebaseTargetNotFoundError ||
+        error instanceof RebaseTargetNotAwaitableError
+      ) {
+        json(response, 422, { error: error.message });
         return;
       }
       if (error instanceof BlueprintEditConflictError) {
