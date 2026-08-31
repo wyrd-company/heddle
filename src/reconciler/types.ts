@@ -78,6 +78,7 @@ export interface ReconcilerAttention {
 export interface ReconcilerAttentionQueue {
   has(attentionId: string): Promise<boolean>;
   raise(attention: ReconcilerAttention): Promise<void>;
+  resolve(attentionId: string): boolean;
 }
 
 export interface ReconcilerPacing {

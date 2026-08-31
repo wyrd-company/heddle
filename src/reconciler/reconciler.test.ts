@@ -232,11 +232,19 @@ describe("Reconciler", () => {
     subject.board.tasks.push(acceptance);
 
     await subject.reconciler.reconcile();
+    await subject.reconciler.reconcile();
 
     expect(acceptance.status).toBe("todo");
     expect(subject.instances.starts.at(-1)?.task.id).toBe(acceptance.id);
     expect(subject.board.epicWrites).toHaveLength(1);
-    expect(subject.attention.entries).toHaveLength(1);
+    expect(subject.attention.entries).toHaveLength(0);
+    await expect(
+      subject.attention.has("epic:54:acceptance:uat-child-missing"),
+    ).resolves.toBe(true);
+    expect(subject.attention.resolutions).toEqual([
+      "epic:54:acceptance:uat-child-missing",
+    ]);
+    expect(subject.board.tasks.map(({ id }) => id)).toEqual([54, 55, 56]);
   });
 
   it("does not promote or dispatch blocked child and standalone tasks", async () => {

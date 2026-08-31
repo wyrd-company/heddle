@@ -17,6 +17,8 @@ import type {
 const isEpic = (task: BoardTask): boolean => task.tags.includes("type:epic");
 const isUat = (task: BoardTask): boolean => task.tags.includes("uat");
 const byId = (left: BoardTask, right: BoardTask): number => left.id - right.id;
+const epicAcceptanceAttentionId = (epicId: number): string =>
+  `epic:${epicId}:acceptance:uat-child-missing`;
 
 const sameDeferral = (
   left: PacingDeferral | undefined,
@@ -125,7 +127,7 @@ export class Reconciler {
         if (epic.status === "uat" && acceptanceChildren.length === 0) {
           await this.raiseAttention(
             {
-              attentionId: `epic:${epic.id}:acceptance:uat-child-missing`,
+              attentionId: epicAcceptanceAttentionId(epic.id),
               code: "uat-child-missing",
               kind: "epic-acceptance",
               message: `Epic ${epic.id} requires a UAT child before acceptance`,
@@ -134,6 +136,9 @@ export class Reconciler {
             actions,
           );
           continue;
+        }
+        if (epic.status === "uat") {
+          await this.resolveAttention(epicAcceptanceAttentionId(epic.id));
         }
         if (
           epic.status === "uat" &&
@@ -406,6 +411,11 @@ export class Reconciler {
     if (await this.options.attention.has(attention.attentionId)) return;
     await this.options.attention.raise(attention);
     actions.push({ attention, kind: "attention-raised" });
+  }
+
+  private async resolveAttention(attentionId: string): Promise<void> {
+    if (!(await this.options.attention.has(attentionId))) return;
+    this.options.attention.resolve(attentionId);
   }
 
   private async raiseTaskError(
