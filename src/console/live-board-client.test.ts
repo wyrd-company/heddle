@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { createConsoleAttention } from "./attention-contract.js";
 import {
   type BrowserResponse,
   childTask,
@@ -63,6 +64,17 @@ const refreshedGraph = {
     },
   ],
 };
+
+const informationalAttention = (attentionId: string) =>
+  createConsoleAttention({
+    actions: [],
+    attentionId,
+    instanceId: "instance-11",
+    kind: "stale-work",
+    message: "A sample record requires operator attention",
+    scope: "task:11",
+    taskId: 11,
+  });
 
 describe("console live board polling", () => {
   it("updates the scoped board without navigation or scroll reset", async () => {
@@ -139,6 +151,7 @@ describe("console live board polling", () => {
     expect(harness.cardIds()).toEqual(["11"]);
     expect(harness.board.replaceCount).toBe(2);
     expect(harness.scope.value).toBe("task:11");
+    expect(harness.projectionRequests).toEqual(["all", "task:11"]);
   });
 
   it("does not render an old live projection after scope navigation", async () => {
@@ -154,11 +167,82 @@ describe("console live board polling", () => {
 
     harness.navigate("task:11");
     await vi.waitFor(() => expect(harness.cardIds()).toEqual(["11"]));
-    heldProjection.resolve(projection([rootTask, childTask, refreshedTask]));
+    heldProjection.resolve(
+      response(projection([rootTask, childTask, refreshedTask])),
+    );
 
     await delay(20);
     expect(harness.cardIds()).toEqual(["11"]);
     expect(harness.board.replaceCount).toBe(2);
+    expect(harness.scope.value).toBe("task:11");
+  });
+
+  it("does not reopen dismissed linked attention while refreshing its data", async () => {
+    const linkedAttention = informationalAttention("attention-11");
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?scope=all&attention=attention-11",
+      undefined,
+      undefined,
+      [linkedAttention],
+    );
+    const linkedEntry = harness
+      .attentionElements()
+      .find(({ dataset }) => dataset.attentionId === "attention-11")!;
+    const initialFocusCount = linkedEntry.focusCount;
+    const initialScrollIntoViewCount = linkedEntry.scrollIntoViewCount;
+    harness.attentionOverlay.close();
+    harness.replaceAttention([
+      linkedAttention,
+      informationalAttention("attention-12"),
+    ]);
+
+    harness.runNextTimeout();
+
+    await vi.waitFor(() => expect(harness.attention.textContent).toBe("2"));
+    expect(harness.attentionOverlay.open).toBe(false);
+    const refreshedEntry = harness
+      .attentionElements()
+      .find(({ dataset }) => dataset.attentionId === "attention-11")!;
+    expect(refreshedEntry.focusCount).toBe(0);
+    expect(refreshedEntry.scrollIntoViewCount).toBe(0);
+    expect(initialFocusCount).toBe(1);
+    expect(initialScrollIntoViewCount).toBe(1);
+  });
+
+  it("does not render an old live dependency graph after scope navigation", async () => {
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?view=dependencies&scope=all",
+    );
+    const heldGraph = deferred<BrowserResponse>();
+    harness.holdGraph("all", heldGraph.promise);
+    harness.runNextTimeout();
+    await vi.waitFor(() =>
+      expect(
+        harness.graphRequests.filter((scope) => scope === "all"),
+      ).toHaveLength(2),
+    );
+
+    harness.navigateUrl(
+      "http://console.test/?view=dependencies&scope=task%3A11",
+    );
+    await vi.waitFor(() =>
+      expect(
+        harness.graphCanvas.children
+          .filter(({ tagName }) => tagName === "a")
+          .map(({ dataset }) => dataset.taskId),
+      ).toEqual(["11"]),
+    );
+    heldGraph.resolve(response(refreshedGraph));
+
+    await delay(20);
+    expect(
+      harness.graphCanvas.children
+        .filter(({ tagName }) => tagName === "a")
+        .map(({ dataset }) => dataset.taskId),
+    ).toEqual(["11"]);
+    expect(harness.graphCanvas.replaceCount).toBe(2);
     expect(harness.scope.value).toBe("task:11");
   });
 });

@@ -21,6 +21,7 @@ class FakeElement {
   clientWidth = 320;
   disabled = false;
   draggable = false;
+  focusCount = 0;
   hidden = false;
   href = "";
   name = "";
@@ -48,10 +49,15 @@ class FakeElement {
   }
 
   focus(): void {
+    this.focusCount += 1;
     this.dataset.focusedByTest = "true";
   }
 
-  scrollIntoView(): void {}
+  scrollIntoViewCount = 0;
+
+  scrollIntoView(): void {
+    this.scrollIntoViewCount += 1;
+  }
 
   showModal(): void {
     this.open = true;
@@ -250,11 +256,13 @@ export const clientHarness = async (
   const liveBoardMark = new FakeElement("span");
   const liveBoardStatus = new FakeElement("span");
   let boardTasks = initialTasks;
+  let attentionEntries = initialAttention;
   let heldBoardResponse: Promise<BrowserResponse> | undefined;
   let graphFixture = initialGraph;
   let locationHref = initialUrl;
   const windowListeners = new Map<string, () => void>();
   const graphResponses = new Map<string, Promise<BrowserResponse>>();
+  const graphRequests: string[] = [];
   const projectionResponses = new Map<string, Promise<BrowserResponse>>();
   const projectionRequests: string[] = [];
   const lifecycleResponses: BrowserResponse[] =
@@ -277,7 +285,7 @@ export const clientHarness = async (
       if (heldBoardResponse !== undefined) return heldBoardResponse;
       return response({ tasks: boardTasks });
     }
-    if (input === "/api/attention") return response(initialAttention);
+    if (input === "/api/attention") return response(attentionEntries);
     if (input.startsWith("/api/attention/") && options?.method === "POST") {
       attentionRequests.push({ input, options });
       return response(null, { status: 204 });
@@ -306,6 +314,7 @@ export const clientHarness = async (
       const requestedScope = new URL(input, locationHref).searchParams.get(
         "scope",
       );
+      graphRequests.push(requestedScope!);
       const heldResponse = graphResponses.get(requestedScope!);
       if (heldResponse !== undefined) return heldResponse;
       const graph = graphFixture ?? {
@@ -489,6 +498,7 @@ export const clientHarness = async (
     graph,
     graphCanvas,
     graphViewport,
+    graphRequests,
     lifecycle,
     lifecycleTask,
     lifecycleSnapshots,
@@ -509,6 +519,9 @@ export const clientHarness = async (
     },
     replaceGraph: (value: GraphFixture) => {
       graphFixture = value;
+    },
+    replaceAttention: (value: unknown[]) => {
+      attentionEntries = value;
     },
     replaceTasks: (value: typeof initialTasks) => {
       boardTasks = value;

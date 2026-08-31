@@ -695,7 +695,7 @@ const createAttentionAction = (entry, action) => {
   return container;
 };
 
-const renderAttention = (entries) => {
+const renderAttention = (entries, focusRequested = false) => {
   attentionElement.textContent = String(entries.length);
   attentionListElement.replaceChildren();
   attentionStatusElement.dataset.error = "false";
@@ -728,7 +728,7 @@ const renderAttention = (entries) => {
     attentionListElement.append(article);
     if (entry.attentionId === requested) focused = article;
   }
-  if (requested !== null) {
+  if (focusRequested && requested !== null) {
     openAttention();
     if (focused) {
       focused.dataset.focused = "true";
@@ -1062,7 +1062,7 @@ async function load() {
     addScopeOptions(board.tasks, requestedScope);
     selectView(view, requestedScope);
     if (view !== "lifecycle") window.heddleLifecycleViewer?.clear();
-    renderAttention(attention);
+    renderAttention(attention, true);
     if (view === "board") {
       const projection = await fetchJson("/api/projection?scope=" + encodeURIComponent(requestedScope));
       if (generation !== loadGeneration) return;
