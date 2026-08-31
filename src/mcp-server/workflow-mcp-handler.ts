@@ -13,6 +13,7 @@ import {
 } from "@modelcontextprotocol/server";
 
 import { workflowMcpCoreTools } from "./core-tools.js";
+import { workflowMcpBoardTools } from "./board-tools.js";
 import { EscalationCoordinator } from "./escalation-coordinator.js";
 import { workflowMcpEscalationTools } from "./escalation-tools.js";
 import { workflowMcpTodoTools } from "./todo-tools.js";
@@ -33,6 +34,7 @@ export interface WorkflowMcpHttpHandler {
   close(): Promise<void>;
   fetch(request: globalThis.Request): Promise<globalThis.Response>;
   readonly notify: ServerNotifier;
+  readonly toolNames: ReadonlySet<string>;
 }
 
 const unauthorized = (): globalThis.Response =>
@@ -96,6 +98,9 @@ export const createWorkflowMcpHttpHandler = (
       persistence: options.persistence,
     });
   const contributors = contributorsByName([
+    ...(options.board === undefined
+      ? []
+      : workflowMcpBoardTools(options.board)),
     ...(options.subagentCoordinator === undefined
       ? []
       : workflowMcpSubagentTools(options.subagentCoordinator)),
@@ -104,7 +109,13 @@ export const createWorkflowMcpHttpHandler = (
   const serverForBinding = (binding: WorkflowMcpSessionBinding): McpServer => {
     const server = new McpServer({ name: "heddle", version: "1.0.0" });
     for (const toolName of binding.stage.tools ?? []) {
-      contributors.get(toolName)?.register(server, {
+      const contributor = contributors.get(toolName);
+      if (contributor === undefined) {
+        throw new Error(
+          `Workflow stage '${binding.stage.id}' declares MCP tool '${toolName}' that is not registered`,
+        );
+      }
+      contributor.register(server, {
         binding,
         escalationCoordinator,
         lifecycle: options.lifecycle,
@@ -126,6 +137,7 @@ export const createWorkflowMcpHttpHandler = (
     bus: handler.bus,
     close: handler.close,
     notify: handler.notify,
+    toolNames: new Set(contributors.keys()),
     fetch: async (request) => {
       const token = bearerCorrelationToken(
         request.headers.get("authorization"),

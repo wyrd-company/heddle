@@ -30,6 +30,35 @@ const json = async (path: string): Promise<unknown> =>
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+export const validateBlueprintToolRegistry = async (
+  repositoryRoot: string,
+  registeredTools: ReadonlySet<string>,
+): Promise<void> => {
+  const directory = join(resolve(repositoryRoot), "blueprints");
+  const filenames = (await readdir(directory, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && extname(entry.name) === ".json")
+    .map(({ name }) => name)
+    .sort();
+  for (const filename of filenames) {
+    const artifactId = basename(filename, ".json");
+    const artifact = await json(join(directory, filename));
+    if (!record(artifact) || !Array.isArray(artifact["nodes"])) continue;
+    for (const candidate of artifact["nodes"]) {
+      if (!record(candidate) || candidate["uses"] !== "wait") continue;
+      const nodeId = candidate["id"];
+      const tools = candidate["tools"];
+      if (typeof nodeId !== "string" || !Array.isArray(tools)) continue;
+      for (const tool of tools) {
+        if (typeof tool === "string" && !registeredTools.has(tool)) {
+          throw new BlueprintValidationError(
+            `Blueprint '${artifactId}' node '${nodeId}' declares MCP tool '${tool}' that is not registered`,
+          );
+        }
+      }
+    }
+  }
+};
+
 const effectCatalog = (
   blueprint: LifecycleBlueprint,
 ): Record<string, LifecycleEffect> =>

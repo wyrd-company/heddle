@@ -19,7 +19,10 @@ export {
   type SaveBlueprintArtifactInput,
 } from "./blueprint-artifact-editor.js";
 export { isBlueprintArtifactId } from "./blueprint-artifact.js";
-export { validateBlueprintRepository } from "./blueprint-repository-validation.js";
+export {
+  validateBlueprintRepository,
+  validateBlueprintToolRegistry,
+} from "./blueprint-repository-validation.js";
 export { GitBlueprintStore } from "./git-blueprint-store.js";
 export type {
   BlueprintRepositoryTransaction,

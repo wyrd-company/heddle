@@ -35,6 +35,7 @@ import {
   claimTodoAssignment,
   mutateTodoAssignment,
   stopTodoAssignmentTree,
+  type SubagentCoordinator,
 } from "../subagents/index.js";
 import { createWorkflowMcpHttpHandler } from "./workflow-mcp-handler.js";
 
@@ -383,8 +384,17 @@ const makeFixture = async () => {
   });
 
   const handler = createWorkflowMcpHttpHandler({
+    board: {
+      createRecord: async () => {
+        throw new Error("Board record creation is not used by this fixture");
+      },
+      readTask: async () => {
+        throw new Error("Board reads are not used by this fixture");
+      },
+    },
     lifecycle,
     persistence,
+    subagentCoordinator: {} as SubagentCoordinator,
   });
   const url = await listen(handler);
   return {
@@ -633,6 +643,57 @@ describe("workflow MCP HTTP server", () => {
     await expect(
       connect(fixture.url, fixture.alphaToken, "mismatched-client"),
     ).rejects.toThrow();
+  });
+
+  it("rejects a stored stage tool that has no registered contributor", async () => {
+    const fixture = await makeFixture();
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const stored = record.state.handoffs[0];
+    if (
+      typeof stored !== "object" ||
+      stored === null ||
+      Array.isArray(stored) ||
+      typeof stored["workflowMcp"] !== "object" ||
+      stored["workflowMcp"] === null ||
+      Array.isArray(stored["workflowMcp"]) ||
+      !Array.isArray(stored["workflowMcp"]["tools"])
+    ) {
+      throw new Error("alpha MCP contract fixture is invalid");
+    }
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [
+        {
+          ...stored,
+          workflowMcp: {
+            ...stored["workflowMcp"],
+            tools: [...stored["workflowMcp"]["tools"], "missing_tool"],
+          },
+        },
+      ],
+    });
+
+    await expect(
+      fixture.handler.fetch(
+        new globalThis.Request("http://mcp.invalid/", {
+          body: JSON.stringify({
+            id: 1,
+            jsonrpc: "2.0",
+            method: "tools/list",
+            params: {},
+          }),
+          headers: {
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${fixture.alphaToken}`,
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }),
+      ),
+    ).rejects.toThrow(
+      "Workflow stage 'assess' declares MCP tool 'missing_tool' that is not registered",
+    );
   });
 
   it("normalizes a stored pre-contract disposition as optional for exact replay", async () => {
@@ -1668,11 +1729,15 @@ describe("workflow MCP HTTP server", () => {
       "get_task_context",
       "report_blocked",
       "escalate",
+      "create_follow_up",
+      "create_finding",
       "todo_list",
       "todo_check",
       "todo_add",
       "todo_edit",
       "todo_reorder",
+      "spawn",
+      "liveness",
       "answer",
     ]);
     const secondTodoList = await secondReview.callTool({

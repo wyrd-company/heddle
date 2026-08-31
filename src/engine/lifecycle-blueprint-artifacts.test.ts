@@ -12,7 +12,10 @@ import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { validateBlueprintRepository } from "./blueprint-repository-validation.js";
+import {
+  validateBlueprintRepository,
+  validateBlueprintToolRegistry,
+} from "./blueprint-repository-validation.js";
 import { deliveryBlueprintFixture } from "./lifecycle-blueprint.test-support.js";
 
 const roots: string[] = [];
@@ -118,6 +121,43 @@ describe("organization lifecycle blueprint artifacts", () => {
     await expect(
       validateBlueprintRepository(await repository(invalid)),
     ).rejects.toThrow('Wait node "inspect" has no disposition edges');
+  });
+
+  it("names the blueprint, node, and unresolved tool in registry failures", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as { tools: string[] }).tools.push("missing_tool");
+
+    await expect(
+      validateBlueprintToolRegistry(
+        await repository(invalid),
+        new Set(["advance"]),
+      ),
+    ).rejects.toThrow(
+      "Blueprint 'sample-process' node 'inspect' declares MCP tool 'missing_tool' that is not registered",
+    );
+  });
+
+  it("checks the tool registry without moving other blueprint validation boundaries", async () => {
+    const partial = artifact() as Record<string, unknown>;
+    delete partial["$schema"];
+    delete partial["relationships"];
+    const root = await repository(partial);
+
+    await expect(
+      validateBlueprintToolRegistry(root, new Set(["advance"])),
+    ).resolves.toBeUndefined();
+    (partial["nodes"] as Array<{ tools?: string[] }>)[1]!.tools!.push(
+      "missing_tool",
+    );
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(partial)}\n`,
+    );
+    await expect(
+      validateBlueprintToolRegistry(root, new Set(["advance"])),
+    ).rejects.toThrow(
+      "Blueprint 'sample-process' node 'inspect' declares MCP tool 'missing_tool' that is not registered",
+    );
   });
 
   it("binds declared relationships to todo and handoff template artifacts", async () => {

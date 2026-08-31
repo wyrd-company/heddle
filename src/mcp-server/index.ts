@@ -4,6 +4,7 @@
 // ---
 
 export { workflowMcpCoreTools } from "./core-tools.js";
+export { workflowMcpBoardTools } from "./board-tools.js";
 export { workflowMcpTodoTools } from "./todo-tools.js";
 export {
   EscalationCoordinator,
@@ -37,6 +38,7 @@ export {
 } from "./workflow-mcp-handler.js";
 export type {
   CorrelationTokenMatch,
+  WorkflowMcpBoardAuthority,
   WorkflowMcpDisposition,
   WorkflowMcpHandlerOptions,
   WorkflowMcpLifecycle,

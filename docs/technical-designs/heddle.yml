@@ -231,7 +231,24 @@ proposed-design:
     blueprint declaration, and tools a task type does not use are
     omitted rather than offered and denied. Because sessions are
     stage-scoped, the list holds static for a session's life and no
-    harness needs dynamic tool updates. `advance` presents only the dispositions valid for
+    harness needs dynamic tool updates. Production startup validates every
+    wait-node tool against the composed registry. An unresolved name fails
+    startup and identifies its blueprint, node, and tool; request-time
+    composition applies the same refusal to stored contracts.
+
+    `create_follow_up` and `create_finding` accept an operation ID, title,
+    body, lifecycle, and optional priority and dependency task IDs. Heddle
+    derives the parent from the bound task: the task must be a direct child of
+    an epic, and every dependency must be another child of that epic. Both
+    tools create a `backlog` task tagged with its lifecycle and respectively
+    `type:follow-up` or `type:finding`. The result contains the task ID, kind,
+    parent, status, and whether the call replayed an existing write. An
+    operation ID is unique to one tool call in one stage occurrence. Heddle
+    stores hashed operation and request identities as board tags, so an exact
+    replay returns the existing task after process restart; reusing the
+    operation ID with different input fails without another write.
+
+    `advance` presents only the dispositions valid for
     the instance's current state, generated from the blueprint's
     outgoing edges with per-disposition descriptions — the tool schema
     itself guides the agent to a legal transition. Every session's

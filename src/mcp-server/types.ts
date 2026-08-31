@@ -5,6 +5,11 @@
 
 import type { McpServer } from "@modelcontextprotocol/server";
 
+import type {
+  BoardRecordWriteResult,
+  BoardTask,
+  CreateBoardRecord,
+} from "../board-adapter/index.js";
 import type { LifecycleSnapshot } from "../engine/index.js";
 import type {
   InstanceEventClaim,
@@ -102,7 +107,13 @@ export interface WorkflowMcpToolContributor {
   register(server: McpServer, context: WorkflowMcpToolContext): void;
 }
 
+export interface WorkflowMcpBoardAuthority {
+  createRecord(record: CreateBoardRecord): Promise<BoardRecordWriteResult>;
+  readTask(taskId: number): Promise<BoardTask>;
+}
+
 export interface WorkflowMcpHandlerOptions {
+  board?: WorkflowMcpBoardAuthority;
   escalationCoordinator?: EscalationCoordinator;
   lifecycle: WorkflowMcpLifecycle;
   persistence: WorkflowMcpPersistence;

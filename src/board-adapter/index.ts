@@ -375,6 +375,18 @@ export class KanbanBoardAdapter {
       }
       return { replayed: true, task: existing };
     }
+    const parent = await this.readTask(record.parent);
+    if (parent.parent !== undefined || !parent.tags.includes("type:epic")) {
+      throw new Error(`board record parent ${record.parent} is not an epic`);
+    }
+    for (const dependencyId of record.dependsOn ?? []) {
+      const dependency = await this.readTask(dependencyId);
+      if (dependency.parent !== record.parent) {
+        throw new Error(
+          `board record dependency ${dependencyId} is not a child of epic ${record.parent}`,
+        );
+      }
+    }
     const arguments_ = [
       "create",
       record.title,

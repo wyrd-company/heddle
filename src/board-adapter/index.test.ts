@@ -355,7 +355,11 @@ next_id: 1
   });
 
   it("creates follow-ups and findings that a later board read sees", async () => {
-    const collectionId = await createTask("Seasonal collection");
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
 
     const followUp = await adapter.createRecord({
       kind: "follow-up",
@@ -401,7 +405,11 @@ next_id: 1
   });
 
   it("replays one board-write occurrence without creating another task", async () => {
-    const collectionId = await createTask("Seasonal collection");
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
     const record = {
       kind: "follow-up" as const,
       title: "Replace worn shelf labels",
@@ -427,7 +435,11 @@ next_id: 1
   });
 
   it("rejects changed input for an existing board-write occurrence", async () => {
-    const collectionId = await createTask("Seasonal collection");
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
     const record = {
       kind: "finding" as const,
       title: "Document crate has a loose hinge",
@@ -447,5 +459,52 @@ next_id: 1
         ({ parent }) => parent === collectionId,
       ),
     ).toHaveLength(1);
+  });
+
+  it("rejects record parent and dependency authority outside one epic", async () => {
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
+    const otherCollectionId = await createTask(
+      "Other collection",
+      "--tags",
+      "type:epic",
+    );
+    const foreignDependencyId = await createTask(
+      "Inspect another sample",
+      "--parent",
+      String(otherCollectionId),
+    );
+    const record = {
+      body: "Use a separate fixture.",
+      kind: "follow-up" as const,
+      lifecycle: "small-maintenance",
+      operationKey: "stage-one:create-follow-up:separate",
+      status: "backlog",
+      title: "Check another sample",
+    };
+
+    await expect(
+      adapter.createRecord({ ...record, parent: foreignDependencyId }),
+    ).rejects.toThrow(
+      `board record parent ${foreignDependencyId} is not an epic`,
+    );
+    await expect(
+      adapter.createRecord({
+        ...record,
+        dependsOn: [foreignDependencyId],
+        operationKey: "stage-one:create-follow-up:foreign-dependency",
+        parent: collectionId,
+      }),
+    ).rejects.toThrow(
+      `board record dependency ${foreignDependencyId} is not a child of epic ${collectionId}`,
+    );
+    expect(
+      (await adapter.readBoard()).filter(
+        ({ parent }) => parent === collectionId,
+      ),
+    ).toHaveLength(0);
   });
 });

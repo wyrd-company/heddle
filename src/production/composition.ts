@@ -23,7 +23,10 @@ import {
   type SessionT3Client,
   type SystemPromptResolver,
 } from "../control-plane/index.js";
-import { type LifecycleEffect } from "../engine/index.js";
+import {
+  type LifecycleEffect,
+  validateBlueprintToolRegistry,
+} from "../engine/index.js";
 import {
   createWorkflowMcpHttpHandler,
   EscalationCoordinator,
@@ -262,6 +265,13 @@ export const createProductionComposition = (
       },
       staleThresholds: configuration.stageThresholds,
     });
+    const mcp = createWorkflowMcpHttpHandler({
+      board,
+      escalationCoordinator: escalation,
+      lifecycle,
+      persistence,
+      subagentCoordinator: coordinator,
+    });
     const scheduler = new ProductionScheduler({
       cadenceMilliseconds: configuration.cadenceMilliseconds,
       onError: async (error) => {
@@ -281,6 +291,10 @@ export const createProductionComposition = (
       },
       pass: async () => {
         await blueprintRepository.synchronize();
+        await validateBlueprintToolRegistry(
+          blueprintRepository.repositoryRoot,
+          mcp.toolNames,
+        );
         const before = await board.readBoard();
         await projects.reconcile(before);
         routing.update(before);
@@ -316,12 +330,6 @@ export const createProductionComposition = (
         await lifecycleAttentionBridge.flush();
       },
       stopTimeoutMilliseconds: configuration.stopTimeoutMilliseconds,
-    });
-    const mcp = createWorkflowMcpHttpHandler({
-      escalationCoordinator: escalation,
-      lifecycle,
-      persistence,
-      subagentCoordinator: coordinator,
     });
     let closed = false;
     return {
