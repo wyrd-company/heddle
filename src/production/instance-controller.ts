@@ -220,8 +220,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const session = this.configuration.session;
     return {
       [mechanicalChangeContextKey]: json({
-        baseBranch:
-          task.parent === undefined ? session.baseRef : `epic/${task.parent}`,
+        baseBranch: this.projects.baseBranchForTask(task),
         branch: `heddle/task-${task.id}`,
         repositoryName: repository.name,
         repositoryRoot: repository.repositoryRoot,

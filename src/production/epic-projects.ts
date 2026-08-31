@@ -115,6 +115,12 @@ export class EpicProjectCoordinator {
     return project.projectId;
   }
 
+  baseBranchForTask(task: BoardTask): string {
+    if (task.parent === undefined) return this.configuration.session.baseRef;
+    this.projectForTask(task);
+    return `epic/${task.parent}`;
+  }
+
   private async ensureActive(
     epic: BoardTask,
   ): Promise<EpicProjectAction | undefined> {

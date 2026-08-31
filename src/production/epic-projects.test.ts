@@ -148,6 +148,12 @@ describe("EpicProjectCoordinator", () => {
     expect(
       coordinator.projectForTask({ ...task("todo"), id: 102, parent: 101 }),
     ).toBe("retained-project");
+    expect(
+      coordinator.baseBranchForTask({ ...task("todo"), id: 102, parent: 101 }),
+    ).toBe("epic/101");
+    expect(() =>
+      coordinator.baseBranchForTask({ ...task("todo"), id: 103, parent: 999 }),
+    ).toThrow("Epic 999 has no active T3 project for task 103");
     expect(commands).toEqual([]);
     persistence.close();
   });
