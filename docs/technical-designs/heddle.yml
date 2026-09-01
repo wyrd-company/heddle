@@ -398,12 +398,16 @@ proposed-design:
     dead-session states. Approval, user-input, stale-instance, lifecycle,
     repository, production-error, and epic-acceptance attention remain in the
     console without a page. Both adapters consume each pageable entry's stable
-    attention ID. Adapter
-    persistence rejects a different payload fingerprint under the same stable
-    ID. Attention insertion is idempotent. Pushover delivery is at-least-once:
-    the provider has no idempotency or outcome-reconciliation key, so pending
-    intent is retried after restart. A process stop after provider acceptance but
-    before local completion can produce one duplicate per ambiguous attempt.
+    attention ID. Every durable attention ID must fit the 128-character console
+    attention identity bound; the durable adapter refuses an entry outside the
+    bound before persistence. A top-level escalation whose composed identity
+    exceeds the bound fails the escalate tool and is not raised as attention.
+    Adapter persistence rejects a different payload fingerprint under the same
+    stable ID. Attention insertion is idempotent. Pushover delivery is
+    at-least-once: the provider has no idempotency or outcome-reconciliation
+    key, so pending intent is retried after restart. A process stop after
+    provider acceptance but before local completion can produce one duplicate
+    per ambiguous attempt.
     The stable attention ID is local outbox and deep-link identity, not provider
     deduplication. The escalation remains pending and answerable until the
     accepted answer event is recorded. An
@@ -638,14 +642,15 @@ proposed-design:
     behind, or diverged branch raises durable repository attention; Heddle
     never merges, rebases, or resets it automatically. That attention names the
     local and origin commits and takes its stable identity from the repository
-    condition and a digest of the same two commits, so one unchanged condition
-    keeps one identity across passes and the repository attention identity stays
-    inside the 128-character console attention identity bound. Each pass
-    replaces every other repository attention, so a repository attention
-    identity the console cannot carry holds the attention and dependency-graph
-    reads at 500 for at most one scheduler cadence — and for as long as the
-    condition holds when the pass cannot read the repository state at all,
-    because such a pass leaves the attention untouched.
+    condition code and a digest of the condition code, local commit, and origin
+    commit. One unchanged condition keeps one identity across passes, and the
+    repository attention identity stays inside the 128-character console
+    attention identity bound. Each successful pass replaces every other
+    repository attention, including a stale identity outside the bound. The
+    deployed server returns 503 while the first pass runs and serves console
+    reads only after that pass completes. A repository state read that throws
+    leaves existing repository attention untouched; on the first pass, this
+    failure prevents Heddle from starting.
 
     The root s6 launcher validates the same file, derives only its nonsecret
     state mount target and loopback host and port, writes the Caddy snippet,
