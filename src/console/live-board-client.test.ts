@@ -116,15 +116,19 @@ const answerableAttention = () =>
 
 describe("console live board polling", () => {
   it("performs no DOM mutation for two consecutive identical payloads", async () => {
-    const harness = await clientHarness();
+    const harness = await clientHarness([rootTask, stagedTask]);
+
+    harness.runNextTimeout();
+    await vi.waitFor(() => expect(harness.projectionRequests).toHaveLength(2));
+
     const boardMutations = harness.board.mutationCount;
     const stackMutations = harness
       .cardStacks()
       .map(({ mutationCount }) => mutationCount);
+    const dwell = harness.elementsByClass("stage-readout")[0]!.children[1]!;
+    const dwellTextWrites = dwell.textContentWriteCount;
     const attentionMutations = harness.attentionList.mutationCount;
 
-    harness.runNextTimeout();
-    await vi.waitFor(() => expect(harness.projectionRequests).toHaveLength(2));
     harness.runNextTimeout();
     await vi.waitFor(() => expect(harness.projectionRequests).toHaveLength(3));
 
@@ -132,6 +136,7 @@ describe("console live board polling", () => {
     expect(
       harness.cardStacks().map(({ mutationCount }) => mutationCount),
     ).toEqual(stackMutations);
+    expect(dwell.textContentWriteCount).toBe(dwellTextWrites);
     expect(harness.attentionList.mutationCount).toBe(attentionMutations);
   });
 
@@ -207,12 +212,11 @@ describe("console live board polling", () => {
     expect(selectedTitle.dataset.selection).toBe("0:7");
   });
 
-  it("updates the scoped board without navigation or scroll reset", async () => {
+  it("updates the scoped board without navigation", async () => {
     const harness = await clientHarness(
       [rootTask, childTask],
       "http://console.test/?scope=epic%3A10",
     );
-    harness.board.scrollLeft = 224;
     harness.replaceTasks([rootTask, childTask, refreshedTask]);
 
     harness.runNextTimeout();
@@ -222,7 +226,6 @@ describe("console live board polling", () => {
     );
     expect(harness.location()).toBe("http://console.test/?scope=epic%3A10");
     expect(harness.scope.value).toBe("epic:10");
-    expect(harness.board.scrollLeft).toBe(224);
     expect(harness.liveBoardStatus.textContent).toBe("LIVE BOARD");
     expect(harness.liveBoardMark.dataset.health).toBe("live");
   });

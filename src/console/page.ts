@@ -1070,7 +1070,10 @@ const addScopeOptions = (tasks, selected) => {
 
 const updateDwells = () => {
   for (const element of document.querySelectorAll("[data-stage-entered-at]")) {
-    element.textContent = duration(Date.now() - Number(element.dataset.stageEnteredAt));
+    setText(
+      element,
+      duration(Date.now() - Number(element.dataset.stageEnteredAt)),
+    );
   }
 };
 
@@ -1227,5 +1230,4 @@ scopeElement.addEventListener("change", () => {
   void load();
 });
 window.addEventListener("popstate", () => void load());
-window.setInterval(updateDwells, 30000);
 void load();`;
