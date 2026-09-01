@@ -515,13 +515,17 @@ const boardViewLink = document.querySelector("#board-view-link");
 const dependenciesViewLink = document.querySelector("#dependencies-view-link");
 const liveBoardMarkElement = document.querySelector("#live-board-mark");
 const liveBoardStatusElement = document.querySelector("#live-board-status");
-const boardPollIntervalMilliseconds = 1000;
-const boardStaleAfterMilliseconds = boardPollIntervalMilliseconds * 2;
+// Keep the one-second bound on unattended change visibility established by Task 716.
+// Reconciliation makes unchanged polls mutation-free, so a slower interval would only
+// delay operator feedback without reducing DOM work.
+const liveViewRefreshIntervalMilliseconds = 1000;
+const boardStaleAfterMilliseconds = liveViewRefreshIntervalMilliseconds * 2;
 let loadGeneration = 0;
 let boardHealthTimer;
 let boardPollTimer;
 let lifecyclePollTimer;
 let liveBoardHealth = "connecting";
+let scopeOptionsSignature;
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
 const attentionFromUrl = () => new URL(window.location.href).searchParams.get("attention");
@@ -601,6 +605,36 @@ const text = (tag, value, className) => {
   element.textContent = value;
   if (className) element.className = className;
   return element;
+};
+
+const setText = (element, value) => {
+  if (element.textContent !== value) element.textContent = value;
+};
+
+const reconcileKeyedChildren = (container, desired, keyOf) => {
+  const existing = new Map(
+    [...container.children].map((element) => [keyOf(element), element]),
+  );
+  let position = 0;
+  for (const candidate of desired) {
+    const key = keyOf(candidate);
+    const current = existing.get(key);
+    const retained =
+      current?.dataset.renderSignature === candidate.dataset.renderSignature
+        ? current
+        : candidate;
+    if (current && retained !== current) {
+      container.replaceChild(retained, current);
+    } else if (!current) {
+      container.insertBefore(retained, container.children[position] || null);
+    }
+    if (container.children[position] !== retained) {
+      container.insertBefore(retained, container.children[position] || null);
+    }
+    existing.delete(key);
+    position += 1;
+  }
+  for (const obsolete of existing.values()) obsolete.remove();
 };
 
 const openAttention = () => {
@@ -719,21 +753,25 @@ const createAttentionAction = (entry, action) => {
 };
 
 const renderAttention = (entries, focusRequested = false, refreshEntries = true) => {
-  attentionElement.textContent = String(entries.length);
+  setText(attentionElement, String(entries.length));
   if (!refreshEntries) return;
-  attentionStatusElement.dataset.error = "false";
-  attentionStatusElement.textContent = entries.length + (entries.length === 1 ? " item requires" : " items require") + " operator attention";
-  attentionListElement.replaceChildren();
+  if (attentionStatusElement.dataset.error !== "false") attentionStatusElement.dataset.error = "false";
+  setText(attentionStatusElement, entries.length + (entries.length === 1 ? " item requires" : " items require") + " operator attention");
   const requested = attentionFromUrl();
+  const rendered = [];
   if (entries.length === 0) {
-    attentionListElement.append(text("p", "No work is waiting for you.", "attention-empty"));
+    const empty = text("p", "No work is waiting for you.", "attention-empty");
+    empty.dataset.renderKey = "empty";
+    empty.dataset.renderSignature = "empty";
+    rendered.push(empty);
   }
-  let focused;
   for (const entry of entries) {
     const article = document.createElement("article");
     article.className = "attention-entry";
     article.dataset.attentionId = entry.attentionId;
     article.dataset.actionless = String(entry.actions.length === 0);
+    article.dataset.renderKey = "attention:" + entry.attentionId;
+    article.dataset.renderSignature = JSON.stringify(entry);
     const meta = document.createElement("p");
     meta.className = "attention-entry-meta";
     meta.append(text("span", entry.kind.replaceAll("-", " ")));
@@ -749,9 +787,12 @@ const renderAttention = (entries, focusRequested = false, refreshEntries = true)
       for (const action of entry.actions) actions.append(createAttentionAction(entry, action));
     }
     article.append(actions);
-    attentionListElement.append(article);
-    if (entry.attentionId === requested) focused = article;
+    rendered.push(article);
   }
+  reconcileKeyedChildren(attentionListElement, rendered, (element) => element.dataset.renderKey);
+  const focused = [...attentionListElement.children].find(
+    (element) => element.dataset.attentionId === requested,
+  );
   if (focusRequested && requested !== null) {
     openAttention();
     if (focused) {
@@ -802,6 +843,8 @@ const createCard = (task) => {
   card.dataset.status = task.status;
   card.dataset.blocked = String(task.blocked);
   card.dataset.taskId = String(task.id);
+  card.dataset.renderKey = "task:" + task.id;
+  card.dataset.renderSignature = JSON.stringify(task);
   card.draggable = false;
   card.append(text("p", (isEpic(task) ? "EPIC " : "TASK ") + "#" + task.id, "card-id"));
   card.append(text("h3", task.title, "card-title"));
@@ -857,11 +900,13 @@ const createCard = (task) => {
 };
 
 const renderProjection = (projection) => {
-  boardElement.replaceChildren();
+  const columns = [];
   for (const column of projection.columns) {
     const section = document.createElement("section");
     section.className = "column";
     section.dataset.status = column.status;
+    section.dataset.renderKey = "column:" + column.status;
+    section.dataset.renderSignature = column.status;
     const header = document.createElement("header");
     header.className = "column-header";
     header.append(text("h2", column.status.replaceAll("-", " ")));
@@ -870,9 +915,29 @@ const renderProjection = (projection) => {
     const stack = document.createElement("div");
     stack.className = "card-stack";
     if (column.tasks.length === 0) stack.append(text("p", "No work in this column", "empty-column"));
-    for (const task of column.tasks) stack.append(createCard(task));
+    const cards = column.tasks.map(createCard);
+    for (const card of cards) stack.append(card);
     section.append(stack);
-    boardElement.append(section);
+    columns.push(section);
+  }
+  reconcileKeyedChildren(boardElement, columns, (element) => element.dataset.renderKey);
+  for (const column of projection.columns) {
+    const section = [...boardElement.children].find(
+      (element) => element.dataset.renderKey === "column:" + column.status,
+    );
+    const stack = section.querySelector(".card-stack");
+    setText(
+      section.querySelector(".column-count"),
+      String(column.tasks.length).padStart(2, "0"),
+    );
+    const desired = column.tasks.length === 0
+      ? [text("p", "No work in this column", "empty-column")]
+      : column.tasks.map(createCard);
+    if (column.tasks.length === 0) {
+      desired[0].dataset.renderKey = "empty";
+      desired[0].dataset.renderSignature = "empty";
+    }
+    reconcileKeyedChildren(stack, desired, (element) => element.dataset.renderKey);
   }
 };
 
@@ -888,13 +953,16 @@ const graphPosition = (node) => ({
 });
 
 const renderDependencyGraph = (graph) => {
-  graphCanvasElement.replaceChildren();
   const maxLayer = graph.nodes.reduce((maximum, node) => Math.max(maximum, node.layer), 0);
   const maxRow = graph.nodes.reduce((maximum, node) => Math.max(maximum, node.row), 0);
   const width = graphPadding * 2 + graphNodeWidth + maxLayer * (graphNodeWidth + graphColumnGap);
   const height = Math.max(480, graphPadding * 2 + graphNodeHeight + maxRow * (graphNodeHeight + graphRowGap));
-  graphCanvasElement.style.width = width + "px";
-  graphCanvasElement.style.height = height + "px";
+  if (graphCanvasElement.style.width !== width + "px") {
+    graphCanvasElement.style.width = width + "px";
+  }
+  if (graphCanvasElement.style.height !== height + "px") {
+    graphCanvasElement.style.height = height + "px";
+  }
 
   const locations = new Map(graph.nodes.map((node) => [node.id, graphPosition(node)]));
   const edges = svg("svg", {
@@ -935,7 +1003,10 @@ const renderDependencyGraph = (graph) => {
     });
     edges.append(path);
   }
-  graphCanvasElement.append(edges);
+  edges.dataset.renderKey = "edges";
+  edges.dataset.renderSignature = JSON.stringify(graph.edges);
+
+  const rendered = [edges];
 
   for (const node of graph.nodes) {
     const position = locations.get(node.id);
@@ -943,6 +1014,8 @@ const renderDependencyGraph = (graph) => {
     link.className = "graph-node";
     link.dataset.taskId = String(node.id);
     link.dataset.treatment = node.treatment;
+    link.dataset.renderKey = "task:" + node.id;
+    link.dataset.renderSignature = JSON.stringify(node);
     link.href = consoleUrl("lifecycle", "task:" + node.id);
     link.style.left = position.x + "px";
     link.style.top = position.y + "px";
@@ -951,8 +1024,9 @@ const renderDependencyGraph = (graph) => {
     link.append(text("span", "TASK #" + node.id, "graph-node-id"));
     link.append(text("strong", node.title, "graph-node-title"));
     link.append(text("span", node.treatment, "graph-node-state"));
-    graphCanvasElement.append(link);
+    rendered.push(link);
   }
+  reconcileKeyedChildren(graphCanvasElement, rendered, (element) => element.dataset.renderKey);
 };
 
 const selectView = (view, scope) => {
@@ -980,12 +1054,17 @@ const selectView = (view, scope) => {
 };
 
 const addScopeOptions = (tasks, selected) => {
-  scopeElement.replaceChildren(new Option("All work", "all"));
+  const options = [new Option("All work", "all")];
   for (const task of tasks.filter(isEpic)) {
-    scopeElement.add(new Option("Epic #" + task.id + " · " + task.title, "epic:" + task.id));
+    options.push(new Option("Epic #" + task.id + " · " + task.title, "epic:" + task.id));
   }
   for (const task of tasks) {
-    scopeElement.add(new Option("Task #" + task.id + " · " + task.title, "task:" + task.id));
+    options.push(new Option("Task #" + task.id + " · " + task.title, "task:" + task.id));
+  }
+  const signature = JSON.stringify(options.map((option) => [option.value, option.textContent]));
+  if (signature !== scopeOptionsSignature) {
+    scopeElement.replaceChildren(...options);
+    scopeOptionsSignature = signature;
   }
   scopeElement.value = [...scopeElement.options].some(({ value }) => value === selected) ? selected : "all";
 };
@@ -1031,7 +1110,7 @@ const pollLifecycle = (taskId, generation, afterSequence) => {
       window.heddleLifecycleViewer?.clear();
       renderLoadFailure(error);
     }
-  }, boardPollIntervalMilliseconds);
+  }, liveViewRefreshIntervalMilliseconds);
 };
 
 const pollBoard = (view, scope, generation) => {
@@ -1051,7 +1130,6 @@ const pollBoard = (view, scope, generation) => {
         );
         if (generation !== loadGeneration) return;
         renderProjection(projection);
-        updateDwells();
       } else {
         const graph = await fetchJson(
           "/api/dependency-graph?scope=" + encodeURIComponent(scope),
@@ -1065,7 +1143,7 @@ const pollBoard = (view, scope, generation) => {
       setLiveBoardHealth("stale");
     }
     if (generation === loadGeneration) pollBoard(view, scope, generation);
-  }, boardPollIntervalMilliseconds);
+  }, liveViewRefreshIntervalMilliseconds);
 };
 
 async function load() {

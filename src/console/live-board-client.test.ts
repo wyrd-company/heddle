@@ -114,6 +114,76 @@ const answerableAttention = () =>
   });
 
 describe("console live board polling", () => {
+  it("performs no DOM mutation for two consecutive identical payloads", async () => {
+    const harness = await clientHarness();
+    const boardMutations = harness.board.mutationCount;
+    const attentionMutations = harness.attentionList.mutationCount;
+
+    harness.runNextTimeout();
+    await vi.waitFor(() => expect(harness.projectionRequests).toHaveLength(2));
+    harness.runNextTimeout();
+    await vi.waitFor(() => expect(harness.projectionRequests).toHaveLength(3));
+
+    expect(harness.board.mutationCount).toBe(boardMutations);
+    expect(harness.attentionList.mutationCount).toBe(attentionMutations);
+  });
+
+  it("retains unaffected card instances when one item changes", async () => {
+    const harness = await clientHarness();
+    const [rootCard, childCard] = harness.cardElements();
+    harness.replaceTasks([
+      rootTask,
+      { ...childTask, title: "Updated example item" },
+    ]);
+
+    harness.runNextTimeout();
+    await vi.waitFor(() =>
+      expect(harness.cardElements()[1]).not.toBe(childCard),
+    );
+
+    expect(harness.cardElements()[0]).toBe(rootCard);
+  });
+
+  it("retains focus on an unaffected card when another item changes", async () => {
+    const harness = await clientHarness();
+    const focused = harness.cardElements()[0]!;
+    focused.focus();
+    harness.replaceTasks([
+      rootTask,
+      { ...childTask, title: "Updated example item" },
+    ]);
+
+    harness.runNextTimeout();
+    await vi.waitFor(() =>
+      expect(harness.cardElements()[1]?.dataset.renderSignature).toContain(
+        "Updated example item",
+      ),
+    );
+
+    expect(harness.cardElements()[0]).toBe(focused);
+    expect(focused.focusCount).toBe(1);
+  });
+
+  it("retains text selection on an unaffected card when another item changes", async () => {
+    const harness = await clientHarness();
+    const selectedTitle = harness.cardElements()[0]!.children[1]!;
+    selectedTitle.dataset.selection = "0:7";
+    harness.replaceTasks([
+      rootTask,
+      { ...childTask, title: "Updated example item" },
+    ]);
+
+    harness.runNextTimeout();
+    await vi.waitFor(() =>
+      expect(harness.cardElements()[1]?.dataset.renderSignature).toContain(
+        "Updated example item",
+      ),
+    );
+
+    expect(harness.cardElements()[0]!.children[1]).toBe(selectedTitle);
+    expect(selectedTitle.dataset.selection).toBe("0:7");
+  });
+
   it("updates the scoped board without navigation or scroll reset", async () => {
     const harness = await clientHarness(
       [rootTask, childTask],
@@ -200,7 +270,7 @@ describe("console live board polling", () => {
 
     await delay(20);
     expect(harness.cardIds()).toEqual(["11"]);
-    expect(harness.board.replaceCount).toBe(2);
+    expect(harness.board.replaceCount).toBe(0);
     expect(harness.scope.value).toBe("task:11");
     expect(harness.projectionRequests).toEqual(["all", "task:11"]);
   });
@@ -224,7 +294,7 @@ describe("console live board polling", () => {
 
     await delay(20);
     expect(harness.cardIds()).toEqual(["11"]);
-    expect(harness.board.replaceCount).toBe(2);
+    expect(harness.board.replaceCount).toBe(0);
     expect(harness.scope.value).toBe("task:11");
   });
 
@@ -255,8 +325,9 @@ describe("console live board polling", () => {
     const refreshedEntry = harness
       .attentionElements()
       .find(({ dataset }) => dataset.attentionId === "attention-11")!;
-    expect(refreshedEntry.focusCount).toBe(0);
-    expect(refreshedEntry.scrollIntoViewCount).toBe(0);
+    expect(refreshedEntry).toBe(linkedEntry);
+    expect(refreshedEntry.focusCount).toBe(initialFocusCount);
+    expect(refreshedEntry.scrollIntoViewCount).toBe(initialScrollIntoViewCount);
     expect(initialFocusCount).toBe(1);
     expect(initialScrollIntoViewCount).toBe(1);
   });
@@ -324,7 +395,7 @@ describe("console live board polling", () => {
         .filter(({ tagName }) => tagName === "a")
         .map(({ dataset }) => dataset.taskId),
     ).toEqual(["11"]);
-    expect(harness.graphCanvas.replaceCount).toBe(2);
+    expect(harness.graphCanvas.replaceCount).toBe(0);
     expect(harness.scope.value).toBe("task:11");
   });
 });

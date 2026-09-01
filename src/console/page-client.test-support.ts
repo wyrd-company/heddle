@@ -26,6 +26,7 @@ class FakeElement {
   href = "";
   name = "";
   open = false;
+  mutationCount = 0;
   replaceCount = 0;
   scrollLeft = 0;
   scrollWidth = 800;
@@ -33,6 +34,7 @@ class FakeElement {
   type = "";
   value = "";
   private content = "";
+  parentElement?: FakeElement;
 
   constructor(readonly tagName: string) {}
 
@@ -87,11 +89,57 @@ class FakeElement {
   }
 
   append(...children: FakeElement[]): void {
+    for (const child of children) child.parentElement = this;
     this.children.push(...children);
+  }
+
+  insertBefore(child: FakeElement, reference: FakeElement | null): void {
+    child.parentElement?.removeChild(child);
+    const index =
+      reference === null
+        ? this.children.length
+        : this.children.indexOf(reference);
+    child.parentElement = this;
+    this.children.splice(index, 0, child);
+    this.mutationCount += 1;
+  }
+
+  querySelector(selector: string): FakeElement | undefined {
+    const className = selector.startsWith(".") ? selector.slice(1) : undefined;
+    for (const child of this.children) {
+      if (child.className === className) return child;
+      const nested = child.querySelector(selector);
+      if (nested) return nested;
+    }
+    return undefined;
+  }
+
+  remove(): void {
+    this.parentElement?.removeChild(this);
+  }
+
+  removeChild(child: FakeElement): void {
+    const index = this.children.indexOf(child);
+    if (index >= 0) this.children.splice(index, 1);
+    child.parentElement = undefined;
+    this.mutationCount += 1;
+  }
+
+  replaceChild(next: FakeElement, current: FakeElement): void {
+    const index = this.children.indexOf(current);
+    if (index < 0) throw new Error("child does not belong to container");
+    current.parentElement = undefined;
+    next.parentElement = this;
+    this.children.splice(index, 1, next);
+    this.mutationCount += 1;
   }
 
   replaceChildren(...children: FakeElement[]): void {
     this.replaceCount += 1;
+    this.mutationCount += 1;
+    this.scrollLeft = 0;
+    for (const child of this.children) child.parentElement = undefined;
+    for (const child of children) child.parentElement = this;
     this.children.splice(0, this.children.length, ...children);
   }
 }
@@ -497,11 +545,17 @@ export const clientHarness = async (
       .filter(({ tagName }) => tagName === "article")
       .map(({ dataset }) => dataset.taskId!);
   };
+  const cardElements = (): FakeElement[] =>
+    visit(board).filter(
+      ({ tagName, dataset }) =>
+        tagName === "article" && dataset.taskId !== undefined,
+    );
 
   return {
     board,
     boardViewLink,
     cardIds,
+    cardElements,
     dependenciesViewLink,
     attention,
     attentionElements: () => visit(attentionList),

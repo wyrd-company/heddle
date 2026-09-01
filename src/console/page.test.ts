@@ -43,10 +43,10 @@ describe("console page state", () => {
       '<span id="live-board-status" role="status" aria-live="polite">BOARD CONNECTING</span>',
     );
     expect(consoleClient).toContain(
-      "const boardPollIntervalMilliseconds = 1000;",
+      "const liveViewRefreshIntervalMilliseconds = 1000;",
     );
     expect(consoleClient).toContain(
-      "const boardStaleAfterMilliseconds = boardPollIntervalMilliseconds * 2;",
+      "const boardStaleAfterMilliseconds = liveViewRefreshIntervalMilliseconds * 2;",
     );
     expect(consoleClient).toContain('setLiveBoardHealth("stale")');
   });
