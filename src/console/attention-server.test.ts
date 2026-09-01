@@ -178,6 +178,45 @@ describe("console attention action endpoint", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("applies the console attention identity bound to action paths", async () => {
+    const acceptedId = "a".repeat(128);
+    const offer = actionable();
+    const current = createConsoleAttention({
+      actions: offer.actions,
+      attentionId: acceptedId,
+      instanceId: offer.instanceId,
+      kind: offer.kind,
+      message: offer.message,
+      scope: offer.scope,
+      taskId: offer.taskId,
+    });
+    const execute = vi.fn<ConsoleAttentionActionPort["execute"]>(
+      async () => undefined,
+    );
+    const baseUrl = await start(() => [current], { execute });
+    const request = (attentionId: string) =>
+      globalThis.fetch(
+        `${baseUrl}/api/attention/${attentionId}/actions/answer`,
+        {
+          body: JSON.stringify({
+            answers: { "delivery-window": "continue" },
+            fingerprint: current.fingerprint,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        },
+      );
+
+    await expect(request(acceptedId)).resolves.toMatchObject({ status: 204 });
+    const rejected = await request("a".repeat(129));
+    await expect(rejected.json()).resolves.toEqual({
+      error:
+        "attention id must be a non-empty string of at most 128 characters",
+    });
+    expect(rejected.status).toBe(400);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it("does not expose actionable attention without an injected action port", async () => {
     const baseUrl = await start(() => [actionable()]);
 

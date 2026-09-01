@@ -33,6 +33,7 @@ import {
   ConsoleAttentionActionsUnavailableError,
   ConsoleAttentionConflictError,
   isConsoleAttentionScope,
+  MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
   parseConsoleAttentionActionRequest,
   validateConsoleAttentionCatalog,
 } from "./attention-contract.js";
@@ -237,9 +238,12 @@ const methodNotAllowed = (response: ServerResponse, allowed: string): void => {
 const decodePathSegment = (value: string, name: string): string => {
   try {
     const decoded = decodeURIComponent(value);
-    if (decoded.trim() === "" || decoded.length > 128) {
+    if (
+      decoded.trim() === "" ||
+      decoded.length > MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH
+    ) {
       throw new RequestError(
-        `${name} must be a non-empty string of at most 128 characters`,
+        `${name} must be a non-empty string of at most ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
       );
     }
     return decoded;
