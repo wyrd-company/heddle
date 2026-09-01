@@ -265,6 +265,13 @@ export const childTask = {
   title: "Example item",
 };
 
+export const stagedTask = {
+  ...childTask,
+  dwellMilliseconds: 59_000,
+  stageEnteredAt: 17_941_000,
+  stageId: "prepare",
+};
+
 export const deferredTask = {
   ...childTask,
   deferral: {
@@ -350,7 +357,7 @@ export const clientHarness = async (
     options?: BrowserRequestOptions;
   }> = [];
   const timeouts = new Map<number, { callback: () => void; due: number }>();
-  let clock = 0;
+  let clock = 18_000_000;
   let nextTimeout = 0;
 
   const fetch = async (
@@ -485,8 +492,23 @@ export const clientHarness = async (
       if (selector === "#live-board-status") return liveBoardStatus;
       throw new Error(`unexpected selector ${selector}`);
     },
-    querySelectorAll: () => [],
+    querySelectorAll: (selector: string) => {
+      if (selector !== "[data-stage-entered-at]") return [];
+      const visit = (element: FakeElement): FakeElement[] => [
+        element,
+        ...element.children.flatMap(visit),
+      ];
+      return visit(board).filter(
+        ({ dataset }) => dataset.stageEnteredAt !== undefined,
+      );
+    },
   };
+
+  class HarnessDate extends Date {
+    static override now(): number {
+      return clock;
+    }
+  }
 
   const window = {
     addEventListener: (name: string, listener: () => void) => {
@@ -519,7 +541,7 @@ export const clientHarness = async (
   };
 
   runInNewContext(consoleClient, {
-    Date,
+    Date: HarnessDate,
     Error,
     JSON,
     Math,
@@ -550,12 +572,15 @@ export const clientHarness = async (
       ({ tagName, dataset }) =>
         tagName === "article" && dataset.taskId !== undefined,
     );
+  const cardStacks = (): FakeElement[] =>
+    visit(board).filter(({ className }) => className === "card-stack");
 
   return {
     board,
     boardViewLink,
     cardIds,
     cardElements,
+    cardStacks,
     dependenciesViewLink,
     attention,
     attentionElements: () => visit(attentionList),

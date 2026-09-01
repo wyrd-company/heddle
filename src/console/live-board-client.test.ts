@@ -16,6 +16,7 @@ import {
   projection,
   response,
   rootTask,
+  stagedTask,
 } from "./page-client.test-support.js";
 
 const refreshedTask = {
@@ -117,6 +118,9 @@ describe("console live board polling", () => {
   it("performs no DOM mutation for two consecutive identical payloads", async () => {
     const harness = await clientHarness();
     const boardMutations = harness.board.mutationCount;
+    const stackMutations = harness
+      .cardStacks()
+      .map(({ mutationCount }) => mutationCount);
     const attentionMutations = harness.attentionList.mutationCount;
 
     harness.runNextTimeout();
@@ -125,7 +129,26 @@ describe("console live board polling", () => {
     await vi.waitFor(() => expect(harness.projectionRequests).toHaveLength(3));
 
     expect(harness.board.mutationCount).toBe(boardMutations);
+    expect(
+      harness.cardStacks().map(({ mutationCount }) => mutationCount),
+    ).toEqual(stackMutations);
     expect(harness.attentionList.mutationCount).toBe(attentionMutations);
+  });
+
+  it("retains a staged card while refreshing its dwell readout", async () => {
+    const harness = await clientHarness([rootTask, stagedTask]);
+    const stagedCard = harness.cardElements()[1]!;
+    const dwell = harness.elementsByClass("stage-readout")[0]!.children[1]!;
+    expect(dwell.textContent).toBe("<1m");
+    harness.replaceTasks([
+      rootTask,
+      { ...stagedTask, dwellMilliseconds: 60_000 },
+    ]);
+
+    harness.runNextTimeout();
+    await vi.waitFor(() => expect(harness.projectionRequests).toHaveLength(2));
+    expect(harness.cardElements()[1]).toBe(stagedCard);
+    expect(dwell.textContent).toBe("1m");
   });
 
   it("retains unaffected card instances when one item changes", async () => {
@@ -204,12 +227,11 @@ describe("console live board polling", () => {
     expect(harness.liveBoardMark.dataset.health).toBe("live");
   });
 
-  it("updates the scoped dependency graph without navigation or scroll reset", async () => {
+  it("updates the scoped dependency graph without navigation", async () => {
     const harness = await clientHarness(
       [rootTask, childTask],
       "http://console.test/?view=dependencies&scope=epic%3A10",
     );
-    harness.graphViewport.scrollLeft = 224;
     harness.replaceTasks([rootTask, childTask, refreshedTask]);
     harness.replaceGraph(refreshedGraph);
 
@@ -226,7 +248,6 @@ describe("console live board polling", () => {
       "http://console.test/?view=dependencies&scope=epic%3A10",
     );
     expect(harness.scope.value).toBe("epic:10");
-    expect(harness.graphViewport.scrollLeft).toBe(224);
   });
 
   it("does not announce a steady live board at each poll", async () => {

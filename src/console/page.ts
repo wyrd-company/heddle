@@ -844,7 +844,9 @@ const createCard = (task) => {
   card.dataset.blocked = String(task.blocked);
   card.dataset.taskId = String(task.id);
   card.dataset.renderKey = "task:" + task.id;
-  card.dataset.renderSignature = JSON.stringify(task);
+  card.dataset.renderSignature = JSON.stringify(
+    Object.entries(task).filter(([key]) => key !== "dwellMilliseconds"),
+  );
   card.draggable = false;
   card.append(text("p", (isEpic(task) ? "EPIC " : "TASK ") + "#" + task.id, "card-id"));
   card.append(text("h3", task.title, "card-title"));
@@ -914,9 +916,6 @@ const renderProjection = (projection) => {
     section.append(header);
     const stack = document.createElement("div");
     stack.className = "card-stack";
-    if (column.tasks.length === 0) stack.append(text("p", "No work in this column", "empty-column"));
-    const cards = column.tasks.map(createCard);
-    for (const card of cards) stack.append(card);
     section.append(stack);
     columns.push(section);
   }
@@ -1130,6 +1129,7 @@ const pollBoard = (view, scope, generation) => {
         );
         if (generation !== loadGeneration) return;
         renderProjection(projection);
+        updateDwells();
       } else {
         const graph = await fetchJson(
           "/api/dependency-graph?scope=" + encodeURIComponent(scope),
