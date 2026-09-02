@@ -42,7 +42,7 @@ if (installedPackage !== "/usr/local/lib/node_modules/heddle") {
 const { stdout: versionOutput } = await execute(t3Binary, ["--version"], {
   timeout: 10_000,
 });
-const observedVersion = versionOutput.trim().match(/\d+\.\d+\.\d+/)?.[0];
+const observedVersion = versionOutput.trim().match(/^t3 v(\S+)$/)?.[1];
 if (observedVersion !== expectedVersion) {
   throw new Error(
     `Pinned T3 mismatch: expected ${expectedVersion}, observed ${observedVersion ?? "unknown"}`,
