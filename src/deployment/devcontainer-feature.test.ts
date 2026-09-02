@@ -167,7 +167,7 @@ describe("Heddle devcontainer feature", () => {
   it("pins qualification and documents every isolation boundary", async () => {
     const versions = JSON.parse(
       await readFile("deployment/supported-versions.json", "utf8"),
-    ) as { kanbanMd: string; t3: string };
+    ) as { kanbanMd: string; t3: string; t3PackageSource: string };
     const readme = await readFile(`${featureDirectory}/README.md`, "utf8");
     const qualification = await readFile(
       "scripts/deployment/qualify-pinned-t3.mjs",
@@ -178,9 +178,15 @@ describe("Heddle devcontainer feature", () => {
       "utf8",
     );
 
-    expect(versions.t3).toBe("0.0.36");
+    expect(versions.t3).toBe("0.0.37-wyrd.1");
+    expect(versions.t3PackageSource).toBe(
+      "https://github.com/wyrd-company/t3code/releases/download/server/0.0.37-wyrd.1/t3-0.0.37-wyrd.1.tgz",
+    );
     expect(versions.kanbanMd).toBe("0.37.0-fork+b9fc380");
-    expect(readme).toContain(`supports T3 \`${versions.t3}\``);
+    expect(readme).toContain(
+      `supports the Wyrd Company T3 fork \`${versions.t3}\``,
+    );
+    expect(featureQualification).toContain("jq -er '.t3PackageSource'");
     expect(qualification).toContain('t3Binary === "/usr/local/bin/t3"');
     expect(qualification).toContain('t3Binary === "/home/vscode/.t3"');
     expect(qualification).toContain(

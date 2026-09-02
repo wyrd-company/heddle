@@ -324,7 +324,7 @@ records the effective prompt, exact rendered document, and task, instance,
 session, stage, and thread identity in `session:activated`. Restart accepts
 only an exact payload match and does not append or dispatch a second activation.
 
-Isolated pinned T3 0.0.36 qualification found no accepted, preserved per-thread
+Isolated pinned Wyrd Company T3 fork 0.0.37-wyrd.1 qualification found no accepted, preserved per-thread
 MCP authentication-header configuration for Claude Code, Codex, or Cursor.
 For these three drivers, Heddle therefore writes the correlation token exactly
 once in the rendered Markdown identity front matter. It never writes the token

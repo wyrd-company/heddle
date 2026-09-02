@@ -193,7 +193,7 @@ proposed-design:
     the delivery state produced by prior stages. First-turn dispatch omits
     `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived seed.
 
-    Qualification against isolated pinned T3 0.0.36 creates a project and a
+    Qualification against isolated pinned Wyrd Company T3 fork 0.0.37-wyrd.1 creates a project and a
     thread whose worktree is a sibling of, and therefore outside, the project
     workspace root. T3 accepts the command and reports the thread through its
     authenticated shell. A thread's worktree is its working directory; the
@@ -296,7 +296,7 @@ proposed-design:
     by the reconciler, so a caller can advance only its own work, and `advance` is idempotent per instance and stage,
     so a retried call cannot double-transition.
 
-    Isolated qualification against pinned T3 0.0.36 found no per-thread MCP
+    Isolated qualification against pinned Wyrd Company T3 fork 0.0.37-wyrd.1 found no per-thread MCP
     authentication-header input that T3 accepts and preserves for Claude Code,
     Codex, or Cursor. For those three measured drivers, Heddle places the
     correlation token exactly once in the rendered Markdown identity front

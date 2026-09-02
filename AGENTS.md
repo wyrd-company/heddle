@@ -198,7 +198,7 @@ Pinned dependencies that the service checks or assumes:
 - **`wyrd-company/kanban-md`** at `0.37.0-fork+b9fc380`, which preserves
   unrecognized front-matter properties through every task mutation. The service
   verifies this at startup and refuses to run against another build.
-- **T3Code `0.0.36`**, against which the control-plane integration is qualified.
+- **Wyrd Company T3Code fork `0.0.37-wyrd.1`**, against which the control-plane integration is qualified from its public release tarball.
 - **Driver CLI versions** are pinned in configuration, and a session refuses to
   dispatch when the running provider does not match its pinned version.
 

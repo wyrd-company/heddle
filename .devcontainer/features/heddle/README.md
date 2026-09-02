@@ -78,10 +78,11 @@ for the complete schema and executable-adapter contracts.
 
 ## T3 compatibility qualification
 
-This release supports T3 `0.0.36`, recorded in
-`deployment/supported-versions.json`. The repository gate installs that exact
-release into a temporary prefix, launches it on an unused non-live loopback port
-with temporary T3 state and a temporary Git repository, and drives it with the
+This release supports the Wyrd Company T3 fork `0.0.37-wyrd.1`, recorded with
+its public release-tarball source in `deployment/supported-versions.json`. The
+repository gate installs that exact artifact into a temporary prefix, launches
+it on an unused non-live loopback port with temporary T3 state and a temporary
+Git repository, and drives it with the
 `T3ControlPlaneClient` installed by this Feature. It does not use the ambient T3
 binary, port `3773`, or `/home/vscode/.t3`.
 

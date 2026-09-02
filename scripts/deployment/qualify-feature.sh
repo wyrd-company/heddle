@@ -267,11 +267,12 @@ persistence.close();
 '
 
 expected_t3="$(jq -er '.t3' "${repository}/deployment/supported-versions.json")"
+t3_package_source="$(jq -er '.t3PackageSource' "${repository}/deployment/supported-versions.json")"
 inside bash -lc "
 set -euo pipefail
 prefix=\"\$(mktemp -d /tmp/heddle-t3-install.XXXXXX)\"
 trap 'rm -rf \"\${prefix}\"' EXIT
-npm install --silent --no-audit --no-fund --prefix \"\${prefix}\" \"t3@${expected_t3}\"
+npm install --silent --no-audit --no-fund --prefix \"\${prefix}\" '${t3_package_source}'
 HEDDLE_EXPECTED_T3_VERSION='${expected_t3}' \\
 HEDDLE_INSTALLED_PACKAGE=/usr/local/lib/node_modules/heddle \\
 HEDDLE_T3_BINARY=\"\${prefix}/node_modules/.bin/t3\" \\
