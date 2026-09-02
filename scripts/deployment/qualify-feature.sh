@@ -272,10 +272,10 @@ inside bash -lc "
 set -euo pipefail
 prefix=\"\$(mktemp -d /tmp/heddle-t3-install.XXXXXX)\"
 trap 'rm -rf \"\${prefix}\"' EXIT
-npm install --no-audit --no-fund --prefix \"\${prefix}\" '${t3_package_source}'
+npm install --global --no-audit --no-fund --prefix \"\${prefix}\" '${t3_package_source}'
 HEDDLE_EXPECTED_T3_VERSION='${expected_t3}' \\
 HEDDLE_INSTALLED_PACKAGE=/usr/local/lib/node_modules/heddle \\
-HEDDLE_T3_BINARY=\"\${prefix}/node_modules/.bin/t3\" \\
+HEDDLE_T3_BINARY=\"\${prefix}/bin/t3\" \\
 node scripts/deployment/qualify-pinned-t3.mjs
 "
 

@@ -187,6 +187,11 @@ describe("Heddle devcontainer feature", () => {
       `supports the Wyrd Company T3 fork \`${versions.t3}\``,
     );
     expect(featureQualification).toContain("jq -er '.t3PackageSource'");
+    expect(featureQualification).toContain(
+      "npm install --global --no-audit --no-fund --prefix",
+    );
+    expect(featureQualification).toContain("HEDDLE_T3_BINARY=");
+    expect(featureQualification).toContain("${prefix}/bin/t3");
     expect(qualification).toContain('t3Binary === "/usr/local/bin/t3"');
     expect(qualification).toContain('t3Binary === "/home/vscode/.t3"');
     expect(qualification).toContain(
