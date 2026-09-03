@@ -175,7 +175,16 @@ export type SessionSteeringDependencies = {
 };
 
 const requireWorkflowMcpEndpoint = (value: string): string => {
-  if (!/^https?:\/\/[^\s]+$/u.test(value)) {
+  let endpoint: InstanceType<typeof globalThis.URL>;
+  try {
+    endpoint = new globalThis.URL(value);
+  } catch {
+    throw new TypeError("workflowMcpEndpoint must be an HTTP URL");
+  }
+  if (
+    /\s/u.test(value) ||
+    (endpoint.protocol !== "http:" && endpoint.protocol !== "https:")
+  ) {
     throw new TypeError("workflowMcpEndpoint must be an HTTP URL");
   }
   return value;

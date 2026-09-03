@@ -423,61 +423,67 @@ describe("stage session bootstrap", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it("rejects an invalid workflow MCP endpoint before worktree or T3 effects", async () => {
-    const ensureWorktree = vi.fn();
-    const dispatch = vi.fn();
-    const registerWorkflowMcpProviderSession = vi.fn();
+  it.each([
+    ["non-HTTP", "file:///tmp/sample-mcp"],
+    ["malformed", "http://?"],
+  ])(
+    "rejects a %s workflow MCP endpoint before worktree or T3 effects",
+    async (_kind, invalidEndpoint) => {
+      const ensureWorktree = vi.fn();
+      const dispatch = vi.fn();
+      const registerWorkflowMcpProviderSession = vi.fn();
 
-    await expect(
-      bootstrapStageSession(
-        {
-          handoff: {
-            skillPointer: "skill://prepare",
-            stage: {
-              kind: "standard",
-              name: "prepare",
-              priorStageOutputs: [],
+      await expect(
+        bootstrapStageSession(
+          {
+            handoff: {
+              skillPointer: "skill://prepare",
+              stage: {
+                kind: "standard",
+                name: "prepare",
+                priorStageOutputs: [],
+              },
+              taskContract: { title: "Prepare inventory" },
             },
-            taskContract: { title: "Prepare inventory" },
+            instanceId: "instance-invalid-endpoint",
+            interactionMode: "default",
+            modelSelection: { instanceId: "cursor", model: "default" },
+            projectId: "project-invalid-endpoint",
+            providerContext: {
+              cliVersion: "test-version",
+              driver: "cursor",
+              lifecycle: "independent",
+            },
+            runtimeMode: "default",
+            sessionKey: "prepare-invalid-endpoint",
+            task: { id: 1, title: "Prepare inventory" },
+            taskId: 1,
+            title: "Prepare inventory",
+            worktree: {
+              baseRef: "main",
+              branch: "task/prepare",
+              repositoryName: "sample-repository",
+              repositoryRoot: "/workspaces/sample-repository",
+              worktreeName: "task-prepare",
+            },
           },
-          instanceId: "instance-invalid-endpoint",
-          interactionMode: "default",
-          modelSelection: { instanceId: "cursor", model: "default" },
-          projectId: "project-invalid-endpoint",
-          providerContext: {
-            cliVersion: "test-version",
-            driver: "cursor",
-            lifecycle: "independent",
+          {
+            ensureWorktree,
+            persistence: {
+              compareAndSwapInstance: vi.fn(),
+              getInstance: vi.fn(),
+              listInstances: vi.fn(),
+            },
+            t3: { dispatch, registerWorkflowMcpProviderSession },
+            workflowMcpEndpoint: invalidEndpoint,
           },
-          runtimeMode: "default",
-          sessionKey: "prepare-invalid-endpoint",
-          task: { id: 1, title: "Prepare inventory" },
-          taskId: 1,
-          title: "Prepare inventory",
-          worktree: {
-            baseRef: "main",
-            branch: "task/prepare",
-            repositoryName: "sample-repository",
-            repositoryRoot: "/workspaces/sample-repository",
-            worktreeName: "task-prepare",
-          },
-        },
-        {
-          ensureWorktree,
-          persistence: {
-            compareAndSwapInstance: vi.fn(),
-            getInstance: vi.fn(),
-            listInstances: vi.fn(),
-          },
-          t3: { dispatch, registerWorkflowMcpProviderSession },
-          workflowMcpEndpoint: "file:///tmp/sample-mcp",
-        },
-      ),
-    ).rejects.toThrow("workflowMcpEndpoint must be an HTTP URL");
-    expect(ensureWorktree).not.toHaveBeenCalled();
-    expect(registerWorkflowMcpProviderSession).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalled();
-  });
+        ),
+      ).rejects.toThrow("workflowMcpEndpoint must be an HTTP URL");
+      expect(ensureWorktree).not.toHaveBeenCalled();
+      expect(registerWorkflowMcpProviderSession).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects a driver without measured launch preparation", () => {
     expect(() =>
