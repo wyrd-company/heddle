@@ -295,6 +295,78 @@ describe("stage session bootstrap", () => {
     },
   );
 
+  it("stops before thread creation when workflow MCP registration fails", async () => {
+    let record: InstanceRecord = {
+      instanceId: "instance-registration-failure",
+      state: initialState(),
+      version: 1,
+    };
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+    const registerWorkflowMcpProviderSession = vi.fn(async () => {
+      throw new Error("synthetic registration rejection");
+    });
+
+    await expect(
+      bootstrapStageSession(
+        {
+          handoff: {
+            skillPointer: "skill://prepare",
+            stage: {
+              kind: "standard",
+              name: "prepare",
+              priorStageOutputs: [],
+            },
+            taskContract: { title: "Prepare inventory" },
+          },
+          instanceId: "instance-registration-failure",
+          interactionMode: "default",
+          modelSelection: { instanceId: "cursor", model: "default" },
+          projectId: "project-registration-failure",
+          providerContext: {
+            cliVersion: "test-version",
+            driver: "cursor",
+            lifecycle: "independent",
+          },
+          runtimeMode: "default",
+          sessionKey: "prepare-registration-failure",
+          task: { id: 1, title: "Prepare inventory" },
+          taskId: 1,
+          title: "Prepare inventory",
+          worktree: {
+            baseRef: "main",
+            branch: "task/prepare",
+            repositoryName: "sample-repository",
+            repositoryRoot: "/workspaces/sample-repository",
+            worktreeName: "task-prepare",
+          },
+        },
+        {
+          ensureWorktree: async ({ branch }) => ({
+            branch,
+            created: true,
+            path: "/workspaces/worktrees/sample-repository/task-prepare",
+          }),
+          instantiateTodoList,
+          mintCorrelationToken: () => "registration-token",
+          persistence: {
+            getInstance: () => record,
+            compareAndSwapInstance: (_id, version, state) => {
+              if (version !== record.version) return undefined;
+              record = { ...record, state, version: record.version + 1 };
+              return record;
+            },
+          },
+          templateAuthority: sampleTemplateAuthority,
+          resolveWorkflowMcpStageContract,
+          t3: { dispatch, registerWorkflowMcpProviderSession },
+          workflowMcpEndpoint,
+        },
+      ),
+    ).rejects.toThrow("synthetic registration rejection");
+    expect(registerWorkflowMcpProviderSession).toHaveBeenCalledTimes(1);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("rejects an unmeasured driver before worktree or T3 effects", async () => {
     const ensureWorktree = vi.fn();
     const dispatch = vi.fn();
