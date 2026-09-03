@@ -426,6 +426,7 @@ describe("stage session bootstrap", () => {
   it.each([
     ["non-HTTP", "file:///tmp/sample-mcp"],
     ["malformed", "http://?"],
+    ["whitespace-bearing", " http://sample.invalid/mcp"],
   ])(
     "rejects a %s workflow MCP endpoint before worktree or T3 effects",
     async (_kind, invalidEndpoint) => {
