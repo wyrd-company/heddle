@@ -50,6 +50,7 @@ describe("production subagent composition", () => {
     const systemPrompt = "# Operator session guidance";
     const resolveSystemPrompt = vi.fn(async () => systemPrompt);
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -210,6 +211,7 @@ describe("production subagent composition", () => {
     cleanup = fixture.cleanup;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -272,6 +274,7 @@ describe("production subagent composition", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {

@@ -29,6 +29,7 @@ describe("production console lifecycle source", () => {
     cleanup = fixture.cleanup;
     const { blueprintsRepositoryRoot, configuration, taskId } = fixture;
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -116,6 +117,7 @@ describe("production console lifecycle source", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {

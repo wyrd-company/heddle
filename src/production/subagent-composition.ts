@@ -170,6 +170,7 @@ export const createProductionSubagentCoordinator = (options: {
   resolveSystemPrompt: SystemPromptResolver;
   t3: ProductionT3Client;
   templateAuthority: SessionTemplateAuthority;
+  workflowMcpEndpoint: string;
 }): SubagentCoordinator => {
   const {
     attention,
@@ -181,6 +182,7 @@ export const createProductionSubagentCoordinator = (options: {
     resolveSystemPrompt,
     t3,
     templateAuthority,
+    workflowMcpEndpoint,
   } = options;
   return new SubagentCoordinator({
     activeSessions: () => activeSessions(configuration, persistence, t3),
@@ -198,7 +200,10 @@ export const createProductionSubagentCoordinator = (options: {
             }),
         dispatch: (command, providerContext) =>
           t3.dispatch(command, providerContext),
+        registerWorkflowMcpProviderSession: (registration) =>
+          t3.registerWorkflowMcpProviderSession(registration),
       },
+      workflowMcpEndpoint,
     },
     observeChild: (target) => observer.observe(target),
     onBootstrapFailure: async ({ error, instanceId, sessionKey, taskId }) => {

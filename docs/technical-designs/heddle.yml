@@ -193,7 +193,7 @@ proposed-design:
     the delivery state produced by prior stages. First-turn dispatch omits
     `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived seed.
 
-    Qualification against isolated pinned Wyrd Company T3 fork 0.0.37-wyrd.1 creates a project and a
+    Qualification against isolated pinned Wyrd Company T3 fork 0.0.37-wyrd.2 creates a project and a
     thread whose worktree is a sibling of, and therefore outside, the project
     workspace root. T3 accepts the command and reports the thread through its
     authenticated shell. A thread's worktree is its working directory; the
@@ -296,13 +296,17 @@ proposed-design:
     by the reconciler, so a caller can advance only its own work, and `advance` is idempotent per instance and stage,
     so a retried call cannot double-transition.
 
-    Isolated qualification against pinned Wyrd Company T3 fork 0.0.37-wyrd.1 found no per-thread MCP
-    authentication-header input that T3 accepts and preserves for Claude Code,
-    Codex, or Cursor. For those three measured drivers, Heddle places the
-    correlation token exactly once in the rendered Markdown identity front
-    matter. The canonical JSON projection and Markdown body contain no token.
-    A driver outside that measured set fails closed. This front-matter fallback
-    is the only session content that may contain a secret.
+    Heddle supports the measured Claude Code, Codex, Cursor, Grok, and OpenCode
+    drivers through pinned Wyrd Company T3 fork 0.0.37-wyrd.2. Before thread
+    creation, Heddle registers the configured workflow MCP HTTP endpoint and the
+    session's bearer correlation token through T3's authenticated
+    `/api/mcp/provider-session` route. T3 supplies the registration to Claude
+    Code and Codex through their native MCP configuration, to Cursor and Grok
+    through the ACP `mcpServers` input, and to OpenCode through the SDK MCP
+    registration API. Heddle does not write driver-specific MCP configuration
+    files. The rendered Markdown identity, canonical JSON projection, and
+    Markdown body contain no token. A driver outside the measured set fails
+    closed before worktree or T3 effects.
 
     Todo lists are instantiated from templates. A todo template is a
     schema'd artifact in the organization blueprint repository: the checklist
@@ -381,6 +385,12 @@ proposed-design:
     a closed, versioned JSON protocol before it creates the T3 thread. Codex
     and Claude configuration requires this executable and session creation
     fails closed when it is absent or does not acknowledge success.
+    Cursor, Grok, and OpenCode require no separate timeout preparation. All five
+    drivers require successful workflow MCP provider-session registration after
+    timeout preparation, when applicable, and before thread creation. The
+    workflow MCP handler negotiates no protocol newer than 2025-11-25, advertises
+    no Tasks capability, and returns ordinary tool results rather than
+    `InputRequiredResult`.
     Escalation opening and session disposition share the durable instance
     claim boundary: opening atomically advances the instance version with
     its event, while advance claims disposition authority only when neither
@@ -542,9 +552,9 @@ proposed-design:
     current durable token catalog only to the HTTP projection boundary. The
     console and deployed event feed omit complete `instance:created` and
     `instance:updated` state payloads. For `session:activated`, the projection
-    validates the activation identity and canonical Markdown identity front
-    matter, then removes the `correlationToken` field while preserving the
-    system prompt and handoff body. Invalid, inconsistent, duplicated, or
+    validates the activation identity and token-free canonical Markdown identity
+    front matter while preserving the system prompt and handoff body. Invalid,
+    inconsistent, duplicated, or
     unrecognized activation structure yields only a fixed unavailable marker.
     Every projected event is then checked structurally against the token
     catalog. A token in any other event payload makes the complete read

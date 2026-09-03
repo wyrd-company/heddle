@@ -178,9 +178,9 @@ describe("Heddle devcontainer feature", () => {
       "utf8",
     );
 
-    expect(versions.t3).toBe("0.0.37-wyrd.1");
+    expect(versions.t3).toBe("0.0.37-wyrd.2");
     expect(versions.t3PackageSource).toBe(
-      "https://github.com/wyrd-company/t3code/releases/download/server/0.0.37-wyrd.1/t3-0.0.37-wyrd.1.tgz",
+      "https://github.com/wyrd-company/t3code/releases/download/server/0.0.37-wyrd.2/t3-0.0.37-wyrd.2.tgz",
     );
     expect(versions.kanbanMd).toBe("0.37.0-fork+b9fc380");
     expect(readme).toContain(
@@ -193,6 +193,7 @@ describe("Heddle devcontainer feature", () => {
     expect(featureQualification).toContain("HEDDLE_T3_BINARY=");
     expect(featureQualification).toContain("${prefix}/bin/t3");
     expect(qualification).toContain('t3Binary === "/usr/local/bin/t3"');
+    expect(qualification).toContain("registerWorkflowMcpProviderSession");
     expect(qualification).toContain('t3Binary === "/home/vscode/.t3"');
     expect(qualification).toContain(
       'installedPackage !== "/usr/local/lib/node_modules/heddle"',

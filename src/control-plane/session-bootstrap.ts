@@ -59,6 +59,7 @@ import {
 import type {
   T3DispatchCommand,
   T3ProviderDispatchContext,
+  T3WorkflowMcpProviderSession,
 } from "./t3-control-plane-client.js";
 import {
   ensureWorktree,
@@ -72,6 +73,9 @@ export interface SessionT3Client {
     command: T3DispatchCommand,
     providerContext?: T3ProviderDispatchContext,
   ): Promise<{ sequence: number }>;
+  registerWorkflowMcpProviderSession(
+    registration: T3WorkflowMcpProviderSession,
+  ): Promise<void>;
 }
 
 export type SessionBootstrapInput = {
@@ -135,6 +139,7 @@ export type SessionBootstrapDependencies = {
   resolveSystemPrompt?: SystemPromptResolver;
   t3: SessionT3Client;
   templateAuthority?: SessionTemplateAuthority;
+  workflowMcpEndpoint: string;
 };
 
 export type HandoffTemplateResolver = (
@@ -167,6 +172,13 @@ export type SessionSteeringDependencies = {
   nextId?: () => string;
   now?: () => string;
   t3: SessionT3Client;
+};
+
+const requireWorkflowMcpEndpoint = (value: string): string => {
+  if (!/^https?:\/\/[^\s]+$/u.test(value)) {
+    throw new TypeError("workflowMcpEndpoint must be an HTTP URL");
+  }
+  return value;
 };
 
 const resolveWorkflowMcpStageContract = async (
@@ -495,6 +507,9 @@ export const bootstrapStageSession = async (
     input.modelSelection.instanceId,
     input.providerContext.driver,
   );
+  const workflowMcpEndpoint = requireWorkflowMcpEndpoint(
+    dependencies.workflowMcpEndpoint,
+  );
   const templateAuthority = dependencies.templateAuthority;
   if (
     templateAuthority === undefined ||
@@ -542,6 +557,11 @@ export const bootstrapStageSession = async (
     sessionKey: input.sessionKey,
     threadId,
     worktreePath: worktree.path,
+  });
+  await dependencies.t3.registerWorkflowMcpProviderSession({
+    authorizationHeader: `Bearer ${correlationToken}`,
+    endpoint: workflowMcpEndpoint,
+    threadId,
   });
 
   await dependencies.t3.dispatch({

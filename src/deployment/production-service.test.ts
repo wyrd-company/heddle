@@ -241,6 +241,16 @@ describe("configured production composition", () => {
     expect(rendered.startsWith(`${override}\n\n`)).toBe(true);
     expect(rendered).not.toContain("# Heddle stage session");
     expect(rendered).not.toContain(fixture.root);
+    expect(t3.mcpRegistrations).toEqual([
+      {
+        authorizationHeader: expect.stringMatching(/^Bearer \S+$/),
+        endpoint: "http://127.0.0.1:3774/mcp",
+        threadId: expect.any(String),
+      },
+    ]);
+    expect(rendered).not.toContain(
+      t3.mcpRegistrations[0]!.authorizationHeader.slice("Bearer ".length),
+    );
   });
 
   it("raises durable attention without dispatch when heddle.md is unreadable", async () => {

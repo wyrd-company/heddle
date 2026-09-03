@@ -87,6 +87,7 @@ export type ProductionCompositionOptions = {
   pushoverTransport?: PushoverTransport;
   resolveSystemPrompt?: SystemPromptResolver;
   t3?: ProductionT3Client;
+  workflowMcpEndpoint: string;
 };
 
 export type ProductionComposition = {
@@ -179,6 +180,7 @@ export const createProductionComposition = (
       projects,
       attention,
       t3,
+      options.workflowMcpEndpoint,
       resolveSystemPrompt,
       templateAuthority,
       boardStatuses,
@@ -261,6 +263,7 @@ export const createProductionComposition = (
       resolveSystemPrompt,
       t3,
       templateAuthority,
+      workflowMcpEndpoint: options.workflowMcpEndpoint,
     });
     subagents = coordinator;
     const consoleActions = new ProductionAttentionActions(

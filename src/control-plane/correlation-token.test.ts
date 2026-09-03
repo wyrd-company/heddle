@@ -145,7 +145,7 @@ describe("ensureCorrelationToken", () => {
     ).toThrow(/token/);
   });
 
-  it("rejects an empty token already stored on the instance", () => {
+  it("rejects a registration-incompatible token already stored on the instance", () => {
     const record: InstanceRecord = {
       instanceId: "instance-1",
       state: {
@@ -164,6 +164,29 @@ describe("ensureCorrelationToken", () => {
         "instance-1",
         "session-1",
       ),
-    ).toThrow(/empty correlation token/);
+    ).toThrow(/invalid correlation token/);
   });
+
+  it.each(["two words", "x".repeat(8193)])(
+    "rejects a minted registration-incompatible token",
+    (token) => {
+      const record: InstanceRecord = {
+        instanceId: "instance-1",
+        state: initialState(),
+        version: 1,
+      };
+
+      expect(() =>
+        ensureCorrelationToken(
+          {
+            getInstance: () => record,
+            compareAndSwapInstance: () => record,
+          },
+          "instance-1",
+          "session-1",
+          () => token,
+        ),
+      ).toThrow(/1 to 8192 non-whitespace characters/);
+    },
+  );
 });

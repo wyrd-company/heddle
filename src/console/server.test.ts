@@ -347,7 +347,7 @@ describe("console server", () => {
     expect(board.writes).toEqual([]);
   });
 
-  it("does not expose an activation correlation token through the console event API", async () => {
+  it("serves a token-free activation document through the console event API", async () => {
     const correlationToken = "console-fixture-credential";
     state.correlationTokens.push(correlationToken);
     const futurePrivateValue = "console-future-private-fixture";
@@ -359,7 +359,6 @@ instanceId: "instance-52"
 sessionKey: "session-52"
 taskId: 52
 stage: "inspect"
-correlationToken: "${correlationToken}"
 ---
 # Inspect the generated sample`;
     state.events.push({

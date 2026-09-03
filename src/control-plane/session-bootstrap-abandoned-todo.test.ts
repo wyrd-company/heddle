@@ -65,6 +65,9 @@ const instantiateTodoList: NonNullable<
   template: templateId,
 });
 
+const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
+const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
+
 const initialState = (): InstanceState => ({
   correlationTokens: {},
   flowcraftContext: { awaitingNodeIds: ["prepare"] },
@@ -138,7 +141,8 @@ describe("abandoned activation todo state", () => {
         instantiateTodoList: instantiateAcrossAdvance,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract: resolveAwaitingStage,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -176,7 +180,8 @@ describe("abandoned activation todo state", () => {
         stage: "next",
         todoTemplate: "sample-next",
       }),
-      t3: { dispatch },
+      workflowMcpEndpoint,
+      t3: { registerWorkflowMcpProviderSession, dispatch },
       ensureWorktree: async ({ branch }) => ({
         branch,
         created: false,
@@ -264,7 +269,11 @@ describe("abandoned activation todo state", () => {
       instantiateTodoList,
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract: async () => workflowMcp,
-      t3: { dispatch: async () => ({ sequence: 1 }) },
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession,
+        dispatch: async () => ({ sequence: 1 }),
+      },
       ensureWorktree: async ({ branch }) => ({
         branch,
         created: false,

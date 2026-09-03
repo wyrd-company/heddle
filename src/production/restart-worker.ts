@@ -67,6 +67,7 @@ const t3: ProductionT3Client = {
   getThread: async () => ({ thread: { activities: [] } }),
   respondToApproval: async () => ({ sequence: 1 }),
   respondToUserInput: async () => ({ sequence: 1 }),
+  registerWorkflowMcpProviderSession: async () => undefined,
 };
 const composition = createProductionComposition({
   blueprintsRepositoryRoot: join(
@@ -79,6 +80,7 @@ const composition = createProductionComposition({
   },
   pushoverTransport: { send: async () => undefined },
   t3,
+  workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
 });
 await composition.start();
 await composition.scheduler.trigger();

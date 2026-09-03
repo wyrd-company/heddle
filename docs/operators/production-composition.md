@@ -324,19 +324,24 @@ records the effective prompt, exact rendered document, and task, instance,
 session, stage, and thread identity in `session:activated`. Restart accepts
 only an exact payload match and does not append or dispatch a second activation.
 
-Isolated pinned Wyrd Company T3 fork 0.0.37-wyrd.1 qualification found no accepted, preserved per-thread
-MCP authentication-header configuration for Claude Code, Codex, or Cursor.
-For these three drivers, Heddle therefore writes the correlation token exactly
-once in the rendered Markdown identity front matter. It never writes the token
-to the canonical JSON projection or Markdown body. Do not add a second token,
-copy it into template content, or configure an unmeasured driver. A driver
-outside this set fails before dispatch. Treat the rendered handoff as secret
-material because its identity front matter contains the token.
+Pinned Wyrd Company T3 fork 0.0.37-wyrd.2 supports authenticated per-thread MCP
+registration for Claude Code, Codex, Cursor, Grok, and OpenCode. Heddle derives
+the workflow MCP endpoint from the configured server host and port, then sends
+that endpoint and the session's bearer correlation token to
+`PUT /api/mcp/provider-session` before thread creation. T3 supplies the
+registration through each driver's native launch path. No Heddle-specific MCP
+configuration file is required. The rendered handoff contains no token. A
+driver outside this measured set fails before worktree or T3 effects.
+
+The workflow MCP handler negotiates protocol 2025-11-25 or older. It advertises
+no Tasks capability and returns ordinary tool results, not
+`InputRequiredResult`. Session preparation keeps the existing Claude Code and
+Codex tool-timeout configuration; Cursor, Grok, and OpenCode need no separate
+timeout setup.
 
 The deployed `/api/events` feed is not a durable-state export. It omits the
-payloads of `instance:created` and `instance:updated` records, structurally
-validates each `session:activated` identity front matter, and removes its
-`correlationToken` field before serialization. An activation record that does
+payloads of `instance:created` and `instance:updated` records and structurally
+validates each token-free `session:activated` identity front matter. An activation record that does
 not match the canonical structure is served only as an unavailable marker.
 After projection, Heddle checks the complete event result against the current
 durable correlation-token catalog. A token in a generic event makes the read

@@ -40,6 +40,7 @@ describe("production epic acceptance attention resolution", () => {
     );
     const t3 = new SyntheticT3();
     const options = {
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: prepared.blueprintsRepositoryRoot,
       configuration: prepared.configuration,
       providerUsage: {

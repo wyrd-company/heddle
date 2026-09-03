@@ -79,6 +79,7 @@ describe("production instance controller", () => {
       {} as EpicProjectCoordinator,
       { has: async () => false, raise: async () => undefined },
       {} as never,
+      "http://127.0.0.1:4774/mcp",
       async () => "",
       { readHandoffTemplate: async () => "", repositoryRoot: root },
     );
@@ -179,6 +180,7 @@ describe("production instance controller", () => {
       {} as EpicProjectCoordinator,
       attention,
       {} as never,
+      "http://127.0.0.1:4774/mcp",
       async () => "",
       { readHandoffTemplate: async () => "", repositoryRoot: root },
     );

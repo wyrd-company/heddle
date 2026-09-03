@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 import type {
   HarnessToolTimeoutLaunchInput,
   T3DispatchCommand,
+  T3WorkflowMcpProviderSession,
 } from "../control-plane/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
@@ -68,6 +69,7 @@ export class SyntheticT3 implements ProductionT3Client {
     threadId: string;
   }> = [];
   readonly commands: T3DispatchCommand[] = [];
+  readonly mcpRegistrations: T3WorkflowMcpProviderSession[] = [];
   readonly timeouts: HarnessToolTimeoutLaunchInput[] = [];
   readonly threads = new Set<string>();
   readonly userInputResponses: Array<{
@@ -99,6 +101,12 @@ export class SyntheticT3 implements ProductionT3Client {
         session: { status: "running" },
       })),
     };
+  }
+
+  async registerWorkflowMcpProviderSession(
+    registration: T3WorkflowMcpProviderSession,
+  ): Promise<void> {
+    this.mcpRegistrations.push(globalThis.structuredClone(registration));
   }
 
   async getThread() {

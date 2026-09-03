@@ -77,6 +77,12 @@ export type T3TokenExchange = {
   scope: string;
 };
 
+export type T3WorkflowMcpProviderSession = {
+  authorizationHeader: string;
+  endpoint: string;
+  threadId: string;
+};
+
 export type T3ThreadObservation = {
   phase: T3AwarenessPhase;
   thread: T3ShellThread;
@@ -223,6 +229,17 @@ export class T3ControlPlaneClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(command),
+    });
+  }
+
+  async registerWorkflowMcpProviderSession(
+    registration: T3WorkflowMcpProviderSession,
+  ): Promise<void> {
+    this.#requireAccessToken("register a workflow MCP provider session");
+    await this.#request<void>("/api/mcp/provider-session", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(registration),
     });
   }
 

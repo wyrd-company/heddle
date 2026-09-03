@@ -31,6 +31,7 @@ describe("production console lifecycle rebase", () => {
     const prepared = await prepareProductionFixture();
     fixture = prepared;
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: prepared.blueprintsRepositoryRoot,
       configuration: prepared.configuration,
       providerUsage: {
@@ -252,6 +253,7 @@ describe("production console lifecycle rebase", () => {
     const prepared = await prepareProductionFixture();
     fixture = prepared;
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: prepared.blueprintsRepositoryRoot,
       configuration: prepared.configuration,
       providerUsage: {
@@ -372,6 +374,7 @@ describe("production console lifecycle rebase", () => {
     const prepared = await prepareProductionFixture();
     fixture = prepared;
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: prepared.blueprintsRepositoryRoot,
       configuration: prepared.configuration,
       providerUsage: {

@@ -124,6 +124,7 @@ describe("production concurrent review landing", () => {
     await git(repositoryRoot, "branch", `epic/${fixture.epicId}`, "main");
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {

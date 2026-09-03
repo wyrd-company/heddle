@@ -62,6 +62,7 @@ export const createConfiguredProductionComposition = (
       loaded.configurationDirectory,
     ),
     t3: dependencies.t3 ?? t3Client(loaded),
+    workflowMcpEndpoint: `http://${loaded.server.host}:${loaded.server.port}/mcp`,
   });
 
 export const startConfiguredProductionService = async (

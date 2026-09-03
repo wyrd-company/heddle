@@ -129,6 +129,7 @@ const t3 = {
     answers: Record<string, string | string[]>,
     commandId?: string,
   ) => recordAcceptedResponse(answers, commandId),
+  registerWorkflowMcpProviderSession: async () => undefined,
 } satisfies ProductionT3Client;
 
 const composition = createProductionComposition({
@@ -139,6 +140,7 @@ const composition = createProductionComposition({
   },
   pushoverTransport: { send: async () => undefined },
   t3,
+  workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
 });
 
 const initialState: InstanceState = {

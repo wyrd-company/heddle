@@ -20,7 +20,10 @@ import {
   steerStageSession,
   type SessionBootstrapDependencies,
 } from "./session-bootstrap.js";
-import { harnessToolTimeoutConfiguration } from "./harness-tool-timeout.js";
+import {
+  harnessToolTimeoutConfiguration,
+  harnessToolTimeoutLaunchConfiguration,
+} from "./harness-tool-timeout.js";
 import { builtInSystemPrompt } from "./system-prompt.js";
 import {
   sampleHandoffTemplate,
@@ -60,6 +63,8 @@ const instantiateTodoList: NonNullable<
 });
 
 const scratchDirectories: string[] = [];
+const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
+const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
 
 afterEach(async () => {
   await Promise.all(
@@ -107,6 +112,9 @@ describe("stage session bootstrap", () => {
       const operations: string[] = [];
       const applyHarnessToolTimeout = vi.fn(async () => {
         operations.push("apply-tool-timeout");
+      });
+      const registerWorkflowMcpProviderSession = vi.fn(async () => {
+        operations.push("register-workflow-mcp");
       });
       const dispatch = vi.fn(async ({ type }: { type: string }) => {
         operations.push(type);
@@ -170,12 +178,18 @@ describe("stage session bootstrap", () => {
           },
           templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
-          t3: { applyHarnessToolTimeout, dispatch },
+          workflowMcpEndpoint,
+          t3: {
+            registerWorkflowMcpProviderSession,
+            applyHarnessToolTimeout,
+            dispatch,
+          },
         },
       );
 
       expect(operations).toEqual([
         "apply-tool-timeout",
+        "register-workflow-mcp",
         "thread.create",
         "thread.turn.start",
       ]);
@@ -187,8 +201,217 @@ describe("stage session bootstrap", () => {
         worktreePath: "/workspaces/worktrees/sample-repository/task-prepare",
       });
       expect(result).not.toHaveProperty("toolTimeoutConfiguration");
+      expect(registerWorkflowMcpProviderSession).toHaveBeenCalledWith({
+        authorizationHeader: expect.stringMatching(/^Bearer \S+$/),
+        endpoint: workflowMcpEndpoint,
+        threadId: "thread-launch",
+      });
     },
   );
+
+  it.each(["cursor", "grok", "opencode"])(
+    "registers workflow MCP for %s without applying a harness timeout",
+    async (driver) => {
+      let record: InstanceRecord = {
+        instanceId: "instance-registration",
+        state: initialState(),
+        version: 1,
+      };
+      const operations: string[] = [];
+      const registerWorkflowMcpProviderSession = vi.fn(async () => {
+        operations.push("register-workflow-mcp");
+      });
+      const dispatch = vi.fn(async ({ type }: { type: string }) => {
+        operations.push(type);
+        return { sequence: operations.length };
+      });
+
+      await bootstrapStageSession(
+        {
+          handoff: {
+            skillPointer: "skill://prepare",
+            stage: {
+              kind: "standard",
+              name: "prepare",
+              priorStageOutputs: [],
+            },
+            taskContract: { title: "Prepare inventory" },
+          },
+          instanceId: "instance-registration",
+          interactionMode: "default",
+          modelSelection: { instanceId: driver, model: "default" },
+          projectId: "project-registration",
+          providerContext: {
+            cliVersion: "test-version",
+            driver,
+            lifecycle: "independent",
+          },
+          runtimeMode: "default",
+          sessionKey: "prepare-registration",
+          task: { id: 1, title: "Prepare inventory" },
+          taskId: 1,
+          title: "Prepare inventory",
+          worktree: {
+            baseRef: "main",
+            branch: "task/prepare",
+            repositoryName: "sample-repository",
+            repositoryRoot: "/workspaces/sample-repository",
+            worktreeName: "task-prepare",
+          },
+        },
+        {
+          ensureWorktree: async ({ branch }) => ({
+            branch,
+            created: true,
+            path: "/workspaces/worktrees/sample-repository/task-prepare",
+          }),
+          instantiateTodoList,
+          mintCorrelationToken: () => "registration-token",
+          persistence: {
+            getInstance: () => record,
+            compareAndSwapInstance: (_id, version, state) => {
+              if (version !== record.version) return undefined;
+              record = { ...record, state, version: record.version + 1 };
+              return record;
+            },
+          },
+          templateAuthority: sampleTemplateAuthority,
+          resolveWorkflowMcpStageContract,
+          t3: { dispatch, registerWorkflowMcpProviderSession },
+          workflowMcpEndpoint,
+        },
+      );
+
+      expect(operations).toEqual([
+        "register-workflow-mcp",
+        "thread.create",
+        "thread.turn.start",
+      ]);
+      expect(registerWorkflowMcpProviderSession).toHaveBeenCalledWith({
+        authorizationHeader: "Bearer registration-token",
+        endpoint: workflowMcpEndpoint,
+        threadId: expect.any(String),
+      });
+    },
+  );
+
+  it("rejects an unmeasured driver before worktree or T3 effects", async () => {
+    const ensureWorktree = vi.fn();
+    const dispatch = vi.fn();
+    const registerWorkflowMcpProviderSession = vi.fn();
+
+    await expect(
+      bootstrapStageSession(
+        {
+          handoff: {
+            skillPointer: "skill://prepare",
+            stage: {
+              kind: "standard",
+              name: "prepare",
+              priorStageOutputs: [],
+            },
+            taskContract: { title: "Prepare inventory" },
+          },
+          instanceId: "instance-unmeasured",
+          interactionMode: "default",
+          modelSelection: { instanceId: "sample-driver", model: "default" },
+          projectId: "project-unmeasured",
+          providerContext: {
+            cliVersion: "test-version",
+            driver: "sample-driver",
+            lifecycle: "independent",
+          },
+          runtimeMode: "default",
+          sessionKey: "prepare-unmeasured",
+          task: { id: 1, title: "Prepare inventory" },
+          taskId: 1,
+          title: "Prepare inventory",
+          worktree: {
+            baseRef: "main",
+            branch: "task/prepare",
+            repositoryName: "sample-repository",
+            repositoryRoot: "/workspaces/sample-repository",
+            worktreeName: "task-prepare",
+          },
+        },
+        {
+          ensureWorktree,
+          persistence: {
+            compareAndSwapInstance: vi.fn(),
+            getInstance: vi.fn(),
+            listInstances: vi.fn(),
+          },
+          t3: { dispatch, registerWorkflowMcpProviderSession },
+          workflowMcpEndpoint,
+        },
+      ),
+    ).rejects.toThrow("has no measured Heddle MCP authentication policy");
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(registerWorkflowMcpProviderSession).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid workflow MCP endpoint before worktree or T3 effects", async () => {
+    const ensureWorktree = vi.fn();
+    const dispatch = vi.fn();
+    const registerWorkflowMcpProviderSession = vi.fn();
+
+    await expect(
+      bootstrapStageSession(
+        {
+          handoff: {
+            skillPointer: "skill://prepare",
+            stage: {
+              kind: "standard",
+              name: "prepare",
+              priorStageOutputs: [],
+            },
+            taskContract: { title: "Prepare inventory" },
+          },
+          instanceId: "instance-invalid-endpoint",
+          interactionMode: "default",
+          modelSelection: { instanceId: "cursor", model: "default" },
+          projectId: "project-invalid-endpoint",
+          providerContext: {
+            cliVersion: "test-version",
+            driver: "cursor",
+            lifecycle: "independent",
+          },
+          runtimeMode: "default",
+          sessionKey: "prepare-invalid-endpoint",
+          task: { id: 1, title: "Prepare inventory" },
+          taskId: 1,
+          title: "Prepare inventory",
+          worktree: {
+            baseRef: "main",
+            branch: "task/prepare",
+            repositoryName: "sample-repository",
+            repositoryRoot: "/workspaces/sample-repository",
+            worktreeName: "task-prepare",
+          },
+        },
+        {
+          ensureWorktree,
+          persistence: {
+            compareAndSwapInstance: vi.fn(),
+            getInstance: vi.fn(),
+            listInstances: vi.fn(),
+          },
+          t3: { dispatch, registerWorkflowMcpProviderSession },
+          workflowMcpEndpoint: "file:///tmp/sample-mcp",
+        },
+      ),
+    ).rejects.toThrow("workflowMcpEndpoint must be an HTTP URL");
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(registerWorkflowMcpProviderSession).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a driver without measured launch preparation", () => {
+    expect(() =>
+      harnessToolTimeoutLaunchConfiguration("sample-driver"),
+    ).toThrow("Provider 'sample-driver' has no measured launch preparation");
+  });
 
   it.each(["codex", "claudeAgent"])(
     "rejects $driver before thread creation without a timeout consumer",
@@ -251,7 +474,8 @@ describe("stage session bootstrap", () => {
             },
             templateAuthority: sampleTemplateAuthority,
             resolveWorkflowMcpStageContract,
-            t3: { dispatch },
+            workflowMcpEndpoint,
+            t3: { registerWorkflowMcpProviderSession, dispatch },
           },
         ),
       ).rejects.toThrow(/tool timeout application is required/);
@@ -292,7 +516,9 @@ describe("stage session bootstrap", () => {
         .fn()
         .mockResolvedValueOnce("# Operator session guidance")
         .mockResolvedValueOnce("# Changed guidance"),
+      workflowMcpEndpoint,
       t3: {
+        registerWorkflowMcpProviderSession,
         dispatch: async (command) => {
           commands.push(command);
           return { sequence: commands.length };
@@ -444,7 +670,8 @@ describe("stage session bootstrap", () => {
       },
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
-      t3: { dispatch },
+      workflowMcpEndpoint,
+      t3: { registerWorkflowMcpProviderSession, dispatch },
     };
 
     await bootstrapStageSession(input, dependencies);
@@ -531,7 +758,9 @@ describe("stage session bootstrap", () => {
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
       resolveSystemPrompt,
+      workflowMcpEndpoint,
       t3: {
+        registerWorkflowMcpProviderSession,
         dispatch: async (command: Record<string, unknown>) => {
           commands.push(command);
           return { sequence: commands.length };
@@ -592,7 +821,8 @@ describe("stage session bootstrap", () => {
           .mockReturnValueOnce("turn-2")
           .mockReturnValueOnce("message-2"),
         now: () => "2026-01-01T00:00:00.000Z",
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
       },
     );
 
@@ -618,7 +848,11 @@ describe("stage session bootstrap", () => {
       instantiateTodoList,
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
-      t3: { dispatch: async () => ({ sequence: 1 }) },
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession,
+        dispatch: async () => ({ sequence: 1 }),
+      },
       ensureWorktree: async ({ branch }) => ({
         branch,
         created: true,

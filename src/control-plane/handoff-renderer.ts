@@ -30,14 +30,20 @@ export type HandoffRenderInput = {
   template: PinnedHandoffTemplate;
 };
 
-const measuredFallbackDrivers = ["claudeAgent", "codex", "cursor"] as const;
+const measuredMcpDrivers = [
+  "claudeAgent",
+  "codex",
+  "cursor",
+  "grok",
+  "opencode",
+] as const;
 
-export type MeasuredHandoffDriver = (typeof measuredFallbackDrivers)[number];
+export type MeasuredHandoffDriver = (typeof measuredMcpDrivers)[number];
 
 export type HandoffAuthenticationBinding = {
   driver: MeasuredHandoffDriver;
   format: "heddle.handoff-authentication-binding";
-  policy: "correlation-token-front-matter-v1";
+  policy: "external-provider-session-v1";
   version: 1;
 };
 
@@ -48,17 +54,15 @@ export const isHandoffAuthenticationBinding = (
   value !== null &&
   !Array.isArray(value) &&
   Object.keys(value).length === 4 &&
-  measuredFallbackDrivers.some((driver) => value["driver"] === driver) &&
+  measuredMcpDrivers.some((driver) => value["driver"] === driver) &&
   value["format"] === "heddle.handoff-authentication-binding" &&
-  value["policy"] === "correlation-token-front-matter-v1" &&
+  value["policy"] === "external-provider-session-v1" &&
   value["version"] === 1;
 
 export const resolveHandoffAuthenticationBinding = (
   driver: string,
 ): HandoffAuthenticationBinding => {
-  if (
-    !measuredFallbackDrivers.some((measuredDriver) => measuredDriver === driver)
-  ) {
+  if (!measuredMcpDrivers.some((measuredDriver) => measuredDriver === driver)) {
     throw new HandoffRenderError(
       `Driver '${driver}' has no measured Heddle MCP authentication policy`,
     );
@@ -66,7 +70,7 @@ export const resolveHandoffAuthenticationBinding = (
   return {
     driver: driver as HandoffAuthenticationBinding["driver"],
     format: "heddle.handoff-authentication-binding",
-    policy: "correlation-token-front-matter-v1",
+    policy: "external-provider-session-v1",
     version: 1,
   };
 };
@@ -125,7 +129,7 @@ export const assertComposedSystemPrompt = (
     systemPrompt.trim() === "" ||
     systemPrompt.includes(correlationToken) ||
     !renderedDocument.startsWith(prefix) ||
-    renderedDocument.split(correlationToken).length !== 2
+    renderedDocument.includes(correlationToken)
   ) {
     throw new HandoffRenderError(
       "Stored rendered handoff does not match its system prompt",
@@ -203,7 +207,6 @@ const identityFrontMatter = (input: HandoffRenderInput): string => {
     `sessionKey: ${JSON.stringify(input.sessionKey)}`,
     `taskId: ${input.taskId}`,
     `stage: ${JSON.stringify(input.stage)}`,
-    `correlationToken: ${JSON.stringify(input.correlationToken)}`,
     "---",
     "",
   ].join("\n");

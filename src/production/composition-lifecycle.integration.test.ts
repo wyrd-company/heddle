@@ -19,6 +19,8 @@ import {
   execute,
 } from "./composition.test-support.js";
 
+const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
+
 describe("production lifecycle composition", () => {
   let cleanup: (() => Promise<void>) | undefined;
 
@@ -37,6 +39,7 @@ describe("production lifecycle composition", () => {
     const firstT3 = new SyntheticT3();
     const transport = { send: vi.fn(async () => undefined) };
     const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -88,6 +91,7 @@ describe("production lifecycle composition", () => {
 
     const secondT3 = new SyntheticT3();
     const second = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -167,6 +171,7 @@ kind: standard
     });
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -199,6 +204,7 @@ kind: standard
     }
     const firstT3 = new InterruptedT3();
     const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -226,6 +232,7 @@ kind: standard
     };
     const secondT3 = new SyntheticT3();
     const second = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration: changedConfiguration,
       providerUsage: {
@@ -254,6 +261,7 @@ kind: standard
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -304,6 +312,7 @@ kind: standard
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -376,6 +385,7 @@ kind: standard
   it("raises durable attention and activates remediation for a legacy findings-less review", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -448,6 +458,7 @@ kind: standard
       }
     }
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -502,6 +513,7 @@ kind: standard
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -560,6 +572,7 @@ kind: standard
             repositoryRoot: blueprintsRepositoryRoot,
           },
           t3,
+          workflowMcpEndpoint,
         },
       ),
     ).rejects.toThrow(
@@ -572,6 +585,7 @@ kind: standard
   it("keeps the intended occurrence after a crash before session intent persistence", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -598,6 +612,7 @@ kind: standard
 
     const t3 = new SyntheticT3();
     const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -625,6 +640,7 @@ kind: standard
   it("keeps a starting occurrence identity when restart pacing defers dispatch", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -654,6 +670,7 @@ kind: standard
     configuration.pacing.maxConcurrentSessions = 0;
     const t3 = new SyntheticT3();
     const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -696,6 +713,7 @@ kind: standard
   it("keeps a double-digit occurrence identity after session intent persistence", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -733,6 +751,7 @@ kind: standard
 
     const t3 = new SyntheticT3();
     const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {

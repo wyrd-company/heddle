@@ -72,7 +72,7 @@ const parsedIdentityFrontMatter = (
   return isRecord(value) ? value : undefined;
 };
 
-const redactRenderedDocument = (
+const publicRenderedDocument = (
   activation: SessionActivationIdentity,
 ): string | undefined => {
   const promptPrefix = `${activation.systemPrompt}\n\n`;
@@ -86,22 +86,13 @@ const redactRenderedDocument = (
   );
   if (
     frontMatter === undefined ||
-    Object.keys(frontMatter).length !== 7 ||
+    Object.keys(frontMatter).length !== 6 ||
     frontMatter["format"] !== handoffFormat ||
     frontMatter["version"] !== 1 ||
     frontMatter["instanceId"] !== activation.instanceId ||
     frontMatter["sessionKey"] !== activation.sessionKey ||
     frontMatter["taskId"] !== activation.taskId ||
-    frontMatter["stage"] !== activation.stage ||
-    typeof frontMatter["correlationToken"] !== "string" ||
-    /\s/.test(frontMatter["correlationToken"])
-  ) {
-    return undefined;
-  }
-  const token = frontMatter["correlationToken"];
-  if (
-    activation.renderedDocument.split(token).length !== 2 ||
-    activation.threadId.includes(token)
+    frontMatter["stage"] !== activation.stage
   ) {
     return undefined;
   }
@@ -122,7 +113,7 @@ const redactRenderedDocument = (
 const projectSessionActivation = (payload: JsonValue): JsonValue => {
   const activation = sessionActivationIdentity(payload);
   if (activation === undefined) return unavailableActivation();
-  const renderedDocument = redactRenderedDocument(activation);
+  const renderedDocument = publicRenderedDocument(activation);
   if (renderedDocument === undefined) return unavailableActivation();
   return {
     format: activationFormat,

@@ -26,6 +26,7 @@ const git = async (cwd: string, ...arguments_: string[]): Promise<string> =>
 
 const compose = (fixture: ProductionFixture, t3: SyntheticT3) =>
   createProductionComposition({
+    workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
     blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
     configuration: fixture.configuration,
     providerUsage: {
@@ -396,6 +397,7 @@ describe("production mechanical worktree preparation", () => {
       "not a directory",
     );
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {

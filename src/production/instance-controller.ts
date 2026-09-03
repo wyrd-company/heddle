@@ -80,6 +80,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly projects: EpicProjectCoordinator,
     private readonly attention: ReconcilerAttentionQueue,
     private readonly t3: SessionT3Client,
+    private readonly workflowMcpEndpoint: string,
     private readonly resolveSystemPrompt: SystemPromptResolver,
     private readonly templateAuthority: SessionTemplateAuthority,
     private readonly boardStatuses: () => Promise<MechanicalBoardStatuses> = defaultMechanicalBoardStatuses,
@@ -547,7 +548,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
                 }),
             dispatch: (command, providerContext) =>
               this.t3.dispatch(command, providerContext),
+            registerWorkflowMcpProviderSession: (registration) =>
+              this.t3.registerWorkflowMcpProviderSession(registration),
           },
+          workflowMcpEndpoint: this.workflowMcpEndpoint,
         },
       );
     } catch (error) {

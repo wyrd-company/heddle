@@ -155,10 +155,10 @@ We record here _non-obvious_ repeated failure modes specific to this repo.
    configuration are real remotes and a mechanical stage will push to them.
 
 5. **The correlation token is a live credential.** It is the bearer credential
-   for the MCP boundary and it appears in the rendered handoff document's
-   identity front matter. Never copy it into a log, a task note, a terminal
-   transcript, a screenshot, or a review artifact. Treat any rendered handoff
-   and any raw event payload as secret material.
+   for the MCP boundary. Heddle sends it only through T3's authenticated
+   provider-session registration. Never copy it into a rendered handoff, log,
+   task note, terminal transcript, screenshot, or review artifact. Raw durable
+   state and event payloads can contain it and remain secret material.
 
 6. **`gitpr` must be on the service's PATH, not just yours.** Mechanical stages
    shell out to it. It resolves under your interactive shell and can be absent
@@ -198,7 +198,7 @@ Pinned dependencies that the service checks or assumes:
 - **`wyrd-company/kanban-md`** at `0.37.0-fork+b9fc380`, which preserves
   unrecognized front-matter properties through every task mutation. The service
   verifies this at startup and refuses to run against another build.
-- **Wyrd Company T3Code fork `0.0.37-wyrd.1`**, against which the control-plane integration is qualified from its public release tarball.
+- **Wyrd Company T3Code fork `0.0.37-wyrd.2`**, against which the control-plane integration is qualified from its public release tarball.
 - **Driver CLI versions** are pinned in configuration, and a session refuses to
   dispatch when the running provider does not match its pinned version.
 
@@ -234,9 +234,11 @@ A few invariants are easy to break without noticing:
   exact payload match and never appends or dispatches a second activation.
 - **Effects are idempotent per occurrence.** A retried transition cannot double
   apply. Command identifiers are deterministic so a replay is recognisable.
-- **Secrets never reach durable state or diagnostics.** The correlation token,
-  provider credentials, Pushover keys, and remote URLs are redacted before they
-  are recorded or surfaced.
+- **Secrets never reach provider prompts or diagnostics.** Heddle keeps the
+  correlation token in its durable credential authority and sends it to T3 only
+  through authenticated provider-session registration. Provider credentials,
+  Pushover keys, remote URLs, and correlation tokens are redacted before they
+  are surfaced.
 
 ## Pull requests
 

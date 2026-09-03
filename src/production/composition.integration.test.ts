@@ -45,6 +45,7 @@ describe("production composition", () => {
     };
     const deliveries = vi.fn(async () => undefined);
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -81,6 +82,7 @@ describe("production composition", () => {
       }
     }
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -97,6 +99,7 @@ describe("production composition", () => {
       "Timed out draining the reconciliation pass",
     );
     const replacement = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -116,6 +119,7 @@ describe("production composition", () => {
       }
     }
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -166,6 +170,7 @@ describe("production composition", () => {
       }
     });
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -288,6 +293,7 @@ describe("production composition", () => {
 
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -388,6 +394,7 @@ describe("production composition", () => {
     configuration.pacing.maxConcurrentSessions = 1;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -437,6 +444,7 @@ describe("production composition", () => {
     const fixture = await prepare();
     const onSchedulerError = vi.fn(async () => undefined);
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       onSchedulerError,
@@ -496,6 +504,7 @@ describe("production composition", () => {
       }
     }
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -529,6 +538,7 @@ describe("production composition", () => {
     const fixture = await prepare();
     fixture.configuration.cadenceMilliseconds = 750;
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -573,6 +583,7 @@ describe("production composition", () => {
     let used = 1;
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -603,6 +614,7 @@ describe("production composition", () => {
   it("persists configured over-threshold attention", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -630,6 +642,7 @@ describe("production composition", () => {
     await composition.close();
 
     const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {
@@ -741,6 +754,7 @@ describe("production composition", () => {
       { cwd: root },
     );
     const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
       configuration,
       providerUsage: {

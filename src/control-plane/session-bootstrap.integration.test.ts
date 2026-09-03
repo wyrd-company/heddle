@@ -229,6 +229,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
           tools: ["advance", "get_task_context"],
         }),
         t3: client,
+        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       },
     );
 

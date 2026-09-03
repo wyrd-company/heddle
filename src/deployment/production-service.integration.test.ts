@@ -9,6 +9,7 @@ import {
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
+import { createHash } from "node:crypto";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
@@ -129,6 +130,7 @@ describe("configured production service entry point", () => {
 
     const threads = new Set<string>();
     const commands: Array<Record<string, unknown>> = [];
+    const registrations: Array<Record<string, unknown>> = [];
     t3Server = createServer(async (request, response) => {
       expect(request.headers.authorization).toBe("Bearer t3-secret-value");
       response.setHeader("content-type", "application/json");
@@ -152,6 +154,19 @@ describe("configured production service entry point", () => {
         request.url?.startsWith("/api/orchestration/threads/")
       ) {
         response.end(JSON.stringify({ thread: { activities: [] } }));
+        return;
+      }
+      if (
+        request.method === "PUT" &&
+        request.url === "/api/mcp/provider-session"
+      ) {
+        let source = "";
+        request.setEncoding("utf8");
+        for await (const chunk of request) source += chunk;
+        registrations.push(JSON.parse(source) as Record<string, unknown>);
+        await appendFile(orderPath, "mcp-registered\n");
+        response.statusCode = 204;
+        response.end();
         return;
       }
       if (
@@ -241,8 +256,8 @@ describe("configured production service entry point", () => {
       ]);
     });
 
-    expect((await readFile(orderPath, "utf8")).split("\n").slice(0, 2)).toEqual(
-      ["timeout-applied", "thread-created"],
+    expect((await readFile(orderPath, "utf8")).split("\n").slice(0, 3)).toEqual(
+      ["timeout-applied", "mcp-registered", "thread-created"],
     );
     const timeoutRequest = JSON.parse(
       await readFile(timeoutRequestPath, "utf8"),
@@ -273,6 +288,24 @@ describe("configured production service entry point", () => {
       .get() as { instanceId: string; sessionKey: string; token: string };
     database.close();
     expect(indexed.instanceId).toBe(`task-${fixture.taskId}`);
+    const registration = registrations[0]!;
+    const createdThread = commands.find(
+      (command) => command["type"] === "thread.create",
+    );
+    expect(registrations).toHaveLength(1);
+    expect(registration["endpoint"]).toBe(`${origin}/mcp`);
+    expect(registration["threadId"]).toBe(createdThread?.["threadId"]);
+    expect(registration["authorizationHeader"]).toMatch(/^Bearer \S+$/);
+    const registeredToken = String(registration["authorizationHeader"]).slice(
+      "Bearer ".length,
+    );
+    expect(createHash("sha256").update(registeredToken).digest("hex")).toBe(
+      createHash("sha256").update(indexed.token).digest("hex"),
+    );
+    const firstTurn = commands.find(
+      (command) => command["type"] === "thread.turn.start",
+    );
+    expect(JSON.stringify(firstTurn)).not.toContain(indexed.token);
 
     mcpClient = new Client({ name: "configured-service", version: "1.0.0" });
     await mcpClient.connect(

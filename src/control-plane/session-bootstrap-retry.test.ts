@@ -96,6 +96,9 @@ const instantiateTodoList: NonNullable<
   template: templateId,
 });
 
+const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
+const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
+
 const memoryStore = (
   state = initialState(),
   otherRecords: InstanceRecord[] = [],
@@ -139,7 +142,8 @@ const expectParentRejected = async (
         persistence: memory.store,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -174,7 +178,12 @@ describe("stage session cold retry guards", () => {
         ensureWorktree,
         mintCorrelationToken,
         nextId,
-        t3: { applyHarnessToolTimeout, dispatch },
+        workflowMcpEndpoint,
+        t3: {
+          registerWorkflowMcpProviderSession,
+          applyHarnessToolTimeout,
+          dispatch,
+        },
       },
     ).catch((caught: unknown) => caught);
 
@@ -216,7 +225,8 @@ describe("stage session cold retry guards", () => {
         persistence: memory.store,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -348,7 +358,8 @@ describe("stage session cold retry guards", () => {
           persistence: memory.store,
           templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
-          t3: { dispatch },
+          workflowMcpEndpoint,
+          t3: { registerWorkflowMcpProviderSession, dispatch },
           ensureWorktree: async ({ branch }) => ({
             branch,
             created: false,
@@ -374,7 +385,8 @@ describe("stage session cold retry guards", () => {
           persistence: memory.store,
           templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
-          t3: { dispatch },
+          workflowMcpEndpoint,
+          t3: { registerWorkflowMcpProviderSession, dispatch },
           ensureWorktree: async ({ branch }) => ({
             branch,
             created: false,
@@ -432,7 +444,8 @@ describe("stage session cold retry guards", () => {
           persistence: memory.store,
           templateAuthority: sampleTemplateAuthority,
           resolveWorkflowMcpStageContract,
-          t3: { dispatch },
+          workflowMcpEndpoint,
+          t3: { registerWorkflowMcpProviderSession, dispatch },
           ensureWorktree: async ({ branch }) => ({
             branch,
             created: false,
@@ -463,7 +476,9 @@ describe("stage session cold retry guards", () => {
       instantiateTodoList,
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
+      workflowMcpEndpoint,
       t3: {
+        registerWorkflowMcpProviderSession,
         dispatch: async (command) => {
           commands.push(command);
           if (command.type === "thread.turn.start" && failFirstTurn) {
@@ -499,7 +514,7 @@ describe("stage session cold retry guards", () => {
       renderedHandoffAuthentication: {
         driver: "cursor",
         format: "heddle.handoff-authentication-binding",
-        policy: "correlation-token-front-matter-v1",
+        policy: "external-provider-session-v1",
         version: 1,
       },
     });
@@ -526,7 +541,12 @@ describe("stage session cold retry guards", () => {
       ensureWorktree,
       mintCorrelationToken,
       nextId,
-      t3: { applyHarnessToolTimeout, dispatch },
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession,
+        applyHarnessToolTimeout,
+        dispatch,
+      },
     };
 
     await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
@@ -579,7 +599,12 @@ describe("stage session cold retry guards", () => {
       persistence: memory.store,
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
-      t3: { applyHarnessToolTimeout, dispatch },
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession,
+        applyHarnessToolTimeout,
+        dispatch,
+      },
     };
 
     await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
@@ -620,7 +645,12 @@ describe("stage session cold retry guards", () => {
         instantiateTodoList,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
-        t3: { applyHarnessToolTimeout, dispatch },
+        workflowMcpEndpoint,
+        t3: {
+          registerWorkflowMcpProviderSession,
+          applyHarnessToolTimeout,
+          dispatch,
+        },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -669,7 +699,12 @@ describe("stage session cold retry guards", () => {
       instantiateTodoList,
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
-      t3: { applyHarnessToolTimeout, dispatch },
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession,
+        applyHarnessToolTimeout,
+        dispatch,
+      },
       ensureWorktree: async ({ branch }) => ({
         branch,
         created: false,
@@ -746,7 +781,11 @@ describe("stage session cold retry guards", () => {
       instantiateTodoList,
       templateAuthority: sampleTemplateAuthority,
       resolveWorkflowMcpStageContract,
-      t3: { dispatch: async () => ({ sequence: 1 }) },
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession,
+        dispatch: async () => ({ sequence: 1 }),
+      },
       ensureWorktree: async ({ branch }) => ({
         branch,
         created: false,
@@ -786,7 +825,8 @@ describe("stage session cold retry guards", () => {
         instantiateTodoList,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -818,7 +858,8 @@ describe("stage session cold retry guards", () => {
         instantiateTodoList,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -852,7 +893,8 @@ describe("stage session cold retry guards", () => {
         instantiateTodoList,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -890,7 +932,8 @@ describe("stage session cold retry guards", () => {
         instantiateTodoList,
         templateAuthority: sampleTemplateAuthority,
         resolveWorkflowMcpStageContract,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async ({ branch }) => ({
           branch,
           created: false,
@@ -909,7 +952,8 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         persistence: memory.store,
         templateAuthority: sampleTemplateAuthority,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
         ensureWorktree: async () => {
           throw new Error("worktree rejected");
         },
@@ -930,7 +974,8 @@ describe("stage session cold retry guards", () => {
       bootstrapStageSession(input, {
         ensureWorktree,
         persistence: memory.store,
-        t3: { dispatch },
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
       }),
     ).rejects.toThrow(
       "Stage session bootstrap requires one organization template authority",

@@ -18,6 +18,8 @@ export type HarnessToolTimeoutLaunchConfiguration =
       driver: "codex";
     };
 
+const driversWithoutToolTimeout = new Set(["cursor", "grok", "opencode"]);
+
 export type HarnessToolTimeoutLaunchInput =
   HarnessToolTimeoutLaunchConfiguration & {
     sessionKey: string;
@@ -45,7 +47,8 @@ export const harnessToolTimeoutLaunchConfiguration = (
   if (driver === "codex") {
     return { configuration: configured.codex, driver };
   }
-  return undefined;
+  if (driversWithoutToolTimeout.has(driver)) return undefined;
+  throw new Error(`Provider '${driver}' has no measured launch preparation`);
 };
 
 export const applyHarnessToolTimeoutBeforeThread = async (input: {

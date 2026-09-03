@@ -68,6 +68,38 @@ describe("resolveT3AwarenessPhase", () => {
 });
 
 describe("T3ControlPlaneClient", () => {
+  it("registers the workflow MCP endpoint and Bearer token through the authenticated provider-session route", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(new globalThis.Response(undefined, { status: 204 }));
+    const client = new T3ControlPlaneClient({
+      baseUrl: "http://t3.test",
+      accessToken: "access-token",
+      fetch,
+    });
+
+    await client.registerWorkflowMcpProviderSession({
+      authorizationHeader: "Bearer registration-token",
+      endpoint: "http://127.0.0.1:4774/mcp",
+      threadId: "thread-1",
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "http://t3.test/api/mcp/provider-session",
+    );
+    const request = fetch.mock.calls[0]?.[1];
+    expect(request?.method).toBe("PUT");
+    expect(new globalThis.Headers(request?.headers).get("authorization")).toBe(
+      "Bearer access-token",
+    );
+    expect(JSON.parse(String(request?.body))).toEqual({
+      authorizationHeader: "Bearer registration-token",
+      endpoint: "http://127.0.0.1:4774/mcp",
+      threadId: "thread-1",
+    });
+  });
+
   it("exchanges a pairing token with the RFC 8693 fields T3 requires", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

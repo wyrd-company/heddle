@@ -184,6 +184,7 @@ try {
   const threadId = globalThis.crypto.randomUUID();
   const branch = "qualification/thread";
   const worktreePath = join(scratch, "thread-worktree");
+  const workflowMcpEndpoint = `http://127.0.0.1:${port}/mcp`;
   await execute(
     "git",
     ["worktree", "add", "--quiet", "-b", branch, worktreePath, "main"],
@@ -196,6 +197,11 @@ try {
     title: "Sample Project",
     workspaceRoot: projectPath,
     createdAt: new Date().toISOString(),
+  });
+  await client.registerWorkflowMcpProviderSession({
+    authorizationHeader: "Bearer qualification-token",
+    endpoint: workflowMcpEndpoint,
+    threadId,
   });
   const threadDispatch = await client.dispatch({
     type: "thread.create",
@@ -227,6 +233,7 @@ try {
       t3Binary,
       t3Version: observedVersion,
       threadSequence: threadDispatch.sequence,
+      workflowMcpRegistered: true,
     })}\n`,
   );
 } finally {

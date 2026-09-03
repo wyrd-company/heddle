@@ -5,7 +5,14 @@
 
 import { execFile, spawn } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
-import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cwd, env } from "node:process";
@@ -38,6 +45,9 @@ import {
   type SubagentCoordinator,
 } from "../subagents/index.js";
 import { createWorkflowMcpHttpHandler } from "./workflow-mcp-handler.js";
+
+const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
+const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
 
 const execFileAsync = promisify(execFile);
 const temporaryDirectories: string[] = [];
@@ -367,7 +377,9 @@ const makeFixture = async () => {
           readHandoffTemplate: (reference) => handoffTemplates.read(reference),
           repositoryRoot,
         },
+        workflowMcpEndpoint,
         t3: {
+          registerWorkflowMcpProviderSession,
           applyHarnessToolTimeout: async () => undefined,
           dispatch: async () => ({ sequence: 1 }),
         },
@@ -433,6 +445,17 @@ afterEach(async () => {
 });
 
 describe("workflow MCP HTTP server", () => {
+  it("uses neither InputRequiredResult nor MCP Tasks", async () => {
+    const source = await readFile(
+      new globalThis.URL("./workflow-mcp-handler.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toContain("InputRequiredResult");
+    expect(source).not.toMatch(/\btasks\s*:/u);
+    expect(source).not.toContain("tasks/");
+  });
+
   it.each([
     ["missing", undefined],
     ["unknown", "Bearer token-unknown"],
@@ -454,7 +477,7 @@ describe("workflow MCP HTTP server", () => {
     expect(response.headers.get("www-authenticate")).toBe("Bearer");
   });
 
-  it("returns plain JSON for a stateless MCP POST", async () => {
+  it("advertises the MCP 2025-11-25 ceiling without task capabilities", async () => {
     const fixture = await makeFixture();
     const response = await globalThis.fetch(fixture.url, {
       body: JSON.stringify({
@@ -478,7 +501,14 @@ describe("workflow MCP HTTP server", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/json");
     expect(response.headers.get("mcp-session-id")).toBeNull();
-    await response.body?.cancel();
+    const body = (await response.json()) as {
+      result?: {
+        capabilities?: Record<string, unknown>;
+        protocolVersion?: string;
+      };
+    };
+    expect(body.result?.protocolVersion).toBe("2025-11-25");
+    expect(body.result?.capabilities).not.toHaveProperty("tasks");
   });
 
   it("connects independent protocol clients without an MCP session", async () => {

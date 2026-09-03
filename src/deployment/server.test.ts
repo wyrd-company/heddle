@@ -127,6 +127,7 @@ describe("deployed Heddle service", () => {
       await enableBlockedReportTool(fixture);
     }
     production = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -245,7 +246,6 @@ instanceId: "task-101"
 sessionKey: "session-101"
 taskId: 101
 stage: "inspect"
-correlationToken: "${correlationToken}"
 ---
 # Inspect the generated sample`;
     const writer = new SqlitePersistence({ stateDirectory: directory });
@@ -418,6 +418,7 @@ correlationToken: "${correlationToken}"
     directory = fixture.root;
     const t3 = new SyntheticT3();
     production = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -542,6 +543,7 @@ correlationToken: "${correlationToken}"
     });
     expect(() =>
       createProductionComposition({
+        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
         blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
         configuration: fixture.configuration,
         providerUsage: {
@@ -556,6 +558,7 @@ correlationToken: "${correlationToken}"
     service = undefined;
     production = undefined;
     const replacement = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -571,6 +574,7 @@ correlationToken: "${correlationToken}"
     const fixture = await prepareProductionFixture();
     directory = fixture.root;
     production = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
@@ -624,6 +628,7 @@ correlationToken: "${correlationToken}"
     const fixture = await prepareProductionFixture();
     directory = fixture.root;
     production = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {

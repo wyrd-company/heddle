@@ -78,8 +78,8 @@ const input = (
 });
 
 describe("renderStageHandoff", () => {
-  it.each(["claudeAgent", "codex", "cursor"])(
-    "places the %s fallback secret once in identity front matter and never in the body",
+  it.each(["claudeAgent", "codex", "cursor", "grok", "opencode"])(
+    "keeps the %s registration secret out of the rendered handoff",
     (driver) => {
       const rendered = renderStageHandoff(input({ driver }));
       const [frontMatter, body] = rendered.split("\n---\n", 2);
@@ -89,7 +89,7 @@ describe("renderStageHandoff", () => {
       expect(frontMatter).toContain('sessionKey: "session-1"');
       expect(frontMatter).toContain("taskId: 17");
       expect(frontMatter).toContain('stage: "arrange"');
-      expect(rendered.match(/opaque-fallback-token/g)).toHaveLength(1);
+      expect(rendered).not.toContain("opaque-fallback-token");
       expect(body).not.toContain("opaque-fallback-token");
       expect(body).toContain("- [x] Inspect the sample");
       expect(body).toContain("- [ ] Record the result");
@@ -126,7 +126,7 @@ describe("renderStageHandoff", () => {
     expect(renderStageHandoff(testInput)).toBe(renderStageHandoff(testInput));
   });
 
-  it("rejects a template body that duplicates the fallback token", () => {
+  it("rejects a template body that exposes the registration token", () => {
     expect(() =>
       renderStageHandoff(
         input({ task: { id: 17, title: "opaque-fallback-token" } }),

@@ -97,6 +97,7 @@ export {
 export {
   T3ControlPlaneClient,
   type T3ControlPlaneClientOptions,
+  type T3WorkflowMcpProviderSession,
 } from "./t3-control-plane-client.js";
 
 export const controlPlane = "control-plane" as const;

@@ -18,7 +18,6 @@ instanceId: "instance-41"
 sessionKey: "session-41"
 taskId: 41
 stage: "inspect"
-correlationToken: "${token}"
 ---
 # Inspect the generated sample`;
 
@@ -96,7 +95,7 @@ describe("public console event projection", () => {
     },
   );
 
-  it("removes only the structurally bound correlation token from a canonical activation document", () => {
+  it("publishes a canonical token-free activation document", () => {
     const publicEvent = project(
       activation({
         format: "heddle.session-activation",
@@ -120,9 +119,7 @@ describe("public console event projection", () => {
       sessionKey: "session-41",
       systemPrompt,
     });
-    expect(
-      (publicEvent.payload as { renderedDocument: string }).renderedDocument,
-    ).not.toContain("correlationToken:");
+    expect(publicEvent.payload).toMatchObject({ renderedDocument });
   });
 
   it("omits an unrecognized activation field from an otherwise canonical payload", () => {
@@ -151,26 +148,23 @@ describe("public console event projection", () => {
   });
 
   it("fails closed when the thread identity contains the correlation token", () => {
-    const publicEvent = project(
-      activation({
-        format: "heddle.session-activation",
-        instanceId: "instance-41",
-        renderedDocument,
-        sessionKey: "session-41",
-        stage: "inspect",
-        systemPrompt,
-        taskId: 41,
-        threadId: `thread-${token}-suffix`,
-        version: 1,
-      }),
+    expect(() =>
+      project(
+        activation({
+          format: "heddle.session-activation",
+          instanceId: "instance-41",
+          renderedDocument,
+          sessionKey: "session-41",
+          stage: "inspect",
+          systemPrompt,
+          taskId: 41,
+          threadId: `thread-${token}-suffix`,
+          version: 1,
+        }),
+      ),
+    ).toThrow(
+      "Console data is unavailable because it contains protected session data",
     );
-
-    expect(JSON.stringify(publicEvent)).not.toContain(token);
-    expect(publicEvent.payload).toEqual({
-      format: "heddle.session-activation",
-      redaction: "session-activation-payload-unavailable",
-      version: 1,
-    });
   });
 
   it.each([
@@ -293,27 +287,35 @@ describe("public console event projection", () => {
     [
       "unrecognized front-matter field",
       renderedDocument.replace(
-        `correlationToken: "${token}"`,
-        `correlationToken: "${token}"\nfuturePrivateField: "fixture"`,
+        'stage: "inspect"',
+        'stage: "inspect"\nfuturePrivateField: "fixture"',
       ),
     ],
     [
-      "duplicate token field",
+      "a correlation-token field",
       renderedDocument.replace(
-        `correlationToken: "${token}"`,
-        `correlationToken: "${token}"\ncorrelationToken: "second"`,
+        'stage: "inspect"',
+        `stage: "inspect"\ncorrelationToken: "${token}"`,
       ),
     ],
-    [
-      "whitespace in the token",
-      renderedDocument.replace(token, `${token} suffix`),
-    ],
-    ["a non-string token", renderedDocument.replace(`"${token}"`, "41")],
-    ["token copied into the body", `${renderedDocument}\n${token}`],
   ])(
     "fails closed when an activation document has %s",
     (_description, candidate) => {
       expectUnavailable(activationPayload({ renderedDocument: candidate }));
     },
   );
+
+  it("fails closed when an activation document body contains a correlation token", () => {
+    expect(() =>
+      project(
+        activation(
+          activationPayload({
+            renderedDocument: `${renderedDocument}\n${token}`,
+          }),
+        ),
+      ),
+    ).toThrow(
+      "Console data is unavailable because it contains protected session data",
+    );
+  });
 });

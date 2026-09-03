@@ -84,6 +84,7 @@ const t3 = {
   getThread: async () => ({ thread: { activities: [] } }),
   respondToApproval: async () => ({ sequence: 1 }),
   respondToUserInput: async () => ({ sequence: 1 }),
+  registerWorkflowMcpProviderSession: async () => undefined,
 } as ProductionT3Client;
 
 const pushoverTransport: PushoverTransport = {
@@ -111,6 +112,7 @@ const composition = createProductionComposition({
   },
   pushoverTransport,
   t3,
+  workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
 });
 
 let instance = composition.persistence.getInstance("task-17");
