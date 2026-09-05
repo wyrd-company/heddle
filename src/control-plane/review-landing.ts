@@ -104,6 +104,14 @@ export const mergeReviewSnapshot = async (
       snapshotId: snapshot.snapshotId,
     };
   }
+  const isExactEvent = (candidate: ReviewSnapshot): boolean =>
+    candidate.latestEvent?.sourceHead === snapshot.sourceHead &&
+    candidate.latestEvent.baseHead === snapshot.baseHead;
+  if (isExactEvent(current) && current.latestEvent?.verdict === "rejected") {
+    throw new Error(
+      `Snapshot ${snapshot.snapshotId} has a rejected verdict for the exact review basis`,
+    );
+  }
   await assertCleanMechanicalWorktree(command, mechanicalWorktreePath(change));
   await Promise.all(
     baseWorktrees.map((path) => assertCleanMechanicalWorktree(command, path)),
@@ -129,9 +137,7 @@ export const mergeReviewSnapshot = async (
   ]);
 
   const isExactAcceptedEvent = (candidate: ReviewSnapshot): boolean =>
-    candidate.latestEvent?.verdict === "accepted" &&
-    candidate.latestEvent.sourceHead === snapshot.sourceHead &&
-    candidate.latestEvent.baseHead === snapshot.baseHead;
+    isExactEvent(candidate) && candidate.latestEvent?.verdict === "accepted";
 
   if (!isExactAcceptedEvent(current)) {
     try {

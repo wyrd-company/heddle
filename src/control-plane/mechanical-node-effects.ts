@@ -14,6 +14,7 @@ import {
 import {
   defaultMechanicalCommand,
   ensureReviewSnapshot,
+  isReviewObjectId,
   runMechanicalGit,
   type CommandRunner,
   type MechanicalChangeContext,
@@ -119,7 +120,13 @@ const requireSnapshotOutput = async (
   ) {
     throw new Error("Review snapshot output is missing");
   }
-  return value as ReviewSnapshot;
+  const snapshot = value as Partial<ReviewSnapshot>;
+  for (const key of ["sourceHead", "baseHead"] as const) {
+    if (!isReviewObjectId(snapshot[key])) {
+      throw new Error(`Review snapshot output has invalid ${key}`);
+    }
+  }
+  return snapshot as ReviewSnapshot;
 };
 
 const mirrorStatuses = async (

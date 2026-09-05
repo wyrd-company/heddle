@@ -159,7 +159,7 @@ const requiredObjectId = (
   key: string,
 ): string => {
   const result = requiredString(value, key);
-  if (!/^[0-9a-f]{40}$/.test(result)) {
+  if (!isReviewObjectId(result)) {
     throw new Error(
       `gitpr snapshot has invalid ${key} ${JSON.stringify(result)}`,
     );
@@ -167,15 +167,13 @@ const requiredObjectId = (
   return result;
 };
 
-const readReviewRecord = async (
-  repositoryRoot: string,
-  snapshotId: string,
-  command: CommandRunner,
-): Promise<GitprReviewRecord> => {
-  const source = await runMechanicalGit(command, repositoryRoot, [
-    "show",
-    `refs/gitpr/pr/${snapshotId}/meta:pr.yaml`,
-  ]);
+export const isReviewObjectId = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+
+const parseReviewRecord = (
+  source: string,
+  unsupportedSchema: "reject" | "skip",
+): GitprReviewRecord | undefined => {
   let parsed: unknown;
   try {
     parsed = parse(source);
@@ -186,6 +184,7 @@ const readReviewRecord = async (
   }
   if (!isObject(parsed)) throw new Error("gitpr snapshot is not an object");
   if (parsed["schema"] !== 2) {
+    if (unsupportedSchema === "skip") return undefined;
     throw new Error(
       `gitpr snapshot has unsupported schema ${JSON.stringify(parsed["schema"])}`,
     );
@@ -231,6 +230,30 @@ const readReviewRecord = async (
     sourceBranch: requiredString(parsed, "source_branch"),
     state,
   };
+};
+
+const readReviewRecord = async (
+  repositoryRoot: string,
+  snapshotId: string,
+  command: CommandRunner,
+): Promise<GitprReviewRecord> => {
+  const source = await runMechanicalGit(command, repositoryRoot, [
+    "show",
+    `refs/gitpr/pr/${snapshotId}/meta:pr.yaml`,
+  ]);
+  return parseReviewRecord(source, "reject")!;
+};
+
+const readReviewRecordIfSupported = async (
+  repositoryRoot: string,
+  snapshotId: string,
+  command: CommandRunner,
+): Promise<GitprReviewRecord | undefined> => {
+  const source = await runMechanicalGit(command, repositoryRoot, [
+    "show",
+    `refs/gitpr/pr/${snapshotId}/meta:pr.yaml`,
+  ]);
+  return parseReviewRecord(source, "skip");
 };
 
 const reviewSnapshotFromRecord = (
@@ -317,14 +340,18 @@ const matchingOpenSnapshot = async (
         .filter((id): id is string => id !== undefined),
     ),
   ].sort();
-  const snapshots = await Promise.all(
-    ids.map((id) => readReviewRecord(change.repositoryRoot, id, command)),
-  );
-  const record = snapshots.find(
-    (snapshot) =>
-      snapshot.state === "open" &&
-      snapshot.sourceBranch === change.branch &&
-      snapshot.baseBranch === change.baseBranch,
+  const records = (
+    await Promise.all(
+      ids.map((id) =>
+        readReviewRecordIfSupported(change.repositoryRoot, id, command),
+      ),
+    )
+  ).filter((record): record is GitprReviewRecord => record !== undefined);
+  const record = records.find(
+    (candidate) =>
+      candidate.state === "open" &&
+      candidate.sourceBranch === change.branch &&
+      candidate.baseBranch === change.baseBranch,
   );
   return record === undefined
     ? undefined

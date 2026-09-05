@@ -11,7 +11,11 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { LifecycleEngine, UnexpectedLandingError } from "../engine/index.js";
+import {
+  LifecycleEngine,
+  UnexpectedLandingError,
+  type LifecycleEffectInput,
+} from "../engine/index.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { ensureWorktree } from "./worktree-creator.js";
@@ -47,6 +51,38 @@ const runCommand: CommandRunner = (cwd, executable, arguments_, input) =>
 
 const git = async (cwd: string, ...arguments_: string[]): Promise<string> =>
   (await execute("git", arguments_, { cwd })).stdout;
+
+const writeGitprMetaRef = async (
+  repositoryRoot: string,
+  snapshotId: string,
+  content: string,
+): Promise<void> => {
+  const blob = (
+    await runCommand(
+      repositoryRoot,
+      "git",
+      ["hash-object", "-w", "--stdin"],
+      content,
+    )
+  ).trim();
+  const tree = (
+    await runCommand(
+      repositoryRoot,
+      "git",
+      ["mktree"],
+      `100644 blob ${blob}\tpr.yaml\n`,
+    )
+  ).trim();
+  const commit = (
+    await git(repositoryRoot, "commit-tree", tree, "-m", "legacy review")
+  ).trim();
+  await git(
+    repositoryRoot,
+    "update-ref",
+    `refs/gitpr/pr/${snapshotId}/meta`,
+    commit,
+  );
+};
 
 const makeChange = async (): Promise<{
   change: MechanicalChangeContext;
@@ -280,6 +316,89 @@ describe("delivery mechanical nodes", () => {
       ),
     ).rejects.toThrow(/invalid state.*approved/);
   });
+
+  it("ignores an unrelated legacy record when finding the open review", async () => {
+    const fixture = await prepareCommittedChange();
+    await writeGitprMetaRef(
+      fixture.sourcePath,
+      "LEGACY1",
+      [
+        "id: LEGACY1",
+        "status: open",
+        "source_branch: task/other",
+        "base_branch: main",
+      ].join("\n"),
+    );
+
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+
+    expect(snapshot).toMatchObject({ schema: 2, state: "open" });
+    expect(snapshot.snapshotId).not.toBe("LEGACY1");
+  });
+
+  it("preserves a rejected verdict for the exact review basis", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "reject",
+      snapshot.snapshotId,
+      "--basis",
+      `${snapshot.sourceHead}:${snapshot.baseHead}`,
+    ]);
+
+    await expect(mergeReviewSnapshot(fixture.change, snapshot)).rejects.toThrow(
+      /rejected.*review basis/,
+    );
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      snapshot.baseHead + "\n",
+    );
+    await expect(
+      readReviewSnapshot(fixture.sourcePath, snapshot.snapshotId, runCommand),
+    ).resolves.toMatchObject({
+      latestEvent: {
+        baseHead: snapshot.baseHead,
+        sourceHead: snapshot.sourceHead,
+        verdict: "rejected",
+      },
+      state: "open",
+    });
+  });
+
+  it.each(["sourceHead", "baseHead"] as const)(
+    "rejects an invalid persisted review %s",
+    async (field) => {
+      const fixture = await makeChange();
+      const effects = createMechanicalNodeEffects({
+        command: async () => {
+          throw new Error("mechanical command must not run");
+        },
+      });
+      const snapshot = {
+        baseBranch: "main",
+        baseHead: "b".repeat(40),
+        latestEvent: null,
+        schema: 2,
+        snapshotId: "SAMPLE1",
+        sourceBranch: "task/change",
+        sourceHead: "a".repeat(40),
+        state: "open",
+        [field]: "not-an-object-id",
+      };
+      const input = {
+        context: {
+          get: async (key: string) =>
+            key === mechanicalChangeContextKey ? fixture.change : snapshot,
+        },
+        idempotencyKey: "sample-effect",
+        input: null,
+        params: {},
+      } as unknown as LifecycleEffectInput;
+
+      await expect(effects.merge(input)).rejects.toThrow(
+        `Review snapshot output has invalid ${field}`,
+      );
+    },
+  );
 
   it("routes source-head drift to remediation without merging", async () => {
     const fixture = await prepareCommittedChange();
