@@ -16,7 +16,9 @@ import {
   validateBlueprintRepository,
   validateBlueprintToolRegistry,
 } from "./blueprint-repository-validation.js";
+import { validateBlueprint } from "./blueprint.js";
 import { deliveryBlueprintFixture } from "./lifecycle-blueprint.test-support.js";
+import type { LifecycleBlueprint, LifecycleEffect } from "./types.js";
 
 const roots: string[] = [];
 
@@ -62,6 +64,24 @@ const artifact = () => ({
       target: "finish",
     },
   ],
+});
+
+const deliveryArtifact = (artifactId: "standard-delivery" | "trivial") => ({
+  $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+  relationships: {
+    implements: "heddle",
+    uses: [
+      "standard-delivery-implement",
+      "standard-delivery-review",
+      "standard-delivery-remediate",
+      ...(artifactId === "standard-delivery"
+        ? ["standard-delivery-retrospective"]
+        : []),
+      "standard",
+      "remediation",
+    ],
+  },
+  ...deliveryBlueprintFixture(artifactId),
 });
 
 const repository = async (
@@ -222,28 +242,32 @@ describe("organization lifecycle blueprint artifacts", () => {
   it.each(["standard-delivery", "trivial"] as const)(
     "rejects inconsistent %s wait-stage handoff metadata",
     async (artifactId) => {
-      const invalid = {
-        $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
-        relationships: {
-          implements: "heddle",
-          uses: [
-            "standard-delivery-implement",
-            "standard-delivery-review",
-            "standard-delivery-remediate",
-            ...(artifactId === "standard-delivery"
-              ? ["standard-delivery-retrospective"]
-              : []),
-            "standard",
-            "remediation",
-          ],
-        },
-        ...deliveryBlueprintFixture(artifactId),
-      };
+      const invalid = deliveryArtifact(artifactId);
       invalid.nodes.find(({ id }) => id === "remediate")!.handoff = "standard";
 
       await expect(
         validateBlueprintRepository(await repository(invalid, artifactId)),
       ).rejects.toThrow("inconsistent delivery handoff metadata");
+    },
+  );
+
+  it.each(["standard-delivery", "trivial"] as const)(
+    "rejects a %s merge reached by the reject disposition",
+    async (artifactId) => {
+      const invalid = deliveryArtifact(artifactId);
+      invalid.edges.find(
+        ({ disposition }) => disposition === "reject",
+      )!.target = "merge";
+      const blueprint = { ...invalid, id: artifactId } as LifecycleBlueprint;
+      const effects = Object.fromEntries(
+        blueprint.nodes
+          .filter(({ uses }) => uses !== "wait")
+          .map(({ uses }) => [uses, async () => ({})]),
+      ) as Record<string, LifecycleEffect>;
+
+      expect(() => validateBlueprint(blueprint, effects)).toThrow(
+        'Merge node "merge" must be reached only from a wait node approve disposition',
+      );
     },
   );
 });

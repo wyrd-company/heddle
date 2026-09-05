@@ -59,6 +59,21 @@ export const validateBlueprint = (
   }
 
   const nodesById = new Map(blueprint.nodes.map((node) => [node.id, node]));
+  for (const node of blueprint.nodes.filter(({ uses }) => uses === "merge")) {
+    const inbound = blueprint.edges.filter(({ target }) => target === node.id);
+    if (
+      inbound.length === 0 ||
+      inbound.some(
+        (edge) =>
+          nodesById.get(edge.source)?.uses !== "wait" ||
+          edge.disposition !== "approve",
+      )
+    ) {
+      throw new BlueprintValidationError(
+        `Merge node ${JSON.stringify(node.id)} must be reached only from a wait node approve disposition`,
+      );
+    }
+  }
   for (const node of blueprint.nodes) {
     if (node.params?.[internalNodeIdParameter] !== undefined) {
       throw new BlueprintValidationError(
