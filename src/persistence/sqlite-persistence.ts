@@ -42,6 +42,8 @@ import type {
   NotificationFailureCategory,
   NotificationFailureRecord,
   NotificationIntentFingerprint,
+  NotificationRetryCategory,
+  NotificationRetryRecord,
   PersistedEvent,
   PersistenceConfiguration,
   ReconcilerRuntimeRecord,
@@ -531,6 +533,49 @@ export class SqlitePersistence {
       )
       .run(stableId, category, new Date().toISOString());
     return this.notificationFailure(stableId)!;
+  }
+
+  notificationRetry(stableId: string): NotificationRetryRecord | undefined {
+    this.assertStableId("stableId", stableId);
+    return this.database
+      .prepare(
+        `SELECT stable_id AS stableId, category,
+                retry_not_before AS retryNotBefore
+         FROM heddle_notification_retries
+         WHERE stable_id = ?`,
+      )
+      .get(stableId) as NotificationRetryRecord | undefined;
+  }
+
+  recordNotificationRetry(
+    stableId: string,
+    category: NotificationRetryCategory,
+    retryNotBefore: number,
+  ): NotificationRetryRecord {
+    this.assertStableId("stableId", stableId);
+    if (!Number.isSafeInteger(retryNotBefore) || retryNotBefore < 0) {
+      throw new TypeError("retryNotBefore must be a non-negative safe integer");
+    }
+    this.database
+      .prepare(
+        `INSERT INTO heddle_notification_retries
+           (stable_id, category, retry_not_before)
+         VALUES (?, ?, ?)
+         ON CONFLICT(stable_id) DO UPDATE SET
+           category = excluded.category,
+           retry_not_before = excluded.retry_not_before`,
+      )
+      .run(stableId, category, retryNotBefore);
+    return this.notificationRetry(stableId)!;
+  }
+
+  clearNotificationRetry(stableId: string): boolean {
+    this.assertStableId("stableId", stableId);
+    return (
+      this.database
+        .prepare(`DELETE FROM heddle_notification_retries WHERE stable_id = ?`)
+        .run(stableId).changes > 0
+    );
   }
 
   authorizeNotificationRetry(stableId: string, occurrence: number): boolean {

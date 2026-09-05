@@ -88,6 +88,7 @@ export type ProductionCompositionOptions = {
   blueprintsRepositoryRoot: string;
   configuration: ProductionConfiguration;
   onSchedulerError?: (error: unknown) => void;
+  notificationNow?: () => number;
   providerUsage: ProviderUsageSource;
   pushoverFetch?: typeof globalThis.fetch;
   pushoverTransport?: PushoverTransport;
@@ -157,6 +158,7 @@ export const createProductionComposition = (
           options.pushoverFetch ?? globalThis.fetch,
         ),
       options.afterPushoverTransportSuccess,
+      options.notificationNow,
     );
     const sendNotification = async (page: OperatorPage): Promise<void> => {
       await pushover.send(page);

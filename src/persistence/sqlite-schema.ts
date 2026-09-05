@@ -89,6 +89,17 @@ export const initializePersistenceSchema = (
       recorded_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_notification_retries (
+      stable_id TEXT PRIMARY KEY,
+      category TEXT NOT NULL CHECK (category IN (
+        'invalid-response',
+        'network-failure',
+        'provider-unavailable',
+        'transport-failure'
+      )),
+      retry_not_before INTEGER NOT NULL CHECK (retry_not_before >= 0)
+    );
+
     CREATE TABLE IF NOT EXISTS heddle_epic_projects (
       epic_id INTEGER PRIMARY KEY,
       product_name TEXT NOT NULL,

@@ -63,6 +63,24 @@ export const isNotificationFailureCategory = (
 ): value is NotificationFailureCategory =>
   notificationFailureCategories.has(value as NotificationFailureCategory);
 
+export type NotificationRetryCategory =
+  | "invalid-response"
+  | "network-failure"
+  | "provider-unavailable"
+  | "transport-failure";
+
+const notificationRetryCategories = new Set<NotificationRetryCategory>([
+  "invalid-response",
+  "network-failure",
+  "provider-unavailable",
+  "transport-failure",
+]);
+
+export const isNotificationRetryCategory = (
+  value: unknown,
+): value is NotificationRetryCategory =>
+  notificationRetryCategories.has(value as NotificationRetryCategory);
+
 export interface NotificationFailureRecord {
   category: NotificationFailureCategory;
   occurrence: number;
@@ -73,6 +91,12 @@ export interface NotificationFailureRecord {
 export interface NotificationIntentFingerprint {
   attemptFingerprint: string;
   logicalFingerprint: string;
+}
+
+export interface NotificationRetryRecord {
+  category: NotificationRetryCategory;
+  retryNotBefore: number;
+  stableId: string;
 }
 
 export interface ReconcilerRuntimeRecord {

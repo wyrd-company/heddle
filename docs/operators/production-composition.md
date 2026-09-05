@@ -480,9 +480,10 @@ The stable attention ID remains the local outbox and console deep-link identity;
 the HTTP transport does not represent it as provider deduplication.
 
 The transport accepts only HTTP 200 with provider `status: 1` as completion.
-Network failures, malformed responses, redirects, and server failures are
-retryable. HTTP 4xx and a parsed HTTP 2xx response without provider `status: 1`
-are permanent for the unchanged request. Permanent categories are the allowlisted
+Network failures, redirects, server failures, and malformed responses with a
+non-4xx status are retryable. HTTP 4xx and a parsed HTTP 2xx response without
+provider `status: 1` are permanent for the unchanged request. Permanent
+categories are the allowlisted
 `application-credential-rejected`, `recipient-rejected`,
 `provider-quota-exceeded`, and `request-rejected`; classification inspects only
 the HTTP status and the presence of documented response fields. Provider error
@@ -494,11 +495,15 @@ and retry contract at <https://pushover.net/api#response> and
 Each classified transport failure raises a task-scoped production-error entry
 and is contained within that notification route. Pending routes after it and
 main instance reconciliation continue in the same scheduler pass. A retryable
-failure retains pending intent and retries on a later serialized pass. A
-permanent rejection stores its safe category and occurrence and performs no
-more HTTP calls until the operator repairs secure configuration, restarts the
-service, and selects Retry notification on that exact occurrence. The action
-authorizes one attempt; another permanent response creates the next occurrence.
+failure retains pending intent and a durable deadline at least five seconds
+after the failed attempt completes. Earlier scheduler passes keep the scoped
+failure visible without calling the provider; a pass at or after the deadline
+can retry. A permanent rejection stores its safe category and occurrence and
+performs no more HTTP calls until the operator repairs secure configuration,
+restarts the service, and selects Retry notification on that exact occurrence.
+The action authorizes recovery of that occurrence. Another permanent response
+creates the next occurrence; a retryable response follows the durable deadline
+without requiring another action.
 The original escalation attention and unanswered questions remain unchanged.
 
 A pending intent written by a version that stored only the combined message

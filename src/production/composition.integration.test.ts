@@ -236,8 +236,10 @@ describe("production composition", () => {
     await restarted.close();
   });
 
-  it("contains a retryable escalation notification and completes it on a later pass", async () => {
+  it("contains sub-five-second cadence retries until the provider boundary", async () => {
     const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 1_000;
+    let now = 10_000;
     let available = false;
     const fetch = vi.fn(
       async () =>
@@ -252,6 +254,7 @@ describe("production composition", () => {
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
       },
+      notificationNow: () => now,
       pushoverFetch: fetch,
       t3: new SyntheticT3(),
     });
@@ -312,6 +315,11 @@ describe("production composition", () => {
 
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
     expect(fetch).toHaveBeenCalledOnce();
+    expect(composition.persistence.notificationRetry(attentionId)).toEqual({
+      category: "provider-unavailable",
+      retryNotBefore: 15_000,
+      stableId: attentionId,
+    });
     expect(composition.attention.list()).toContainEqual(
       expect.objectContaining({
         kind: "production-error",
@@ -325,6 +333,18 @@ describe("production composition", () => {
     ).toMatchObject({ state: "waiting" });
 
     available = true;
+    for (now = 11_000; now < 15_000; now += 1_000) {
+      await composition.scheduler.trigger();
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining("provider-unavailable"),
+      }),
+    );
+
+    now = 15_000;
     await composition.scheduler.trigger();
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(
@@ -523,6 +543,7 @@ describe("production composition", () => {
         return { threads: [] };
       }
     }
+    let now = 10_000;
     let rejectTransport = true;
     const deliveries = vi.fn(async () => {
       if (rejectTransport) {
@@ -536,6 +557,7 @@ describe("production composition", () => {
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
       },
+      notificationNow: () => now,
       pushoverTransport: { send: deliveries },
       t3: new AbsentSessionT3(),
     });
@@ -576,6 +598,7 @@ describe("production composition", () => {
     );
 
     rejectTransport = false;
+    now = 15_000;
     await composition.scheduler.trigger();
     expect(deliveries).toHaveBeenCalledTimes(2);
     expect(deliveries.mock.calls[1]?.[0]).toEqual(

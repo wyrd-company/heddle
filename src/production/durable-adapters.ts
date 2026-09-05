@@ -11,10 +11,12 @@ import type { SessionObservationAttention } from "../control-plane/index.js";
 import type {
   JsonValue,
   NotificationFailureCategory,
+  NotificationRetryCategory,
   SqlitePersistence,
 } from "../persistence/index.js";
 import {
   isNotificationFailureCategory,
+  isNotificationRetryCategory,
   LegacyNotificationIntentMismatchError,
 } from "../persistence/index.js";
 import type { ReconcilerAttention } from "../reconciler/index.js";
@@ -102,11 +104,9 @@ export interface PushoverTransport {
 }
 
 export type NotificationDeliveryFailureCategory =
-  | NotificationFailureCategory
-  | "invalid-response"
-  | "network-failure"
-  | "provider-unavailable"
-  | "transport-failure";
+  NotificationFailureCategory | NotificationRetryCategory;
+
+const pushoverRetryDelayMilliseconds = 5_000;
 
 export class NotificationDeliveryError extends Error {
   public constructor(
@@ -201,6 +201,7 @@ export class DurablePushoverNotifier {
     private readonly afterTransportSuccess?: (
       message: PushoverMessage,
     ) => Promise<void> | void,
+    private readonly now: () => number = Date.now,
   ) {}
 
   async send(page: OperatorPage): Promise<void> {
@@ -266,6 +267,10 @@ export class DurablePushoverNotifier {
         priorFailure.occurrence,
       );
     }
+    const retry = this.persistence.notificationRetry(page.attentionId);
+    if (retry !== undefined && this.now() < retry.retryNotBefore) {
+      throw new NotificationDeliveryError("retryable", retry.category);
+    }
     try {
       await this.transport.send(message);
     } catch (error) {
@@ -278,14 +283,28 @@ export class DurablePushoverNotifier {
           page.attentionId,
           error.category,
         );
+        this.persistence.clearNotificationRetry(page.attentionId);
         throw new NotificationDeliveryError(
           "permanent",
           failure.category,
           failure.occurrence,
         );
       }
-      if (error instanceof NotificationDeliveryError) throw error;
-      throw new NotificationDeliveryError("retryable", "transport-failure");
+      const retryable =
+        error instanceof NotificationDeliveryError
+          ? error
+          : new NotificationDeliveryError("retryable", "transport-failure");
+      if (
+        retryable.disposition === "retryable" &&
+        isNotificationRetryCategory(retryable.category)
+      ) {
+        this.persistence.recordNotificationRetry(
+          page.attentionId,
+          retryable.category,
+          this.now() + pushoverRetryDelayMilliseconds,
+        );
+      }
+      throw retryable;
     }
     await this.afterTransportSuccess?.(message);
     if (
@@ -294,5 +313,6 @@ export class DurablePushoverNotifier {
     ) {
       throw new Error("Pushover completion lost its durable intent");
     }
+    this.persistence.clearNotificationRetry(page.attentionId);
   }
 }

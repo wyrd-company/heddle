@@ -471,21 +471,24 @@ proposed-design:
     deduplication.
 
     Pushover completion requires HTTP 200 and provider status 1. Network,
-    malformed-response, redirect, and server failures are retryable. HTTP 4xx
-    and a parsed HTTP 2xx response without provider status 1 are permanent for
-    unchanged input. Permanent provider categories are allowlisted as application
-    credential rejected, recipient rejected, quota exceeded, or request
-    rejected. Classification uses only HTTP status and documented field
+    redirect, server, and non-4xx malformed-response failures are retryable.
+    HTTP 4xx and a parsed HTTP 2xx response without provider status 1 are
+    permanent for unchanged input. Permanent provider categories are allowlisted
+    as application credential rejected, recipient rejected, quota exceeded, or
+    request rejected. Classification uses only HTTP status and documented field
     presence; raw response bodies, provider request identifiers, credentials,
     devices, and error text are never persisted or emitted. Each classified
     failure raises task-scoped production-error attention and is contained at
     its notification route, so later pending routes and instance reconciliation
-    continue in the same pass. Retryable failures retain pending intent for a
-    later serialized pass. Permanent failures retain their safe category and
+    continue in the same pass. Retryable failures retain pending intent and a
+    durable retry deadline at least five seconds after the failed attempt
+    completes. Earlier passes preserve scoped visibility without another
+    provider call. Permanent failures retain their safe category and
     occurrence and make no further transport call until the exact Retry
-    notification action authorizes one attempt. Another permanent response
-    creates a new occurrence. Neither failure state nor recovery changes or
-    answers the original escalation attention.
+    notification action authorizes recovery of that occurrence. Another
+    permanent response creates a new occurrence; a retryable response follows
+    the durable deadline without another action. Neither failure state nor
+    recovery changes or answers the original escalation attention.
 
     A legacy pending combined fingerprint upgrades when it exactly matches the
     current combined message. A mismatch is not assumed to be credential-only:

@@ -212,30 +212,39 @@ describe("durable production adapters", () => {
     expect(sent[0]?.url).toContain("scope=task%3A17");
   });
 
-  it("records Pushover intent before a failed effect and retries it", async () => {
+  it("persists the five-second retry boundary from a slow failure across restart", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-intent-"));
-    const persistence = new SqlitePersistence({ stateDirectory: directory });
-    persistence.writeReconcilerRuntime({
+    let now = 1_000;
+    const firstPersistence = new SqlitePersistence({
+      stateDirectory: directory,
+    });
+    firstPersistence.writeReconcilerRuntime({
       boardStatus: "in-progress",
       instanceId: "task-18",
       state: "waiting",
       taskId: 18,
     });
     let attempts = 0;
-    const notifier = new DurablePushoverNotifier(
-      persistence,
+    const transport = {
+      send: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          now = 9_000;
+          throw new Error("Injected transport failure");
+        }
+      },
+    };
+    const first = new DurablePushoverNotifier(
+      firstPersistence,
       {
         apiUrl: "https://notify.invalid/messages",
         applicationToken: "application-token",
         consoleBaseUrl: "https://console.invalid/",
         userKey: "operator-key",
       },
-      {
-        send: async () => {
-          attempts += 1;
-          if (attempts === 1) throw new Error("Injected transport failure");
-        },
-      },
+      transport,
+      undefined,
+      () => now,
     );
     const attention = {
       attentionId: "task-18:session:choice",
@@ -243,21 +252,66 @@ describe("durable production adapters", () => {
       message: "Session sample-two is stalled without lifecycle advance",
     };
 
-    await expect(notifier.send(attention)).rejects.toMatchObject({
+    await expect(first.send(attention)).rejects.toMatchObject({
       category: "transport-failure",
       disposition: "retryable",
     });
     expect(
-      persistence.effectIntentRecorded("pushover", attention.attentionId),
+      firstPersistence.effectIntentRecorded("pushover", attention.attentionId),
     ).toBe(true);
-    expect(persistence.effectCompleted("pushover", attention.attentionId)).toBe(
-      false,
+    expect(firstPersistence.notificationRetry(attention.attentionId)).toEqual({
+      category: "transport-failure",
+      retryNotBefore: 14_000,
+      stableId: attention.attentionId,
+    });
+    firstPersistence.close();
+
+    now = 13_999;
+    const restartedPersistence = new SqlitePersistence({
+      stateDirectory: directory,
+    });
+    const restarted = new DurablePushoverNotifier(
+      restartedPersistence,
+      {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        userKey: "operator-key",
+      },
+      transport,
+      undefined,
+      () => now,
     );
-    await notifier.send(attention);
-    expect(persistence.effectCompleted("pushover", attention.attentionId)).toBe(
-      true,
-    );
+    await expect(restarted.send(attention)).rejects.toMatchObject({
+      category: "transport-failure",
+      disposition: "retryable",
+    });
+    expect(attempts).toBe(1);
+
+    now = 14_000;
+    await restarted.send(attention);
+    expect(
+      restartedPersistence.effectCompleted("pushover", attention.attentionId),
+    ).toBe(true);
+    expect(
+      restartedPersistence.notificationRetry(attention.attentionId),
+    ).toBeUndefined();
     expect(attempts).toBe(2);
+    restartedPersistence.close();
+  });
+
+  it("rejects a non-allowlisted durable notification retry category", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-retry-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+
+    expect(() =>
+      persistence.recordNotificationRetry(
+        "sample-attention",
+        "provider-detail" as never,
+        5_000,
+      ),
+    ).toThrow(/CHECK constraint failed|SQLITE_CONSTRAINT/);
+    expect(persistence.notificationRetry("sample-attention")).toBeUndefined();
     persistence.close();
   });
 

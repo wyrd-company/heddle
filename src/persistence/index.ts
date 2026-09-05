@@ -5,6 +5,7 @@
 
 export {
   isNotificationFailureCategory,
+  isNotificationRetryCategory,
   type EpicProjectRecord,
   type InstanceRecord,
   type InstanceEventClaim,
@@ -12,6 +13,8 @@ export {
   type NotificationFailureCategory,
   type NotificationFailureRecord,
   type NotificationIntentFingerprint,
+  type NotificationRetryCategory,
+  type NotificationRetryRecord,
   type DurableAttentionRecord,
   type JsonPrimitive,
   type JsonValue,
