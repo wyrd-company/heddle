@@ -165,13 +165,16 @@ describe("production notification failure projection", () => {
         taskId: fixture.taskId,
       }),
     );
-    const unrelated = productionErrorAttention({
-      code: "sample-source-failed",
-      error: new Error("Synthetic failure"),
-      instanceId: runtime.instanceId,
-      summary: "Sample source failed",
-      taskId: fixture.taskId,
-    });
+    const unrelated = {
+      ...productionErrorAttention({
+        code: "sample-source-failed",
+        error: new Error("Synthetic failure"),
+        instanceId: runtime.instanceId,
+        summary: "Sample source failed",
+        taskId: fixture.taskId,
+      }),
+      notificationStableId: targetId,
+    };
     await first.attention.raise(unrelated);
 
     now = 15_000;
