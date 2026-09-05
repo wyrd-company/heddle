@@ -47,9 +47,11 @@ const reviewBasisDriftCause = (
   value: unknown,
 ): ReviewBasisDriftRemediationCause | undefined => {
   const candidate = asRecord(value);
+  const snapshotId = candidate?.["snapshotId"];
   if (
     candidate?.["kind"] !== "review-basis-drift" ||
-    !/^[0-9A-Z]+$/.test(String(candidate["snapshotId"] ?? "")) ||
+    !nonEmptyString(snapshotId) ||
+    !/^[0-9A-Z]+$/.test(snapshotId) ||
     !nonEmptyString(candidate["sourceBranch"]) ||
     !nonEmptyString(candidate["targetBranch"]) ||
     !reviewObjectId(candidate["reviewedSourceHead"]) ||

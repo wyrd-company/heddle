@@ -220,6 +220,19 @@ describe("production stage handoff", () => {
 
   it.each([
     {
+      label: "a numeric snapshot identity",
+      mechanicalOutput: {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        remediationCause: {
+          ...driftCause,
+          snapshotId: 1,
+        },
+        snapshotId: 1,
+      },
+    },
+    {
       label: "an invalid current target",
       mechanicalOutput: {
         alreadyMerged: false,
