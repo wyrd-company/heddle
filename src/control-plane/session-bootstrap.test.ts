@@ -29,6 +29,7 @@ import {
   sampleHandoffTemplate,
   sampleTemplateAuthority,
 } from "./session-bootstrap.test-support.js";
+import { measuredMcpDrivers } from "./handoff-renderer.js";
 
 const initialState = (): InstanceState => ({
   correlationTokens: {},
@@ -65,6 +66,9 @@ const instantiateTodoList: NonNullable<
 const scratchDirectories: string[] = [];
 const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
 const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
+const measuredDriversWithoutToolTimeout = measuredMcpDrivers.filter(
+  (driver) => driver !== "claudeAgent" && driver !== "codex",
+);
 
 afterEach(async () => {
   await Promise.all(
@@ -209,7 +213,7 @@ describe("stage session bootstrap", () => {
     },
   );
 
-  it.each(["cursor", "grok", "opencode"])(
+  it.each(measuredDriversWithoutToolTimeout)(
     "registers workflow MCP for %s without applying a harness timeout",
     async (driver) => {
       let record: InstanceRecord = {
@@ -424,12 +428,25 @@ describe("stage session bootstrap", () => {
   });
 
   it.each([
-    ["non-HTTP", "file:///tmp/sample-mcp"],
-    ["malformed", "http://?"],
-    ["whitespace-bearing", " http://sample.invalid/mcp"],
+    [
+      "non-HTTP",
+      "file:///tmp/sample-mcp",
+      "workflowMcpEndpoint must be an HTTP(S) URL",
+    ],
+    ["malformed", "http://?", "workflowMcpEndpoint must be an HTTP(S) URL"],
+    [
+      "whitespace-bearing",
+      " http://sample.invalid/mcp",
+      "workflowMcpEndpoint must be an HTTP(S) URL",
+    ],
+    [
+      "cleartext non-loopback",
+      "http://192.0.2.10/mcp",
+      "workflowMcpEndpoint must use HTTPS unless its hostname is loopback",
+    ],
   ])(
     "rejects a %s workflow MCP endpoint before worktree or T3 effects",
-    async (_kind, invalidEndpoint) => {
+    async (_kind, invalidEndpoint, expectedError) => {
       const ensureWorktree = vi.fn();
       const dispatch = vi.fn();
       const registerWorkflowMcpProviderSession = vi.fn();
@@ -479,7 +496,7 @@ describe("stage session bootstrap", () => {
             workflowMcpEndpoint: invalidEndpoint,
           },
         ),
-      ).rejects.toThrow("workflowMcpEndpoint must be an HTTP URL");
+      ).rejects.toThrow(expectedError);
       expect(ensureWorktree).not.toHaveBeenCalled();
       expect(registerWorkflowMcpProviderSession).not.toHaveBeenCalled();
       expect(dispatch).not.toHaveBeenCalled();

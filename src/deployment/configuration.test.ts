@@ -201,6 +201,25 @@ describe("deployed configuration directory", () => {
     expect(loaded.configuration.stateDirectory).toBe(join(root, "state"));
   });
 
+  it.each(["0.0.0.0", "::", "192.0.2.10"])(
+    "rejects non-loopback server host %s at configuration load",
+    async (host) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+      await prepareBlueprintRepository(root);
+      await writeFile(
+        join(root, "config.yml"),
+        stringify({
+          ...fixture(root),
+          server: { host, port: 4171 },
+        }),
+      );
+
+      await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+        "/server/host must be equal to constant: 127.0.0.1",
+      );
+    },
+  );
+
   it("fails closed when the derived blueprint directory is absent or not the tracked clone root", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const configurationPath = join(root, "config.yml");

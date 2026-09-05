@@ -30,7 +30,7 @@ export type HandoffRenderInput = {
   template: PinnedHandoffTemplate;
 };
 
-const measuredMcpDrivers = [
+export const measuredMcpDrivers = [
   "claudeAgent",
   "codex",
   "cursor",

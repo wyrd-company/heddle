@@ -3,6 +3,11 @@
 //   implements: heddle
 // ---
 
+import {
+  measuredMcpDrivers,
+  type MeasuredHandoffDriver,
+} from "./handoff-renderer.js";
+
 export type HarnessToolTimeoutConfiguration = {
   claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } };
   codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } };
@@ -18,7 +23,13 @@ export type HarnessToolTimeoutLaunchConfiguration =
       driver: "codex";
     };
 
-const driversWithoutToolTimeout = new Set(["cursor", "grok", "opencode"]);
+const driversWithToolTimeout = new Set<MeasuredHandoffDriver>([
+  "claudeAgent",
+  "codex",
+]);
+const driversWithoutToolTimeout = new Set<string>(
+  measuredMcpDrivers.filter((driver) => !driversWithToolTimeout.has(driver)),
+);
 
 export type HarnessToolTimeoutLaunchInput =
   HarnessToolTimeoutLaunchConfiguration & {

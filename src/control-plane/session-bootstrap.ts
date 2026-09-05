@@ -56,6 +56,7 @@ import {
   recordSessionActivation,
   type SessionActivationEventStore,
 } from "./session-activation.js";
+import { requireWorkflowMcpEndpoint } from "./workflow-mcp-endpoint.js";
 import type {
   T3DispatchCommand,
   T3ProviderDispatchContext,
@@ -172,22 +173,6 @@ export type SessionSteeringDependencies = {
   nextId?: () => string;
   now?: () => string;
   t3: SessionT3Client;
-};
-
-const requireWorkflowMcpEndpoint = (value: string): string => {
-  let endpoint: InstanceType<typeof globalThis.URL>;
-  try {
-    endpoint = new globalThis.URL(value);
-  } catch {
-    throw new TypeError("workflowMcpEndpoint must be an HTTP URL");
-  }
-  if (
-    /\s/u.test(value) ||
-    (endpoint.protocol !== "http:" && endpoint.protocol !== "https:")
-  ) {
-    throw new TypeError("workflowMcpEndpoint must be an HTTP URL");
-  }
-  return value;
 };
 
 const resolveWorkflowMcpStageContract = async (
