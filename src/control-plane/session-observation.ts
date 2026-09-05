@@ -9,7 +9,7 @@
 import type { InstanceRecord } from "../persistence/index.js";
 import { resolveT3AwarenessPhase } from "./t3-agent-awareness.js";
 import {
-  requestAttention,
+  requestAttentions,
   type RequestAttentionKind,
 } from "./session-observation-attention.js";
 import {
@@ -169,11 +169,13 @@ export class SessionObserver {
     if (thread?.hasPendingUserInput) kinds.push("user-input");
     if (kinds.length === 0) return [];
     const snapshot = await this.options.t3.getThread(target.threadId);
-    return Promise.all(
-      kinds.map((kind) =>
-        requestAttention(this.options, target, snapshot, kind),
-      ),
-    );
+    return (
+      await Promise.all(
+        kinds.map((kind) =>
+          requestAttentions(this.options, target, snapshot, kind),
+        ),
+      )
+    ).flat();
   }
 }
 

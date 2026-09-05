@@ -307,6 +307,61 @@ describe("production attention actions", () => {
     await composition.close();
   });
 
+  it("settles only the selected request-specific approval under retry", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    for (const suffix of ["first", "second"]) {
+      await composition.attention.raise({
+        attentionId: `approval-${suffix}`,
+        instanceId: runtime.instanceId,
+        kind: "approval",
+        message: `Approval ${suffix}`,
+        requestId: `request-${suffix}`,
+        sessionKey: runtime.sessionKey!,
+        threadId: runtime.threadId!,
+      });
+    }
+    const second = composition.attention
+      .list()
+      .find(({ attentionId }) => attentionId === "approval-second")!;
+
+    await composition.consoleActions.execute({
+      action: second.actions[0]!,
+      attention: second,
+    });
+    await composition.consoleActions.execute({
+      action: second.actions[0]!,
+      attention: second,
+    });
+
+    expect(t3.approvalResponses).toEqual([
+      {
+        commandId: "approval-second",
+        decision: "accept",
+        requestId: "request-second",
+        threadId: runtime.threadId,
+      },
+    ]);
+    expect(composition.attention.list()).toMatchObject([
+      {
+        attentionId: "approval-first",
+        message: "Approval first",
+      },
+    ]);
+    await composition.close();
+  });
+
   it("keeps failed effects unresolved and rejects a changed durable action", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

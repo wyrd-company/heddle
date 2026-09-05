@@ -115,6 +115,34 @@ const answerableAttention = () =>
   });
 
 describe("console live board polling", () => {
+  it("renders provider-controlled attention titles as text", async () => {
+    const entry = createConsoleAttention({
+      actions: [],
+      attentionId: "attention-title",
+      instanceId: "instance-11",
+      kind: "approval",
+      message:
+        "Session sample-session requests approval for <strong>Read catalog</strong>",
+      scope: "task:11",
+      taskId: 11,
+    });
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?scope=all",
+      undefined,
+      undefined,
+      [entry],
+    );
+
+    const message = harness
+      .attentionElements()
+      .find(({ className }) => className === "attention-entry-message")!;
+    expect(message.textContent).toBe(
+      "Session sample-session requests approval for <strong>Read catalog</strong>",
+    );
+    expect(message.children).toEqual([]);
+  });
+
   it("performs no DOM mutation for two consecutive identical payloads", async () => {
     const harness = await clientHarness([rootTask, stagedTask]);
 

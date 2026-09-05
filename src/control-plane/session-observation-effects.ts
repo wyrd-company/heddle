@@ -3,7 +3,7 @@
 //   implements: heddle
 // ---
 
-import { requestIdFor } from "./session-observation-attention.js";
+import { requestIdsFor } from "./session-observation-attention.js";
 import {
   eventWithOperation,
   eventsForSession,
@@ -146,34 +146,36 @@ const dispositionPendingQuestions = async (
   snapshot: T3ThreadSnapshot,
   nextId: () => string,
 ): Promise<void> => {
-  const pending = [
+  const pendingKinds = [
     ...(thread.hasPendingApprovals ? (["approval"] as const) : []),
     ...(thread.hasPendingUserInput ? (["user-input"] as const) : []),
   ];
-  for (const kind of pending) {
+  for (const kind of pendingKinds) {
     const activity =
       kind === "approval" ? "approval.requested" : "user-input.requested";
-    const requestId = requestIdFor(snapshot, activity);
-    if (requestId === undefined) {
+    const requestIds = requestIdsFor(snapshot, activity);
+    if (requestIds.length === 0) {
       throw new Error(`T3 reports pending ${kind} without a request ID`);
     }
-    const decision =
-      kind === "approval"
-        ? input.approvalDecisions?.[requestId]
-        : input.userInputAnswers?.[requestId];
-    if (decision === undefined) {
-      throw new Error(
-        `Explicit disposition is required for pending ${kind} '${requestId}'`,
+    for (const requestId of requestIds) {
+      const decision =
+        kind === "approval"
+          ? input.approvalDecisions?.[requestId]
+          : input.userInputAnswers?.[requestId];
+      if (decision === undefined) {
+        throw new Error(
+          `Explicit disposition is required for pending ${kind} '${requestId}'`,
+        );
+      }
+      await dispositionQuestion(
+        options,
+        input,
+        kind,
+        requestId,
+        decision,
+        nextId,
       );
     }
-    await dispositionQuestion(
-      options,
-      input,
-      kind,
-      requestId,
-      decision,
-      nextId,
-    );
   }
 };
 

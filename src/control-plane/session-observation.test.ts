@@ -13,6 +13,7 @@ import type {
 } from "../persistence/index.js";
 import type { PendingEscalation } from "../mcp-server/index.js";
 import { SessionObserver } from "./session-observation.js";
+import { observationHash } from "./session-observation-attention.js";
 import {
   interruptSession,
   stopSession,
@@ -427,6 +428,250 @@ describe("SessionObserver operator actions", () => {
     ]);
   });
 
+  it("keeps an older approval actionable after a newer request resolves", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingApprovals: true,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "approval.requested",
+            payload: {
+              requestId: "approval-older",
+              toolCallId: "tool-older",
+              toolTitle: "Read catalog",
+            },
+          },
+          {
+            kind: "approval.requested",
+            payload: {
+              requestId: "approval-newer",
+              toolCallId: "tool-newer",
+              toolTitle: "Update catalog",
+            },
+          },
+          {
+            kind: "approval.resolved",
+            payload: { requestId: "approval-newer" },
+          },
+        ],
+      },
+    };
+
+    const result = await test.observer.observe(target);
+
+    expect(result.attentions).toMatchObject([
+      {
+        kind: "approval",
+        message: "Session mix-one requests approval for Read catalog",
+        requestId: "approval-older",
+      },
+    ]);
+  });
+
+  it("projects each unresolved approval exactly once across observation retries", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingApprovals: true,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "approval.requested",
+            payload: {
+              requestId: "approval-first",
+              toolCallId: "tool-first",
+              toolTitle: "Read catalog",
+            },
+          },
+          {
+            kind: "approval.requested",
+            payload: {
+              requestId: "approval-second",
+              toolCallId: "tool-second",
+              toolTitle: "Update catalog",
+            },
+          },
+        ],
+      },
+    };
+
+    const first = await test.observer.observe(target);
+    const retry = await test.observer.observe(target);
+
+    expect(first.attentions).toMatchObject([
+      {
+        message: "Session mix-one requests approval for Read catalog",
+        requestId: "approval-first",
+      },
+      {
+        message: "Session mix-one requests approval for Update catalog",
+        requestId: "approval-second",
+      },
+    ]);
+    expect(retry.attentions).toEqual(first.attentions);
+    expect(test.attention.entries).toHaveLength(2);
+    expect(
+      test.persistence.events.filter(
+        ({ type }) => type === sessionObservationEventTypes.attentionRequired,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("keeps the generic approval message for mixed-version and unsafe metadata", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingApprovals: true,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "approval.requested",
+            payload: {
+              args: { note: "not display metadata" },
+              detail: "not display metadata",
+              requestId: "approval-legacy",
+            },
+          },
+          {
+            kind: "approval.requested",
+            payload: {
+              requestId: "approval-control",
+              toolTitle: "Unsafe\ntitle",
+            },
+          },
+          {
+            kind: "approval.requested",
+            payload: {
+              requestId: "approval-long",
+              toolTitle: "x".repeat(161),
+            },
+          },
+        ],
+      },
+    };
+
+    const result = await test.observer.observe(target);
+
+    expect(result.attentions).toMatchObject([
+      {
+        message: "Session mix-one has pending approval",
+        requestId: "approval-legacy",
+      },
+      {
+        message: "Session mix-one has pending approval",
+        requestId: "approval-control",
+      },
+      {
+        message: "Session mix-one has pending approval",
+        requestId: "approval-long",
+      },
+    ]);
+    expect(
+      result.attentions.map(({ message }) => message).join(" "),
+    ).not.toContain("not display metadata");
+  });
+
+  it("does not rewrite an existing generic durable attention when metadata appears", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingApprovals: true,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "approval.requested",
+            payload: {
+              requestId: "approval-one",
+              toolTitle: "Read catalog",
+            },
+          },
+        ],
+      },
+    };
+    const existing: SessionObservationAttention = {
+      attentionId: observationHash(
+        target.instanceId,
+        target.sessionKey,
+        "approval",
+        "approval-one",
+      ),
+      instanceId: target.instanceId,
+      kind: "approval",
+      message: "Session mix-one has pending approval",
+      requestId: "approval-one",
+      sessionKey: target.sessionKey,
+      threadId: target.threadId,
+    };
+    test.attention.entries.push(existing);
+    test.persistence.appendEvent(
+      target.instanceId,
+      sessionObservationEventTypes.attentionRequired,
+      existing,
+    );
+
+    await test.observer.observe(target);
+
+    expect(test.attention.entries).toEqual([existing]);
+    expect(
+      test.persistence.events.filter(
+        ({ type }) => type === sessionObservationEventTypes.attentionRequired,
+      ),
+    ).toMatchObject([{ payload: existing }]);
+  });
+
+  it("removes only the request named by a stale-response failure", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingApprovals: true,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "approval.requested",
+            payload: { requestId: "approval-first" },
+          },
+          {
+            kind: "approval.requested",
+            payload: { requestId: "approval-second" },
+          },
+          {
+            kind: "provider.approval.respond.failed",
+            payload: {
+              detail: "Unknown pending approval request",
+              requestId: "approval-second",
+            },
+          },
+        ],
+      },
+    };
+
+    const result = await test.observer.observe(target);
+
+    expect(result.attentions).toMatchObject([{ requestId: "approval-first" }]);
+  });
+
   it("rejects pending user input without a canonical question catalog", async () => {
     const test = fixture();
     test.t3.shell.threads[0] = {
@@ -557,6 +802,49 @@ describe("SessionObserver operator actions", () => {
       () => "id",
     );
     expect(test.t3.userInputAnswers).toHaveLength(1);
+    expect(
+      test.t3.commands.filter(({ type }) => type === "thread.session.stop"),
+    ).toHaveLength(1);
+  });
+
+  it("dispositions every pending approval exactly once before stopping", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      hasPendingApprovals: true,
+    };
+    test.t3.snapshot = {
+      thread: {
+        activities: [
+          {
+            kind: "approval.requested",
+            payload: { requestId: "approval-first" },
+          },
+          {
+            kind: "approval.requested",
+            payload: { requestId: "approval-second" },
+          },
+        ],
+      },
+    };
+    const input = {
+      ...target,
+      approvalDecisions: {
+        "approval-first": "accept" as const,
+        "approval-second": "reject" as const,
+      },
+      operationId: "stop-many",
+    };
+
+    await stopSession(test.options, input, () => "id");
+    test.t3.shell.threads[0]!.hasPendingApprovals = true;
+    await stopSession(test.options, input, () => "id");
+
+    expect(test.t3.approvalAnswers).toMatchObject([
+      { decision: "accept", requestId: "approval-first" },
+      { decision: "reject", requestId: "approval-second" },
+    ]);
+    expect(test.t3.approvalAnswers).toHaveLength(2);
     expect(
       test.t3.commands.filter(({ type }) => type === "thread.session.stop"),
     ).toHaveLength(1);
