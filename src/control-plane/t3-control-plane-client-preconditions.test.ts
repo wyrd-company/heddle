@@ -163,6 +163,36 @@ describe("T3ControlPlaneClient preconditions", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("dispatches full-access turns for the qualified Cursor version", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(jsonResponse({ threads: [{ id: "thread-1" }] }))
+      .mockResolvedValueOnce(jsonResponse({ sequence: 1 }));
+    const client = new T3ControlPlaneClient({
+      baseUrl: "http://t3.test",
+      accessToken: "access-token",
+      fetch,
+    });
+
+    await expect(
+      client.dispatch(
+        {
+          type: "thread.turn.start",
+          commandId: "command-1",
+          threadId: "thread-1",
+          modelSelection: { instanceId: "cursor", model: "sample-model" },
+          runtimeMode: "full-access",
+        },
+        {
+          driver: "cursor",
+          cliVersion: "2026.08.25-3e8eec8",
+          lifecycle: "independent",
+        },
+      ),
+    ).resolves.toEqual({ sequence: 1 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects cross-driver provider context before contacting T3", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

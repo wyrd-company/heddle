@@ -33,7 +33,7 @@ describe("T3 provider dispatch preconditions", () => {
     const table: T3ProviderPreconditionTable = {
       configurable: {
         "9.4.1": {
-          runtimeMode: "review-required",
+          runtimeModes: ["review-required", "unattended"],
           questionToolAvailable: true,
         },
       },
@@ -47,19 +47,39 @@ describe("T3 provider dispatch preconditions", () => {
           cliVersion: "9.4.1",
           lifecycle: "assistive",
         },
-        "review-required",
+        "unattended",
       ),
     ).not.toThrow();
   });
 
-  it("keeps runtime-mode pins distinct by driver and CLI version", () => {
+  it("keeps allowed runtime modes distinct by driver and CLI version", () => {
     expect(
-      t3ProviderPreconditions["claudeAgent"]?.["2.1.250"]?.runtimeMode,
-    ).toBe("auto-accept-edits");
+      t3ProviderPreconditions["claudeAgent"]?.["2.1.250"]?.runtimeModes,
+    ).toEqual(["auto-accept-edits"]);
     expect(
-      t3ProviderPreconditions["cursor"]?.["2026.08.11-e8db854"]?.runtimeMode,
-    ).toBe("auto");
+      t3ProviderPreconditions["cursor"]?.["2026.08.11-e8db854"]?.runtimeModes,
+    ).toEqual(["auto"]);
+    expect(
+      t3ProviderPreconditions["cursor"]?.["2026.08.25-3e8eec8"]?.runtimeModes,
+    ).toEqual(["auto", "full-access"]);
   });
+
+  it.each(["auto", "full-access"])(
+    "allows qualified Cursor mode %s",
+    (runtimeMode) => {
+      expect(() =>
+        assertT3ProviderDispatchPreconditions(
+          t3ProviderPreconditions,
+          {
+            driver: "cursor",
+            cliVersion: "2026.08.25-3e8eec8",
+            lifecycle: "independent",
+          },
+          runtimeMode,
+        ),
+      ).not.toThrow();
+    },
+  );
 
   it.each<{
     context:
@@ -102,6 +122,24 @@ describe("T3 provider dispatch preconditions", () => {
         lifecycle: "independent",
       },
       runtimeMode: "auto",
+      reason: "provider-runtime-mode-mismatch",
+    },
+    {
+      context: {
+        driver: "cursor",
+        cliVersion: "2026.08.11-e8db854",
+        lifecycle: "independent",
+      },
+      runtimeMode: "full-access",
+      reason: "provider-runtime-mode-mismatch",
+    },
+    {
+      context: {
+        driver: "cursor",
+        cliVersion: "2026.08.25-3e8eec8",
+        lifecycle: "independent",
+      },
+      runtimeMode: "approval-required",
       reason: "provider-runtime-mode-mismatch",
     },
     {

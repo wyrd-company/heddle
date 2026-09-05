@@ -175,9 +175,9 @@ proposed-design:
     thread, and sends one rendered Markdown handoff with the first
     `thread.turn.start` — three deterministic steps it owns end to end.
     Provider, model, and runtime mode are
-    per-stage configuration; Heddle pins runtime modes known to work
-    with each driver and CLI version and verifies them as dispatch
-    preconditions. Mid-turn steering is a second `thread.turn.start`
+    per-stage configuration; Heddle pins an explicit set of runtime modes known
+    to work with each driver and CLI version and verifies the selected mode as a
+    dispatch precondition. Mid-turn steering is a second `thread.turn.start`
     on the same thread.
 
     A child task thread uses its epic project's durable ID. An ad-hoc task uses

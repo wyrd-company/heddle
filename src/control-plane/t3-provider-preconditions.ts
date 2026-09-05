@@ -8,7 +8,7 @@ import configuredPreconditions from "./t3-provider-preconditions.json" with { ty
 
 export type T3ProviderVersionPreconditions = {
   readonly questionToolAvailable: boolean;
-  readonly runtimeMode: string;
+  readonly runtimeModes: readonly string[];
 };
 
 export type T3ProviderPreconditionTable = Readonly<
@@ -76,10 +76,15 @@ export const assertT3ProviderDispatchPreconditions = (
       `Cannot dispatch 'thread.turn.start': provider '${context.driver}' CLI version '${context.cliVersion}' is not configured`,
     );
 
-  if (runtimeMode !== version.runtimeMode)
+  if (
+    typeof runtimeMode !== "string" ||
+    !version.runtimeModes.includes(runtimeMode)
+  )
     throw new T3ProviderPreconditionError(
       "provider-runtime-mode-mismatch",
-      `Cannot dispatch 'thread.turn.start': provider '${context.driver}' CLI version '${context.cliVersion}' requires runtime mode '${version.runtimeMode}'`,
+      version.runtimeModes.length === 1
+        ? `Cannot dispatch 'thread.turn.start': provider '${context.driver}' CLI version '${context.cliVersion}' requires runtime mode '${version.runtimeModes[0]}'`
+        : `Cannot dispatch 'thread.turn.start': provider '${context.driver}' CLI version '${context.cliVersion}' requires one of runtime modes '${version.runtimeModes.join("', '")}'`,
     );
 
   if (context.lifecycle === "assistive" && !version.questionToolAvailable)
