@@ -8,7 +8,15 @@ import { createHash } from "node:crypto";
 import { MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH } from "../console/index.js";
 import type { EscalationAttention } from "../mcp-server/index.js";
 import type { SessionObservationAttention } from "../control-plane/index.js";
-import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
+import type {
+  JsonValue,
+  NotificationFailureCategory,
+  SqlitePersistence,
+} from "../persistence/index.js";
+import {
+  isNotificationFailureCategory,
+  LegacyNotificationIntentMismatchError,
+} from "../persistence/index.js";
 import type { ReconcilerAttention } from "../reconciler/index.js";
 import type { BlueprintRepositoryAttention } from "./blueprint-repository.js";
 import type { PushoverConfiguration } from "./configuration.js";
@@ -51,6 +59,27 @@ export class DurableAttentionQueue {
     return this.persistence.resolveAttention(attentionId);
   }
 
+  resolveNotificationFailures(notificationStableId: string): void {
+    const notificationFailureCodes = new Set([
+      "notification-delivery-recovery-required",
+      "notification-delivery-rejected",
+      "notification-delivery-retryable",
+    ]);
+    for (const record of this.persistence.listAttention()) {
+      const payload = record.payload;
+      if (
+        typeof payload === "object" &&
+        payload !== null &&
+        !Array.isArray(payload) &&
+        payload["kind"] === "production-error" &&
+        notificationFailureCodes.has(String(payload["code"])) &&
+        payload["notificationStableId"] === notificationStableId
+      ) {
+        this.persistence.resolveAttention(record.attentionId);
+      }
+    }
+  }
+
   list() {
     const runtimes = this.persistence.listReconcilerRuntime();
     return this.persistence
@@ -72,6 +101,24 @@ export interface PushoverTransport {
   send(message: PushoverMessage): Promise<void>;
 }
 
+export type NotificationDeliveryFailureCategory =
+  | NotificationFailureCategory
+  | "invalid-response"
+  | "network-failure"
+  | "provider-unavailable"
+  | "transport-failure";
+
+export class NotificationDeliveryError extends Error {
+  public constructor(
+    public readonly disposition: "operator-action" | "permanent" | "retryable",
+    public readonly category: NotificationDeliveryFailureCategory,
+    public readonly occurrence?: number,
+  ) {
+    super(`Notification delivery ${disposition} failure: ${category}`);
+    this.name = "NotificationDeliveryError";
+  }
+}
+
 export type OperatorPage = {
   attentionId: string;
   instanceId: string;
@@ -85,20 +132,64 @@ export class HttpPushoverTransport implements PushoverTransport {
   ) {}
 
   async send(message: PushoverMessage): Promise<void> {
-    const response = await this.fetch(this.apiUrl, {
-      body: new globalThis.URLSearchParams({
-        message: message.message,
-        title: message.title,
-        token: message.applicationToken,
-        url: message.url,
-        user: message.userKey,
-      }),
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      method: "POST",
-    });
-    if (!response.ok) {
-      throw new Error(`Pushover returned HTTP ${response.status}`);
+    let response: Awaited<ReturnType<typeof globalThis.fetch>>;
+    try {
+      response = await this.fetch(this.apiUrl, {
+        body: new globalThis.URLSearchParams({
+          message: message.message,
+          title: message.title,
+          token: message.applicationToken,
+          url: message.url,
+          user: message.userKey,
+        }),
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        method: "POST",
+      });
+    } catch {
+      throw new NotificationDeliveryError("retryable", "network-failure");
     }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      if (response.status >= 400 && response.status < 500) {
+        throw new NotificationDeliveryError(
+          "permanent",
+          response.status === 429
+            ? "provider-quota-exceeded"
+            : "request-rejected",
+        );
+      }
+      throw new NotificationDeliveryError("retryable", "invalid-response");
+    }
+    if (
+      response.status === 200 &&
+      typeof payload === "object" &&
+      payload !== null &&
+      !Array.isArray(payload) &&
+      (payload as Record<string, unknown>)["status"] === 1
+    ) {
+      return;
+    }
+    if (
+      response.status >= 500 ||
+      (response.status >= 300 && response.status < 400)
+    ) {
+      throw new NotificationDeliveryError("retryable", "provider-unavailable");
+    }
+    const fields =
+      typeof payload === "object" && payload !== null && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : {};
+    const category: NotificationFailureCategory =
+      response.status === 429
+        ? "provider-quota-exceeded"
+        : Object.hasOwn(fields, "token")
+          ? "application-credential-rejected"
+          : Object.hasOwn(fields, "user")
+            ? "recipient-rejected"
+            : "request-rejected";
+    throw new NotificationDeliveryError("permanent", category);
   }
 }
 
@@ -136,13 +227,66 @@ export class DurablePushoverNotifier {
       url: scope.toString(),
       userKey: this.configuration.userKey,
     };
-    const messageFingerprint = createHash("sha256")
-      .update(JSON.stringify(message))
-      .digest("hex");
-    this.persistence.recordEffectIntent("pushover", page.attentionId, {
-      messageFingerprint,
+    const fingerprint = (value: unknown): string =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    const legacyFingerprint = fingerprint(message);
+    const logicalFingerprint = fingerprint({
+      message: message.message,
+      stableId: message.stableId,
+      title: message.title,
+      url: message.url,
+      userKey: message.userKey,
     });
-    await this.transport.send(message);
+    const attemptFingerprint = legacyFingerprint;
+    try {
+      this.persistence.recordNotificationIntent(
+        page.attentionId,
+        { attemptFingerprint, logicalFingerprint },
+        legacyFingerprint,
+      );
+    } catch (error) {
+      if (!(error instanceof LegacyNotificationIntentMismatchError)) {
+        throw error;
+      }
+      const failure = this.persistence.recordNotificationFailure(
+        page.attentionId,
+        "legacy-intent-unverifiable",
+      );
+      throw new NotificationDeliveryError(
+        "operator-action",
+        failure.category,
+        failure.occurrence,
+      );
+    }
+    const priorFailure = this.persistence.notificationFailure(page.attentionId);
+    if (priorFailure?.state === "rejected") {
+      throw new NotificationDeliveryError(
+        "permanent",
+        priorFailure.category,
+        priorFailure.occurrence,
+      );
+    }
+    try {
+      await this.transport.send(message);
+    } catch (error) {
+      if (
+        error instanceof NotificationDeliveryError &&
+        error.disposition === "permanent" &&
+        isNotificationFailureCategory(error.category)
+      ) {
+        const failure = this.persistence.recordNotificationFailure(
+          page.attentionId,
+          error.category,
+        );
+        throw new NotificationDeliveryError(
+          "permanent",
+          failure.category,
+          failure.occurrence,
+        );
+      }
+      if (error instanceof NotificationDeliveryError) throw error;
+      throw new NotificationDeliveryError("retryable", "transport-failure");
+    }
     await this.afterTransportSuccess?.(message);
     if (
       !this.persistence.recordEffectCompleted("pushover", page.attentionId) &&

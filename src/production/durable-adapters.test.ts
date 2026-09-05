@@ -4,6 +4,7 @@
 // ---
 
 import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -14,6 +15,8 @@ import { SqlitePersistence } from "../persistence/index.js";
 import {
   DurableAttentionQueue,
   DurablePushoverNotifier,
+  HttpPushoverTransport,
+  NotificationDeliveryError,
   type PushoverMessage,
 } from "./durable-adapters.js";
 
@@ -240,9 +243,10 @@ describe("durable production adapters", () => {
       message: "Session sample-two is stalled without lifecycle advance",
     };
 
-    await expect(notifier.send(attention)).rejects.toThrow(
-      "Injected transport failure",
-    );
+    await expect(notifier.send(attention)).rejects.toMatchObject({
+      category: "transport-failure",
+      disposition: "retryable",
+    });
     expect(
       persistence.effectIntentRecorded("pushover", attention.attentionId),
     ).toBe(true);
@@ -254,6 +258,350 @@ describe("durable production adapters", () => {
       true,
     );
     expect(attempts).toBe(2);
+    persistence.close();
+  });
+
+  it.each([
+    {
+      body: {
+        errors: ["sensitive provider detail"],
+        status: 0,
+        token: "invalid",
+      },
+      category: "application-credential-rejected",
+      status: 400,
+    },
+    {
+      body: {
+        errors: ["sensitive provider detail"],
+        status: 0,
+        user: "invalid",
+      },
+      category: "recipient-rejected",
+      status: 400,
+    },
+    {
+      body: { errors: ["sensitive provider detail"], status: 0 },
+      category: "provider-quota-exceeded",
+      status: 429,
+    },
+    {
+      body: { errors: ["sensitive provider detail"], status: 0 },
+      category: "request-rejected",
+      status: 200,
+    },
+    {
+      body: { status: 1 },
+      category: "request-rejected",
+      status: 202,
+    },
+    {
+      body: "not-json",
+      category: "request-rejected",
+      status: 400,
+    },
+  ])(
+    "classifies permanent Pushover $category without exposing its body",
+    async ({ body, category, status }) => {
+      const transport = new HttpPushoverTransport(
+        "https://notify.invalid/messages",
+        vi.fn(
+          async () =>
+            new globalThis.Response(
+              typeof body === "string" ? body : JSON.stringify(body),
+              {
+                headers: { "content-type": "application/json" },
+                status,
+              },
+            ),
+        ),
+      );
+
+      const failure = await transport
+        .send({
+          applicationToken: "application-token",
+          message: "A sample needs attention",
+          stableId: "sample-attention",
+          title: "Sample attention",
+          url: "https://console.invalid/",
+          userKey: "operator-key",
+        })
+        .catch((error: unknown) => error);
+
+      expect(failure).toMatchObject({ category, disposition: "permanent" });
+      expect(String(failure)).not.toContain("sensitive provider detail");
+    },
+  );
+
+  it.each([
+    { body: { status: 0 }, category: "provider-unavailable", status: 503 },
+    { body: "not-json", category: "invalid-response", status: 200 },
+  ])(
+    "classifies retryable Pushover $category",
+    async ({ body, category, status }) => {
+      const transport = new HttpPushoverTransport(
+        "https://notify.invalid/messages",
+        vi.fn(
+          async () =>
+            new globalThis.Response(
+              typeof body === "string" ? body : JSON.stringify(body),
+              { status },
+            ),
+        ),
+      );
+
+      const failure = await transport
+        .send({
+          applicationToken: "application-token",
+          message: "A sample needs attention",
+          stableId: "sample-attention",
+          title: "Sample attention",
+          url: "https://console.invalid/",
+          userKey: "operator-key",
+        })
+        .catch((error: unknown) => error);
+
+      expect(failure).toMatchObject({ category, disposition: "retryable" });
+    },
+  );
+
+  it("holds a permanent rejection until its exact occurrence is authorized", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-rejected-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-24",
+      state: "waiting",
+      taskId: 24,
+    });
+    const rejected = vi.fn(async () => {
+      throw new NotificationDeliveryError(
+        "permanent",
+        "application-credential-rejected",
+      );
+    });
+    const attention = {
+      attentionId: "task-24:session:choice",
+      instanceId: "task-24",
+      message: "Session sample-five needs an operator choice",
+    };
+    const configuration = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "retired-application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "operator-key",
+    };
+    const notifier = new DurablePushoverNotifier(persistence, configuration, {
+      send: rejected,
+    });
+
+    await expect(notifier.send(attention)).rejects.toMatchObject({
+      category: "application-credential-rejected",
+      occurrence: 1,
+    });
+    await expect(notifier.send(attention)).rejects.toMatchObject({
+      occurrence: 1,
+    });
+    expect(rejected).toHaveBeenCalledTimes(1);
+    expect(
+      persistence.authorizeNotificationRetry(attention.attentionId, 2),
+    ).toBe(false);
+    expect(
+      persistence.authorizeNotificationRetry(attention.attentionId, 1),
+    ).toBe(true);
+
+    const rejectedAgain = vi.fn(async () => {
+      throw new NotificationDeliveryError("permanent", "request-rejected");
+    });
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        { ...configuration, applicationToken: "replacement-application-token" },
+        { send: rejectedAgain },
+      ).send(attention),
+    ).rejects.toMatchObject({ occurrence: 2 });
+    expect(
+      persistence.authorizeNotificationRetry(attention.attentionId, 1),
+    ).toBe(false);
+    expect(
+      persistence.authorizeNotificationRetry(attention.attentionId, 2),
+    ).toBe(true);
+
+    const accepted = vi.fn(async () => undefined);
+    await new DurablePushoverNotifier(
+      persistence,
+      { ...configuration, applicationToken: "replacement-application-token" },
+      { send: accepted },
+    ).send(attention);
+    expect(accepted).toHaveBeenCalledOnce();
+    expect(persistence.effectCompleted("pushover", attention.attentionId)).toBe(
+      true,
+    );
+
+    const database = new Database(join(directory, "heddle-state.sqlite"), {
+      readonly: true,
+    });
+    const stored = JSON.stringify(
+      database.prepare("SELECT * FROM heddle_completed_effects").all(),
+    );
+    database.close();
+    expect(stored).not.toContain("retired-application-token");
+    expect(stored).not.toContain("replacement-application-token");
+    expect(stored).not.toContain("operator-key");
+    persistence.close();
+  });
+
+  it("does not authorize a recipient change with an application credential retry", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-recipient-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-25",
+      state: "waiting",
+      taskId: 25,
+    });
+    const attention = {
+      attentionId: "task-25:session:choice",
+      instanceId: "task-25",
+      message: "Session sample-six needs an operator choice",
+    };
+    const configuration = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "retired-application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "first-operator-key",
+    };
+    await expect(
+      new DurablePushoverNotifier(persistence, configuration, {
+        send: async () => {
+          throw new NotificationDeliveryError("permanent", "request-rejected");
+        },
+      }).send(attention),
+    ).rejects.toBeInstanceOf(NotificationDeliveryError);
+    expect(
+      persistence.authorizeNotificationRetry(attention.attentionId, 1),
+    ).toBe(true);
+
+    const changed = vi.fn(async () => undefined);
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        { ...configuration, userKey: "second-operator-key" },
+        { send: changed },
+      ).send(attention),
+    ).rejects.toThrow("changed durable identity");
+    expect(changed).not.toHaveBeenCalled();
+    persistence.close();
+  });
+
+  it("upgrades a matching legacy pending fingerprint without sending twice", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-legacy-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-26",
+      state: "waiting",
+      taskId: 26,
+    });
+    const attention = {
+      attentionId: "task-26:session:choice",
+      instanceId: "task-26",
+      message: "Session sample-seven needs an operator choice",
+    };
+    const configuration = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "operator-key",
+    };
+    const message = {
+      applicationToken: configuration.applicationToken,
+      message: attention.message,
+      stableId: attention.attentionId,
+      title: "Heddle needs attention",
+      url: "https://console.invalid/?view=lifecycle&scope=task%3A26&attention=task-26%3Asession%3Achoice",
+      userKey: configuration.userKey,
+    };
+    persistence.recordEffectIntent("pushover", attention.attentionId, {
+      messageFingerprint: createHash("sha256")
+        .update(JSON.stringify(message))
+        .digest("hex"),
+    });
+    const transport = { send: vi.fn(async () => undefined) };
+
+    await new DurablePushoverNotifier(
+      persistence,
+      configuration,
+      transport,
+    ).send(attention);
+
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(persistence.effectCompleted("pushover", attention.attentionId)).toBe(
+      true,
+    );
+    persistence.close();
+  });
+
+  it("requires exact operator authorization before recovering a changed legacy route", async () => {
+    directory = await mkdtemp(
+      join(tmpdir(), "heddle-pushover-legacy-recovery-"),
+    );
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-27",
+      state: "waiting",
+      taskId: 27,
+    });
+    const attention = {
+      attentionId: "task-27:session:choice",
+      instanceId: "task-27",
+      message: "Session sample-eight needs an operator choice",
+    };
+    const retired = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "retired-application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "operator-key",
+    };
+    const retiredMessage = {
+      applicationToken: retired.applicationToken,
+      message: attention.message,
+      stableId: attention.attentionId,
+      title: "Heddle needs attention",
+      url: "https://console.invalid/?view=lifecycle&scope=task%3A27&attention=task-27%3Asession%3Achoice",
+      userKey: retired.userKey,
+    };
+    persistence.recordEffectIntent("pushover", attention.attentionId, {
+      messageFingerprint: createHash("sha256")
+        .update(JSON.stringify(retiredMessage))
+        .digest("hex"),
+    });
+    const transport = { send: vi.fn(async () => undefined) };
+    const recovered = new DurablePushoverNotifier(
+      persistence,
+      { ...retired, applicationToken: "replacement-application-token" },
+      transport,
+    );
+
+    await expect(recovered.send(attention)).rejects.toMatchObject({
+      category: "legacy-intent-unverifiable",
+      disposition: "operator-action",
+      occurrence: 1,
+    });
+    await expect(recovered.send(attention)).rejects.toMatchObject({
+      occurrence: 1,
+    });
+    expect(transport.send).not.toHaveBeenCalled();
+    expect(
+      persistence.authorizeNotificationRetry(attention.attentionId, 1),
+    ).toBe(true);
+
+    await recovered.send(attention);
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(persistence.effectCompleted("pushover", attention.attentionId)).toBe(
+      true,
+    );
     persistence.close();
   });
 
@@ -287,7 +635,10 @@ describe("durable production adapters", () => {
         },
         firstTransport,
       ).send(attention),
-    ).rejects.toThrow("Injected ambiguous failure");
+    ).rejects.toMatchObject({
+      category: "transport-failure",
+      disposition: "retryable",
+    });
 
     const changedTransport = { send: vi.fn(async () => undefined) };
     await expect(

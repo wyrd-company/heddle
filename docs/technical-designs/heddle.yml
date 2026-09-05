@@ -441,8 +441,11 @@ proposed-design:
     75-character external identity is stable and sensitive to every component;
     history, waiters, replay, and answer authority continue to use the exact
     tuple components rather than the digest.
-    Adapter persistence rejects a different payload fingerprint under the same
-    stable ID. Attention insertion is idempotent. Pushover delivery is
+    Adapter persistence rejects a different logical recipient or message
+    fingerprint under the same stable ID. It keeps the application credential
+    in a separate attempt fingerprint. That attempt fingerprint can change only
+    after an exact rejection occurrence receives the operator's Retry
+    notification disposition. Attention insertion is idempotent. Pushover delivery is
     at-least-once: the provider has no idempotency or outcome-reconciliation
     key, so pending intent is retried after restart. A process stop after
     provider acceptance but before local completion can produce one duplicate
@@ -467,14 +470,38 @@ proposed-design:
     the current console catalog but retain their stable identity for restart
     deduplication.
 
+    Pushover completion requires HTTP 200 and provider status 1. Network,
+    malformed-response, redirect, and server failures are retryable. HTTP 4xx
+    and a parsed HTTP 2xx response without provider status 1 are permanent for
+    unchanged input. Permanent provider categories are allowlisted as application
+    credential rejected, recipient rejected, quota exceeded, or request
+    rejected. Classification uses only HTTP status and documented field
+    presence; raw response bodies, provider request identifiers, credentials,
+    devices, and error text are never persisted or emitted. Each classified
+    failure raises task-scoped production-error attention and is contained at
+    its notification route, so later pending routes and instance reconciliation
+    continue in the same pass. Retryable failures retain pending intent for a
+    later serialized pass. Permanent failures retain their safe category and
+    occurrence and make no further transport call until the exact Retry
+    notification action authorizes one attempt. Another permanent response
+    creates a new occurrence. Neither failure state nor recovery changes or
+    answers the original escalation attention.
+
+    A legacy pending combined fingerprint upgrades when it exactly matches the
+    current combined message. A mismatch is not assumed to be credential-only:
+    it makes no transport call and raises an exact legacy-intent-unverifiable
+    recovery occurrence. Its Retry notification disposition explicitly adopts
+    the current secure route while retaining the original stable attention ID.
+
     Session observation and session page delivery fail independently. An
     observer rejection raises the stable task-scoped production error
     `session-observation-failed`. A failed Pushover effect after successful
     observation raises the distinct stable task-scoped production error
-    `session-page-delivery-failed`. The latter leaves the original Pushover
-    intent pending under its pageable attention ID for at-least-once retry; it
-    never relabels a notification transport failure as a T3 observation
-    failure.
+    `session-page-delivery-failed`. Classified notification failures instead use
+    the notification-delivery production-error and recovery contract above. All
+    delivery failures leave the original Pushover intent pending under its
+    pageable attention ID; none relabels a notification transport failure as a
+    T3 observation failure.
 
     Harness-native question tools serve assistive tasks, where the
     operator already works in T3's UI. The provider adapters map

@@ -75,6 +75,20 @@ export const initializePersistenceSchema = (
       PRIMARY KEY (effect_kind, stable_id)
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_notification_failures (
+      stable_id TEXT PRIMARY KEY,
+      occurrence INTEGER NOT NULL CHECK (occurrence > 0),
+      category TEXT NOT NULL CHECK (category IN (
+        'application-credential-rejected',
+        'legacy-intent-unverifiable',
+        'provider-quota-exceeded',
+        'recipient-rejected',
+        'request-rejected'
+      )),
+      state TEXT NOT NULL CHECK (state IN ('rejected', 'retry-authorized')),
+      recorded_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS heddle_epic_projects (
       epic_id INTEGER PRIMARY KEY,
       product_name TEXT NOT NULL,

@@ -55,4 +55,35 @@ describe("session attention paging", () => {
       },
     ]);
   });
+
+  it("contains an exact page failure and continues later pages", async () => {
+    const send = vi.fn(async ({ attentionId }: { attentionId: string }) => {
+      if (attentionId === "attention-ended") throw new Error("unavailable");
+    });
+    const containFailure = vi.fn(async () => true);
+
+    await pageSessionAttentions(
+      [attention("ended"), attention("failed")],
+      { send },
+      containFailure,
+    );
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(containFailure).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ attentionId: "attention-ended" }),
+    );
+  });
+
+  it("propagates an uncontained page failure", async () => {
+    const failure = new Error("invariant");
+
+    await expect(
+      pageSessionAttentions(
+        [attention("ended")],
+        { send: async () => Promise.reject(failure) },
+        async () => false,
+      ),
+    ).rejects.toBe(failure);
+  });
 });

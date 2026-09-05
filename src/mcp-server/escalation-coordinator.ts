@@ -42,6 +42,10 @@ export interface ParentEscalationRouter {
 
 export type EscalationCoordinatorOptions = {
   attention: EscalationAttentionQueue;
+  containPushoverFailure?: (
+    error: unknown,
+    escalation: PendingEscalation,
+  ) => Promise<boolean> | boolean;
   now?: () => string;
   parent: ParentEscalationRouter;
   persistence: WorkflowMcpPersistence;
@@ -55,6 +59,7 @@ type Waiter = {
 
 export class EscalationCoordinator {
   readonly #attention: EscalationAttentionQueue;
+  readonly #containPushoverFailure?: EscalationCoordinatorOptions["containPushoverFailure"];
   readonly #history: EscalationHistory;
   readonly #now: () => string;
   readonly #parent: ParentEscalationRouter;
@@ -65,6 +70,7 @@ export class EscalationCoordinator {
 
   constructor(options: EscalationCoordinatorOptions) {
     this.#attention = options.attention;
+    this.#containPushoverFailure = options.containPushoverFailure;
     this.#history = new EscalationHistory(options.persistence);
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#parent = options.parent;
@@ -247,7 +253,12 @@ export class EscalationCoordinator {
       this.#history.recordRoute(opened, escalationEventTypes.attentionRaised);
     }
     if (!types.has(escalationEventTypes.notified)) {
-      await this.#pushover.send(opened);
+      try {
+        await this.#pushover.send(opened);
+      } catch (error) {
+        if (await this.#containPushoverFailure?.(error, opened)) return;
+        throw error;
+      }
       this.#history.recordRoute(opened, escalationEventTypes.notified);
     }
   }

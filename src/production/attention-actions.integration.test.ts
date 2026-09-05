@@ -11,6 +11,8 @@ import {
 } from "../console/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
+import { NotificationDeliveryError } from "./durable-adapters.js";
+import { notificationDeliveryErrorAttention } from "./error-visibility.js";
 import {
   prepareProductionFixture,
   SyntheticT3,
@@ -39,6 +41,61 @@ describe("production attention actions", () => {
 
   afterEach(async () => {
     await cleanup?.();
+  });
+
+  it("does not let a stale notification retry action authorize a newer rejection", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const stableId = "task-sample:session:notification";
+    composition.persistence.recordNotificationFailure(
+      stableId,
+      "request-rejected",
+    );
+    composition.persistence.authorizeNotificationRetry(stableId, 1);
+    composition.persistence.recordNotificationFailure(
+      stableId,
+      "request-rejected",
+    );
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    await composition.attention.raise(
+      notificationDeliveryErrorAttention({
+        error: new NotificationDeliveryError(
+          "permanent",
+          "request-rejected",
+          1,
+        ),
+        instanceId: runtime.instanceId,
+        stableId,
+        taskId: fixture.taskId,
+      }),
+    );
+    const attention = composition.attention
+      .list()
+      .find(({ actions }) => actions[0]?.actionId === "notification.retry")!;
+
+    await composition.consoleActions.execute({
+      action: attention.actions[0]!,
+      attention,
+    });
+    expect(composition.persistence.notificationFailure(stableId)).toMatchObject(
+      { occurrence: 2, state: "rejected" },
+    );
+    expect(
+      composition.persistence.effectCompleted(
+        "console-attention-action",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    await composition.close();
   });
 
   it("answers a maximum-length escalation through durable attention", async () => {

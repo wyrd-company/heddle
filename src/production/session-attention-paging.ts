@@ -10,6 +10,11 @@ export interface SessionAttentionPager {
   send(page: OperatorPage): Promise<void>;
 }
 
+export type SessionAttentionPageFailureHandler = (
+  error: unknown,
+  page: OperatorPage,
+) => Promise<boolean> | boolean;
+
 const pageableKinds = new Set<SessionObservationAttention["kind"]>([
   "ended",
   "failed",
@@ -19,13 +24,20 @@ const pageableKinds = new Set<SessionObservationAttention["kind"]>([
 export const pageSessionAttentions = async (
   attentions: readonly SessionObservationAttention[],
   pager: SessionAttentionPager,
+  containFailure?: SessionAttentionPageFailureHandler,
 ): Promise<void> => {
   for (const attention of attentions) {
     if (!pageableKinds.has(attention.kind)) continue;
-    await pager.send({
+    const page = {
       attentionId: attention.attentionId,
       instanceId: attention.instanceId,
       message: attention.message,
-    });
+    };
+    try {
+      await pager.send(page);
+    } catch (error) {
+      if ((await containFailure?.(error, page)) === true) continue;
+      throw error;
+    }
   }
 };

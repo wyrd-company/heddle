@@ -60,6 +60,11 @@ export type ConsoleAttentionActionInput =
 
 export type ConsoleAttentionActionContract =
   | {
+      kind: "notification.retry";
+      occurrence: number;
+      stableId: string;
+    }
+  | {
       escalationId: string;
       instanceId: string;
       kind: "escalation.answer";

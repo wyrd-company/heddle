@@ -115,6 +115,15 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     input: Parameters<ConsoleAttentionActionPort["execute"]>[0],
   ): Promise<boolean> {
     const contract = input.action.contract;
+    if (contract.kind === "notification.retry") {
+      const failure = this.persistence.notificationFailure(contract.stableId);
+      return (
+        failure !== undefined &&
+        (failure.occurrence > contract.occurrence ||
+          (failure.occurrence === contract.occurrence &&
+            failure.state === "retry-authorized"))
+      );
+    }
     if (contract.kind === "escalation.answer") return false;
     const target = {
       instanceId: contract.instanceId,
@@ -137,6 +146,19 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
 
   async #apply(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
     const contract = input.action.contract;
+    if (contract.kind === "notification.retry") {
+      if (
+        !this.persistence.authorizeNotificationRetry(
+          contract.stableId,
+          contract.occurrence,
+        )
+      ) {
+        throw new Error(
+          "Notification rejection occurrence is no longer current",
+        );
+      }
+      return;
+    }
     if (contract.kind === "escalation.answer") {
       this.escalation.answerAsOperator({
         answers: escalationAnswers(input.answers),

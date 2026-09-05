@@ -17,6 +17,7 @@ import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { errorDetail } from "../error-details.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/index.js";
+import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import { createProductionComposition } from "./composition.js";
 import {
   execute,
@@ -71,6 +72,364 @@ describe("production composition", () => {
     expect(composition.persistence.effectCompleted("pushover", stableId)).toBe(
       true,
     );
+    await composition.close();
+  });
+
+  it("contains a permanent escalation notification until exact operator retry after credential repair", async () => {
+    const fixture = await prepare();
+    let accepted = false;
+    const fetch = vi.fn(async () =>
+      accepted
+        ? new globalThis.Response(JSON.stringify({ status: 1 }), {
+            status: 200,
+          })
+        : new globalThis.Response(
+            JSON.stringify({
+              errors: ["provider detail must remain private"],
+              status: 0,
+              token: "invalid",
+            }),
+            { status: 400 },
+          ),
+    );
+    const t3 = new SyntheticT3();
+    const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3,
+    });
+    await first.start();
+    const runtime = first.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "sample-choice";
+    const attentionId = escalationAttentionId(
+      runtime.instanceId,
+      runtime.sessionKey!,
+      escalationId,
+    );
+    first.persistence.appendEvent(runtime.instanceId, "mcp:escalation-opened", {
+      attentionId,
+      escalationId,
+      instanceId: runtime.instanceId,
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: runtime.sessionKey!,
+      questions: [
+        {
+          id: "selection",
+          options: [
+            {
+              description: "Use the first sample",
+              id: "first",
+              label: "First",
+            },
+            {
+              description: "Use the second sample",
+              id: "second",
+              label: "Second",
+            },
+          ],
+          prompt: "Which sample should be selected?",
+        },
+      ],
+      stage: runtime.stageId!,
+    });
+
+    await expect(first.scheduler.trigger()).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      first.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    expect(first.persistence.listAttention()).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "notification-delivery-rejected",
+          notificationCategory: "application-credential-rejected",
+          notificationOccurrence: 1,
+          notificationStableId: attentionId,
+        }),
+      }),
+    );
+    expect(JSON.stringify(first.persistence.listAttention())).not.toContain(
+      "provider detail must remain private",
+    );
+    await first.close();
+
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Later Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const laterTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+    accepted = true;
+    fixture.configuration.pushover.applicationToken =
+      "replacement-application-token";
+    const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3,
+    });
+
+    await restarted.start();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      restarted.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === laterTaskId),
+    ).toMatchObject({ state: "waiting" });
+    const rejected = restarted.attention
+      .list()
+      .find(({ actions }) =>
+        actions.some(({ actionId }) => actionId === "notification.retry"),
+      );
+    if (rejected === undefined) {
+      throw new Error("Missing rejected notification attention");
+    }
+    const retry = rejected.actions.find(
+      ({ actionId }) => actionId === "notification.retry",
+    )!;
+    await restarted.consoleActions.execute({
+      action: retry,
+      attention: rejected,
+    });
+    await restarted.scheduler.trigger();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      new globalThis.URLSearchParams(
+        String(fetch.mock.calls[1]?.[1]?.body),
+      ).get("token"),
+    ).toBe("replacement-application-token");
+    expect(restarted.persistence.effectCompleted("pushover", attentionId)).toBe(
+      true,
+    );
+    expect(
+      restarted.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    expect(restarted.attention.list()).toContainEqual(
+      expect.objectContaining({
+        actions: [expect.objectContaining({ actionId: "escalation.answer" })],
+        attentionId,
+      }),
+    );
+    expect(restarted.attention.list()).not.toContainEqual(
+      expect.objectContaining({ kind: "production-error" }),
+    );
+    await restarted.close();
+  });
+
+  it("contains a retryable escalation notification and completes it on a later pass", async () => {
+    const fixture = await prepare();
+    let available = false;
+    const fetch = vi.fn(
+      async () =>
+        new globalThis.Response(JSON.stringify({ status: available ? 1 : 0 }), {
+          status: available ? 200 : 503,
+        }),
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "retryable-choice";
+    const attentionId = escalationAttentionId(
+      runtime.instanceId,
+      runtime.sessionKey!,
+      escalationId,
+    );
+    composition.persistence.appendEvent(
+      runtime.instanceId,
+      "mcp:escalation-opened",
+      {
+        attentionId,
+        escalationId,
+        instanceId: runtime.instanceId,
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: runtime.sessionKey!,
+        questions: [
+          {
+            id: "selection",
+            options: [
+              {
+                description: "Use the first sample",
+                id: "first",
+                label: "First",
+              },
+              {
+                description: "Use the second sample",
+                id: "second",
+                label: "Second",
+              },
+            ],
+            prompt: "Which sample should be selected?",
+          },
+        ],
+        stage: runtime.stageId!,
+      },
+    );
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Independent Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+
+    await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining("provider-unavailable"),
+      }),
+    );
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === independentTaskId),
+    ).toMatchObject({ state: "waiting" });
+
+    available = true;
+    await composition.scheduler.trigger();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      composition.persistence.effectCompleted("pushover", attentionId),
+    ).toBe(true);
+    expect(composition.attention.list()).not.toContainEqual(
+      expect.objectContaining({ kind: "production-error" }),
+    );
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    await composition.close();
+  });
+
+  it("requires an exact recovery action before adopting an unverifiable legacy notification route", async () => {
+    const fixture = await prepare();
+    const fetch = vi.fn(
+      async () =>
+        new globalThis.Response(JSON.stringify({ status: 1 }), { status: 200 }),
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "legacy-choice";
+    const attentionId = escalationAttentionId(
+      runtime.instanceId,
+      runtime.sessionKey!,
+      escalationId,
+    );
+    composition.persistence.appendEvent(
+      runtime.instanceId,
+      "mcp:escalation-opened",
+      {
+        attentionId,
+        escalationId,
+        instanceId: runtime.instanceId,
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: runtime.sessionKey!,
+        questions: [
+          {
+            id: "selection",
+            options: [
+              {
+                description: "Use the first sample",
+                id: "first",
+                label: "First",
+              },
+              {
+                description: "Use the second sample",
+                id: "second",
+                label: "Second",
+              },
+            ],
+            prompt: "Which sample should be selected?",
+          },
+        ],
+        stage: runtime.stageId!,
+      },
+    );
+    composition.persistence.recordEffectIntent("pushover", attentionId, {
+      messageFingerprint: "a".repeat(64),
+    });
+
+    await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+    const recovery = composition.attention
+      .list()
+      .find(({ message }) => message.includes("legacy-intent-unverifiable"));
+    if (recovery === undefined) {
+      throw new Error("Missing legacy notification recovery attention");
+    }
+    expect(recovery).toMatchObject({
+      actions: [
+        expect.objectContaining({
+          actionId: "notification.retry",
+          contract: expect.objectContaining({
+            occurrence: 1,
+            stableId: attentionId,
+          }),
+        }),
+      ],
+      kind: "production-error",
+    });
+
+    await composition.consoleActions.execute({
+      action: recovery.actions[0]!,
+      attention: recovery,
+    });
+    await composition.scheduler.trigger();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      composition.persistence.effectCompleted("pushover", attentionId),
+    ).toBe(true);
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
     await composition.close();
   });
 
@@ -152,7 +511,7 @@ describe("production composition", () => {
     await composition.close();
   });
 
-  it("retries a failed session page delivery without relabeling it as observation failure", async () => {
+  it("retries a classified session page delivery without relabeling it as observation failure", async () => {
     const fixture = await prepare();
     fixture.configuration.observationThresholds = {
       endedMilliseconds: 1,
@@ -201,9 +560,9 @@ describe("production composition", () => {
     expect(composition.persistence.listAttention()).toContainEqual(
       expect.objectContaining({
         payload: expect.objectContaining({
-          code: "session-page-delivery-failed",
+          code: "notification-delivery-retryable",
           kind: "production-error",
-          message: expect.stringContaining("page delivery failed"),
+          message: expect.stringContaining("transport-failure"),
           taskId: fixture.taskId,
         }),
       }),
@@ -225,6 +584,13 @@ describe("production composition", () => {
     expect(
       composition.persistence.effectCompleted("pushover", pageable.attentionId),
     ).toBe(true);
+    expect(composition.persistence.listAttention()).not.toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "notification-delivery-retryable",
+        }),
+      }),
+    );
     await composition.scheduler.trigger();
     expect(deliveries).toHaveBeenCalledTimes(2);
     await composition.close();

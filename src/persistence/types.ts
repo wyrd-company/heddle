@@ -43,6 +43,38 @@ export interface DurableAttentionRecord {
   recordedAt: string;
 }
 
+export type NotificationFailureCategory =
+  | "application-credential-rejected"
+  | "legacy-intent-unverifiable"
+  | "provider-quota-exceeded"
+  | "recipient-rejected"
+  | "request-rejected";
+
+const notificationFailureCategories = new Set<NotificationFailureCategory>([
+  "application-credential-rejected",
+  "legacy-intent-unverifiable",
+  "provider-quota-exceeded",
+  "recipient-rejected",
+  "request-rejected",
+]);
+
+export const isNotificationFailureCategory = (
+  value: unknown,
+): value is NotificationFailureCategory =>
+  notificationFailureCategories.has(value as NotificationFailureCategory);
+
+export interface NotificationFailureRecord {
+  category: NotificationFailureCategory;
+  occurrence: number;
+  stableId: string;
+  state: "rejected" | "retry-authorized";
+}
+
+export interface NotificationIntentFingerprint {
+  attemptFingerprint: string;
+  logicalFingerprint: string;
+}
+
 export interface ReconcilerRuntimeRecord {
   boardStatus: string;
   deferral?: JsonValue;

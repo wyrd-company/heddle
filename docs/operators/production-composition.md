@@ -438,9 +438,14 @@ does not overlap or stop future cadence passes.
 Attention and notification delivery use the stable attention ID from the
 accepted lifecycle or escalation contract. SQLite stores attention and adapter
 intent and completion records. Reusing an attention ID with a different payload
-fingerprint fails closed as a durable-identity disagreement. A restart replays
-an unfinished escalation route without adding a second attention entry. The
-current console catalog lists only unresolved attention.
+fingerprint fails closed as a durable-identity disagreement. Notification
+identity keeps the logical recipient, message, title, deep link, and stable ID
+separate from its application-credential attempt fingerprint. A changed
+recipient still fails closed. A changed application credential can replace the
+attempt fingerprint only after an exact rejected occurrence receives its Retry
+notification disposition. A restart replays an unfinished escalation route
+without adding a second attention entry. The current console catalog lists only
+unresolved attention.
 
 An escalation attention ID is `escalation:` plus a SHA-256 digest of the exact
 instance, owner-session, and escalation identity tuple. The exact components
@@ -473,6 +478,36 @@ accepts the request but before Heddle records completion can produce one
 duplicate per ambiguous attempt. Durable completion suppresses later replay.
 The stable attention ID remains the local outbox and console deep-link identity;
 the HTTP transport does not represent it as provider deduplication.
+
+The transport accepts only HTTP 200 with provider `status: 1` as completion.
+Network failures, malformed responses, redirects, and server failures are
+retryable. HTTP 4xx and a parsed HTTP 2xx response without provider `status: 1`
+are permanent for the unchanged request. Permanent categories are the allowlisted
+`application-credential-rejected`, `recipient-rejected`,
+`provider-quota-exceeded`, and `request-rejected`; classification inspects only
+the HTTP status and the presence of documented response fields. Provider error
+text, request identifiers, raw bodies, credentials, and device identifiers are
+not persisted or emitted. These rules follow the Pushover Message API response
+and retry contract at <https://pushover.net/api#response> and
+<https://pushover.net/api#friendly>.
+
+Each classified transport failure raises a task-scoped production-error entry
+and is contained within that notification route. Pending routes after it and
+main instance reconciliation continue in the same scheduler pass. A retryable
+failure retains pending intent and retries on a later serialized pass. A
+permanent rejection stores its safe category and occurrence and performs no
+more HTTP calls until the operator repairs secure configuration, restarts the
+service, and selects Retry notification on that exact occurrence. The action
+authorizes one attempt; another permanent response creates the next occurrence.
+The original escalation attention and unanswered questions remain unchanged.
+
+A pending intent written by a version that stored only the combined message
+fingerprint upgrades automatically when the current combined fingerprint still
+matches. A mismatch cannot prove that only the application credential changed.
+It performs no HTTP call and raises an exact
+`legacy-intent-unverifiable` recovery occurrence. Retry notification is the
+explicit disposition that adopts the current route; without it, ambiguous
+legacy intent stays pending.
 Pushover receives escalations and session-observation attention of kind
 `ended`, `failed`, or `stalled`. The first two are dead-session states. Approval,
 user-input, stale-instance, lifecycle, repository, production-error, and
@@ -480,10 +515,11 @@ epic-acceptance attention remain console-only.
 
 Session observation and Pushover page delivery have separate production-error
 entries. `session-observation-failed` means Heddle could not read the session
-from T3. `session-page-delivery-failed` means observation succeeded but the
-Pushover effect failed. The page-delivery entry does not replace the original
-pageable attention: its durable Pushover intent remains pending under the same
-stable attention ID and a later serialized pass retries the same payload. A
+from T3. `session-page-delivery-failed` means observation succeeded but an
+unclassified Pushover adapter effect failed. Classified retryable and permanent
+notification failures use the scoped notification-delivery entries and recovery
+rules above. No delivery entry replaces the original pageable attention. Its
+durable Pushover intent remains pending under the same stable attention ID. A
 completed effect does not send again.
 
 Qualification uses generated boards, repositories, state directories,

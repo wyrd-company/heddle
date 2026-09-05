@@ -226,7 +226,7 @@ export const projectProductionAttention = (
     });
   }
   if (kind === "production-error") {
-    requiredIdentifier(payload, "code", attentionId);
+    const code = requiredIdentifier(payload, "code", attentionId);
     const taskIdValue = payload["taskId"];
     const instanceIdValue = payload["instanceId"];
     const taskId =
@@ -247,8 +247,31 @@ export const projectProductionAttention = (
         `Attention '${attentionId}' disagrees with its production task`,
       );
     }
+    const actions: ConsoleAttentionAction[] =
+      code === "notification-delivery-rejected" ||
+      code === "notification-delivery-recovery-required"
+        ? [
+            {
+              actionId: "notification.retry",
+              contract: {
+                kind: "notification.retry",
+                occurrence: validTaskId(
+                  payload["notificationOccurrence"],
+                  attentionId,
+                ),
+                stableId: requiredIdentifier(
+                  payload,
+                  "notificationStableId",
+                  attentionId,
+                ),
+              },
+              input: { kind: "none" },
+              label: "Retry notification",
+            },
+          ]
+        : [];
     return createConsoleAttention({
-      actions: [],
+      actions,
       attentionId,
       ...(typeof instanceIdValue === "string"
         ? { instanceId: instanceIdValue }

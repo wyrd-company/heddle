@@ -39,6 +39,9 @@ import type {
   InstanceRow,
   InstanceState,
   JsonValue,
+  NotificationFailureCategory,
+  NotificationFailureRecord,
+  NotificationIntentFingerprint,
   PersistedEvent,
   PersistenceConfiguration,
   ReconcilerRuntimeRecord,
@@ -46,6 +49,13 @@ import type {
 } from "./types.js";
 
 const databaseFilename = "heddle-state.sqlite";
+
+export class LegacyNotificationIntentMismatchError extends Error {
+  public constructor() {
+    super("Legacy notification intent cannot verify the current secure route");
+    this.name = "LegacyNotificationIntentMismatchError";
+  }
+}
 const serialize = (value: JsonValue | InstanceState): string => {
   const serialized = JSON.stringify(value);
   if (serialized === undefined) {
@@ -409,6 +419,134 @@ export class SqlitePersistence {
       );
     }
     return false;
+  }
+
+  recordNotificationIntent(
+    stableId: string,
+    fingerprint: NotificationIntentFingerprint,
+    legacyFingerprint: string,
+  ): boolean {
+    this.assertStableId("stableId", stableId);
+    const effectKind = "pushover";
+    const payloadJson = serialize({
+      attemptFingerprint: fingerprint.attemptFingerprint,
+      logicalFingerprint: fingerprint.logicalFingerprint,
+    });
+    const inserted =
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO heddle_completed_effects
+             (effect_kind, stable_id, state, payload_json, recorded_at, completed_at)
+           VALUES (?, ?, 'pending', ?, ?, NULL)`,
+        )
+        .run(effectKind, stableId, payloadJson, new Date().toISOString())
+        .changes > 0;
+    if (inserted) return true;
+    const prior = this.database
+      .prepare(
+        `SELECT payload_json AS payloadJson
+         FROM heddle_completed_effects
+         WHERE effect_kind = ? AND stable_id = ?`,
+      )
+      .get(effectKind, stableId) as { payloadJson: string } | undefined;
+    if (prior?.payloadJson === payloadJson) return false;
+    let priorPayload: unknown;
+    try {
+      priorPayload = JSON.parse(prior?.payloadJson ?? "null");
+    } catch {
+      priorPayload = null;
+    }
+    const legacyMatches =
+      typeof priorPayload === "object" &&
+      priorPayload !== null &&
+      !Array.isArray(priorPayload) &&
+      (priorPayload as Record<string, unknown>)["messageFingerprint"] ===
+        legacyFingerprint;
+    const legacyIntent =
+      typeof priorPayload === "object" &&
+      priorPayload !== null &&
+      !Array.isArray(priorPayload) &&
+      typeof (priorPayload as Record<string, unknown>)["messageFingerprint"] ===
+        "string";
+    const sameLogicalIntent =
+      typeof priorPayload === "object" &&
+      priorPayload !== null &&
+      !Array.isArray(priorPayload) &&
+      (priorPayload as Record<string, unknown>)["logicalFingerprint"] ===
+        fingerprint.logicalFingerprint;
+    const failureState = this.notificationFailure(stableId)?.state;
+    if (sameLogicalIntent && failureState === "rejected") return false;
+    const retryAuthorized = failureState === "retry-authorized";
+    if (legacyIntent && !legacyMatches && !retryAuthorized) {
+      throw new LegacyNotificationIntentMismatchError();
+    }
+    if (
+      !legacyMatches &&
+      !(retryAuthorized && (sameLogicalIntent || legacyIntent))
+    ) {
+      throw new Error(
+        `Effect ${JSON.stringify([effectKind, stableId])} changed durable identity`,
+      );
+    }
+    this.database
+      .prepare(
+        `UPDATE heddle_completed_effects
+         SET payload_json = ?
+         WHERE effect_kind = ? AND stable_id = ?`,
+      )
+      .run(payloadJson, effectKind, stableId);
+    return false;
+  }
+
+  notificationFailure(stableId: string): NotificationFailureRecord | undefined {
+    this.assertStableId("stableId", stableId);
+    const row = this.database
+      .prepare(
+        `SELECT stable_id AS stableId, occurrence, category, state
+         FROM heddle_notification_failures
+         WHERE stable_id = ?`,
+      )
+      .get(stableId) as NotificationFailureRecord | undefined;
+    return row;
+  }
+
+  recordNotificationFailure(
+    stableId: string,
+    category: NotificationFailureCategory,
+  ): NotificationFailureRecord {
+    this.assertStableId("stableId", stableId);
+    this.database
+      .prepare(
+        `INSERT INTO heddle_notification_failures
+           (stable_id, occurrence, category, state, recorded_at)
+         VALUES (?, 1, ?, 'rejected', ?)
+         ON CONFLICT(stable_id) DO UPDATE SET
+           occurrence = CASE
+             WHEN state = 'retry-authorized' THEN occurrence + 1
+             ELSE occurrence
+           END,
+           category = excluded.category,
+           state = 'rejected',
+           recorded_at = excluded.recorded_at`,
+      )
+      .run(stableId, category, new Date().toISOString());
+    return this.notificationFailure(stableId)!;
+  }
+
+  authorizeNotificationRetry(stableId: string, occurrence: number): boolean {
+    this.assertStableId("stableId", stableId);
+    if (!Number.isSafeInteger(occurrence) || occurrence <= 0) {
+      throw new TypeError("occurrence must be a positive safe integer");
+    }
+    return (
+      this.database
+        .prepare(
+          `UPDATE heddle_notification_failures
+           SET state = 'retry-authorized'
+           WHERE stable_id = ? AND occurrence = ? AND state = 'rejected'`,
+        )
+        .run(stableId, occurrence).changes > 0
+    );
   }
 
   recordEffectCompleted(effectKind: string, stableId: string): boolean {

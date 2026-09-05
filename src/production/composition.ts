@@ -46,6 +46,8 @@ import {
   DurableAttentionQueue,
   DurablePushoverNotifier,
   HttpPushoverTransport,
+  NotificationDeliveryError,
+  type OperatorPage,
   type PushoverTransport,
 } from "./durable-adapters.js";
 import {
@@ -64,7 +66,10 @@ import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { LifecycleAttentionBridge } from "./lifecycle-attention-bridge.js";
-import { productionErrorAttention } from "./error-visibility.js";
+import {
+  notificationDeliveryErrorAttention,
+  productionErrorAttention,
+} from "./error-visibility.js";
 import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
 import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
@@ -84,6 +89,7 @@ export type ProductionCompositionOptions = {
   configuration: ProductionConfiguration;
   onSchedulerError?: (error: unknown) => void;
   providerUsage: ProviderUsageSource;
+  pushoverFetch?: typeof globalThis.fetch;
   pushoverTransport?: PushoverTransport;
   resolveSystemPrompt?: SystemPromptResolver;
   t3?: ProductionT3Client;
@@ -146,9 +152,16 @@ export const createProductionComposition = (
       persistence,
       configuration.pushover,
       options.pushoverTransport ??
-        new HttpPushoverTransport(configuration.pushover.apiUrl),
+        new HttpPushoverTransport(
+          configuration.pushover.apiUrl,
+          options.pushoverFetch ?? globalThis.fetch,
+        ),
       options.afterPushoverTransportSuccess,
     );
+    const sendNotification = async (page: OperatorPage): Promise<void> => {
+      await pushover.send(page);
+      attention.resolveNotificationFailures(page.attentionId);
+    };
     const effects: Record<string, LifecycleEffect> =
       createMechanicalNodeEffects({ board, statuses: boardStatuses });
     const routing = new ProductRoutingCatalog(configuration);
@@ -190,12 +203,39 @@ export const createProductionComposition = (
       persistence,
       attention,
     );
+    const raiseNotificationDeliveryError = async (
+      error: NotificationDeliveryError,
+      page: OperatorPage,
+    ): Promise<void> => {
+      const runtime = persistence!
+        .listReconcilerRuntime()
+        .find(({ instanceId }) => instanceId === page.instanceId);
+      if (runtime === undefined) throw error;
+      const failure = notificationDeliveryErrorAttention({
+        error,
+        instanceId: page.instanceId,
+        stableId: page.attentionId,
+        taskId: runtime.taskId,
+      });
+      if (!(await attention.has(failure.attentionId))) {
+        await attention.raise(failure);
+      }
+    };
     const escalation = new EscalationCoordinator({
       attention: {
         raise: async (value) => {
           await attention.raise(value);
           await options.afterEscalationEffect?.("attention", value.attentionId);
         },
+      },
+      containPushoverFailure: async (error, opened) => {
+        if (!(error instanceof NotificationDeliveryError)) return false;
+        await raiseNotificationDeliveryError(error, {
+          attentionId: opened.attentionId,
+          instanceId: opened.instanceId,
+          message: `Heddle escalation in ${opened.stage}`,
+        });
+        return true;
       },
       parent: {
         steer: async (pending: ParentEscalation) => {
@@ -224,7 +264,7 @@ export const createProductionComposition = (
       persistence,
       pushover: {
         send: async (value) => {
-          await pushover.send({
+          await sendNotification({
             attentionId: value.attentionId,
             instanceId: value.instanceId,
             message: `Heddle escalation in ${value.stage}`,
@@ -366,7 +406,15 @@ export const createProductionComposition = (
             continue;
           }
           try {
-            await pageSessionAttentions(observation.attentions, pushover);
+            await pageSessionAttentions(
+              observation.attentions,
+              { send: sendNotification },
+              async (error, page) => {
+                if (!(error instanceof NotificationDeliveryError)) return false;
+                await raiseNotificationDeliveryError(error, page);
+                return true;
+              },
+            );
           } catch (error) {
             await raiseSessionProductionError(
               "session-page-delivery-failed",
