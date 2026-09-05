@@ -66,11 +66,16 @@ export const validateBlueprint = (
       inbound.some(
         (edge) =>
           nodesById.get(edge.source)?.uses !== "wait" ||
-          edge.disposition !== "approve",
+          edge.disposition !== "approve" ||
+          !blueprint.edges.some(
+            (candidate) =>
+              candidate.target === edge.source &&
+              nodesById.get(candidate.source)?.uses === "review-snapshot",
+          ),
       )
     ) {
       throw new BlueprintValidationError(
-        `Merge node ${JSON.stringify(node.id)} must be reached only from a wait node approve disposition`,
+        `Merge node ${JSON.stringify(node.id)} must be reached only from a review wait node approve disposition`,
       );
     }
   }

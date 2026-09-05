@@ -57,12 +57,11 @@ export const waitForEmptyProcessGroup = async (
 
 export const waitForSettledProcessGroup = async (
   processGroupId: number,
-  holdsLease: boolean,
 ): Promise<ProcessRecord[]> => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const observed = await readProcessGroup(processGroupId);
     const gitProcesses = observed.filter(({ command }) => command === "git");
-    if (gitProcesses.length === (holdsLease ? 1 : 0)) return observed;
+    if (gitProcesses.length === 0) return observed;
     await delay(20);
   }
   return readProcessGroup(processGroupId);

@@ -266,7 +266,27 @@ describe("organization lifecycle blueprint artifacts", () => {
       ) as Record<string, LifecycleEffect>;
 
       expect(() => validateBlueprint(blueprint, effects)).toThrow(
-        'Merge node "merge" must be reached only from a wait node approve disposition',
+        'Merge node "merge" must be reached only from a review wait node approve disposition',
+      );
+    },
+  );
+
+  it.each(["standard-delivery", "trivial"] as const)(
+    "rejects a %s merge approved by a wait without a current review snapshot",
+    async (artifactId) => {
+      const invalid = deliveryArtifact(artifactId);
+      invalid.edges.find(
+        ({ disposition }) => disposition === "approve",
+      )!.source = "implement";
+      const blueprint = { ...invalid, id: artifactId } as LifecycleBlueprint;
+      const effects = Object.fromEntries(
+        blueprint.nodes
+          .filter(({ uses }) => uses !== "wait")
+          .map(({ uses }) => [uses, async () => ({})]),
+      ) as Record<string, LifecycleEffect>;
+
+      expect(() => validateBlueprint(blueprint, effects)).toThrow(
+        'Merge node "merge" must be reached only from a review wait node approve disposition',
       );
     },
   );
