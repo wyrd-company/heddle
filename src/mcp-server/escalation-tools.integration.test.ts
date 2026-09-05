@@ -394,15 +394,18 @@ describe("workflow MCP escalation tools", () => {
       subject.persistence,
     ).resolve("token-replay");
     const abort = new globalThis.AbortController();
+    const escalationId = "e".repeat(128);
     const abandoned = subject.coordinator.escalate(
       binding,
       {
-        escalationId: "restart-choice",
+        escalationId,
         questions: sampleEscalationQuestions,
       },
       abort.signal,
     );
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
+    const attentionId = subject.attentions[0]!.attentionId;
+    expect(attentionId).toHaveLength(75);
     abort.abort(new Error("simulated process stop"));
     await expect(abandoned).rejects.toThrow(/simulated process stop/);
     subject.persistence.close();
@@ -431,7 +434,8 @@ describe("workflow MCP escalation tools", () => {
 
     expect(recovered.pendingEscalations("instance-replay")).toMatchObject([
       {
-        escalationId: "restart-choice",
+        attentionId,
+        escalationId,
         ownerSessionKey: "top",
       },
     ]);
@@ -439,27 +443,27 @@ describe("workflow MCP escalation tools", () => {
       recoveredPersistence,
     ).resolve("token-replay");
     const reattached = recovered.escalate(recoveredBinding, {
-      escalationId: "restart-choice",
+      escalationId,
       questions: sampleEscalationQuestions,
     });
     recovered.answerAsOperator({
       answers: sampleEscalationAnswer,
-      escalationId: "restart-choice",
+      escalationId,
       instanceId: "instance-replay",
       ownerSessionKey: "top",
     });
     await expect(reattached).resolves.toEqual({
       answers: sampleEscalationAnswer,
-      escalationId: "restart-choice",
+      escalationId,
     });
     await expect(
       recovered.escalate(recoveredBinding, {
-        escalationId: "restart-choice",
+        escalationId,
         questions: sampleEscalationQuestions,
       }),
     ).resolves.toEqual({
       answers: sampleEscalationAnswer,
-      escalationId: "restart-choice",
+      escalationId,
     });
     expect(
       recoveredPersistence

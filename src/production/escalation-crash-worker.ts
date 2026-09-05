@@ -8,6 +8,7 @@ import { join } from "node:path";
 import process from "node:process";
 
 import type { WorkflowMcpSessionBinding } from "../mcp-server/index.js";
+import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import {
   createProductionComposition,
   type ProductionT3Client,
@@ -168,6 +169,11 @@ const deliveries = (await readFile(deliveriesPath, "utf8").catch(() => ""))
   .split("\n")
   .filter(Boolean)
   .map((line) => JSON.parse(line) as PushoverMessage);
+const stableAttentionId = escalationAttentionId(
+  "task-17",
+  "task-17:implement",
+  "delivery-choice",
+);
 process.stdout.write(
   JSON.stringify({
     attentionIds: composition.attention
@@ -176,11 +182,11 @@ process.stdout.write(
     deliveries,
     effectCompleted: composition.persistence.effectCompleted(
       "pushover",
-      '["task-17","task-17:implement","delivery-choice"]',
+      stableAttentionId,
     ),
     effectIntentRecorded: composition.persistence.effectIntentRecorded(
       "pushover",
-      '["task-17","task-17:implement","delivery-choice"]',
+      stableAttentionId,
     ),
     routeTypes: composition.persistence
       .replayEvents("task-17")

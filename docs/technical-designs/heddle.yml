@@ -410,8 +410,12 @@ proposed-design:
     console without a page. Both adapters consume each pageable entry's stable
     attention ID. Every durable attention ID must fit the 128-character console
     attention identity bound; the durable adapter refuses an entry outside the
-    bound before persistence. A top-level escalation whose composed identity
-    exceeds the bound fails the escalate tool and is not raised as attention.
+    bound before persistence. A top-level escalation derives its external
+    attention ID as `escalation:` plus the SHA-256 digest of the lossless JSON
+    tuple containing its instance ID, owner session key, and escalation ID. The
+    75-character external identity is stable and sensitive to every component;
+    history, waiters, replay, and answer authority continue to use the exact
+    tuple components rather than the digest.
     Adapter persistence rejects a different payload fingerprint under the same
     stable ID. Attention insertion is idempotent. Pushover delivery is
     at-least-once: the provider has no idempotency or outcome-reconciliation
@@ -420,8 +424,12 @@ proposed-design:
     per ambiguous attempt.
     The stable attention ID is local outbox and deep-link identity, not provider
     deduplication. The escalation remains pending and answerable until the
-    accepted answer event is recorded. An
-    accepted console disposition invokes the canonical escalation or T3 action
+    accepted answer event is recorded. A pending escalation retains the
+    attention ID recorded by its open event; replay never remaps or deletes that
+    identity. If a persisted identity is outside the console bound, routing
+    fails with the bound diagnostic while the pending escalation remains durable
+    for explicit state repair. An accepted console disposition invokes the
+    canonical escalation or T3 action
     before recording the attention entry as resolved. The production adapter
     records the exact action and answers as durable intent, uses the attention ID
     as the T3 command identity, and reconciles pending local intent against the

@@ -6,6 +6,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  escalationAttentionId,
+  escalationKey,
   type PendingEscalation,
   validateAnswers,
   validateQuestions,
@@ -26,6 +28,38 @@ const pending = (): PendingEscalation => ({
 });
 
 describe("escalation contract", () => {
+  it("separates the bounded attention identity from the lossless key", () => {
+    const instanceId = "task-41";
+    const ownerSessionKey = "12345678-1234-4234-8234-123456789abc";
+    const escalationId = "e".repeat(128);
+
+    expect(escalationKey(instanceId, ownerSessionKey, escalationId)).toBe(
+      JSON.stringify([instanceId, ownerSessionKey, escalationId]),
+    );
+    const attentionId = escalationAttentionId(
+      instanceId,
+      ownerSessionKey,
+      escalationId,
+    );
+    expect(attentionId).toMatch(/^escalation:[0-9a-f]{64}$/);
+    expect(attentionId).toHaveLength(75);
+    expect(
+      escalationAttentionId(instanceId, ownerSessionKey, escalationId),
+    ).toBe(attentionId);
+    expect(
+      new Set([
+        attentionId,
+        escalationAttentionId("task-43", ownerSessionKey, escalationId),
+        escalationAttentionId(
+          instanceId,
+          "87654321-4321-4321-8321-cba987654321",
+          escalationId,
+        ),
+        escalationAttentionId(instanceId, ownerSessionKey, "f".repeat(128)),
+      ]),
+    ).toHaveLength(4);
+  });
+
   it("rejects duplicate question and option identities", () => {
     expect(() =>
       validateQuestions([

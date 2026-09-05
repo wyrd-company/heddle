@@ -6,6 +6,7 @@
 import type { JsonValue, PersistedEvent } from "../persistence/index.js";
 import {
   escalationAnswerSchema,
+  escalationAttentionId,
   escalationInputSchema,
   escalationKey,
   sameAnswers,
@@ -110,7 +111,7 @@ export class EscalationHistory {
     const parsed = escalationInputSchema.parse(input);
     validateQuestions(parsed.questions);
     const opened: PendingEscalation = {
-      attentionId: escalationKey(
+      attentionId: escalationAttentionId(
         binding.instance.instanceId,
         binding.sessionKey,
         parsed.escalationId,

@@ -13,6 +13,7 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import type { PushoverMessage } from "./durable-adapters.js";
 
@@ -159,11 +160,13 @@ next_id: 17
     const resumed = await runWorker("resume", root, deliveries);
     expect(resumed, resumed.stderr).toMatchObject({ code: 0 });
     const evidence = JSON.parse(resumed.stdout) as Evidence;
+    const stableId = escalationAttentionId(
+      "task-17",
+      "task-17:implement",
+      "delivery-choice",
+    );
     expect(
-      evidence.attentionIds.filter(
-        (attentionId) =>
-          attentionId === '["task-17","task-17:implement","delivery-choice"]',
-      ),
+      evidence.attentionIds.filter((attentionId) => attentionId === stableId),
     ).toHaveLength(1);
     expect(evidence.deliveries).toHaveLength(1);
     expect(evidence.routeTypes).toEqual([
@@ -175,7 +178,11 @@ next_id: 17
 
   it("retries one ambiguous Pushover delivery with the same stable payload", async () => {
     const deliveries = await prepare("pushover");
-    const stableId = '["task-17","task-17:implement","delivery-choice"]';
+    const stableId = escalationAttentionId(
+      "task-17",
+      "task-17:implement",
+      "delivery-choice",
+    );
 
     const crashed = await runWorker("crash-pushover", root, deliveries);
     expect(crashed, crashed.stderr).toMatchObject({ code: 86 });

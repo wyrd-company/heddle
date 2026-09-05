@@ -3,6 +3,8 @@
 //   implements: heddle
 // ---
 
+import { createHash } from "node:crypto";
+
 import { z } from "zod";
 
 const identifier = z.string().trim().min(1).max(128);
@@ -79,6 +81,15 @@ export const escalationKey = (
   ownerSessionKey: string,
   escalationId: string,
 ): string => JSON.stringify([instanceId, ownerSessionKey, escalationId]);
+
+export const escalationAttentionId = (
+  instanceId: string,
+  ownerSessionKey: string,
+  escalationId: string,
+): string =>
+  `escalation:${createHash("sha256")
+    .update(escalationKey(instanceId, ownerSessionKey, escalationId))
+    .digest("hex")}`;
 
 export const validateQuestions = (questions: EscalationQuestion[]): void => {
   const questionIds = new Set<string>();

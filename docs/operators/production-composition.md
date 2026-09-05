@@ -418,6 +418,16 @@ intent and completion records. Reusing an attention ID with a different payload
 fingerprint fails closed as a durable-identity disagreement. A restart replays
 an unfinished escalation route without adding a second attention entry. The
 current console catalog lists only unresolved attention.
+
+An escalation attention ID is `escalation:` plus a SHA-256 digest of the exact
+instance, owner-session, and escalation identity tuple. The exact components
+remain in the durable escalation event and console action contract. If replay
+reports that a recorded attention identity exceeds the console bound, stop the
+service and preserve the state directory. Restore a known-good state backup from
+before that pending escalation, or hold the state for a purpose-built repair.
+Do not delete or rewrite the event or attention row by hand; the pending event
+still blocks its session from stopping.
+
 An accepted disposition performs its canonical effect before marking the entry
 resolved. The resolved record remains durable so the same stable ID cannot raise
 a second entry after restart. The production action port records the exact action

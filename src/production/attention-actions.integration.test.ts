@@ -5,7 +5,10 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createConsoleAttention } from "../console/index.js";
+import {
+  createConsoleAttention,
+  MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
+} from "../console/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -38,7 +41,7 @@ describe("production attention actions", () => {
     await cleanup?.();
   });
 
-  it("answers one blocked escalation and durably resolves its entry", async () => {
+  it("answers a maximum-length escalation through durable attention", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     const composition = createProductionComposition({
@@ -60,8 +63,9 @@ describe("production attention actions", () => {
       taskContext: { id: fixture.taskId, title: "Example Item" },
       token: "correlation-token",
     };
+    const escalationId = "e".repeat(128);
     const pending = composition.escalation.escalate(binding, {
-      escalationId: "delivery-choice",
+      escalationId,
       questions: [
         {
           id: "decision",
@@ -73,10 +77,15 @@ describe("production attention actions", () => {
         },
       ],
     });
+    void pending.catch(() => undefined);
     await vi.waitFor(() =>
       expect(composition.attention.list()).toHaveLength(1),
     );
     const attention = composition.attention.list()[0]!;
+    expect(attention.attentionId).toHaveLength(75);
+    expect(attention.attentionId.length).toBeLessThanOrEqual(
+      MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
+    );
     await expect(
       composition.consoleActions.execute({
         action: attention.actions[0]!,
@@ -99,7 +108,7 @@ describe("production attention actions", () => {
 
     await expect(pending).resolves.toEqual({
       answers: { decision: "b" },
-      escalationId: "delivery-choice",
+      escalationId,
     });
     expect(composition.attention.list()).toEqual([]);
     expect(
@@ -108,6 +117,114 @@ describe("production attention actions", () => {
         attention.attentionId,
       ),
     ).toBe(true);
+    await composition.close();
+  });
+
+  it("retains an overlength raw pending identity for explicit repair", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "e".repeat(128);
+    const attentionId = JSON.stringify([
+      runtime.instanceId,
+      runtime.sessionKey,
+      escalationId,
+    ]);
+    expect(attentionId.length).toBeGreaterThan(
+      MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
+    );
+    composition.persistence.appendEvent(
+      runtime.instanceId,
+      "mcp:escalation-opened",
+      {
+        attentionId,
+        escalationId,
+        instanceId: runtime.instanceId,
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: runtime.sessionKey!,
+        questions: [
+          {
+            id: "decision",
+            options: [
+              { description: "Use route A", id: "a", label: "Route A" },
+              { description: "Use route B", id: "b", label: "Route B" },
+            ],
+            prompt: "Choose a route",
+          },
+        ],
+        stage: runtime.stageId!,
+      },
+    );
+
+    await expect(composition.escalation.replayPendingRoutes()).rejects.toThrow(
+      `exceeds the console attention identity bound of ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
+    );
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    expect(composition.attention.list()).toEqual([]);
+    await composition.close();
+  });
+
+  it("replays a within-bound raw pending identity without remapping", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "legacy-choice";
+    const attentionId = JSON.stringify([
+      runtime.instanceId,
+      runtime.sessionKey,
+      escalationId,
+    ]);
+    expect(attentionId.length).toBeLessThanOrEqual(
+      MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
+    );
+    composition.persistence.appendEvent(
+      runtime.instanceId,
+      "mcp:escalation-opened",
+      {
+        attentionId,
+        escalationId,
+        instanceId: runtime.instanceId,
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: runtime.sessionKey!,
+        questions: [
+          {
+            id: "decision",
+            options: [
+              { description: "Use route A", id: "a", label: "Route A" },
+              { description: "Use route B", id: "b", label: "Route B" },
+            ],
+            prompt: "Choose a route",
+          },
+        ],
+        stage: runtime.stageId!,
+      },
+    );
+
+    await composition.escalation.replayPendingRoutes();
+    expect(composition.attention.list()).toMatchObject([{ attentionId }]);
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
     await composition.close();
   });
 
