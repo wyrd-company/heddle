@@ -1345,6 +1345,35 @@ const auditView = async (baseUrl, viewport, view) => {
   );
 };
 
+const assertNotificationRecoveryDetails = async () => {
+  const recovery = await snapshotText(
+    '.attention-entry[data-attention-id="notification-recovery-a"]',
+  );
+  invariant(
+    recovery.includes("Recipient") &&
+      recovery.includes("Primary operator") &&
+      recovery.includes("Intended message") &&
+      recovery.includes("A sample needs attention.") &&
+      recovery.includes("Retry notification"),
+    "notification-recovery-verification",
+    `recovery card lacks its accessible verification details: ${recovery}`,
+  );
+};
+
+const assertNotificationRecoveryOrder = async () => {
+  const order = await evaluate(`(() => {
+    const entry = document.querySelector('.attention-entry[data-attention-id="notification-recovery-a"]');
+    const details = entry.querySelector('.attention-notification-verification');
+    const retry = entry.querySelector('.attention-action');
+    return details.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING;
+  })()`);
+  invariant(
+    order !== 0,
+    "notification-recovery-before-retry",
+    "verification details do not precede Retry notification",
+  );
+};
+
 const auditIntermediateAttention = async (baseUrl) => {
   for (const width of [679, 690, 740, 800, 801]) {
     fixture.reset();
@@ -1371,29 +1400,8 @@ const auditIntermediateAttention = async (baseUrl) => {
     `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=notification-recovery-a`,
   );
   await assertLifecycleSettled();
-  const recovery = await snapshotText(
-    '.attention-entry[data-attention-id="notification-recovery-a"]',
-  );
-  invariant(
-    recovery.includes("Recipient") &&
-      recovery.includes("Primary operator") &&
-      recovery.includes("Intended message") &&
-      recovery.includes("A sample needs attention.") &&
-      recovery.includes("Retry notification"),
-    "notification-recovery-verification",
-    `recovery card lacks its accessible verification details: ${recovery}`,
-  );
-  const order = await evaluate(`(() => {
-    const entry = document.querySelector('.attention-entry[data-attention-id="notification-recovery-a"]');
-    const details = entry.querySelector('.attention-notification-verification');
-    const retry = entry.querySelector('.attention-action');
-    return details.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING;
-  })()`);
-  invariant(
-    order !== 0,
-    "notification-recovery-before-retry",
-    "verification details do not precede Retry notification",
-  );
+  await assertNotificationRecoveryDetails();
+  await assertNotificationRecoveryOrder();
   const publicAttention = await evaluate(
     `fetch('/api/attention').then((response) => response.text())`,
   );
@@ -1459,6 +1467,35 @@ const mutationBattery = async (baseUrl) => {
     );
   }
   await setViewport({ height: 844, width: 390 });
+
+  fixture.reset();
+  await open(
+    `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=notification-recovery-a`,
+  );
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "notification-recovery-verification",
+    () =>
+      evaluate(
+        `document.querySelector('.attention-notification-verification dt').textContent = "Destination"`,
+      ),
+    assertNotificationRecoveryDetails,
+  );
+
+  fixture.reset();
+  await open(
+    `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=notification-recovery-a`,
+  );
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "notification-recovery-before-retry",
+    () =>
+      evaluate(`(() => {
+        const entry = document.querySelector('.attention-entry[data-attention-id="notification-recovery-a"]');
+        entry.append(entry.querySelector('.attention-notification-verification'));
+      })()`),
+    assertNotificationRecoveryOrder,
+  );
 
   await open(`${baseUrl}/?view=dependencies&scope=epic%3A40`);
   await assertPageReady("4 visible nodes");
