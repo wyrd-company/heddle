@@ -38,6 +38,50 @@ const notificationFailures = (
         payload["notificationStableId"] === stableId,
     );
 
+const openEscalation = (
+  composition: ProductionComposition,
+  runtime: { instanceId: string; sessionKey: string; stageId: string },
+  escalationId: string,
+  prompt: string,
+): string => {
+  const attentionId = escalationAttentionId(
+    runtime.instanceId,
+    runtime.sessionKey,
+    escalationId,
+  );
+  composition.persistence.appendEvent(
+    runtime.instanceId,
+    "mcp:escalation-opened",
+    {
+      attentionId,
+      escalationId,
+      instanceId: runtime.instanceId,
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: runtime.sessionKey,
+      questions: [
+        {
+          id: "selection",
+          options: [
+            {
+              description: "Use the first sample",
+              id: "first",
+              label: "First",
+            },
+            {
+              description: "Use the second sample",
+              id: "second",
+              label: "Second",
+            },
+          ],
+          prompt,
+        },
+      ],
+      stage: runtime.stageId,
+    },
+  );
+  return attentionId;
+};
+
 describe("production notification failure projection", () => {
   let cleanup: (() => Promise<void>) | undefined;
 
@@ -91,47 +135,24 @@ describe("production notification failure projection", () => {
     const first = createComposition();
     await first.start();
     const runtime = first.persistence.listReconcilerRuntime()[0]!;
-    const openEscalation = (escalationId: string, prompt: string) => {
-      const attentionId = escalationAttentionId(
-        runtime.instanceId,
-        runtime.sessionKey!,
-        escalationId,
-      );
-      first.persistence.appendEvent(
-        runtime.instanceId,
-        "mcp:escalation-opened",
-        {
-          attentionId,
-          escalationId,
-          instanceId: runtime.instanceId,
-          openedAt: "2026-01-01T00:00:00.000Z",
-          ownerSessionKey: runtime.sessionKey!,
-          questions: [
-            {
-              id: "selection",
-              options: [
-                {
-                  description: "Use the first sample",
-                  id: "first",
-                  label: "First",
-                },
-                {
-                  description: "Use the second sample",
-                  id: "second",
-                  label: "Second",
-                },
-              ],
-              prompt,
-            },
-          ],
-          stage: runtime.stageId!,
-        },
-      );
-      return attentionId;
-    };
     const targetPrompt = "Which sample should be selected?";
-    const targetId = openEscalation("primary-choice", targetPrompt);
+    const targetId = openEscalation(
+      first,
+      {
+        instanceId: runtime.instanceId,
+        sessionKey: runtime.sessionKey!,
+        stageId: runtime.stageId!,
+      },
+      "primary-choice",
+      targetPrompt,
+    );
     const laterId = openEscalation(
+      first,
+      {
+        instanceId: runtime.instanceId,
+        sessionKey: runtime.sessionKey!,
+        stageId: runtime.stageId!,
+      },
       "secondary-choice",
       "Which alternate sample should be selected?",
     );
@@ -308,5 +329,155 @@ describe("production notification failure projection", () => {
       }),
     );
     await afterActionRestart.close();
+  });
+
+  it("projects a changed retryable category without stopping later routes or reconciliation", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    let now = 10_000;
+    let attempt = 0;
+    const fetch = vi.fn(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        return new globalThis.Response(JSON.stringify({ status: 0 }), {
+          status: 503,
+        });
+      }
+      if (attempt === 3) throw new Error("Synthetic network failure");
+      return new globalThis.Response(JSON.stringify({ status: 1 }), {
+        status: 200,
+      });
+    });
+    const createComposition = () =>
+      createProductionComposition({
+        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration: fixture.configuration,
+        providerUsage: {
+          readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        },
+        notificationNow: () => now,
+        pushoverFetch: fetch,
+        t3: new SyntheticT3(),
+      });
+    const first = createComposition();
+    await first.start();
+    const runtime = first.persistence.listReconcilerRuntime()[0]!;
+    if (runtime.sessionKey === undefined || runtime.stageId === undefined) {
+      throw new Error("Missing sample runtime session");
+    }
+    const escalationRuntime = {
+      instanceId: runtime.instanceId,
+      sessionKey: runtime.sessionKey,
+      stageId: runtime.stageId,
+    };
+    const targetPrompt = "Which sample should be retained?";
+    const targetId = openEscalation(
+      first,
+      escalationRuntime,
+      "category-change",
+      targetPrompt,
+    );
+    const completedRouteId = openEscalation(
+      first,
+      escalationRuntime,
+      "completed-route",
+      "Which completed-route sample should be retained?",
+    );
+
+    await first.scheduler.trigger();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const initialTargetFailures = notificationFailures(first, targetId);
+    expect(initialTargetFailures).toMatchObject([
+      {
+        payload: {
+          code: "notification-delivery-retryable",
+          notificationCategory: "provider-unavailable",
+        },
+      },
+    ]);
+    const initialFailureId = initialTargetFailures[0]!.attentionId;
+    expect(
+      first.persistence.effectCompleted("pushover", completedRouteId),
+    ).toBe(true);
+
+    const laterRouteId = openEscalation(
+      first,
+      escalationRuntime,
+      "later-route",
+      "Which later-route sample should be retained?",
+    );
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Later Independent Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+
+    now = 15_000;
+    await first.scheduler.trigger();
+    expect(fetch).toHaveBeenCalledTimes(4);
+    const changedTargetFailures = notificationFailures(first, targetId);
+    expect(changedTargetFailures).toMatchObject([
+      {
+        payload: {
+          code: "notification-delivery-retryable",
+          notificationCategory: "network-failure",
+        },
+      },
+    ]);
+    expect(changedTargetFailures[0]!.attentionId).not.toBe(initialFailureId);
+    expect(first.persistence.hasAttention(initialFailureId)).toBe(true);
+    expect(first.persistence.effectCompleted("pushover", laterRouteId)).toBe(
+      true,
+    );
+    expect(
+      first.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === independentTaskId),
+    ).toMatchObject({ state: "waiting" });
+    expect(
+      first.escalation.pendingEscalations(runtime.instanceId),
+    ).toContainEqual(
+      expect.objectContaining({
+        attentionId: targetId,
+        questions: [expect.objectContaining({ prompt: targetPrompt })],
+      }),
+    );
+    await first.close();
+
+    const restarted = createComposition();
+    await restarted.start();
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(notificationFailures(restarted, targetId)).toMatchObject([
+      {
+        payload: {
+          code: "notification-delivery-retryable",
+          notificationCategory: "network-failure",
+        },
+      },
+    ]);
+    expect(
+      restarted.persistence.effectCompleted("pushover", laterRouteId),
+    ).toBe(true);
+    expect(
+      restarted.escalation.pendingEscalations(runtime.instanceId),
+    ).toContainEqual(
+      expect.objectContaining({
+        attentionId: targetId,
+        questions: [expect.objectContaining({ prompt: targetPrompt })],
+      }),
+    );
+    await restarted.close();
   });
 });

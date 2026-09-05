@@ -58,8 +58,18 @@ export const productionErrorAttention = (input: {
   };
 };
 
-const notificationIdentity = (stableId: string): string =>
-  createHash("sha256").update(stableId).digest("hex").slice(0, 16);
+const notificationIdentity = (
+  stableId: string,
+  retryableCategory?: NotificationDeliveryError["category"],
+): string =>
+  createHash("sha256")
+    .update(
+      retryableCategory === undefined
+        ? stableId
+        : JSON.stringify({ retryableCategory, stableId }),
+    )
+    .digest("hex")
+    .slice(0, 16);
 
 export const notificationDeliveryErrorAttention = (input: {
   error: NotificationDeliveryError;
@@ -67,9 +77,12 @@ export const notificationDeliveryErrorAttention = (input: {
   stableId: string;
   taskId: number;
 }): NotificationDeliveryAttention => {
-  const identity = notificationIdentity(input.stableId);
   const occurrence = input.error.occurrence;
   const retryable = input.error.disposition === "retryable";
+  const identity = notificationIdentity(
+    input.stableId,
+    retryable ? input.error.category : undefined,
+  );
   const code = retryable
     ? "notification-delivery-retryable"
     : input.error.disposition === "operator-action"
