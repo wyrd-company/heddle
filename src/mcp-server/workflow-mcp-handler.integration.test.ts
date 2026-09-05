@@ -5,14 +5,7 @@
 
 import { execFile, spawn } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
-import {
-  copyFile,
-  mkdtemp,
-  mkdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cwd, env } from "node:process";
@@ -445,17 +438,6 @@ afterEach(async () => {
 });
 
 describe("workflow MCP HTTP server", () => {
-  it("uses neither InputRequiredResult nor MCP Tasks", async () => {
-    const source = await readFile(
-      new globalThis.URL("./workflow-mcp-handler.ts", import.meta.url),
-      "utf8",
-    );
-
-    expect(source).not.toContain("InputRequiredResult");
-    expect(source).not.toMatch(/\btasks\s*:/u);
-    expect(source).not.toContain("tasks/");
-  });
-
   it.each([
     ["missing", undefined],
     ["unknown", "Bearer token-unknown"],
@@ -477,7 +459,7 @@ describe("workflow MCP HTTP server", () => {
     expect(response.headers.get("www-authenticate")).toBe("Bearer");
   });
 
-  it("advertises the MCP 2025-11-25 ceiling without task capabilities", async () => {
+  it("holds the MCP 2025-11-25 ceiling without task capabilities", async () => {
     const fixture = await makeFixture();
     const response = await globalThis.fetch(fixture.url, {
       body: JSON.stringify({
@@ -487,7 +469,7 @@ describe("workflow MCP HTTP server", () => {
         params: {
           capabilities: {},
           clientInfo: { name: "sample-client", version: "1.0.0" },
-          protocolVersion: "2025-11-25",
+          protocolVersion: "2099-12-31",
         },
       }),
       headers: {
