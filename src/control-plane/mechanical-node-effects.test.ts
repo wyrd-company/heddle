@@ -509,6 +509,65 @@ describe("delivery mechanical nodes", () => {
     expect(approvals).toBe(1);
   });
 
+  it("records a new approval when the latest accepted event has another basis", async () => {
+    const fixture = await prepareCommittedChange();
+    const firstSnapshot = await ensureReviewSnapshot(fixture.change);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "approve",
+      firstSnapshot.snapshotId,
+      "--basis",
+      `${firstSnapshot.sourceHead}:${firstSnapshot.baseHead}`,
+    ]);
+    await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");
+    await git(fixture.worktreePath, "add", "notes.txt");
+    await git(fixture.worktreePath, "commit", "--quiet", "-m", "add note");
+    const nextSnapshot = await ensureReviewSnapshot(fixture.change);
+    expect(nextSnapshot.snapshotId).toBe(firstSnapshot.snapshotId);
+    expect(nextSnapshot.latestEvent).toMatchObject({
+      baseHead: firstSnapshot.baseHead,
+      sourceHead: firstSnapshot.sourceHead,
+      verdict: "accepted",
+    });
+
+    const approvals: string[][] = [];
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (executable === "gitpr" && arguments_[0] === "approve") {
+        approvals.push(arguments_);
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+    await expect(
+      mergeReviewSnapshot(fixture.change, nextSnapshot, command),
+    ).resolves.toMatchObject({ merged: true });
+    expect(approvals).toEqual([
+      [
+        "approve",
+        nextSnapshot.snapshotId,
+        "--basis",
+        `${nextSnapshot.sourceHead}:${nextSnapshot.baseHead}`,
+      ],
+    ]);
+    expect(
+      await readReviewSnapshot(
+        fixture.sourcePath,
+        nextSnapshot.snapshotId,
+        runCommand,
+      ),
+    ).toMatchObject({
+      latestEvent: {
+        baseHead: nextSnapshot.baseHead,
+        sourceHead: nextSnapshot.sourceHead,
+        verdict: "accepted",
+      },
+      state: "merged",
+    });
+  });
+
   it("fails a conflicting merge and preserves both branch heads", async () => {
     const fixture = await prepareCommittedChange();
     await writeFile(join(fixture.sourcePath, "inventory.txt"), "replacement\n");
