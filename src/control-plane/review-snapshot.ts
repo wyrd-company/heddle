@@ -140,6 +140,11 @@ interface GitprReviewRecord {
   state: ReviewSnapshot["state"];
 }
 
+type GitprReviewMetadata = Pick<
+  GitprReviewRecord,
+  "baseBranch" | "schema" | "snapshotId" | "sourceBranch" | "state"
+>;
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -244,16 +249,61 @@ const readReviewRecord = async (
   return parseReviewRecord(source, "reject")!;
 };
 
-const readReviewRecordIfSupported = async (
+const readReviewMetadataIfSupported = async (
   repositoryRoot: string,
   snapshotId: string,
+  metaVersion: string,
   command: CommandRunner,
-): Promise<GitprReviewRecord | undefined> => {
-  const source = await runMechanicalGit(command, repositoryRoot, [
-    "show",
-    `refs/gitpr/pr/${snapshotId}/meta:pr.yaml`,
-  ]);
-  return parseReviewRecord(source, "skip");
+): Promise<GitprReviewMetadata | undefined> => {
+  let source: string;
+  try {
+    source = await runMechanicalGit(command, repositoryRoot, [
+      "grep",
+      "-E",
+      "^(schema|id|source_branch|base_branch|state):",
+      metaVersion,
+      "--",
+      "pr.yaml",
+    ]);
+  } catch (error) {
+    if ((error as { code?: number | string }).code === 1) return undefined;
+    throw error;
+  }
+  const prefix = `${metaVersion}:pr.yaml:`;
+  const projected = source
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => {
+      if (!line.startsWith(prefix)) {
+        throw new Error(
+          `gitpr snapshot ${JSON.stringify(snapshotId)} returned invalid metadata`,
+        );
+      }
+      return line.slice(prefix.length);
+    })
+    .join("\n");
+  let parsed: unknown;
+  try {
+    parsed = parse(projected);
+  } catch (error) {
+    throw new Error(
+      `gitpr snapshot metadata is invalid YAML: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!isObject(parsed) || parsed["schema"] !== 2) return undefined;
+  const state = requiredString(parsed, "state");
+  if (state !== "open" && state !== "merged" && state !== "closed") {
+    throw new Error(
+      `gitpr snapshot has invalid state ${JSON.stringify(state)}`,
+    );
+  }
+  return {
+    baseBranch: requiredString(parsed, "base_branch"),
+    schema: 2,
+    snapshotId: requiredString(parsed, "id"),
+    sourceBranch: requiredString(parsed, "source_branch"),
+    state,
+  };
 };
 
 const reviewSnapshotFromRecord = (
@@ -329,33 +379,52 @@ const matchingOpenSnapshot = async (
 ): Promise<ReviewSnapshot | undefined> => {
   const refs = await runMechanicalGit(command, change.repositoryRoot, [
     "for-each-ref",
-    "--format=%(refname)",
-    "refs/gitpr/pr",
+    "--format=%(refname)%09%(objectname)",
+    "refs/gitpr/index/open",
   ]);
-  const ids = [
-    ...new Set(
-      refs
-        .split("\n")
-        .map((ref) => /^refs\/gitpr\/pr\/([^/]+)\/meta$/.exec(ref)?.[1])
-        .filter((id): id is string => id !== undefined),
-    ),
-  ].sort();
-  const records = (
-    await Promise.all(
-      ids.map((id) =>
-        readReviewRecordIfSupported(change.repositoryRoot, id, command),
-      ),
+  const indexed = refs
+    .split("\n")
+    .map((line) =>
+      /^refs\/gitpr\/index\/open\/([0-9A-Z]+)\t([0-9a-f]{40})$/.exec(line),
     )
-  ).filter((record): record is GitprReviewRecord => record !== undefined);
-  const record = records.find(
-    (candidate) =>
-      candidate.state === "open" &&
-      candidate.sourceBranch === change.branch &&
-      candidate.baseBranch === change.baseBranch,
-  );
-  return record === undefined
-    ? undefined
-    : reviewSnapshotFromRecord(record, sourceHead, baseHead);
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => ({ id: match[1]!, metaVersion: match[2]! }))
+    .sort(({ id: left }, { id: right }) => left.localeCompare(right));
+  for (const { id, metaVersion } of indexed) {
+    const metadata = await readReviewMetadataIfSupported(
+      change.repositoryRoot,
+      id,
+      metaVersion,
+      command,
+    );
+    if (
+      metadata?.state !== "open" ||
+      metadata.sourceBranch !== change.branch ||
+      metadata.baseBranch !== change.baseBranch
+    ) {
+      continue;
+    }
+    if (metadata.snapshotId !== id) {
+      throw new Error("gitpr snapshot ID does not match its ref");
+    }
+    const record = parseReviewRecord(
+      await runMechanicalGit(command, change.repositoryRoot, [
+        "show",
+        `${metaVersion}:pr.yaml`,
+      ]),
+      "reject",
+    )!;
+    if (
+      record.snapshotId !== id ||
+      record.state !== metadata.state ||
+      record.sourceBranch !== metadata.sourceBranch ||
+      record.baseBranch !== metadata.baseBranch
+    ) {
+      throw new Error("gitpr snapshot metadata does not match its record");
+    }
+    return reviewSnapshotFromRecord(record, sourceHead, baseHead);
+  }
+  return undefined;
 };
 
 export const ensureReviewSnapshot = async (

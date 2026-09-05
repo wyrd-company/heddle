@@ -56,6 +56,7 @@ const writeGitprMetaRef = async (
   repositoryRoot: string,
   snapshotId: string,
   content: string,
+  state?: "open" | "merged" | "closed",
 ): Promise<void> => {
   const blob = (
     await runCommand(
@@ -82,6 +83,14 @@ const writeGitprMetaRef = async (
     `refs/gitpr/pr/${snapshotId}/meta`,
     commit,
   );
+  if (state !== undefined) {
+    await git(
+      repositoryRoot,
+      "update-ref",
+      `refs/gitpr/index/${state}/${snapshotId}`,
+      commit,
+    );
+  }
 };
 
 const makeChange = async (): Promise<{
@@ -317,7 +326,7 @@ describe("delivery mechanical nodes", () => {
     ).rejects.toThrow(/invalid state.*approved/);
   });
 
-  it("ignores an unrelated legacy record when finding the open review", async () => {
+  it("ignores an unrelated oversized legacy record when finding the open review", async () => {
     const fixture = await prepareCommittedChange();
     await writeGitprMetaRef(
       fixture.sourcePath,
@@ -327,13 +336,48 @@ describe("delivery mechanical nodes", () => {
         "status: open",
         "source_branch: task/other",
         "base_branch: main",
+        "file_diffs:",
+        "  - patch: |",
+        `      ${"x".repeat(11 * 1024 * 1024)}`,
       ].join("\n"),
+      "open",
     );
 
     const snapshot = await ensureReviewSnapshot(fixture.change);
+    const replayed = await ensureReviewSnapshot(fixture.change);
 
     expect(snapshot).toMatchObject({ schema: 2, state: "open" });
     expect(snapshot.snapshotId).not.toBe("LEGACY1");
+    expect(replayed.snapshotId).toBe(snapshot.snapshotId);
+  });
+
+  it("fails closed when the matching indexed record is corrupt", async () => {
+    const fixture = await prepareCommittedChange();
+    await writeGitprMetaRef(
+      fixture.sourcePath,
+      "BROKEN1",
+      [
+        "schema: 2",
+        "id: BROKEN1",
+        "source_branch: task/change",
+        "base_branch: main",
+        "state: open",
+        "events: [",
+      ].join("\n"),
+      "open",
+    );
+
+    await expect(ensureReviewSnapshot(fixture.change)).rejects.toThrow(
+      /invalid YAML/,
+    );
+    expect(
+      await git(
+        fixture.sourcePath,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/gitpr/pr",
+      ),
+    ).toBe("refs/gitpr/pr/BROKEN1/meta\n");
   });
 
   it("preserves a rejected verdict for the exact review basis", async () => {
