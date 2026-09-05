@@ -204,8 +204,8 @@ describe("production notification failure projection", () => {
       ],
     });
     expect(notificationFailures(first, neighboringStableId)).toHaveLength(1);
-    await expect(first.attention.has(unrelated.attentionId)).resolves.toBe(
-      true,
+    expect(first.persistence.listAttention()).toContainEqual(
+      expect.objectContaining({ attentionId: unrelated.attentionId }),
     );
     expect(
       first.escalation.pendingEscalations(runtime.instanceId),
@@ -241,8 +241,8 @@ describe("production notification failure projection", () => {
     expect(notificationFailures(restarted, neighboringStableId)).toHaveLength(
       1,
     );
-    await expect(restarted.attention.has(unrelated.attentionId)).resolves.toBe(
-      true,
+    expect(restarted.persistence.listAttention()).toContainEqual(
+      expect.objectContaining({ attentionId: unrelated.attentionId }),
     );
     expect(restarted.persistence.effectCompleted("pushover", targetId)).toBe(
       false,
