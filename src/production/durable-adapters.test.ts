@@ -301,7 +301,7 @@ describe("durable production adapters", () => {
       status: 400,
     },
   ])(
-    "classifies permanent Pushover $category without exposing its body",
+    "classifies HTTP $status as permanent Pushover $category without exposing its body",
     async ({ body, category, status }) => {
       const transport = new HttpPushoverTransport(
         "https://notify.invalid/messages",
@@ -337,7 +337,7 @@ describe("durable production adapters", () => {
     { body: { status: 0 }, category: "provider-unavailable", status: 503 },
     { body: "not-json", category: "invalid-response", status: 200 },
   ])(
-    "classifies retryable Pushover $category",
+    "classifies HTTP $status as retryable Pushover $category",
     async ({ body, category, status }) => {
       const transport = new HttpPushoverTransport(
         "https://notify.invalid/messages",
