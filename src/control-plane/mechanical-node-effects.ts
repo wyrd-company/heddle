@@ -11,6 +11,8 @@ import {
   type CleanupMergedChangeResult,
   type MergeSnapshotResult,
   type ReviewBasisDriftRemediationCause,
+  type ReviewIntegrationRemediationCause,
+  type ReviewSourceBehindRemediationCause,
 } from "./review-landing.js";
 import {
   defaultMechanicalCommand,
@@ -31,6 +33,8 @@ export {
   type MechanicalChangeContext,
   type MergeSnapshotResult,
   type ReviewBasisDriftRemediationCause,
+  type ReviewIntegrationRemediationCause,
+  type ReviewSourceBehindRemediationCause,
   type ReviewSnapshot,
 };
 

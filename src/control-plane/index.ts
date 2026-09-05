@@ -81,6 +81,8 @@ export {
   type MechanicalNodeEffectOptions,
   type MergeSnapshotResult,
   type ReviewBasisDriftRemediationCause,
+  type ReviewIntegrationRemediationCause,
+  type ReviewSourceBehindRemediationCause,
   type ReviewSnapshot,
 } from "./mechanical-node-effects.js";
 export {

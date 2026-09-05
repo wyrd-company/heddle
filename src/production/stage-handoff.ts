@@ -6,7 +6,7 @@
 import type { FlowcraftEvent } from "flowcraft";
 
 import type {
-  ReviewBasisDriftRemediationCause,
+  ReviewIntegrationRemediationCause,
   StageHandoffInput,
 } from "../control-plane/index.js";
 import {
@@ -40,13 +40,14 @@ const reviewObjectId = (value: unknown): value is string =>
 const nonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value !== "";
 
-const reviewBasisDriftCause = (
+const reviewIntegrationCause = (
   value: unknown,
-): ReviewBasisDriftRemediationCause | undefined => {
+): ReviewIntegrationRemediationCause | undefined => {
   const candidate = asRecord(value);
   const snapshotId = candidate?.["snapshotId"];
   if (
-    candidate?.["kind"] !== "review-basis-drift" ||
+    (candidate?.["kind"] !== "review-basis-drift" &&
+      candidate?.["kind"] !== "review-source-behind") ||
     !nonEmptyString(snapshotId) ||
     !/^[0-9A-Z]+$/.test(snapshotId) ||
     !nonEmptyString(candidate["sourceBranch"]) ||
@@ -58,15 +59,22 @@ const reviewBasisDriftCause = (
   ) {
     return undefined;
   }
-  return candidate as ReviewBasisDriftRemediationCause;
+  if (
+    candidate["kind"] === "review-source-behind" &&
+    (candidate["currentSourceHead"] !== candidate["reviewedSourceHead"] ||
+      candidate["currentTargetHead"] !== candidate["reviewedBaseHead"])
+  ) {
+    return undefined;
+  }
+  return candidate as ReviewIntegrationRemediationCause;
 };
 
-const reviewBasisDriftCauseFromMechanicalOutput = (
+const reviewIntegrationCauseFromMechanicalOutput = (
   value: unknown,
-): ReviewBasisDriftRemediationCause | undefined => {
+): ReviewIntegrationRemediationCause | undefined => {
   const output = asRecord(value);
   const dispositions = asRecord(output?.["dispositions"]);
-  const cause = reviewBasisDriftCause(output?.["remediationCause"]);
+  const cause = reviewIntegrationCause(output?.["remediationCause"]);
   return cause !== undefined &&
     output?.["alreadyMerged"] === false &&
     output["merged"] === false &&
@@ -211,8 +219,8 @@ export const readProductionHandoffStage = async (input: {
     context.serializedContext,
     input.stageId,
   );
-  const driftCause = currentMechanicalOutputs
-    .map(reviewBasisDriftCauseFromMechanicalOutput)
+  const integrationCause = currentMechanicalOutputs
+    .map(reviewIntegrationCauseFromMechanicalOutput)
     .find((cause) => cause !== undefined);
   const priorStage = outputs.at(-1);
   const review = priorStage?.output;
@@ -224,9 +232,9 @@ export const readProductionHandoffStage = async (input: {
   // One resume either runs merge after approval or carries rejection findings.
   // The conjunct makes that lifecycle exclusivity explicit for decoded data.
   const findings =
-    driftCause === undefined && hasReviewFindings ? reviewFindings : [];
+    integrationCause === undefined && hasReviewFindings ? reviewFindings : [];
   return {
-    ...(driftCause !== undefined || hasReviewFindings
+    ...(integrationCause !== undefined || hasReviewFindings
       ? {}
       : {
           contractIssue: {
@@ -237,11 +245,11 @@ export const readProductionHandoffStage = async (input: {
           },
         }),
     handoff: {
-      ...(driftCause === undefined
+      ...(integrationCause === undefined
         ? hasReviewFindings
           ? { cause: { kind: "review-findings" as const } }
           : {}
-        : { cause: driftCause }),
+        : { cause: integrationCause }),
       kind: "remediation",
       name: input.stageId,
       review: {

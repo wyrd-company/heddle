@@ -17,6 +17,7 @@ import {
   assertCleanMechanicalWorktree,
   assertReviewSnapshotMatches,
   defaultMechanicalCommand,
+  isReviewObjectId,
   mechanicalWorktreePath,
   readReviewSnapshot,
   resolveMechanicalBranchHead,
@@ -32,13 +33,12 @@ interface MergeSnapshotResultBase extends Record<string, JsonValue> {
   snapshotId: string;
 }
 
-export interface ReviewBasisDriftRemediationCause extends Record<
+interface ReviewIntegrationRemediationCauseBase extends Record<
   string,
   JsonValue
 > {
   currentSourceHead: string | null;
   currentTargetHead: string | null;
-  kind: "review-basis-drift";
   reviewedBaseHead: string;
   reviewedSourceHead: string;
   snapshotId: string;
@@ -46,13 +46,26 @@ export interface ReviewBasisDriftRemediationCause extends Record<
   targetBranch: string;
 }
 
+export interface ReviewBasisDriftRemediationCause extends ReviewIntegrationRemediationCauseBase {
+  kind: "review-basis-drift";
+}
+
+export interface ReviewSourceBehindRemediationCause extends ReviewIntegrationRemediationCauseBase {
+  currentSourceHead: string;
+  currentTargetHead: string;
+  kind: "review-source-behind";
+}
+
+export type ReviewIntegrationRemediationCause =
+  ReviewBasisDriftRemediationCause | ReviewSourceBehindRemediationCause;
+
 export type MergeSnapshotResult =
   | (MergeSnapshotResultBase & {
       dispositions: { merged: true; remediate: false };
     })
   | (MergeSnapshotResultBase & {
       dispositions: { merged: false; remediate: true };
-      remediationCause: ReviewBasisDriftRemediationCause;
+      remediationCause: ReviewIntegrationRemediationCause;
     });
 
 export interface CleanupMergedChangeResult extends Record<string, JsonValue> {
@@ -61,9 +74,61 @@ export interface CleanupMergedChangeResult extends Record<string, JsonValue> {
   worktreeRemoved: boolean;
 }
 
-const reviewBasisDriftResult = async (
+const commandExited = (error: unknown, code: number): boolean => {
+  if (typeof error !== "object" || error === null) return false;
+  const actual = (error as { code?: number | string }).code;
+  return actual === code || actual === String(code);
+};
+
+const gitAncestor = async (
+  command: CommandRunner,
+  repositoryRoot: string,
+  ancestor: string,
+  descendant: string,
+): Promise<boolean> => {
+  try {
+    await runMechanicalGit(command, repositoryRoot, [
+      "merge-base",
+      "--is-ancestor",
+      ancestor,
+      descendant,
+    ]);
+    return true;
+  } catch (error) {
+    if (commandExited(error, 1)) return false;
+    throw error;
+  }
+};
+
+const assertRelatedReviewHistory = async (
+  command: CommandRunner,
+  repositoryRoot: string,
+  left: string,
+  right: string,
+): Promise<void> => {
+  try {
+    const mergeBase = (
+      await runMechanicalGit(command, repositoryRoot, [
+        "merge-base",
+        left,
+        right,
+      ])
+    ).trim();
+    if (!isReviewObjectId(mergeBase)) {
+      throw new Error("Reviewed source and target have unrelated histories");
+    }
+  } catch (error) {
+    if (commandExited(error, 1)) {
+      throw new Error("Reviewed source and target have unrelated histories");
+    }
+    throw error;
+  }
+};
+
+const reviewIntegrationResult = async (
   change: MechanicalChangeContext,
   snapshot: ReviewSnapshot,
+  requestedKind: ReviewIntegrationRemediationCause["kind"],
   command: CommandRunner,
 ): Promise<MergeSnapshotResult> => {
   const [currentSourceHead, currentTargetHead] = await Promise.all([
@@ -74,20 +139,34 @@ const reviewBasisDriftResult = async (
       change.baseBranch,
     ),
   ]);
+  const common = {
+    reviewedBaseHead: snapshot.baseHead,
+    reviewedSourceHead: snapshot.sourceHead,
+    snapshotId: snapshot.snapshotId,
+    sourceBranch: change.branch,
+    targetBranch: change.baseBranch,
+  };
+  const remediationCause: ReviewIntegrationRemediationCause =
+    requestedKind === "review-source-behind" &&
+    currentSourceHead === snapshot.sourceHead &&
+    currentTargetHead === snapshot.baseHead
+      ? {
+          ...common,
+          currentSourceHead,
+          currentTargetHead,
+          kind: "review-source-behind",
+        }
+      : {
+          ...common,
+          currentSourceHead: currentSourceHead ?? null,
+          currentTargetHead: currentTargetHead ?? null,
+          kind: "review-basis-drift",
+        };
   return {
     alreadyMerged: false,
     dispositions: { merged: false, remediate: true },
     merged: false,
-    remediationCause: {
-      currentSourceHead: currentSourceHead ?? null,
-      currentTargetHead: currentTargetHead ?? null,
-      kind: "review-basis-drift",
-      reviewedBaseHead: snapshot.baseHead,
-      reviewedSourceHead: snapshot.sourceHead,
-      snapshotId: snapshot.snapshotId,
-      sourceBranch: change.branch,
-      targetBranch: change.baseBranch,
-    },
+    remediationCause,
     snapshotId: snapshot.snapshotId,
   };
 };
@@ -150,7 +229,12 @@ export const mergeReviewSnapshot = async (
       snapshot.baseHead,
       current.baseHead,
     );
-    return reviewBasisDriftResult(change, snapshot, command);
+    return reviewIntegrationResult(
+      change,
+      snapshot,
+      "review-basis-drift",
+      command,
+    );
   }
   const isExactEvent = (candidate: ReviewSnapshot): boolean =>
     candidate.latestEvent?.sourceHead === snapshot.sourceHead &&
@@ -173,12 +257,27 @@ export const mergeReviewSnapshot = async (
     throw new Error("Reviewed change contains a merge commit");
   }
 
-  await runMechanicalGit(command, change.repositoryRoot, [
-    "merge-base",
-    "--is-ancestor",
-    snapshot.baseHead,
-    snapshot.sourceHead,
-  ]);
+  if (
+    !(await gitAncestor(
+      command,
+      change.repositoryRoot,
+      snapshot.baseHead,
+      snapshot.sourceHead,
+    ))
+  ) {
+    await assertRelatedReviewHistory(
+      command,
+      change.repositoryRoot,
+      snapshot.baseHead,
+      snapshot.sourceHead,
+    );
+    return reviewIntegrationResult(
+      change,
+      snapshot,
+      "review-source-behind",
+      command,
+    );
+  }
   await assertMechanicalBranchRefs(command, change.repositoryRoot, [
     change.baseBranch,
     change.branch,
@@ -215,7 +314,12 @@ export const mergeReviewSnapshot = async (
         currentSourceHead !== snapshot.sourceHead ||
         currentBaseHead !== snapshot.baseHead
       ) {
-        return reviewBasisDriftResult(change, snapshot, command);
+        return reviewIntegrationResult(
+          change,
+          snapshot,
+          "review-basis-drift",
+          command,
+        );
       }
       throw error;
     }
@@ -245,7 +349,12 @@ export const mergeReviewSnapshot = async (
       (afterFailure.sourceHead !== snapshot.sourceHead ||
         afterFailure.baseHead !== snapshot.baseHead)
     ) {
-      return reviewBasisDriftResult(change, snapshot, command);
+      return reviewIntegrationResult(
+        change,
+        snapshot,
+        "review-basis-drift",
+        command,
+      );
     }
     throw error;
   }

@@ -300,12 +300,14 @@ recorded lifecycle execution order. A standard stage receives those prior
 outputs plus the persisted outputs of completed mechanical nodes on the path
 from the preceding wait stage, including the review snapshot identity. A
 remediation stage receives either the current review findings or a validated
-review-basis-drift cause from the mechanical merge execution that entered that
-remediation occurrence. The drift cause contains the snapshot, source and
-target branches, reviewed source and base heads, and current source and target
-heads. It directs the agent to rebase onto the named exact target without a
-merge commit. Review transcript data is not dispatched. Missing or malformed
-legacy cause data keeps the existing missing-findings attention and empty list.
+review integration cause from the mechanical merge execution that entered that
+remediation occurrence. The cause distinguishes review-basis drift from a
+reviewed source that did not contain its target. It contains the snapshot,
+source and target branches, reviewed source and base heads, and current source
+and target heads. It directs the agent to rebase onto the named exact target
+without a merge commit. Review transcript data is not dispatched. Missing or
+malformed legacy cause data keeps the existing missing-findings attention and
+empty list.
 
 The review snapshot identity is a gitpr schema-2 PR ID plus the exact source
 and base heads captured for review. The PR remains in `state: open` while review

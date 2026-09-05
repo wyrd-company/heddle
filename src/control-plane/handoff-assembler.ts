@@ -4,7 +4,7 @@
 // ---
 
 import type { JsonValue } from "../persistence/index.js";
-import type { ReviewBasisDriftRemediationCause } from "./review-landing.js";
+import type { ReviewIntegrationRemediationCause } from "./review-landing.js";
 
 export type ReviewStageOutput = {
   findings: JsonValue[];
@@ -18,7 +18,7 @@ export type StandardHandoffStage = {
 };
 
 export type RemediationHandoffStage = {
-  cause?: { kind: "review-findings" } | ReviewBasisDriftRemediationCause;
+  cause?: { kind: "review-findings" } | ReviewIntegrationRemediationCause;
   kind: "remediation";
   name: string;
   review: ReviewStageOutput;

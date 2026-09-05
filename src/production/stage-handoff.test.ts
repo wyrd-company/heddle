@@ -35,6 +35,12 @@ const laterDriftCause = {
   reviewedSourceHead: "e".repeat(40),
   snapshotId: "SAMPLE2",
 };
+const sourceBehindCause = {
+  ...driftCause,
+  currentSourceHead: driftCause.reviewedSourceHead,
+  currentTargetHead: driftCause.reviewedBaseHead,
+  kind: "review-source-behind" as const,
+};
 
 const executeFile = promisify(execFile);
 const temporaryDirectories: string[] = [];
@@ -140,6 +146,16 @@ describe("production stage handoff", () => {
       secondDisposition: "approve",
       secondOutput: undefined,
       expectedCause: laterDriftCause,
+      expectedFindings: [],
+    },
+    {
+      firstDisposition: "approve",
+      firstOutput: undefined,
+      driftCauses: [sourceBehindCause],
+      label: "current already-behind integration cause",
+      secondDisposition: "approve",
+      secondOutput: undefined,
+      expectedCause: sourceBehindCause,
       expectedFindings: [],
     },
   ])(
@@ -313,6 +329,32 @@ describe("production stage handoff", () => {
         merged: false,
         remediationCause: driftCause,
         snapshotId: "SAMPLE2",
+      },
+    },
+    {
+      label: "an unknown integration cause",
+      mechanicalOutput: {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        remediationCause: {
+          ...sourceBehindCause,
+          kind: "unclassified-integration",
+        },
+        snapshotId: sourceBehindCause.snapshotId,
+      },
+    },
+    {
+      label: "a source-behind cause with a moved current target",
+      mechanicalOutput: {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        remediationCause: {
+          ...sourceBehindCause,
+          currentTargetHead: "f".repeat(40),
+        },
+        snapshotId: sourceBehindCause.snapshotId,
       },
     },
   ])(

@@ -444,6 +444,165 @@ describe("delivery mechanical nodes", () => {
     },
   );
 
+  it("repeatedly routes an unchanged already-behind review source to remediation", async () => {
+    const fixture = await prepareCommittedChange();
+    await writeFile(join(fixture.sourcePath, "catalog.txt"), "published\n");
+    await git(fixture.sourcePath, "add", "catalog.txt");
+    await git(fixture.sourcePath, "commit", "--quiet", "-m", "publish catalog");
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const expected = {
+      alreadyMerged: false,
+      dispositions: { merged: false, remediate: true },
+      merged: false,
+      remediationCause: {
+        currentSourceHead: snapshot.sourceHead,
+        currentTargetHead: snapshot.baseHead,
+        kind: "review-source-behind",
+        reviewedBaseHead: snapshot.baseHead,
+        reviewedSourceHead: snapshot.sourceHead,
+        snapshotId: snapshot.snapshotId,
+        sourceBranch: "task/change",
+        targetBranch: "main",
+      },
+      snapshotId: snapshot.snapshotId,
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot),
+    ).resolves.toEqual(expected);
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot),
+    ).resolves.toEqual(expected);
+    await expect(
+      readReviewSnapshot(
+        fixture.change.repositoryRoot,
+        snapshot.snapshotId,
+        runCommand,
+      ),
+    ).resolves.toMatchObject({ latestEvent: null, state: "open" });
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      snapshot.baseHead + "\n",
+    );
+
+    await git(fixture.worktreePath, "rebase", "main");
+    const remediatedSnapshot = await ensureReviewSnapshot(fixture.change);
+    expect(remediatedSnapshot).toMatchObject({
+      baseHead: snapshot.baseHead,
+      snapshotId: snapshot.snapshotId,
+    });
+    expect(remediatedSnapshot.sourceHead).not.toBe(snapshot.sourceHead);
+    await expect(
+      mergeReviewSnapshot(fixture.change, remediatedSnapshot),
+    ).resolves.toMatchObject({
+      dispositions: { merged: true, remediate: false },
+      merged: true,
+    });
+  });
+
+  it("keeps unrelated review histories on the visible failure path", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (executable === "git" && arguments_[0] === "merge-base") {
+        throw Object.assign(new Error("no common history"), { code: 1 });
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).rejects.toThrow("Reviewed source and target have unrelated histories");
+  });
+
+  it("reports basis drift when the target moves during source-behind classification", async () => {
+    const fixture = await prepareCommittedChange();
+    await writeFile(join(fixture.sourcePath, "catalog.txt"), "published\n");
+    await git(fixture.sourcePath, "add", "catalog.txt");
+    await git(fixture.sourcePath, "commit", "--quiet", "-m", "publish catalog");
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const targetTree = (
+      await git(fixture.sourcePath, "rev-parse", `${snapshot.baseHead}^{tree}`)
+    ).trim();
+    const nextTargetHead = (
+      await git(
+        fixture.sourcePath,
+        "commit-tree",
+        targetTree,
+        "-p",
+        snapshot.baseHead,
+        "-m",
+        "advance catalog",
+      )
+    ).trim();
+    let moved = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      const output = await runCommand(cwd, executable, arguments_, input);
+      if (
+        !moved &&
+        executable === "git" &&
+        arguments_[0] === "merge-base" &&
+        arguments_[1] !== "--is-ancestor"
+      ) {
+        moved = true;
+        await git(
+          fixture.sourcePath,
+          "update-ref",
+          "refs/heads/main",
+          nextTargetHead,
+          snapshot.baseHead,
+        );
+      }
+      return output;
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).resolves.toMatchObject({
+      dispositions: { merged: false, remediate: true },
+      remediationCause: {
+        currentSourceHead: snapshot.sourceHead,
+        currentTargetHead: nextTargetHead,
+        kind: "review-basis-drift",
+        reviewedBaseHead: snapshot.baseHead,
+        reviewedSourceHead: snapshot.sourceHead,
+      },
+    });
+  });
+
+  it("does not convert an ancestry command failure into remediation", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (
+        executable === "git" &&
+        arguments_[0] === "merge-base" &&
+        arguments_[1] === "--is-ancestor"
+      ) {
+        throw Object.assign(new Error("repository unavailable"), { code: 128 });
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).rejects.toThrow("repository unavailable");
+  });
+
   it("routes source-head drift to remediation without merging", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
@@ -829,7 +988,7 @@ describe("delivery mechanical nodes", () => {
     ]);
   });
 
-  it("fails a conflicting merge and preserves both branch heads", async () => {
+  it("routes a conflicting reviewed source to remediation and preserves both branch heads", async () => {
     const fixture = await prepareCommittedChange();
     await writeFile(join(fixture.sourcePath, "inventory.txt"), "replacement\n");
     await git(fixture.sourcePath, "add", "inventory.txt");
@@ -844,7 +1003,16 @@ describe("delivery mechanical nodes", () => {
 
     await expect(
       mergeReviewSnapshot(fixture.change, snapshot),
-    ).rejects.toThrow();
+    ).resolves.toMatchObject({
+      dispositions: { merged: false, remediate: true },
+      remediationCause: {
+        currentSourceHead: sourceHead.trim(),
+        currentTargetHead: baseHead.trim(),
+        kind: "review-source-behind",
+        reviewedBaseHead: baseHead.trim(),
+        reviewedSourceHead: sourceHead.trim(),
+      },
+    });
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(baseHead);
     expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
       sourceHead,
@@ -1248,7 +1416,7 @@ describe("delivery mechanical nodes", () => {
     fixture.persistence.close();
   });
 
-  it("moves a real merge conflict to attention without entering remediation", async () => {
+  it("routes pre-snapshot source divergence to remediation without attention", async () => {
     const fixture = await makeLifecycle(
       {},
       undefined,
@@ -1265,20 +1433,19 @@ describe("delivery mechanical nodes", () => {
         instanceId: "sample-lifecycle",
         operationId: "review-approved",
       }),
-    ).rejects.toBeInstanceOf(UnexpectedLandingError);
+    ).resolves.toMatchObject({
+      awaitingNodeIds: ["remediate"],
+      status: "awaiting",
+    });
     expect(
       fixture.persistence
         .replayEvents("sample-lifecycle")
         .filter(({ type }) => type === "lifecycle:attention-required"),
-    ).toEqual([
-      expect.objectContaining({
-        payload: expect.objectContaining({ actualStatus: "failed" }),
-      }),
-    ]);
+    ).toEqual([]);
     expect(
       fixture.persistence.getInstance("sample-lifecycle")?.state
         .flowcraftContext,
-    ).toMatchObject({ awaitingNodeIds: ["review"] });
+    ).toMatchObject({ awaitingNodeIds: ["remediate"] });
     fixture.persistence.close();
   });
 

@@ -222,7 +222,7 @@ proposed-design:
     Heddle first assembles a canonical JSON
     projection containing the task contract, the outputs of prior stages (a
     remediation session receives either the current review's findings or a
-    typed current-transition review-basis-drift cause, never the review
+    typed current-transition review integration cause, never the review
     session's transcript), the stage's instantiated todo list,
     and a pointer to the stage's skill. It then renders that projection and
     the board task's raw front matter through a schema'd, strict Nunjucks
@@ -243,12 +243,15 @@ proposed-design:
     wait-stage outputs reconstructed in recorded lifecycle execution order.
     Remediation receives the latest canonical review output through the
     handoff assembler, which retains findings and excludes transcript data.
-    When the current transition's merge node detects review-basis drift, the
-    assembler selects that validated mechanical cause instead. The cause names
-    the snapshot, source and target branches, reviewed source and base heads,
-    and current source and target heads. Selection reads only the execution
-    that entered the current remediation occurrence, so an earlier loop's
-    mechanical output cannot replace later review findings.
+    When the current transition's merge node detects review-basis drift or a
+    reviewed source that does not contain its target, the assembler selects
+    that validated mechanical cause instead. The cause distinguishes those
+    conditions and names the snapshot, source and target branches, reviewed
+    source and base heads, and current source and target heads. Selection reads
+    only the execution that entered the current remediation occurrence, so an
+    earlier loop's mechanical output cannot replace later review findings.
+    The source-behind cause is valid only while current heads equal the reviewed
+    heads; movement during classification becomes review-basis drift.
     The rendered document is stored with the session handoff before any T3
     effect. Retry and restart replay those exact bytes. After T3 accepts the
     first turn, Heddle appends a `session:activated` event containing the exact
@@ -296,7 +299,7 @@ proposed-design:
     this schema before recording the lifecycle transition. Every other
     disposition accepts an omitted output or a JSON object. A stored contract
     without an output classification remains replayable as `optional`.
-    A validated review-basis-drift cause satisfies remediation input without
+    A validated review integration cause satisfies remediation input without
     inventing reviewer findings. When remediation receives neither that cause
     nor a completed stage output with `findings`, it
     raises one durable attention entry keyed by the remediation session and
@@ -531,16 +534,19 @@ proposed-design:
     source/base basis, verifies that exact event, and asks gitpr to merge it.
     A merged record is accepted only when its merged event is accepted for that
     same basis and the base contains the exact source head. Review events are
-    immutable and verdicts binary; any source or base drift routes the instance
-    back to remediation with the exact reviewed and current basis. The pinned
-    remediation handoff directs the agent to rebase the source onto that exact
-    current target without a merge commit, validate, commit only task-scoped
-    changes, and prove target ancestry and a clean worktree before advancing.
-    A later target movement repeats the drift loop under the same exact-basis
-    checks. Reviewed history must contain no merge commit.
-    A mechanical node that cannot complete — a merge conflict, a dirty
-    worktree — moves the instance to attention rather than retrying an
-    agent into the failure.
+    immutable and verdicts binary. Any source or base drift, or a snapshot whose
+    reviewed source does not contain its reviewed target, routes the instance
+    back to remediation with a distinct typed cause and the exact reviewed and
+    current basis. The latter requires a common history; unrelated histories
+    remain a visible mechanical failure. The pinned remediation handoff directs
+    the agent to rebase the source onto that exact current target without a
+    merge commit, validate, commit only task-scoped changes, and prove target
+    ancestry and a clean worktree before advancing. A later target movement
+    repeats the drift loop under the same exact-basis checks. Reviewed history
+    must contain no merge commit.
+    A mechanical failure with no valid integration cause — an unrelated
+    history, a dirty worktree, or a command failure — moves the instance to
+    attention rather than retrying an agent into the failure.
   human-console: >
     The console presents three views of the same state, at three
     altitudes. A kanban projection answers where everything stands:
