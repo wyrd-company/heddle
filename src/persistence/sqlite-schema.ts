@@ -85,6 +85,8 @@ export const initializePersistenceSchema = (
         'recipient-rejected',
         'request-rejected'
       )),
+      recipient_label TEXT,
+      message TEXT,
       state TEXT NOT NULL CHECK (state IN ('rejected', 'retry-authorized')),
       recorded_at TEXT NOT NULL
     );
@@ -136,6 +138,21 @@ export const initializePersistenceSchema = (
   if (!effectColumns.some(({ name }) => name === "payload_json")) {
     database.exec(
       "ALTER TABLE heddle_completed_effects ADD COLUMN payload_json TEXT NOT NULL DEFAULT 'null'",
+    );
+  }
+  const notificationFailureColumns = database
+    .prepare("PRAGMA table_info(heddle_notification_failures)")
+    .all() as Array<{ name: string }>;
+  if (
+    !notificationFailureColumns.some(({ name }) => name === "recipient_label")
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_notification_failures ADD COLUMN recipient_label TEXT",
+    );
+  }
+  if (!notificationFailureColumns.some(({ name }) => name === "message")) {
+    database.exec(
+      "ALTER TABLE heddle_notification_failures ADD COLUMN message TEXT",
     );
   }
   const reconcilerColumns = database

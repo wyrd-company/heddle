@@ -59,11 +59,10 @@ describe("production attention actions", () => {
     composition.persistence.recordNotificationFailure(
       stableId,
       "request-rejected",
-    );
-    composition.persistence.authorizeNotificationRetry(stableId, 1);
-    composition.persistence.recordNotificationFailure(
-      stableId,
-      "request-rejected",
+      {
+        message: "A sample needs attention",
+        recipientLabel: "Primary operator",
+      },
     );
     const runtime = composition.persistence.listReconcilerRuntime()[0]!;
     await composition.attention.raise(
@@ -81,11 +80,19 @@ describe("production attention actions", () => {
     const attention = composition.attention
       .list()
       .find(({ actions }) => actions[0]?.actionId === "notification.retry")!;
+    composition.persistence.authorizeNotificationRetry(stableId, 1);
+    composition.persistence.recordNotificationFailure(
+      stableId,
+      "request-rejected",
+      { message: "A newer sample", recipientLabel: "Primary operator" },
+    );
 
-    await composition.consoleActions.execute({
-      action: attention.actions[0]!,
-      attention,
-    });
+    await expect(
+      composition.consoleActions.execute({
+        action: attention.actions[0]!,
+        attention,
+      }),
+    ).rejects.toThrow("Notification rejection occurrence is no longer current");
     expect(composition.persistence.notificationFailure(stableId)).toMatchObject(
       { occurrence: 2, state: "rejected" },
     );
@@ -94,7 +101,7 @@ describe("production attention actions", () => {
         "console-attention-action",
         attention.attentionId,
       ),
-    ).toBe(true);
+    ).toBe(false);
     await composition.close();
   });
 

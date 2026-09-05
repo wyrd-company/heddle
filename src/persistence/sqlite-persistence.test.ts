@@ -114,6 +114,45 @@ describe("SqlitePersistence", () => {
     persistence.close();
   });
 
+  it("keeps legacy notification failures unverifiable until details are reconstructed", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_notification_failures (
+        stable_id TEXT PRIMARY KEY,
+        occurrence INTEGER NOT NULL CHECK (occurrence > 0),
+        category TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('rejected', 'retry-authorized')),
+        recorded_at TEXT NOT NULL
+      );
+      INSERT INTO heddle_notification_failures VALUES
+        ('sample-notification', 1, 'request-rejected', 'rejected',
+         '2026-01-01T00:00:00.000Z');
+    `);
+    legacy.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+    expect(persistence.notificationFailure("sample-notification")).toEqual({
+      category: "request-rejected",
+      message: null,
+      occurrence: 1,
+      recipientLabel: null,
+      stableId: "sample-notification",
+      state: "rejected",
+    });
+    const migrated = new Database(databasePath, { readonly: true });
+    expect(
+      (
+        migrated
+          .prepare("PRAGMA table_info(heddle_notification_failures)")
+          .all() as Array<{ name: string }>
+      ).map(({ name }) => name),
+    ).toEqual(expect.arrayContaining(["recipient_label", "message"]));
+    migrated.close();
+    persistence.close();
+  });
+
   it("creates, reads, updates, lists, and deletes instances", async () => {
     const stateDirectory = await makeStateDirectory();
     const persistence = new SqlitePersistence({ stateDirectory });

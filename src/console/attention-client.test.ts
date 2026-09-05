@@ -166,4 +166,52 @@ describe("global console attention overlay", () => {
       "/?scope=task%3A11&attention=attention-11",
     );
   });
+
+  it("renders notification verification before the Retry action", async () => {
+    const entry = createConsoleAttention({
+      actions: [
+        {
+          actionId: "notification.retry",
+          contract: { kind: "notification.retry", occurrence: 1 },
+          input: { kind: "none" },
+          label: "Retry notification",
+        },
+      ],
+      attentionId: "notification-recovery",
+      instanceId: "instance-11",
+      kind: "production-error",
+      message: "Notification delivery requires recovery.",
+      notificationVerification: {
+        message: "A sample needs attention",
+        recipientLabel: "Primary operator",
+      },
+      scope: "task:11",
+      taskId: 11,
+    });
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      undefined,
+      undefined,
+      undefined,
+      [entry],
+    );
+    const elements = harness.attentionElements();
+    const verification = elements.find(
+      ({ className }) => className === "attention-notification-verification",
+    );
+    const action = elements.find(
+      ({ className }) => className === "attention-action",
+    );
+
+    expect(verification).toBeDefined();
+    expect(
+      verification!.children.map(({ textContent }) => textContent),
+    ).toEqual([
+      "Recipient",
+      "Primary operator",
+      "Intended message",
+      "A sample needs attention",
+    ]);
+    expect(action?.textContent).toBe("Retry notification →");
+  });
 });

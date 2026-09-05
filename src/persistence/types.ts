@@ -83,9 +83,16 @@ export const isNotificationRetryCategory = (
 
 export interface NotificationFailureRecord {
   category: NotificationFailureCategory;
+  message: string | null;
   occurrence: number;
+  recipientLabel: string | null;
   stableId: string;
   state: "rejected" | "retry-authorized";
+}
+
+export interface NotificationVerification {
+  message: string;
+  recipientLabel: string;
 }
 
 export interface NotificationIntentFingerprint {

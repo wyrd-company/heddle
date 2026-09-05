@@ -79,6 +79,7 @@ pushover:
   apiUrl: https://notify.example.invalid/messages
   applicationToken: replace-with-operator-secret
   consoleBaseUrl: https://console.example.invalid/
+  recipientLabel: Primary operator
   userKey: replace-with-operator-secret
 server:
   host: 127.0.0.1
@@ -504,6 +505,14 @@ restarts the service, and selects Retry notification on that exact occurrence.
 The action authorizes recovery of that occurrence. Another permanent response
 creates the next occurrence; a retryable response follows the durable deadline
 without requiring another action.
+Set `pushover.recipientLabel` to a non-secret name the operator can recognize.
+For each rejected occurrence, Heddle stores this label with the exact intended
+message and displays both before it offers **Retry notification**. The public
+attention API does not expose the Pushover user key, application token, or
+internal notification stable ID. If either verification value is unavailable,
+the card explains the missing verification and offers no Retry action. Adding a
+label later can reconstruct details when the pending intent still supplies an
+exact message; otherwise the historical occurrence remains actionless.
 When one stable notification changes delivery-failure state, the newly raised
 entry becomes its current projection and resolves only older
 notification-delivery entries for that stable ID. A permanent rejection does

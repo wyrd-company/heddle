@@ -42,6 +42,7 @@ import type {
   NotificationFailureCategory,
   NotificationFailureRecord,
   NotificationIntentFingerprint,
+  NotificationVerification,
   NotificationRetryCategory,
   NotificationRetryRecord,
   PersistedEvent,
@@ -504,7 +505,8 @@ export class SqlitePersistence {
     this.assertStableId("stableId", stableId);
     const row = this.database
       .prepare(
-        `SELECT stable_id AS stableId, occurrence, category, state
+        `SELECT stable_id AS stableId, occurrence, category,
+                recipient_label AS recipientLabel, message, state
          FROM heddle_notification_failures
          WHERE stable_id = ?`,
       )
@@ -515,23 +517,47 @@ export class SqlitePersistence {
   recordNotificationFailure(
     stableId: string,
     category: NotificationFailureCategory,
+    verification?: NotificationVerification,
   ): NotificationFailureRecord {
     this.assertStableId("stableId", stableId);
+    if (
+      verification !== undefined &&
+      (verification.recipientLabel.trim() === "" ||
+        verification.message.trim() === "")
+    ) {
+      throw new TypeError(
+        "notification verification recipientLabel and message must not be empty",
+      );
+    }
     this.database
       .prepare(
         `INSERT INTO heddle_notification_failures
-           (stable_id, occurrence, category, state, recorded_at)
-         VALUES (?, 1, ?, 'rejected', ?)
+           (stable_id, occurrence, category, recipient_label, message, state, recorded_at)
+         VALUES (?, 1, ?, ?, ?, 'rejected', ?)
          ON CONFLICT(stable_id) DO UPDATE SET
            occurrence = CASE
              WHEN state = 'retry-authorized' THEN occurrence + 1
              ELSE occurrence
            END,
            category = excluded.category,
+           recipient_label = CASE
+             WHEN state = 'retry-authorized' THEN excluded.recipient_label
+             ELSE COALESCE(recipient_label, excluded.recipient_label)
+           END,
+           message = CASE
+             WHEN state = 'retry-authorized' THEN excluded.message
+             ELSE COALESCE(message, excluded.message)
+           END,
            state = 'rejected',
            recorded_at = excluded.recorded_at`,
       )
-      .run(stableId, category, new Date().toISOString());
+      .run(
+        stableId,
+        category,
+        verification?.recipientLabel ?? null,
+        verification?.message ?? null,
+        new Date().toISOString(),
+      );
     return this.notificationFailure(stableId)!;
   }
 

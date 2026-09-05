@@ -12,6 +12,7 @@ import type {
   JsonValue,
   NotificationFailureCategory,
   NotificationRetryCategory,
+  NotificationVerification,
   SqlitePersistence,
 } from "../persistence/index.js";
 import {
@@ -107,9 +108,23 @@ export class DurableAttentionQueue {
 
   list() {
     const runtimes = this.persistence.listReconcilerRuntime();
-    return this.persistence
-      .listAttention()
-      .map((record) => projectProductionAttention(record, runtimes));
+    return this.persistence.listAttention().map((record) => {
+      const payload = record.payload;
+      const stableId =
+        typeof payload === "object" &&
+        payload !== null &&
+        !Array.isArray(payload) &&
+        typeof payload["notificationStableId"] === "string"
+          ? payload["notificationStableId"]
+          : undefined;
+      return projectProductionAttention(
+        record,
+        runtimes,
+        stableId === undefined
+          ? undefined
+          : this.persistence.notificationFailure(stableId),
+      );
+    });
   }
 }
 
@@ -227,6 +242,23 @@ export class DurablePushoverNotifier {
     private readonly now: () => number = Date.now,
   ) {}
 
+  #verification(page: OperatorPage): NotificationVerification | undefined {
+    const recipientLabel = this.configuration.recipientLabel?.trim();
+    if (recipientLabel === undefined || recipientLabel === "") return undefined;
+    const secrets = [
+      this.configuration.applicationToken,
+      this.configuration.userKey,
+    ];
+    if (
+      [recipientLabel, page.message].some((value) =>
+        secrets.some((secret) => secret !== "" && value.includes(secret)),
+      )
+    ) {
+      return undefined;
+    }
+    return { message: page.message, recipientLabel };
+  }
+
   async send(page: OperatorPage): Promise<void> {
     if (this.persistence.effectCompleted("pushover", page.attentionId)) {
       return;
@@ -262,6 +294,7 @@ export class DurablePushoverNotifier {
       userKey: message.userKey,
     });
     const attemptFingerprint = legacyFingerprint;
+    const verification = this.#verification(page);
     try {
       this.persistence.recordNotificationIntent(
         page.attentionId,
@@ -275,6 +308,7 @@ export class DurablePushoverNotifier {
       const failure = this.persistence.recordNotificationFailure(
         page.attentionId,
         "legacy-intent-unverifiable",
+        verification,
       );
       throw new NotificationDeliveryError(
         "operator-action",
@@ -282,7 +316,18 @@ export class DurablePushoverNotifier {
         failure.occurrence,
       );
     }
-    const priorFailure = this.persistence.notificationFailure(page.attentionId);
+    let priorFailure = this.persistence.notificationFailure(page.attentionId);
+    if (
+      priorFailure?.state === "rejected" &&
+      verification !== undefined &&
+      (priorFailure.recipientLabel === null || priorFailure.message === null)
+    ) {
+      priorFailure = this.persistence.recordNotificationFailure(
+        page.attentionId,
+        priorFailure.category,
+        verification,
+      );
+    }
     if (priorFailure?.state === "rejected") {
       throw new NotificationDeliveryError(
         "permanent",
@@ -305,6 +350,7 @@ export class DurablePushoverNotifier {
         const failure = this.persistence.recordNotificationFailure(
           page.attentionId,
           error.category,
+          verification,
         );
         this.persistence.clearNotificationRetry(page.attentionId);
         throw new NotificationDeliveryError(

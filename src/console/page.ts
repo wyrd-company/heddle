@@ -240,6 +240,9 @@ button, input, select { font: inherit; }
 .attention-entry-meta { margin: 0 0 9px; display: flex; justify-content: space-between; gap: 12px; color: var(--signal); font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .attention-entry h3 { margin: 0; font-family: Georgia, serif; font-size: 19px; font-weight: 500; line-height: 1.25; }
 .attention-entry-message { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.attention-notification-verification { margin: 12px 0 0; padding: 10px; display: grid; grid-template-columns: minmax(90px, auto) 1fr; gap: 6px 12px; border: 1px solid var(--rule); font-size: 10px; line-height: 1.45; }
+.attention-notification-verification dt { color: var(--muted); font-weight: 800; }
+.attention-notification-verification dd { min-width: 0; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .attention-actions { margin-top: 14px; padding-top: 13px; display: grid; gap: 10px; border-top: 1px dotted var(--rule-dark); }
 .attention-question { min-width: 0; margin: 0; padding: 9px; display: grid; gap: 8px; border: 1px solid var(--rule); }
 .attention-question legend { padding: 0 5px; font-size: 10px; font-weight: 800; }
@@ -779,6 +782,17 @@ const renderAttention = (entries, focusRequested = false, refreshEntries = true)
     article.append(meta);
     article.append(text("h3", "Attention " + entry.attentionId));
     article.append(text("p", entry.message, "attention-entry-message"));
+    if (entry.notificationVerification) {
+      const verification = document.createElement("dl");
+      verification.className = "attention-notification-verification";
+      verification.append(text("dt", "Recipient"));
+      verification.append(
+        text("dd", entry.notificationVerification.recipientLabel),
+      );
+      verification.append(text("dt", "Intended message"));
+      verification.append(text("dd", entry.notificationVerification.message));
+      article.append(verification);
+    }
     const actions = document.createElement("div");
     actions.className = "attention-actions";
     if (entry.actions.length === 0) {

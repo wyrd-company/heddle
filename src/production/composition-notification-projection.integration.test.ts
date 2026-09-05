@@ -228,10 +228,15 @@ describe("production notification failure projection", () => {
       actions: [
         {
           actionId: "notification.retry",
-          contract: { occurrence: 1, stableId: targetId },
+          contract: { kind: "notification.retry", occurrence: 1 },
         },
       ],
+      notificationVerification: {
+        message: `Heddle escalation in ${runtime.stageId}`,
+        recipientLabel: "Primary operator",
+      },
     });
+    expect(JSON.stringify(rejection)).not.toContain(targetId);
     expect(notificationFailures(first, neighboringStableId)).toHaveLength(1);
     expect(first.persistence.listAttention()).toContainEqual(
       expect.objectContaining({ attentionId: unrelated.attentionId }),

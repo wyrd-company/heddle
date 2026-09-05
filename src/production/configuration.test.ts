@@ -49,6 +49,7 @@ const fixture = (): ProductionConfiguration => ({
     apiUrl: "https://notify.invalid/messages",
     applicationToken: "application-token",
     consoleBaseUrl: "https://console.invalid/",
+    recipientLabel: "Primary operator",
     userKey: "operator-key",
   },
   session: {
@@ -121,6 +122,20 @@ describe("production configuration", () => {
 
     expect(() => validateProductionConfiguration(invalid)).toThrow(
       "pacing.defaultProvider must equal session.driver",
+    );
+  });
+
+  it("rejects a recipient label that contains a Pushover credential", () => {
+    const invalid = {
+      ...fixture(),
+      pushover: {
+        ...fixture().pushover,
+        recipientLabel: "Primary operator-key recipient",
+      },
+    };
+
+    expect(() => validateProductionConfiguration(invalid)).toThrow(
+      "pushover.recipientLabel must not contain a Pushover credential",
     );
   });
 

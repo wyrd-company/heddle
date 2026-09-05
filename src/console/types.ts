@@ -36,6 +36,10 @@ export interface ConsoleAttention {
   instanceId?: string;
   kind: string;
   message: string;
+  notificationVerification?: {
+    message: string;
+    recipientLabel: string;
+  };
   scope: ConsoleAttentionScope;
   taskId?: number;
 }
@@ -62,7 +66,6 @@ export type ConsoleAttentionActionContract =
   | {
       kind: "notification.retry";
       occurrence: number;
-      stableId: string;
     }
   | {
       escalationId: string;

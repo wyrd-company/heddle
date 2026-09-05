@@ -257,6 +257,26 @@ const attentionCatalog = () => [
     scope: "task:43",
     taskId: 43,
   }),
+  createConsoleAttention({
+    actions: [
+      {
+        actionId: "notification.retry",
+        contract: { kind: "notification.retry", occurrence: 1 },
+        input: { kind: "none" },
+        label: "Retry notification",
+      },
+    ],
+    attentionId: "notification-recovery-a",
+    instanceId: "instance-43",
+    kind: "production-error",
+    message: "A notification requires verified recovery.",
+    notificationVerification: {
+      message: "A sample needs attention.",
+      recipientLabel: "Primary operator",
+    },
+    scope: "task:43",
+    taskId: 43,
+  }),
 ];
 
 const clone = (value) => JSON.parse(JSON.stringify(value));

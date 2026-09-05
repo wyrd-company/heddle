@@ -203,6 +203,11 @@ describe("production composition", () => {
     if (rejected === undefined) {
       throw new Error("Missing rejected notification attention");
     }
+    expect(rejected.notificationVerification).toEqual({
+      message: `Heddle escalation in ${runtime.stageId}`,
+      recipientLabel: "Primary operator",
+    });
+    expect(JSON.stringify(rejected)).not.toContain(attentionId);
     const retry = rejected.actions.find(
       ({ actionId }) => actionId === "notification.retry",
     )!;
@@ -431,12 +436,16 @@ describe("production composition", () => {
           actionId: "notification.retry",
           contract: expect.objectContaining({
             occurrence: 1,
-            stableId: attentionId,
           }),
         }),
       ],
       kind: "production-error",
+      notificationVerification: {
+        message: `Heddle escalation in ${runtime.stageId}`,
+        recipientLabel: "Primary operator",
+      },
     });
+    expect(JSON.stringify(recovery)).not.toContain(attentionId);
 
     await composition.consoleActions.execute({
       action: recovery.actions[0]!,

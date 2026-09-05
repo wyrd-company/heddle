@@ -13,6 +13,7 @@ export {
   type NotificationFailureCategory,
   type NotificationFailureRecord,
   type NotificationIntentFingerprint,
+  type NotificationVerification,
   type NotificationRetryCategory,
   type NotificationRetryRecord,
   type DurableAttentionRecord,

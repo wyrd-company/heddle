@@ -202,6 +202,63 @@ describe("production attention projection", () => {
     ).toMatchObject({ actions: [], scope: "epic:45", taskId: 45 });
   });
 
+  it("offers exact notification recovery only with verifiable recipient and message details", () => {
+    const failureRecord = {
+      category: "request-rejected" as const,
+      message: "A sample needs attention",
+      occurrence: 2,
+      recipientLabel: "Primary operator",
+      stableId: "private-notification-id",
+      state: "rejected" as const,
+    };
+    const rejected = record("notification-rejected", {
+      code: "notification-delivery-rejected",
+      instanceId: "task-41",
+      kind: "production-error",
+      message: "Notification delivery was rejected.",
+      notificationOccurrence: 2,
+      notificationStableId: failureRecord.stableId,
+      taskId: 41,
+    });
+
+    const projected = projectProductionAttention(
+      rejected,
+      [runtime],
+      failureRecord,
+    );
+
+    expect(projected).toMatchObject({
+      actions: [
+        {
+          actionId: "notification.retry",
+          contract: { kind: "notification.retry", occurrence: 2 },
+        },
+      ],
+      notificationVerification: {
+        message: "A sample needs attention",
+        recipientLabel: "Primary operator",
+      },
+    });
+    expect(JSON.stringify(projected)).not.toContain(failureRecord.stableId);
+
+    const unavailable = projectProductionAttention(rejected, [runtime], {
+      ...failureRecord,
+      message: null,
+      recipientLabel: null,
+    });
+    expect(unavailable.actions).toEqual([]);
+    expect(unavailable.notificationVerification).toBeUndefined();
+    expect(unavailable.message).toContain(
+      "Retry is unavailable because the intended recipient and message cannot be verified.",
+    );
+
+    const stale = projectProductionAttention(rejected, [runtime], {
+      ...failureRecord,
+      occurrence: 3,
+    });
+    expect(stale.actions).toEqual([]);
+  });
+
   it("fails closed on identity, task, and catalog disagreement", () => {
     expect(() =>
       projectProductionAttention(

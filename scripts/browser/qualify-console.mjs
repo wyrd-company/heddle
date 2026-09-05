@@ -1334,7 +1334,7 @@ const auditView = async (baseUrl, viewport, view) => {
     const badge = await evaluate(
       `document.querySelector("#attention-count").textContent`,
     );
-    invariant(badge === "5", "attention-badge-count", `badge reports ${badge}`);
+    invariant(badge === "6", "attention-badge-count", `badge reports ${badge}`);
   }
   const editorState = view === "lifecycle" ? "closed" : "unavailable";
   await assertEditorControlRoster(editorState);
@@ -1366,6 +1366,44 @@ const auditIntermediateAttention = async (baseUrl) => {
     await settleVisuals();
     assertAxeClean(await axe(), `attention ${attentionId} 740x900`);
   }
+  fixture.reset();
+  await open(
+    `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=notification-recovery-a`,
+  );
+  await assertLifecycleSettled();
+  const recovery = await snapshotText(
+    '.attention-entry[data-attention-id="notification-recovery-a"]',
+  );
+  invariant(
+    recovery.includes("Recipient") &&
+      recovery.includes("Primary operator") &&
+      recovery.includes("Intended message") &&
+      recovery.includes("A sample needs attention.") &&
+      recovery.includes("Retry notification"),
+    "notification-recovery-verification",
+    `recovery card lacks its accessible verification details: ${recovery}`,
+  );
+  const order = await evaluate(`(() => {
+    const entry = document.querySelector('.attention-entry[data-attention-id="notification-recovery-a"]');
+    const details = entry.querySelector('.attention-notification-verification');
+    const retry = entry.querySelector('.attention-action');
+    return details.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING;
+  })()`);
+  invariant(
+    order !== 0,
+    "notification-recovery-before-retry",
+    "verification details do not precede Retry notification",
+  );
+  const publicAttention = await evaluate(
+    `fetch('/api/attention').then((response) => response.text())`,
+  );
+  invariant(
+    !publicAttention.includes("notificationStableId") &&
+      !publicAttention.includes("applicationToken") &&
+      !publicAttention.includes("userKey"),
+    "notification-recovery-public-safety",
+    "notification recovery exposed a private provider or stable identifier field",
+  );
 };
 
 const expectSoleKill = async (name, mutate, check) => {

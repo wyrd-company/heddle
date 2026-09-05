@@ -10,6 +10,7 @@ import {
 } from "../console/index.js";
 import type {
   DurableAttentionRecord,
+  NotificationFailureRecord,
   ReconcilerRuntimeRecord,
 } from "../persistence/index.js";
 import {
@@ -156,6 +157,7 @@ const projectSessionAttention = (
 export const projectProductionAttention = (
   record: DurableAttentionRecord,
   runtimes: ReconcilerRuntimeRecord[],
+  notificationFailure?: NotificationFailureRecord,
 ): ConsoleAttention => {
   const payload = recordPayload(record);
   const attentionId = record.attentionId;
@@ -247,23 +249,38 @@ export const projectProductionAttention = (
         `Attention '${attentionId}' disagrees with its production task`,
       );
     }
-    const actions: ConsoleAttentionAction[] =
+    const notificationOccurrence =
       code === "notification-delivery-rejected" ||
       code === "notification-delivery-recovery-required"
+        ? validTaskId(payload["notificationOccurrence"], attentionId)
+        : undefined;
+    const notificationStableId =
+      notificationOccurrence === undefined
+        ? undefined
+        : requiredIdentifier(payload, "notificationStableId", attentionId);
+    const verification =
+      notificationOccurrence !== undefined &&
+      notificationFailure !== undefined &&
+      notificationFailure.stableId === notificationStableId &&
+      notificationFailure.occurrence === notificationOccurrence &&
+      notificationFailure.state === "rejected" &&
+      notificationFailure.recipientLabel !== null &&
+      notificationFailure.message !== null
+        ? {
+            message: notificationFailure.message,
+            recipientLabel: notificationFailure.recipientLabel,
+          }
+        : undefined;
+    const actions: ConsoleAttentionAction[] =
+      (code === "notification-delivery-rejected" ||
+        code === "notification-delivery-recovery-required") &&
+      verification !== undefined
         ? [
             {
               actionId: "notification.retry",
               contract: {
                 kind: "notification.retry",
-                occurrence: validTaskId(
-                  payload["notificationOccurrence"],
-                  attentionId,
-                ),
-                stableId: requiredIdentifier(
-                  payload,
-                  "notificationStableId",
-                  attentionId,
-                ),
+                occurrence: notificationOccurrence!,
               },
               input: { kind: "none" },
               label: "Retry notification",
@@ -277,7 +294,10 @@ export const projectProductionAttention = (
         ? { instanceId: instanceIdValue }
         : {}),
       kind,
-      message: requiredString(payload, "message", attentionId),
+      message: `${requiredString(payload, "message", attentionId)}${notificationOccurrence !== undefined && verification === undefined ? " Retry is unavailable because the intended recipient and message cannot be verified." : ""}`,
+      ...(verification === undefined
+        ? {}
+        : { notificationVerification: verification }),
       scope: taskId === undefined ? "all" : `task:${taskId}`,
       ...(taskId === undefined ? {} : { taskId }),
     });

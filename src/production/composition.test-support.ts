@@ -487,6 +487,7 @@ next_id: 1
           apiUrl: "https://notify.invalid/messages",
           applicationToken: "application-token",
           consoleBaseUrl: "https://console.invalid/",
+          recipientLabel: "Primary operator",
           userKey: "operator-key",
         },
         session: {

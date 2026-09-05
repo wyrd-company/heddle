@@ -495,6 +495,17 @@ proposed-design:
     attention remain unresolved. Neither failure state nor recovery changes or
     answers the original escalation attention.
 
+    An optional non-secret Pushover recipient label lets Heddle persist the
+    human-readable recipient and exact intended message with each rejected
+    occurrence. The attention API exposes those verification details before
+    offering Retry notification, while keeping the notification stable ID and
+    provider credentials private. A rejected occurrence without both details,
+    including a row that cannot be reconstructed after upgrade, explains that
+    verification is unavailable and offers no Retry action. The occurrence,
+    persisted details, attention fingerprint, and action contract bind the
+    displayed values to the exact recovery action; stale actions remain
+    rejected.
+
     A legacy pending combined fingerprint upgrades when it exactly matches the
     current combined message. A mismatch is not assumed to be credential-only:
     it makes no transport call and raises an exact legacy-intent-unverifiable

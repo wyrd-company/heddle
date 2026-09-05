@@ -116,13 +116,11 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
   ): Promise<boolean> {
     const contract = input.action.contract;
     if (contract.kind === "notification.retry") {
-      const failure = this.persistence.notificationFailure(contract.stableId);
-      return (
-        failure !== undefined &&
-        (failure.occurrence > contract.occurrence ||
-          (failure.occurrence === contract.occurrence &&
-            failure.state === "retry-authorized"))
+      const failure = this.#notificationFailure(
+        input.attention.attentionId,
+        contract.occurrence,
       );
+      return failure !== undefined && failure.state === "retry-authorized";
     }
     if (contract.kind === "escalation.answer") return false;
     const target = {
@@ -147,9 +145,16 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
   async #apply(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
     const contract = input.action.contract;
     if (contract.kind === "notification.retry") {
+      const failure = this.#notificationFailure(
+        input.attention.attentionId,
+        contract.occurrence,
+      );
       if (
+        failure === undefined ||
+        failure.recipientLabel === null ||
+        failure.message === null ||
         !this.persistence.authorizeNotificationRetry(
-          contract.stableId,
+          failure.stableId,
           contract.occurrence,
         )
       ) {
@@ -191,5 +196,28 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       input.answers!,
       input.attention.attentionId,
     );
+  }
+
+  #notificationFailure(attentionId: string, occurrence: number) {
+    const record = this.persistence
+      .listAttention()
+      .find((candidate) => candidate.attentionId === attentionId);
+    const payload = record?.payload;
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      Array.isArray(payload) ||
+      payload["kind"] !== "production-error" ||
+      (payload["code"] !== "notification-delivery-rejected" &&
+        payload["code"] !== "notification-delivery-recovery-required") ||
+      typeof payload["notificationStableId"] !== "string" ||
+      payload["notificationOccurrence"] !== occurrence
+    ) {
+      return undefined;
+    }
+    const failure = this.persistence.notificationFailure(
+      payload["notificationStableId"],
+    );
+    return failure?.occurrence === occurrence ? failure : undefined;
   }
 }

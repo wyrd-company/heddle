@@ -39,6 +39,7 @@ export type PushoverConfiguration = {
   apiUrl: string;
   applicationToken: string;
   consoleBaseUrl: string;
+  recipientLabel?: string;
   userKey: string;
 };
 
@@ -191,6 +192,25 @@ export const validateProductionConfiguration = (
     "pushover.consoleBaseUrl",
     configuration.pushover.consoleBaseUrl,
   );
+  if (configuration.pushover.recipientLabel !== undefined) {
+    requireNonEmpty(
+      "pushover.recipientLabel",
+      configuration.pushover.recipientLabel,
+    );
+    for (const secret of [
+      configuration.pushover.applicationToken,
+      configuration.pushover.userKey,
+    ]) {
+      if (
+        secret !== "" &&
+        configuration.pushover.recipientLabel.includes(secret)
+      ) {
+        throw new TypeError(
+          "pushover.recipientLabel must not contain a Pushover credential",
+        );
+      }
+    }
+  }
   requireNonEmpty("pushover.userKey", configuration.pushover.userKey);
   return configuration;
 };

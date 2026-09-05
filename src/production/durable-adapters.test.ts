@@ -443,6 +443,7 @@ describe("durable production adapters", () => {
       apiUrl: "https://notify.invalid/messages",
       applicationToken: "retired-application-token",
       consoleBaseUrl: "https://console.invalid/",
+      recipientLabel: "Primary operator",
       userKey: "operator-key",
     };
     const notifier = new DurablePushoverNotifier(persistence, configuration, {
@@ -452,6 +453,13 @@ describe("durable production adapters", () => {
     await expect(notifier.send(attention)).rejects.toMatchObject({
       category: "application-credential-rejected",
       occurrence: 1,
+    });
+    expect(
+      persistence.notificationFailure(attention.attentionId),
+    ).toMatchObject({
+      message: attention.message,
+      occurrence: 1,
+      recipientLabel: "Primary operator",
     });
     await expect(notifier.send(attention)).rejects.toMatchObject({
       occurrence: 1,
@@ -548,6 +556,105 @@ describe("durable production adapters", () => {
     persistence.close();
   });
 
+  it("backfills missing verification without changing an existing rejection occurrence", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-verification-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-28",
+      state: "waiting",
+      taskId: 28,
+    });
+    const attention = {
+      attentionId: "task-28:session:choice",
+      instanceId: "task-28",
+      message: "A sample needs attention",
+    };
+    const configuration = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "operator-key",
+    };
+    const rejected = vi.fn(async () => {
+      throw new NotificationDeliveryError("permanent", "request-rejected");
+    });
+
+    await expect(
+      new DurablePushoverNotifier(persistence, configuration, {
+        send: rejected,
+      }).send(attention),
+    ).rejects.toBeInstanceOf(NotificationDeliveryError);
+    expect(
+      persistence.notificationFailure(attention.attentionId),
+    ).toMatchObject({ message: null, occurrence: 1, recipientLabel: null });
+
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        { ...configuration, recipientLabel: "Primary operator" },
+        { send: rejected },
+      ).send(attention),
+    ).rejects.toBeInstanceOf(NotificationDeliveryError);
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        { ...configuration, recipientLabel: "Alternate operator" },
+        { send: rejected },
+      ).send(attention),
+    ).rejects.toBeInstanceOf(NotificationDeliveryError);
+    expect(
+      persistence.notificationFailure(attention.attentionId),
+    ).toMatchObject({
+      message: attention.message,
+      occurrence: 1,
+      recipientLabel: "Primary operator",
+    });
+    expect(rejected).toHaveBeenCalledOnce();
+    persistence.close();
+  });
+
+  it("keeps verification unavailable when the intended message contains a configured credential", async () => {
+    directory = await mkdtemp(
+      join(tmpdir(), "heddle-pushover-private-message-"),
+    );
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "sample-instance",
+      state: "waiting",
+      taskId: 29,
+    });
+    const attention = {
+      attentionId: "sample-notification",
+      instanceId: "sample-instance",
+      message: "A sample contains application-token",
+    };
+    const notifier = new DurablePushoverNotifier(
+      persistence,
+      {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        recipientLabel: "Primary operator",
+        userKey: "operator-key",
+      },
+      {
+        send: async () => {
+          throw new NotificationDeliveryError("permanent", "request-rejected");
+        },
+      },
+    );
+
+    await expect(notifier.send(attention)).rejects.toBeInstanceOf(
+      NotificationDeliveryError,
+    );
+    expect(
+      persistence.notificationFailure(attention.attentionId),
+    ).toMatchObject({ message: null, occurrence: 1, recipientLabel: null });
+    persistence.close();
+  });
+
   it("upgrades a matching legacy pending fingerprint without sending twice", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-legacy-"));
     const persistence = new SqlitePersistence({ stateDirectory: directory });
@@ -616,6 +723,7 @@ describe("durable production adapters", () => {
       apiUrl: "https://notify.invalid/messages",
       applicationToken: "retired-application-token",
       consoleBaseUrl: "https://console.invalid/",
+      recipientLabel: "Primary operator",
       userKey: "operator-key",
     };
     const retiredMessage = {
@@ -642,6 +750,13 @@ describe("durable production adapters", () => {
       category: "legacy-intent-unverifiable",
       disposition: "operator-action",
       occurrence: 1,
+    });
+    expect(
+      persistence.notificationFailure(attention.attentionId),
+    ).toMatchObject({
+      category: "legacy-intent-unverifiable",
+      message: attention.message,
+      recipientLabel: "Primary operator",
     });
     await expect(recovered.send(attention)).rejects.toMatchObject({
       occurrence: 1,
