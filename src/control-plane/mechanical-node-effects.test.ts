@@ -568,6 +568,61 @@ describe("delivery mechanical nodes", () => {
     });
   });
 
+  it("does not reuse an accepted event for another base head", async () => {
+    const fixture = await prepareCommittedChange();
+    await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");
+    await git(fixture.worktreePath, "add", "notes.txt");
+    await git(fixture.worktreePath, "commit", "--quiet", "-m", "add note");
+    const firstSnapshot = await ensureReviewSnapshot(fixture.change);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "approve",
+      firstSnapshot.snapshotId,
+      "--basis",
+      `${firstSnapshot.sourceHead}:${firstSnapshot.baseHead}`,
+    ]);
+    const nextBase = (
+      await git(fixture.sourcePath, "rev-parse", `${firstSnapshot.sourceHead}^`)
+    ).trim();
+    await git(
+      fixture.sourcePath,
+      "update-ref",
+      "refs/heads/main",
+      nextBase,
+      firstSnapshot.baseHead,
+    );
+    await git(fixture.sourcePath, "reset", "--hard", nextBase);
+    const nextSnapshot = await ensureReviewSnapshot(fixture.change);
+    expect(nextSnapshot).toMatchObject({
+      baseHead: nextBase,
+      snapshotId: firstSnapshot.snapshotId,
+      sourceHead: firstSnapshot.sourceHead,
+    });
+
+    const approvals: string[][] = [];
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (executable === "gitpr" && arguments_[0] === "approve") {
+        approvals.push(arguments_);
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+    await expect(
+      mergeReviewSnapshot(fixture.change, nextSnapshot, command),
+    ).resolves.toMatchObject({ merged: true });
+    expect(approvals).toEqual([
+      [
+        "approve",
+        nextSnapshot.snapshotId,
+        "--basis",
+        `${nextSnapshot.sourceHead}:${nextSnapshot.baseHead}`,
+      ],
+    ]);
+  });
+
   it("fails a conflicting merge and preserves both branch heads", async () => {
     const fixture = await prepareCommittedChange();
     await writeFile(join(fixture.sourcePath, "inventory.txt"), "replacement\n");
