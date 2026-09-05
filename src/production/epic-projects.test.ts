@@ -317,6 +317,9 @@ describe("EpicProjectCoordinator", () => {
         async () => undefined,
       );
       await expect(restarted.reconcile([task("done")])).resolves.toEqual([]);
+      await expect(restarted.reconcile([task("in-progress")])).rejects.toThrow(
+        "project deletion cannot be reversed",
+      );
       expect(restartedPersistence.getEpicProject(101)?.state).toBe(state);
       expect(() =>
         restarted.projectForTask({ ...task("todo"), id: 102, parent: 101 }),
