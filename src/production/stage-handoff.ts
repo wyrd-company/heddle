@@ -37,9 +37,6 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 const reviewObjectId = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 
-const nullableReviewObjectId = (value: unknown): value is string | null =>
-  value === null || reviewObjectId(value);
-
 const nonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value !== "";
 
@@ -56,8 +53,8 @@ const reviewBasisDriftCause = (
     !nonEmptyString(candidate["targetBranch"]) ||
     !reviewObjectId(candidate["reviewedSourceHead"]) ||
     !reviewObjectId(candidate["reviewedBaseHead"]) ||
-    !nullableReviewObjectId(candidate["currentSourceHead"]) ||
-    !nullableReviewObjectId(candidate["currentTargetHead"])
+    !reviewObjectId(candidate["currentSourceHead"]) ||
+    !reviewObjectId(candidate["currentTargetHead"])
   ) {
     return undefined;
   }
@@ -224,6 +221,8 @@ export const readProductionHandoffStage = async (input: {
       ? review["findings"]
       : undefined;
   const hasReviewFindings = reviewFindings !== undefined;
+  // One resume either runs merge after approval or carries rejection findings.
+  // The conjunct makes that lifecycle exclusivity explicit for decoded data.
   const findings =
     driftCause === undefined && hasReviewFindings ? reviewFindings : [];
   return {

@@ -27,6 +27,14 @@ const driftCause = {
   sourceBranch: "task/change",
   targetBranch: "main",
 };
+const laterDriftCause = {
+  ...driftCause,
+  currentSourceHead: "e".repeat(40),
+  currentTargetHead: "f".repeat(40),
+  reviewedBaseHead: "d".repeat(40),
+  reviewedSourceHead: "e".repeat(40),
+  snapshotId: "SAMPLE2",
+};
 
 const executeFile = promisify(execFile);
 const temporaryDirectories: string[] = [];
@@ -101,6 +109,7 @@ describe("production stage handoff", () => {
     {
       firstDisposition: "approve",
       firstOutput: undefined,
+      driftCauses: [driftCause],
       label: "later review findings over stale drift",
       secondDisposition: "reject",
       secondOutput: {
@@ -116,10 +125,21 @@ describe("production stage handoff", () => {
       firstOutput: {
         findings: [{ code: "P1", summary: "A recorded value is unchecked" }],
       },
+      driftCauses: [laterDriftCause],
       label: "current drift over earlier review findings",
       secondDisposition: "approve",
       secondOutput: undefined,
-      expectedCause: driftCause,
+      expectedCause: laterDriftCause,
+      expectedFindings: [],
+    },
+    {
+      firstDisposition: "approve",
+      firstOutput: undefined,
+      driftCauses: [driftCause, laterDriftCause],
+      label: "latest drift across consecutive mechanical drift loops",
+      secondDisposition: "approve",
+      secondOutput: undefined,
+      expectedCause: laterDriftCause,
       expectedFindings: [],
     },
   ])(
@@ -129,6 +149,7 @@ describe("production stage handoff", () => {
       expectedFindings,
       firstDisposition,
       firstOutput,
+      driftCauses,
       secondDisposition,
       secondOutput,
     }) => {
@@ -140,18 +161,33 @@ describe("production stage handoff", () => {
       const persistence = new SqlitePersistence({
         stateDirectory: join(repositoryRoot, "state"),
       });
+      let mergeActivation = 0;
+      let reviewSnapshotActivation = 0;
       const engine = new LifecycleEngine({
         effects: {
           finalize: async () => ({}),
-          merge: async () => ({
-            alreadyMerged: false,
-            dispositions: { merged: false, remediate: true },
-            merged: false,
-            remediationCause: driftCause,
-            snapshotId: driftCause.snapshotId,
-          }),
+          merge: async () => {
+            const cause =
+              driftCauses[
+                Math.min(mergeActivation, driftCauses.length - 1)
+              ]!;
+            mergeActivation += 1;
+            return {
+              alreadyMerged: false,
+              dispositions: { merged: false, remediate: true },
+              merged: false,
+              remediationCause: cause,
+              snapshotId: cause.snapshotId,
+            };
+          },
           "prepare-worktree": async () => ({ prepared: true }),
-          "review-snapshot": async () => ({ snapshotId: "SAMPLE1" }),
+          "review-snapshot": async () => {
+            reviewSnapshotActivation += 1;
+            return {
+              snapshotId:
+                reviewSnapshotActivation === 1 ? "SAMPLE1" : "SAMPLE2",
+            };
+          },
         },
         persistence,
         repositoryRoot,
@@ -219,6 +255,32 @@ describe("production stage handoff", () => {
   );
 
   it.each([
+    {
+      label: "a missing current source",
+      mechanicalOutput: {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        remediationCause: {
+          ...driftCause,
+          currentSourceHead: null,
+        },
+        snapshotId: driftCause.snapshotId,
+      },
+    },
+    {
+      label: "a missing current target",
+      mechanicalOutput: {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        remediationCause: {
+          ...driftCause,
+          currentTargetHead: null,
+        },
+        snapshotId: driftCause.snapshotId,
+      },
+    },
     {
       label: "a numeric snapshot identity",
       mechanicalOutput: {
