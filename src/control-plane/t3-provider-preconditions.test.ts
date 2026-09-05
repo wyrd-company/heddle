@@ -128,24 +128,6 @@ describe("T3 provider dispatch preconditions", () => {
       context: {
         driver: "cursor",
         cliVersion: "2026.08.11-e8db854",
-        lifecycle: "independent",
-      },
-      runtimeMode: "full-access",
-      reason: "provider-runtime-mode-mismatch",
-    },
-    {
-      context: {
-        driver: "cursor",
-        cliVersion: "2026.08.25-3e8eec8",
-        lifecycle: "independent",
-      },
-      runtimeMode: "approval-required",
-      reason: "provider-runtime-mode-mismatch",
-    },
-    {
-      context: {
-        driver: "cursor",
-        cliVersion: "2026.08.11-e8db854",
         lifecycle: "assistive",
       },
       runtimeMode: "auto",
@@ -160,6 +142,38 @@ describe("T3 provider dispatch preconditions", () => {
           runtimeMode,
         ),
       reason,
+    );
+  });
+
+  it("rejects full access for the earlier Cursor version", () => {
+    expectReason(
+      () =>
+        assertT3ProviderDispatchPreconditions(
+          t3ProviderPreconditions,
+          {
+            driver: "cursor",
+            cliVersion: "2026.08.11-e8db854",
+            lifecycle: "independent",
+          },
+          "full-access",
+        ),
+      "provider-runtime-mode-mismatch",
+    );
+  });
+
+  it("rejects an unsupported mode for the qualified Cursor version", () => {
+    expectReason(
+      () =>
+        assertT3ProviderDispatchPreconditions(
+          t3ProviderPreconditions,
+          {
+            driver: "cursor",
+            cliVersion: "2026.08.25-3e8eec8",
+            lifecycle: "independent",
+          },
+          "approval-required",
+        ),
+      "provider-runtime-mode-mismatch",
     );
   });
 });
