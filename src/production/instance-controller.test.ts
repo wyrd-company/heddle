@@ -15,6 +15,7 @@ import type { BoardTask } from "../board-adapter/index.js";
 import type { LifecycleSnapshot } from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
+import { DurableAttentionQueue } from "./durable-adapters.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import type { ProductionConfiguration } from "./configuration.js";
@@ -27,6 +28,61 @@ describe("production instance controller", () => {
 
   afterEach(async () => {
     if (root !== "") await rm(root, { force: true, recursive: true });
+  });
+
+  it("suppresses intentional lifecycle absence and preserves a genuine missing-instance alarm", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-instance-absence-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    for (const [taskId, state] of [
+      [10, "deferred"],
+      [11, "starting"],
+      [12, "running"],
+    ] as const) {
+      persistence.writeReconcilerRuntime({
+        boardStatus: state === "deferred" ? "todo" : "in-progress",
+        instanceId: `sample-${taskId}`,
+        state,
+        taskId,
+      });
+    }
+    const attention = new DurableAttentionQueue(persistence);
+    const controller = new ProductionInstanceController(
+      {} as ProductionConfiguration,
+      persistence,
+      {} as ProductionLifecycleRouter,
+      {} as ProductRoutingCatalog,
+      {} as EpicProjectCoordinator,
+      attention,
+      {} as never,
+      "http://127.0.0.1:4774/mcp",
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+    );
+
+    await controller.synchronize([]);
+
+    expect(attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: "production:lifecycle-instance-absent:task:12:sample-12",
+        taskId: 12,
+      }),
+    ]);
+    expect(
+      attention.resolve(
+        "production:lifecycle-instance-absent:task:12:sample-12",
+      ),
+    ).toBe(true);
+
+    await controller.synchronize([]);
+
+    expect(attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: "production:lifecycle-instance-absent:task:12:sample-12",
+      }),
+    ]);
+    persistence.close();
   });
 
   it("does not replay a transition that is active in this service process", async () => {

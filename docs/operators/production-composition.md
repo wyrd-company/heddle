@@ -409,7 +409,14 @@ Flowcraft `lifecycle:attention-required` events enter the same durable queue.
 Their persisted error data includes the node error and nested cause messages, so
 the attention entry can diagnose a mechanical failure without source reading.
 The bridge keys the entry by task, instance, and lifecycle transition; replay or
-another cadence pass does not create another open entry.
+another cadence pass does not create another entry. The entry remains open while
+that exact transition is pending and resolves after its successful retry.
+
+A deferred or starting reconciler runtime can intentionally exist before its
+lifecycle state. Synchronization does not report that interval as
+`lifecycle-instance-absent`. If a matching stale entry exists, synchronization
+resolves it when the lifecycle state appears. A running, waiting, or completed
+runtime with no lifecycle state remains a production error.
 
 A failure that cannot be attributed to one item aborts that pass. The scheduler
 raises global durable attention and `heddle-server` writes one

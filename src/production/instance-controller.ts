@@ -71,6 +71,11 @@ const defaultMechanicalBoardStatuses =
     ...mechanicalBoardStatusNames,
   });
 
+const synchronizationAttentionId = (
+  runtime: ReconcilerRuntimeRecord,
+  code: string,
+): string => `production:${code}:task:${runtime.taskId}:${runtime.instanceId}`;
+
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(
     private readonly configuration: ProductionConfiguration,
@@ -277,6 +282,13 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       try {
         const record = this.persistence.getInstance(runtime.instanceId);
         if (record === undefined) {
+          if (runtime.state === "deferred" || runtime.state === "starting") {
+            await this.#resolveSynchronizationError(
+              runtime,
+              "lifecycle-instance-absent",
+            );
+            continue;
+          }
           await this.#raiseSynchronizationError(
             runtime,
             "lifecycle-instance-absent",
@@ -286,6 +298,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           );
           continue;
         }
+        await this.#resolveSynchronizationError(
+          runtime,
+          "lifecycle-instance-absent",
+        );
         const task = tasksById.get(runtime.taskId);
         if (task === undefined) {
           await this.#raiseSynchronizationError(
@@ -396,8 +412,13 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     code: string,
     error: unknown,
   ): Promise<void> {
-    const attentionId = `production:${code}:task:${runtime.taskId}:${runtime.instanceId}`;
-    if (await this.attention.has(attentionId)) return;
+    const attentionId = synchronizationAttentionId(runtime, code);
+    if (await this.attention.has(attentionId)) {
+      if (code === "lifecycle-instance-absent") {
+        this.attention.reopen(attentionId);
+      }
+      return;
+    }
     await this.attention.raise({
       attentionId,
       code,
@@ -407,6 +428,16 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       message: `Instance ${runtime.instanceId} synchronization failed: ${describeError(error)}`,
       taskId: runtime.taskId,
     });
+  }
+
+  async #resolveSynchronizationError(
+    runtime: ReconcilerRuntimeRecord,
+    code: string,
+  ): Promise<void> {
+    const attentionId = synchronizationAttentionId(runtime, code);
+    if (await this.attention.has(attentionId)) {
+      this.attention.resolve(attentionId);
+    }
   }
 
   async #activate(

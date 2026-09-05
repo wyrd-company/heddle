@@ -27,7 +27,26 @@ describe("production lifecycle attention bridge", () => {
     const persistence = new SqlitePersistence({ stateDirectory: root });
     persistence.createInstance("sample-instance", {
       correlationTokens: {},
-      flowcraftContext: {},
+      flowcraftContext: {
+        awaitingNodeIds: [],
+        blueprintBlobHash: "0123456789012345678901234567890123456789",
+        blueprintPath: "blueprints/sample.json",
+        completedOperations: {},
+        executionIds: [],
+        nextTransitionNumber: 2,
+        pendingAttentions: [],
+        pendingTransition: {
+          disposition: null,
+          id: "sample-instance:1",
+          initialContext: {},
+          kind: "start",
+          operationId: null,
+          output: null,
+          requestFingerprint: null,
+        },
+        serializedContext: null,
+        status: "pending",
+      },
       handoffs: [],
       todoState: {},
     });
@@ -59,6 +78,13 @@ describe("production lifecycle attention bridge", () => {
     await bridge.flush();
     await bridge.flush();
 
+    expect(
+      attention.resolve(
+        "production:lifecycle-execution-failed:task:42:sample-instance:sample-instance:1",
+      ),
+    ).toBe(true);
+    await bridge.flush();
+
     expect(attention.list()).toEqual([
       expect.objectContaining({
         attentionId:
@@ -71,6 +97,63 @@ describe("production lifecycle attention bridge", () => {
         taskId: 42,
       }),
     ]);
+
+    const current = persistence.getInstance("sample-instance")!;
+    persistence.compareAndSwapInstance("sample-instance", current.version, {
+      ...current.state,
+      flowcraftContext: {
+        awaitingNodeIds: ["inspect"],
+        blueprintBlobHash: "0123456789012345678901234567890123456789",
+        blueprintPath: "blueprints/sample.json",
+        completedOperations: {
+          "complete-first": {
+            awaitingNodeIds: ["inspect"],
+            executionIds: ["execution-a"],
+            requestFingerprint: "first-request",
+            status: "awaiting",
+            transitionId: "sample-instance:1",
+          },
+        },
+        executionIds: ["execution-a"],
+        nextTransitionNumber: 3,
+        pendingAttentions: [],
+        pendingTransition: {
+          disposition: "complete",
+          id: "sample-instance:2",
+          initialContext: null,
+          kind: "resume",
+          operationId: "complete-second",
+          output: {},
+          requestFingerprint: "second-request",
+        },
+        serializedContext: "{}",
+        status: "awaiting",
+      },
+    });
+    persistence.appendEvent("sample-instance", "lifecycle:attention-required", {
+      actualAwaitingNodeIds: [],
+      actualStatus: "failed",
+      attentionId: "engine-attention-second",
+      errors: [],
+      executionId: "execution-b",
+      expectedAwaitingNodeIds: ["finish"],
+      expectedTerminalNodeIds: [],
+      transitionId: "sample-instance:2",
+    });
+
+    await bridge.flush();
+
+    expect(attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId:
+          "production:lifecycle-execution-failed:task:42:sample-instance:sample-instance:2",
+      }),
+    ]);
+    expect(
+      persistence.hasAttention(
+        "production:lifecycle-execution-failed:task:42:sample-instance:sample-instance:1",
+      ),
+    ).toBe(true);
     persistence.close();
   });
 });

@@ -9,6 +9,7 @@ import {
   errorDetail,
   type ErrorDetail,
 } from "../error-details.js";
+import { readLifecycleContext } from "../engine/index.js";
 import type {
   JsonValue,
   ReconcilerRuntimeRecord,
@@ -71,13 +72,33 @@ export class LifecycleAttentionBridge {
   }
 
   async #flushRuntime(runtime: ReconcilerRuntimeRecord): Promise<void> {
+    const record = this.persistence.getInstance(runtime.instanceId);
+    const context =
+      record === undefined ? undefined : readLifecycleContext(record);
     for (const event of this.persistence
       .replayEvents(runtime.instanceId)
       .filter(({ type }) => type === lifecycleAttentionEvent)) {
       const payload = payloadRecord(event.payload);
       const transitionId = requiredString(payload, "transitionId");
       const attentionId = `production:lifecycle-execution-failed:task:${runtime.taskId}:${runtime.instanceId}:${transitionId}`;
-      if (await this.attention.has(attentionId)) continue;
+      const transitionCompleted =
+        context !== undefined &&
+        (Object.values(context.completedOperations).some(
+          (operation) => operation.transitionId === transitionId,
+        ) ||
+          (transitionId === `${runtime.instanceId}:1` &&
+            context.serializedContext !== null &&
+            context.pendingTransition?.id !== transitionId));
+      if (transitionCompleted) {
+        if (await this.attention.has(attentionId)) {
+          this.attention.resolve(attentionId);
+        }
+        continue;
+      }
+      if (await this.attention.has(attentionId)) {
+        this.attention.reopen(attentionId);
+        continue;
+      }
       const errors = errorsFrom(payload);
       const actualStatus = payload["actualStatus"];
       const summary =

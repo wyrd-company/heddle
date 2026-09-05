@@ -15,6 +15,7 @@ import {
 } from "../control-plane/index.js";
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
+import { errorDetail } from "../error-details.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -420,6 +421,33 @@ describe("production composition", () => {
       state: "deferred",
     });
     expect(t3.commands).toHaveLength(0);
+    expect(
+      composition.attention
+        .list()
+        .filter(({ taskId: value }) => value === taskId),
+    ).toEqual([]);
+
+    const instanceId = `task-${taskId}`;
+    const absenceAttentionId = `production:lifecycle-instance-absent:task:${taskId}:${instanceId}`;
+    await composition.attention.raise({
+      attentionId: absenceAttentionId,
+      code: "lifecycle-instance-absent",
+      error: errorDetail(new Error("Synthetic stale lifecycle absence")),
+      instanceId,
+      kind: "production-error",
+      message: "Synthetic stale lifecycle absence",
+      taskId,
+    });
+    const unrelatedAttentionId = `production:unrelated-recovery-probe:task:${taskId}:${instanceId}`;
+    await composition.attention.raise({
+      attentionId: unrelatedAttentionId,
+      code: "unrelated-recovery-probe",
+      error: errorDetail(new Error("Synthetic unrelated condition")),
+      instanceId,
+      kind: "production-error",
+      message: "Synthetic unrelated condition",
+      taskId,
+    });
 
     composition.persistence.writeReconcilerRuntime({
       boardStatus: "done",
@@ -437,6 +465,12 @@ describe("production composition", () => {
     expect(
       t3.commands.filter(({ type }) => type === "thread.create"),
     ).toHaveLength(1);
+    expect(
+      composition.attention
+        .list()
+        .filter(({ taskId: value }) => value === taskId)
+        .map(({ attentionId }) => attentionId),
+    ).toEqual([unrelatedAttentionId]);
     await composition.close();
   });
 

@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -387,7 +387,7 @@ describe("production mechanical worktree preparation", () => {
     await composition.close();
   });
 
-  it("bridges a mechanical failure through the scheduler once across cadence passes", async () => {
+  it("resolves only the recovered mechanical transition failure after its successful retry", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     await useMechanicalLifecycle(fixture);
@@ -408,32 +408,6 @@ describe("production mechanical worktree preparation", () => {
     });
 
     await composition.start();
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "create",
-        "Additional Item",
-        "--status",
-        "todo",
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: fixture.root },
-    );
-    const additionalTaskId = (JSON.parse(created.stdout) as { id: number }).id;
-    await vi.waitFor(
-      () => {
-        expect(
-          composition.persistence
-            .listReconcilerRuntime()
-            .some(({ taskId }) => taskId === additionalTaskId),
-        ).toBe(true);
-      },
-      { timeout: 3_000 },
-    );
 
     expect(
       composition.attention
@@ -452,6 +426,40 @@ describe("production mechanical worktree preparation", () => {
         taskId: fixture.taskId,
       }),
     ]);
+
+    const transitionAttention = composition.attention
+      .list()
+      .find(({ taskId }) => taskId === fixture.taskId)!;
+    const unrelatedAttentionId = `production:unrelated-recovery-probe:task:${fixture.taskId}:task-${fixture.taskId}`;
+    await composition.attention.raise({
+      attentionId: unrelatedAttentionId,
+      code: "unrelated-recovery-probe",
+      error: {
+        cause: null,
+        message: "Synthetic unrelated condition",
+        name: "Error",
+      },
+      instanceId: `task-${fixture.taskId}`,
+      kind: "production-error",
+      message: "Synthetic unrelated condition",
+      taskId: fixture.taskId,
+    });
+    await rm(fixture.configuration.session.worktreesRoot!);
+    await mkdir(fixture.configuration.session.worktreesRoot!);
+
+    await composition.scheduler.trigger();
+
+    expect(
+      composition.attention.list().map(({ attentionId }) => attentionId),
+    ).toEqual([unrelatedAttentionId]);
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === fixture.taskId),
+    ).toMatchObject({ stageId: "implement", state: "waiting" });
+    expect(
+      composition.persistence.hasAttention(transitionAttention.attentionId),
+    ).toBe(true);
     await composition.close();
   });
 });

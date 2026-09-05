@@ -38,8 +38,10 @@ proposed-design:
     the instance landed in an expected state and raises attention when
     it did not. The lifecycle attention event preserves the Flowcraft error and
     its cause chain as JSON data, and the production bridge projects it into one
-    durable task attention entry per transition. Node execution is at-least-once,
-    so every node effect is idempotent.
+    durable task attention entry per transition. The entry remains open while
+    that transition is pending and resolves only after the same transition
+    lands successfully. Node execution is at-least-once, so every node effect
+    is idempotent.
 
     Each task names its lifecycle: a `lifecycle` property on the
     task — front matter where the board stores it, a `lifecycle:`
@@ -142,7 +144,11 @@ proposed-design:
     applicable limit, observed usage or occupancy, and the next provider
     window time when one applies. An unchanged deferral converges without
     another write. Each reconciliation pass evaluates deferred work
-    again, so released capacity starts it on a later pass.
+    again, so released capacity starts it on a later pass. A deferred or
+    starting runtime may intentionally precede lifecycle-state creation and
+    does not raise missing-instance attention. Synchronization resolves the
+    matching stale entry after lifecycle state appears; other runtime records
+    with no lifecycle state remain operator-visible failures.
 
     One production composition owns reconciliation for a workspace. It
     constructs the real board adapter, SQLite-backed instance controller,
