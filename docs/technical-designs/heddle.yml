@@ -487,8 +487,13 @@ proposed-design:
     occurrence and make no further transport call until the exact Retry
     notification action authorizes recovery of that occurrence. Another
     permanent response creates a new occurrence; a retryable response follows
-    the durable deadline without another action. Neither failure state nor
-    recovery changes or answers the original escalation attention.
+    the durable deadline without another action. A newly raised delivery-failure
+    entry is the current projection for its stable notification and resolves
+    only older notification-delivery entries for that stable ID. A permanent
+    rejection therefore leaves no earlier automatic-retry guidance visible;
+    failures for other notifications and the original escalation or pageable
+    attention remain unresolved. Neither failure state nor recovery changes or
+    answers the original escalation attention.
 
     A legacy pending combined fingerprint upgrades when it exactly matches the
     current combined message. A mismatch is not assumed to be credential-only:

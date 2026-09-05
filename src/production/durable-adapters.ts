@@ -23,7 +23,10 @@ import type { ReconcilerAttention } from "../reconciler/index.js";
 import type { BlueprintRepositoryAttention } from "./blueprint-repository.js";
 import type { PushoverConfiguration } from "./configuration.js";
 import { projectProductionAttention } from "./attention-projection.js";
-import type { ProductionErrorAttention } from "./error-visibility.js";
+import type {
+  NotificationDeliveryAttention,
+  ProductionErrorAttention,
+} from "./error-visibility.js";
 
 export type DurableAttention =
   | BlueprintRepositoryAttention
@@ -31,6 +34,12 @@ export type DurableAttention =
   | ProductionErrorAttention
   | ReconcilerAttention
   | SessionObservationAttention;
+
+const notificationFailureCodes = new Set([
+  "notification-delivery-recovery-required",
+  "notification-delivery-rejected",
+  "notification-delivery-retryable",
+]);
 
 export class DurableAttentionQueue {
   public constructor(private readonly persistence: SqlitePersistence) {}
@@ -61,15 +70,28 @@ export class DurableAttentionQueue {
     return this.persistence.resolveAttention(attentionId);
   }
 
+  async raiseCurrentNotificationFailure(
+    attention: NotificationDeliveryAttention,
+  ): Promise<void> {
+    await this.raise(attention);
+    this.#resolveNotificationFailures(
+      attention.notificationStableId,
+      attention.attentionId,
+    );
+  }
+
   resolveNotificationFailures(notificationStableId: string): void {
-    const notificationFailureCodes = new Set([
-      "notification-delivery-recovery-required",
-      "notification-delivery-rejected",
-      "notification-delivery-retryable",
-    ]);
+    this.#resolveNotificationFailures(notificationStableId);
+  }
+
+  #resolveNotificationFailures(
+    notificationStableId: string,
+    retainedAttentionId?: string,
+  ): void {
     for (const record of this.persistence.listAttention()) {
       const payload = record.payload;
       if (
+        record.attentionId !== retainedAttentionId &&
         typeof payload === "object" &&
         payload !== null &&
         !Array.isArray(payload) &&

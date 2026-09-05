@@ -504,6 +504,11 @@ restarts the service, and selects Retry notification on that exact occurrence.
 The action authorizes recovery of that occurrence. Another permanent response
 creates the next occurrence; a retryable response follows the durable deadline
 without requiring another action.
+When one stable notification changes delivery-failure state, the newly raised
+entry becomes its current projection and resolves only older
+notification-delivery entries for that stable ID. A permanent rejection does
+not leave earlier automatic-retry guidance visible. Other notification failures
+and the original escalation or pageable attention remain unresolved.
 The original escalation attention and unanswered questions remain unchanged.
 
 A pending intent written by a version that stored only the combined message

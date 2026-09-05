@@ -23,6 +23,12 @@ export interface ProductionErrorAttention extends Record<string, JsonValue> {
   taskId: number | null;
 }
 
+export interface NotificationDeliveryAttention extends ProductionErrorAttention {
+  notificationCategory: NotificationDeliveryError["category"];
+  notificationOccurrence: number | null;
+  notificationStableId: string;
+}
+
 const errorFingerprint = (error: unknown): string =>
   createHash("sha256")
     .update(JSON.stringify(errorDetail(error)))
@@ -60,7 +66,7 @@ export const notificationDeliveryErrorAttention = (input: {
   instanceId: string;
   stableId: string;
   taskId: number;
-}): ProductionErrorAttention => {
+}): NotificationDeliveryAttention => {
   const identity = notificationIdentity(input.stableId);
   const occurrence = input.error.occurrence;
   const retryable = input.error.disposition === "retryable";

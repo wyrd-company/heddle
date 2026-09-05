@@ -219,9 +219,7 @@ export const createProductionComposition = (
         stableId: page.attentionId,
         taskId: runtime.taskId,
       });
-      if (!(await attention.has(failure.attentionId))) {
-        await attention.raise(failure);
-      }
+      await attention.raiseCurrentNotificationFailure(failure);
     };
     const escalation = new EscalationCoordinator({
       attention: {
