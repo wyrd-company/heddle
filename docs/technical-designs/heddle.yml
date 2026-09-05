@@ -471,10 +471,14 @@ proposed-design:
     A session that ends, fails, or stalls without advancing is a
     designed-for transition: after its threshold, the instance moves
     to an attention state and notifies the operator. Pending T3
-    approvals and user-input requests surface through the same poll
-    into the attention queue with actions that answer the recorded T3
-    request. A user-input attention record carries the exact typed question
-    catalog from the T3 request activity; consumers do not reconstruct
+    approvals and user-input requests surface through the same poll. Heddle
+    folds request and resolution activities by request ID and creates one
+    durable attention record for each unresolved request. Its actions retain
+    the exact T3 request ID. Approval attention uses the optional bounded ACP
+    tool title from T3 when present and otherwise keeps the generic message; it
+    does not infer display metadata from request details, arguments, command
+    text, or raw payload. A user-input attention record carries the exact typed
+    question catalog from the T3 request activity; consumers do not reconstruct
     prompts, options, or answer cardinality from thread messages or shell
     flags. Heddle dispositions every pending approval and user-input
     request before stopping a session, because stop settles unanswered
