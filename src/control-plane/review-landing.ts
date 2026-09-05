@@ -26,18 +26,71 @@ import {
   type ReviewSnapshot,
 } from "./review-snapshot.js";
 
-export interface MergeSnapshotResult extends Record<string, JsonValue> {
+interface MergeSnapshotResultBase extends Record<string, JsonValue> {
   alreadyMerged: boolean;
-  dispositions: { merged: boolean; remediate: boolean };
   merged: boolean;
   snapshotId: string;
 }
+
+export interface ReviewBasisDriftRemediationCause extends Record<
+  string,
+  JsonValue
+> {
+  currentSourceHead: string | null;
+  currentTargetHead: string | null;
+  kind: "review-basis-drift";
+  reviewedBaseHead: string;
+  reviewedSourceHead: string;
+  snapshotId: string;
+  sourceBranch: string;
+  targetBranch: string;
+}
+
+export type MergeSnapshotResult =
+  | (MergeSnapshotResultBase & {
+      dispositions: { merged: true; remediate: false };
+    })
+  | (MergeSnapshotResultBase & {
+      dispositions: { merged: false; remediate: true };
+      remediationCause: ReviewBasisDriftRemediationCause;
+    });
 
 export interface CleanupMergedChangeResult extends Record<string, JsonValue> {
   branchDeleted: boolean;
   snapshotId: string;
   worktreeRemoved: boolean;
 }
+
+const reviewBasisDriftResult = async (
+  change: MechanicalChangeContext,
+  snapshot: ReviewSnapshot,
+  command: CommandRunner,
+): Promise<MergeSnapshotResult> => {
+  const [currentSourceHead, currentTargetHead] = await Promise.all([
+    resolveMechanicalBranchHead(command, change.repositoryRoot, change.branch),
+    resolveMechanicalBranchHead(
+      command,
+      change.repositoryRoot,
+      change.baseBranch,
+    ),
+  ]);
+  return {
+    alreadyMerged: false,
+    dispositions: { merged: false, remediate: true },
+    merged: false,
+    remediationCause: {
+      currentSourceHead: currentSourceHead ?? null,
+      currentTargetHead: currentTargetHead ?? null,
+      kind: "review-basis-drift",
+      reviewedBaseHead: snapshot.baseHead,
+      reviewedSourceHead: snapshot.sourceHead,
+      snapshotId: snapshot.snapshotId,
+      sourceBranch: change.branch,
+      targetBranch: change.baseBranch,
+    },
+    snapshotId: snapshot.snapshotId,
+  };
+};
 
 export const mergeReviewSnapshot = async (
   change: MechanicalChangeContext,
@@ -97,12 +150,7 @@ export const mergeReviewSnapshot = async (
       snapshot.baseHead,
       current.baseHead,
     );
-    return {
-      alreadyMerged: false,
-      dispositions: { merged: false, remediate: true },
-      merged: false,
-      snapshotId: snapshot.snapshotId,
-    };
+    return reviewBasisDriftResult(change, snapshot, command);
   }
   const isExactEvent = (candidate: ReviewSnapshot): boolean =>
     candidate.latestEvent?.sourceHead === snapshot.sourceHead &&
@@ -167,12 +215,7 @@ export const mergeReviewSnapshot = async (
         currentSourceHead !== snapshot.sourceHead ||
         currentBaseHead !== snapshot.baseHead
       ) {
-        return {
-          alreadyMerged: false,
-          dispositions: { merged: false, remediate: true },
-          merged: false,
-          snapshotId: snapshot.snapshotId,
-        };
+        return reviewBasisDriftResult(change, snapshot, command);
       }
       throw error;
     }
@@ -202,12 +245,7 @@ export const mergeReviewSnapshot = async (
       (afterFailure.sourceHead !== snapshot.sourceHead ||
         afterFailure.baseHead !== snapshot.baseHead)
     ) {
-      return {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        snapshotId: snapshot.snapshotId,
-      };
+      return reviewBasisDriftResult(change, snapshot, command);
     }
     throw error;
   }

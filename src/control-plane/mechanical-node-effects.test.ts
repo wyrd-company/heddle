@@ -451,6 +451,9 @@ describe("delivery mechanical nodes", () => {
     await writeFile(join(fixture.worktreePath, "notes.txt"), "checked\n");
     await git(fixture.worktreePath, "add", "notes.txt");
     await git(fixture.worktreePath, "commit", "--quiet", "-m", "add note");
+    const currentSourceHead = (
+      await git(fixture.sourcePath, "rev-parse", "task/change")
+    ).trim();
 
     await expect(
       mergeReviewSnapshot(fixture.change, snapshot),
@@ -458,6 +461,16 @@ describe("delivery mechanical nodes", () => {
       alreadyMerged: false,
       dispositions: { merged: false, remediate: true },
       merged: false,
+      remediationCause: {
+        currentSourceHead,
+        currentTargetHead: baseBefore.trim(),
+        kind: "review-basis-drift",
+        reviewedBaseHead: snapshot.baseHead,
+        reviewedSourceHead: snapshot.sourceHead,
+        snapshotId: snapshot.snapshotId,
+        sourceBranch: "task/change",
+        targetBranch: "main",
+      },
       snapshotId: snapshot.snapshotId,
     });
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(baseBefore);
@@ -486,6 +499,16 @@ describe("delivery mechanical nodes", () => {
       alreadyMerged: false,
       dispositions: { merged: false, remediate: true },
       merged: false,
+      remediationCause: {
+        currentSourceHead: snapshot.sourceHead,
+        currentTargetHead: intermediateHead,
+        kind: "review-basis-drift",
+        reviewedBaseHead: snapshot.baseHead,
+        reviewedSourceHead: snapshot.sourceHead,
+        snapshotId: snapshot.snapshotId,
+        sourceBranch: "task/change",
+        targetBranch: "main",
+      },
       snapshotId: snapshot.snapshotId,
     });
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
@@ -527,6 +550,16 @@ describe("delivery mechanical nodes", () => {
     ).resolves.toMatchObject({
       dispositions: { merged: false, remediate: true },
       merged: false,
+      remediationCause: {
+        currentSourceHead: snapshot.sourceHead,
+        currentTargetHead: intermediateHead,
+        kind: "review-basis-drift",
+        reviewedBaseHead: snapshot.baseHead,
+        reviewedSourceHead: snapshot.sourceHead,
+        snapshotId: snapshot.snapshotId,
+        sourceBranch: "task/change",
+        targetBranch: "main",
+      },
     });
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
       intermediateHead + "\n",
@@ -604,6 +637,16 @@ describe("delivery mechanical nodes", () => {
     ).resolves.toMatchObject({
       dispositions: { merged: false, remediate: true },
       merged: false,
+      remediationCause: {
+        currentSourceHead: snapshot.sourceHead,
+        currentTargetHead: intermediateHead,
+        kind: "review-basis-drift",
+        reviewedBaseHead: snapshot.baseHead,
+        reviewedSourceHead: snapshot.sourceHead,
+        snapshotId: snapshot.snapshotId,
+        sourceBranch: "task/change",
+        targetBranch: "main",
+      },
     });
     expect(attempted).toBe(true);
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(

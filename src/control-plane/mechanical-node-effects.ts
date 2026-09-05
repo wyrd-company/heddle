@@ -10,6 +10,7 @@ import {
   mergeReviewSnapshot,
   type CleanupMergedChangeResult,
   type MergeSnapshotResult,
+  type ReviewBasisDriftRemediationCause,
 } from "./review-landing.js";
 import {
   defaultMechanicalCommand,
@@ -29,6 +30,7 @@ export {
   type CommandRunner,
   type MechanicalChangeContext,
   type MergeSnapshotResult,
+  type ReviewBasisDriftRemediationCause,
   type ReviewSnapshot,
 };
 

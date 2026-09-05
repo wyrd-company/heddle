@@ -25,7 +25,7 @@ describe("production concurrent review landing", () => {
 
   afterEach(async () => cleanup?.());
 
-  it("activates findings-less remediation after another task moves the epic base", async () => {
+  it("activates exact drift remediation after another task moves the epic base", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     const repositoryRoot =
@@ -123,7 +123,7 @@ describe("production concurrent review landing", () => {
     const secondTaskId = (JSON.parse(secondTask.stdout) as { id: number }).id;
     await git(repositoryRoot, "branch", `epic/${fixture.epicId}`, "main");
     const t3 = new SyntheticT3();
-    const composition = createProductionComposition({
+    const options = {
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
@@ -132,7 +132,8 @@ describe("production concurrent review landing", () => {
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
       t3,
-    });
+    };
+    let composition = createProductionComposition(options);
 
     await composition.start();
     await composition.scheduler.trigger();
@@ -166,21 +167,39 @@ describe("production concurrent review landing", () => {
     }
     await composition.scheduler.trigger();
 
+    const reviewedBaseHead = await git(
+      repositoryRoot,
+      "rev-parse",
+      `epic/${fixture.epicId}`,
+    );
     await composition.lifecycle.resume({
       disposition: "approve",
       instanceId: `task-${fixture.taskId}`,
       operationId: advanceOperationId(`task-${fixture.taskId}:review:1`),
     });
+    const currentSourceHead = await git(
+      repositoryRoot,
+      "rev-parse",
+      `heddle/task-${secondTaskId}`,
+    );
     const drifted = await composition.lifecycle.resume({
       disposition: "approve",
       instanceId: `task-${secondTaskId}`,
       operationId: advanceOperationId(`task-${secondTaskId}:review:1`),
     });
+    const currentTargetHead = await git(
+      repositoryRoot,
+      "rev-parse",
+      `epic/${fixture.epicId}`,
+    );
     expect(drifted).toMatchObject({
       awaitingNodeIds: ["remediate"],
       status: "awaiting",
     });
 
+    await composition.close();
+    composition = createProductionComposition(options);
+    await composition.start();
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
     expect(
@@ -192,16 +211,7 @@ describe("production concurrent review landing", () => {
       composition.persistence.getInstance(`task-${fixture.taskId}`)?.state
         .flowcraftContext,
     ).toMatchObject({ status: "completed" });
-    expect(composition.attention.list()).toEqual([
-      expect.objectContaining({
-        attentionId: `task-${secondTaskId}:remediate:1:advance-output:findings`,
-        instanceId: `task-${secondTaskId}`,
-        message: expect.stringContaining(
-          'received no findings field from stage "review"',
-        ),
-        taskId: secondTaskId,
-      }),
-    ]);
+    expect(composition.attention.list()).toEqual([]);
     const remediationActivation = composition.persistence
       .replayEvents(`task-${secondTaskId}`)
       .find(
@@ -214,9 +224,22 @@ describe("production concurrent review landing", () => {
       );
     expect(remediationActivation).toMatchObject({
       payload: expect.objectContaining({
-        renderedDocument: expect.stringContaining("Review findings: []"),
+        stage: "remediate",
       }),
     });
+    const renderedDocument = (
+      remediationActivation?.payload as { renderedDocument: string }
+    ).renderedDocument;
+    for (const expected of [
+      "review-basis-drift",
+      reviewedBaseHead,
+      currentSourceHead,
+      currentTargetHead,
+      "Rebase source branch",
+      "without creating a merge commit",
+    ]) {
+      expect(renderedDocument).toContain(expected);
+    }
     await composition.close();
   }, 20_000);
 });

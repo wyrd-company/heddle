@@ -56,7 +56,13 @@ kind: remediation
 
 Stage: {{ handoff.stage.name }}
 
+{% if handoff.stage.remediationCause and handoff.stage.remediationCause.kind == "review-basis-drift" %}
+Rebase source branch {{ handoff.stage.remediationCause.sourceBranch }} at {{ handoff.stage.remediationCause.currentSourceHead }} onto target branch {{ handoff.stage.remediationCause.targetBranch }} at exact head {{ handoff.stage.remediationCause.currentTargetHead }} without creating a merge commit. Preserve task-scoped changes, resolve conflicts, validate, commit only task-scoped changes, verify the exact target head is an ancestor of the current source HEAD, and verify the worktree is clean before calling advance.
+{% endif %}
+
 Review findings: {{ handoff.stage.reviewFindings | stableJson }}
+
+Remediation cause: {{ handoff.stage.remediationCause | stableJson }}
 
 {% for list in handoff.todoList.lists %}{% for item in list.items %}- [{% if item.checked %}x{% else %} {% endif %}] {{ item.text }}
 {% endfor %}{% endfor %}`;

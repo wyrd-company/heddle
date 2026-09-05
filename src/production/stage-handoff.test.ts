@@ -17,6 +17,17 @@ import { advanceOperationId } from "../mcp-server/operations.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
 
+const driftCause = {
+  currentSourceHead: "c".repeat(40),
+  currentTargetHead: "d".repeat(40),
+  kind: "review-basis-drift" as const,
+  reviewedBaseHead: "b".repeat(40),
+  reviewedSourceHead: "a".repeat(40),
+  snapshotId: "SAMPLE1",
+  sourceBranch: "task/change",
+  targetBranch: "main",
+};
+
 const executeFile = promisify(execFile);
 const temporaryDirectories: string[] = [];
 
@@ -85,4 +96,219 @@ describe("production stage handoff", () => {
     });
     persistence.close();
   });
+
+  it.each([
+    {
+      firstDisposition: "approve",
+      firstOutput: undefined,
+      label: "later review findings over stale drift",
+      secondDisposition: "reject",
+      secondOutput: {
+        findings: [{ code: "P1", summary: "A recorded value is unchecked" }],
+      },
+      expectedCause: { kind: "review-findings" },
+      expectedFindings: [
+        { code: "P1", summary: "A recorded value is unchecked" },
+      ],
+    },
+    {
+      firstDisposition: "reject",
+      firstOutput: {
+        findings: [{ code: "P1", summary: "A recorded value is unchecked" }],
+      },
+      label: "current drift over earlier review findings",
+      secondDisposition: "approve",
+      secondOutput: undefined,
+      expectedCause: driftCause,
+      expectedFindings: [],
+    },
+  ])(
+    "selects $label across remediation loops",
+    async ({
+      expectedCause,
+      expectedFindings,
+      firstDisposition,
+      firstOutput,
+      secondDisposition,
+      secondOutput,
+    }) => {
+      const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-handoff-"));
+      temporaryDirectories.push(repositoryRoot);
+      await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
+      await mkdir(join(repositoryRoot, "blueprints"));
+      await writeDeliveryBlueprintFixture(repositoryRoot, "standard-delivery");
+      const persistence = new SqlitePersistence({
+        stateDirectory: join(repositoryRoot, "state"),
+      });
+      const engine = new LifecycleEngine({
+        effects: {
+          finalize: async () => ({}),
+          merge: async () => ({
+            alreadyMerged: false,
+            dispositions: { merged: false, remediate: true },
+            merged: false,
+            remediationCause: driftCause,
+            snapshotId: driftCause.snapshotId,
+          }),
+          "prepare-worktree": async () => ({ prepared: true }),
+          "review-snapshot": async () => ({ snapshotId: "SAMPLE1" }),
+        },
+        persistence,
+        repositoryRoot,
+      });
+      const instanceId = "sample-instance";
+      await engine.start({
+        blueprintPath: "blueprints/standard-delivery.json",
+        instanceId,
+      });
+      const recordSession = (stageId: string, activation: number): string => {
+        const sessionKey = `${instanceId}:${stageId}:${activation}`;
+        persistence.writeSessionRuntime({
+          activation,
+          instanceId,
+          sessionKey,
+          stageId,
+          threadId: `${stageId}-thread-${activation}`,
+        });
+        return sessionKey;
+      };
+      const implement = recordSession("implement", 1);
+      await engine.resume({
+        disposition: "complete",
+        instanceId,
+        operationId: advanceOperationId(implement),
+      });
+      const firstReview = recordSession("review", 1);
+      await engine.resume({
+        disposition: firstDisposition,
+        instanceId,
+        operationId: advanceOperationId(firstReview),
+        ...(firstOutput === undefined ? {} : { output: firstOutput }),
+      });
+      const firstRemediation = recordSession("remediate", 1);
+      await engine.resume({
+        disposition: "complete",
+        instanceId,
+        operationId: advanceOperationId(firstRemediation),
+      });
+      const secondReview = recordSession("review", 2);
+      await engine.resume({
+        disposition: secondDisposition,
+        instanceId,
+        operationId: advanceOperationId(secondReview),
+        ...(secondOutput === undefined ? {} : { output: secondOutput }),
+      });
+      recordSession("remediate", 2);
+
+      await expect(
+        readProductionHandoffStage({
+          instanceId,
+          persistence,
+          repositoryRoot,
+          stageId: "remediate",
+        }),
+      ).resolves.toMatchObject({
+        handoff: {
+          cause: expectedCause,
+          kind: "remediation",
+          review: { findings: expectedFindings },
+        },
+      });
+      persistence.close();
+    },
+  );
+
+  it.each([
+    {
+      label: "an invalid current target",
+      mechanicalOutput: {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        remediationCause: {
+          ...driftCause,
+          currentTargetHead: "not-an-object-id",
+        },
+        snapshotId: driftCause.snapshotId,
+      },
+    },
+    {
+      label: "a mismatched outer snapshot identity",
+      mechanicalOutput: {
+        alreadyMerged: false,
+        dispositions: { merged: false, remediate: true },
+        merged: false,
+        remediationCause: driftCause,
+        snapshotId: "SAMPLE2",
+      },
+    },
+  ])(
+    "keeps the legacy missing-findings fallback for $label",
+    async ({ mechanicalOutput }) => {
+      const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-handoff-"));
+      temporaryDirectories.push(repositoryRoot);
+      await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
+      await mkdir(join(repositoryRoot, "blueprints"));
+      await writeDeliveryBlueprintFixture(repositoryRoot, "standard-delivery");
+      const persistence = new SqlitePersistence({
+        stateDirectory: join(repositoryRoot, "state"),
+      });
+      const engine = new LifecycleEngine({
+        effects: {
+          finalize: async () => ({}),
+          merge: async () => mechanicalOutput,
+          "prepare-worktree": async () => ({ prepared: true }),
+          "review-snapshot": async () => ({ snapshotId: "SAMPLE1" }),
+        },
+        persistence,
+        repositoryRoot,
+      });
+      const instanceId = "sample-instance";
+      await engine.start({
+        blueprintPath: "blueprints/standard-delivery.json",
+        instanceId,
+      });
+      for (const [stageId, disposition, activation] of [
+        ["implement", "complete", 1],
+        ["review", "approve", 1],
+      ] as const) {
+        const sessionKey = `${instanceId}:${stageId}:${activation}`;
+        persistence.writeSessionRuntime({
+          activation,
+          instanceId,
+          sessionKey,
+          stageId,
+          threadId: `${stageId}-thread-${activation}`,
+        });
+        await engine.resume({
+          disposition,
+          instanceId,
+          operationId: advanceOperationId(sessionKey),
+        });
+      }
+
+      await expect(
+        readProductionHandoffStage({
+          instanceId,
+          persistence,
+          repositoryRoot,
+          stageId: "remediate",
+        }),
+      ).resolves.toMatchObject({
+        contractIssue: { field: "findings", priorStageId: "review" },
+        handoff: {
+          kind: "remediation",
+          review: { findings: [] },
+        },
+      });
+      const handoff = await readProductionHandoffStage({
+        instanceId,
+        persistence,
+        repositoryRoot,
+        stageId: "remediate",
+      });
+      expect(handoff.handoff).not.toHaveProperty("cause");
+      persistence.close();
+    },
+  );
 });

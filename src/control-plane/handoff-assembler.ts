@@ -4,6 +4,7 @@
 // ---
 
 import type { JsonValue } from "../persistence/index.js";
+import type { ReviewBasisDriftRemediationCause } from "./review-landing.js";
 
 export type ReviewStageOutput = {
   findings: JsonValue[];
@@ -17,6 +18,7 @@ export type StandardHandoffStage = {
 };
 
 export type RemediationHandoffStage = {
+  cause?: { kind: "review-findings" } | ReviewBasisDriftRemediationCause;
   kind: "remediation";
   name: string;
   review: ReviewStageOutput;
@@ -47,6 +49,7 @@ export const assembleStageHandoff = (input: StageHandoffInput): string => {
   const stage: JsonValue =
     input.stage.kind === "remediation"
       ? {
+          remediationCause: input.stage.cause ?? null,
           kind: input.stage.kind,
           name: input.stage.name,
           reviewFindings: input.stage.review.findings,

@@ -299,8 +299,13 @@ Heddle reconstructs completed wait-stage outputs in
 recorded lifecycle execution order. A standard stage receives those prior
 outputs plus the persisted outputs of completed mechanical nodes on the path
 from the preceding wait stage, including the review snapshot identity. A
-remediation stage receives the latest review findings through the
-canonical handoff assembler; review transcript data is not dispatched.
+remediation stage receives either the current review findings or a validated
+review-basis-drift cause from the mechanical merge execution that entered that
+remediation occurrence. The drift cause contains the snapshot, source and
+target branches, reviewed source and base heads, and current source and target
+heads. It directs the agent to rebase onto the named exact target without a
+merge commit. Review transcript data is not dispatched. Missing or malformed
+legacy cause data keeps the existing missing-findings attention and empty list.
 
 The review snapshot identity is a gitpr schema-2 PR ID plus the exact source
 and base heads captured for review. The PR remains in `state: open` while review
@@ -316,8 +321,8 @@ strict Nunjucks variables. Use `stableJson` for structured values and do not
 use `random` or `date`; Heddle disables both filters and compares two renders.
 The standard context supplies `task` and `handoff`, including the normalized
 task contract, prior outputs, skill pointer, and persisted todo lists. The
-remediation context supplies the same roots with canonical review findings in
-the handoff. Raw board front matter is available only as display input under
+remediation context supplies the same roots with canonical review findings and
+the typed remediation cause in the handoff. Raw board front matter is available only as display input under
 `task`; normalized `handoff.taskContract` remains the machine authority.
 
 Before dispatch, Heddle resolves the effective system prompt, prepends it to

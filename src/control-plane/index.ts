@@ -80,6 +80,7 @@ export {
   type MechanicalChangeContext,
   type MechanicalNodeEffectOptions,
   type MergeSnapshotResult,
+  type ReviewBasisDriftRemediationCause,
   type ReviewSnapshot,
 } from "./mechanical-node-effects.js";
 export {
