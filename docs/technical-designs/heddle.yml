@@ -496,13 +496,17 @@ proposed-design:
   mechanical-nodes: >
     Every step with a single correct outcome executes as a
     deterministic blueprint node running real code: creating the
-    worktree and branch, taking the gitpr review snapshot, merging to
+    worktree and branch, creating the gitpr review record and persisting its
+    exact source/base basis, merging to
     the epic branch on approval, deleting merged branches and
     worktrees, mirroring board status, and filing records. The merge
-    node enforces the review contract mechanically: snapshots are
-    immutable and verdicts binary, an approved snapshot merges from
-    its exact head without a merge commit, and any drift between
-    snapshot and branch head routes the instance back to remediation.
+    node is reachable only from the review wait stage's approve disposition.
+    It records an accepted gitpr schema-2 review event for the persisted exact
+    source/base basis, verifies that exact event, and asks gitpr to merge it.
+    A merged record is accepted only when its merged event is accepted for that
+    same basis and the base contains the exact source head. Review events are
+    immutable and verdicts binary; any source or base drift routes the instance
+    back to remediation, and reviewed history must contain no merge commit.
     A mechanical node that cannot complete — a merge conflict, a dirty
     worktree — moves the instance to attention rather than retrying an
     agent into the failure.

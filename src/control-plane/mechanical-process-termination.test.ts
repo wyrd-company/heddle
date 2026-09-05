@@ -32,75 +32,49 @@ const transitionBoundaries: Array<{
   boundary: MechanicalTerminationBoundary;
   detachedBase: boolean;
   executable: string;
-  expectedApprovalPathAtKill: boolean;
   expectedBaseWorktreeCleanAtKill: boolean;
   expectedBranchAtKill: boolean;
-  expectedSnapshotStatusAtKill: ReviewSnapshot["status"];
+  expectedBaseAtSource: boolean;
+  expectedSnapshotStateAtKill: ReviewSnapshot["state"];
   expectedSourcePathAtKill: boolean;
   phase: BoundaryRecord["phase"];
   transition: "cleanup" | "merge";
 }> = [
   {
-    argumentPrefix: ["update-ref", "--stdin"],
-    boundary: "exact-base-integrated",
+    argumentPrefix: ["approve"],
+    boundary: "approval-recorded",
     detachedBase: false,
-    executable: "git",
-    expectedApprovalPathAtKill: false,
-    expectedBaseWorktreeCleanAtKill: false,
-    expectedBranchAtKill: true,
-    expectedSnapshotStatusAtKill: "open",
-    expectedSourcePathAtKill: true,
-    phase: "after",
-    transition: "merge",
-  },
-  {
-    argumentPrefix: ["worktree", "add"],
-    boundary: "approval-worktree-provisioned",
-    detachedBase: true,
-    executable: "git",
-    expectedApprovalPathAtKill: true,
+    executable: "gitpr",
     expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
-    expectedSnapshotStatusAtKill: "open",
+    expectedBaseAtSource: false,
+    expectedSnapshotStateAtKill: "open",
     expectedSourcePathAtKill: true,
     phase: "after",
     transition: "merge",
   },
   {
     argumentPrefix: ["merge"],
-    boundary: "exact-base-leased",
+    boundary: "merge-command-started",
     detachedBase: true,
     executable: "gitpr",
-    expectedApprovalPathAtKill: true,
     expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
-    expectedSnapshotStatusAtKill: "open",
+    expectedBaseAtSource: false,
+    expectedSnapshotStateAtKill: "open",
     expectedSourcePathAtKill: true,
     phase: "before",
     transition: "merge",
   },
   {
     argumentPrefix: ["merge"],
-    boundary: "approval-recorded",
+    boundary: "exact-base-integrated",
     detachedBase: true,
     executable: "gitpr",
-    expectedApprovalPathAtKill: true,
     expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
-    expectedSnapshotStatusAtKill: "approved",
-    expectedSourcePathAtKill: true,
-    phase: "after",
-    transition: "merge",
-  },
-  {
-    argumentPrefix: ["worktree", "remove", "--"],
-    boundary: "approval-worktree-removed",
-    detachedBase: true,
-    executable: "git",
-    expectedApprovalPathAtKill: false,
-    expectedBaseWorktreeCleanAtKill: true,
-    expectedBranchAtKill: true,
-    expectedSnapshotStatusAtKill: "approved",
+    expectedBaseAtSource: true,
+    expectedSnapshotStateAtKill: "merged",
     expectedSourcePathAtKill: true,
     phase: "after",
     transition: "merge",
@@ -110,10 +84,10 @@ const transitionBoundaries: Array<{
     boundary: "source-worktree-removed",
     detachedBase: false,
     executable: "git",
-    expectedApprovalPathAtKill: false,
     expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: true,
-    expectedSnapshotStatusAtKill: "approved",
+    expectedBaseAtSource: true,
+    expectedSnapshotStateAtKill: "merged",
     expectedSourcePathAtKill: false,
     phase: "after",
     transition: "cleanup",
@@ -123,10 +97,10 @@ const transitionBoundaries: Array<{
     boundary: "cleanup-ref-deleted",
     detachedBase: false,
     executable: "git",
-    expectedApprovalPathAtKill: false,
     expectedBaseWorktreeCleanAtKill: true,
     expectedBranchAtKill: false,
-    expectedSnapshotStatusAtKill: "approved",
+    expectedBaseAtSource: true,
+    expectedSnapshotStateAtKill: "merged",
     expectedSourcePathAtKill: false,
     phase: "after",
     transition: "cleanup",
@@ -160,31 +134,24 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
       expect(
         killed.marker.arguments.slice(0, boundaryCase.argumentPrefix.length),
       ).toEqual(boundaryCase.argumentPrefix);
-      if (boundaryCase.boundary === "exact-base-integrated") {
-        expect(killed.marker.input).toContain(
-          `update refs/heads/${fixture.change.baseBranch} ${fixture.snapshot.sourceHead} ${fixture.snapshot.baseHead}`,
-        );
-      }
       if (boundaryCase.boundary === "cleanup-ref-deleted") {
         expect(killed.marker.input).toContain(
           `delete refs/heads/${fixture.change.branch} ${fixture.snapshot.sourceHead}`,
         );
       }
-      if (
-        boundaryCase.boundary === "approval-worktree-provisioned" ||
-        boundaryCase.boundary === "approval-worktree-removed"
-      ) {
-        expect(killed.marker.arguments).toContain(fixture.approvalWorktreePath);
+      if (boundaryCase.boundary === "approval-recorded") {
+        expect(killed.marker.arguments).toEqual([
+          "approve",
+          fixture.snapshot.snapshotId,
+          "--basis",
+          `${fixture.snapshot.sourceHead}:${fixture.snapshot.baseHead}`,
+        ]);
       }
       if (boundaryCase.boundary === "source-worktree-removed") {
         expect(killed.marker.arguments.at(-1)).toBe(fixture.sourceWorktreePath);
       }
       expect(killed.topologyBeforeKill).toContainEqual(
         expect.objectContaining({ processId: killed.marker.pid }),
-      );
-      const leaseProcesses = killed.topologyBeforeKill.filter(
-        ({ arguments: arguments_, command }) =>
-          command === "git" && arguments_.includes("update-ref --stdin"),
       );
       const transformProcesses = killed.topologyBeforeKill.filter(
         ({ arguments: arguments_, command, parentPid }) =>
@@ -195,28 +162,16 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
           arguments_.endsWith(" --ping"),
       );
       expect(transformProcesses.length).toBeLessThanOrEqual(1);
-      if (
-        boundaryCase.boundary === "exact-base-leased" ||
-        boundaryCase.boundary === "approval-recorded"
-      ) {
-        expect(leaseProcesses).toHaveLength(1);
-        expect(leaseProcesses[0]).toMatchObject({
-          parentPid: killed.marker.pid,
-        });
-        expect(
-          killed.locksBeforeKill.some((path) => path.endsWith("main.lock")),
-        ).toBe(true);
-      } else {
-        expect(leaseProcesses).toHaveLength(0);
-        expect(killed.locksBeforeKill).toEqual([]);
-      }
+      expect(killed.locksBeforeKill).toEqual([]);
       expect(
         killed.topologyBeforeKill,
         JSON.stringify(killed.topologyBeforeKill, null, 2),
-      ).toHaveLength(1 + leaseProcesses.length + transformProcesses.length);
+      ).toHaveLength(1 + transformProcesses.length);
 
       expect(await readBranchHead(fixture.repositoryRoot, "main")).toBe(
-        fixture.snapshot.sourceHead,
+        boundaryCase.expectedBaseAtSource
+          ? fixture.snapshot.sourceHead
+          : fixture.snapshot.baseHead,
       );
       expect(
         await readBranchHead(fixture.repositoryRoot, fixture.change.branch),
@@ -228,9 +183,6 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
       expect(await pathExists(fixture.sourceWorktreePath)).toBe(
         boundaryCase.expectedSourcePathAtKill,
       );
-      expect(await pathExists(fixture.approvalWorktreePath)).toBe(
-        boundaryCase.expectedApprovalPathAtKill,
-      );
       if (boundaryCase.expectedSourcePathAtKill) {
         await assertOwnedWorktree(
           fixture,
@@ -238,16 +190,15 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
           fixture.change.branch,
         );
       }
-      if (boundaryCase.expectedApprovalPathAtKill) {
-        await assertOwnedWorktree(
-          fixture,
-          fixture.approvalWorktreePath,
-          fixture.change.baseBranch,
-        );
-      }
-      expect((await snapshotNow(fixture)).status).toBe(
-        boundaryCase.expectedSnapshotStatusAtKill,
+      const snapshotAtKill = await snapshotNow(fixture);
+      expect(snapshotAtKill.state).toBe(
+        boundaryCase.expectedSnapshotStateAtKill,
       );
+      expect(snapshotAtKill.latestEvent).toMatchObject({
+        baseHead: fixture.snapshot.baseHead,
+        sourceHead: fixture.snapshot.sourceHead,
+        verdict: "accepted",
+      });
       expect(
         (await git(fixture.repositoryRoot, "status", "--porcelain=v1")) === "",
       ).toBe(boundaryCase.expectedBaseWorktreeCleanAtKill);
@@ -285,8 +236,7 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
       expect(await readBranchHead(fixture.repositoryRoot, "main")).toBe(
         fixture.snapshot.sourceHead,
       );
-      expect((await snapshotNow(fixture)).status).toBe("approved");
-      expect(await pathExists(fixture.approvalWorktreePath)).toBe(false);
+      expect((await snapshotNow(fixture)).state).toBe("merged");
       expect(
         await git(fixture.repositoryRoot, "status", "--porcelain=v1"),
       ).toBe("");
@@ -339,7 +289,7 @@ describe("mechanical process-termination recovery", { timeout: 30_000 }, () => {
     expect(
       await git(fixture.sourceWorktreePath, "symbolic-ref", "--short", "HEAD"),
     ).toBe(`${fixture.change.branch}\n`);
-    expect((await snapshotNow(fixture)).status).toBe("approved");
+    expect((await snapshotNow(fixture)).state).toBe("merged");
     const persistence = new SqlitePersistence({
       stateDirectory: fixture.stateDirectory,
     });

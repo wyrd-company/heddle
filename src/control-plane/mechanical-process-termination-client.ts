@@ -217,11 +217,9 @@ export const terminateAtBoundary = async (
   const processGroupId = worker.child.pid!;
   try {
     const marker = await worker.waitForRecord("boundary");
-    const holdsLease =
-      boundary === "exact-base-leased" || boundary === "approval-recorded";
     const topologyBeforeKill = await waitForSettledProcessGroup(
       processGroupId,
-      holdsLease,
+      false,
     );
     const locksBeforeKill = await readRepositoryRefLocks(fixture);
     expect(worker.child.kill("SIGKILL")).toBe(true);

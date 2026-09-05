@@ -33,14 +33,14 @@ describe(
   "mechanical process-termination remediation",
   { timeout: 30_000 },
   () => {
-    it("routes reviewed-base drift after exact-base integration to remediation", async () => {
+    it("routes reviewed-base drift after exact approval to remediation", async () => {
       const fixture = await makeLifecycleAtReview();
-      await terminateAtBoundary(fixture, mergeResume, "exact-base-integrated");
+      await terminateAtBoundary(fixture, mergeResume, "approval-recorded");
       const tree = (
         await git(
           fixture.repositoryRoot,
           "rev-parse",
-          `${fixture.snapshot.sourceHead}^{tree}`,
+          `${fixture.snapshot.baseHead}^{tree}`,
         )
       ).trim();
       const movedBase = (
@@ -49,7 +49,7 @@ describe(
           "commit-tree",
           tree,
           "-p",
-          fixture.snapshot.sourceHead,
+          fixture.snapshot.baseHead,
           "-m",
           "advance base",
         )
@@ -59,7 +59,7 @@ describe(
         "update-ref",
         "refs/heads/main",
         movedBase,
-        fixture.snapshot.sourceHead,
+        fixture.snapshot.baseHead,
       );
 
       await expect(
@@ -68,7 +68,7 @@ describe(
         awaitingNodeIds: ["remediate"],
         status: "awaiting",
       });
-      expect((await snapshotNow(fixture)).status).toBe("open");
+      expect((await snapshotNow(fixture)).state).toBe("open");
       expect(await readBranchHead(fixture.repositoryRoot, "main")).toBe(
         movedBase,
       );
@@ -81,9 +81,9 @@ describe(
       ).toBe("");
     });
 
-    it("routes reviewed-source drift after exact-base integration to remediation", async () => {
+    it("routes reviewed-source drift after exact approval to remediation", async () => {
       const fixture = await makeLifecycleAtReview();
-      await terminateAtBoundary(fixture, mergeResume, "exact-base-integrated");
+      await terminateAtBoundary(fixture, mergeResume, "approval-recorded");
       const tree = (
         await git(
           fixture.repositoryRoot,
@@ -116,9 +116,9 @@ describe(
         awaitingNodeIds: ["remediate"],
         status: "awaiting",
       });
-      expect((await snapshotNow(fixture)).status).toBe("open");
+      expect((await snapshotNow(fixture)).state).toBe("open");
       expect(await readBranchHead(fixture.repositoryRoot, "main")).toBe(
-        fixture.snapshot.sourceHead,
+        fixture.snapshot.baseHead,
       );
       expect(
         await readBranchHead(fixture.repositoryRoot, fixture.change.branch),
@@ -128,19 +128,18 @@ describe(
         fixture.sourceWorktreePath,
         fixture.change.branch,
       );
-      expect(await pathExists(fixture.approvalWorktreePath)).toBe(false);
       expect(
         await git(fixture.repositoryRoot, "status", "--porcelain=v1"),
       ).toBe("");
     });
 
-    it("kills the restart process group and ref lease when recovery times out", async () => {
+    it("kills the restart process group when recovery times out", async () => {
       const fixture = await makeLifecycleAtReview(true);
       let processGroupId: number | undefined;
       try {
         await expect(
           restartOperation(fixture, mergeResume, {
-            boundary: "exact-base-leased",
+            boundary: "merge-command-started",
             onLaunch: (launchedProcessGroupId) => {
               processGroupId = launchedProcessGroupId;
             },
@@ -162,13 +161,13 @@ describe(
       }
     });
 
-    it("kills the attention restart process group and ref lease when recovery times out", async () => {
+    it("kills the attention restart process group when recovery times out", async () => {
       const fixture = await makeLifecycleAtReview(true);
       let processGroupId: number | undefined;
       try {
         await expect(
           restartExpectingAttention(fixture, mergeResume, {
-            boundary: "exact-base-leased",
+            boundary: "merge-command-started",
             onLaunch: (launchedProcessGroupId) => {
               processGroupId = launchedProcessGroupId;
             },

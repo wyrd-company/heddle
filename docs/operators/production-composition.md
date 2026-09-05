@@ -302,6 +302,13 @@ from the preceding wait stage, including the review snapshot identity. A
 remediation stage receives the latest review findings through the
 canonical handoff assembler; review transcript data is not dispatched.
 
+The review snapshot identity is a gitpr schema-2 PR ID plus the exact source
+and base heads captured for review. The PR remains in `state: open` while review
+events are recorded. A review-stage approve disposition authorizes Heddle to
+record one `verdict: accepted` event for that captured basis and then invoke
+gitpr's separate merge operation. Heddle accepts completion only from
+`state: merged` with the exact accepted event and branch identities.
+
 Handoff templates are schema'd Markdown artifacts in `handoff-templates/`.
 Their YAML front matter declares the Heddle template schema, relationship,
 format version, and either `standard` or `remediation`. Template bodies use

@@ -29,7 +29,6 @@ const execute = promisify(execFile);
 const temporaryDirectories: string[] = [];
 
 export interface LifecycleFixture {
-  approvalWorktreePath: string;
   change: MechanicalChangeContext;
   repositoryRoot: string;
   snapshot: ReviewSnapshot;
@@ -104,11 +103,6 @@ export const makeLifecycleAtReview = async (
     change.worktreeName,
     change.repositoryName,
   );
-  const approvalWorktreePath = join(
-    worktreesRoot,
-    `${change.worktreeName}.merge-base`,
-    change.repositoryName,
-  );
   const persistence = new SqlitePersistence({ stateDirectory });
   const engine = new LifecycleEngine({
     effects: createMechanicalNodeEffects(),
@@ -151,7 +145,6 @@ export const makeLifecycleAtReview = async (
   persistence.close();
   if (detachBase) await git(repositoryRoot, "switch", "--detach");
   return {
-    approvalWorktreePath,
     change,
     repositoryRoot,
     snapshot,

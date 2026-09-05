@@ -3,16 +3,7 @@
 //   implements: heddle
 // ---
 
-import { spawn } from "node:child_process";
-
-import { ensureWorktree } from "./worktree-creator.js";
-import {
-  assertCleanMechanicalWorktree,
-  mechanicalWorktreePath,
-  runMechanicalGit,
-  type CommandRunner,
-  type MechanicalChangeContext,
-} from "./review-snapshot.js";
+import { runMechanicalGit, type CommandRunner } from "./review-snapshot.js";
 
 export const assertMechanicalBranchRefs = async (
   command: CommandRunner,
@@ -71,64 +62,6 @@ export const mechanicalWorktreesForSingleCheckout = async (
     throw new Error("Merge base branch is checked out in multiple worktrees");
   }
   return worktrees;
-};
-
-const mechanicalApprovalWorktreePath = (
-  change: MechanicalChangeContext,
-): string =>
-  mechanicalWorktreePath({
-    ...change,
-    worktreeName: `${change.worktreeName}.merge-base`,
-  });
-
-export const provisionMechanicalApprovalWorktree = async (
-  command: CommandRunner,
-  change: MechanicalChangeContext,
-  baseWorktrees: string[],
-  mergedHead: string,
-): Promise<{ baseWorktrees: string[]; ownsApprovalWorktree: boolean }> => {
-  const approvalWorktreePath = mechanicalApprovalWorktreePath(change);
-  if (baseWorktrees.length > 0) {
-    return {
-      baseWorktrees,
-      ownsApprovalWorktree: baseWorktrees.includes(approvalWorktreePath),
-    };
-  }
-  await ensureWorktree(
-    {
-      baseRef: mergedHead,
-      branch: change.baseBranch,
-      repositoryName: change.repositoryName,
-      repositoryRoot: change.repositoryRoot,
-      worktreeName: `${change.worktreeName}.merge-base`,
-      worktreesRoot: change.worktreesRoot,
-    },
-    (cwd, arguments_) => runMechanicalGit(command, cwd, arguments_),
-  );
-  return {
-    baseWorktrees: [approvalWorktreePath],
-    ownsApprovalWorktree: true,
-  };
-};
-
-export const removeMechanicalApprovalWorktree = async (
-  command: CommandRunner,
-  change: MechanicalChangeContext,
-): Promise<void> => {
-  const path = mechanicalApprovalWorktreePath(change);
-  const baseWorktrees = await mechanicalWorktreesForBranch(
-    command,
-    change.repositoryRoot,
-    change.baseBranch,
-  );
-  if (!baseWorktrees.includes(path)) return;
-  await assertCleanMechanicalWorktree(command, path);
-  await runMechanicalGit(command, change.repositoryRoot, [
-    "worktree",
-    "remove",
-    "--",
-    path,
-  ]);
 };
 
 export const synchronizeMechanicalBaseWorktree = async (
@@ -192,54 +125,4 @@ export const runMechanicalRefTransaction = async (
     ["update-ref", "--stdin"],
     ["start", ...instructions, "prepare", "commit", ""].join("\n"),
   );
-};
-
-export const withMechanicalRefLease = async <T>(
-  repositoryRoot: string,
-  ref: string,
-  expectedHead: string,
-  operation: () => Promise<T>,
-): Promise<T> => {
-  const child = spawn("git", ["update-ref", "--stdin"], {
-    cwd: repositoryRoot,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  let output = "";
-  let errors = "";
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk: string) => {
-    errors += chunk;
-  });
-  const prepared = new Promise<void>((resolve, reject) => {
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      output += chunk;
-      if (output.includes("prepare: ok\n")) resolve();
-    });
-    child.once("error", reject);
-    child.once("exit", (code) => {
-      if (!output.includes("prepare: ok\n")) {
-        reject(
-          new Error(
-            `Could not lease ${ref}: ${errors.trim() || `git exited ${code}`}`,
-          ),
-        );
-      }
-    });
-  });
-  child.stdin.write(`start\nverify ${ref} ${expectedHead}\nprepare\n`);
-  await prepared;
-  try {
-    return await operation();
-  } finally {
-    const exited = new Promise<void>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`Could not release ${ref}: ${errors.trim()}`));
-      });
-    });
-    child.stdin.end("abort\n");
-    await exited;
-  }
 };

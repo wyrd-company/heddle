@@ -71,10 +71,10 @@ describe("production process restart", () => {
     const killed = await terminateAtBoundary(
       fixture,
       mergeResume,
-      "exact-base-leased",
+      "merge-command-started",
     );
     expect(killed.marker).toMatchObject({
-      boundary: "exact-base-leased",
+      boundary: "merge-command-started",
       executable: "gitpr",
       phase: "before",
     });
@@ -236,7 +236,7 @@ next_id: 1
     expect(await readBranchHead(fixture.repositoryRoot, "main")).toBe(
       fixture.snapshot.sourceHead,
     );
-    expect((await snapshotNow(fixture)).status).toBe("approved");
+    expect((await snapshotNow(fixture)).state).toBe("merged");
     expect(
       await git(fixture.repositoryRoot, "rev-list", "--merges", "main"),
     ).toBe("");

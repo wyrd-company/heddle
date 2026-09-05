@@ -26,6 +26,7 @@ import {
   type MechanicalChangeContext,
   type MechanicalNodeEffectOptions,
 } from "./mechanical-node-effects.js";
+import { readReviewSnapshot } from "./review-snapshot.js";
 
 const execute = promisify(execFile);
 const temporaryDirectories: string[] = [];
@@ -166,6 +167,11 @@ describe("delivery mechanical nodes", () => {
     const firstSnapshot = await ensureReviewSnapshot(fixture.change);
     const secondSnapshot = await ensureReviewSnapshot(fixture.change);
     expect(secondSnapshot).toEqual(firstSnapshot);
+    expect(firstSnapshot).toMatchObject({
+      latestEvent: null,
+      schema: 2,
+      state: "open",
+    });
     expect(
       (
         await git(
@@ -179,16 +185,28 @@ describe("delivery mechanical nodes", () => {
         .filter((ref) => ref.endsWith("/meta")),
     ).toHaveLength(1);
 
-    const firstMerge = await mergeReviewSnapshot(
-      fixture.change,
-      firstSnapshot.snapshotId,
-    );
+    const firstMerge = await mergeReviewSnapshot(fixture.change, firstSnapshot);
     const secondMerge = await mergeReviewSnapshot(
       fixture.change,
-      firstSnapshot.snapshotId,
+      firstSnapshot,
     );
     expect(firstMerge).toMatchObject({ merged: true, alreadyMerged: false });
     expect(secondMerge).toMatchObject({ merged: false, alreadyMerged: true });
+    expect(
+      await readReviewSnapshot(
+        fixture.sourcePath,
+        firstSnapshot.snapshotId,
+        runCommand,
+      ),
+    ).toMatchObject({
+      latestEvent: {
+        baseHead: firstSnapshot.baseHead,
+        sourceHead: firstSnapshot.sourceHead,
+        verdict: "accepted",
+      },
+      schema: 2,
+      state: "merged",
+    });
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
       firstSnapshot.sourceHead + "\n",
     );
@@ -236,6 +254,33 @@ describe("delivery mechanical nodes", () => {
     ).rejects.toThrow();
   });
 
+  it("refuses legacy status and non-schema-2 review states", async () => {
+    const record =
+      (body: string): CommandRunner =>
+      async () =>
+        body;
+    const common = [
+      "id: SAMPLE1",
+      "source_branch: task/sample",
+      "base_branch: main",
+    ].join("\n");
+
+    await expect(
+      readReviewSnapshot(
+        "/tmp/sample-repository",
+        "SAMPLE1",
+        record([common, "status: open"].join("\n")),
+      ),
+    ).rejects.toThrow(/unsupported schema/);
+    await expect(
+      readReviewSnapshot(
+        "/tmp/sample-repository",
+        "SAMPLE1",
+        record(["schema: 2", common, "state: approved"].join("\n")),
+      ),
+    ).rejects.toThrow(/invalid state.*approved/);
+  });
+
   it("routes source-head drift to remediation without merging", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
@@ -245,7 +290,7 @@ describe("delivery mechanical nodes", () => {
     await git(fixture.worktreePath, "commit", "--quiet", "-m", "add note");
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot),
     ).resolves.toEqual({
       alreadyMerged: false,
       dispositions: { merged: false, remediate: true },
@@ -273,7 +318,7 @@ describe("delivery mechanical nodes", () => {
     );
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot),
     ).resolves.toEqual({
       alreadyMerged: false,
       dispositions: { merged: false, remediate: true },
@@ -301,13 +346,7 @@ describe("delivery mechanical nodes", () => {
       arguments_,
       input,
     ) => {
-      if (
-        !moved &&
-        executable === "git" &&
-        arguments_[0] === "update-ref" &&
-        arguments_[1] === "--stdin" &&
-        input?.includes("update refs/heads/main")
-      ) {
+      if (!moved && executable === "gitpr" && arguments_[0] === "merge") {
         moved = true;
         await git(
           fixture.sourcePath,
@@ -321,7 +360,7 @@ describe("delivery mechanical nodes", () => {
     };
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
+      mergeReviewSnapshot(fixture.change, snapshot, command),
     ).resolves.toMatchObject({
       dispositions: { merged: false, remediate: true },
       merged: false,
@@ -331,7 +370,7 @@ describe("delivery mechanical nodes", () => {
     );
   });
 
-  it("resumes an interrupted atomic merge before approving the snapshot", async () => {
+  it("resumes an interrupted merge from the exact recorded approval", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
     let interrupted = false;
@@ -341,12 +380,7 @@ describe("delivery mechanical nodes", () => {
       arguments_,
       input,
     ) => {
-      if (
-        !interrupted &&
-        executable === "git" &&
-        arguments_[0] === "reset" &&
-        arguments_[1] === "--hard"
-      ) {
+      if (!interrupted && executable === "gitpr" && arguments_[0] === "merge") {
         interrupted = true;
         throw new Error("simulated merge interruption");
       }
@@ -354,14 +388,14 @@ describe("delivery mechanical nodes", () => {
     };
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
+      mergeReviewSnapshot(fixture.change, snapshot, command),
     ).rejects.toThrow(/simulated merge interruption/);
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
-      snapshot.sourceHead + "\n",
+      snapshot.baseHead + "\n",
     );
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot),
     ).resolves.toMatchObject({ merged: true });
     expect(
       await git(
@@ -373,7 +407,7 @@ describe("delivery mechanical nodes", () => {
     ).toBe("");
   });
 
-  it("holds the exact merged base while approving the snapshot", async () => {
+  it("routes base drift while recording approval to remediation", async () => {
     const fixture = await prepareCommittedChange();
     const intermediateHead = (
       await git(fixture.sourcePath, "rev-parse", "task/change")
@@ -389,30 +423,29 @@ describe("delivery mechanical nodes", () => {
       arguments_,
       input,
     ) => {
-      if (!attempted && executable === "gitpr" && arguments_[0] === "merge") {
+      if (!attempted && executable === "gitpr" && arguments_[0] === "approve") {
         attempted = true;
         await git(
           fixture.sourcePath,
           "update-ref",
           "refs/heads/main",
           intermediateHead,
-          snapshot.sourceHead,
+          snapshot.baseHead,
         );
       }
       return runCommand(cwd, executable, arguments_, input);
     };
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
-    ).rejects.toThrow();
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).resolves.toMatchObject({
+      dispositions: { merged: false, remediate: true },
+      merged: false,
+    });
     expect(attempted).toBe(true);
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
-      snapshot.sourceHead + "\n",
+      intermediateHead + "\n",
     );
-
-    await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
-    ).resolves.toMatchObject({ merged: true });
   });
 
   it("approves the exact merge when the base branch is not checked out", async () => {
@@ -421,10 +454,10 @@ describe("delivery mechanical nodes", () => {
     await git(fixture.sourcePath, "switch", "--detach");
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot),
     ).resolves.toMatchObject({ merged: true });
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot),
     ).resolves.toMatchObject({ alreadyMerged: true });
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
       snapshot.sourceHead + "\n",
@@ -434,7 +467,7 @@ describe("delivery mechanical nodes", () => {
         fixture.sourcePath,
         "for-each-ref",
         "--format=%(refname)",
-        "refs/gitpr/index/approved",
+        "refs/gitpr/index/merged",
       ),
     ).toContain(snapshot.snapshotId);
     expect(
@@ -442,46 +475,38 @@ describe("delivery mechanical nodes", () => {
     ).not.toContain(`${fixture.change.worktreeName}.merge-base`);
   });
 
-  it("removes an approval worktree on replay after approval was recorded", async () => {
+  it("replays an exact accepted event without recording another approval", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    const approvalWorktreePath = join(
-      fixture.change.worktreesRoot!,
-      `${fixture.change.worktreeName}.merge-base`,
-      fixture.change.repositoryName,
-    );
-    await git(fixture.sourcePath, "switch", "--detach");
     let interrupted = false;
+    let approvals = 0;
     const command: CommandRunner = async (
       cwd,
       executable,
       arguments_,
       input,
     ) => {
-      if (
-        !interrupted &&
-        executable === "git" &&
-        arguments_[0] === "worktree" &&
-        arguments_[1] === "remove" &&
-        arguments_.at(-1) === approvalWorktreePath
-      ) {
-        interrupted = true;
-        throw new Error("simulated approval cleanup interruption");
+      if (executable === "gitpr" && arguments_[0] === "approve") {
+        approvals += 1;
+        const output = await runCommand(cwd, executable, arguments_, input);
+        if (!interrupted) {
+          interrupted = true;
+          throw new Error("simulated post-approval interruption");
+        }
+        return output;
       }
       return runCommand(cwd, executable, arguments_, input);
     };
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId, command),
-    ).rejects.toThrow(/approval cleanup interruption/);
-    await expect(lstat(approvalWorktreePath)).resolves.toBeDefined();
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).rejects.toThrow(/post-approval interruption/);
+    expect(approvals).toBe(1);
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
-    ).resolves.toMatchObject({ alreadyMerged: true });
-    await expect(lstat(approvalWorktreePath)).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).resolves.toMatchObject({ merged: true });
+    expect(approvals).toBe(1);
   });
 
   it("fails a conflicting merge and preserves both branch heads", async () => {
@@ -498,7 +523,7 @@ describe("delivery mechanical nodes", () => {
     );
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot),
     ).rejects.toThrow();
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(baseHead);
     expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
@@ -539,9 +564,9 @@ describe("delivery mechanical nodes", () => {
     );
     const snapshot = await ensureReviewSnapshot(fixture.change);
 
-    await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
-    ).rejects.toThrow(/merge commit/);
+    await expect(mergeReviewSnapshot(fixture.change, snapshot)).rejects.toThrow(
+      /merge commit/,
+    );
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
       baseHead + "\n",
     );
@@ -550,7 +575,7 @@ describe("delivery mechanical nodes", () => {
   it("refuses cleanup while the merged worktree is dirty", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     await writeFile(join(fixture.worktreePath, "local.txt"), "uncommitted\n");
 
     await expect(
@@ -565,7 +590,7 @@ describe("delivery mechanical nodes", () => {
   it("preserves a clean worktree when the merged branch moved", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     await writeFile(join(fixture.worktreePath, "notes.txt"), "later\n");
     await git(fixture.worktreePath, "add", "notes.txt");
     await git(fixture.worktreePath, "commit", "--quiet", "-m", "later note");
@@ -583,7 +608,7 @@ describe("delivery mechanical nodes", () => {
   it("restores the worktree when the merged branch moves during cleanup", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     let movedHead: string | undefined;
     let moved = false;
     const command: CommandRunner = async (
@@ -640,7 +665,7 @@ describe("delivery mechanical nodes", () => {
   it("restores resources when the base rewinds during cleanup", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     let rewound = false;
     const command: CommandRunner = async (
       cwd,
@@ -681,7 +706,7 @@ describe("delivery mechanical nodes", () => {
   it("fails cleanup closed when branch resolution has a transient failure", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     let failed = false;
     const command: CommandRunner = async (
       cwd,
@@ -714,7 +739,7 @@ describe("delivery mechanical nodes", () => {
   it("restores an absent worktree after interrupted cleanup and branch movement", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     let interrupted = false;
     let movedHead: string | undefined;
     const command: CommandRunner = async (
@@ -777,7 +802,7 @@ describe("delivery mechanical nodes", () => {
   it("preserves merged resources when the base no longer contains the snapshot", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     await git(
       fixture.sourcePath,
       "update-ref",
@@ -787,7 +812,7 @@ describe("delivery mechanical nodes", () => {
     );
 
     await expect(
-      mergeReviewSnapshot(fixture.change, snapshot.snapshotId),
+      mergeReviewSnapshot(fixture.change, snapshot),
     ).rejects.toThrow();
     await expect(
       cleanupMergedChange(fixture.change, snapshot.snapshotId),
@@ -801,7 +826,7 @@ describe("delivery mechanical nodes", () => {
   it("refuses cleanup when an approved snapshot is absent from the base", async () => {
     const fixture = await prepareCommittedChange();
     const snapshot = await ensureReviewSnapshot(fixture.change);
-    await mergeReviewSnapshot(fixture.change, snapshot.snapshotId);
+    await mergeReviewSnapshot(fixture.change, snapshot);
     await git(
       fixture.sourcePath,
       "update-ref",
@@ -829,7 +854,7 @@ describe("delivery mechanical nodes", () => {
 
     await expect(
       cleanupMergedChange(fixture.change, snapshot.snapshotId),
-    ).rejects.toThrow(/not approved/);
+    ).rejects.toThrow(/not merged by an approval/);
     await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
   });
 

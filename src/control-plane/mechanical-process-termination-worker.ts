@@ -19,11 +19,9 @@ import {
 
 export type MechanicalTerminationBoundary =
   | "approval-recorded"
-  | "approval-worktree-provisioned"
-  | "approval-worktree-removed"
   | "cleanup-ref-deleted"
   | "exact-base-integrated"
-  | "exact-base-leased"
+  | "merge-command-started"
   | "source-worktree-removed";
 
 interface WorkerConfiguration {
@@ -48,25 +46,12 @@ const instructionMatches = (
   instruction: BoundaryInstruction,
 ): boolean => {
   const { arguments: arguments_, executable, input, phase } = instruction;
-  const approvalPath = `${change.worktreeName}.merge-base`;
   switch (boundary) {
     case "exact-base-integrated":
       return (
-        phase === "after" &&
-        executable === "git" &&
-        arguments_[0] === "update-ref" &&
-        arguments_[1] === "--stdin" &&
-        input?.includes(`update refs/heads/${change.baseBranch} `) === true
+        phase === "after" && executable === "gitpr" && arguments_[0] === "merge"
       );
-    case "approval-worktree-provisioned":
-      return (
-        phase === "after" &&
-        executable === "git" &&
-        arguments_[0] === "worktree" &&
-        arguments_[1] === "add" &&
-        arguments_.some((argument) => argument.includes(approvalPath))
-      );
-    case "exact-base-leased":
+    case "merge-command-started":
       return (
         phase === "before" &&
         executable === "gitpr" &&
@@ -74,15 +59,9 @@ const instructionMatches = (
       );
     case "approval-recorded":
       return (
-        phase === "after" && executable === "gitpr" && arguments_[0] === "merge"
-      );
-    case "approval-worktree-removed":
-      return (
         phase === "after" &&
-        executable === "git" &&
-        arguments_[0] === "worktree" &&
-        arguments_[1] === "remove" &&
-        arguments_.some((argument) => argument.includes(approvalPath))
+        executable === "gitpr" &&
+        arguments_[0] === "approve"
       );
     case "source-worktree-removed":
       return (

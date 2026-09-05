@@ -189,11 +189,7 @@ export const createMechanicalNodeEffects = (
       const change = await requireChange(input);
       const snapshot = await requireSnapshotOutput(input);
       const statuses = await mirrorStatuses(options, change);
-      const result = await mergeReviewSnapshot(
-        change,
-        snapshot.snapshotId,
-        command,
-      );
+      const result = await mergeReviewSnapshot(change, snapshot, command);
       if (result.merged || result.alreadyMerged) {
         await mirror(options, change, statuses, ({ merged }) => merged);
       }

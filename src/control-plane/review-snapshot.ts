@@ -5,6 +5,7 @@
 
 import { execFile } from "node:child_process";
 import { join } from "node:path";
+import { parse } from "yaml";
 
 import type { JsonValue } from "../persistence/index.js";
 import { ensureWorktree } from "./worktree-creator.js";
@@ -24,10 +25,20 @@ export interface MechanicalChangeContext {
 export interface ReviewSnapshot extends Record<string, JsonValue> {
   baseBranch: string;
   baseHead: string;
+  latestEvent: ReviewSnapshotEvent | null;
+  schema: 2;
   snapshotId: string;
   sourceBranch: string;
   sourceHead: string;
-  status: "approved" | "open" | "rejected";
+  state: "closed" | "merged" | "open";
+}
+
+export interface ReviewSnapshotEvent extends Record<string, JsonValue> {
+  baseHead: string;
+  eventId: string;
+  mergeBase: string;
+  sourceHead: string;
+  verdict: "accepted" | "rejected";
 }
 
 export type CommandRunner = (
@@ -119,20 +130,123 @@ export const assertCleanMechanicalWorktree = async (
   }
 };
 
-const topLevelScalar = (source: string, key: string): string => {
-  const match = new RegExp(`^${key}:[ \\t]*(.*)$`, "m").exec(source);
-  if (match?.[1] === undefined) {
+interface GitprReviewRecord {
+  baseBranch: string;
+  events: ReviewSnapshotEvent[];
+  mergedEventId?: string;
+  schema: 2;
+  snapshotId: string;
+  sourceBranch: string;
+  state: ReviewSnapshot["state"];
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const requiredString = (
+  value: Record<string, unknown>,
+  key: string,
+): string => {
+  const result = value[key];
+  if (typeof result !== "string" || result === "") {
     throw new Error(`gitpr snapshot is missing ${key}`);
   }
-  const value = match[1].trim();
-  if (value.startsWith("'") && value.endsWith("'")) {
-    return value.slice(1, -1).replaceAll("''", "'");
-  }
-  if (value.startsWith('"') && value.endsWith('"')) {
-    return JSON.parse(value) as string;
-  }
-  return value;
+  return result;
 };
+
+const requiredObjectId = (
+  value: Record<string, unknown>,
+  key: string,
+): string => {
+  const result = requiredString(value, key);
+  if (!/^[0-9a-f]{40}$/.test(result)) {
+    throw new Error(
+      `gitpr snapshot has invalid ${key} ${JSON.stringify(result)}`,
+    );
+  }
+  return result;
+};
+
+const readReviewRecord = async (
+  repositoryRoot: string,
+  snapshotId: string,
+  command: CommandRunner,
+): Promise<GitprReviewRecord> => {
+  const source = await runMechanicalGit(command, repositoryRoot, [
+    "show",
+    `refs/gitpr/pr/${snapshotId}/meta:pr.yaml`,
+  ]);
+  let parsed: unknown;
+  try {
+    parsed = parse(source);
+  } catch (error) {
+    throw new Error(
+      `gitpr snapshot is invalid YAML: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!isObject(parsed)) throw new Error("gitpr snapshot is not an object");
+  if (parsed["schema"] !== 2) {
+    throw new Error(
+      `gitpr snapshot has unsupported schema ${JSON.stringify(parsed["schema"])}`,
+    );
+  }
+  const state = requiredString(parsed, "state");
+  if (state !== "open" && state !== "merged" && state !== "closed") {
+    throw new Error(
+      `gitpr snapshot has invalid state ${JSON.stringify(state)}`,
+    );
+  }
+  const eventsValue = parsed["events"];
+  if (eventsValue !== undefined && !Array.isArray(eventsValue)) {
+    throw new Error("gitpr snapshot has invalid events");
+  }
+  const events = (eventsValue ?? []).map((value, index) => {
+    if (!isObject(value)) {
+      throw new Error(`gitpr snapshot event ${index} is not an object`);
+    }
+    const verdict = requiredString(value, "verdict");
+    if (verdict !== "accepted" && verdict !== "rejected") {
+      throw new Error(
+        `gitpr snapshot event ${index} has invalid verdict ${JSON.stringify(verdict)}`,
+      );
+    }
+    return {
+      baseHead: requiredObjectId(value, "base_head_sha"),
+      eventId: requiredString(value, "id"),
+      mergeBase: requiredObjectId(value, "merge_base_sha"),
+      sourceHead: requiredObjectId(value, "source_head_sha"),
+      verdict,
+    } satisfies ReviewSnapshotEvent;
+  });
+  const mergedEventId = parsed["merged_event_id"];
+  if (mergedEventId !== undefined && typeof mergedEventId !== "string") {
+    throw new Error("gitpr snapshot has invalid merged_event_id");
+  }
+  return {
+    baseBranch: requiredString(parsed, "base_branch"),
+    events,
+    ...(mergedEventId === undefined ? {} : { mergedEventId }),
+    schema: 2,
+    snapshotId: requiredString(parsed, "id"),
+    sourceBranch: requiredString(parsed, "source_branch"),
+    state,
+  };
+};
+
+const reviewSnapshotFromRecord = (
+  record: GitprReviewRecord,
+  sourceHead: string,
+  baseHead: string,
+): ReviewSnapshot => ({
+  baseBranch: record.baseBranch,
+  baseHead,
+  latestEvent: record.events.at(-1) ?? null,
+  schema: 2,
+  snapshotId: record.snapshotId,
+  sourceBranch: record.sourceBranch,
+  sourceHead,
+  state: record.state,
+});
 
 export const readReviewSnapshot = async (
   repositoryRoot: string,
@@ -142,24 +256,32 @@ export const readReviewSnapshot = async (
   if (!/^[0-9A-Z]+$/.test(snapshotId)) {
     throw new TypeError("snapshotId must be an uppercase alphanumeric ID");
   }
-  const source = await runMechanicalGit(command, repositoryRoot, [
-    "show",
-    `refs/gitpr/pr/${snapshotId}/meta:pr.yaml`,
-  ]);
-  const status = topLevelScalar(source, "status");
-  if (status !== "open" && status !== "approved" && status !== "rejected") {
-    throw new Error(
-      `gitpr snapshot has invalid status ${JSON.stringify(status)}`,
+  const record = await readReviewRecord(repositoryRoot, snapshotId, command);
+  if (record.snapshotId !== snapshotId) {
+    throw new Error("gitpr snapshot ID does not match its ref");
+  }
+  const mergedEvent =
+    record.state === "merged"
+      ? record.events.find(({ eventId }) => eventId === record.mergedEventId)
+      : undefined;
+  if (record.state === "merged") {
+    if (mergedEvent === undefined || mergedEvent.verdict !== "accepted") {
+      throw new Error("gitpr merged snapshot has no accepted merged event");
+    }
+    return reviewSnapshotFromRecord(
+      record,
+      mergedEvent.sourceHead,
+      mergedEvent.baseHead,
     );
   }
-  return {
-    baseBranch: topLevelScalar(source, "base_branch"),
-    baseHead: topLevelScalar(source, "base_head_sha"),
-    snapshotId: topLevelScalar(source, "id"),
-    sourceBranch: topLevelScalar(source, "source_branch"),
-    sourceHead: topLevelScalar(source, "source_head_sha"),
-    status,
-  };
+  const [sourceHead, baseHead] = await Promise.all([
+    resolveMechanicalBranchHead(command, repositoryRoot, record.sourceBranch),
+    resolveMechanicalBranchHead(command, repositoryRoot, record.baseBranch),
+  ]);
+  if (sourceHead === undefined || baseHead === undefined) {
+    throw new Error("Review source and base branches must exist");
+  }
+  return reviewSnapshotFromRecord(record, sourceHead, baseHead);
 };
 
 export const assertReviewSnapshotMatches = (
@@ -196,16 +318,17 @@ const matchingOpenSnapshot = async (
     ),
   ].sort();
   const snapshots = await Promise.all(
-    ids.map((id) => readReviewSnapshot(change.repositoryRoot, id, command)),
+    ids.map((id) => readReviewRecord(change.repositoryRoot, id, command)),
   );
-  return snapshots.find(
+  const record = snapshots.find(
     (snapshot) =>
-      snapshot.status === "open" &&
+      snapshot.state === "open" &&
       snapshot.sourceBranch === change.branch &&
-      snapshot.sourceHead === sourceHead &&
-      snapshot.baseBranch === change.baseBranch &&
-      snapshot.baseHead === baseHead,
+      snapshot.baseBranch === change.baseBranch,
   );
+  return record === undefined
+    ? undefined
+    : reviewSnapshotFromRecord(record, sourceHead, baseHead);
 };
 
 export const ensureReviewSnapshot = async (
