@@ -19,6 +19,8 @@ const isUat = (task: BoardTask): boolean => task.tags.includes("uat");
 const byId = (left: BoardTask, right: BoardTask): number => left.id - right.id;
 const epicAcceptanceAttentionId = (epicId: number): string =>
   `epic:${epicId}:acceptance:uat-child-missing`;
+const epicDeliveryAttentionId = (epicId: number): string =>
+  `epic:${epicId}:acceptance:delivery-child-incomplete`;
 
 const sameDeferral = (
   left: PacingDeferral | undefined,
@@ -123,6 +125,26 @@ export class Reconciler {
           )
         ) {
           await this.transitionEpic(epic, "uat", actions);
+        }
+
+        if (
+          epic.status === "uat" &&
+          deliveryChildren.some(
+            ({ id }) => tasksById.get(id)?.status !== "done",
+          )
+        ) {
+          await this.ensureConditionAttention(
+            {
+              attentionId: epicDeliveryAttentionId(epic.id),
+              code: "uat-delivery-child-incomplete",
+              kind: "epic-acceptance",
+              message: `Epic ${epic.id} has incomplete delivery children during UAT; move the epic to in-progress to admit them, or remove or re-parent them`,
+              taskId: epic.id,
+            },
+            actions,
+          );
+        } else {
+          await this.resolveAttention(epicDeliveryAttentionId(epic.id));
         }
 
         const acceptanceChildren = children.filter(isUat);

@@ -251,6 +251,12 @@ deleting its stable durable identity, promotes and dispatches that child, and
 can complete the epic after acceptance. Removing the UAT child while the epic
 remains in `uat` makes the same missing-child attention current again.
 
+An epic in `uat` with an incomplete non-UAT child raises a separate stable
+epic-scoped attention and remains in `uat`. Move the epic to `in-progress` to
+admit that delivery work, or remove or re-parent work that is not part of the
+epic. Reconciliation resolves the matching attention when no incomplete
+delivery child remains or the epic leaves `uat`.
+
 Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
 repo-first worktrees are not migrated. Every thread has a bounded deterministic
 `task-<id> · <stage-occurrence>` title and no `titleSeed` on its first turn.

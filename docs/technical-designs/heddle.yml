@@ -110,7 +110,12 @@ proposed-design:
     attention without deleting its stable durable identity, and ordinary
     promotion, dispatch, and epic completion continue. If the UAT child is
     removed while the epic remains in `uat`, reconciliation makes the same
-    durable attention identity current again.
+    durable attention identity current again. If incomplete non-UAT children
+    exist while the epic is in `uat`, reconciliation raises a separate stable
+    epic-scoped attention and changes no task status. The operator moves the
+    epic to `in-progress` to admit that delivery work, or removes or re-parents
+    work that is not part of the epic. Reconciliation resolves the matching
+    attention when this condition no longer exists.
 
     Production configuration declares a complete product inventory. Each
     product owns one or more named repositories and may carry the durable T3

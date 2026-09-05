@@ -260,6 +260,90 @@ describe("Reconciler", () => {
     ]);
   });
 
+  it("surfaces incomplete delivery work during UAT until the operator changes the condition", async () => {
+    const epic = task(60, "uat", { tags: ["type:epic"] });
+    const delivered = task(61, "done", { parent: epic.id });
+    const acceptance = task(62, "done", {
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    const lateDelivery = task(63, "backlog", {
+      lifecycle: "catalogue-repair",
+      parent: epic.id,
+    });
+    const subject = fixture([epic, delivered, acceptance, lateDelivery]);
+    const attentionId = "epic:60:acceptance:delivery-child-incomplete";
+    const unrelatedAttentionId = "production:unrelated-recovery-probe:task:60";
+    await subject.attention.raise({
+      attentionId: unrelatedAttentionId,
+      code: "unrelated-recovery-probe",
+      kind: "production-error",
+      message: "Synthetic unrelated condition",
+      taskId: epic.id,
+    });
+
+    await subject.reconciler.reconcile();
+    await subject.reconciler.reconcile();
+
+    expect([...subject.attention.entries.values()]).toEqual([
+      expect.objectContaining({ attentionId: unrelatedAttentionId }),
+      {
+        attentionId,
+        code: "uat-delivery-child-incomplete",
+        kind: "epic-acceptance",
+        message:
+          "Epic 60 has incomplete delivery children during UAT; move the epic to in-progress to admit them, or remove or re-parent them",
+        taskId: epic.id,
+      },
+    ]);
+    expect(subject.board.epicWrites).toEqual([]);
+    expect(subject.board.statusWrites).toEqual([]);
+    expect(subject.instances.starts).toEqual([]);
+    expect(lateDelivery.status).toBe("backlog");
+
+    expect(subject.attention.resolve(attentionId)).toBe(true);
+    await subject.reconciler.reconcile();
+
+    expect(subject.attention.reopenings).toEqual([attentionId]);
+
+    epic.status = "in-progress";
+    await subject.reconciler.reconcile();
+
+    expect(lateDelivery.status).toBe("todo");
+    expect(subject.instances.starts.at(-1)?.task.id).toBe(lateDelivery.id);
+    expect(subject.attention.entries.has(attentionId)).toBe(false);
+    expect(subject.attention.entries.has(unrelatedAttentionId)).toBe(true);
+    expect(subject.board.epicWrites).toEqual([]);
+  });
+
+  it("resolves and reopens the same UAT delivery attention as children finish and recur", async () => {
+    const epic = task(64, "uat", { tags: ["type:epic"] });
+    const delivery = task(65, "todo", { parent: epic.id });
+    const acceptance = task(66, "done", {
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    const subject = fixture([epic, delivery, acceptance]);
+    const attentionId = "epic:64:acceptance:delivery-child-incomplete";
+
+    await subject.reconciler.reconcile();
+    delivery.status = "done";
+    await subject.reconciler.reconcile();
+
+    expect(subject.attention.entries.has(attentionId)).toBe(false);
+    expect(subject.attention.resolutions).toEqual([attentionId]);
+    expect(subject.board.epicWrites).toEqual([
+      { status: "done", taskId: epic.id },
+    ]);
+
+    epic.status = "uat";
+    delivery.status = "todo";
+    await subject.reconciler.reconcile();
+
+    expect(subject.attention.entries.has(attentionId)).toBe(true);
+    expect(subject.attention.reopenings).toEqual([attentionId]);
+  });
+
   it("does not promote or dispatch blocked child and standalone tasks", async () => {
     const epic = task(55, "in-progress", { tags: ["type:epic"] });
     const child = task(56, "backlog", {
