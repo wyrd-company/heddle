@@ -74,6 +74,7 @@ export class DurableAttentionQueue {
     attention: NotificationDeliveryAttention,
   ): Promise<void> {
     await this.raise(attention);
+    this.reopen(attention.attentionId);
     this.#resolveNotificationFailures(
       attention.notificationStableId,
       attention.attentionId,

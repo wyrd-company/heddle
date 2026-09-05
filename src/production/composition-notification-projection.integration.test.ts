@@ -62,10 +62,18 @@ describe("production notification failure projection", () => {
           status: 200,
         });
       }
-      return new globalThis.Response(
-        JSON.stringify({ errors: ["private detail"], status: 0, token: "x" }),
-        { status: 400 },
-      );
+      return attempt === 3
+        ? new globalThis.Response(
+            JSON.stringify({
+              errors: ["private detail"],
+              status: 0,
+              token: "x",
+            }),
+            { status: 400 },
+          )
+        : new globalThis.Response(JSON.stringify({ status: 0 }), {
+            status: 503,
+          });
     });
     const t3 = new SyntheticT3();
     const createComposition = () =>
@@ -259,5 +267,46 @@ describe("production notification failure projection", () => {
       }),
     );
     await restarted.close();
+
+    const afterAction = createComposition();
+    await afterAction.start();
+    const currentRejection = afterAction.attention
+      .list()
+      .find(({ actions }) => actions[0]?.actionId === "notification.retry");
+    if (currentRejection === undefined) {
+      throw new Error("Missing current notification rejection");
+    }
+    await afterAction.consoleActions.execute({
+      action: currentRejection.actions[0]!,
+      attention: currentRejection,
+    });
+    await afterAction.scheduler.trigger();
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(notificationFailures(afterAction, targetId)).toMatchObject([
+      { payload: { code: "notification-delivery-retryable" } },
+    ]);
+    expect(
+      afterAction.persistence.effectCompleted(
+        "console-attention-action",
+        currentRejection.attentionId,
+      ),
+    ).toBe(true);
+    await afterAction.close();
+
+    const afterActionRestart = createComposition();
+    await afterActionRestart.start();
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(notificationFailures(afterActionRestart, targetId)).toMatchObject([
+      { payload: { code: "notification-delivery-retryable" } },
+    ]);
+    expect(
+      afterActionRestart.escalation.pendingEscalations(runtime.instanceId),
+    ).toContainEqual(
+      expect.objectContaining({
+        attentionId: targetId,
+        questions: [expect.objectContaining({ prompt: targetPrompt })],
+      }),
+    );
+    await afterActionRestart.close();
   });
 });
