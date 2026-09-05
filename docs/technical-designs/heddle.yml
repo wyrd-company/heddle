@@ -97,10 +97,13 @@ proposed-design:
     its workspace root. Moving an epic out of
     `in-progress` pauses it: no new dispatches for its children, while
     in-flight instances run to their next wait state and hold. Paused,
-    stopped, and UAT epics retain their project. Completion deletes the
-    project after child dispatch is no longer possible. Successful deletion
-    retains a local durable tombstone so restart cannot reseed the configured
-    project or dispatch deletion again. The
+    stopped, UAT, and completed epics retain their project so archived stage
+    threads remain available for inspection. The durable `active` project
+    state means that the T3 project exists; it does not authorize child task
+    execution. The epic's board status remains dispatch authority, and a done
+    epic cannot dispatch a child. Project deletion is a separate explicit
+    cleanup policy. A durable deleting or deleted record remains non-active
+    and cannot be reseeded or restored as an available project. The
     reconciler advances the epic itself to `uat` when its last non-UAT
     child completes and to `done` when UAT is accepted. An epic in `uat` must
     have at least one child tagged `uat`. When none exists, reconciliation
@@ -723,9 +726,11 @@ proposed-design:
     and never enters Heddle arguments or output.
 
     The installation uses one configured shared T3 project for ad-hoc tasks
-    and one Heddle-managed T3 project per active epic. The product inventory is
-    the repository and project-routing authority. Existing repo-first worktrees
-    remain usable; Heddle does not move or rewrite them.
+    and one Heddle-managed T3 project per started epic. Managed projects remain
+    available after epic completion so their archived stage threads can be
+    inspected. The product inventory is the repository and project-routing
+    authority. Existing repo-first worktrees remain usable; Heddle does not
+    move or rewrite them.
 
     The deployment server accepts the canonical production composition and
     shares its board, persistence, console state, console action port,

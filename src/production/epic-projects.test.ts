@@ -57,7 +57,7 @@ const configuration = (root: string): ProductionConfiguration =>
   }) as ProductionConfiguration;
 
 describe("EpicProjectCoordinator", () => {
-  it("creates on in-progress, retains through UAT, and deletes only on done", async () => {
+  it("creates on in-progress and retains the exact project after completion", async () => {
     const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
     scratch.push(root);
     const persistence = new SqlitePersistence({
@@ -106,16 +106,38 @@ describe("EpicProjectCoordinator", () => {
     await expect(coordinator.reconcile([task("stopped")])).resolves.toEqual([]);
     expect(commands).toHaveLength(1);
 
-    await expect(coordinator.reconcile([task("done")])).resolves.toMatchObject([
-      { epicId: 101, kind: "deleted", projectId: created.projectId },
-    ]);
-    expect(commands[1]).toMatchObject({
-      force: true,
+    await expect(coordinator.reconcile([task("done")])).resolves.toEqual([]);
+    await expect(coordinator.reconcile([task("done")])).resolves.toEqual([]);
+    expect(commands).toHaveLength(1);
+    expect(persistence.getEpicProject(101)).toMatchObject({
       projectId: created.projectId,
-      type: "project.delete",
+      state: "active",
     });
-    expect(persistence.getEpicProject(101)?.state).toBe("deleted");
     persistence.close();
+
+    const restartedPersistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const restarted = new EpicProjectCoordinator(
+      config,
+      restartedPersistence,
+      new ProductRoutingCatalog(config),
+      {
+        dispatch: async (command) => (
+          commands.push(command),
+          { sequence: commands.length }
+        ),
+      },
+      () => "2027-01-01T00:00:00.000Z",
+      async () => undefined,
+    );
+    await expect(restarted.reconcile([task("done")])).resolves.toEqual([]);
+    expect(commands).toHaveLength(1);
+    expect(restartedPersistence.getEpicProject(101)).toMatchObject({
+      projectId: created.projectId,
+      state: "active",
+    });
+    restartedPersistence.close();
   });
 
   it("retains configured epic project identity without creating it again", async () => {
@@ -244,52 +266,63 @@ describe("EpicProjectCoordinator", () => {
     persistence.close();
   });
 
-  it("retains a configured deletion tombstone across process restart", async () => {
-    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
-    scratch.push(root);
-    const config = configuration(root);
-    config.products[0]!.epicProject = {
-      epicId: 101,
-      projectId: "retained-project",
-    };
-    const stateDirectory = join(root, "state");
-    const commands: T3DispatchCommand[] = [];
-    const t3 = {
-      dispatch: async (command: T3DispatchCommand) => (
-        commands.push(command),
-        { sequence: commands.length }
-      ),
-    };
-    const firstPersistence = new SqlitePersistence({ stateDirectory });
-    const first = new EpicProjectCoordinator(
-      config,
-      firstPersistence,
-      new ProductRoutingCatalog(config),
-      t3,
-      undefined,
-      async () => undefined,
-    );
+  it.each(["deleting", "deleted"] as const)(
+    "keeps a legacy %s record fail-closed across process restart",
+    async (state) => {
+      const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+      scratch.push(root);
+      const config = configuration(root);
+      config.products[0]!.epicProject = {
+        epicId: 101,
+        projectId: "retained-project",
+      };
+      const stateDirectory = join(root, "state");
+      const commands: T3DispatchCommand[] = [];
+      const t3 = {
+        dispatch: async (command: T3DispatchCommand) => (
+          commands.push(command),
+          { sequence: commands.length }
+        ),
+      };
+      const firstPersistence = new SqlitePersistence({ stateDirectory });
+      firstPersistence.writeEpicProject({
+        createCommandId: "create-retained-project",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        deleteCommandId: "delete-retained-project",
+        epicId: 101,
+        productName: "Sample product",
+        projectId: "retained-project",
+        state,
+      });
+      const first = new EpicProjectCoordinator(
+        config,
+        firstPersistence,
+        new ProductRoutingCatalog(config),
+        t3,
+        undefined,
+        async () => undefined,
+      );
 
-    await expect(first.reconcile([task("done")])).resolves.toMatchObject([
-      { epicId: 101, kind: "deleted", projectId: "retained-project" },
-    ]);
-    firstPersistence.close();
+      await expect(first.reconcile([task("done")])).resolves.toEqual([]);
+      expect(firstPersistence.getEpicProject(101)?.state).toBe(state);
+      firstPersistence.close();
 
-    const restartedPersistence = new SqlitePersistence({ stateDirectory });
-    const restarted = new EpicProjectCoordinator(
-      config,
-      restartedPersistence,
-      new ProductRoutingCatalog(config),
-      t3,
-      undefined,
-      async () => undefined,
-    );
-    await expect(restarted.reconcile([task("done")])).resolves.toEqual([]);
-    expect(restartedPersistence.getEpicProject(101)?.state).toBe("deleted");
-    expect(() =>
-      restarted.projectForTask({ ...task("todo"), id: 102, parent: 101 }),
-    ).toThrow("has no active T3 project");
-    expect(commands).toHaveLength(1);
-    restartedPersistence.close();
-  });
+      const restartedPersistence = new SqlitePersistence({ stateDirectory });
+      const restarted = new EpicProjectCoordinator(
+        config,
+        restartedPersistence,
+        new ProductRoutingCatalog(config),
+        t3,
+        undefined,
+        async () => undefined,
+      );
+      await expect(restarted.reconcile([task("done")])).resolves.toEqual([]);
+      expect(restartedPersistence.getEpicProject(101)?.state).toBe(state);
+      expect(() =>
+        restarted.projectForTask({ ...task("todo"), id: 102, parent: 101 }),
+      ).toThrow("has no active T3 project");
+      expect(commands).toHaveLength(0);
+      restartedPersistence.close();
+    },
+  );
 });

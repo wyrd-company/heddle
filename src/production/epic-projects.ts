@@ -27,7 +27,7 @@ export interface EpicProjectT3Client {
 
 export type EpicProjectAction = {
   epicId: number;
-  kind: "created" | "deleted";
+  kind: "created";
   projectId: string;
 };
 
@@ -81,9 +81,6 @@ export class EpicProjectCoordinator {
         if (epic.status === "in-progress") {
           const created = await this.ensureActive(epic);
           if (created !== undefined) actions.push(created);
-        } else if (epic.status === "done") {
-          const deleted = await this.ensureDeleted(epic.id);
-          if (deleted !== undefined) actions.push(deleted);
         }
       } catch (error) {
         if (this.attention === undefined) throw error;
@@ -167,24 +164,6 @@ export class EpicProjectCoordinator {
     });
     this.persistence.writeEpicProject({ ...record, state: "active" });
     return { epicId: epic.id, kind: "created", projectId: record.projectId };
-  }
-
-  private async ensureDeleted(
-    epicId: number,
-  ): Promise<EpicProjectAction | undefined> {
-    const existing = this.persistence.getEpicProject(epicId);
-    if (existing === undefined || existing.state === "deleted")
-      return undefined;
-    const deleting = { ...existing, state: "deleting" as const };
-    this.persistence.writeEpicProject(deleting);
-    await this.t3.dispatch({
-      commandId: deleting.deleteCommandId,
-      force: true,
-      projectId: deleting.projectId,
-      type: "project.delete",
-    });
-    this.persistence.writeEpicProject({ ...deleting, state: "deleted" });
-    return { epicId, kind: "deleted", projectId: deleting.projectId };
   }
 
   private recordFor(

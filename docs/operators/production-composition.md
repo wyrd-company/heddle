@@ -237,9 +237,12 @@ An in-progress epic gets one T3 project titled
 `{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
 each declared repository at `/workspaces/worktrees/{epic-id}/{repository}` on
 `epic/{epic-id}` before project creation. Paused, stopped, and UAT epics retain
-their project; a done epic's project is deleted. Child task threads use that
-epic project. Successful deletion leaves a durable local tombstone; restart
-does not seed a configured tombstoned project as active or repeat its deletion.
+their project. A done epic also retains its project so its archived stage
+threads remain available in T3's archive view. The durable `active` state means
+that the project exists; it is not execution permission. A done epic's board
+status blocks child dispatch. Project deletion requires a separate explicit
+cleanup policy. A durable deleting or deleted record stays non-active across
+restart and is not reseeded. Child task threads use the epic project.
 Ad-hoc threads use `adHocProject.projectId`. Subagents reuse the parent's project
 and worktree.
 
