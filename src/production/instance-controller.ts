@@ -283,10 +283,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         const record = this.persistence.getInstance(runtime.instanceId);
         if (record === undefined) {
           if (runtime.state === "deferred" || runtime.state === "starting") {
-            await this.#resolveSynchronizationError(
-              runtime,
-              "lifecycle-instance-absent",
-            );
             continue;
           }
           await this.#raiseSynchronizationError(

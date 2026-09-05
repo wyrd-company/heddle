@@ -82,6 +82,56 @@ describe("production instance controller", () => {
         attentionId: "production:lifecycle-instance-absent:task:12:sample-12",
       }),
     ]);
+
+    persistence.createInstance("sample-12", {
+      correlationTokens: {},
+      flowcraftContext: {
+        awaitingNodeIds: [],
+        blueprintBlobHash: "0123456789012345678901234567890123456789",
+        blueprintPath: "blueprints/sample.json",
+        completedOperations: {},
+        executionIds: ["sample-execution"],
+        nextTransitionNumber: 2,
+        pendingAttentions: [],
+        pendingTransition: null,
+        serializedContext: "{}",
+        status: "completed",
+      },
+      handoffs: [],
+      todoState: null,
+    });
+    await attention.raise({
+      attentionId: "production:unrelated-recovery-probe:task:12:sample-12",
+      code: "unrelated-recovery-probe",
+      error: {
+        cause: null,
+        message: "Synthetic unrelated condition",
+        name: "Error",
+      },
+      instanceId: "sample-12",
+      kind: "production-error",
+      message: "Synthetic unrelated condition",
+      taskId: 12,
+    });
+
+    await controller.synchronize([
+      {
+        blocked: false,
+        dependencies: [],
+        frontMatter: {},
+        id: 12,
+        priority: "medium",
+        status: "in-progress",
+        tags: [],
+        title: "Arrange inventory",
+      },
+    ]);
+
+    expect(attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: "production:unrelated-recovery-probe:task:12:sample-12",
+      }),
+    ]);
     persistence.close();
   });
 
