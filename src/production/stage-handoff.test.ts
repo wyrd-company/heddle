@@ -168,9 +168,7 @@ describe("production stage handoff", () => {
           finalize: async () => ({}),
           merge: async () => {
             const cause =
-              driftCauses[
-                Math.min(mergeActivation, driftCauses.length - 1)
-              ]!;
+              driftCauses[Math.min(mergeActivation, driftCauses.length - 1)]!;
             mergeActivation += 1;
             return {
               alreadyMerged: false,
