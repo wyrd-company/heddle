@@ -611,10 +611,24 @@ It performs no HTTP call and raises an exact
 `legacy-intent-unverifiable` recovery occurrence. Retry notification is the
 explicit disposition that adopts the current route; without it, ambiguous
 legacy intent stays pending.
-Pushover receives escalations and session-observation attention of kind
-`ended`, `failed`, or `stalled`. The first two are dead-session states. Approval,
-user-input, stale-instance, lifecycle, repository, production-error, and
-epic-acceptance attention remain console-only.
+Pushover receives escalations, every production error, and session-observation
+attention of kind `ended`, `failed`, or `stalled`. The first two session states
+are dead-session states. An incident-eligible production error is informational
+and carries a deterministic incident identity for its later incident lifecycle.
+A scheduler-pass or durable-catalog production error is a critical floor page:
+its message states that no incident can be raised and that operator action is
+required. Heddle durably limits one production-error code to one page per minute and
+three page attempts in five minutes, even when changing error text produces new
+attention identities. Approval, user-input, stale-instance, lifecycle,
+repository, and epic-acceptance attention remain console-only. Configuration
+validation fails before production composition exists, so it cannot produce an
+attention or dispatch an incident.
+
+Every production-error card offers **Resolve**. The action records durable
+intent and completion before it resolves the entry. Repeating the action or
+replaying it after a crash is safe. The resolved row remains in SQLite for
+audit, while the active attention list and count no longer include it. Agents do
+not use this action; incident-owned resolution has its own recorded authority.
 
 Session observation and Pushover page delivery have separate production-error
 entries. `session-observation-failed` means Heddle could not read the session

@@ -498,12 +498,21 @@ proposed-design:
     tool.
 
     Top-level routing composes one durable attention adapter and one Pushover
-    adapter. Escalations page through Pushover. Session observation also pages
-    `ended`, `failed`, and `stalled` attention; `ended` and `failed` are the
-    dead-session states. Approval, user-input, stale-instance, lifecycle,
-    repository, production-error, and epic-acceptance attention remain in the
-    console without a page. Both adapters consume each pageable entry's stable
-    attention ID. Every durable attention ID must fit the 128-character console
+    adapter. Escalations, every production error, and session-observation
+    attention of kind `ended`, `failed`, or `stalled` page through Pushover;
+    `ended` and `failed` are the dead-session states. Production-error codes
+    declare incident eligibility in one closed catalog. Eligible errors page at
+    the informational level and carry an incident identity derived from their
+    stable attention ID. Scheduler-pass and durable-catalog failures form the
+    operator-only floor: they page at the critical level, carry no incident
+    identity, and state that an incident cannot run. Configuration validation
+    fails before production composition exists and therefore cannot raise an
+    incident or production-error attention. Production-error pages have a
+    durable one-minute per-code cooldown and a cap of three attempts in five minutes,
+    so varying error text cannot bypass storm containment. Approval, user-input,
+    stale-instance, lifecycle, repository, and epic-acceptance attention remain
+    in the console without a page. Both adapters consume each pageable entry's
+    stable attention ID. Every durable attention ID must fit the 128-character console
     attention identity bound; the durable adapter refuses an entry outside the
     bound before persistence. A top-level escalation derives its external
     attention ID as `escalation:` plus the SHA-256 digest of the lossless JSON
@@ -753,7 +762,10 @@ proposed-design:
     re-reads the canonical unresolved entry and accepts only the offered
     action and matching fingerprint before it delegates through an injected
     action port. A deployment without that port fails closed for actionable
-    entries; informational attention has no invented disposition. Pushover
+    entries. Every production error offers Resolve through this port. The port
+    records and completes one replay-safe durable intent before it resolves the
+    entry; resolution retains the durable record and removes it from the active
+    catalog. Other informational attention has no invented disposition. Pushover
     notifications preserve scope and deep-link focus to the stable entry. The
     operator can equally disposition conversationally: any agent
     session configured with Heddle's MCP server can act on their
