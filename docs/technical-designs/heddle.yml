@@ -113,12 +113,21 @@ proposed-design:
     attention without deleting its stable durable identity, and ordinary
     promotion, dispatch, and epic completion continue. If the UAT child is
     removed while the epic remains in `uat`, reconciliation makes the same
-    durable attention identity current again. If incomplete non-UAT children
-    exist while the epic is in `uat`, reconciliation raises a separate stable
-    epic-scoped attention and changes no task status. The operator moves the
-    epic to `in-progress` to admit that delivery work, or removes or re-parents
-    work that is not part of the epic. Reconciliation resolves the matching
-    attention when this condition no longer exists.
+    durable attention identity current again. An incomplete non-UAT child can
+    run while the epic remains in `uat` only when its live task exactly matches
+    one completed Heddle-owned dynamic-task intent. Board identity tags are
+    evidence, not authority. Admission waits quietly while any UAT child remains
+    active. A done UAT child proves terminal only when exactly one retained
+    top-level runtime has both runtime state and mirrored board status `done`,
+    and no delegated instance for that task is nonterminal. A done board card
+    without this proof raises one stable `uat-terminal-unverified` attention and
+    admits no dynamic work. Missing or conflicting authority raises the stable
+    delivery-child attention, leaves that child unchanged, and does not prevent
+    another exactly trusted child from running. The operator moves the epic to
+    `in-progress` to admit untrusted delivery work, or removes or re-parents work
+    that is not part of the epic. Every child remains a completion gate. When
+    they are all done, Heddle completes the epic without starting another UAT
+    instance.
 
     Production configuration declares a complete product inventory. Each
     product owns one or more named repositories and may carry the durable T3
@@ -163,7 +172,20 @@ proposed-design:
     matching stale entry after lifecycle state appears; other runtime records
     with no lifecycle state remain operator-visible failures.
 
-    One production composition owns reconciliation for a workspace. It
+    One production composition owns reconciliation for a workspace. A shared
+    per-epic operation coordinator orders dynamic-task creation and recovery,
+    trusted admission, Console status controls, the durable starting-runtime
+    reservation, and final completion. Preparation, start reservation, and
+    completion are separate ordered decisions and each re-reads live board and
+    runtime state. A Console pause before preparation prevents promotion. A
+    pause queued after promotion runs before start reservation and prevents
+    dispatch. Once the durable reservation wins, the instance follows ordinary
+    in-flight pause behavior. Direct `kanban-md` writes do not enter this
+    coordinator because the board has no compare-and-set operation. They are
+    observed on a later read and can lose one race to an admission decision that
+    already reserved a start.
+
+    The composition
     constructs the real board adapter, SQLite-backed instance controller,
     lifecycle resolver and engine, session bootstrap, observation channel,
     durable attention queue, Pushover notifier, pacing evaluator, and stage

@@ -255,11 +255,37 @@ deleting its stable durable identity, promotes and dispatches that child, and
 can complete the epic after acceptance. Removing the UAT child while the epic
 remains in `uat` makes the same missing-child attention current again.
 
-An epic in `uat` with an incomplete non-UAT child raises a separate stable
-epic-scoped attention and remains in `uat`. Move the epic to `in-progress` to
-admit that delivery work, or remove or re-parent work that is not part of the
-epic. Reconciliation resolves the matching attention when no incomplete
-delivery child remains or the epic leaves `uat`.
+Agents create findings and follow-ups through Heddle's MCP tools. Heddle records
+the source task, instance, session, kind, parent epic, lifecycle, operation
+digest, record digest, and request before it writes the board task. Startup
+recovers pending records before reconciliation. A board tag is evidence only;
+it cannot authorize execution.
+
+An incomplete non-UAT child can run while its epic remains in `uat` only when
+the live task exactly matches one completed Heddle-owned creation record. Heddle
+also requires every UAT child to be done on the board, to have exactly one
+retained top-level runtime whose state and mirrored board status are `done`, and
+to have no nonterminal delegated instance. Trusted work waits without attention
+while UAT is active. A done UAT card without the required runtime proof raises
+one stable `uat-terminal-unverified` attention and admits no dynamic work.
+
+Missing or conflicting creation authority leaves the child unchanged and keeps
+one stable epic-scoped delivery attention. A mixed set still admits each exact
+trusted child. Move the epic to `in-progress` to admit untrusted delivery work,
+or remove or re-parent work that is not part of the epic. All direct children,
+including follow-ups created by other follow-ups, remain completion gates. When
+all work is done, Heddle completes the epic without starting another UAT
+lifecycle.
+
+Heddle Console status controls use the same per-epic ordering boundary as
+dynamic creation, recovery, admission, start reservation, and completion. A
+Console pause before admission prevents promotion. A pause after promotion but
+before the durable start reservation prevents dispatch. A reservation that
+wins first continues under the normal in-flight pause rule. Direct `kanban-md`
+status writes are outside this boundary because the board has no compare-and-set
+operation. Heddle observes them on a later read, so a direct pause can lose one
+race to an admission decision that already reserved a start. Use the Console
+control when this ordering matters.
 
 Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
 repo-first worktrees are not migrated. Every thread has a bounded deterministic
