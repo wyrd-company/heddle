@@ -417,6 +417,7 @@ export const createProductionComposition = (
         }
       },
       pass: async () => {
+        await attention.replayProductionErrorPages();
         await blueprintRepository.synchronize();
         await validateBlueprintToolRegistry(
           blueprintRepository.repositoryRoot,

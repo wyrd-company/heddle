@@ -737,6 +737,61 @@ describe("durable production adapters", () => {
     persistence.close();
   });
 
+  it("upgrades the preceding two-fingerprint pending intent after restart", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-prior-"));
+    const first = new SqlitePersistence({ stateDirectory: directory });
+    first.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-29",
+      state: "waiting",
+      taskId: 29,
+    });
+    const attention = {
+      attentionId: "task-29:session:choice",
+      instanceId: "task-29",
+      message: "A sample needs attention",
+    };
+    const configuration = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "operator-key",
+    };
+    const priorMessage = {
+      applicationToken: configuration.applicationToken,
+      message: attention.message,
+      stableId: attention.attentionId,
+      title: "Heddle needs attention",
+      url: "https://console.invalid/?view=lifecycle&scope=task%3A29&attention=task-29%3Asession%3Achoice",
+      userKey: configuration.userKey,
+    };
+    const hash = (value: unknown): string =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    first.recordEffectIntent("pushover", attention.attentionId, {
+      attemptFingerprint: hash(priorMessage),
+      logicalFingerprint: hash({
+        message: priorMessage.message,
+        stableId: priorMessage.stableId,
+        title: priorMessage.title,
+        url: priorMessage.url,
+        userKey: priorMessage.userKey,
+      }),
+    });
+    first.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory: directory });
+    const transport = { send: vi.fn(async () => undefined) };
+    await new DurablePushoverNotifier(restarted, configuration, transport).send(
+      attention,
+    );
+
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(restarted.effectCompleted("pushover", attention.attentionId)).toBe(
+      true,
+    );
+    restarted.close();
+  });
+
   it("requires exact operator authorization before recovering a changed legacy route", async () => {
     directory = await mkdtemp(
       join(tmpdir(), "heddle-pushover-legacy-recovery-"),

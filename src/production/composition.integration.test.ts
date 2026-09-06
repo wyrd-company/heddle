@@ -666,6 +666,79 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("replays a retryable production-error page after its deadline and restart", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 60_000;
+    let now = 10_000;
+    let available = false;
+    const attention = createProductionErrorAttention({
+      attentionId: `production:task-reconciliation-failed:task:${fixture.taskId}`,
+      code: "task-reconciliation-failed",
+      error: new Error("Synthetic task failure"),
+      message: "Task reconciliation failed",
+      taskId: fixture.taskId,
+    });
+    const deliveries = vi.fn(async (message: { stableId: string }) => {
+      if (message.stableId === attention.attentionId && !available) {
+        throw new Error("Synthetic page transport failure");
+      }
+    });
+    const options = {
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      notificationNow: () => now,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: deliveries },
+      t3: new SyntheticT3(),
+    };
+    const targetAttempts = () =>
+      deliveries.mock.calls.filter(
+        ([message]) => message.stableId === attention.attentionId,
+      );
+
+    const first = createProductionComposition(options);
+    await first.start();
+    await first.attention.raise(attention);
+    expect(targetAttempts()).toHaveLength(1);
+    expect(await first.attention.has(attention.attentionId)).toBe(true);
+    expect(
+      first.persistence.effectIntentRecorded(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    expect(
+      first.persistence.effectCompleted(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(false);
+    await first.close();
+
+    now += 4_999;
+    available = true;
+    const restarted = createProductionComposition(options);
+    await restarted.start();
+    expect(targetAttempts()).toHaveLength(1);
+    now += 1;
+    await restarted.scheduler.trigger();
+
+    expect(targetAttempts()).toHaveLength(2);
+    expect(
+      restarted.persistence.effectCompleted(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    expect(
+      restarted.persistence.effectCompleted("pushover", attention.attentionId),
+    ).toBe(true);
+    await restarted.close();
+  });
+
   it("activates standard delivery from the organization template authority without product templates", async () => {
     const fixture = await prepare();
     const artifactPaths = [

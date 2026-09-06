@@ -464,6 +464,22 @@ export class SqlitePersistence {
     })();
   }
 
+  productionErrorPageAttemptRecorded(
+    code: string,
+    attentionId: string,
+  ): boolean {
+    this.assertStableId("code", code);
+    this.assertStableId("attentionId", attentionId);
+    return (
+      this.database
+        .prepare(
+          `SELECT 1 FROM heddle_production_error_page_attempts
+           WHERE code = ? AND attention_id = ?`,
+        )
+        .get(code, attentionId) !== undefined
+    );
+  }
+
   effectIntentRecorded(effectKind: string, stableId: string): boolean {
     this.assertStableId("effectKind", effectKind);
     this.assertStableId("stableId", stableId);
@@ -514,6 +530,7 @@ export class SqlitePersistence {
     stableId: string,
     fingerprint: NotificationIntentFingerprint,
     legacyFingerprint: string,
+    precedingFingerprint?: NotificationIntentFingerprint,
   ): boolean {
     this.assertStableId("stableId", stableId);
     const effectKind = "pushover";
@@ -539,6 +556,23 @@ export class SqlitePersistence {
       )
       .get(effectKind, stableId) as { payloadJson: string } | undefined;
     if (prior?.payloadJson === payloadJson) return false;
+    if (
+      precedingFingerprint !== undefined &&
+      prior?.payloadJson ===
+        serialize({
+          attemptFingerprint: precedingFingerprint.attemptFingerprint,
+          logicalFingerprint: precedingFingerprint.logicalFingerprint,
+        })
+    ) {
+      this.database
+        .prepare(
+          `UPDATE heddle_completed_effects
+           SET payload_json = ?
+           WHERE effect_kind = ? AND stable_id = ? AND state = 'pending'`,
+        )
+        .run(payloadJson, effectKind, stableId);
+      return false;
+    }
     let priorPayload: unknown;
     try {
       priorPayload = JSON.parse(prior?.payloadJson ?? "null");

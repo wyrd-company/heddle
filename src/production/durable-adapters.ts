@@ -39,6 +39,7 @@ export type DurableAttention =
 
 export interface ProductionErrorPagePort {
   send(attention: ProductionErrorAttention): Promise<void>;
+  replayPending(): Promise<void>;
 }
 
 const isProductionErrorAttention = (
@@ -102,6 +103,10 @@ export class DurableAttentionQueue {
         // The durable console record is the fallback when paging is unavailable.
       }
     }
+  }
+
+  async replayProductionErrorPages(): Promise<void> {
+    await this.productionErrorPages?.replayPending();
   }
 
   reopen(attentionId: string): boolean {
@@ -334,6 +339,16 @@ export class DurablePushoverNotifier {
       url: message.url,
       userKey: message.userKey,
     });
+    const precedingFingerprint = {
+      attemptFingerprint: legacyFingerprint,
+      logicalFingerprint: fingerprint({
+        message: message.message,
+        stableId: message.stableId,
+        title: message.title,
+        url: message.url,
+        userKey: message.userKey,
+      }),
+    };
     const attemptFingerprint = fingerprint(message);
     const verification = this.#verification(page);
     try {
@@ -341,6 +356,7 @@ export class DurablePushoverNotifier {
         page.attentionId,
         { attemptFingerprint, logicalFingerprint },
         legacyFingerprint,
+        precedingFingerprint,
       );
     } catch (error) {
       if (!(error instanceof LegacyNotificationIntentMismatchError)) {

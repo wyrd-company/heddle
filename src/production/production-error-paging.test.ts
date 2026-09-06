@@ -176,6 +176,41 @@ describe("production error paging", () => {
     persistence.close();
   });
 
+  it("replays an admitted eligible page after a crash before page intent", async () => {
+    const { deliveries, pager, persistence } = await prepare();
+    const attention = productionErrorAttention({
+      code: "task-reconciliation-failed",
+      error: new Error("Synthetic task failure"),
+      summary: "Task reconciliation failed",
+      taskId: 31,
+    });
+    persistence.raiseAttention(
+      attention.attentionId,
+      JSON.parse(JSON.stringify(attention)),
+    );
+    expect(
+      persistence.admitProductionErrorPage({
+        attentionId: attention.attentionId,
+        attemptedAt: 0,
+        code: attention.code,
+        ...productionErrorPagePolicy,
+      }),
+    ).toBe(true);
+
+    await pager.replayPending();
+
+    expect(deliveries).toMatchObject([
+      { level: "informational", stableId: attention.attentionId },
+    ]);
+    expect(
+      persistence.effectCompleted(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    persistence.close();
+  });
+
   it("attempts a floor page before a failed durable record", async () => {
     const { deliveries, pager, persistence } = await prepare();
     const queue = new DurableAttentionQueue(persistence, pager);
