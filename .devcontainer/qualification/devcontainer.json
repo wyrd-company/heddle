@@ -3,7 +3,7 @@
   "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
   "features": {
     "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
-    "../features/heddle": {
+    "ghcr.io/wyrd-company/heddle/heddle:1": {
       "configDirectory": "/home/vscode/.heddle",
       "dnsName": "heddle.localhost"
     }

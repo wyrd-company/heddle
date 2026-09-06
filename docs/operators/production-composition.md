@@ -17,6 +17,30 @@ accepted `BlueprintArtifactEditor` over the organization blueprint clone and
 the same mechanical effect registry as the lifecycle engine. The factory
 rejects a second live composition for the same board directory.
 
+## Dev Container Feature distribution
+
+Install the service with the versioned Feature reference
+`ghcr.io/wyrd-company/heddle/heddle:1`. The `wyrd-company/heddle` collection
+namespace follows the source repository identity, and `heddle` is the Feature
+ID. The major-version reference accepts compatible Feature updates while the
+Feature manifest retains the complete semantic version.
+
+The repository source at the publishing head is the Heddle installation source
+of truth. Publication stages the tracked package, TypeScript, viewer, binary,
+and schema inputs inside the Feature. `install.sh` installs locked development
+dependencies, builds those inputs, and creates the private npm package locally
+inside the Feature installation. It does not download a Heddle npm package or
+release archive. The public GHCR Feature and public npm dependencies need no
+application credential. The repository workflow alone receives package-write
+access through its scoped `GITHUB_TOKEN` to publish the Feature.
+
+`task deployment:qualification` dry-publishes the same staged collection to an
+isolated local OCI registry and replaces only the registry portion of the
+checked-in remote reference. The Dev Container CLI then resolves and installs
+that reference in a clean container. `task deployment:package` checks the OCI
+Feature archive without exercising registry resolution; it is not the remote
+installation proof.
+
 ## Configuration directory
 
 `--config <directory>` selects the configuration directory. Without that

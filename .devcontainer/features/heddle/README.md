@@ -10,6 +10,14 @@ the supported front-matter-preserving `kanban-md` fork on `PATH`; its exact
 version is recorded in `deployment/supported-versions.json`. When `dnsName` is
 set, add the Wyrd Company Caddy Feature to the same devcontainer.
 
+The supported Feature reference is
+`ghcr.io/wyrd-company/heddle/heddle:1`. The published Feature contains the
+tracked Heddle source for the same version and builds it during installation.
+It does not fetch a separately published Heddle package and does not use the
+private npm registry; `package.json` stays private. Installation fetches the
+Feature from public GHCR and its public npm dependencies without an application
+credential.
+
 ## Options
 
 | Option            | Type   | Default                | Description                                                         |
@@ -40,7 +48,7 @@ without replacing SQLite history:
 {
   "features": {
     "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
-    "ghcr.io/boblangley/heddle:1": {
+    "ghcr.io/wyrd-company/heddle/heddle:1": {
       "configDirectory": "/home/vscode/.heddle",
       "dnsName": "heddle.workspace.example.test"
     }
@@ -92,3 +100,8 @@ qualification at one repository head:
 ```console
 task deployment:qualification
 ```
+
+This gate stages the tracked source, dry-publishes the Feature to an isolated
+local OCI registry, and installs it through a versioned remote reference. It
+does not use the local-path Feature form. `task deployment:package` separately
+checks the distribution archive without starting a container or registry.

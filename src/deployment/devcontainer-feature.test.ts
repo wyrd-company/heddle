@@ -52,7 +52,15 @@ describe("Heddle devcontainer feature", () => {
     expect(installer).toContain(
       "ensure_apt_packages build-essential ca-certificates jq python3",
     );
-    expect(installer).toContain('packages=("$(dirname "$0")"/heddle-*.tgz)');
+    expect(installer).toContain(
+      '"$(dirname "$0")/verify-feature-source.sh" "$(dirname "$0")"',
+    );
+    expect(installer).toContain(
+      'source_directory="$(dirname "$0")/heddle-source"',
+    );
+    expect(installer).not.toContain(
+      'packages=("$(dirname "$0")"/heddle-*.tgz)',
+    );
     expect(installer).toContain("--allow-scripts=better-sqlite3");
     expect(installer).toContain(
       [
@@ -141,7 +149,7 @@ describe("Heddle devcontainer feature", () => {
     }
   });
 
-  it.each(["state", "board", "tools", "config"])(
+  it.each(["state", "board", "tools", "config", "publication"])(
     "cleans scratch resources when the %s allocation fails",
     async (allocation) => {
       const scratchRoot = await mkdtemp(
@@ -207,6 +215,14 @@ describe("Heddle devcontainer feature", () => {
     );
     expect(featureQualification).toContain(
       'chmod 0600 "${config_directory}/config.yml"',
+    );
+    expect(featureQualification).toContain(
+      'published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:1"',
+    );
+    expect(featureQualification).toContain("devcontainer features publish");
+    expect(featureQualification).toContain("--namespace wyrd-company/heddle");
+    expect(featureQualification).toContain(
+      'dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:1"',
     );
     expect(featureQualification).toContain(
       'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',

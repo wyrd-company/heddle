@@ -8,30 +8,46 @@ set -euo pipefail
 # ---
 
 repository="$(git rev-parse --show-toplevel)"
-feature_directory="${repository}/.devcontainer/features/heddle"
+scratch="$(mktemp -d)"
+cleanup() {
+    rm -rf "${scratch}"
+}
+trap cleanup EXIT
 
-find "${feature_directory}" -maxdepth 1 -type f -name 'heddle-*.tgz' -delete
-npm pack --silent --pack-destination "${feature_directory}" "${repository}" >/dev/null
+collection="${scratch}/features"
+output="${scratch}/output"
+extracted="${scratch}/extracted"
+"${repository}/scripts/deployment/stage-feature.sh" "${collection}"
+devcontainer features package "${collection}" \
+    --output-folder "${output}" \
+    --force-clean-output-folder
 
-shopt -s nullglob
-packages=("${feature_directory}"/heddle-*.tgz)
-shopt -u nullglob
-[ "${#packages[@]}" -eq 1 ] || {
-    echo "Expected one packaged Heddle release; found ${#packages[@]}." >&2
+archive="${output}/devcontainer-feature-heddle.tgz"
+[ -f "${archive}" ] || {
+    echo "The Dev Container CLI did not produce ${archive}." >&2
     exit 1
 }
 
-contents="$(mktemp)"
-trap 'rm -f "${contents}"' EXIT
-tar -tzf "${packages[0]}" >"${contents}"
-grep -qx 'package/dist/control-plane/t3-control-plane-client.js' "${contents}"
-grep -qx 'package/dist/deployment/server.js' "${contents}"
-grep -qx 'package/dist/deployment/production-service.js' "${contents}"
-grep -qx 'package/bin/heddle-server.mjs' "${contents}"
-grep -qx 'package/assets/console-viewer/lifecycle.js' "${contents}"
-grep -qx 'package/assets/console-viewer/lifecycle.css' "${contents}"
-grep -qx 'package/schemas/lifecycle-blueprint.json' "${contents}"
-grep -qx 'package/schemas/advance-output.json' "${contents}"
-tar -xOf "${packages[0]}" package/package.json | jq -e \
-    '.dependencies.ajv != null and .devDependencies.ajv == null' >/dev/null
-printf 'Packaged %s\n' "$(basename "${packages[0]}")"
+contents="${scratch}/contents"
+tar -tf "${archive}" >"${contents}"
+for path in \
+    ./devcontainer-feature.json \
+    ./install.sh \
+    ./verify-feature-source.sh \
+    ./heddle-source/package.json \
+    ./heddle-source/package-lock.json \
+    ./heddle-source/src/deployment/server.ts \
+    ./heddle-source/bin/heddle-server.mjs \
+    ./heddle-source/schemas/lifecycle-blueprint.json; do
+    grep -qx "${path}" "${contents}"
+done
+if grep -Eq '^\./heddle-[^/]*\.tgz$' "${contents}"; then
+    echo "The published Feature contains a pre-packaged Heddle tarball." >&2
+    exit 1
+fi
+
+install -d -m 0755 "${extracted}"
+tar -xf "${archive}" -C "${extracted}"
+"${extracted}/verify-feature-source.sh" "${extracted}"
+printf 'Packaged devcontainer-feature-heddle.tgz (%s)\n' \
+    "$(sha256sum "${archive}" | cut -d ' ' -f 1)"

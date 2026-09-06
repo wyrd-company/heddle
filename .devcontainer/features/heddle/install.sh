@@ -42,19 +42,37 @@ service_user="$(pick_service_user "${SERVICEUSER}")"
 service_group="$(id -gn "${service_user}")"
 install -d -m 0750 -o "${service_user}" -g "${service_group}" "${CONFIGDIRECTORY}"
 
-shopt -s nullglob
-packages=("$(dirname "$0")"/heddle-*.tgz)
-shopt -u nullglob
-[ "${#packages[@]}" -eq 1 ] \
-    || err "The Feature must contain exactly one packaged Heddle release."
+"$(dirname "$0")/verify-feature-source.sh" "$(dirname "$0")"
+source_directory="$(dirname "$0")/heddle-source"
+built_package_directory="$(mktemp -d)"
+cleanup_package() {
+    rm -rf "${built_package_directory}"
+}
+trap cleanup_package EXIT
 
-log "Installing the packaged Heddle release"
+log "Building Heddle from the published Feature source"
+env \
+    NPM_CONFIG_ENGINE_STRICT=true \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    npm ci --prefix "${source_directory}" --ignore-scripts --no-audit --no-fund
+npm run --prefix "${source_directory}" build
+npm pack --silent \
+    --pack-destination "${built_package_directory}" \
+    "${source_directory}" >/dev/null
+
+shopt -s nullglob
+built_packages=("${built_package_directory}"/heddle-*.tgz)
+shopt -u nullglob
+[ "${#built_packages[@]}" -eq 1 ] \
+    || err "The Feature build must produce exactly one Heddle package."
+
+log "Installing the Heddle package built from Feature source"
 env \
     NPM_CONFIG_ENGINE_STRICT=true \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     npm install --global --prefix /usr/local \
         --allow-scripts=better-sqlite3 \
-        "${packages[0]}"
+        "${built_packages[0]}"
 [ -x /usr/local/bin/heddle-server ] \
     || err "Heddle was not installed at /usr/local/bin/heddle-server."
 

@@ -50,6 +50,13 @@ tasks:
     cmds:
       - scripts/deployment/package-feature.sh
 
+  deployment:stage-feature:
+    desc: Stage the distributable Dev Container Feature collection
+    requires:
+      vars: [FEATURE_COLLECTION_PATH]
+    cmds:
+      - scripts/deployment/stage-feature.sh "{{.FEATURE_COLLECTION_PATH}}"
+
   deployment:qualification:
     desc: Qualify the deployment feature
     deps: [build]

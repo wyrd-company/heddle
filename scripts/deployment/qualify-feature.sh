@@ -9,13 +9,18 @@ set -euo pipefail
 
 repository="$(git rev-parse --show-toplevel)"
 accepted_head="$(git rev-parse HEAD)"
-configuration="${repository}/.devcontainer/qualification/devcontainer.json"
+source_configuration="${repository}/.devcontainer/qualification/devcontainer.json"
+published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:1"
+registry_image="registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
+configuration=""
 scratch_root="${HEDDLE_QUALIFICATION_SCRATCH_ROOT:-/workspaces/mnt}"
 state_directory=""
 board_directory=""
 tools_directory=""
 config_directory=""
+publication_directory=""
 container_id=""
+registry_container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
 cleanup() {
@@ -29,10 +34,14 @@ cleanup() {
     for scratch_container in "${scratch_containers[@]}"; do
         docker rm --force "${scratch_container}" >/dev/null 2>&1 || true
     done
+    if [ -n "${registry_container_id}" ]; then
+        docker rm --force "${registry_container_id}" >/dev/null 2>&1 || true
+    fi
     [ -z "${state_directory}" ] || rm -rf "${state_directory}"
     [ -z "${board_directory}" ] || rm -rf "${board_directory}"
     [ -z "${tools_directory}" ] || rm -rf "${tools_directory}"
     [ -z "${config_directory}" ] || rm -rf "${config_directory}"
+    [ -z "${publication_directory}" ] || rm -rf "${publication_directory}"
 }
 trap cleanup EXIT
 
@@ -49,6 +58,8 @@ state_directory="$(allocate_scratch_directory state)"
 board_directory="$(allocate_scratch_directory board)"
 tools_directory="$(allocate_scratch_directory tools)"
 config_directory="$(allocate_scratch_directory config)"
+publication_directory="$(allocate_scratch_directory publication)"
+configuration="${publication_directory}/devcontainer.json"
 
 install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
 
@@ -185,6 +196,71 @@ inside() {
 assert_head
 task -d "${repository}" deployment:package
 assert_head
+
+docker_config="${publication_directory}/docker-config"
+install -d -m 0700 "${docker_config}"
+if ! docker image inspect "${registry_image}" >/dev/null 2>&1; then
+    docker --config "${docker_config}" pull "${registry_image}"
+fi
+registry_container_id="$(
+    docker run --detach \
+        --label "heddle.dry-publish=${qualification_label}" \
+        --publish 127.0.0.1::5000 \
+        "${registry_image}"
+)"
+registry_port="$(
+    docker inspect \
+        --format '{{(index (index .NetworkSettings.Ports "5000/tcp") 0).HostPort}}' \
+        "${registry_container_id}"
+)"
+for attempt in $(seq 1 100); do
+    if curl --fail --silent "http://127.0.0.1:${registry_port}/v2/" >/dev/null; then
+        break
+    fi
+    [ "${attempt}" -lt 100 ] || {
+        echo "The dry-publish OCI registry did not become ready." >&2
+        exit 1
+    }
+    sleep 0.1
+done
+
+feature_collection="${publication_directory}/features"
+"${repository}/scripts/deployment/stage-feature.sh" "${feature_collection}"
+publication_log="${publication_directory}/publish.log"
+if ! devcontainer features publish \
+    --registry "localhost:${registry_port}" \
+    --namespace wyrd-company/heddle \
+    "${feature_collection}" >"${publication_log}" 2>&1; then
+    tail -n 100 "${publication_log}" >&2
+    exit 1
+fi
+cat "${publication_log}"
+publication_result="$(tail -n 1 "${publication_log}")"
+jq -e \
+    '.heddle.version == "1.0.0" and
+     .heddle.publishedTags == ["1", "1.0", "1.0.0", "latest"] and
+     (.heddle.digest | test("^sha256:[0-9a-f]{64}$"))' \
+    <<<"${publication_result}" >/dev/null
+
+dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:1"
+jq -e --arg reference "${published_feature_reference}" \
+    '[.features | keys[] | select(. == $reference)] | length == 1' \
+    "${source_configuration}" >/dev/null
+jq \
+    --arg published "${published_feature_reference}" \
+    --arg dry_published "${dry_published_reference}" \
+    '.features |= with_entries(
+      if .key == $published then .key = $dry_published else . end
+    )' \
+    "${source_configuration}" >"${configuration}"
+jq -e --arg reference "${dry_published_reference}" \
+    '[.features | keys[] | select(. == $reference)] | length == 1' \
+    "${configuration}" >/dev/null
+
+printf 'Dry-published %s as %s (%s)\n' \
+    "${published_feature_reference}" \
+    "${dry_published_reference}" \
+    "$(jq -r '.heddle.digest' <<<"${publication_result}")"
 up
 
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
