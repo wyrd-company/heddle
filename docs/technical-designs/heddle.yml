@@ -303,11 +303,12 @@ proposed-design:
     stores hashed operation and request identities as board tags and anchors
     both in its SQLite creation registry. An exact replay requires the same
     durable source and request identity and returns the completed registry
-    row's exact live board task. Reusing the operation ID with different input
+    row's exact-identity live board task. Reusing the operation ID with different input
     fails before another board write. A pending intent with no board match is a
     quiet recoverable state. Startup binds one board task only when its kind,
-    parent, lifecycle, operation digest, record digest, and immutable request
-    fields match. Multiple, conflicting, malformed, or failed recovery raises
+    parent, lifecycle, operation digest, and record digest match, and the
+    registry request reproduces both digests. Multiple, conflicting, malformed,
+    or failed recovery raises
     stable authority attention and remains pending.
 
     `advance` presents only the dispositions valid for

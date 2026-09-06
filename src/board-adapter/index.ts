@@ -20,7 +20,6 @@ export type KanbanCommandRunner = (arguments_: string[]) => Promise<string>;
 
 export interface BoardTask {
   blocked: boolean;
-  body?: string;
   frontMatter: JsonValue;
   id: number;
   title: string;
@@ -159,12 +158,6 @@ const frontMatterFrom = (source: string): string | undefined => {
   return source.slice(4, end);
 };
 
-const bodyFrom = (source: string): string => {
-  if (!source.startsWith("---\n")) return source.trim();
-  const end = source.indexOf("\n---", 4);
-  return end === -1 ? "" : source.slice(end + 4).trim();
-};
-
 const isJsonValue = (value: unknown): value is JsonValue => {
   if (
     value === null ||
@@ -297,15 +290,8 @@ export const boardTaskMatchesRecord = (
   record: Omit<CreateBoardRecord, "operationKey">,
   identity: BoardRecordIdentity,
 ): boolean =>
-  task.body === record.body.trim() &&
-  task.dependencies.length === (record.dependsOn ?? []).length &&
-  task.dependencies.every(
-    (dependency, index) => dependency === (record.dependsOn ?? [])[index],
-  ) &&
   task.lifecycle === record.lifecycle &&
   task.parent === record.parent &&
-  task.priority === (record.priority ?? "medium") &&
-  task.title === record.title &&
   task.tags.includes(`type:${record.kind}`) &&
   task.tags.includes(operationTag(identity.operationDigest)) &&
   task.tags.includes(recordTag(identity.recordDigest)) &&
@@ -477,7 +463,6 @@ export class KanbanBoardAdapter {
     const repos = repositoriesFromFrontMatter(frontMatter);
     return {
       blocked: task.blocked ?? false,
-      body: bodyFrom(source),
       frontMatter: rawFrontMatter(frontMatter),
       id: task.id,
       title: task.title,

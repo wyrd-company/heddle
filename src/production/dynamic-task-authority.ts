@@ -78,14 +78,19 @@ const requireStoredRequest = (value: JsonValue): StoredDynamicTaskRequest => {
     value === null ||
     Array.isArray(value) ||
     typeof value["body"] !== "string" ||
+    value["body"].trim() === "" ||
     !Array.isArray(value["dependsOn"]) ||
     !value["dependsOn"].every(
       (id) => Number.isSafeInteger(id) && (id as number) > 0,
     ) ||
     typeof value["operationKey"] !== "string" ||
-    (value["priority"] !== null && typeof value["priority"] !== "string") ||
-    (value["status"] !== null && typeof value["status"] !== "string") ||
-    typeof value["title"] !== "string"
+    (value["priority"] !== null &&
+      (typeof value["priority"] !== "string" ||
+        value["priority"].trim() === "")) ||
+    (value["status"] !== null &&
+      (typeof value["status"] !== "string" || value["status"].trim() === "")) ||
+    typeof value["title"] !== "string" ||
+    value["title"].trim() === ""
   ) {
     throw new Error("Dynamic task intent request is malformed");
   }
@@ -124,12 +129,16 @@ const matchesIntent = (
     throw new Error("Dynamic task operation key is malformed");
   }
   if (
+    !/^[a-f0-9]{64}$/.test(intent.operationDigest) ||
+    !/^[a-f0-9]{64}$/.test(intent.recordDigest) ||
+    !/^[a-z][a-z-]*$/.test(intent.lifecycle) ||
     !Array.isArray(operation) ||
     operation.length !== 4 ||
     !operation.every((value) => typeof value === "string") ||
     operation[0] !== intent.sourceInstanceId ||
     operation[1] !== intent.sourceSessionKey ||
     operation[2] !== intent.kind ||
+    operation[3]!.trim() === "" ||
     intent.sourceInstanceId !== `task-${intent.sourceTaskId}`
   ) {
     throw new Error("Dynamic task source identity is malformed");
@@ -200,7 +209,9 @@ export class DynamicTaskAuthority {
       sourceSessionKey: source.sessionKey,
       sourceTaskId: source.taskId,
     });
-    await this.options.afterIntentRecorded?.(persisted.record);
+    if (persisted.record.state === "pending") {
+      await this.options.afterIntentRecorded?.(persisted.record);
+    }
 
     if (persisted.record.state === "completed") {
       const task = await this.board.readTask(persisted.record.taskId!);
@@ -245,29 +256,36 @@ export class DynamicTaskAuthority {
     }
 
     for (const intent of pending) {
+      let occurrenceMatches: BoardTask[];
+      let exactMatches: BoardTask[];
       try {
-        const occurrenceMatches = tasks.filter(({ tags }) =>
+        occurrenceMatches = tasks.filter(({ tags }) =>
           tags.includes(operationTag(intent)),
         );
-        const exactMatches = occurrenceMatches.filter((task) =>
+        exactMatches = occurrenceMatches.filter((task) =>
           matchesIntent(task, intent),
         );
-        if (occurrenceMatches.length === 0) continue;
-        if (exactMatches.length === 0) {
-          await this.raiseRecovery(intent, "conflicting");
-          continue;
-        }
-        if (occurrenceMatches.length !== 1 || exactMatches.length !== 1) {
-          await this.raiseRecovery(intent, "ambiguous");
-          continue;
-        }
+      } catch {
+        await this.raiseRecovery(intent, "malformed");
+        continue;
+      }
+      if (occurrenceMatches.length === 0) continue;
+      if (exactMatches.length === 0) {
+        await this.raiseRecovery(intent, "conflicting");
+        continue;
+      }
+      if (occurrenceMatches.length !== 1 || exactMatches.length !== 1) {
+        await this.raiseRecovery(intent, "ambiguous");
+        continue;
+      }
+      try {
         this.persistence.completeDynamicTaskIntent(
           intent.operationDigest,
           exactMatches[0]!.id,
         );
         await this.resolveRecoveryAttention(intent);
       } catch {
-        await this.raiseRecovery(intent, "malformed");
+        await this.raiseRecovery(intent, "failed");
       }
     }
   }
@@ -289,8 +307,24 @@ export class DynamicTaskAuthority {
     record: CreateBoardRecord,
     source: DynamicTaskSource,
   ): Promise<void> {
-    if (source.instanceId !== `task-${source.taskId}`) {
-      throw new Error("Dynamic task source instance does not match its task");
+    let operation: unknown;
+    try {
+      operation = JSON.parse(record.operationKey) as unknown;
+    } catch {
+      throw new Error("Dynamic task operation key is malformed");
+    }
+    if (
+      !Array.isArray(operation) ||
+      operation.length !== 4 ||
+      !operation.every((value) => typeof value === "string") ||
+      operation[0] !== source.instanceId ||
+      operation[1] !== source.sessionKey ||
+      operation[2] !== record.kind ||
+      source.instanceId !== `task-${source.taskId}`
+    ) {
+      throw new Error(
+        "Dynamic task source identity does not match its operation",
+      );
     }
     const task = await this.board.readTask(source.taskId);
     if (task.id !== source.taskId || task.parent !== record.parent) {
@@ -314,7 +348,10 @@ export class DynamicTaskAuthority {
     task: BoardTask,
     intent: DynamicTaskIntentRecord,
   ): void {
-    if (!matchesIntent(task, intent)) {
+    if (
+      (intent.taskId !== undefined && task.id !== intent.taskId) ||
+      !matchesIntent(task, intent)
+    ) {
       throw new Error(
         `Board task ${task.id} does not exactly match dynamic task operation '${intent.operationDigest}'`,
       );

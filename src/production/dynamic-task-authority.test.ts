@@ -30,7 +30,6 @@ const makePersistence = async (): Promise<SqlitePersistence> => {
 
 const task = (id: number, options: Partial<BoardTask> = {}): BoardTask => ({
   blocked: false,
-  body: "",
   dependencies: [],
   frontMatter: { id, title: `Sample ${id}` },
   id,
@@ -67,7 +66,6 @@ const source = {
 const boardTask = (id = 21): BoardTask => {
   const identity = boardRecordIdentity(record);
   return task(id, {
-    body: record.body,
     dependencies: record.dependsOn,
     lifecycle: record.lifecycle,
     parent: record.parent,
@@ -174,7 +172,22 @@ describe("DynamicTaskAuthority", () => {
     await expect(
       authority.createRecord({ ...record, title: "Changed sample" }, source),
     ).rejects.toThrow("changed durable identity");
+    await expect(
+      authority.createRecord(
+        {
+          ...record,
+          operationKey: JSON.stringify([
+            "task-12",
+            "task-12:other:1",
+            "follow-up",
+            "different-operation",
+          ]),
+        },
+        source,
+      ),
+    ).rejects.toThrow("source identity does not match its operation");
     expect(createRecord).toHaveBeenCalledTimes(1);
+    expect(persistence.listDynamicTaskIntents()).toHaveLength(1);
     persistence.close();
   });
 
@@ -214,10 +227,7 @@ describe("DynamicTaskAuthority", () => {
   });
 
   it.each([
-    [
-      "conflicting",
-      [boardTask(21)].map((value) => ({ ...value, body: "Changed" })),
-    ],
+    ["conflicting", [{ ...boardTask(21), lifecycle: "changed-lifecycle" }]],
     ["ambiguous", [boardTask(21), boardTask(22)]],
   ] as const)(
     "fails %s recovery closed with one stable attention",
