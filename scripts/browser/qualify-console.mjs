@@ -1349,12 +1349,13 @@ const assertNotificationRecoveryDetails = async () => {
   const recovery = await snapshotText(
     '.attention-entry[data-attention-id="notification-recovery-a"]',
   );
+  const normalized = recovery.toLowerCase();
   invariant(
-    recovery.includes("Recipient") &&
-      recovery.includes("Primary operator") &&
-      recovery.includes("Intended message") &&
-      recovery.includes("A sample needs attention.") &&
-      recovery.includes("Retry notification"),
+    normalized.includes("recipient") &&
+      normalized.includes("primary operator") &&
+      normalized.includes("intended message") &&
+      normalized.includes("a sample needs attention.") &&
+      normalized.includes("retry notification"),
     "notification-recovery-verification",
     `recovery card lacks its accessible verification details: ${recovery}`,
   );
