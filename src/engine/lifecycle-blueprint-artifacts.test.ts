@@ -154,6 +154,27 @@ describe("organization lifecycle blueprint artifacts", () => {
     ).rejects.toThrow("violates the lifecycle schema");
   });
 
+  it("rejects a non-string stage skill through the lifecycle schema", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["skills"] = [17];
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow(/violates the lifecycle schema/);
+  });
+
+  it("rejects duplicate stage skills through the lifecycle schema", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["skills"] = [
+      "evidence-review",
+      "evidence-review",
+    ];
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow(/violates the lifecycle schema/);
+  });
+
   it("rejects the removed handoff blobHash schema shape", async () => {
     const invalid = artifact();
     (invalid.nodes[1] as Record<string, unknown>)["handoff-template"] = {
@@ -261,7 +282,18 @@ describe("organization lifecycle blueprint artifacts", () => {
     invalid.relationships.uses = ["sample-checklist"];
     await expect(
       validateBlueprintRepository(await repository(invalid)),
-    ).rejects.toThrow("relationships must name its template artifacts");
+    ).rejects.toThrow("relationships must name its bound artifacts");
+  });
+
+  it("binds declared relationships to stage skill artifacts", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["skills"] = [
+      "evidence-review",
+    ];
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow("relationships must name its bound artifacts");
   });
 
   it("resolves a pinned handoff template after its working-tree path is removed", async () => {

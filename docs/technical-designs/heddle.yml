@@ -295,7 +295,16 @@ proposed-design:
     `handoff-templates/includes/<path>`. Paths outside that directory and the
     Nunjucks `extends` and `import` directives fail closed. Heddle verifies the
     entry schema and declared handoff kind and never substitutes mutable
-    working-tree content. Standard handoffs receive completed
+    working-tree content. A wait node can declare a unique, non-empty array of
+    kebab-case `skills` names. Each name resolves from
+    `skills/<name>/SKILL.md` at the handoff template's pinned commit. The skill
+    must have YAML front matter whose `name` equals its folder and whose
+    `description` is non-empty. The handoff stage carries the names, and the
+    Nunjucks `skill(name)` global returns only `name`, the repository-relative
+    `path`, and `description`. A missing or malformed pinned skill fails with
+    the same stable lifecycle-resolution attention before any T3 effect.
+    Task front-matter `skills` remains a per-task display override; blueprint
+    stage skills provide the generic journey declaration. Standard handoffs receive completed
     wait-stage outputs reconstructed in recorded lifecycle execution order.
     Remediation receives the latest canonical review output through the
     handoff assembler, which retains findings and excludes transcript data.
@@ -394,7 +403,7 @@ proposed-design:
     for one stage of one task type, with placeholders for task context. Each
     blueprint stage that starts an agent session names its template;
     at bootstrap, Heddle resolves that repository as the sole todo-template and
-    pinned handoff-template authority and fills the template from the task contract
+    pinned handoff-template and stage-skill authority and fills the template from the task contract
     and stores the resulting list on the instance. The instantiated
     list belongs to the stage's agent, which can add, edit, and
     reorder items; the template itself never changes. The todo tools

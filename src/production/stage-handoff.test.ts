@@ -4,7 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -59,7 +59,20 @@ describe("production stage handoff", () => {
     temporaryDirectories.push(repositoryRoot);
     await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
     await mkdir(join(repositoryRoot, "blueprints"));
-    await writeDeliveryBlueprintFixture(repositoryRoot, "standard-delivery");
+    const blueprintPath = await writeDeliveryBlueprintFixture(
+      repositoryRoot,
+      "standard-delivery",
+    );
+    const blueprint = JSON.parse(
+      await readFile(join(repositoryRoot, blueprintPath), "utf8"),
+    ) as { nodes: Array<{ id: string; skills?: string[] }> };
+    blueprint.nodes.find(({ id }) => id === "review")!.skills = [
+      "evidence-review",
+    ];
+    await writeFile(
+      join(repositoryRoot, blueprintPath),
+      `${JSON.stringify(blueprint, null, 2)}\n`,
+    );
     const persistence = new SqlitePersistence({
       stateDirectory: join(repositoryRoot, "state"),
     });
@@ -107,6 +120,7 @@ describe("production stage handoff", () => {
         { result: "ready" },
         { snapshotId: "snapshot-sample" },
       ],
+      skills: ["evidence-review"],
     });
     persistence.close();
   });

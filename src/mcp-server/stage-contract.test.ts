@@ -18,6 +18,7 @@ const contract = () => ({
     commitSha: "b".repeat(40),
     path: "handoff-templates/standard.md",
   },
+  skills: ["evidence-review"],
   stage: "inspect",
   todoTemplate: "sample-checklist",
   tools: ["advance"],
@@ -44,6 +45,17 @@ describe("workflow MCP stage contract", () => {
   it("rejects an uppercase handoff commit SHA", () => {
     const value = contract();
     value.handoffTemplate.commitSha = "B".repeat(40);
+
+    expect(isWorkflowMcpStageContract(value)).toBe(false);
+  });
+
+  it.each([
+    { label: "non-string", skills: [17] },
+    { label: "non-kebab", skills: ["EvidenceReview"] },
+    { label: "duplicate", skills: ["evidence-review", "evidence-review"] },
+  ])("rejects $label stage skills", ({ skills }) => {
+    const value = contract();
+    value.skills = skills as unknown as string[];
 
     expect(isWorkflowMcpStageContract(value)).toBe(false);
   });

@@ -43,6 +43,7 @@ const resolveWorkflowMcpStageContract = async () => ({
   blueprintPath: "blueprints/sample-process.json",
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
   handoffTemplate: sampleHandoffTemplate,
+  skills: [],
   stage: "prepare",
   todoTemplate: "sample-prepare",
   tools: ["advance", "get_task_context"],

@@ -363,6 +363,14 @@ organization blueprint clone, retains the commit under
 `refs/heddle/handoff-templates/<commit-sha>`, and does not read mutable
 working-tree files during session activation. Product repositories receive no
 template-retention refs.
+An agent wait node can also declare `skills: [<name>, ...]`. Each name must be
+unique and kebab-case. Heddle reads `skills/<name>/SKILL.md` from the same
+pinned commit as the handoff template, requires the front-matter `name` to
+equal the folder name, and requires a non-empty `description`. The handoff
+stage carries the names. Templates resolve one with the `skill(name)` global,
+which returns `{name,path,description}` with a repository-relative path. This
+blueprint declaration supplies generic stage skills. A task's front-matter
+`skills` map remains an independent per-task override.
 Heddle reconstructs completed wait-stage outputs in
 recorded lifecycle execution order. A standard stage receives those prior
 outputs plus the persisted outputs of completed mechanical nodes on the path
@@ -402,7 +410,7 @@ Templates can include pinned partials with the full repository-relative form
 escape that directory. Nunjucks `extends`, `import`, and `from ... import`
 directives are not supported in entry files or included files.
 The standard context supplies `task` and `handoff`, including the normalized
-task contract, prior outputs, skill pointer, and persisted todo lists. The
+task contract, prior outputs, stage skill names, skill pointer, and persisted todo lists. The
 remediation context supplies the same roots with canonical review findings and
 the typed remediation cause in the handoff. Raw board front matter is available only as display input under
 `task`; normalized `handoff.taskContract` remains the machine authority.
@@ -410,7 +418,7 @@ the typed remediation cause in the handoff. Raw board front matter is available 
 Before dispatch, Heddle resolves the effective system prompt, prepends it to
 the rendered handoff, and durably stores both the prompt and exact composed
 Markdown document.
-A missing variable, invalid template, pin or kind disagreement, invalid
+A missing variable, invalid template or pinned skill, pin or kind disagreement, invalid
 identity, or nondeterministic render raises one stable
 `handoff-render-failed` lifecycle-resolution attention entry. No timeout,
 thread, or first-turn effect occurs. After T3 accepts the first turn, Heddle

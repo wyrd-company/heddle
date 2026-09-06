@@ -89,6 +89,7 @@ const assertTemplateRelationships = (
         ),
       );
     }
+    if (node.skills !== undefined) values.push(...node.skills);
     return values;
   });
   const declared = relationships["uses"].filter(
@@ -99,7 +100,7 @@ const assertTemplateRelationships = (
     JSON.stringify([...declared].sort())
   ) {
     throw new BlueprintValidationError(
-      `Blueprint '${artifactId}' relationships must name its template artifacts`,
+      `Blueprint '${artifactId}' relationships must name its bound artifacts`,
     );
   }
 };

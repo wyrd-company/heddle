@@ -59,6 +59,7 @@ const workflowMcp = {
   blueprintPath: "blueprints/sample-process.json",
   dispositions: [{ description: "Finish the preparation", name: "complete" }],
   handoffTemplate: sampleHandoffTemplate,
+  skills: [],
   stage: "prepare",
   todoTemplate: "sample-prepare",
   tools: ["advance", "answer", "get_task_context"],
@@ -69,7 +70,7 @@ const resolveWorkflowMcpStageContract = async () => workflowMcp;
 const handoffDocument = (token: string, stage = "prepare") =>
   JSON.stringify({
     format: "heddle.stage-handoff",
-    stage: { name: stage },
+    stage: { name: stage, skills: [] },
     taskContract: { title: "Prepare a sample" },
     version: 1,
   });
@@ -246,6 +247,7 @@ describe("stage session cold retry guards", () => {
             body,
             includes,
             kind: "standard",
+            skills: {},
           }),
         },
         workflowMcpEndpoint,
@@ -272,6 +274,91 @@ describe("stage session cold retry guards", () => {
       });
     },
   );
+
+  it("rejects a correlation token in pinned skill source before any T3 effect", async () => {
+    const memory = memoryStore();
+    const applyHarnessToolTimeout = vi.fn(async () => undefined);
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+    const register = vi.fn(async () => undefined);
+    const skilledInput: SessionBootstrapInput = {
+      ...input,
+      handoff: {
+        ...input.handoff,
+        stage: { ...input.handoff.stage, skills: ["evidence-review"] },
+      },
+    };
+
+    await expect(
+      bootstrapStageSession(skilledInput, {
+        instantiateTodoList,
+        persistence: memory.store,
+        resolveWorkflowMcpStageContract: async () => ({
+          ...workflowMcp,
+          skills: ["evidence-review"],
+        }),
+        templateAuthority: {
+          repositoryRoot: sampleTemplateAuthority.repositoryRoot,
+          readHandoffTemplate: async (reference, skillNames) => {
+            expect(skillNames).toEqual(["evidence-review"]);
+            return {
+              ...reference,
+              body: '{{ skill("evidence-review").description }}',
+              includes: {},
+              kind: "standard",
+              skills: {
+                "evidence-review": {
+                  description: "Inspect evidence.",
+                  name: "evidence-review",
+                  path: "skills/evidence-review/SKILL.md",
+                  source: "Body contains correlation-token",
+                },
+              },
+            };
+          },
+        },
+        workflowMcpEndpoint,
+        t3: {
+          applyHarnessToolTimeout,
+          dispatch,
+          registerWorkflowMcpProviderSession: register,
+        },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+        mintCorrelationToken: () => "correlation-token",
+      }),
+    ).rejects.toThrow("Pinned skill source contains the correlation token");
+    expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
+    expect(register).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects handoff skill names that disagree with the pinned blueprint contract", async () => {
+    const memory = memoryStore();
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(input, {
+        instantiateTodoList,
+        persistence: memory.store,
+        resolveWorkflowMcpStageContract: async () => ({
+          ...workflowMcp,
+          skills: ["evidence-review"],
+        }),
+        templateAuthority: sampleTemplateAuthority,
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+      }),
+    ).rejects.toThrow("skills do not match the pinned blueprint contract");
+    expect(dispatch).not.toHaveBeenCalled();
+  });
 
   it("persists parentage only for a child of a bound session", async () => {
     const parentHandoff = {
@@ -1018,6 +1105,50 @@ describe("stage session cold retry guards", () => {
     ).rejects.toThrow(/workflow MCP stage disagree/);
     expect(dispatch).not.toHaveBeenCalled();
     expect(memory.record.state.handoffs).toHaveLength(1);
+  });
+
+  it("fails closed when stored handoff skills differ from the MCP contract", async () => {
+    const stored = JSON.parse(handoffDocument("token-1")) as {
+      stage: { skills: string[] };
+    };
+    stored.stage.skills = ["different-skill"];
+    const memory = memoryStore({
+      ...initialState(),
+      correlationTokens: { "prepare-1": "token-1" },
+      handoffs: [
+        {
+          correlationToken: "token-1",
+          handoff: JSON.stringify(stored),
+          kind: "stage-handoff",
+          sessionKey: "prepare-1",
+          workflowMcp,
+        },
+      ],
+    });
+    const applyHarnessToolTimeout = vi.fn(async () => undefined);
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(input, {
+        persistence: memory.store,
+        instantiateTodoList,
+        templateAuthority: sampleTemplateAuthority,
+        resolveWorkflowMcpStageContract,
+        workflowMcpEndpoint,
+        t3: {
+          applyHarnessToolTimeout,
+          registerWorkflowMcpProviderSession,
+          dispatch,
+        },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+      }),
+    ).rejects.toThrow("Stored handoff and workflow MCP skills disagree");
+    expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("fails closed when a stored MCP contract has no todo template binding", async () => {

@@ -775,6 +775,7 @@ describe("production composition", () => {
       ...stored.workflowMcp.handoffTemplate,
       body: expectedTemplateBytes.slice(bodyBoundary + "\n---\n".length),
       includes: {},
+      skills: {},
       kind: "standard" as const,
     };
     const task = await composition.board.readTask(fixture.taskId);

@@ -138,7 +138,7 @@ const binding: WorkflowMcpSessionBinding = {
   dispositions: [],
   instance,
   sessionKey: "task-17:implement",
-  stage: { id: "implement", tools: ["escalate", "answer"] },
+  stage: { id: "implement", skills: [], tools: ["escalate", "answer"] },
   taskContext: { id: 17, title: "Example Item" },
   token: "correlation-token",
 };

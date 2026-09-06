@@ -15,6 +15,7 @@ export type StandardHandoffStage = {
   kind: "standard";
   name: string;
   priorStageOutputs: JsonValue[];
+  skills?: string[];
 };
 
 export type RemediationHandoffStage = {
@@ -22,6 +23,7 @@ export type RemediationHandoffStage = {
   kind: "remediation";
   name: string;
   review: ReviewStageOutput;
+  skills?: string[];
 };
 
 export type StageHandoffInput = {
@@ -53,11 +55,13 @@ export const assembleStageHandoff = (input: StageHandoffInput): string => {
           kind: input.stage.kind,
           name: input.stage.name,
           reviewFindings: input.stage.review.findings,
+          skills: input.stage.skills ?? [],
         }
       : {
           kind: input.stage.kind,
           name: input.stage.name,
           priorStageOutputs: input.stage.priorStageOutputs,
+          skills: input.stage.skills ?? [],
         };
 
   return canonicalJson({

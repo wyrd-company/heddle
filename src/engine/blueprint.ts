@@ -134,7 +134,8 @@ export const validateBlueprint = (
       node.uses === "wait" &&
       (node.tools !== undefined ||
         node["todo-template"] !== undefined ||
-        node["handoff-template"] !== undefined);
+        node["handoff-template"] !== undefined ||
+        node.skills !== undefined);
     if (
       node.handoff !== undefined &&
       node.handoff !== "standard" &&
@@ -181,6 +182,30 @@ export const validateBlueprint = (
     if (node.uses !== "wait" && node["handoff-template"] !== undefined) {
       throw new BlueprintValidationError(
         `Non-wait node ${JSON.stringify(node.id)} must not declare handoff template metadata`,
+      );
+    }
+    const skills = node.skills as unknown;
+    if (
+      skills !== undefined &&
+      (!Array.isArray(skills) ||
+        skills.length === 0 ||
+        skills.some(
+          (skill) =>
+            typeof skill !== "string" || !/^[a-z]+(?:-[a-z]+)*$/.test(skill),
+        ))
+    ) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} skills must be a non-empty array of kebab-case names`,
+      );
+    }
+    if (Array.isArray(skills) && new Set(skills).size !== skills.length) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} skills must not contain duplicate names`,
+      );
+    }
+    if (node.uses !== "wait" && skills !== undefined) {
+      throw new BlueprintValidationError(
+        `Non-wait node ${JSON.stringify(node.id)} must not declare skills`,
       );
     }
     if (

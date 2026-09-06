@@ -148,6 +148,7 @@ export type SessionBootstrapDependencies = {
 
 export type HandoffTemplateResolver = (
   reference: PinnedHandoffTemplateReference,
+  skillNames: readonly string[],
   input: SessionBootstrapInput,
 ) => Promise<PinnedHandoffTemplate>;
 
@@ -176,6 +177,35 @@ export type SessionSteeringDependencies = {
   nextId?: () => string;
   now?: () => string;
   t3: SessionT3Client;
+};
+
+const storedStageSkills = (serialized: string): string[] => {
+  let value: unknown;
+  try {
+    value = JSON.parse(serialized) as unknown;
+  } catch (error) {
+    throw new HandoffRenderError("Stored handoff is not valid JSON", error);
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof (value as Record<string, unknown>)["stage"] !== "object" ||
+    (value as Record<string, unknown>)["stage"] === null ||
+    Array.isArray((value as Record<string, unknown>)["stage"])
+  ) {
+    throw new HandoffRenderError("Stored handoff has no valid stage skills");
+  }
+  const skills = (
+    (value as Record<string, unknown>)["stage"] as Record<string, unknown>
+  )["skills"];
+  if (
+    !Array.isArray(skills) ||
+    skills.some((skill) => typeof skill !== "string")
+  ) {
+    throw new HandoffRenderError("Stored handoff has no valid stage skills");
+  }
+  return skills as string[];
 };
 
 const resolveWorkflowMcpStageContract = async (
@@ -269,6 +299,7 @@ const resolveWorkflowMcpStageContract = async (
       commitSha: stage["handoff-template"]["commitSha"],
       path: stage["handoff-template"]["path"],
     },
+    skills: [...(stage.skills ?? [])],
     stage: stage.id,
     todoTemplate: stage["todo-template"],
     tools: [...stage.tools],
@@ -342,6 +373,14 @@ const ensureStoredHandoff = async (
           `Stored handoff and workflow MCP stage disagree for '${input.sessionKey}'`,
         );
       }
+      if (
+        JSON.stringify(storedStageSkills(existing.handoff)) !==
+        JSON.stringify(workflowMcp.skills)
+      ) {
+        throw new HandoffRenderError(
+          `Stored handoff and workflow MCP skills disagree for '${input.sessionKey}'`,
+        );
+      }
       if (typeof existing.renderedHandoff !== "string") {
         throw new Error(
           `Stored handoff has no rendered payload for '${input.sessionKey}'`,
@@ -384,6 +423,14 @@ const ensureStoredHandoff = async (
     }
 
     const templateContract = await resolveStageContract(input, current);
+    if (
+      JSON.stringify(input.handoff.stage.skills ?? []) !==
+      JSON.stringify(templateContract.skills)
+    ) {
+      throw new Error(
+        `Stage handoff skills do not match the pinned blueprint contract for '${input.sessionKey}'`,
+      );
+    }
     if (input.todoAssignment === undefined) {
       await ensureStageTodoList(
         store,
@@ -410,6 +457,14 @@ const ensureStoredHandoff = async (
       continue;
     }
     const workflowMcp = await resolveStageContract(input, refreshed);
+    if (
+      JSON.stringify(input.handoff.stage.skills ?? []) !==
+      JSON.stringify(workflowMcp.skills)
+    ) {
+      throw new Error(
+        `Stage handoff skills do not match the pinned blueprint contract for '${input.sessionKey}'`,
+      );
+    }
     const assignment =
       input.todoAssignment === undefined
         ? undefined
@@ -460,6 +515,7 @@ const ensureStoredHandoff = async (
     });
     const template = await templateAuthority.readHandoffTemplate(
       workflowMcp.handoffTemplate,
+      workflowMcp.skills,
       input,
     );
     const renderedStageHandoff = renderStageHandoff({

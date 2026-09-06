@@ -40,7 +40,7 @@ const storedHandoff = (
   correlationToken: token,
   handoff: JSON.stringify({
     format: "heddle.stage-handoff",
-    stage: { name: "assess" },
+    stage: { name: "assess", skills: [] },
     taskContract: { id: 41, title: "Assess a sample" },
     version: 1,
   }),
@@ -57,6 +57,7 @@ const storedHandoff = (
       commitSha: "b".repeat(40),
       path: "handoff-templates/sample.md",
     },
+    skills: [],
     stage: "assess",
     todoTemplate: "sample-assess",
     tools,

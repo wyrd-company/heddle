@@ -93,7 +93,11 @@ const binding = (store: MemoryStore): WorkflowMcpSessionBinding => ({
   dispositions: [],
   instance: store.record,
   sessionKey: "parent",
-  stage: { id: "implement", tools: ["spawn"] },
+  stage: {
+    id: "implement",
+    skills: ["evidence-review"],
+    tools: ["spawn"],
+  },
   taskContext: { title: "Process sample" },
   token: "parent-token",
 });
@@ -208,6 +212,9 @@ describe("SubagentCoordinator", () => {
     expect(test.bootstrap).toHaveBeenCalledWith(
       expect.objectContaining({
         createdAt: expect.any(String),
+        handoff: expect.objectContaining({
+          stage: expect.objectContaining({ skills: ["evidence-review"] }),
+        }),
         parentSessionKey: "parent",
         sessionKey: "child-session",
         threadCreateCommandId: "create-command",

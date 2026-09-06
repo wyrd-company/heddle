@@ -209,6 +209,7 @@ export const readProductionHandoffStage = async (input: {
           ...outputs.map(({ output }) => output),
           ...mechanicalOutputs,
         ],
+        skills: node.skills ?? [],
       },
       ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
     };
@@ -258,6 +259,7 @@ export const readProductionHandoffStage = async (input: {
           ? {}
           : { transcript: review["transcript"] }),
       },
+      skills: node.skills ?? [],
     },
     ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
   };

@@ -25,6 +25,14 @@ export type PinnedHandoffTemplate = PinnedHandoffTemplateReference & {
   body: string;
   includes: Readonly<Record<string, string>>;
   kind: HandoffTemplateKind;
+  skills: Readonly<Record<string, PinnedSkill>>;
+};
+
+export type PinnedSkill = {
+  description: string;
+  name: string;
+  path: string;
+  source: string;
 };
 
 export class HandoffTemplateError extends Error {
@@ -52,7 +60,7 @@ const assertReference = (reference: PinnedHandoffTemplateReference): void => {
 const parseTemplate = (
   serialized: string,
   reference: PinnedHandoffTemplateReference,
-): Omit<PinnedHandoffTemplate, "includes"> => {
+): Omit<PinnedHandoffTemplate, "includes" | "skills"> => {
   if (!serialized.startsWith("---\n")) {
     throw new HandoffTemplateError("Handoff template has no YAML front matter");
   }
@@ -145,11 +153,78 @@ const readPinnedIncludes = async (
   );
 };
 
+const parseSkill = (serialized: string, name: string): PinnedSkill => {
+  const path = `skills/${name}/SKILL.md`;
+  if (!serialized.startsWith("---\n")) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} has no YAML front matter`,
+    );
+  }
+  const boundary = serialized.indexOf("\n---\n", 4);
+  if (boundary === -1) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter is not closed`,
+    );
+  }
+  let metadata: unknown;
+  try {
+    metadata = parse(serialized.slice(4, boundary));
+  } catch (error) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (
+    typeof metadata !== "object" ||
+    metadata === null ||
+    Array.isArray(metadata) ||
+    (metadata as Record<string, unknown>)["name"] !== name
+  ) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter name must equal its folder name`,
+    );
+  }
+  const description = (metadata as Record<string, unknown>)["description"];
+  if (typeof description !== "string" || description.trim() === "") {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter description must be a non-empty string`,
+    );
+  }
+  return Object.freeze({ description, name, path, source: serialized });
+};
+
+const readPinnedSkills = async (
+  repositoryRoot: string,
+  commitSha: string,
+  skillNames: readonly string[],
+): Promise<Readonly<Record<string, PinnedSkill>>> => {
+  const skills: Array<readonly [string, PinnedSkill]> = [];
+  for (const name of skillNames) {
+    if (!artifactId.test(name)) {
+      throw new HandoffTemplateError(
+        `Pinned skill name is invalid: ${JSON.stringify(name)}`,
+      );
+    }
+    const path = `skills/${name}/SKILL.md`;
+    let serialized: string;
+    try {
+      serialized = await readPinnedPath(repositoryRoot, commitSha, path);
+    } catch {
+      throw new HandoffTemplateError(
+        `Pinned skill ${JSON.stringify(name)} is unavailable at commit ${commitSha}: ${path}`,
+      );
+    }
+    skills.push([name, parseSkill(serialized, name)]);
+  }
+  return Object.freeze(Object.fromEntries(skills));
+};
+
 export class GitHandoffTemplateStore {
   constructor(private readonly repositoryRoot: string) {}
 
   async read(
     reference: PinnedHandoffTemplateReference,
+    skillNames: readonly string[] = [],
   ): Promise<PinnedHandoffTemplate> {
     assertReference(reference);
     try {
@@ -167,21 +242,28 @@ export class GitHandoffTemplateStore {
     }
     let serialized: string;
     let includes: Readonly<Record<string, string>>;
+    let skills: Readonly<Record<string, PinnedSkill>>;
     try {
-      [serialized, includes] = await Promise.all([
+      [serialized, includes, skills] = await Promise.all([
         readPinnedPath(
           this.repositoryRoot,
           reference.commitSha,
           reference.path,
         ),
         readPinnedIncludes(this.repositoryRoot, reference.commitSha),
+        readPinnedSkills(this.repositoryRoot, reference.commitSha, skillNames),
       ]);
-    } catch {
+    } catch (error) {
+      if (error instanceof HandoffTemplateError) throw error;
       throw new HandoffTemplateError(
         `Pinned handoff template path is unavailable at commit ${reference.commitSha}: ${reference.path}`,
       );
     }
-    const template = { ...parseTemplate(serialized, reference), includes };
+    const template = {
+      ...parseTemplate(serialized, reference),
+      includes,
+      skills,
+    };
     try {
       await execute(
         "git",

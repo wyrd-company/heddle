@@ -59,6 +59,11 @@ export const isWorkflowMcpStageContract = (
   /^handoff-templates\/[a-z]+(?:-[a-z]+)*\.md$/.test(
     value["handoffTemplate"]["path"],
   ) &&
+  Array.isArray(value["skills"]) &&
+  value["skills"].every(
+    (skill) => typeof skill === "string" && /^[a-z]+(?:-[a-z]+)*$/.test(skill),
+  ) &&
+  new Set(value["skills"]).size === value["skills"].length &&
   typeof value["stage"] === "string" &&
   typeof value["todoTemplate"] === "string" &&
   Array.isArray(value["tools"]) &&

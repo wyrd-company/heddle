@@ -89,6 +89,10 @@ const parseHandoff = (serialized: string): StageHandoffDocument => {
     typeof (value as Partial<StageHandoffDocument>).stage !== "object" ||
     (value as Partial<StageHandoffDocument>).stage === null ||
     typeof (value as StageHandoffDocument).stage.name !== "string" ||
+    !Array.isArray((value as StageHandoffDocument).stage.skills) ||
+    !(value as StageHandoffDocument).stage.skills.every(
+      (skill) => typeof skill === "string",
+    ) ||
     !Object.hasOwn(value, "taskContract")
   ) {
     throw new CorrelationTokenError();
@@ -101,7 +105,11 @@ export const isAuthorityValidStoredStageHandoff = (
 ): value is StoredStageHandoff => {
   if (!isStoredStageHandoff(value)) return false;
   try {
-    return parseHandoff(value.handoff).stage.name === value.workflowMcp.stage;
+    const stage = parseHandoff(value.handoff).stage;
+    return (
+      stage.name === value.workflowMcp.stage &&
+      JSON.stringify(stage.skills) === JSON.stringify(value.workflowMcp.skills)
+    );
   } catch {
     return false;
   }
@@ -217,7 +225,11 @@ export const resolveWorkflowMcpSessionBinding = (
       ? {}
       : { parentSessionKey: storedHandoffs[0]!.parentSessionKey }),
     sessionKey: match.sessionKey,
-    stage: { id: stageContract.stage, tools },
+    stage: {
+      id: stageContract.stage,
+      skills: [...stageContract.skills],
+      tools,
+    },
     taskContext: handoff.taskContract,
     ...(todoAssignment === undefined ? {} : { todoAssignment }),
     token,

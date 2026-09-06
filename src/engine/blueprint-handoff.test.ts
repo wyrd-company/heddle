@@ -86,6 +86,40 @@ describe("lifecycle blueprint handoff metadata", () => {
     expect(() => validate(value)).not.toThrow();
   });
 
+  it("accepts unique kebab-case skill names on a wait node", () => {
+    const value = blueprint();
+    value.nodes[0]!.skills = ["evidence-review", "task-execution"];
+
+    expect(() => validate(value)).not.toThrow();
+  });
+
+  it("rejects a non-string stage skill with a named diagnostic", () => {
+    const value = blueprint();
+    value.nodes[0]!.skills = [17] as unknown as string[];
+
+    expect(() => validate(value)).toThrow(
+      'Node "prepare" skills must be a non-empty array of kebab-case names',
+    );
+  });
+
+  it("rejects duplicate stage skills with a named diagnostic", () => {
+    const value = blueprint();
+    value.nodes[0]!.skills = ["evidence-review", "evidence-review"];
+
+    expect(() => validate(value)).toThrow(
+      'Node "prepare" skills must not contain duplicate names',
+    );
+  });
+
+  it("rejects stage skills on a non-wait node", () => {
+    const value = blueprint();
+    value.nodes[1]!.skills = ["evidence-review"];
+
+    expect(() => validate(value)).toThrow(
+      'Non-wait node "finish" must not declare skills',
+    );
+  });
+
   it.each(["a".repeat(41), "A".repeat(40)])(
     "rejects invalid handoff template commit pin %s",
     (commitSha) => {

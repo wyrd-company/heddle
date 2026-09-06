@@ -8,7 +8,10 @@ import { posix } from "node:path";
 import nunjucks from "nunjucks";
 
 import type { JsonValue } from "../persistence/index.js";
-import type { PinnedHandoffTemplate } from "./handoff-template-store.js";
+import type {
+  PinnedHandoffTemplate,
+  PinnedSkill,
+} from "./handoff-template-store.js";
 
 export class HandoffRenderError extends Error {
   constructor(
@@ -220,6 +223,7 @@ class PinnedIncludeLoader extends nunjucks.Loader {
 
 const environment = (
   includes: Readonly<Record<string, string>>,
+  skills: Readonly<Record<string, PinnedSkill>>,
 ): nunjucks.Environment => {
   const result = new nunjucks.Environment(new PinnedIncludeLoader(includes), {
     autoescape: false,
@@ -235,6 +239,19 @@ const environment = (
   result.addFilter("stableJson", (value: JsonValue) =>
     JSON.stringify(sortedJson(value), undefined, 2),
   );
+  result.addGlobal("skill", (name: unknown) => {
+    if (typeof name !== "string" || !Object.hasOwn(skills, name)) {
+      throw new HandoffRenderError(
+        `Handoff template requested undeclared pinned skill: ${JSON.stringify(name)}`,
+      );
+    }
+    const resolved = skills[name]!;
+    return {
+      description: resolved.description,
+      name: resolved.name,
+      path: resolved.path,
+    };
+  });
   return result;
 };
 
@@ -299,7 +316,16 @@ export const renderStageHandoff = (input: HandoffRenderInput): string => {
       "Stored handoff and pinned template stage metadata disagree",
     );
   }
-  const renderer = environment(input.template.includes);
+  if (
+    Object.values(input.template.skills).some(({ source }) =>
+      source.includes(input.correlationToken),
+    )
+  ) {
+    throw new HandoffRenderError(
+      "Pinned skill source contains the correlation token",
+    );
+  }
+  const renderer = environment(input.template.includes, input.template.skills);
   let first: string;
   let second: string;
   try {

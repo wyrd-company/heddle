@@ -22,6 +22,64 @@ import { GitHandoffTemplateStore } from "./handoff-template-store.js";
 const execute = promisify(execFile);
 const cleanup: string[] = [];
 
+const pinnedSkillFixture = async (
+  serializedSkill?: string,
+  keepSkillFolder = false,
+): Promise<{ commitSha: string; root: string }> => {
+  const root = await mkdtemp(join(tmpdir(), "pinned-skill-store-"));
+  cleanup.push(root);
+  await mkdir(join(root, "handoff-templates"));
+  await mkdir(join(root, "skills", "evidence-review"), { recursive: true });
+  await writeFile(
+    join(root, "handoff-templates", "standard.md"),
+    [
+      "---",
+      "$schema: https://wyrd.company/heddle/handoff-template.schema.json",
+      "relationships:",
+      "  implements: heddle",
+      "format: heddle.handoff-template",
+      "version: 1",
+      "kind: standard",
+      "---",
+      '{{ skill("evidence-review").description }}',
+      "",
+    ].join("\n"),
+  );
+  if (serializedSkill !== undefined) {
+    await writeFile(
+      join(root, "skills", "evidence-review", "SKILL.md"),
+      serializedSkill,
+    );
+  } else if (keepSkillFolder) {
+    await writeFile(
+      join(root, "skills", "evidence-review", "README.md"),
+      "# Evidence review fixture\n",
+    );
+  }
+  await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+    cwd: root,
+  });
+  await execute("git", ["add", "."], { cwd: root });
+  await execute(
+    "git",
+    [
+      "-c",
+      "user.name=Sample User",
+      "-c",
+      "user.email=sample@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "add pinned artifacts",
+    ],
+    { cwd: root },
+  );
+  const commitSha = (
+    await execute("git", ["rev-parse", "HEAD"], { cwd: root })
+  ).stdout.trim();
+  return { commitSha, root };
+};
+
 afterEach(async () => {
   await Promise.all(
     cleanup.splice(0).map((path) => rm(path, { force: true, recursive: true })),
@@ -74,6 +132,7 @@ const input = (
     includes: {},
     kind: "standard",
     path: "handoff-templates/standard.md",
+    skills: {},
   },
   ...overrides,
 });
@@ -125,6 +184,99 @@ describe("renderStageHandoff", () => {
   it("renders byte-identically from identical stored inputs", () => {
     const testInput = input();
     expect(renderStageHandoff(testInput)).toBe(renderStageHandoff(testInput));
+  });
+
+  it("renders every field from a declared pinned skill through the skill global", () => {
+    const rendered = renderStageHandoff(
+      input({
+        template: {
+          ...input().template,
+          body: [
+            '{{ skill("evidence-review").name }}',
+            '{{ skill("evidence-review").path }}',
+            '{{ skill("evidence-review").description }}',
+          ].join("\n"),
+          skills: {
+            "evidence-review": {
+              description: "Inspect evidence before recording a result.",
+              name: "evidence-review",
+              path: "skills/evidence-review/SKILL.md",
+              source: "Pinned skill source",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(rendered).toContain("evidence-review");
+    expect(rendered).toContain("skills/evidence-review/SKILL.md");
+    expect(rendered).toContain("Inspect evidence before recording a result.");
+  });
+
+  it("detects skill-resolved content that changes between deterministic renders", () => {
+    let reads = 0;
+    const skills = new Proxy(input().template.skills, {
+      get: (_target, property) => {
+        if (property !== "evidence-review") return undefined;
+        reads += 1;
+        return {
+          description: `Description ${reads}`,
+          name: "evidence-review",
+          path: "skills/evidence-review/SKILL.md",
+          source: "Pinned skill source",
+        };
+      },
+      ownKeys: () => ["evidence-review"],
+      getOwnPropertyDescriptor: () => ({
+        configurable: true,
+        enumerable: true,
+      }),
+    });
+
+    expect(() =>
+      renderStageHandoff(
+        input({
+          template: {
+            ...input().template,
+            body: '{{ skill("evidence-review").description }}',
+            skills,
+          },
+        }),
+      ),
+    ).toThrow("Handoff template render is not deterministic");
+  });
+
+  it("rejects a correlation token anywhere in a declared pinned skill source", () => {
+    expect(() =>
+      renderStageHandoff(
+        input({
+          template: {
+            ...input().template,
+            skills: {
+              "evidence-review": {
+                description: "Inspect evidence before recording a result.",
+                name: "evidence-review",
+                path: "skills/evidence-review/SKILL.md",
+                source: "Body contains opaque-fallback-token",
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("Pinned skill source contains the correlation token");
+  });
+
+  it("rejects a skill global request not declared by the stage", () => {
+    expect(() =>
+      renderStageHandoff(
+        input({
+          template: {
+            ...input().template,
+            body: '{{ skill("unlisted-skill").description }}',
+          },
+        }),
+      ),
+    ).toThrow("requested undeclared pinned skill");
   });
 
   it("renders an include from the pinned template commit", () => {
@@ -268,12 +420,126 @@ describe("renderStageHandoff", () => {
 });
 
 describe("GitHandoffTemplateStore", () => {
+  it("rejects a declared skill whose pinned folder is missing", async () => {
+    const { commitSha, root } = await pinnedSkillFixture();
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).rejects.toThrow(
+      `Pinned skill "evidence-review" is unavailable at commit ${commitSha}: skills/evidence-review/SKILL.md`,
+    );
+  });
+
+  it("rejects a declared skill folder with no pinned SKILL.md", async () => {
+    const { commitSha, root } = await pinnedSkillFixture(undefined, true);
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).rejects.toThrow(
+      `Pinned skill "evidence-review" is unavailable at commit ${commitSha}: skills/evidence-review/SKILL.md`,
+    );
+  });
+
+  it("rejects a pinned skill whose front-matter name differs from its folder", async () => {
+    const { commitSha, root } = await pinnedSkillFixture(
+      "---\nname: other-skill\ndescription: Inspect evidence.\n---\n\nInspect it.\n",
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).rejects.toThrow(
+      'Pinned skill "evidence-review" front matter name must equal its folder name',
+    );
+  });
+
+  it("rejects a pinned skill with no front-matter description", async () => {
+    const { commitSha, root } = await pinnedSkillFixture(
+      "---\nname: evidence-review\n---\n\nInspect it.\n",
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).rejects.toThrow(
+      'Pinned skill "evidence-review" front matter description must be a non-empty string',
+    );
+  });
+
+  it.each([
+    {
+      diagnostic: "has no YAML front matter",
+      label: "no front matter",
+      source: "# Evidence review\n",
+    },
+    {
+      diagnostic: "front matter is not closed",
+      label: "unclosed front matter",
+      source: "---\nname: evidence-review\n",
+    },
+    {
+      diagnostic: "front matter is invalid",
+      label: "invalid front matter",
+      source: "---\nname: [\ndescription: Inspect evidence.\n---\n",
+    },
+  ])("rejects a pinned skill with $label", async ({ diagnostic, source }) => {
+    const { commitSha, root } = await pinnedSkillFixture(source);
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).rejects.toThrow(diagnostic);
+  });
+
+  it("rejects a non-kebab pinned skill name", async () => {
+    const { commitSha, root } = await pinnedSkillFixture(
+      "---\nname: evidence-review\ndescription: Inspect evidence.\n---\n\nInspect it.\n",
+    );
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["EvidenceReview"],
+      ),
+    ).rejects.toThrow('Pinned skill name is invalid: "EvidenceReview"');
+  });
+
   it("reads entry and include bytes from one pinned commit", async () => {
     const root = await mkdtemp(join(tmpdir(), "handoff-template-store-"));
     cleanup.push(root);
     await mkdir(join(root, "handoff-templates", "includes", "nested"), {
       recursive: true,
     });
+    await mkdir(join(root, "skills", "evidence-review"), { recursive: true });
     const path = join(root, "handoff-templates", "standard.md");
     const includePath = join(
       root,
@@ -299,15 +565,27 @@ describe("GitHandoffTemplateStore", () => {
       "---",
       '{% include "handoff-templates/includes/summary.md" %}',
       '{% include "handoff-templates/includes/nested/detail.md" %}',
+      '{{ skill("evidence-review").description }}',
+      "",
+    ].join("\n");
+    const skillPath = join(root, "skills", "evidence-review", "SKILL.md");
+    const originalSkill = [
+      "---",
+      "name: evidence-review",
+      "description: Inspect pinned evidence.",
+      "---",
+      "",
+      "Inspect the supplied evidence.",
       "",
     ].join("\n");
     await writeFile(path, original);
     await writeFile(includePath, "Pinned {{ task.title }}\n");
     await writeFile(nestedIncludePath, "Nested pinned content\n");
+    await writeFile(skillPath, originalSkill);
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: root,
     });
-    await execute("git", ["add", "handoff-templates"], { cwd: root });
+    await execute("git", ["add", "handoff-templates", "skills"], { cwd: root });
     await execute(
       "git",
       [
@@ -334,11 +612,21 @@ describe("GitHandoffTemplateStore", () => {
     );
     await writeFile(includePath, "Live changed {{ task.title }}\n");
     await writeFile(nestedIncludePath, "Nested live content\n");
+    await writeFile(
+      skillPath,
+      originalSkill.replace(
+        "Inspect pinned evidence.",
+        "Inspect live evidence.",
+      ),
+    );
 
-    const template = await new GitHandoffTemplateStore(root).read({
-      commitSha: firstCommit,
-      path: "handoff-templates/standard.md",
-    });
+    const template = await new GitHandoffTemplateStore(root).read(
+      {
+        commitSha: firstCommit,
+        path: "handoff-templates/standard.md",
+      },
+      ["evidence-review"],
+    );
 
     expect(template.body).toContain("summary.md");
     expect(template.body).not.toContain("Live entry changed");
@@ -346,10 +634,17 @@ describe("GitHandoffTemplateStore", () => {
       "handoff-templates/includes/summary.md": "Pinned {{ task.title }}\n",
       "handoff-templates/includes/nested/detail.md": "Nested pinned content\n",
     });
+    expect(template.skills["evidence-review"]).toMatchObject({
+      description: "Inspect pinned evidence.",
+      name: "evidence-review",
+      path: "skills/evidence-review/SKILL.md",
+    });
     const pinnedRender = renderStageHandoff(input({ template }));
     expect(pinnedRender).toContain("Pinned Arrange a sample");
     expect(pinnedRender).not.toContain("Live changed");
     expect(pinnedRender).toContain("Nested pinned content");
+    expect(pinnedRender).toContain("Inspect pinned evidence.");
+    expect(pinnedRender).not.toContain("Inspect live evidence.");
     await expect(
       execute(
         "git",
@@ -358,7 +653,7 @@ describe("GitHandoffTemplateStore", () => {
       ),
     ).resolves.toMatchObject({ stdout: `${firstCommit}\n` });
 
-    await execute("git", ["add", "handoff-templates"], { cwd: root });
+    await execute("git", ["add", "handoff-templates", "skills"], { cwd: root });
     await execute(
       "git",
       [
@@ -376,21 +671,30 @@ describe("GitHandoffTemplateStore", () => {
     const secondCommit = (
       await execute("git", ["rev-parse", "HEAD"], { cwd: root })
     ).stdout.trim();
-    const stillPinned = await new GitHandoffTemplateStore(root).read({
-      commitSha: firstCommit,
-      path: "handoff-templates/standard.md",
-    });
+    const stillPinned = await new GitHandoffTemplateStore(root).read(
+      {
+        commitSha: firstCommit,
+        path: "handoff-templates/standard.md",
+      },
+      ["evidence-review"],
+    );
     expect(renderStageHandoff(input({ template: stillPinned }))).toContain(
       "Pinned Arrange a sample",
     );
     expect(renderStageHandoff(input({ template: stillPinned }))).not.toContain(
       "Live changed",
     );
+    expect(renderStageHandoff(input({ template: stillPinned }))).toContain(
+      "Inspect pinned evidence.",
+    );
 
-    const changed = await new GitHandoffTemplateStore(root).read({
-      commitSha: secondCommit,
-      path: "handoff-templates/standard.md",
-    });
+    const changed = await new GitHandoffTemplateStore(root).read(
+      {
+        commitSha: secondCommit,
+        path: "handoff-templates/standard.md",
+      },
+      ["evidence-review"],
+    );
 
     expect(changed.body).toContain("Live entry changed");
     expect(changed.includes).toEqual({
@@ -402,6 +706,7 @@ describe("GitHandoffTemplateStore", () => {
     expect(changedRender).toContain("Live entry changed");
     expect(changedRender).toContain("Live changed Arrange a sample");
     expect(changedRender).toContain("Nested live content");
+    expect(changedRender).toContain("Inspect live evidence.");
   });
 
   it.each(["a".repeat(41), "A".repeat(40)])(

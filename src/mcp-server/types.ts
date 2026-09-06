@@ -68,7 +68,7 @@ export interface WorkflowMcpSessionBinding {
   instance: InstanceRecord;
   parentSessionKey?: string;
   sessionKey: string;
-  stage: { id: string; tools: string[] };
+  stage: { id: string; skills: string[]; tools: string[] };
   taskContext: JsonValue;
   todoAssignment?: {
     listSessionKey: string;
@@ -86,6 +86,7 @@ export interface StoredWorkflowMcpStageContract {
     commitSha: string;
     path: string;
   };
+  skills: string[];
   stage: string;
   todoTemplate: string;
   tools: string[];
@@ -152,6 +153,7 @@ export type StageHandoffDocument = {
   format: "heddle.stage-handoff";
   stage: {
     name: string;
+    skills: string[];
   };
   taskContract: JsonValue;
   version: 1;

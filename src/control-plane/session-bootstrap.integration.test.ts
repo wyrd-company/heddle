@@ -224,6 +224,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
             { description: "Finish the preparation", name: "complete" },
           ],
           handoffTemplate: sampleHandoffTemplate,
+          skills: [],
           stage: "prepare",
           todoTemplate: "sample-prepare",
           tools: ["advance", "get_task_context"],

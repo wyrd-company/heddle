@@ -32,6 +32,7 @@ export interface LifecycleNode extends NodeDefinition {
     path: string;
   };
   repo?: string;
+  skills?: string[];
   "todo-template"?: string;
   tools?: string[];
 }

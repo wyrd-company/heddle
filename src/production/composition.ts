@@ -170,7 +170,8 @@ export const createProductionComposition = (
       blueprintRepository.repositoryRoot,
     );
     const templateAuthority: SessionTemplateAuthority = {
-      readHandoffTemplate: (reference) => handoffTemplateStore.read(reference),
+      readHandoffTemplate: (reference, skillNames) =>
+        handoffTemplateStore.read(reference, skillNames),
       repositoryRoot: blueprintRepository.repositoryRoot,
     };
     const pushover = new DurablePushoverNotifier(

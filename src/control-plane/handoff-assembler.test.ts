@@ -17,6 +17,7 @@ describe("assembleStageHandoff", () => {
         kind: "standard",
         name: "prepare",
         priorStageOutputs: [{ result: "ready", count: 2 }],
+        skills: ["evidence-review"],
       },
       skillPointer: "skill://prepare",
       taskContract: { title: "Prepare inventory", priority: "normal" },
@@ -36,11 +37,15 @@ describe("assembleStageHandoff", () => {
         priorStageOutputs: [{ count: 2, result: "ready" }],
         name: "prepare",
         kind: "standard",
+        skills: ["evidence-review"],
       },
       correlationToken: "correlation-token",
     });
 
     expect(Buffer.from(first)).toEqual(Buffer.from(second));
+    expect(JSON.parse(first)).toMatchObject({
+      stage: { skills: ["evidence-review"] },
+    });
   });
 
   it("carries remediation findings without carrying the review transcript", () => {

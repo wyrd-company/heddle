@@ -710,6 +710,33 @@ describe("workflow MCP HTTP server", () => {
     ).rejects.toThrow();
   });
 
+  it("rejects a token handoff whose skill names differ from its static contract", async () => {
+    const fixture = await makeFixture();
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const stored = record.state.handoffs[0];
+    if (
+      typeof stored !== "object" ||
+      stored === null ||
+      Array.isArray(stored) ||
+      typeof stored["handoff"] !== "string"
+    ) {
+      throw new Error("alpha handoff fixture is invalid");
+    }
+    const handoff = JSON.parse(stored["handoff"]) as {
+      stage: { skills: string[] };
+    };
+    handoff.stage.skills = ["different-skill"];
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [{ ...stored, handoff: JSON.stringify(handoff) }],
+    });
+
+    await expect(
+      connect(fixture.url, fixture.alphaToken, "skill-mismatched-client"),
+    ).rejects.toThrow();
+  });
+
   it("rejects a static MCP contract that names a different workflow stage", async () => {
     const fixture = await makeFixture();
     const record = fixture.persistence.getInstance("instance-alpha");

@@ -4,7 +4,7 @@
 // ---
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -210,6 +210,137 @@ kind: standard
     ]);
     await composition.close();
   });
+
+  it.each([
+    {
+      diagnostic: "is unavailable at commit",
+      label: "missing skill folder",
+      source: undefined,
+      supportingFile: false,
+    },
+    {
+      diagnostic: "is unavailable at commit",
+      label: "missing SKILL.md",
+      source: undefined,
+      supportingFile: true,
+    },
+    {
+      diagnostic: "front matter name must equal its folder name",
+      label: "front-matter name mismatch",
+      source:
+        "---\nname: other-skill\ndescription: Inspect evidence.\n---\n\nInspect it.\n",
+      supportingFile: false,
+    },
+    {
+      diagnostic: "front matter description must be a non-empty string",
+      label: "missing front-matter description",
+      source: "---\nname: evidence-review\n---\n\nInspect it.\n",
+      supportingFile: false,
+    },
+  ])(
+    "raises stable lifecycle-resolution attention before dispatch for $label",
+    async ({ diagnostic, source, supportingFile }) => {
+      const { blueprintsRepositoryRoot, configuration } = await prepare();
+      const skillDirectory = join(
+        blueprintsRepositoryRoot,
+        "skills",
+        "evidence-review",
+      );
+      await mkdir(skillDirectory, { recursive: true });
+      if (source !== undefined) {
+        await writeFile(join(skillDirectory, "SKILL.md"), source);
+      } else if (supportingFile) {
+        await writeFile(
+          join(skillDirectory, "README.md"),
+          "# Evidence review fixture\n",
+        );
+      }
+      if (source !== undefined || supportingFile) {
+        await execute("git", ["add", "--", "skills/evidence-review"], {
+          cwd: blueprintsRepositoryRoot,
+        });
+        await execute(
+          "git",
+          [
+            "-c",
+            "user.name=Fixture User",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "Add invalid fixture skill",
+          ],
+          { cwd: blueprintsRepositoryRoot },
+        );
+      }
+      const skillCommitSha = (
+        await execute("git", ["rev-parse", "HEAD"], {
+          cwd: blueprintsRepositoryRoot,
+        })
+      ).stdout.trim();
+      const blueprintPath = join(
+        blueprintsRepositoryRoot,
+        "blueprints",
+        "sample.json",
+      );
+      const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
+        nodes: Array<Record<string, unknown>>;
+      };
+      blueprint.nodes[0]!["skills"] = ["evidence-review"];
+      blueprint.nodes[0]!["handoff-template"] = {
+        commitSha: skillCommitSha,
+        path: "handoff-templates/standard.md",
+      };
+      await writeFile(blueprintPath, JSON.stringify(blueprint));
+      await execute("git", ["add", "--", "blueprints/sample.json"], {
+        cwd: blueprintsRepositoryRoot,
+      });
+      await execute(
+        "git",
+        [
+          "-c",
+          "user.name=Fixture User",
+          "-c",
+          "user.email=fixture@example.invalid",
+          "commit",
+          "--quiet",
+          "-m",
+          "Bind invalid fixture skill",
+        ],
+        { cwd: blueprintsRepositoryRoot },
+      );
+      await execute("git", ["push", "--quiet"], {
+        cwd: blueprintsRepositoryRoot,
+      });
+      const t3 = new SyntheticT3();
+      const composition = createProductionComposition({
+        workflowMcpEndpoint,
+        blueprintsRepositoryRoot,
+        configuration,
+        providerUsage: {
+          readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        },
+        pushoverTransport: { send: vi.fn(async () => undefined) },
+        t3,
+      });
+
+      await expect(composition.start()).resolves.toBeUndefined();
+      await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
+
+      expect(t3.timeouts).toHaveLength(0);
+      expect(t3.mcpRegistrations).toHaveLength(0);
+      expect(t3.commands).toHaveLength(0);
+      expect(composition.attention.list()).toEqual([
+        expect.objectContaining({
+          attentionId: expect.stringContaining(":handoff-render"),
+          kind: "lifecycle-resolution",
+          message: expect.stringContaining(diagnostic),
+        }),
+      ]);
+      await composition.close();
+    },
+  );
 
   it("raises durable attention without partial dispatch when a cold retry changes handoff authentication policy", async () => {
     const { blueprintsRepositoryRoot, configuration } = await prepare();

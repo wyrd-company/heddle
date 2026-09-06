@@ -223,6 +223,7 @@ export class SubagentCoordinator {
               kind: "standard",
               name: binding.stage.id,
               priorStageOutputs: [],
+              skills: [...binding.stage.skills],
             },
             taskContract: binding.taskContext,
           },
