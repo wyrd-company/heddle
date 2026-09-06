@@ -202,24 +202,29 @@ describe("stage session cold retry guards", () => {
   });
 
   it.each([
-    [
-      "an escaping include",
-      '{% include "handoff-templates/includes/../outside.md" %}',
-      "repository-relative path inside handoff-templates/includes/",
-    ],
-    [
-      "extends syntax",
-      '{% extends "handoff-templates/includes/layout.md" %}',
-      "uses unsupported Extends syntax; only include is supported",
-    ],
-    [
-      "import syntax",
-      '{% import "handoff-templates/includes/macros.md" as macros %}',
-      "uses unsupported Import syntax; only include is supported",
-    ],
+    {
+      body: '{% include "handoff-templates/includes/../outside.md" %}',
+      case: "an escaping include",
+      diagnostic: "repository-relative path inside handoff-templates/includes/",
+      includes: {
+        "handoff-templates/includes/../outside.md": "Outside content",
+      },
+    },
+    {
+      body: '{% extends "handoff-templates/includes/layout.md" %}',
+      case: "extends syntax",
+      diagnostic: "uses unsupported Extends syntax; only include is supported",
+      includes: {},
+    },
+    {
+      body: '{% import "handoff-templates/includes/macros.md" as macros %}',
+      case: "import syntax",
+      diagnostic: "uses unsupported Import syntax; only include is supported",
+      includes: {},
+    },
   ])(
-    "rejects %s before timeout, registration, or T3 dispatch",
-    async (_case, body, diagnostic) => {
+    "rejects $case before timeout, registration, or T3 dispatch",
+    async ({ body, diagnostic, includes }) => {
       const memory = memoryStore();
       const applyHarnessToolTimeout = vi.fn(async () => undefined);
       const dispatch = vi.fn(async () => ({ sequence: 1 }));
@@ -234,7 +239,7 @@ describe("stage session cold retry guards", () => {
           readHandoffTemplate: async (reference) => ({
             ...reference,
             body,
-            includes: {},
+            includes,
             kind: "standard",
           }),
         },
