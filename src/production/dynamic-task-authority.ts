@@ -5,7 +5,6 @@
 
 import {
   boardRecordIdentity,
-  boardTaskMatchesRecord,
   type BoardRecordWriteResult,
   type BoardTask,
   type CreateBoardRecord,
@@ -13,9 +12,14 @@ import {
 import { errorDetail } from "../error-details.js";
 import type {
   DynamicTaskIntentRecord,
-  JsonValue,
   SqlitePersistence,
 } from "../persistence/index.js";
+import {
+  dynamicTaskIntentRequest,
+  dynamicTaskMatchesIntent,
+  dynamicTaskOperationTag,
+  dynamicTaskRecordTag,
+} from "./dynamic-task-authority-identity.js";
 import type { ProductionErrorAttention } from "./error-visibility.js";
 
 type DynamicTaskSource = {
@@ -43,15 +47,6 @@ type DynamicTaskPersistence = Pick<
   | "recordDynamicTaskIntent"
 >;
 
-type StoredDynamicTaskRequest = {
-  body: string;
-  dependsOn: number[];
-  operationKey: string;
-  priority: string | null;
-  status: string | null;
-  title: string;
-};
-
 type RecoveryFailure = "ambiguous" | "conflicting" | "failed" | "malformed";
 
 const recoveryFailures: readonly RecoveryFailure[] = [
@@ -60,101 +55,6 @@ const recoveryFailures: readonly RecoveryFailure[] = [
   "failed",
   "malformed",
 ];
-
-const intentRequest = (
-  record: CreateBoardRecord,
-): StoredDynamicTaskRequest => ({
-  body: record.body,
-  dependsOn: record.dependsOn ?? [],
-  operationKey: record.operationKey,
-  priority: record.priority ?? null,
-  status: record.status ?? null,
-  title: record.title,
-});
-
-const requireStoredRequest = (value: JsonValue): StoredDynamicTaskRequest => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    typeof value["body"] !== "string" ||
-    value["body"].trim() === "" ||
-    !Array.isArray(value["dependsOn"]) ||
-    !value["dependsOn"].every(
-      (id) => Number.isSafeInteger(id) && (id as number) > 0,
-    ) ||
-    typeof value["operationKey"] !== "string" ||
-    (value["priority"] !== null &&
-      (typeof value["priority"] !== "string" ||
-        value["priority"].trim() === "")) ||
-    (value["status"] !== null &&
-      (typeof value["status"] !== "string" || value["status"].trim() === "")) ||
-    typeof value["title"] !== "string" ||
-    value["title"].trim() === ""
-  ) {
-    throw new Error("Dynamic task intent request is malformed");
-  }
-  return value as StoredDynamicTaskRequest;
-};
-
-const recordFromIntent = (
-  intent: DynamicTaskIntentRecord,
-): CreateBoardRecord => {
-  const request = requireStoredRequest(intent.request);
-  return {
-    body: request.body,
-    dependsOn: request.dependsOn,
-    kind: intent.kind,
-    lifecycle: intent.lifecycle,
-    operationKey: request.operationKey,
-    parent: intent.parentEpicId,
-    ...(request.priority === null ? {} : { priority: request.priority }),
-    ...(request.status === null ? {} : { status: request.status }),
-    title: request.title,
-  };
-};
-
-const operationTag = (intent: DynamicTaskIntentRecord): string =>
-  `heddle-operation:${intent.operationDigest}`;
-
-const recordTag = (intent: DynamicTaskIntentRecord): string =>
-  `heddle-record:${intent.recordDigest}`;
-
-const matchesIntent = (
-  task: BoardTask,
-  intent: DynamicTaskIntentRecord,
-): boolean => {
-  const record = recordFromIntent(intent);
-  let operation: unknown;
-  try {
-    operation = JSON.parse(record.operationKey) as unknown;
-  } catch {
-    throw new Error("Dynamic task operation key is malformed");
-  }
-  if (
-    !/^[a-f0-9]{64}$/.test(intent.operationDigest) ||
-    !/^[a-f0-9]{64}$/.test(intent.recordDigest) ||
-    !/^[a-z][a-z-]*$/.test(intent.lifecycle) ||
-    !Array.isArray(operation) ||
-    operation.length !== 4 ||
-    !operation.every((value) => typeof value === "string") ||
-    operation[0] !== intent.sourceInstanceId ||
-    operation[1] !== intent.sourceSessionKey ||
-    operation[2] !== intent.kind ||
-    operation[3]!.trim() === "" ||
-    intent.sourceInstanceId !== `task-${intent.sourceTaskId}`
-  ) {
-    throw new Error("Dynamic task source identity is malformed");
-  }
-  const derived = boardRecordIdentity(record);
-  if (
-    derived.operationDigest !== intent.operationDigest ||
-    derived.recordDigest !== intent.recordDigest
-  ) {
-    throw new Error("Dynamic task digest identity is malformed");
-  }
-  return boardTaskMatchesRecord(task, record, derived);
-};
 
 const recoveryAttention = (
   intent: DynamicTaskIntentRecord,
@@ -207,7 +107,7 @@ export class DynamicTaskAuthority {
       operationDigest: identity.operationDigest,
       parentEpicId: record.parent,
       recordDigest: identity.recordDigest,
-      request: intentRequest(record),
+      request: dynamicTaskIntentRequest(record),
       sourceInstanceId: source.instanceId,
       sourceSessionKey: source.sessionKey,
       sourceTaskId: source.taskId,
@@ -264,10 +164,12 @@ export class DynamicTaskAuthority {
       try {
         candidates = tasks.filter(
           ({ tags }) =>
-            tags.includes(operationTag(intent)) ||
-            tags.includes(recordTag(intent)),
+            tags.includes(dynamicTaskOperationTag(intent)) ||
+            tags.includes(dynamicTaskRecordTag(intent)),
         );
-        exactMatches = candidates.filter((task) => matchesIntent(task, intent));
+        exactMatches = candidates.filter((task) =>
+          dynamicTaskMatchesIntent(task, intent),
+        );
       } catch {
         await this.raiseRecovery(intent, "malformed");
         continue;
@@ -300,7 +202,7 @@ export class DynamicTaskAuthority {
         (intent) => intent.state === "completed" && intent.taskId === task.id,
       );
     if (matches.length === 0) return undefined;
-    if (matches.length !== 1 || !matchesIntent(task, matches[0]!)) {
+    if (matches.length !== 1 || !dynamicTaskMatchesIntent(task, matches[0]!)) {
       throw new Error(
         `Task ${task.id} does not exactly match completed dynamic task authority`,
       );
@@ -355,7 +257,7 @@ export class DynamicTaskAuthority {
   ): void {
     if (
       (intent.taskId !== undefined && task.id !== intent.taskId) ||
-      !matchesIntent(task, intent)
+      !dynamicTaskMatchesIntent(task, intent)
     ) {
       throw new Error(
         `Board task ${task.id} does not exactly match dynamic task operation '${intent.operationDigest}'`,
