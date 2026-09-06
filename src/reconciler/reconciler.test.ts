@@ -227,6 +227,57 @@ describe("Reconciler", () => {
     ).toBe(true);
   });
 
+  it("requires terminal runtime and mirrored board proof for every UAT task", async () => {
+    const epic = task(40, "uat", { tags: ["type:epic"] });
+    const firstAcceptance = task(41, "done", {
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    const secondAcceptance = task(42, "done", {
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    const followUp = task(43, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture(
+      [epic, firstAcceptance, secondAcceptance, followUp],
+      { coordinated: true, trustedTaskIds: [followUp.id] },
+    );
+    subject.instances.instances.push(
+      {
+        boardStatus: "done",
+        instanceId: "task-41",
+        state: "done",
+        taskId: firstAcceptance.id,
+      },
+      {
+        boardStatus: "in-progress",
+        instanceId: "task-42",
+        state: "done",
+        taskId: secondAcceptance.id,
+      },
+    );
+    const mirror = subject.board.mirrorTaskStatus.bind(subject.board);
+    vi.spyOn(subject.board, "mirrorTaskStatus").mockImplementation(
+      async (taskId, status) => {
+        await mirror(taskId, status);
+        if (taskId === secondAcceptance.id) secondAcceptance.status = "done";
+      },
+    );
+
+    await subject.reconciler.reconcile();
+
+    expect(followUp.status).toBe("backlog");
+    expect(epic.status).toBe("uat");
+    expect(subject.instances.starts).toEqual([]);
+    expect([...subject.attention.entries.values()]).toContainEqual(
+      expect.objectContaining({ code: "uat-terminal-unverified" }),
+    );
+  });
+
   it("completes all dynamic work without starting a second UAT lifecycle", async () => {
     const epic = task(17, "uat", { tags: ["type:epic"] });
     const acceptance = task(18, "done", { parent: epic.id, tags: ["uat"] });
