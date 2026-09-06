@@ -329,11 +329,10 @@ export class Reconciler {
     const indexed = new Map<number, ReconcilerInstance>();
     for (const instance of instances) {
       if (instance.parentSessionId !== undefined) continue;
-      if (indexed.has(instance.taskId)) {
-        throw new Error(
-          `More than one instance exists for task ${instance.taskId}`,
-        );
-      }
+      // Retain one record so an already-corrupt duplicate set cannot trigger
+      // another dispatch. UAT terminal proof evaluates the complete instance
+      // set and fails closed when the retained top-level count is not exact.
+      if (indexed.has(instance.taskId)) continue;
       indexed.set(instance.taskId, instance);
     }
     return indexed;
@@ -462,7 +461,9 @@ export class Reconciler {
         isEpic(epic) &&
         ((epic.status === "in-progress" && !isUat(child)) ||
           (epic.status === "uat" &&
-            (isUat(child) || admissibleDuringUat.has(child.id))));
+            (isUat(child) ||
+              (admissibleDuringUat.has(child.id) &&
+                this.dependenciesDone(child, tasksById)))));
       if (!shouldPromote) continue;
       try {
         await this.transitionTask(child, "todo", actions);

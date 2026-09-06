@@ -131,6 +131,33 @@ afterEach(async () => {
 });
 
 describe("DynamicTaskAuthority", () => {
+  it("rejects creation after its parent epic is complete", async () => {
+    const persistence = await makePersistence();
+    const attention = attentionFixture();
+    const tasks = [
+      task(10, { status: "done", tags: ["type:epic"] }),
+      task(12, { parent: 10, status: "done" }),
+      task(13, { parent: 10, status: "done" }),
+    ];
+    const createRecord = vi.fn();
+    const authority = new DynamicTaskAuthority(
+      persistence,
+      {
+        createRecord,
+        readBoard: async () => tasks,
+        readTask: async (id: number) => tasks.find((value) => value.id === id)!,
+      },
+      attention.attention,
+    );
+
+    await expect(authority.createRecord(record, source)).rejects.toThrow(
+      "parent epic 10 is already done",
+    );
+    expect(createRecord).not.toHaveBeenCalled();
+    expect(persistence.listDynamicTaskIntents()).toHaveLength(0);
+    persistence.close();
+  });
+
   it("writes authority before the board effect and rejects changed replay before another effect", async () => {
     const persistence = await makePersistence();
     const attention = attentionFixture();

@@ -270,6 +270,11 @@ export class DynamicTaskAuthority {
     if (epic.parent !== undefined || !epic.tags.includes("type:epic")) {
       throw new Error(`Dynamic task parent ${record.parent} is not an epic`);
     }
+    if (epic.status === "done") {
+      throw new Error(
+        `Dynamic task parent epic ${record.parent} is already done`,
+      );
+    }
     for (const dependencyId of record.dependsOn ?? []) {
       const dependency = await this.board.readTask(dependencyId);
       if (dependency.parent !== record.parent) {

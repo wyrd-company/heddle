@@ -157,7 +157,9 @@ describe("production trusted dynamic work during UAT", () => {
     );
     await composition.scheduler.trigger();
     board = await composition.board.readBoard();
-    expect(board.find(({ id }) => id === second.task.id)?.status).toBe("todo");
+    expect(board.find(({ id }) => id === second.task.id)?.status).toBe(
+      "backlog",
+    );
     expect(
       composition.persistence
         .listReconcilerRuntime()
@@ -204,6 +206,33 @@ describe("production trusted dynamic work during UAT", () => {
         attentionId: `epic:${epicId}:acceptance:delivery-child-incomplete`,
       }),
     );
+    const completedIntentCount =
+      composition.persistence.listDynamicTaskIntents("completed").length;
+    await expect(
+      composition.dynamicTasks.createRecord(
+        {
+          body: "Apply another example correction.",
+          kind: "follow-up",
+          lifecycle: "sample",
+          operationKey: JSON.stringify([
+            `task-${second.task.id}`,
+            "task-verification:review:2",
+            "follow-up",
+            "late-correction",
+          ]),
+          parent: epicId,
+          title: "Apply Late Correction",
+        },
+        {
+          instanceId: `task-${second.task.id}`,
+          sessionKey: "task-verification:review:2",
+          taskId: second.task.id,
+        },
+      ),
+    ).rejects.toThrow(`parent epic ${epicId} is already done`);
+    expect(
+      composition.persistence.listDynamicTaskIntents("completed"),
+    ).toHaveLength(completedIntentCount);
     await composition.close();
   }, 15_000);
 

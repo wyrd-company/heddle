@@ -113,6 +113,41 @@ describe("Reconciler", () => {
     ]);
   });
 
+  it("fails closed when a done UAT task has duplicate top-level runtimes", async () => {
+    const epic = task(7, "uat", { tags: ["type:epic"] });
+    const acceptance = task(8, "done", { parent: 7, tags: ["uat"] });
+    const followUp = task(9, "backlog", { parent: 7 });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      trustedTaskIds: [followUp.id],
+    });
+    subject.instances.instances.push(
+      {
+        boardStatus: "done",
+        instanceId: "task-8",
+        state: "done",
+        taskId: acceptance.id,
+      },
+      {
+        boardStatus: "done",
+        instanceId: "task-8-duplicate",
+        state: "done",
+        taskId: acceptance.id,
+      },
+    );
+
+    await expect(subject.reconciler.reconcile()).resolves.toBeDefined();
+
+    expect(followUp.status).toBe("backlog");
+    expect(subject.instances.starts).toEqual([]);
+    expect([...subject.attention.entries.values()]).toContainEqual(
+      expect.objectContaining({
+        attentionId: "epic:7:acceptance:uat-terminal-unverified",
+        code: "uat-terminal-unverified",
+      }),
+    );
+  });
+
   it("admits only exact trusted work from a mixed set", async () => {
     const epic = task(10, "uat", { tags: ["type:epic"] });
     const acceptance = task(11, "done", { parent: epic.id, tags: ["uat"] });
