@@ -593,8 +593,9 @@ proposed-design:
     same basis and the base contains the exact source head. A closed record is
     accepted only for the equal-head case when its latest event is accepted for
     that same basis and its integrated closure names the exact base branch and
-    head. Review events are immutable and verdicts binary. Any source or base
-    drift, or a snapshot whose
+    head; the live base must still equal that reviewed head on replay and
+    cleanup. Review events are immutable and verdicts binary. Any source or
+    base drift, or a snapshot whose
     reviewed source does not contain its reviewed target, routes the instance
     back to remediation with a distinct typed cause and the exact reviewed and
     current basis. The latter requires a common history; unrelated histories

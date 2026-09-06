@@ -330,7 +330,9 @@ operation. Heddle accepts completion only from `state: merged` with the exact
 accepted event and branch identities, or from `state: closed` with an exact
 equal-head accepted event and matching integrated closure evidence. Cleanup
 removes the worktree and task branch only while the retained review evidence,
-base ancestry, clean worktree, and task branch head still agree.
+clean worktree, and task branch head still agree. Merged reviews require base
+ancestry; closed equal-head reviews require the live base to remain at the
+exact reviewed head.
 
 Handoff templates are schema'd Markdown artifacts in `handoff-templates/`.
 Their YAML front matter declares the Heddle template schema, relationship,

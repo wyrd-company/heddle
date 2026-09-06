@@ -578,6 +578,61 @@ describe("delivery mechanical nodes", () => {
     },
   );
 
+  it("keeps a closed no-op review fail-closed after its base moves during terminalization", async () => {
+    const fixture = await makeChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const tree = (
+      await git(fixture.sourcePath, "rev-parse", `${snapshot.baseHead}^{tree}`)
+    ).trim();
+    const movedBaseHead = (
+      await git(
+        fixture.sourcePath,
+        "commit-tree",
+        tree,
+        "-p",
+        snapshot.baseHead,
+        "-m",
+        "advance target",
+      )
+    ).trim();
+    let moved = false;
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (!moved && executable === "gitpr" && arguments_[0] === "close") {
+        moved = true;
+        await git(
+          fixture.sourcePath,
+          "update-ref",
+          "refs/heads/main",
+          movedBaseHead,
+          snapshot.baseHead,
+        );
+      }
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).rejects.toThrow(/did not close the exact accepted no-op integration/);
+    await expect(
+      readReviewSnapshot(fixture.sourcePath, snapshot.snapshotId, runCommand),
+    ).resolves.toMatchObject({ state: "closed" });
+    await expect(mergeReviewSnapshot(fixture.change, snapshot)).rejects.toThrow(
+      /does not preserve the exact accepted no-op integration/,
+    );
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/does not preserve the exact accepted no-op integration/);
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      snapshot.sourceHead + "\n",
+    );
+  });
+
   it("refuses legacy status and non-schema-2 review states", async () => {
     const record =
       (body: string): CommandRunner =>

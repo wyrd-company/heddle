@@ -229,18 +229,13 @@ export const mergeReviewSnapshot = async (
     if (
       current.sourceHead !== snapshot.sourceHead ||
       current.baseHead !== snapshot.baseHead ||
-      !isExactAcceptedNoopClosure(change, current)
+      !isExactAcceptedNoopClosure(change, current) ||
+      baseHead !== snapshot.baseHead
     ) {
       throw new Error(
         `Snapshot ${snapshot.snapshotId} does not preserve the exact accepted no-op integration`,
       );
     }
-    await runMechanicalGit(command, change.repositoryRoot, [
-      "merge-base",
-      "--is-ancestor",
-      snapshot.sourceHead,
-      baseHead,
-    ]);
     return {
       alreadyMerged: true,
       dispositions: { merged: true, remediate: false },
@@ -490,7 +485,8 @@ export const cleanupMergedChange = async (
   assertReviewSnapshotMatches(change, snapshot);
   const isMergedApproval =
     snapshot.state === "merged" && snapshot.latestEvent?.verdict === "accepted";
-  if (!isMergedApproval && !isExactAcceptedNoopClosure(change, snapshot)) {
+  const isNoopApproval = isExactAcceptedNoopClosure(change, snapshot);
+  if (!isMergedApproval && !isNoopApproval) {
     throw new Error(
       `Snapshot ${snapshotId} is not integrated by an exact approval`,
     );
@@ -502,12 +498,20 @@ export const cleanupMergedChange = async (
   );
   if (baseHead === undefined)
     throw new Error("Cleanup base branch does not exist");
-  await runMechanicalGit(command, change.repositoryRoot, [
-    "merge-base",
-    "--is-ancestor",
-    snapshot.sourceHead,
-    baseHead,
-  ]);
+  if (isNoopApproval) {
+    if (baseHead !== snapshot.baseHead) {
+      throw new Error(
+        `Snapshot ${snapshotId} does not preserve the exact accepted no-op integration`,
+      );
+    }
+  } else {
+    await runMechanicalGit(command, change.repositoryRoot, [
+      "merge-base",
+      "--is-ancestor",
+      snapshot.sourceHead,
+      baseHead,
+    ]);
+  }
 
   const branchHead = await resolveMechanicalBranchHead(
     command,
