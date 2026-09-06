@@ -97,6 +97,13 @@ describe("production lifecycle attention bridge", () => {
         taskId: 42,
       }),
     ]);
+    expect(persistence.listAttention()[0]?.payload).toMatchObject({
+      error: {
+        cause: { cause: null, message: "Disk is read-only", name: "Error" },
+        message: "Node 'prepare' execution failed",
+        name: "FlowcraftError",
+      },
+    });
 
     const current = persistence.getInstance("sample-instance")!;
     persistence.compareAndSwapInstance("sample-instance", current.version, {

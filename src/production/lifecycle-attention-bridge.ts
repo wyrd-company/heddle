@@ -112,7 +112,7 @@ export class LifecycleAttentionBridge {
         createProductionErrorAttention({
           attentionId,
           code: "lifecycle-execution-failed",
-          error:
+          parsedError:
             errors[0] ??
             errorDetail(
               new Error(

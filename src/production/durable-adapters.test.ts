@@ -19,6 +19,7 @@ import {
   NotificationDeliveryError,
   type PushoverMessage,
 } from "./durable-adapters.js";
+import { notificationDeliveryErrorAttention } from "./error-visibility.js";
 
 describe("durable production adapters", () => {
   let directory = "";
@@ -112,6 +113,38 @@ describe("durable production adapters", () => {
     );
     expect(queue.list()).toMatchObject([{ message: "Choose a lifecycle" }]);
     persistence.close();
+  });
+
+  it("reopens a legacy retryable notification failure after restart without changing its durable identity", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-attention-upgrade-"));
+    const current = notificationDeliveryErrorAttention({
+      error: new NotificationDeliveryError("retryable", "network-failure"),
+      instanceId: "sample-instance",
+      stableId: "sample-notification",
+      taskId: 21,
+    });
+    const { incidentId, ...legacy } = current;
+    expect(incidentId).toEqual(expect.any(String));
+    const firstPersistence = new SqlitePersistence({
+      stateDirectory: directory,
+    });
+    firstPersistence.raiseAttention(current.attentionId, legacy);
+    firstPersistence.resolveAttention(current.attentionId);
+    firstPersistence.close();
+
+    const restartedPersistence = new SqlitePersistence({
+      stateDirectory: directory,
+    });
+    const restarted = new DurableAttentionQueue(restartedPersistence);
+    await restarted.raiseCurrentNotificationFailure(current);
+
+    expect(restartedPersistence.listAttention()).toEqual([
+      expect.objectContaining({
+        attentionId: current.attentionId,
+        payload: legacy,
+      }),
+    ]);
+    restartedPersistence.close();
   });
 
   it("retains resolved attention identity while hiding it across restart", async () => {

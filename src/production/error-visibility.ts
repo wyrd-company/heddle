@@ -67,19 +67,28 @@ export interface ProductionErrorAttention extends Record<string, JsonValue> {
   taskId: number | null;
 }
 
-export const createProductionErrorAttention = (input: {
+type ProductionErrorAttentionInput = {
   attentionId: string;
   code: ProductionErrorCode;
-  error: unknown;
   instanceId?: string;
   message: string;
   taskId?: number;
-}): ProductionErrorAttention => {
+} & (
+  | { error: unknown; parsedError?: never }
+  | { error?: never; parsedError: ErrorDetail }
+);
+
+export const createProductionErrorAttention = (
+  input: ProductionErrorAttentionInput,
+): ProductionErrorAttention => {
   const incidentEligible = productionErrorIncidentEligible(input.code);
   return {
     attentionId: input.attentionId,
     code: input.code,
-    error: errorDetail(input.error),
+    error:
+      input.parsedError === undefined
+        ? errorDetail(input.error)
+        : input.parsedError,
     incidentId: incidentEligible
       ? productionErrorIncidentId(input.attentionId)
       : null,
