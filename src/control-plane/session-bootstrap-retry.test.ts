@@ -214,13 +214,18 @@ describe("stage session cold retry guards", () => {
       body: '{% extends "handoff-templates/includes/layout.md" %}',
       case: "extends syntax",
       diagnostic: "uses unsupported Extends syntax; only include is supported",
-      includes: {},
+      includes: {
+        "handoff-templates/includes/layout.md": "Layout content",
+      },
     },
     {
       body: '{% import "handoff-templates/includes/macros.md" as macros %}',
       case: "import syntax",
       diagnostic: "uses unsupported Import syntax; only include is supported",
-      includes: {},
+      includes: {
+        "handoff-templates/includes/macros.md":
+          "{% macro item() %}Macro content{% endmacro %}",
+      },
     },
   ])(
     "rejects $case before timeout, registration, or T3 dispatch",
