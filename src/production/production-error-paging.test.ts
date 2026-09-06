@@ -148,6 +148,29 @@ describe("production error paging", () => {
     persistence.close();
   });
 
+  it("rejects invalid rate policy and admits one stable identity once", async () => {
+    const { persistence } = await prepare();
+    const admission = {
+      attentionId: "production:scheduler-pass-failed:global:sample",
+      attemptedAt: 0,
+      code: "scheduler-pass-failed",
+      ...productionErrorPagePolicy,
+    };
+
+    expect(persistence.admitProductionErrorPage(admission)).toBe(true);
+    expect(persistence.admitProductionErrorPage(admission)).toBe(false);
+    expect(() =>
+      persistence.admitProductionErrorPage({ ...admission, attemptedAt: -1 }),
+    ).toThrow("attemptedAt must be a non-negative safe integer");
+    expect(() =>
+      persistence.admitProductionErrorPage({
+        ...admission,
+        cooldownMilliseconds: 0,
+      }),
+    ).toThrow("Production error page policy must be positive");
+    persistence.close();
+  });
+
   it("attempts a floor page before a failed durable record", async () => {
     const { deliveries, pager, persistence } = await prepare();
     const queue = new DurableAttentionQueue(persistence, pager);
