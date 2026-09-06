@@ -32,6 +32,9 @@ import {
 } from "./sqlite-schema.js";
 import type {
   DurableAttentionRecord,
+  DynamicTaskIntentEvent,
+  DynamicTaskIntentInput,
+  DynamicTaskIntentRecord,
   EpicProjectRecord,
   EventRow,
   InstanceEventClaim,
@@ -52,6 +55,22 @@ import type {
 } from "./types.js";
 
 const databaseFilename = "heddle-state.sqlite";
+
+type DynamicTaskIntentRow = {
+  completed_at: string | null;
+  kind: DynamicTaskIntentRecord["kind"];
+  lifecycle: string;
+  operation_digest: string;
+  parent_epic_id: number;
+  record_digest: string;
+  recorded_at: string;
+  request_json: string;
+  source_instance_id: string;
+  source_session_key: string;
+  source_task_id: number;
+  state: DynamicTaskIntentRecord["state"];
+  task_id: number | null;
+};
 
 export class LegacyNotificationIntentMismatchError extends Error {
   public constructor() {
@@ -713,6 +732,158 @@ export class SqlitePersistence {
       );
   }
 
+  recordDynamicTaskIntent(input: DynamicTaskIntentInput): {
+    record: DynamicTaskIntentRecord;
+    replayed: boolean;
+  } {
+    this.assertDigest("operationDigest", input.operationDigest);
+    this.assertDigest("recordDigest", input.recordDigest);
+    this.assertTaskId("sourceTaskId", input.sourceTaskId);
+    this.assertTaskId("parentEpicId", input.parentEpicId);
+    this.assertStableId("sourceInstanceId", input.sourceInstanceId);
+    this.assertStableId("sourceSessionKey", input.sourceSessionKey);
+    this.assertStableId("lifecycle", input.lifecycle);
+    const requestJson = serialize(input.request);
+
+    return this.database.transaction(() => {
+      const recordedAt = new Date().toISOString();
+      const inserted =
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO heddle_dynamic_task_intents
+               (operation_digest, record_digest, source_task_id,
+                source_instance_id, source_session_key, kind, parent_epic_id,
+                lifecycle, request_json, state, task_id, recorded_at,
+                completed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, NULL)`,
+          )
+          .run(
+            input.operationDigest,
+            input.recordDigest,
+            input.sourceTaskId,
+            input.sourceInstanceId,
+            input.sourceSessionKey,
+            input.kind,
+            input.parentEpicId,
+            input.lifecycle,
+            requestJson,
+            recordedAt,
+          ).changes > 0;
+      if (inserted) {
+        this.insertDynamicTaskIntentEvent(
+          input.operationDigest,
+          "pending",
+          serialize({ ...input, state: "pending" }),
+          recordedAt,
+        );
+      }
+      const record = this.getRequiredDynamicTaskIntent(input.operationDigest);
+      if (!this.sameDynamicTaskIntent(input, requestJson, record)) {
+        throw new Error(
+          `Dynamic task operation '${input.operationDigest}' changed durable identity`,
+        );
+      }
+      return { record, replayed: !inserted };
+    })();
+  }
+
+  completeDynamicTaskIntent(
+    operationDigest: string,
+    taskId: number,
+  ): DynamicTaskIntentRecord {
+    this.assertDigest("operationDigest", operationDigest);
+    this.assertTaskId("taskId", taskId);
+    return this.database.transaction(() => {
+      const prior = this.getRequiredDynamicTaskIntent(operationDigest);
+      if (prior.state === "completed") {
+        if (prior.taskId !== taskId) {
+          throw new Error(
+            `Dynamic task operation '${operationDigest}' changed task identity`,
+          );
+        }
+        return prior;
+      }
+      const completedAt = new Date().toISOString();
+      this.database
+        .prepare(
+          `UPDATE heddle_dynamic_task_intents
+           SET state = 'completed', task_id = ?, completed_at = ?
+           WHERE operation_digest = ? AND state = 'pending'`,
+        )
+        .run(taskId, completedAt, operationDigest);
+      this.insertDynamicTaskIntentEvent(
+        operationDigest,
+        "completed",
+        serialize({ taskId }),
+        completedAt,
+      );
+      return this.getRequiredDynamicTaskIntent(operationDigest);
+    })();
+  }
+
+  getDynamicTaskIntent(
+    operationDigest: string,
+  ): DynamicTaskIntentRecord | undefined {
+    this.assertDigest("operationDigest", operationDigest);
+    const row = this.database
+      .prepare(
+        `SELECT operation_digest, record_digest, source_task_id,
+                source_instance_id, source_session_key, kind, parent_epic_id,
+                lifecycle, request_json, state, task_id, recorded_at,
+                completed_at
+         FROM heddle_dynamic_task_intents
+         WHERE operation_digest = ?`,
+      )
+      .get(operationDigest);
+    return row === undefined
+      ? undefined
+      : this.toDynamicTaskIntent(row as DynamicTaskIntentRow);
+  }
+
+  listDynamicTaskIntents(
+    state?: DynamicTaskIntentRecord["state"],
+  ): DynamicTaskIntentRecord[] {
+    const rows = this.database
+      .prepare(
+        `SELECT operation_digest, record_digest, source_task_id,
+                source_instance_id, source_session_key, kind, parent_epic_id,
+                lifecycle, request_json, state, task_id, recorded_at,
+                completed_at
+         FROM heddle_dynamic_task_intents
+         ${state === undefined ? "" : "WHERE state = ?"}
+         ORDER BY recorded_at, operation_digest`,
+      )
+      .all(...(state === undefined ? [] : [state])) as DynamicTaskIntentRow[];
+    return rows.map((row) => this.toDynamicTaskIntent(row));
+  }
+
+  replayDynamicTaskIntentEvents(
+    operationDigest: string,
+  ): DynamicTaskIntentEvent[] {
+    this.assertDigest("operationDigest", operationDigest);
+    const rows = this.database
+      .prepare(
+        `SELECT sequence, operation_digest, type, payload_json, recorded_at
+         FROM heddle_dynamic_task_intent_events
+         WHERE operation_digest = ?
+         ORDER BY sequence`,
+      )
+      .all(operationDigest) as Array<{
+      operation_digest: string;
+      payload_json: string;
+      recorded_at: string;
+      sequence: number;
+      type: DynamicTaskIntentEvent["type"];
+    }>;
+    return rows.map((row) => ({
+      operationDigest: row.operation_digest,
+      payload: JSON.parse(row.payload_json) as JsonValue,
+      recordedAt: row.recorded_at,
+      sequence: row.sequence,
+      type: row.type,
+    }));
+  }
+
   listReconcilerRuntime(): ReconcilerRuntimeRecord[] {
     const rows = this.database
       .prepare(
@@ -928,6 +1099,12 @@ export class SqlitePersistence {
     }
   }
 
+  private assertDigest(name: string, value: string): void {
+    if (!/^[a-f0-9]{64}$/.test(value)) {
+      throw new TypeError(`${name} must be a lowercase SHA-256 digest`);
+    }
+  }
+
   private assertTaskId(name: string, value: number): void {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new TypeError(`${name} must be a positive safe integer`);
@@ -982,6 +1159,71 @@ export class SqlitePersistence {
       )
       .run(instanceId, type, payloadJson, new Date().toISOString());
     return Number(result.lastInsertRowid);
+  }
+
+  private insertDynamicTaskIntentEvent(
+    operationDigest: string,
+    type: DynamicTaskIntentEvent["type"],
+    payloadJson: string,
+    recordedAt: string,
+  ): void {
+    this.database
+      .prepare(
+        `INSERT INTO heddle_dynamic_task_intent_events
+           (operation_digest, type, payload_json, recorded_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(operationDigest, type, payloadJson, recordedAt);
+  }
+
+  private getRequiredDynamicTaskIntent(
+    operationDigest: string,
+  ): DynamicTaskIntentRecord {
+    const record = this.getDynamicTaskIntent(operationDigest);
+    if (record === undefined) {
+      throw new Error(
+        `Dynamic task operation does not exist: ${operationDigest}`,
+      );
+    }
+    return record;
+  }
+
+  private sameDynamicTaskIntent(
+    input: DynamicTaskIntentInput,
+    requestJson: string,
+    record: DynamicTaskIntentRecord,
+  ): boolean {
+    return (
+      record.operationDigest === input.operationDigest &&
+      record.recordDigest === input.recordDigest &&
+      record.sourceTaskId === input.sourceTaskId &&
+      record.sourceInstanceId === input.sourceInstanceId &&
+      record.sourceSessionKey === input.sourceSessionKey &&
+      record.kind === input.kind &&
+      record.parentEpicId === input.parentEpicId &&
+      record.lifecycle === input.lifecycle &&
+      serialize(record.request) === requestJson
+    );
+  }
+
+  private toDynamicTaskIntent(
+    row: DynamicTaskIntentRow,
+  ): DynamicTaskIntentRecord {
+    return {
+      ...(row.completed_at === null ? {} : { completedAt: row.completed_at }),
+      kind: row.kind,
+      lifecycle: row.lifecycle,
+      operationDigest: row.operation_digest,
+      parentEpicId: row.parent_epic_id,
+      recordDigest: row.record_digest,
+      recordedAt: row.recorded_at,
+      request: JSON.parse(row.request_json) as JsonValue,
+      sourceInstanceId: row.source_instance_id,
+      sourceSessionKey: row.source_session_key,
+      sourceTaskId: row.source_task_id,
+      state: row.state,
+      ...(row.task_id === null ? {} : { taskId: row.task_id }),
+    };
   }
 
   private instanceExists(instanceId: string): boolean {

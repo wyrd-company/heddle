@@ -113,6 +113,37 @@ export const initializePersistenceSchema = (
       delete_command_id TEXT NOT NULL UNIQUE
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_dynamic_task_intents (
+      operation_digest TEXT PRIMARY KEY CHECK (length(operation_digest) = 64),
+      record_digest TEXT NOT NULL CHECK (length(record_digest) = 64),
+      source_task_id INTEGER NOT NULL CHECK (source_task_id > 0),
+      source_instance_id TEXT NOT NULL,
+      source_session_key TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('finding', 'follow-up')),
+      parent_epic_id INTEGER NOT NULL CHECK (parent_epic_id > 0),
+      lifecycle TEXT NOT NULL,
+      request_json TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+      task_id INTEGER UNIQUE CHECK (task_id > 0),
+      recorded_at TEXT NOT NULL,
+      completed_at TEXT,
+      CHECK (
+        (state = 'pending' AND task_id IS NULL AND completed_at IS NULL) OR
+        (state = 'completed' AND task_id IS NOT NULL AND completed_at IS NOT NULL)
+      )
+    );
+
+    CREATE TABLE IF NOT EXISTS heddle_dynamic_task_intent_events (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      operation_digest TEXT NOT NULL,
+      type TEXT NOT NULL CHECK (type IN ('pending', 'completed')),
+      payload_json TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS heddle_dynamic_task_intent_events_operation_sequence
+      ON heddle_dynamic_task_intent_events(operation_digest, sequence);
+
     CREATE TRIGGER IF NOT EXISTS heddle_instance_events_no_update
     BEFORE UPDATE ON heddle_instance_events
     BEGIN
@@ -123,6 +154,18 @@ export const initializePersistenceSchema = (
     BEFORE DELETE ON heddle_instance_events
     BEGIN
       SELECT RAISE(ABORT, 'heddle instance history is append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS heddle_dynamic_task_intent_events_no_update
+    BEFORE UPDATE ON heddle_dynamic_task_intent_events
+    BEGIN
+      SELECT RAISE(ABORT, 'dynamic task intent history is append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS heddle_dynamic_task_intent_events_no_delete
+    BEFORE DELETE ON heddle_dynamic_task_intent_events
+    BEGIN
+      SELECT RAISE(ABORT, 'dynamic task intent history is append-only');
     END;
   `);
 

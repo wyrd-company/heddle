@@ -140,6 +140,37 @@ export interface EpicProjectRecord {
   state: "active" | "creating" | "deleted" | "deleting";
 }
 
+export type DynamicTaskKind = "finding" | "follow-up";
+
+export interface DynamicTaskIntentRecord {
+  completedAt?: string;
+  kind: DynamicTaskKind;
+  lifecycle: string;
+  operationDigest: string;
+  parentEpicId: number;
+  recordDigest: string;
+  recordedAt: string;
+  request: JsonValue;
+  sourceInstanceId: string;
+  sourceSessionKey: string;
+  sourceTaskId: number;
+  state: "completed" | "pending";
+  taskId?: number;
+}
+
+export type DynamicTaskIntentInput = Omit<
+  DynamicTaskIntentRecord,
+  "completedAt" | "recordedAt" | "state" | "taskId"
+>;
+
+export interface DynamicTaskIntentEvent {
+  operationDigest: string;
+  payload: JsonValue;
+  recordedAt: string;
+  sequence: number;
+  type: "completed" | "pending";
+}
+
 export type EventRow = {
   instance_id: string;
   payload_json: string;

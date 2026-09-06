@@ -76,6 +76,105 @@ afterEach(async () => {
 });
 
 describe("SqlitePersistence", () => {
+  it("persists and exactly replays one dynamic task intent across restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const operationDigest = "a".repeat(64);
+    const input = {
+      kind: "follow-up" as const,
+      lifecycle: "sample-delivery",
+      operationDigest,
+      parentEpicId: 10,
+      recordDigest: "b".repeat(64),
+      request: {
+        body: "Check another independent sample.",
+        dependsOn: [13],
+        priority: "high",
+        status: "backlog",
+        title: "Check another sample",
+      },
+      sourceInstanceId: "task-12",
+      sourceSessionKey: "task-12:review:1",
+      sourceTaskId: 12,
+    };
+    const first = new SqlitePersistence({ stateDirectory });
+
+    expect(first.recordDynamicTaskIntent(input)).toMatchObject({
+      record: { ...input, state: "pending" },
+      replayed: false,
+    });
+    expect(first.recordDynamicTaskIntent(input)).toMatchObject({
+      record: { state: "pending" },
+      replayed: true,
+    });
+    expect(() =>
+      first.recordDynamicTaskIntent({
+        ...input,
+        recordDigest: "c".repeat(64),
+        request: { ...input.request, title: "Changed sample" },
+      }),
+    ).toThrow("changed durable identity");
+    expect(first.completeDynamicTaskIntent(operationDigest, 21)).toMatchObject({
+      state: "completed",
+      taskId: 21,
+    });
+    expect(first.completeDynamicTaskIntent(operationDigest, 21)).toMatchObject({
+      state: "completed",
+      taskId: 21,
+    });
+    expect(() => first.completeDynamicTaskIntent(operationDigest, 22)).toThrow(
+      "changed task identity",
+    );
+    first.close();
+
+    const recovered = new SqlitePersistence({ stateDirectory });
+    expect(recovered.listDynamicTaskIntents()).toMatchObject([
+      { ...input, state: "completed", taskId: 21 },
+    ]);
+    expect(
+      recovered.replayDynamicTaskIntentEvents(operationDigest),
+    ).toMatchObject([
+      { operationDigest, type: "pending" },
+      { operationDigest, payload: { taskId: 21 }, type: "completed" },
+    ]);
+    expect(recovered.recordDynamicTaskIntent(input)).toMatchObject({
+      record: { state: "completed", taskId: 21 },
+      replayed: true,
+    });
+    recovered.close();
+  });
+
+  it("protects dynamic task intent lifecycle evidence from mutation", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.recordDynamicTaskIntent({
+      kind: "finding",
+      lifecycle: "sample-delivery",
+      operationDigest: "d".repeat(64),
+      parentEpicId: 10,
+      recordDigest: "e".repeat(64),
+      request: {
+        body: "Inspect an independent sample.",
+        title: "Inspect sample",
+      },
+      sourceInstanceId: "task-12",
+      sourceSessionKey: "task-12:review:1",
+      sourceTaskId: 12,
+    });
+    const database = new Database(persistence.databasePath);
+
+    expect(() =>
+      database.exec(
+        "UPDATE heddle_dynamic_task_intent_events SET type = 'completed'",
+      ),
+    ).toThrow(/append-only/);
+    expect(() =>
+      database.exec("DELETE FROM heddle_dynamic_task_intent_events"),
+    ).toThrow(/append-only/);
+
+    database.close();
+    persistence.close();
+  });
+
   it("migrates legacy epic projects to durable tombstone storage", async () => {
     const stateDirectory = await makeStateDirectory();
     const databasePath = join(stateDirectory, "heddle-state.sqlite");
