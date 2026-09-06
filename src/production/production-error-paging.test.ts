@@ -211,6 +211,41 @@ describe("production error paging", () => {
     persistence.close();
   });
 
+  it("completes a pending floor page without repeating its delivered transport", async () => {
+    const { deliveries, pager, persistence } = await prepare();
+    const attention = productionErrorAttention({
+      code: "scheduler-pass-failed",
+      error: new Error("Synthetic scheduler failure"),
+      summary: "Scheduler pass failed",
+      varyByError: true,
+    });
+    persistence.raiseAttention(
+      attention.attentionId,
+      JSON.parse(JSON.stringify(attention)),
+    );
+    persistence.recordEffectIntent(
+      "production-error-pushover",
+      attention.attentionId,
+      {
+        attentionId: attention.attentionId,
+        level: "critical",
+        message: attention.message,
+        scope: "all",
+      },
+    );
+
+    await pager.replayPending();
+
+    expect(deliveries).toHaveLength(0);
+    expect(
+      persistence.effectCompleted(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    persistence.close();
+  });
+
   it("attempts a floor page before a failed durable record", async () => {
     const { deliveries, pager, persistence } = await prepare();
     const queue = new DurableAttentionQueue(persistence, pager);

@@ -792,6 +792,68 @@ describe("durable production adapters", () => {
     restarted.close();
   });
 
+  it.each(["attemptFingerprint", "logicalFingerprint"] as const)(
+    "rejects preceding intent with %s disagreement after restart",
+    async (changedFingerprint) => {
+      directory = await mkdtemp(join(tmpdir(), "heddle-pushover-prior-bad-"));
+      const first = new SqlitePersistence({ stateDirectory: directory });
+      first.writeReconcilerRuntime({
+        boardStatus: "in-progress",
+        instanceId: "task-30",
+        state: "waiting",
+        taskId: 30,
+      });
+      const attention = {
+        attentionId: "task-30:session:choice",
+        instanceId: "task-30",
+        message: "A sample needs attention",
+      };
+      const configuration = {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        userKey: "operator-key",
+      };
+      const priorMessage = {
+        applicationToken: configuration.applicationToken,
+        message: attention.message,
+        stableId: attention.attentionId,
+        title: "Heddle needs attention",
+        url: "https://console.invalid/?view=lifecycle&scope=task%3A30&attention=task-30%3Asession%3Achoice",
+        userKey: configuration.userKey,
+      };
+      const hash = (value: unknown): string =>
+        createHash("sha256").update(JSON.stringify(value)).digest("hex");
+      first.recordEffectIntent("pushover", attention.attentionId, {
+        attemptFingerprint:
+          changedFingerprint === "attemptFingerprint"
+            ? "0".repeat(64)
+            : hash(priorMessage),
+        logicalFingerprint:
+          changedFingerprint === "logicalFingerprint"
+            ? "0".repeat(64)
+            : hash({
+                message: priorMessage.message,
+                stableId: priorMessage.stableId,
+                title: priorMessage.title,
+                url: priorMessage.url,
+                userKey: priorMessage.userKey,
+              }),
+      });
+      first.close();
+
+      const restarted = new SqlitePersistence({ stateDirectory: directory });
+      const transport = { send: vi.fn(async () => undefined) };
+      await expect(
+        new DurablePushoverNotifier(restarted, configuration, transport).send(
+          attention,
+        ),
+      ).rejects.toThrow("changed durable identity");
+      expect(transport.send).not.toHaveBeenCalled();
+      restarted.close();
+    },
+  );
+
   it("requires exact operator authorization before recovering a changed legacy route", async () => {
     directory = await mkdtemp(
       join(tmpdir(), "heddle-pushover-legacy-recovery-"),
