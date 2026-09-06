@@ -1590,6 +1590,9 @@ const mutationBattery = async (baseUrl) => {
     assertAttentionHeadings,
   );
 
+  fixture.reset();
+  await open(`${baseUrl}/?scope=epic%3A40&attention=choice-a`);
+  await assertPageReady("4 visible records");
   fixture.currentAttentionKinds.push("sample-new-category");
   await expectSoleKill(
     "attention-category-coverage",
