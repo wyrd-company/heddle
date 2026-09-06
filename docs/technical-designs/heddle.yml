@@ -90,9 +90,10 @@ proposed-design:
     generic lifecycle control maps `backlog` and `todo` to Start, which moves
     the epic to `in-progress`; maps `in-progress` and `uat` to Pause, which
     moves the epic to `todo`; and offers no action for `done` or an unknown
-    status. The board authority validates the current status before applying
-    the requested transition, so stale requests and unknown statuses fail
-    closed. Moving an epic to `in-progress` starts delivery: the reconciler
+    status. For each generic control request, the board authority validates the
+    current status before applying the requested transition, so stale requests
+    and unknown statuses fail closed. Moving an epic to `in-progress` starts
+    delivery: the reconciler
     promotes its non-UAT children from `backlog` to `todo` — including children
     added later — and dispatches them as readiness allows, with sequencing
     carried by dependency edges. It also prepares each declared
