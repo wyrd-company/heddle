@@ -211,6 +211,49 @@ describe("Reconciler", () => {
     ]);
   });
 
+  it("admits a trusted peer while conflicting authority remains actionable", async () => {
+    const epic = task(44, "uat", { tags: ["type:epic"] });
+    const acceptance = task(45, "done", {
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    const trusted = task(46, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const conflicting = task(47, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:finding"],
+    });
+    const subject = fixture([epic, acceptance, trusted, conflicting], {
+      conflictingTaskIds: [conflicting.id],
+      coordinated: true,
+      trustedTaskIds: [trusted.id],
+    });
+    subject.instances.instances.push({
+      boardStatus: "done",
+      instanceId: "task-45",
+      state: "done",
+      taskId: acceptance.id,
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(trusted.status).toBe("todo");
+    expect(conflicting.status).toBe("backlog");
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      trusted.id,
+    ]);
+    expect([...subject.attention.entries.values()]).toContainEqual(
+      expect.objectContaining({
+        attentionId: "epic:44:acceptance:delivery-child-incomplete",
+        code: "uat-delivery-child-incomplete",
+      }),
+    );
+  });
+
   it("requires delegated UAT work to stop before trusted admission", async () => {
     const epic = task(14, "uat", { tags: ["type:epic"] });
     const acceptance = task(15, "done", { parent: epic.id, tags: ["uat"] });

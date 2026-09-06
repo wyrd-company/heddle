@@ -167,6 +167,7 @@ const lifecycleResolver: ReconcilerLifecycleResolver = {
 export const fixture = (
   tasks: BoardTask[],
   options: {
+    conflictingTaskIds?: readonly number[];
     coordinated?: boolean;
     epicOperations?: ReconcilerOptions["epicOperations"];
     failingStartTaskId?: number;
@@ -181,6 +182,7 @@ export const fixture = (
   const instances = new FixtureInstances(options.failingStartTaskId);
   const attention = new FixtureAttentionQueue();
   const trustedTaskIds = new Set(options.trustedTaskIds ?? []);
+  const conflictingTaskIds = new Set(options.conflictingTaskIds ?? []);
   const pendingEpicIds = new Set(options.pendingEpicIds ?? []);
   const reconciler = new Reconciler({
     attention,
@@ -189,8 +191,14 @@ export const fixture = (
       ? {
           dynamicTasks: {
             hasPendingForEpic: (epicId: number) => pendingEpicIds.has(epicId),
-            verifyTask: (item: BoardTask) =>
-              trustedTaskIds.has(item.id) ? { taskId: item.id } : undefined,
+            verifyTask: (item: BoardTask) => {
+              if (conflictingTaskIds.has(item.id)) {
+                throw new Error(`Conflicting authority for task ${item.id}`);
+              }
+              return trustedTaskIds.has(item.id)
+                ? { taskId: item.id }
+                : undefined;
+            },
           },
           epicOperations: options.epicOperations ?? {
             run: <T>(_epicId: number, operation: () => Promise<T>) =>
