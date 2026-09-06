@@ -158,7 +158,12 @@ describe("production error paging", () => {
     };
 
     expect(persistence.admitProductionErrorPage(admission)).toBe(true);
-    expect(persistence.admitProductionErrorPage(admission)).toBe(false);
+    expect(
+      persistence.admitProductionErrorPage({
+        ...admission,
+        attemptedAt: productionErrorPagePolicy.cooldownMilliseconds,
+      }),
+    ).toBe(false);
     expect(() =>
       persistence.admitProductionErrorPage({ ...admission, attemptedAt: -1 }),
     ).toThrow("attemptedAt must be a non-negative safe integer");
