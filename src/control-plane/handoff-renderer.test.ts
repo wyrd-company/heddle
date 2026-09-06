@@ -147,7 +147,7 @@ describe("renderStageHandoff", () => {
   it.each([
     "handoff-templates/includes/../outside.md",
     "handoff-templates/outside.md",
-    "handoff-templates\\includes\\outside.md",
+    "handoff-templates/includes/nested\\..\\outside.md",
     "handoff-templates/includes/",
   ])("rejects contained-include violation %s", (includePath) => {
     expect(() =>
