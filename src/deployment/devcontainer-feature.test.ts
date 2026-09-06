@@ -230,6 +230,13 @@ describe("Heddle devcontainer feature", () => {
     expect(
       featureQualification.match(/DOCKER_CONFIG="\$\{docker_config\}"/g),
     ).toHaveLength(2);
+    expect(featureQualification).toContain("remove_owned_container() {");
+    expect(featureQualification).toContain(
+      "Refusing to remove container ${full_id}",
+    );
+    expect(featureQualification).toContain(
+      "Removing verified qualification container %s label=%s=%s",
+    );
     expect(featureQualification).toContain(
       "persistence.writeReconcilerRuntime({",
     );

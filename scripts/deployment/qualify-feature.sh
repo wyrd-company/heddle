@@ -23,7 +23,36 @@ container_id=""
 registry_container_id=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
+remove_owned_container() {
+    local container_reference="$1"
+    local label_key="$2"
+    local full_id
+    local identity
+    local label_value
+
+    full_id="$(docker inspect --format '{{.Id}}' "${container_reference}" 2>/dev/null)" \
+        || return 0
+    label_value="$(
+        docker inspect \
+            --format "{{ index .Config.Labels \"${label_key}\" }}" \
+            "${full_id}"
+    )"
+    if [ "${label_value}" != "${qualification_label}" ]; then
+        echo "Refusing to remove container ${full_id}: ${label_key} does not match ${qualification_label}." >&2
+        return 1
+    fi
+    identity="$(
+        docker inspect \
+            --format '{{.Id}} name={{.Name}} image={{.Config.Image}}' \
+            "${full_id}"
+    )"
+    printf 'Removing verified qualification container %s label=%s=%s\n' \
+        "${identity}" "${label_key}" "${label_value}" >&2
+    docker rm --force "${full_id}" >/dev/null
+}
+
 cleanup() {
+    local cleanup_failed=0
     local scratch_container
     local -a scratch_containers
     mapfile -t scratch_containers < <(
@@ -32,16 +61,23 @@ cleanup() {
             2>/dev/null || true
     )
     for scratch_container in "${scratch_containers[@]}"; do
-        docker rm --force "${scratch_container}" >/dev/null 2>&1 || true
+        remove_owned_container \
+            "${scratch_container}" \
+            heddle.qualification \
+            || cleanup_failed=1
     done
     if [ -n "${registry_container_id}" ]; then
-        docker rm --force "${registry_container_id}" >/dev/null 2>&1 || true
+        remove_owned_container \
+            "${registry_container_id}" \
+            heddle.dry-publish \
+            || cleanup_failed=1
     fi
     [ -z "${state_directory}" ] || rm -rf "${state_directory}"
     [ -z "${board_directory}" ] || rm -rf "${board_directory}"
     [ -z "${tools_directory}" ] || rm -rf "${tools_directory}"
     [ -z "${config_directory}" ] || rm -rf "${config_directory}"
     [ -z "${publication_directory}" ] || rm -rf "${publication_directory}"
+    return "${cleanup_failed}"
 }
 trap cleanup EXIT
 
