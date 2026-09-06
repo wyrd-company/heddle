@@ -482,6 +482,48 @@ describe("Reconciler", () => {
     expect(epic.status).toBe("todo");
   });
 
+  it("lets a Console pause before completion prevent the final transition", async () => {
+    const operations = new EpicOperationCoordinator();
+    const epic = task(48, "uat", { tags: ["type:epic"] });
+    const acceptance = task(49, "done", {
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    const subject = fixture([epic, acceptance], {
+      coordinated: true,
+      epicOperations: operations,
+    });
+    subject.instances.instances.push({
+      boardStatus: "done",
+      instanceId: "task-49",
+      state: "done",
+      taskId: acceptance.id,
+    });
+    const listInstances = subject.instances.listInstances.bind(
+      subject.instances,
+    );
+    let reads = 0;
+    let pause: Promise<void> | undefined;
+    vi.spyOn(subject.instances, "listInstances").mockImplementation(
+      async () => {
+        const result = await listInstances();
+        reads += 1;
+        if (reads === 3) {
+          pause = operations.run(epic.id, async () => {
+            epic.status = "todo";
+          });
+        }
+        return result;
+      },
+    );
+
+    await subject.reconciler.reconcile();
+    await pause;
+
+    expect(epic.status).toBe("todo");
+    expect(subject.board.epicWrites).toEqual([]);
+  });
+
   it("ignites an epic, picks up late children, and dispatches standalone todo tasks", async () => {
     const epic = task(10, "in-progress", { tags: ["type:epic"] });
     const first = task(11, "backlog", {
