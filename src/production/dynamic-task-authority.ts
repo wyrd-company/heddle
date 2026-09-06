@@ -113,8 +113,18 @@ export class DynamicTaskAuthority {
     record: CreateBoardRecord,
     source: DynamicTaskSource,
   ): Promise<BoardRecordWriteResult> {
-    await this.validateSource(record, source);
+    const epic = await this.validateSource(record, source);
     const identity = boardRecordIdentity(record);
+    const existing = this.persistence
+      .listDynamicTaskIntents()
+      .find(
+        ({ operationDigest }) => operationDigest === identity.operationDigest,
+      );
+    if (epic.status === "done" && existing?.state !== "completed") {
+      throw new Error(
+        `Dynamic task parent epic ${record.parent} is already done`,
+      );
+    }
     const persisted = this.persistence.recordDynamicTaskIntent({
       kind: record.kind,
       lifecycle: record.lifecycle,
@@ -242,7 +252,7 @@ export class DynamicTaskAuthority {
   private async validateSource(
     record: CreateBoardRecord,
     source: DynamicTaskSource,
-  ): Promise<void> {
+  ): Promise<BoardTask> {
     let operation: unknown;
     try {
       operation = JSON.parse(record.operationKey) as unknown;
@@ -270,11 +280,6 @@ export class DynamicTaskAuthority {
     if (epic.parent !== undefined || !epic.tags.includes("type:epic")) {
       throw new Error(`Dynamic task parent ${record.parent} is not an epic`);
     }
-    if (epic.status === "done") {
-      throw new Error(
-        `Dynamic task parent epic ${record.parent} is already done`,
-      );
-    }
     for (const dependencyId of record.dependsOn ?? []) {
       const dependency = await this.board.readTask(dependencyId);
       if (dependency.parent !== record.parent) {
@@ -283,6 +288,7 @@ export class DynamicTaskAuthority {
         );
       }
     }
+    return epic;
   }
 
   private assertExactTask(
