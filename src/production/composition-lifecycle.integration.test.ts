@@ -243,6 +243,20 @@ kind: standard
       source: `---\nname: evidence-review\ndescription: ${"a".repeat(1_025)}\n---\n\nInspect it.\n`,
       supportingFile: false,
     },
+    {
+      diagnostic: "front matter contains unsupported fields: relationships",
+      label: "unsupported front-matter field",
+      source:
+        "---\nname: evidence-review\ndescription: Inspect evidence.\nrelationships:\n  implements: heddle\n---\n\nInspect it.\n",
+      supportingFile: false,
+    },
+    {
+      diagnostic: "front matter description must not contain angle brackets",
+      label: "front-matter description with angle brackets",
+      source:
+        "---\nname: evidence-review\ndescription: Inspect <evidence>.\n---\n\nInspect it.\n",
+      supportingFile: false,
+    },
   ])(
     "raises stable lifecycle-resolution attention before dispatch for $label",
     async ({ diagnostic, source, supportingFile }) => {

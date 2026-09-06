@@ -14,6 +14,14 @@ const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const artifactId = /^[a-z]+(?:-[a-z]+)*$/;
 const validSkillName = (name: string): boolean =>
   name.length <= 64 && artifactId.test(name);
+const allowedSkillFrontMatterFields = new Set([
+  "allowed-tools",
+  "compatibility",
+  "description",
+  "license",
+  "metadata",
+  "name",
+]);
 const schemaId = "https://wyrd.company/heddle/handoff-template.schema.json";
 
 export type HandoffTemplateKind = "remediation" | "standard";
@@ -155,7 +163,10 @@ const readPinnedIncludes = async (
   );
 };
 
-const parseSkill = (serialized: string, name: string): PinnedSkill => {
+export const validateAgentSkillSource = (
+  serialized: string,
+  name: string,
+): PinnedSkill => {
   const path = `skills/${name}/SKILL.md`;
   if (!validSkillName(name)) {
     throw new HandoffTemplateError(
@@ -191,7 +202,16 @@ const parseSkill = (serialized: string, name: string): PinnedSkill => {
       `Pinned skill ${JSON.stringify(name)} front matter name must equal its folder name`,
     );
   }
-  const description = (metadata as Record<string, unknown>)["description"];
+  const skillMetadata = metadata as Record<string, unknown>;
+  const unsupportedFields = Object.keys(skillMetadata)
+    .filter((field) => !allowedSkillFrontMatterFields.has(field))
+    .sort();
+  if (unsupportedFields.length > 0) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter contains unsupported fields: ${unsupportedFields.join(", ")}`,
+    );
+  }
+  const description = skillMetadata["description"];
   if (
     typeof description !== "string" ||
     description.trim() === "" ||
@@ -199,6 +219,21 @@ const parseSkill = (serialized: string, name: string): PinnedSkill => {
   ) {
     throw new HandoffTemplateError(
       `Pinned skill ${JSON.stringify(name)} front matter description must contain 1 to 1,024 characters`,
+    );
+  }
+  if (description.includes("<") || description.includes(">")) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter description must not contain angle brackets`,
+    );
+  }
+  const compatibility = skillMetadata["compatibility"];
+  if (
+    compatibility !== undefined &&
+    (typeof compatibility !== "string" ||
+      Array.from(compatibility).length > 500)
+  ) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter compatibility must contain at most 500 characters`,
     );
   }
   return Object.freeze({ description, name, path, source: serialized });
@@ -225,7 +260,7 @@ const readPinnedSkills = async (
         `Pinned skill ${JSON.stringify(name)} is unavailable at commit ${commitSha}: ${path}`,
       );
     }
-    skills.push([name, parseSkill(serialized, name)]);
+    skills.push([name, validateAgentSkillSource(serialized, name)]);
   }
   return Object.freeze(Object.fromEntries(skills));
 };

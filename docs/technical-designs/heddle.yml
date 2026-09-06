@@ -299,7 +299,11 @@ proposed-design:
     kebab-case `skills` names no longer than 64 characters. Each name resolves from
     `skills/<name>/SKILL.md` at the handoff template's pinned commit. The skill
     must have YAML front matter whose `name` equals its folder and whose
-    `description` contains 1 to 1,024 characters. The handoff stage carries the names, and the
+    `description` contains 1 to 1,024 characters and no angle brackets. Skill
+    front matter permits only the portable Agent Skills fields `name`,
+    `description`, `license`, `compatibility`, `metadata`, and `allowed-tools`;
+    compatibility is a string of at most 500 characters. Artifact relationships
+    are nested under `metadata`. The handoff stage carries the names, and the
     Nunjucks `skill(name)` global returns only `name`, the repository-relative
     `path`, and `description`. A missing or malformed pinned skill fails with
     the same stable lifecycle-resolution attention before any T3 effect.
