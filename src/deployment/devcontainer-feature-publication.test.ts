@@ -4,9 +4,10 @@
 // ---
 
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 
 import { parse } from "yaml";
@@ -142,6 +143,60 @@ describe("Heddle devcontainer feature publication", () => {
     }
   });
 
+  it("stages only files from the accepted tracked publishing head", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "feature-source-head-"));
+    const collection = join(directory, "features");
+    const fixtureIdentity = randomUUID();
+    const untrackedFixture = join(
+      "src",
+      `staging-untracked-${fixtureIdentity}.ts`,
+    );
+    const ignoredFixture = join(
+      "src",
+      `staging-ignored-${fixtureIdentity}.log`,
+    );
+    const featureIgnoredFixture = join(
+      featureDirectory,
+      `staging-ignored-${fixtureIdentity}.log`,
+    );
+
+    try {
+      await writeFile(untrackedFixture, "export const fixture = true;\n");
+      await writeFile(ignoredFixture, "ignored fixture\n");
+      await writeFile(featureIgnoredFixture, "ignored feature fixture\n");
+      await expect(
+        execute("git", ["ls-files", "--error-unmatch", untrackedFixture]),
+      ).rejects.toMatchObject({ code: 1 });
+      await expect(
+        execute("git", ["check-ignore", "--quiet", ignoredFixture]),
+      ).resolves.toMatchObject({ stderr: "", stdout: "" });
+      await expect(
+        execute("git", ["check-ignore", "--quiet", featureIgnoredFixture]),
+      ).resolves.toMatchObject({ stderr: "", stdout: "" });
+
+      await execute("bash", [
+        "scripts/deployment/stage-feature.sh",
+        collection,
+      ]);
+
+      const stagedSource = join(collection, "heddle", "heddle-source");
+      await expect(
+        readFile(join(stagedSource, untrackedFixture)),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(
+        readFile(join(stagedSource, ignoredFixture)),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(
+        readFile(join(collection, "heddle", basename(featureIgnoredFixture))),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(untrackedFixture, { force: true });
+      await rm(ignoredFixture, { force: true });
+      await rm(featureIgnoredFixture, { force: true });
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
   it("refuses to replace the checked-in Feature collection", async () => {
     await expect(
       execute("bash", [
@@ -186,6 +241,7 @@ describe("Heddle devcontainer feature publication", () => {
       jobs: Record<
         string,
         {
+          if: string;
           permissions: Record<string, string>;
           steps: Array<{
             uses?: string;
@@ -213,6 +269,10 @@ describe("Heddle devcontainer feature publication", () => {
     });
 
     const publish = workflow.jobs["publish-features"];
+    expect(publish?.if).toContain("github.event.workflow_run.event == 'push'");
+    expect(publish?.if).toContain(
+      "github.event.workflow_run.head_repository.full_name == github.repository",
+    );
     expect(publish?.permissions).toMatchObject({
       contents: "write",
       packages: "write",

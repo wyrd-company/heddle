@@ -8,7 +8,7 @@ set -euo pipefail
 # ---
 
 repository="$(git rev-parse --show-toplevel)"
-source_feature="${repository}/.devcontainer/features/heddle"
+accepted_head="$(git rev-parse HEAD)"
 collection_directory="$(realpath -m "${1:?Feature collection directory is required.}")"
 staged_feature="${collection_directory}/heddle"
 staged_source="${staged_feature}/heddle-source"
@@ -24,18 +24,8 @@ install -d -m 0755 "${collection_directory}"
 rm -rf -- "${staged_feature}"
 install -d -m 0755 "${staged_source}"
 
-for file in \
-    README.md \
-    check-kanban-version.sh \
-    common.sh \
-    devcontainer-feature.json \
-    install.sh \
-    verify-feature-source.sh; do
-    install -m 0755 "${source_feature}/${file}" "${staged_feature}/${file}"
-done
-chmod 0644 \
-    "${staged_feature}/README.md" \
-    "${staged_feature}/devcontainer-feature.json"
+git -C "${repository}" archive "${accepted_head}" -- .devcontainer/features/heddle \
+    | tar -C "${staged_feature}" --strip-components=3 -xf -
 
 source_paths=(
     LICENSE
@@ -50,7 +40,7 @@ source_paths=(
     tsconfig.viewer.json
     vite.config.ts
 )
-tar -C "${repository}" -cf - "${source_paths[@]}" \
+git -C "${repository}" archive "${accepted_head}" -- "${source_paths[@]}" \
     | tar -C "${staged_source}" -xf -
 
 "${staged_feature}/verify-feature-source.sh" "${staged_feature}"
