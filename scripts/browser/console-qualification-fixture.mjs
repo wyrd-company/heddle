@@ -145,6 +145,7 @@ const question = ({ header, id, prompt }) => ({
 
 const longAttentionId = "recovery-record-".padEnd(128, "x");
 const longSessionId = "sample-session-".padEnd(128, "y");
+const longVisibleMessageToken = "sample-record-".padEnd(128, "z");
 
 const attentionCatalog = () => [
   createConsoleAttention({
@@ -335,8 +336,7 @@ const attentionCatalog = () => [
     attentionId: longAttentionId,
     instanceId: longSessionId,
     kind: "production-error",
-    message:
-      "A second notification with a deliberately long internal identity requires verified recovery.",
+    message: `The ${longVisibleMessageToken} notification requires verified recovery.`,
     notificationVerification: {
       message:
         "A deliberately long sample message must remain fully visible without horizontal scrolling.",
