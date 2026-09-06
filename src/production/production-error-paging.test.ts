@@ -3,9 +3,10 @@
 //   verifies: heddle
 // ---
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cwd } from "node:process";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -262,6 +263,49 @@ describe("production error paging", () => {
       ),
     ).rejects.toBeInstanceOf(AggregateError);
     expect(deliveries).toHaveLength(1);
+  });
+
+  it("bounds floor pages in memory while durable admission is unavailable", async () => {
+    let now = 0;
+    const { deliveries, pager, persistence } = await prepare(() => now);
+    const queue = new DurableAttentionQueue(persistence, pager);
+    persistence.close();
+    const attentions = [0, 1, 2, 3, 4].map((index) =>
+      productionErrorAttention({
+        code: "scheduler-pass-failed",
+        error: new Error(`Synthetic unavailable persistence ${index}`),
+        summary: "Scheduler pass failed",
+        varyByError: true,
+      }),
+    );
+
+    for (const [index, time] of [0, 1, 60_000, 120_000, 180_000].entries()) {
+      now = time;
+      await expect(queue.raise(attentions[index]!)).rejects.toBeDefined();
+    }
+
+    expect(deliveries.map(({ stableId }) => stableId)).toEqual([
+      attentions[0]!.attentionId,
+      attentions[2]!.attentionId,
+      attentions[3]!.attentionId,
+    ]);
+  });
+
+  it("documents the degraded floor rate limit in both production contracts", async () => {
+    const documents = await Promise.all(
+      [
+        "docs/operators/production-composition.md",
+        "docs/technical-designs/heddle.yml",
+      ].map((path) => readFile(join(cwd(), path), "utf8")),
+    );
+
+    for (const document of documents) {
+      const prose = document.replace(/\s+/g, " ");
+      expect(prose).toContain("While SQLite is available");
+      expect(prose).toContain("in-memory window");
+      expect(prose).toMatch(/(?:reset.{0,40}restart|restart.{0,40}reset)/i);
+      expect(prose).not.toMatch(/Production-error pages have a durable/);
+    }
   });
 
   it("retains a floor attention when its page transport fails", async () => {
