@@ -39,8 +39,10 @@ export { createConsoleServer } from "./server.js";
 export type { ConsoleServerOptions } from "./server.js";
 export {
   assertConsoleAttentionFingerprint,
+  CONSOLE_ATTENTION_KIND_LABELS,
   consoleAttentionDeepLink,
   consoleAttentionFingerprint,
+  consoleAttentionHeading,
   createConsoleAttention,
   ConsoleAttentionActionsUnavailableError,
   ConsoleAttentionConflictError,

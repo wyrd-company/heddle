@@ -6,10 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import {
-  consoleAttentionFingerprint,
-  createConsoleAttention,
-} from "./attention-contract.js";
+import { createConsoleAttention } from "./attention-contract.js";
 import {
   buildDependencyGraphProjection,
   projectDependencyGraphAttention,
@@ -117,10 +114,7 @@ describe("dependency graph projection", () => {
       scope: "task:11" as const,
       taskId: 11,
     };
-    const source = {
-      ...sourceState,
-      fingerprint: consoleAttentionFingerprint(sourceState),
-    };
+    const source = createConsoleAttention(sourceState);
 
     expect(projectDependencyGraphAttention(source)).toEqual({
       attentionId: "attention-11",

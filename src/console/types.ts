@@ -33,6 +33,7 @@ export interface ConsoleAttention {
   actions: ConsoleAttentionAction[];
   attentionId: string;
   fingerprint: string;
+  heading: string;
   instanceId?: string;
   kind: string;
   message: string;

@@ -1047,7 +1047,7 @@ const exerciseAttentionActions = async (baseUrl) => {
     "user-input response did not preserve the offered target and value",
   );
 
-  for (const attentionId of ["stale-a", "uat-a"]) {
+  for (const attentionId of ["stale-a", "repository-a"]) {
     await openAttentionEntry(baseUrl, attentionId);
     const interactive = await evaluate(
       `document.querySelector('.attention-entry[data-attention-id=${JSON.stringify(attentionId)}]').querySelectorAll("button,input,select,textarea").length`,
@@ -1058,6 +1058,75 @@ const exerciseAttentionActions = async (baseUrl) => {
       `${attentionId} invents an unauthorized action`,
     );
   }
+};
+
+const assertAttentionHeadings = async () => {
+  const expected = fixture.attentionHeadings;
+  const rendered =
+    await evaluate(`([...document.querySelectorAll(".attention-entry")].map((entry) => ({
+    attentionId: entry.dataset.attentionId,
+    heading: entry.querySelector("h3")?.textContent,
+    headingTag: entry.querySelector("h3")?.tagName,
+  })))`);
+  const byId = new Map(rendered.map((entry) => [entry.attentionId, entry]));
+  const missingOrChanged = expected.filter(({ attentionId, heading }) => {
+    const actual = byId.get(attentionId);
+    return actual?.headingTag !== "H3" || actual.heading !== heading;
+  });
+  invariant(
+    missingOrChanged.length === 0,
+    "attention-readable-headings",
+    `attention headings differ from kind and scope: ${JSON.stringify({ missingOrChanged, rendered })}`,
+  );
+  const renderedKinds = [...new Set(expected.map(({ kind }) => kind))].sort();
+  const currentKinds = [...fixture.currentAttentionKinds].sort();
+  invariant(
+    JSON.stringify(renderedKinds) === JSON.stringify(currentKinds),
+    "attention-category-coverage",
+    `browser fixture covers ${JSON.stringify(renderedKinds)} instead of ${JSON.stringify(currentKinds)}`,
+  );
+  const leaked = expected.flatMap(({ attentionId, fingerprint, instanceId }) =>
+    rendered
+      .filter(({ heading }) =>
+        [attentionId, fingerprint, instanceId]
+          .filter((identifier) => identifier !== undefined)
+          .some((identifier) => heading?.includes(identifier)),
+      )
+      .map(({ heading }) => ({ attentionId, heading })),
+  );
+  invariant(
+    leaked.length === 0,
+    "attention-heading-identity-safety",
+    `attention headings expose internal identity: ${JSON.stringify(leaked)}`,
+  );
+  const tree = (await snapshotText("#attention-list")).toLowerCase();
+  invariant(
+    expected.every(({ heading }) => tree.includes(heading.toLowerCase())),
+    "attention-accessible-headings",
+    "the accessibility tree does not contain every attention heading",
+  );
+};
+
+const assertAttentionNoHorizontalOverflow = async (context) => {
+  const overflow = await evaluate(`(() => {
+    const surfaces = [
+      document.querySelector("#attention-overlay"),
+      document.querySelector(".attention-sheet"),
+      document.querySelector("#attention-list"),
+      ...document.querySelectorAll(".attention-entry"),
+    ];
+    return surfaces.map((element) => ({
+      attentionId: element.dataset.attentionId,
+      className: element.className,
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    })).filter(({ clientWidth, scrollWidth }) => scrollWidth > clientWidth);
+  })()`);
+  invariant(
+    overflow.length === 0,
+    "attention-no-horizontal-overflow",
+    `${context} has horizontal overflow: ${JSON.stringify(overflow)}`,
+  );
 };
 
 const assertAttentionLayout = async (attentionId, context) => {
@@ -1123,6 +1192,7 @@ const assertAttentionLayout = async (attentionId, context) => {
     "attention-fixed-chrome",
     `${context} moved the attention header or status while the list scrolled`,
   );
+  await assertAttentionNoHorizontalOverflow(context);
 };
 
 const assertLifecycleSettled = async () => {
@@ -1334,7 +1404,15 @@ const auditView = async (baseUrl, viewport, view) => {
     const badge = await evaluate(
       `document.querySelector("#attention-count").textContent`,
     );
-    invariant(badge === "6", "attention-badge-count", `badge reports ${badge}`);
+    invariant(
+      badge === String(fixture.stableAttentionIds.length),
+      "attention-badge-count",
+      `badge reports ${badge}`,
+    );
+    await assertAttentionHeadings();
+    await assertAttentionNoHorizontalOverflow(
+      `attention ${viewport.width}x${viewport.height}`,
+    );
   }
   const editorState = view === "lifecycle" ? "closed" : "unavailable";
   await assertEditorControlRoster(editorState);
@@ -1403,6 +1481,7 @@ const auditIntermediateAttention = async (baseUrl) => {
   await assertLifecycleSettled();
   await assertNotificationRecoveryDetails();
   await assertNotificationRecoveryOrder();
+  await assertAttentionHeadings();
   const publicAttention = await evaluate(
     `fetch('/api/attention').then((response) => response.text())`,
   );
@@ -1496,6 +1575,39 @@ const mutationBattery = async (baseUrl) => {
         entry.append(entry.querySelector('.attention-notification-verification'));
       })()`),
     assertNotificationRecoveryOrder,
+  );
+
+  fixture.reset();
+  await open(`${baseUrl}/?scope=epic%3A40&attention=choice-a`);
+  await assertPageReady("4 visible records");
+  await expectSoleKill(
+    "attention-readable-headings",
+    () =>
+      evaluate(`(() => {
+        const entry = document.querySelector('.attention-entry[data-attention-id="choice-a"]');
+        entry.querySelector("h3").textContent = "Attention " + entry.dataset.attentionId;
+      })()`),
+    assertAttentionHeadings,
+  );
+
+  fixture.currentAttentionKinds.push("sample-new-category");
+  await expectSoleKill(
+    "attention-category-coverage",
+    async () => undefined,
+    assertAttentionHeadings,
+  );
+  fixture.currentAttentionKinds.pop();
+
+  fixture.reset();
+  await open(`${baseUrl}/?scope=epic%3A40&attention=choice-a`);
+  await assertPageReady("4 visible records");
+  await expectSoleKill(
+    "attention-no-horizontal-overflow",
+    () =>
+      evaluate(
+        `document.querySelector('.attention-entry[data-attention-id="choice-a"]').style.width = "900px"`,
+      ),
+    () => assertAttentionNoHorizontalOverflow("mutated attention card"),
   );
 
   await open(`${baseUrl}/?view=dependencies&scope=epic%3A40`);

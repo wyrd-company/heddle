@@ -240,6 +240,11 @@ describe("production attention projection", () => {
       },
     });
     expect(JSON.stringify(projected)).not.toContain(failureRecord.stableId);
+    expect(projected.heading).toBe("Production error — Task 41");
+    expect(projected.heading).not.toContain(rejected.attentionId);
+    expect(projected.heading).not.toContain(failureRecord.stableId);
+    expect(projected.heading).not.toContain(projected.fingerprint);
+    expect(projected.heading).not.toContain(runtime.instanceId);
 
     const unavailable = projectProductionAttention(rejected, [runtime], {
       ...failureRecord,

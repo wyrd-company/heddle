@@ -200,7 +200,10 @@ describe("console page accessibility", () => {
       /\.attention-sheet \{[^}]*height: 100%;[^}]*min-height: 0;[^}]*grid-template-rows: auto auto minmax\(0, 1fr\);[^}]*\}/,
     );
     expect(consoleStyles).toMatch(
-      /\.attention-list \{[^}]*min-height: 0;[^}]*overflow-y: auto;[^}]*\}/,
+      /\.attention-list \{[^}]*min-width: 0;[^}]*min-height: 0;[^}]*overflow-x: hidden;[^}]*overflow-y: auto;[^}]*\}/,
+    );
+    expect(consoleStyles).toMatch(
+      /\.attention-entry \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;[^}]*\}/,
     );
   });
 });

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import { consoleAttentionFingerprint } from "./attention-contract.js";
+import { createConsoleAttention } from "./attention-contract.js";
 import { createConsoleServer } from "./server.js";
 import type { ConsoleBoard, ConsoleStateSource } from "./types.js";
 
@@ -53,12 +53,7 @@ const attentionState = {
 };
 
 const state: ConsoleStateSource = {
-  listAttention: async () => [
-    {
-      ...attentionState,
-      fingerprint: consoleAttentionFingerprint(attentionState),
-    },
-  ],
+  listAttention: async () => [createConsoleAttention(attentionState)],
   listCorrelationTokens: async () => [correlationToken],
   listEvents: async () => [],
   listInstances: async () => [],

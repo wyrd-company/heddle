@@ -664,7 +664,10 @@ proposed-design:
     and pending T3 approvals. Each entry offers the dispositions
     valid for its state, and the buttons call the same actions the
     MCP tools call — humans and agents disposition through one
-    contract. Each projected entry has a stable identity, an explicit
+    contract. Each card heading combines its human-readable attention kind
+    with its all-work, epic, or task scope. Stable attention, notification,
+    fingerprint, and session identifiers remain action and deep-link data and
+    never become card headings. Each projected entry has a stable identity, an explicit
     authority and target for every offered action, and a deterministic
     fingerprint of its current state and actions. The action endpoint
     re-reads the canonical unresolved entry and accepts only the offered

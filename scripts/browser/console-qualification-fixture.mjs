@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import {
+  CONSOLE_ATTENTION_KIND_LABELS,
   createConsoleAttention,
   createConsoleServer,
 } from "../../dist/console/index.js";
@@ -142,6 +143,9 @@ const question = ({ header, id, prompt }) => ({
   prompt,
 });
 
+const longAttentionId = "recovery-record-".padEnd(128, "x");
+const longSessionId = "sample-session-".padEnd(128, "y");
+
 const attentionCatalog = () => [
   createConsoleAttention({
     actions: [
@@ -243,17 +247,59 @@ const attentionCatalog = () => [
     actions: [],
     attentionId: "stale-a",
     instanceId: "instance-42",
-    kind: "stale-work",
+    kind: "stale-instance",
     message: "One catalogue pass has not changed recently.",
     scope: "task:42",
     taskId: 42,
   }),
   createConsoleAttention({
     actions: [],
-    attentionId: "uat-a",
+    attentionId: "repository-a",
+    kind: "blueprint-repository",
+    message: "The room plan catalogue requires inspection.",
+    scope: "all",
+  }),
+  createConsoleAttention({
+    actions: [],
+    attentionId: "ended-a",
     instanceId: "instance-43",
-    kind: "uat",
-    message: "The room refresh is ready for user acceptance.",
+    kind: "ended",
+    message: "A measurement session ended before recording its result.",
+    scope: "task:43",
+    taskId: 43,
+  }),
+  createConsoleAttention({
+    actions: [],
+    attentionId: "failed-a",
+    instanceId: longSessionId,
+    kind: "failed",
+    message: "A supply-count session failed before recording its result.",
+    scope: "task:43",
+    taskId: 43,
+  }),
+  createConsoleAttention({
+    actions: [],
+    attentionId: "stalled-a",
+    instanceId: "instance-43",
+    kind: "stalled",
+    message: "A shelf-label session has not reported progress.",
+    scope: "task:43",
+    taskId: 43,
+  }),
+  createConsoleAttention({
+    actions: [],
+    attentionId: "acceptance-a",
+    kind: "epic-acceptance",
+    message: "The room plan needs an acceptance record.",
+    scope: "epic:40",
+    taskId: 40,
+  }),
+  createConsoleAttention({
+    actions: [],
+    attentionId: "lifecycle-a",
+    instanceId: "instance-43",
+    kind: "lifecycle-resolution",
+    message: "The room plan needs a process selection.",
     scope: "task:43",
     taskId: 43,
   }),
@@ -273,6 +319,29 @@ const attentionCatalog = () => [
     notificationVerification: {
       message: "A sample needs attention.",
       recipientLabel: "Primary operator",
+    },
+    scope: "task:43",
+    taskId: 43,
+  }),
+  createConsoleAttention({
+    actions: [
+      {
+        actionId: "notification.retry",
+        contract: { kind: "notification.retry", occurrence: 2 },
+        input: { kind: "none" },
+        label: "Retry notification",
+      },
+    ],
+    attentionId: longAttentionId,
+    instanceId: longSessionId,
+    kind: "production-error",
+    message:
+      "A second notification with a deliberately long internal identity requires verified recovery.",
+    notificationVerification: {
+      message:
+        "A deliberately long sample message must remain fully visible without horizontal scrolling.",
+      recipientLabel:
+        "Secondary operator label that remains readable at the narrowest supported viewport",
     },
     scope: "task:43",
     taskId: 43,
@@ -501,6 +570,17 @@ export const createConsoleQualificationFixture = async () => {
       lifecycleTargetState = "upstream-target-unavailable";
     },
     server,
+    attentionHeadings: attentionCatalog().map(
+      ({ attentionId, fingerprint, heading, instanceId, kind, scope }) => ({
+        attentionId,
+        fingerprint,
+        heading,
+        instanceId,
+        kind,
+        scope,
+      }),
+    ),
+    currentAttentionKinds: Object.keys(CONSOLE_ATTENTION_KIND_LABELS),
     stableAttentionIds: attentionCatalog().map(
       ({ attentionId }) => attentionId,
     ),

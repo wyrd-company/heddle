@@ -16,6 +16,45 @@ import type {
 
 export const MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH = 128;
 
+export const CONSOLE_ATTENTION_KIND_LABELS = {
+  approval: "Approval request",
+  "blueprint-repository": "Blueprint repository",
+  ended: "Session ended",
+  escalation: "Escalation",
+  failed: "Session failed",
+  "epic-acceptance": "Epic acceptance",
+  "lifecycle-resolution": "Lifecycle resolution",
+  "production-error": "Production error",
+  stalled: "Session stalled",
+  "stale-instance": "Stale instance",
+  "user-input": "User input",
+} as const;
+
+const readableKind = (kind: string): string =>
+  kind
+    .split("-")
+    .filter((part) => part !== "")
+    .map((part, index) =>
+      index === 0 ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : part,
+    )
+    .join(" ");
+
+export const consoleAttentionHeading = (
+  attention: Pick<ConsoleAttention, "kind" | "scope">,
+): string => {
+  const kind =
+    CONSOLE_ATTENTION_KIND_LABELS[
+      attention.kind as keyof typeof CONSOLE_ATTENTION_KIND_LABELS
+    ] ?? readableKind(attention.kind);
+  const scope =
+    attention.scope === "all"
+      ? "All work"
+      : attention.scope.startsWith("epic:")
+        ? `Epic ${attention.scope.slice("epic:".length)}`
+        : `Task ${attention.scope.slice("task:".length)}`;
+  return `${kind} — ${scope}`;
+};
+
 const identifier = (value: unknown, name: string): string => {
   if (
     typeof value !== "string" ||
@@ -45,11 +84,17 @@ export const consoleAttentionFingerprint = (
 ): string => createHash("sha256").update(canonical(attention)).digest("hex");
 
 export const createConsoleAttention = (
-  attention: Omit<ConsoleAttention, "fingerprint">,
-): ConsoleAttention => ({
-  ...attention,
-  fingerprint: consoleAttentionFingerprint(attention),
-});
+  attention: Omit<ConsoleAttention, "fingerprint" | "heading">,
+): ConsoleAttention => {
+  const state = {
+    ...attention,
+    heading: consoleAttentionHeading(attention),
+  };
+  return {
+    ...state,
+    fingerprint: consoleAttentionFingerprint(state),
+  };
+};
 
 export const assertConsoleAttentionFingerprint = (
   attention: ConsoleAttention,
@@ -76,6 +121,11 @@ export const validateConsoleAttentionCatalog = (
     }
     identities.add(entry.attentionId);
     assertConsoleAttentionFingerprint(entry);
+    if (entry.heading !== consoleAttentionHeading(entry)) {
+      throw new Error(
+        `Attention '${entry.attentionId}' has a heading that does not match its kind and scope`,
+      );
+    }
     const actionIds = new Set<string>();
     for (const action of entry.actions) {
       identifier(action.actionId, "actionId");

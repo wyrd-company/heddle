@@ -35,10 +35,12 @@ boundary widths. It checks WCAG A/AA axe results, computed accessible names,
 visible keyboard focus, board and graph scrolling, authorized actions,
 the exact blueprint-editor control roster and repository GET/PUT flow,
 dependency geometry, lifecycle event tails, attention deep links, and browser
-console, runtime, and network activity. Nineteen named live mutants must
-independently kill the prohibited-ARIA, name, focusability, keyboard, editor
-roster and activation, contrast, incomplete result, node-height, spacing, and
-edge-anchor guards.
+console, runtime, and network activity. The attention audit covers every current
+category, readable accessible headings, long internal identifiers, simultaneous
+notification recovery, and horizontal containment. Twenty-six named live
+mutants must independently kill the prohibited-ARIA, name, focusability,
+keyboard, editor roster and activation, contrast, incomplete result,
+node-height, spacing, edge-anchor, attention-heading, and overflow guards.
 
 All audited views require zero axe violations. Attention focus audits require
 zero incomplete results. Tldraw lifecycle-node overlap and horizontally clipped

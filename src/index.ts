@@ -1,8 +1,10 @@
 export {
   buildKanbanProjection,
+  CONSOLE_ATTENTION_KIND_LABELS,
   console,
   consoleAttentionDeepLink,
   consoleAttentionFingerprint,
+  consoleAttentionHeading,
   createConsoleAttention,
   createConsoleServer,
   parseConsoleScope,

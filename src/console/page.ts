@@ -231,10 +231,10 @@ button, input, select { font: inherit; }
 .attention-close { padding: 7px 0; color: #d5d3cc; background: transparent; border: 0; cursor: pointer; font-size: 10px; font-weight: 800; letter-spacing: 0.09em; }
 .attention-status { min-height: 38px; margin: 0; padding: 11px 22px; color: var(--muted); border-bottom: 1px solid var(--rule); font-size: 10px; }
 .attention-status[data-error="true"] { color: var(--signal); font-weight: 800; }
-.attention-list { min-height: 0; padding: 14px; display: grid; align-content: start; gap: 12px; overflow-y: auto; }
+.attention-list { min-width: 0; min-height: 0; padding: 14px; display: grid; align-content: start; gap: 12px; overflow-x: hidden; overflow-y: auto; }
 .attention-empty { margin: 20px 8px; color: var(--muted); font-family: Georgia, serif; font-size: 21px; }
 
-.attention-entry { padding: 15px; background: var(--paper-raised); border: 1px solid var(--rule-dark); box-shadow: var(--shadow); }
+.attention-entry { min-width: 0; padding: 15px; overflow-wrap: anywhere; background: var(--paper-raised); border: 1px solid var(--rule-dark); box-shadow: var(--shadow); }
 .attention-entry:focus { outline: 3px solid var(--signal-focus); outline-offset: 2px; }
 .attention-entry[data-focused="true"] { border-color: var(--signal); box-shadow: 5px 5px 0 rgba(180, 51, 33, 0.22); }
 .attention-entry-meta { margin: 0 0 9px; display: flex; justify-content: space-between; gap: 12px; color: var(--signal); font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -780,7 +780,7 @@ const renderAttention = (entries, focusRequested = false, refreshEntries = true)
     meta.append(text("span", entry.kind.replaceAll("-", " ")));
     meta.append(text("span", entry.scope));
     article.append(meta);
-    article.append(text("h3", "Attention " + entry.attentionId));
+    article.append(text("h3", entry.heading));
     article.append(text("p", entry.message, "attention-entry-message"));
     if (entry.notificationVerification) {
       const verification = document.createElement("dl");
