@@ -86,6 +86,9 @@ describe("production attention actions", () => {
       "request-rejected",
       { message: "A newer sample", recipientLabel: "Primary operator" },
     );
+    expect(
+      composition.persistence.authorizeNotificationRetry(stableId, 2),
+    ).toBe(true);
 
     await expect(
       composition.consoleActions.execute({
@@ -94,7 +97,7 @@ describe("production attention actions", () => {
       }),
     ).rejects.toThrow("Notification rejection occurrence is no longer current");
     expect(composition.persistence.notificationFailure(stableId)).toMatchObject(
-      { occurrence: 2, state: "rejected" },
+      { occurrence: 2, state: "retry-authorized" },
     );
     expect(
       composition.persistence.effectCompleted(
