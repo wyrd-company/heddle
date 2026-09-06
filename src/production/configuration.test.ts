@@ -145,6 +145,11 @@ describe("production configuration", () => {
     );
     const invalid = {
       ...fixture(),
+      providerUsage: {
+        arguments: [],
+        executable: "/tmp/sample-provider-usage",
+        timeoutMilliseconds: 1_000,
+      },
       pushover: { ...fixture().pushover, recipientLabel: "   " },
     };
     const validate = new Ajv2020({
