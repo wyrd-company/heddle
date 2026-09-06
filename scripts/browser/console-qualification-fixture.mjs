@@ -375,6 +375,7 @@ export const createConsoleQualificationFixture = async () => {
   }
 
   let tasks = clone(initialTasks);
+  let boardStatuses = ["todo", "in-progress", "done"];
   let resolvedAttention = new Set();
   let lifecycleTrace = [];
   let lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
@@ -484,7 +485,7 @@ export const createConsoleQualificationFixture = async () => {
       return clone(tasks);
     },
     async readBoardStatuses() {
-      return ["todo", "in-progress", "done"];
+      return clone(boardStatuses);
     },
     async setEpicInProgress(taskId, inProgress) {
       boardWrites.push({ inProgress, taskId });
@@ -557,6 +558,7 @@ export const createConsoleQualificationFixture = async () => {
     },
     reset() {
       tasks = clone(initialTasks);
+      boardStatuses = ["todo", "in-progress", "done"];
       resolvedAttention = new Set();
       lifecycleTrace = [];
       lifecyclePinnedBlobHash = lifecycleBlueprint.blobHash;
@@ -565,6 +567,13 @@ export const createConsoleQualificationFixture = async () => {
       lifecycleRebases = [];
       actions = [];
       boardWrites = [];
+    },
+    setEpicStatus(status) {
+      tasks.find(({ id }) => id === 40).status = status;
+      if (status === "uat") {
+        tasks.find(({ id }) => id === 42).status = "todo";
+        boardStatuses = ["todo", "uat", "done"];
+      }
     },
     makeLifecycleSourceUnresolvable() {
       lifecycleTargetState = "upstream-target-unavailable";

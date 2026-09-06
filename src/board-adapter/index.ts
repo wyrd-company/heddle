@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { parse } from "yaml";
 
 import type { JsonValue } from "../persistence/index.js";
+import { epicControlForStatus } from "./epic-control.js";
 
 const executeFile = promisify(execFile);
 const lifecycleName = /^[a-z][a-z-]*$/;
@@ -47,6 +48,19 @@ export interface CreateBoardRecord {
 export interface BoardRecordWriteResult {
   replayed: boolean;
   task: BoardTask;
+}
+
+export class EpicStatusConflictError extends Error {
+  public constructor(
+    public readonly taskId: number,
+    public readonly currentStatus: string,
+    public readonly requestedStatus: "in-progress" | "todo",
+  ) {
+    super(
+      `epic ${taskId} cannot transition from ${currentStatus} to ${requestedStatus}`,
+    );
+    this.name = "EpicStatusConflictError";
+  }
 }
 
 interface KanbanTaskJson {
@@ -315,11 +329,16 @@ export class KanbanBoardAdapter {
     if (task.parent !== undefined || !task.tags.includes("type:epic")) {
       throw new Error(`task ${taskId} is not an epic task`);
     }
+    const requestedControl = inProgress ? "start" : "pause";
+    const requestedStatus = inProgress ? "in-progress" : "todo";
+    if (epicControlForStatus(task.status) !== requestedControl) {
+      throw new EpicStatusConflictError(taskId, task.status, requestedStatus);
+    }
     await this.command(
       "edit",
       String(taskId),
       "--status",
-      inProgress ? "in-progress" : "todo",
+      requestedStatus,
       "--json",
     );
   }

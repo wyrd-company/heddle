@@ -2,7 +2,10 @@ import type { AddressInfo } from "node:net";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { BoardTask } from "../board-adapter/index.js";
+import {
+  EpicStatusConflictError,
+  type BoardTask,
+} from "../board-adapter/index.js";
 import { createConsoleAttention } from "./attention-contract.js";
 import { createConsoleServer } from "./server.js";
 import {
@@ -53,10 +56,17 @@ class FixtureBoard implements ConsoleBoard {
   }
 
   async setEpicInProgress(taskId: number, inProgress: boolean): Promise<void> {
-    this.writes.push({ inProgress, taskId });
     const item = this.tasks.find(({ id }) => id === taskId);
     if (item === undefined) throw new Error("fixture task is absent");
-    item.status = inProgress ? "in-progress" : "todo";
+    const targetStatus = inProgress ? "in-progress" : "todo";
+    const permittedStatuses = inProgress
+      ? ["backlog", "todo"]
+      : ["in-progress", "uat"];
+    if (!permittedStatuses.includes(item.status)) {
+      throw new EpicStatusConflictError(taskId, item.status, targetStatus);
+    }
+    this.writes.push({ inProgress, taskId });
+    item.status = targetStatus;
   }
 }
 
@@ -237,7 +247,9 @@ describe("console server", () => {
     expect(clientSource).not.toContain("contentEditable = true");
     expect(clientSource).toContain("if (task.stageId) {");
     expect(clientSource).toContain("const requestedScope = scopeFromUrl();");
-    expect(clientSource).toContain("if (isEpic(task)) {");
+    expect(clientSource).toContain(
+      'if (isEpic(task) && epicControl !== "none") {',
+    );
     expect(clientSource).toContain('stage.className = "stage-readout"');
     expect(clientSource).toContain(
       'await fetchJson("/api/epics/" + task.id + "/in-progress", {',
@@ -554,6 +566,51 @@ stage: "inspect"
       globalThis.fetch(`${baseUrl}/api/board`, { method: "POST" }),
     ).resolves.toMatchObject({ status: 405 });
     expect(board.writes).toHaveLength(1);
+  });
+
+  it.each([
+    ["uat", true],
+    ["done", true],
+    ["done", false],
+  ] as const)(
+    "returns a typed conflict for status %s with inProgress=%s without a board write",
+    async (status, inProgress) => {
+      board.tasks[0]!.status = status;
+
+      const response = await globalThis.fetch(
+        `${baseUrl}/api/epics/51/in-progress`,
+        {
+          body: JSON.stringify({ inProgress }),
+          headers: { "content-type": "application/json" },
+          method: "PUT",
+        },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({
+        code: "epic-status-conflict",
+        error: `epic 51 cannot transition from ${status} to ${inProgress ? "in-progress" : "todo"}`,
+      });
+      expect(board.writes).toEqual([]);
+      expect(board.tasks[0]!.status).toBe(status);
+    },
+  );
+
+  it("permits the UAT Pause transition", async () => {
+    board.tasks[0]!.status = "uat";
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/epics/51/in-progress`,
+      {
+        body: JSON.stringify({ inProgress: false }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(board.writes).toEqual([{ inProgress: false, taskId: 51 }]);
+    expect(board.tasks[0]!.status).toBe("todo");
   });
 
   it("accepts application/json with media-type parameters", async () => {

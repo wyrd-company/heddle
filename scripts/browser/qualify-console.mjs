@@ -489,6 +489,26 @@ const assertBoardKeyboard = async (baseUrl) => {
   );
 };
 
+const assertSafeEpicControls = async (baseUrl) => {
+  for (const [status, expectedLabels] of [
+    ["uat", ["Pause epic ∥"]],
+    ["done", []],
+  ]) {
+    fixture.reset();
+    fixture.setEpicStatus(status);
+    await open(`${baseUrl}/?scope=epic%3A40`);
+    await assertPageReady("4 visible records");
+    const labels = await evaluate(
+      `[...document.querySelectorAll(".epic-lever")].map(({ textContent }) => textContent)`,
+    );
+    invariant(
+      JSON.stringify(labels) === JSON.stringify(expectedLabels),
+      "safe-epic-controls",
+      `${status} rendered ${JSON.stringify(labels)} instead of ${JSON.stringify(expectedLabels)}`,
+    );
+  }
+};
+
 const exerciseShellControls = async (baseUrl) => {
   fixture.reset();
   await setViewport({ height: 1000, width: 1440 });
@@ -1990,6 +2010,7 @@ const main = async () => {
     }
     await setViewport({ height: 844, width: 390 });
     await assertBoardKeyboard(baseUrl);
+    await assertSafeEpicControls(baseUrl);
     await assertDependencyKeyboard(baseUrl);
     await exerciseAttentionActions(baseUrl);
     await auditIntermediateAttention(baseUrl);

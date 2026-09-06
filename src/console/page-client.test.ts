@@ -20,6 +20,23 @@ import {
 } from "./page-client.test-support.js";
 
 describe("console client request ownership", () => {
+  it.each([
+    ["backlog", "Start epic →"],
+    ["todo", "Start epic →"],
+    ["in-progress", "Pause epic ∥"],
+    ["uat", "Pause epic ∥"],
+    ["done", undefined],
+    ["unexpected", undefined],
+  ])("renders the safe epic control for %s", async (status, label) => {
+    const harness = await clientHarness([{ ...rootTask, status }]);
+
+    expect(
+      harness
+        .elementsByClass("epic-lever")
+        .map(({ textContent }) => textContent),
+    ).toEqual(label === undefined ? [] : [label]);
+  });
+
   it("scrolls board and dependency overflow with keyboard-only controls", async () => {
     const harness = await clientHarness();
 

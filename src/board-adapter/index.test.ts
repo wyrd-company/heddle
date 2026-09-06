@@ -11,7 +11,11 @@ import { promisify } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { KanbanBoardAdapter, type KanbanCommandRunner } from "./index.js";
+import {
+  EpicStatusConflictError,
+  KanbanBoardAdapter,
+  type KanbanCommandRunner,
+} from "./index.js";
 
 const execute = promisify(execFile);
 
@@ -288,6 +292,59 @@ next_id: 1
     );
   });
 
+  it.each([
+    ["backlog", true, "in-progress"],
+    ["todo", true, "in-progress"],
+    ["in-progress", false, "todo"],
+    ["uat", false, "todo"],
+  ] as const)(
+    "moves an epic from %s when inProgress is %s",
+    async (status, inProgress, expectedStatus) => {
+      const collectionId = await createTask(
+        "Seasonal collection",
+        "--status",
+        status,
+        "--tags",
+        "type:epic",
+      );
+
+      await adapter.setEpicInProgress(collectionId, inProgress);
+
+      await expect(adapter.readTask(collectionId)).resolves.toMatchObject({
+        status: expectedStatus,
+      });
+    },
+  );
+
+  it.each([
+    ["uat", true],
+    ["done", true],
+    ["done", false],
+    ["archived", true],
+  ] as const)(
+    "rejects status %s with inProgress=%s without a board write",
+    async (status, inProgress) => {
+      const collectionId = await createTask(
+        "Seasonal collection",
+        "--status",
+        status,
+        "--tags",
+        "type:epic",
+      );
+      commands = [];
+
+      await expect(
+        adapter.setEpicInProgress(collectionId, inProgress),
+      ).rejects.toBeInstanceOf(EpicStatusConflictError);
+      expect(commands).not.toContainEqual(
+        expect.arrayContaining(["edit", String(collectionId)]),
+      );
+      await expect(adapter.readTask(collectionId)).resolves.toMatchObject({
+        status,
+      });
+    },
+  );
+
   it("moves only an epic in and out of in-progress", async () => {
     const collectionId = await createTask(
       "Seasonal collection",
@@ -301,15 +358,6 @@ next_id: 1
     );
     const standaloneId = await createTask("Repair reading-room lamp");
     commands = [];
-
-    await adapter.setEpicInProgress(collectionId, true);
-    await expect(adapter.readTask(collectionId)).resolves.toMatchObject({
-      status: "in-progress",
-    });
-    await adapter.setEpicInProgress(collectionId, false);
-    await expect(adapter.readTask(collectionId)).resolves.toMatchObject({
-      status: "todo",
-    });
 
     commands = [];
     await expect(adapter.setEpicInProgress(childId, true)).rejects.toThrow(

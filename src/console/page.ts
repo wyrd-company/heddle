@@ -3,6 +3,8 @@
 //   implements: heddle
 // ---
 
+import { EPIC_CONTROL_BY_STATUS } from "../board-adapter/epic-control.js";
+
 export const consolePage = `<!doctype html>
 <html lang="en">
   <head>
@@ -830,6 +832,7 @@ const svg = (tag, attributes) => {
 };
 
 const isEpic = (task) => task.parent === undefined && task.tags.includes("type:epic");
+const epicControlByStatus = ${JSON.stringify(EPIC_CONTROL_BY_STATUS)};
 
 const deferralDetail = (deferral) => {
   switch (deferral.reason) {
@@ -888,11 +891,12 @@ const createCard = (task) => {
     card.append(deferral);
   }
 
-  if (isEpic(task)) {
+  const epicControl = epicControlByStatus[task.status] ?? "none";
+  if (isEpic(task) && epicControl !== "none") {
     const lever = document.createElement("button");
     lever.type = "button";
     lever.className = "epic-lever";
-    const target = task.status !== "in-progress";
+    const target = epicControl === "start";
     lever.textContent = target ? "Start epic →" : "Pause epic ∥";
     lever.addEventListener("click", async () => {
       lever.disabled = true;

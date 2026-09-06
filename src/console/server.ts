@@ -13,6 +13,7 @@ import {
 import { URL } from "node:url";
 import { MIMEType } from "node:util";
 
+import { EpicStatusConflictError } from "../board-adapter/index.js";
 import {
   BlueprintEditConflictError,
   BlueprintValidationError,
@@ -582,6 +583,13 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
       }
       if (error instanceof ConsoleAttentionConflictError) {
         json(response, 409, { error: error.message });
+        return;
+      }
+      if (error instanceof EpicStatusConflictError) {
+        json(response, 409, {
+          code: "epic-status-conflict",
+          error: error.message,
+        });
         return;
       }
       if (
