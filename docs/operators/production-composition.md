@@ -367,7 +367,7 @@ An agent wait node can also declare `skills: [<name>, ...]`. Each name must be
 unique, kebab-case, and no longer than 64 characters. Heddle reads
 `skills/<name>/SKILL.md` from the same
 pinned commit as the handoff template, requires the front-matter `name` to
-equal the folder name, and requires a non-empty `description`. The handoff
+equal the folder name, and requires a `description` of 1 to 1,024 characters. The handoff
 stage carries the names. Templates resolve one with the `skill(name)` global,
 which returns `{name,path,description}` with a repository-relative path. This
 blueprint declaration supplies generic stage skills. A task's front-matter

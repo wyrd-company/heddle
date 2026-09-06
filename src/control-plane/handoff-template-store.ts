@@ -192,9 +192,13 @@ const parseSkill = (serialized: string, name: string): PinnedSkill => {
     );
   }
   const description = (metadata as Record<string, unknown>)["description"];
-  if (typeof description !== "string" || description.trim() === "") {
+  if (
+    typeof description !== "string" ||
+    description.trim() === "" ||
+    Array.from(description).length > 1_024
+  ) {
     throw new HandoffTemplateError(
-      `Pinned skill ${JSON.stringify(name)} front matter description must be a non-empty string`,
+      `Pinned skill ${JSON.stringify(name)} front matter description must contain 1 to 1,024 characters`,
     );
   }
   return Object.freeze({ description, name, path, source: serialized });

@@ -484,7 +484,44 @@ describe("GitHandoffTemplateStore", () => {
         ["evidence-review"],
       ),
     ).rejects.toThrow(
-      'Pinned skill "evidence-review" front matter description must be a non-empty string',
+      'Pinned skill "evidence-review" front matter description must contain 1 to 1,024 characters',
+    );
+  });
+
+  it("counts Unicode code points in a 1,024-character description", async () => {
+    const description = "😀".repeat(1_024);
+    const { commitSha, root } = await pinnedSkillFixture(
+      `---\nname: evidence-review\ndescription: ${description}\n---\n\nInspect it.\n`,
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).resolves.toMatchObject({
+      skills: { "evidence-review": { description } },
+    });
+  });
+
+  it("rejects a pinned skill with a 1,025-character description", async () => {
+    const { commitSha, root } = await pinnedSkillFixture(
+      `---\nname: evidence-review\ndescription: ${"a".repeat(1_025)}\n---\n\nInspect it.\n`,
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).rejects.toThrow(
+      'Pinned skill "evidence-review" front matter description must contain 1 to 1,024 characters',
     );
   });
 

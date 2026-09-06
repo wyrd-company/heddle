@@ -232,9 +232,15 @@ kind: standard
       supportingFile: false,
     },
     {
-      diagnostic: "front matter description must be a non-empty string",
+      diagnostic: "front matter description must contain 1 to 1,024 characters",
       label: "missing front-matter description",
       source: "---\nname: evidence-review\n---\n\nInspect it.\n",
+      supportingFile: false,
+    },
+    {
+      diagnostic: "front matter description must contain 1 to 1,024 characters",
+      label: "overlong front-matter description",
+      source: `---\nname: evidence-review\ndescription: ${"a".repeat(1_025)}\n---\n\nInspect it.\n`,
       supportingFile: false,
     },
   ])(
