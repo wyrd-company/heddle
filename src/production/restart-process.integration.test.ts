@@ -242,7 +242,7 @@ next_id: 1
     ).toBe("");
   }, 30_000);
 
-  it("converges one instance, activation, and board write after a fresh process", async () => {
+  it("rejects restart recovery before a mirror when the pinned prepare-worktree status was removed after the crash, then converges after repair", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-process-restart-"));
     const repositoryRoot = join(root, "sample-repository");
     const blueprintsRepositoryRoot = join(root, "blueprint-repository");
@@ -374,9 +374,7 @@ kind: standard
       ],
       { cwd: repositoryRoot },
     );
-    await writeFile(
-      join(boardDirectory, "config.yml"),
-      `version: 11
+    const boardConfiguration = `version: 11
 board: { name: Sample Board }
 tasks_dir: tasks
 statuses:
@@ -397,8 +395,8 @@ classes:
   - { name: standard }
 tui: { title_lines: 2, age_thresholds: [] }
 next_id: 1
-`,
-    );
+`;
+    await writeFile(join(boardDirectory, "config.yml"), boardConfiguration);
     await execute(
       "kanban-md",
       [
@@ -501,14 +499,42 @@ next_id: 1
         }
       )["board-statuses"]["prepare-worktree"],
     ).toBe("in-progress");
-    const restarted = await run("restart", configurationPath, commandLog);
-    expect(restarted, restarted.stderr).toMatchObject({ code: 0 });
-    const evidence = JSON.parse(restarted.stdout) as {
+    const configuredPreparedStatus = "  - { name: in-progress }\n";
+    expect(boardConfiguration).toContain(configuredPreparedStatus);
+    const missingPreparedStatus = boardConfiguration.replace(
+      configuredPreparedStatus,
+      "",
+    );
+    expect(missingPreparedStatus).not.toContain(configuredPreparedStatus);
+    await writeFile(join(boardDirectory, "config.yml"), missingPreparedStatus);
+    type RestartEvidence = {
+      attention: Array<{ code: string; message: string }>;
       commands: Array<{ commandId: string; type: string }>;
       instanceCount: number;
       runtime: Array<{ state: string }>;
+      statusWrites: Array<{ status: string; taskId: number }>;
       taskStatus: string;
     };
+    const rejected = await run("restart", configurationPath, commandLog);
+    expect(rejected, rejected.stderr).toMatchObject({ code: 0 });
+    const rejectedEvidence = JSON.parse(rejected.stdout) as RestartEvidence;
+    expect(rejectedEvidence.statusWrites).toEqual([]);
+    expect(rejectedEvidence.attention).toContainEqual(
+      expect.objectContaining({
+        code: "instance-synchronization-failed",
+        message:
+          'Instance task-1 synchronization failed: Blueprint board-statuses maps mechanical node use "prepare-worktree" to status "in-progress", which is absent from the board configuration',
+      }),
+    );
+    expect(rejectedEvidence.taskStatus).toBe("in-progress");
+
+    await writeFile(join(boardDirectory, "config.yml"), boardConfiguration);
+    const restarted = await run("restart", configurationPath, commandLog);
+    expect(restarted, restarted.stderr).toMatchObject({ code: 0 });
+    const evidence = JSON.parse(restarted.stdout) as RestartEvidence;
+    expect(evidence.attention).not.toContainEqual(
+      expect.objectContaining({ code: "instance-synchronization-failed" }),
+    );
     expect(evidence.instanceCount).toBe(1);
     expect(
       evidence.commands.filter(({ type }) => type === "thread.create"),

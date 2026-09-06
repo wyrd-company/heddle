@@ -53,6 +53,18 @@ export interface MechanicalBoardMirror {
   mirrorTaskStatus(taskId: number, status: string): Promise<void>;
 }
 
+export const assertMechanicalBoardStatusConfigured = (
+  uses: MechanicalNodeUse,
+  status: string,
+  configuredStatuses: Iterable<string>,
+): void => {
+  if (!new Set(configuredStatuses).has(status)) {
+    throw new Error(
+      `Blueprint board-statuses maps mechanical node use ${JSON.stringify(uses)} to status ${JSON.stringify(status)}, which is absent from the board configuration`,
+    );
+  }
+};
+
 export const resolveMechanicalBoardStatuses = (
   blueprint: LifecycleEffectInput["blueprint"],
   configuredStatuses: Iterable<string>,
@@ -60,11 +72,11 @@ export const resolveMechanicalBoardStatuses = (
   const configured = new Set(configuredStatuses);
   const statuses = blueprint["board-statuses"] ?? {};
   for (const [uses, status] of Object.entries(statuses)) {
-    if (!configured.has(status)) {
-      throw new Error(
-        `Blueprint board-statuses maps mechanical node use ${JSON.stringify(uses)} to status ${JSON.stringify(status)}, which is absent from the board configuration`,
-      );
-    }
+    assertMechanicalBoardStatusConfigured(
+      uses as MechanicalNodeUse,
+      status,
+      configured,
+    );
   }
   return statuses;
 };

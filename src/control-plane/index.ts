@@ -64,6 +64,7 @@ export {
   type WorktreeInput,
 } from "./worktree-creator.js";
 export {
+  assertMechanicalBoardStatusConfigured,
   cleanupMergedChange,
   createMechanicalNodeEffects,
   ensureReviewSnapshot,

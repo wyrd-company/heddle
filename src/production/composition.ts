@@ -14,6 +14,7 @@ import type {
   ConsoleStateSource,
 } from "../console/index.js";
 import {
+  assertMechanicalBoardStatusConfigured,
   createMechanicalNodeEffects,
   GitHandoffTemplateStore,
   resolveBuiltInSystemPrompt,
@@ -217,7 +218,16 @@ export const createProductionComposition = (
       options.workflowMcpEndpoint,
       resolveSystemPrompt,
       templateAuthority,
-      (instanceId, uses) => lifecycle.boardStatusFor(instanceId, uses),
+      async (instanceId, uses) => {
+        const status = await lifecycle.boardStatusFor(instanceId, uses);
+        if (status === undefined) return undefined;
+        assertMechanicalBoardStatusConfigured(
+          uses,
+          status,
+          await boardStatuses(),
+        );
+        return status;
+      },
       (taskId, status) => board.mirrorTaskStatus(taskId, status),
     );
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(

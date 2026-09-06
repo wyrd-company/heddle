@@ -19,6 +19,7 @@ export interface ReconcilerBoard {
 
 export interface ReconcilerInstance {
   boardStatus: string;
+  boardStatusMirrorBlocked?: boolean;
   deferral?: PacingDeferral;
   depth?: number;
   instanceId: string;

@@ -82,14 +82,26 @@ const composition = createProductionComposition({
   t3,
   workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
 });
+const statusWrites: Array<{ status: string; taskId: number }> = [];
+const mirrorTaskStatus = composition.board.mirrorTaskStatus.bind(
+  composition.board,
+);
+composition.board.mirrorTaskStatus = async (taskId, status) => {
+  statusWrites.push({ status, taskId });
+  await mirrorTaskStatus(taskId, status);
+};
 await composition.start();
 await composition.scheduler.trigger();
 const board = await composition.board.readBoard();
 process.stdout.write(
   JSON.stringify({
+    attention: composition.persistence
+      .listAttention()
+      .map(({ payload }) => payload),
     commands: recorded.map(({ commandId, type }) => ({ commandId, type })),
     instanceCount: composition.persistence.listInstances().length,
     runtime: composition.persistence.listReconcilerRuntime(),
+    statusWrites,
     taskStatus: board[0]?.status,
   }),
 );

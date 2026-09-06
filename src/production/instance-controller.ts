@@ -98,21 +98,36 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const runtimeByInstanceId = new Map(
       runtimes.map((runtime) => [runtime.instanceId, runtime]),
     );
-    const topLevel = runtimes.map((runtime) => ({
-      boardStatus: runtime.boardStatus,
-      ...(runtime.deferral === undefined
-        ? {}
-        : { deferral: deferral(runtime.deferral) }),
-      depth: 0,
-      instanceId: runtime.instanceId,
-      ...(runtime.provider === undefined ? {} : { provider: runtime.provider }),
-      ...(runtime.stageEnteredAt === undefined
-        ? {}
-        : { stageEnteredAt: runtime.stageEnteredAt }),
-      ...(runtime.stageId === undefined ? {} : { stageId: runtime.stageId }),
-      state: runtime.state,
-      taskId: runtime.taskId,
-    }));
+    const topLevel = await Promise.all(
+      runtimes.map(async (runtime) => {
+        const boardStatusMirrorBlocked = await this.attention.has(
+          synchronizationAttentionId(
+            runtime,
+            "instance-synchronization-failed",
+          ),
+        );
+        return {
+          boardStatus: runtime.boardStatus,
+          ...(boardStatusMirrorBlocked ? { boardStatusMirrorBlocked } : {}),
+          ...(runtime.deferral === undefined
+            ? {}
+            : { deferral: deferral(runtime.deferral) }),
+          depth: 0,
+          instanceId: runtime.instanceId,
+          ...(runtime.provider === undefined
+            ? {}
+            : { provider: runtime.provider }),
+          ...(runtime.stageEnteredAt === undefined
+            ? {}
+            : { stageEnteredAt: runtime.stageEnteredAt }),
+          ...(runtime.stageId === undefined
+            ? {}
+            : { stageId: runtime.stageId }),
+          state: runtime.state,
+          taskId: runtime.taskId,
+        };
+      }),
+    );
     const delegated = this.persistence.listInstances().flatMap((instance) => {
       const runtime = runtimeByInstanceId.get(instance.instanceId);
       if (runtime === undefined || !isTodoState(instance.state.todoState)) {
@@ -332,9 +347,17 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             throw error;
           });
           await this.#synchronizeSnapshot(task, runtime, snapshot);
+          await this.#resolveSynchronizationError(
+            runtime,
+            "instance-synchronization-failed",
+          );
           continue;
         }
         await this.#synchronizeSnapshot(task, runtime, context);
+        await this.#resolveSynchronizationError(
+          runtime,
+          "instance-synchronization-failed",
+        );
       } catch (error) {
         if (error instanceof AttentionVisibleError) continue;
         await this.#raiseSynchronizationError(
@@ -407,7 +430,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       return;
     }
     const restoreInitialBoardStatus =
-      runtime.state === "starting" && task.status === "todo";
+      runtime.state === "starting" && runtime.boardStatus === "todo";
     const starting: ReconcilerRuntimeRecord = {
       ...runtime,
       boardStatus: sameStage ? runtime.boardStatus : task.status,

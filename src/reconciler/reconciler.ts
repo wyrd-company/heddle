@@ -364,6 +364,7 @@ export class Reconciler {
       if (
         isEpic(task) ||
         instance === undefined ||
+        instance.boardStatusMirrorBlocked === true ||
         task.status === instance.boardStatus
       ) {
         continue;
