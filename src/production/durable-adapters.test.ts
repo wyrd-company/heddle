@@ -876,6 +876,49 @@ describe("durable production adapters", () => {
     persistence.close();
   });
 
+  it("rejects a page level change under an authorized stable ID", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-level-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-24",
+      state: "waiting",
+      taskId: 24,
+    });
+    const attention = {
+      attentionId: "task-24:session:choice",
+      instanceId: "task-24",
+      message: "A sample needs attention",
+    };
+    const configuration = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "operator-key",
+    };
+    await expect(
+      new DurablePushoverNotifier(persistence, configuration, {
+        send: async () => {
+          throw new NotificationDeliveryError("permanent", "request-rejected");
+        },
+      }).send(attention),
+    ).rejects.toMatchObject({ occurrence: 1 });
+    expect(
+      persistence.authorizeNotificationRetry(attention.attentionId, 1),
+    ).toBe(true);
+
+    const changedTransport = { send: vi.fn(async () => undefined) };
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        configuration,
+        changedTransport,
+      ).send({ ...attention, level: "critical" }),
+    ).rejects.toThrow("changed durable identity");
+    expect(changedTransport.send).not.toHaveBeenCalled();
+    persistence.close();
+  });
+
   it("rejects Pushover without one canonical production task scope", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-scope-"));
     const persistence = new SqlitePersistence({ stateDirectory: directory });
