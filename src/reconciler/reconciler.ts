@@ -47,7 +47,10 @@ export class Reconciler {
     ]);
     const orderedTasks = [...tasks].sort(byId);
     const tasksById = new Map(orderedTasks.map((task) => [task.id, task]));
-    const instancesByTask = this.indexInstances(instances);
+    const instancesByTask = this.indexInstances(
+      instances,
+      new Set(orderedTasks.filter(isUat).map(({ id }) => id)),
+    );
     const actions: ReconciliationAction[] = [];
 
     await this.mirrorInstanceStatuses(orderedTasks, instancesByTask, actions);
@@ -56,14 +59,18 @@ export class Reconciler {
       this.options.dynamicTasks !== undefined
     ) {
       await this.reconcileCoordinatedEpics(orderedTasks, actions);
-      const standaloneTasks = (await this.options.board.readBoard())
+      const currentTasks = await this.options.board.readBoard();
+      const standaloneTasks = currentTasks
         .filter(({ parent }) => parent === undefined)
         .sort(byId);
       const currentInstances = await this.options.instances.listInstances();
       await this.dispatchReadyTasks(
         standaloneTasks,
         new Map(standaloneTasks.map((task) => [task.id, task])),
-        this.indexInstances(currentInstances),
+        this.indexInstances(
+          currentInstances,
+          new Set(currentTasks.filter(isUat).map(({ id }) => id)),
+        ),
         currentInstances,
         actions,
       );
@@ -245,7 +252,10 @@ export class Reconciler {
       await this.dispatchReadyTasks(
         children,
         new Map(tasks.map((task) => [task.id, task])),
-        this.indexInstances(instances),
+        this.indexInstances(
+          instances,
+          new Set(acceptanceChildren.map(({ id }) => id)),
+        ),
         instances,
         actions,
         admissibleDuringUat,
@@ -325,14 +335,20 @@ export class Reconciler {
 
   private indexInstances(
     instances: readonly ReconcilerInstance[],
+    toleratedDuplicateTaskIds: ReadonlySet<number> = new Set(),
   ): Map<number, ReconcilerInstance> {
     const indexed = new Map<number, ReconcilerInstance>();
     for (const instance of instances) {
       if (instance.parentSessionId !== undefined) continue;
-      // Retain one record so an already-corrupt duplicate set cannot trigger
-      // another dispatch. UAT terminal proof evaluates the complete instance
-      // set and fails closed when the retained top-level count is not exact.
-      if (indexed.has(instance.taskId)) continue;
+      if (indexed.has(instance.taskId)) {
+        // Retain one UAT record so an already-corrupt duplicate set cannot
+        // trigger another dispatch. Terminal proof evaluates the complete set
+        // and fails closed when the retained top-level count is not exact.
+        if (toleratedDuplicateTaskIds.has(instance.taskId)) continue;
+        throw new Error(
+          `More than one instance exists for task ${instance.taskId}`,
+        );
+      }
       indexed.set(instance.taskId, instance);
     }
     return indexed;

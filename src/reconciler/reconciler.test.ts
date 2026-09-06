@@ -148,6 +148,29 @@ describe("Reconciler", () => {
     );
   });
 
+  it("does not hide duplicate top-level runtimes for ordinary tasks", async () => {
+    const standalone = task(39, "todo", { lifecycle: "label-replacement" });
+    const subject = fixture([standalone]);
+    subject.instances.instances.push(
+      {
+        boardStatus: "todo",
+        instanceId: "task-39-first",
+        state: "waiting",
+        taskId: standalone.id,
+      },
+      {
+        boardStatus: "todo",
+        instanceId: "task-39-second",
+        state: "waiting",
+        taskId: standalone.id,
+      },
+    );
+
+    await expect(subject.reconciler.reconcile()).rejects.toThrow(
+      "More than one instance exists for task 39",
+    );
+  });
+
   it("admits only exact trusted work from a mixed set", async () => {
     const epic = task(10, "uat", { tags: ["type:epic"] });
     const acceptance = task(11, "done", { parent: epic.id, tags: ["uat"] });
