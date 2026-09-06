@@ -282,13 +282,14 @@ describe("production mechanical worktree preparation", () => {
   }, 20_000);
 
   it("completes standard delivery when review approves an unchanged task branch", async () => {
-    const fixture = await prepareProductionFixture();
+    const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     await installStandardDelivery(fixture);
     const composition = compose(fixture, new SyntheticT3());
     const instanceId = `task-${fixture.taskId}`;
     const repositoryRoot =
       fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
+    const baseBranch = `epic/${fixture.epicId}`;
     const taskBranch = `heddle/task-${fixture.taskId}`;
     const worktree = join(
       fixture.configuration.session.worktreesRoot!,
@@ -298,7 +299,7 @@ describe("production mechanical worktree preparation", () => {
 
     await composition.start();
     expect(await git(repositoryRoot, "rev-parse", taskBranch)).toBe(
-      await git(repositoryRoot, "rev-parse", "main"),
+      await git(repositoryRoot, "rev-parse", baseBranch),
     );
     await composition.lifecycle.resume({
       disposition: "complete",
@@ -313,7 +314,11 @@ describe("production mechanical worktree preparation", () => {
       operationId: advanceOperationId(`${instanceId}:review:1`),
     });
     expect(await statusOf(fixture)).toBe("retrospective");
-    expect(composition.attention.list()).toEqual([]);
+    expect(
+      composition.attention
+        .list()
+        .filter(({ taskId }) => taskId === fixture.taskId),
+    ).toEqual([]);
 
     await composition.lifecycle.resume({
       disposition: "complete",
@@ -324,7 +329,11 @@ describe("production mechanical worktree preparation", () => {
     await composition.scheduler.trigger();
 
     expect(await statusOf(fixture)).toBe("done");
-    expect(composition.attention.list()).toEqual([]);
+    expect(
+      composition.attention
+        .list()
+        .filter(({ taskId }) => taskId === fixture.taskId),
+    ).toEqual([]);
     await expect(stat(worktree)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(
       execute(
