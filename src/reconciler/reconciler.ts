@@ -5,8 +5,12 @@
 
 import type { BoardTask } from "../board-adapter/index.js";
 import { AttentionVisibleError } from "../attention-visible-error.js";
-import { describeError, errorDetail } from "../error-details.js";
+import { describeError } from "../error-details.js";
 import type { PacingDeferral, PacingSession } from "../pacing/index.js";
+import {
+  createProductionErrorAttention,
+  type ProductionErrorCode,
+} from "../production/error-visibility.js";
 import type {
   ReconcilerAttention,
   ReconcilerInstance,
@@ -745,22 +749,21 @@ export class Reconciler {
 
   private async raiseTaskError(
     taskId: number,
-    code: string,
+    code: ProductionErrorCode,
     summary: string,
     error: unknown,
     actions: ReconciliationAction[],
     instanceId?: string,
   ): Promise<void> {
     await this.raiseAttention(
-      {
+      createProductionErrorAttention({
         attentionId: `production:${code}:task:${taskId}${instanceId === undefined ? "" : `:${instanceId}`}`,
         code,
-        error: errorDetail(error),
+        error,
         ...(instanceId === undefined ? {} : { instanceId }),
-        kind: "production-error",
         message: `${summary}: ${describeError(error)}`,
         taskId,
-      },
+      }),
       actions,
     );
   }

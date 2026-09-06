@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import type { BoardTask } from "../board-adapter/index.js";
 import type { T3DispatchCommand } from "../control-plane/t3-control-plane-client.js";
-import { describeError, errorDetail } from "../error-details.js";
+import { describeError } from "../error-details.js";
 import {
   ensureWorktree,
   type WorktreeInput,
@@ -19,6 +19,7 @@ import type {
 } from "../persistence/index.js";
 import type { ReconcilerAttentionQueue } from "../reconciler/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
+import { createProductionErrorAttention } from "./error-visibility.js";
 import type { ProductRoutingCatalog } from "./product-routing.js";
 
 export interface EpicProjectT3Client {
@@ -86,14 +87,15 @@ export class EpicProjectCoordinator {
         if (this.attention === undefined) throw error;
         const attentionId = `production:epic-project-reconciliation-failed:task:${epic.id}`;
         if (!(await this.attention.has(attentionId))) {
-          await this.attention.raise({
-            attentionId,
-            code: "epic-project-reconciliation-failed",
-            error: errorDetail(error),
-            kind: "production-error",
-            message: `Epic ${epic.id} project reconciliation failed: ${describeError(error)}`,
-            taskId: epic.id,
-          });
+          await this.attention.raise(
+            createProductionErrorAttention({
+              attentionId,
+              code: "epic-project-reconciliation-failed",
+              error,
+              message: `Epic ${epic.id} project reconciliation failed: ${describeError(error)}`,
+              taskId: epic.id,
+            }),
+          );
         }
       }
     }

@@ -19,9 +19,24 @@ export {
   DurableAttentionQueue,
   DurablePushoverNotifier,
   HttpPushoverTransport,
+  ProductionErrorPager,
+  productionErrorPagePolicy,
+  type ProductionErrorPagePort,
+  type PushoverLevel,
   type PushoverMessage,
   type PushoverTransport,
 } from "./durable-adapters.js";
+export {
+  createProductionErrorAttention,
+  notificationDeliveryErrorAttention,
+  productionErrorAttention,
+  productionErrorCodeDeclarations,
+  productionErrorIncidentEligible,
+  productionErrorIncidentId,
+  type NotificationDeliveryAttention,
+  type ProductionErrorAttention,
+  type ProductionErrorCode,
+} from "./error-visibility.js";
 export { ProductionInstanceController } from "./instance-controller.js";
 export {
   blueprintRepositoryStateAttention,

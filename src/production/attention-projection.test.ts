@@ -11,6 +11,7 @@ import type {
   ReconcilerRuntimeRecord,
 } from "../persistence/index.js";
 import { projectProductionAttention } from "./attention-projection.js";
+import { productionErrorIncidentId } from "./error-visibility.js";
 
 const runtime: ReconcilerRuntimeRecord = {
   boardStatus: "in-progress",
@@ -233,6 +234,10 @@ describe("production attention projection", () => {
           actionId: "notification.retry",
           contract: { kind: "notification.retry", occurrence: 2 },
         },
+        {
+          actionId: "attention.resolve",
+          contract: { kind: "attention.resolve" },
+        },
       ],
       notificationVerification: {
         message: "A sample needs attention",
@@ -251,7 +256,9 @@ describe("production attention projection", () => {
       message: null,
       recipientLabel: null,
     });
-    expect(unavailable.actions).toEqual([]);
+    expect(unavailable.actions).toMatchObject([
+      { actionId: "attention.resolve" },
+    ]);
     expect(unavailable.notificationVerification).toBeUndefined();
     expect(unavailable.message).toContain(
       "Retry is unavailable because the intended recipient and message cannot be verified.",
@@ -261,10 +268,36 @@ describe("production attention projection", () => {
       ...failureRecord,
       occurrence: 3,
     });
-    expect(stale.actions).toEqual([]);
+    expect(stale.actions).toMatchObject([{ actionId: "attention.resolve" }]);
   });
 
   it("fails closed on identity, task, and catalog disagreement", () => {
+    expect(() =>
+      projectProductionAttention(
+        record("attention-production", {
+          code: "unregistered-production-failure",
+          incidentId: null,
+          instanceId: null,
+          kind: "production-error",
+          message: "Production failed",
+          taskId: null,
+        }),
+        [],
+      ),
+    ).toThrow("has undeclared production error code");
+    expect(() =>
+      projectProductionAttention(
+        record("attention-production", {
+          code: "task-reconciliation-failed",
+          incidentId: productionErrorIncidentId("different-attention"),
+          instanceId: null,
+          kind: "production-error",
+          message: "Production failed",
+          taskId: null,
+        }),
+        [],
+      ),
+    ).toThrow("has an invalid incident identity");
     expect(() =>
       projectProductionAttention(
         {

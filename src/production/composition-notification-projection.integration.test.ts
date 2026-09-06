@@ -38,6 +38,15 @@ const notificationFailures = (
         payload["notificationStableId"] === stableId,
     );
 
+const requestedAttentionId = (
+  init: Parameters<typeof globalThis.fetch>[1],
+): string | null => {
+  const target = new globalThis.URLSearchParams(String(init?.body)).get("url");
+  return target === null
+    ? null
+    : new globalThis.URL(target).searchParams.get("attention");
+};
+
 const openEscalation = (
   composition: ProductionComposition,
   runtime: { instanceId: string; sessionKey: string; stageId: string },
@@ -93,32 +102,38 @@ describe("production notification failure projection", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     let now = 10_000;
-    let attempt = 0;
-    const fetch = vi.fn(async () => {
-      attempt += 1;
-      if (attempt === 1) {
-        return new globalThis.Response(JSON.stringify({ status: 0 }), {
-          status: 503,
-        });
-      }
-      if (attempt === 2) {
-        return new globalThis.Response(JSON.stringify({ status: 1 }), {
-          status: 200,
-        });
-      }
-      return attempt === 3
-        ? new globalThis.Response(
-            JSON.stringify({
-              errors: ["private detail"],
-              status: 0,
-              token: "x",
-            }),
-            { status: 400 },
-          )
-        : new globalThis.Response(JSON.stringify({ status: 0 }), {
+    let targetId = "";
+    let targetAttempt = 0;
+    const fetch = vi.fn(
+      async (
+        _input: unknown,
+        init?: Parameters<typeof globalThis.fetch>[1],
+      ) => {
+        if (requestedAttentionId(init) !== targetId) {
+          return new globalThis.Response(JSON.stringify({ status: 1 }), {
+            status: 200,
+          });
+        }
+        targetAttempt += 1;
+        if (targetAttempt === 1) {
+          return new globalThis.Response(JSON.stringify({ status: 0 }), {
             status: 503,
           });
-    });
+        }
+        return targetAttempt === 2
+          ? new globalThis.Response(
+              JSON.stringify({
+                errors: ["private detail"],
+                status: 0,
+                token: "x",
+              }),
+              { status: 400 },
+            )
+          : new globalThis.Response(JSON.stringify({ status: 0 }), {
+              status: 503,
+            });
+      },
+    );
     const t3 = new SyntheticT3();
     const createComposition = () =>
       createProductionComposition({
@@ -136,7 +151,7 @@ describe("production notification failure projection", () => {
     await first.start();
     const runtime = first.persistence.listReconcilerRuntime()[0]!;
     const targetPrompt = "Which sample should be selected?";
-    const targetId = openEscalation(
+    targetId = openEscalation(
       first,
       {
         instanceId: runtime.instanceId,
@@ -174,7 +189,11 @@ describe("production notification failure projection", () => {
     const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
 
     await first.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(1);
     expect(notificationFailures(first, targetId)).toMatchObject([
       { payload: { code: "notification-delivery-retryable" } },
     ]);
@@ -196,7 +215,7 @@ describe("production notification failure projection", () => {
     );
     const unrelated = {
       ...productionErrorAttention({
-        code: "sample-source-failed",
+        code: "task-reconciliation-failed",
         error: new Error("Synthetic failure"),
         instanceId: runtime.instanceId,
         summary: "Sample source failed",
@@ -208,7 +227,11 @@ describe("production notification failure projection", () => {
 
     now = 15_000;
     await first.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(2);
     const targetFailures = notificationFailures(first, targetId);
     expect(targetFailures).toMatchObject([
       {
@@ -230,6 +253,7 @@ describe("production notification failure projection", () => {
           actionId: "notification.retry",
           contract: { kind: "notification.retry", occurrence: 1 },
         },
+        expect.objectContaining({ actionId: "attention.resolve" }),
       ],
       notificationVerification: {
         message: `Heddle escalation in ${runtime.stageId}`,
@@ -258,12 +282,20 @@ describe("production notification failure projection", () => {
     );
 
     await first.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(2);
     await first.close();
 
     const restarted = createComposition();
     await restarted.start();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(2);
     expect(notificationFailures(restarted, targetId)).toMatchObject([
       {
         payload: {
@@ -307,7 +339,11 @@ describe("production notification failure projection", () => {
       attention: currentRejection,
     });
     await afterAction.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(3);
     expect(notificationFailures(afterAction, targetId)).toMatchObject([
       { payload: { code: "notification-delivery-retryable" } },
     ]);
@@ -321,7 +357,11 @@ describe("production notification failure projection", () => {
 
     const afterActionRestart = createComposition();
     await afterActionRestart.start();
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(3);
     expect(notificationFailures(afterActionRestart, targetId)).toMatchObject([
       { payload: { code: "notification-delivery-retryable" } },
     ]);
@@ -340,19 +380,27 @@ describe("production notification failure projection", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     let now = 10_000;
-    let attempt = 0;
-    const fetch = vi.fn(async () => {
-      attempt += 1;
-      if (attempt === 1) {
-        return new globalThis.Response(JSON.stringify({ status: 0 }), {
-          status: 503,
-        });
-      }
-      if (attempt === 3) throw new Error("Synthetic network failure");
-      return new globalThis.Response(JSON.stringify({ status: 1 }), {
-        status: 200,
-      });
-    });
+    let targetId = "";
+    let targetAttempt = 0;
+    const fetch = vi.fn(
+      async (
+        _input: unknown,
+        init?: Parameters<typeof globalThis.fetch>[1],
+      ) => {
+        if (requestedAttentionId(init) !== targetId) {
+          return new globalThis.Response(JSON.stringify({ status: 1 }), {
+            status: 200,
+          });
+        }
+        targetAttempt += 1;
+        if (targetAttempt === 1) {
+          return new globalThis.Response(JSON.stringify({ status: 0 }), {
+            status: 503,
+          });
+        }
+        throw new Error("Synthetic network failure");
+      },
+    );
     const createComposition = () =>
       createProductionComposition({
         workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -377,7 +425,7 @@ describe("production notification failure projection", () => {
       stageId: runtime.stageId,
     };
     const targetPrompt = "Which sample should be retained?";
-    const targetId = openEscalation(
+    targetId = openEscalation(
       first,
       escalationRuntime,
       "category-change",
@@ -391,7 +439,11 @@ describe("production notification failure projection", () => {
     );
 
     await first.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(1);
     const initialTargetFailures = notificationFailures(first, targetId);
     expect(initialTargetFailures).toMatchObject([
       {
@@ -431,7 +483,11 @@ describe("production notification failure projection", () => {
 
     now = 15_000;
     await first.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(2);
     const changedTargetFailures = notificationFailures(first, targetId);
     expect(changedTargetFailures).toMatchObject([
       {
@@ -463,7 +519,11 @@ describe("production notification failure projection", () => {
 
     const restarted = createComposition();
     await restarted.start();
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(
+      fetch.mock.calls.filter(
+        ([, init]) => requestedAttentionId(init) === targetId,
+      ),
+    ).toHaveLength(2);
     expect(notificationFailures(restarted, targetId)).toMatchObject([
       {
         payload: {

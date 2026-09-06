@@ -28,6 +28,7 @@ import type {
   NotificationDeliveryAttention,
   ProductionErrorAttention,
 } from "./error-visibility.js";
+import { productionErrorIncidentEligible } from "./error-visibility.js";
 
 export type DurableAttention =
   | BlueprintRepositoryAttention
@@ -36,6 +37,15 @@ export type DurableAttention =
   | ReconcilerAttention
   | SessionObservationAttention;
 
+export interface ProductionErrorPagePort {
+  send(attention: ProductionErrorAttention): Promise<void>;
+}
+
+const isProductionErrorAttention = (
+  attention: DurableAttention,
+): attention is ProductionErrorAttention =>
+  "kind" in attention && attention.kind === "production-error";
+
 const notificationFailureCodes = new Set([
   "notification-delivery-recovery-required",
   "notification-delivery-rejected",
@@ -43,7 +53,10 @@ const notificationFailureCodes = new Set([
 ]);
 
 export class DurableAttentionQueue {
-  public constructor(private readonly persistence: SqlitePersistence) {}
+  public constructor(
+    private readonly persistence: SqlitePersistence,
+    private readonly productionErrorPages?: ProductionErrorPagePort,
+  ) {}
 
   async has(attentionId: string): Promise<boolean> {
     return this.persistence.hasAttention(attentionId);
@@ -57,10 +70,38 @@ export class DurableAttentionQueue {
         `Attention '${attention.attentionId}' exceeds the console attention identity bound of ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
       );
     }
-    this.persistence.raiseAttention(
-      attention.attentionId,
-      JSON.parse(JSON.stringify(attention)) as JsonValue,
-    );
+    const productionError = isProductionErrorAttention(attention);
+    const floorProductionError =
+      productionError && !productionErrorIncidentEligible(attention.code);
+    let pageError: unknown;
+    if (floorProductionError) {
+      try {
+        await this.productionErrorPages?.send(attention);
+      } catch (error) {
+        pageError = error;
+      }
+    }
+    try {
+      this.persistence.raiseAttention(
+        attention.attentionId,
+        JSON.parse(JSON.stringify(attention)) as JsonValue,
+      );
+    } catch (recordError) {
+      if (pageError !== undefined) {
+        throw new AggregateError(
+          [pageError, recordError],
+          "Production error page and durable attention record both failed",
+        );
+      }
+      throw recordError;
+    }
+    if (productionError && !floorProductionError) {
+      try {
+        await this.productionErrorPages?.send(attention);
+      } catch {
+        // The durable console record is the fallback when paging is unavailable.
+      }
+    }
   }
 
   reopen(attentionId: string): boolean {
@@ -130,12 +171,15 @@ export class DurableAttentionQueue {
 
 export type PushoverMessage = {
   applicationToken: string;
+  level: PushoverLevel;
   message: string;
   stableId: string;
   title: string;
   url: string;
   userKey: string;
 };
+
+export type PushoverLevel = "critical" | "informational" | "normal";
 
 export interface PushoverTransport {
   send(message: PushoverMessage): Promise<void>;
@@ -159,8 +203,10 @@ export class NotificationDeliveryError extends Error {
 
 export type OperatorPage = {
   attentionId: string;
-  instanceId: string;
+  instanceId?: string;
+  level?: PushoverLevel;
   message: string;
+  scope?: "all" | `task:${number}`;
 };
 
 export class HttpPushoverTransport implements PushoverTransport {
@@ -175,6 +221,12 @@ export class HttpPushoverTransport implements PushoverTransport {
       response = await this.fetch(this.apiUrl, {
         body: new globalThis.URLSearchParams({
           message: message.message,
+          priority:
+            message.level === "critical"
+              ? "1"
+              : message.level === "informational"
+                ? "-1"
+                : "0",
           title: message.title,
           token: message.applicationToken,
           url: message.url,
@@ -263,37 +315,26 @@ export class DurablePushoverNotifier {
     if (this.persistence.effectCompleted("pushover", page.attentionId)) {
       return;
     }
-    const runtimes = this.persistence
-      .listReconcilerRuntime()
-      .filter(({ instanceId }) => instanceId === page.instanceId);
-    if (runtimes.length !== 1) {
-      throw new Error(
-        `Attention '${page.attentionId}' does not resolve to one production task`,
-      );
-    }
-    const scope = new globalThis.URL(this.configuration.consoleBaseUrl);
-    scope.searchParams.set("view", "lifecycle");
-    scope.searchParams.set("scope", `task:${runtimes[0]!.taskId}`);
-    scope.searchParams.set("attention", page.attentionId);
-    const message: PushoverMessage = {
-      applicationToken: this.configuration.applicationToken,
-      message: page.message,
-      stableId: page.attentionId,
-      title: "Heddle needs attention",
-      url: scope.toString(),
-      userKey: this.configuration.userKey,
-    };
+    const message = this.#message(page);
     const fingerprint = (value: unknown): string =>
       createHash("sha256").update(JSON.stringify(value)).digest("hex");
-    const legacyFingerprint = fingerprint(message);
-    const logicalFingerprint = fingerprint({
+    const legacyFingerprint = fingerprint({
+      applicationToken: message.applicationToken,
       message: message.message,
       stableId: message.stableId,
       title: message.title,
       url: message.url,
       userKey: message.userKey,
     });
-    const attemptFingerprint = legacyFingerprint;
+    const logicalFingerprint = fingerprint({
+      level: message.level,
+      message: message.message,
+      stableId: message.stableId,
+      title: message.title,
+      url: message.url,
+      userKey: message.userKey,
+    });
+    const attemptFingerprint = fingerprint(message);
     const verification = this.#verification(page);
     try {
       this.persistence.recordNotificationIntent(
@@ -340,7 +381,7 @@ export class DurablePushoverNotifier {
       throw new NotificationDeliveryError("retryable", retry.category);
     }
     try {
-      await this.transport.send(message);
+      await this.#sendTransport(message);
     } catch (error) {
       if (
         error instanceof NotificationDeliveryError &&
@@ -375,7 +416,6 @@ export class DurablePushoverNotifier {
       }
       throw retryable;
     }
-    await this.afterTransportSuccess?.(message);
     if (
       !this.persistence.recordEffectCompleted("pushover", page.attentionId) &&
       !this.persistence.effectCompleted("pushover", page.attentionId)
@@ -383,5 +423,165 @@ export class DurablePushoverNotifier {
       throw new Error("Pushover completion lost its durable intent");
     }
     this.persistence.clearNotificationRetry(page.attentionId);
+  }
+
+  async sendBeforeDurableIntent(page: OperatorPage): Promise<void> {
+    await this.#sendTransport(this.#message(page));
+  }
+
+  #message(page: OperatorPage): PushoverMessage {
+    const scopeValue = page.scope ?? this.#scopeForInstance(page);
+    const scope = new globalThis.URL(this.configuration.consoleBaseUrl);
+    scope.searchParams.set("view", "lifecycle");
+    scope.searchParams.set("scope", scopeValue);
+    scope.searchParams.set("attention", page.attentionId);
+    const message: PushoverMessage = {
+      applicationToken: this.configuration.applicationToken,
+      level: page.level ?? "normal",
+      message: page.message,
+      stableId: page.attentionId,
+      title: "Heddle needs attention",
+      url: scope.toString(),
+      userKey: this.configuration.userKey,
+    };
+    return message;
+  }
+
+  async #sendTransport(message: PushoverMessage): Promise<void> {
+    await this.transport.send(message);
+    await this.afterTransportSuccess?.(message);
+  }
+
+  #scopeForInstance(page: OperatorPage): `task:${number}` {
+    if (page.instanceId === undefined) {
+      throw new Error(
+        `Attention '${page.attentionId}' has neither a production instance nor an explicit scope`,
+      );
+    }
+    const runtimes = this.persistence
+      .listReconcilerRuntime()
+      .filter(({ instanceId }) => instanceId === page.instanceId);
+    if (runtimes.length !== 1) {
+      throw new Error(
+        `Attention '${page.attentionId}' does not resolve to one production task`,
+      );
+    }
+    return `task:${runtimes[0]!.taskId}`;
+  }
+}
+
+export const productionErrorPagePolicy = {
+  cooldownMilliseconds: 60_000,
+  maximumPagesPerWindow: 3,
+  windowMilliseconds: 300_000,
+} as const;
+
+type PageWindow = {
+  attempts: number;
+  lastAttemptAt: number;
+  startedAt: number;
+};
+
+const productionErrorPageEffect = "production-error-pushover";
+
+export class ProductionErrorPager implements ProductionErrorPagePort {
+  readonly #windows = new Map<string, PageWindow>();
+
+  public constructor(
+    private readonly persistence: SqlitePersistence,
+    private readonly notifier: DurablePushoverNotifier,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  async send(attention: ProductionErrorAttention): Promise<void> {
+    const incidentEligible = productionErrorIncidentEligible(attention.code);
+    try {
+      if (
+        this.persistence.effectCompleted(
+          productionErrorPageEffect,
+          attention.attentionId,
+        )
+      ) {
+        return;
+      }
+    } catch (error) {
+      if (incidentEligible) throw error;
+    }
+    const attemptedAt = this.now();
+    let admitted: boolean;
+    try {
+      admitted = this.persistence.admitProductionErrorPage({
+        attentionId: attention.attentionId,
+        attemptedAt,
+        code: attention.code,
+        ...productionErrorPagePolicy,
+      });
+    } catch (error) {
+      if (incidentEligible) throw error;
+      admitted = this.#admitInMemory(attention.code, attemptedAt);
+    }
+    if (!admitted) return;
+    const intent: OperatorPage = {
+      attentionId: attention.attentionId,
+      level: incidentEligible ? "informational" : "critical",
+      message: attention.message,
+      scope:
+        attention.taskId === null
+          ? ("all" as const)
+          : (`task:${attention.taskId}` as const),
+    };
+    if (incidentEligible) {
+      this.persistence.recordEffectIntent(
+        productionErrorPageEffect,
+        attention.attentionId,
+        intent,
+      );
+      await this.notifier.send(intent);
+    } else {
+      await this.notifier.sendBeforeDurableIntent(intent);
+      this.persistence.recordEffectIntent(
+        productionErrorPageEffect,
+        attention.attentionId,
+        intent,
+      );
+    }
+    if (
+      !this.persistence.recordEffectCompleted(
+        productionErrorPageEffect,
+        attention.attentionId,
+      ) &&
+      !this.persistence.effectCompleted(
+        productionErrorPageEffect,
+        attention.attentionId,
+      )
+    ) {
+      throw new Error(
+        "Production error page completion lost its durable intent",
+      );
+    }
+  }
+
+  #admitInMemory(code: string, attemptedAt: number): boolean {
+    const prior = this.#windows.get(code);
+    const current =
+      prior === undefined ||
+      attemptedAt - prior.startedAt >=
+        productionErrorPagePolicy.windowMilliseconds
+        ? { attempts: 0, lastAttemptAt: -Infinity, startedAt: attemptedAt }
+        : prior;
+    if (
+      attemptedAt - current.lastAttemptAt <
+        productionErrorPagePolicy.cooldownMilliseconds ||
+      current.attempts >= productionErrorPagePolicy.maximumPagesPerWindow
+    ) {
+      this.#windows.set(code, current);
+      return false;
+    }
+    this.#windows.set(code, {
+      attempts: current.attempts + 1,
+      lastAttemptAt: attemptedAt,
+      startedAt: current.startedAt,
+    });
+    return true;
   }
 }

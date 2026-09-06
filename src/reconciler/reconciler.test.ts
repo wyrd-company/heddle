@@ -770,11 +770,11 @@ describe("Reconciler", () => {
     });
     const subject = fixture([epic, delivered, acceptance, lateDelivery]);
     const attentionId = "epic:60:acceptance:delivery-child-incomplete";
-    const unrelatedAttentionId = "production:unrelated-recovery-probe:task:60";
+    const unrelatedAttentionId = "task:60:lifecycle:unrelated-recovery-probe";
     await subject.attention.raise({
       attentionId: unrelatedAttentionId,
-      code: "unrelated-recovery-probe",
-      kind: "production-error",
+      code: "lifecycle-not-declared",
+      kind: "lifecycle-resolution",
       message: "Synthetic unrelated condition",
       taskId: epic.id,
     });

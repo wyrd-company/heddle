@@ -16,7 +16,10 @@ import type {
   SqlitePersistence,
 } from "../persistence/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
-import type { ProductionErrorAttention } from "./error-visibility.js";
+import {
+  createProductionErrorAttention,
+  type ProductionErrorAttention,
+} from "./error-visibility.js";
 
 const lifecycleAttentionEvent = "lifecycle:attention-required";
 
@@ -105,21 +108,21 @@ export class LifecycleAttentionBridge {
         errors.length === 0
           ? `Lifecycle transition ${transitionId} landed as ${String(actualStatus)}`
           : describeErrorDetail(errors[0]!);
-      const attention: ProductionErrorAttention = {
-        attentionId,
-        code: "lifecycle-execution-failed",
-        error:
-          errors[0] ??
-          errorDetail(
-            new Error(
-              `Lifecycle transition ${transitionId} landed as ${String(actualStatus)}`,
+      const attention: ProductionErrorAttention =
+        createProductionErrorAttention({
+          attentionId,
+          code: "lifecycle-execution-failed",
+          error:
+            errors[0] ??
+            errorDetail(
+              new Error(
+                `Lifecycle transition ${transitionId} landed as ${String(actualStatus)}`,
+              ),
             ),
-          ),
-        instanceId: runtime.instanceId,
-        kind: "production-error",
-        message: `Instance ${runtime.instanceId} requires lifecycle attention: ${summary}`,
-        taskId: runtime.taskId,
-      };
+          instanceId: runtime.instanceId,
+          message: `Instance ${runtime.instanceId} requires lifecycle attention: ${summary}`,
+          taskId: runtime.taskId,
+        });
       await this.attention.raise(attention);
     }
   }
@@ -130,14 +133,15 @@ export class LifecycleAttentionBridge {
   ): Promise<void> {
     const attentionId = `production:lifecycle-attention-bridge-failed:task:${runtime.taskId}:${runtime.instanceId}`;
     if (await this.attention.has(attentionId)) return;
-    await this.attention.raise({
-      attentionId,
-      code: "lifecycle-attention-bridge-failed",
-      error: errorDetail(error),
-      instanceId: runtime.instanceId,
-      kind: "production-error",
-      message: `Instance ${runtime.instanceId} attention bridge failed: ${describeError(error)}`,
-      taskId: runtime.taskId,
-    });
+    await this.attention.raise(
+      createProductionErrorAttention({
+        attentionId,
+        code: "lifecycle-attention-bridge-failed",
+        error,
+        instanceId: runtime.instanceId,
+        message: `Instance ${runtime.instanceId} attention bridge failed: ${describeError(error)}`,
+        taskId: runtime.taskId,
+      }),
+    );
   }
 }

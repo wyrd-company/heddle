@@ -20,6 +20,12 @@ import {
   t3Questions,
   type AttentionPayload as Payload,
 } from "./attention-question-projection.js";
+import {
+  productionErrorCodeDeclarations,
+  productionErrorIncidentEligible,
+  productionErrorIncidentId,
+  type ProductionErrorCode,
+} from "./error-visibility.js";
 
 const recordPayload = (record: DurableAttentionRecord): Payload => {
   const payload = record.payload;
@@ -229,6 +235,26 @@ export const projectProductionAttention = (
   }
   if (kind === "production-error") {
     const code = requiredIdentifier(payload, "code", attentionId);
+    if (!Object.hasOwn(productionErrorCodeDeclarations, code)) {
+      throw new Error(
+        `Attention '${attentionId}' has undeclared production error code '${code}'`,
+      );
+    }
+    const productionErrorCode = code as ProductionErrorCode;
+    const incidentIdValue = payload["incidentId"];
+    const expectedIncidentId = productionErrorIncidentEligible(
+      productionErrorCode,
+    )
+      ? productionErrorIncidentId(attentionId)
+      : null;
+    if (
+      incidentIdValue !== undefined &&
+      incidentIdValue !== expectedIncidentId
+    ) {
+      throw new Error(
+        `Attention '${attentionId}' has an invalid incident identity`,
+      );
+    }
     const taskIdValue = payload["taskId"];
     const instanceIdValue = payload["instanceId"];
     const taskId =
@@ -271,7 +297,7 @@ export const projectProductionAttention = (
             recipientLabel: notificationFailure.recipientLabel,
           }
         : undefined;
-    const actions: ConsoleAttentionAction[] =
+    const notificationActions: ConsoleAttentionAction[] =
       (code === "notification-delivery-rejected" ||
         code === "notification-delivery-recovery-required") &&
       verification !== undefined
@@ -287,6 +313,15 @@ export const projectProductionAttention = (
             },
           ]
         : [];
+    const actions: ConsoleAttentionAction[] = [
+      ...notificationActions,
+      {
+        actionId: "attention.resolve",
+        contract: { kind: "attention.resolve" },
+        input: { kind: "none" },
+        label: "Resolve",
+      },
+    ];
     return createConsoleAttention({
       actions,
       attentionId,

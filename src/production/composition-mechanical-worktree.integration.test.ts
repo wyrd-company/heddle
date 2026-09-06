@@ -589,10 +589,10 @@ describe("production mechanical worktree preparation", () => {
     const transitionAttention = composition.attention
       .list()
       .find(({ taskId }) => taskId === fixture.taskId)!;
-    const unrelatedAttentionId = `production:unrelated-recovery-probe:task:${fixture.taskId}:task-${fixture.taskId}`;
+    const unrelatedAttentionId = `production:task-reconciliation-failed:task:${fixture.taskId}:task-${fixture.taskId}`;
     await composition.attention.raise({
       attentionId: unrelatedAttentionId,
-      code: "unrelated-recovery-probe",
+      code: "task-reconciliation-failed",
       error: {
         cause: null,
         message: "Synthetic unrelated condition",

@@ -9,7 +9,6 @@ import {
   type BoardTask,
   type CreateBoardRecord,
 } from "../board-adapter/index.js";
-import { errorDetail } from "../error-details.js";
 import type {
   DynamicTaskIntentRecord,
   SqlitePersistence,
@@ -20,7 +19,10 @@ import {
   dynamicTaskOperationTag,
   dynamicTaskRecordTag,
 } from "./dynamic-task-authority-identity.js";
-import type { ProductionErrorAttention } from "./error-visibility.js";
+import {
+  createProductionErrorAttention,
+  type ProductionErrorAttention,
+} from "./error-visibility.js";
 import type { EpicOperationBoundary } from "./epic-operation-coordinator.js";
 
 type DynamicTaskSource = {
@@ -60,26 +62,23 @@ const recoveryFailures: readonly RecoveryFailure[] = [
 const recoveryAttention = (
   intent: DynamicTaskIntentRecord,
   failure: RecoveryFailure,
-): ProductionErrorAttention => ({
-  attentionId: `production:dynamic-task-authority-${failure}:task:${intent.parentEpicId}:${intent.operationDigest.slice(0, 16)}`,
-  code: `dynamic-task-authority-${failure}`,
-  error: errorDetail(new Error(`Dynamic task authority recovery ${failure}`)),
-  instanceId: null,
-  kind: "production-error",
-  message: `Dynamic task authority recovery ${failure} for operation ${intent.operationDigest}.`,
-  taskId: intent.parentEpicId,
-});
+): ProductionErrorAttention =>
+  createProductionErrorAttention({
+    attentionId: `production:dynamic-task-authority-${failure}:task:${intent.parentEpicId}:${intent.operationDigest.slice(0, 16)}`,
+    code: `dynamic-task-authority-${failure}`,
+    error: new Error(`Dynamic task authority recovery ${failure}`),
+    message: `Dynamic task authority recovery ${failure} for operation ${intent.operationDigest}.`,
+    taskId: intent.parentEpicId,
+  });
 
-const catalogAttention = (error: unknown): ProductionErrorAttention => ({
-  attentionId: "production:dynamic-task-authority-failed:global:catalog",
-  code: "dynamic-task-authority-failed",
-  error: errorDetail(error),
-  instanceId: null,
-  kind: "production-error",
-  message:
-    "Dynamic task authority recovery could not read its durable catalog.",
-  taskId: null,
-});
+const catalogAttention = (error: unknown): ProductionErrorAttention =>
+  createProductionErrorAttention({
+    attentionId: "production:dynamic-task-authority-failed:global:catalog",
+    code: "dynamic-task-authority-failed",
+    error,
+    message:
+      "Dynamic task authority recovery could not read its durable catalog.",
+  });
 
 export type DynamicTaskAuthorityOptions = {
   afterBoardEffect?: (task: BoardTask) => Promise<void> | void;

@@ -131,6 +131,31 @@ afterEach(async () => {
 });
 
 describe("DynamicTaskAuthority", () => {
+  it("classifies an unavailable durable catalog as an operator-only floor", async () => {
+    const persistence = await makePersistence();
+    const attention = attentionFixture();
+    const authority = new DynamicTaskAuthority(
+      persistence,
+      {
+        createRecord: vi.fn(),
+        readBoard: vi.fn(),
+        readTask: vi.fn(),
+      },
+      attention.attention,
+    );
+    persistence.close();
+
+    await authority.recoverPending();
+
+    expect([...attention.records.values()]).toMatchObject([
+      {
+        code: "dynamic-task-authority-failed",
+        incidentId: null,
+        message: expect.stringContaining("Operator action is required"),
+      },
+    ]);
+  });
+
   it("routes creation and recovery through the same parent epic boundary", async () => {
     const createPersistence = await makePersistence();
     const createAttention = attentionFixture();
@@ -533,7 +558,11 @@ describe("DynamicTaskAuthority", () => {
     );
     await failed.recoverPending();
     expect([...failedAttention.records.values()]).toMatchObject([
-      { code: "dynamic-task-authority-failed" },
+      {
+        code: "dynamic-task-authority-failed",
+        incidentId: null,
+        message: expect.stringContaining("Operator action is required"),
+      },
     ]);
     failedPersistence.close();
   });

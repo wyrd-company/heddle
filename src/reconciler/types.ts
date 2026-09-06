@@ -10,6 +10,7 @@ import type {
   PacingDeferral,
 } from "../pacing/index.js";
 import type { ErrorDetail } from "../error-details.js";
+import type { ProductionErrorAttention } from "../production/error-visibility.js";
 
 export interface ReconcilerBoard {
   mirrorTaskStatus(taskId: number, status: string): Promise<void>;
@@ -61,20 +62,19 @@ export interface ReconcilerLifecycleResolver {
   resolve(task: BoardTask): Promise<LifecycleResolution>;
 }
 
-export interface ReconcilerAttention {
+type ReconcilerConditionAttention = {
   artifactId?: string;
   attentionId: string;
   code: string;
   error?: ErrorDetail;
   instanceId?: string;
-  kind:
-    | "epic-acceptance"
-    | "lifecycle-resolution"
-    | "production-error"
-    | "stale-instance";
+  kind: "epic-acceptance" | "lifecycle-resolution" | "stale-instance";
   message: string;
   taskId: number;
-}
+};
+
+export type ReconcilerAttention =
+  ProductionErrorAttention | ReconcilerConditionAttention;
 
 export interface ReconcilerAttentionQueue {
   has(attentionId: string): Promise<boolean>;

@@ -27,6 +27,40 @@ describe("durable production adapters", () => {
     if (directory) await rm(directory, { force: true, recursive: true });
   });
 
+  it.each([
+    ["informational", "-1"],
+    ["normal", "0"],
+    ["critical", "1"],
+  ] as const)(
+    "maps the %s page level to Pushover priority %s",
+    async (level, priority) => {
+      const fetch = vi.fn(
+        async () =>
+          new globalThis.Response(JSON.stringify({ status: 1 }), {
+            status: 200,
+          }),
+      );
+      await new HttpPushoverTransport(
+        "https://notify.invalid/messages",
+        fetch,
+      ).send({
+        applicationToken: "application-token",
+        level,
+        message: "A sample needs attention",
+        stableId: "sample-attention",
+        title: "Sample attention",
+        url: "https://console.invalid/",
+        userKey: "operator-key",
+      });
+
+      expect(
+        new globalThis.URLSearchParams(
+          String(fetch.mock.calls[0]?.[1]?.body),
+        ).get("priority"),
+      ).toBe(priority);
+    },
+  );
+
   it("deduplicates a stable attention ID after a fresh persistence process", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-attention-"));
     const firstPersistence = new SqlitePersistence({
@@ -821,6 +855,18 @@ describe("durable production adapters", () => {
         },
         changedTransport,
       ).send(attention),
+    ).rejects.toThrow("changed durable identity");
+    await expect(
+      new DurablePushoverNotifier(
+        persistence,
+        {
+          apiUrl: "https://notify.invalid/messages",
+          applicationToken: "application-token",
+          consoleBaseUrl: "https://console.invalid/",
+          userKey: "operator-key",
+        },
+        changedTransport,
+      ).send({ ...attention, level: "critical" }),
     ).rejects.toThrow("changed durable identity");
     expect(firstTransport.send).toHaveBeenCalledTimes(1);
     expect(changedTransport.send).not.toHaveBeenCalled();

@@ -168,7 +168,9 @@ next_id: 17
     expect(
       evidence.attentionIds.filter((attentionId) => attentionId === stableId),
     ).toHaveLength(1);
-    expect(evidence.deliveries).toHaveLength(1);
+    expect(
+      evidence.deliveries.filter(({ stableId: id }) => id === stableId),
+    ).toHaveLength(1);
     expect(evidence.routeTypes).toEqual([
       "mcp:escalation-opened",
       "mcp:escalation-attention-raised",
@@ -198,9 +200,13 @@ next_id: 17
     const retryEvidence = JSON.parse(resumed.stdout) as Evidence;
     expect(retryEvidence.effectIntentRecorded).toBe(true);
     expect(retryEvidence.effectCompleted).toBe(true);
-    expect(retryEvidence.deliveries).toHaveLength(2);
-    expect(retryEvidence.deliveries[0]).toEqual(retryEvidence.deliveries[1]);
-    expect(retryEvidence.deliveries[0]).toMatchObject({
+    const targetDeliveries = retryEvidence.deliveries.filter(
+      ({ stableId: id }) => id === stableId,
+    );
+    expect(targetDeliveries).toHaveLength(2);
+    expect(targetDeliveries[0]).toEqual(targetDeliveries[1]);
+    expect(targetDeliveries[0]).toMatchObject({
+      level: "normal",
       message: "Heddle escalation in implement",
       stableId,
       title: "Heddle needs attention",
@@ -214,6 +220,11 @@ next_id: 17
 
   it("validates the startup tool registry before replaying external effects", async () => {
     const deliveries = await prepare("pushover");
+    const stableId = escalationAttentionId(
+      "task-17",
+      "task-17:implement",
+      "delivery-choice",
+    );
     const crashed = await runWorker("crash-pushover", root, deliveries);
     expect(crashed, crashed.stderr).toMatchObject({ code: 86 });
     const repositoryRoot = join(root, "blueprint-repository");
@@ -252,7 +263,11 @@ next_id: 17
       "declares MCP tool 'missing_tool' that is not registered",
     );
     expect(
-      (await readFile(deliveries, "utf8")).split("\n").filter(Boolean),
+      (await readFile(deliveries, "utf8"))
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as PushoverMessage)
+        .filter(({ stableId: id }) => id === stableId),
     ).toHaveLength(1);
   });
 });

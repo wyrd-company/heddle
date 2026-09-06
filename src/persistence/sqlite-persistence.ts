@@ -397,6 +397,73 @@ export class SqlitePersistence {
     );
   }
 
+  admitProductionErrorPage(input: {
+    attentionId: string;
+    attemptedAt: number;
+    code: string;
+    cooldownMilliseconds: number;
+    maximumPagesPerWindow: number;
+    windowMilliseconds: number;
+  }): boolean {
+    this.assertStableId("attentionId", input.attentionId);
+    this.assertStableId("code", input.code);
+    for (const name of [
+      "attemptedAt",
+      "cooldownMilliseconds",
+      "maximumPagesPerWindow",
+      "windowMilliseconds",
+    ] as const) {
+      if (!Number.isSafeInteger(input[name]) || input[name] < 0) {
+        throw new TypeError(`${name} must be a non-negative safe integer`);
+      }
+    }
+    if (
+      input.cooldownMilliseconds === 0 ||
+      input.maximumPagesPerWindow === 0 ||
+      input.windowMilliseconds === 0
+    ) {
+      throw new TypeError("Production error page policy must be positive");
+    }
+    return this.database.transaction(() => {
+      const windowStart = input.attemptedAt - input.windowMilliseconds;
+      this.database
+        .prepare(
+          `DELETE FROM heddle_production_error_page_attempts
+           WHERE attempted_at <= ?`,
+        )
+        .run(windowStart);
+      const existing = this.database
+        .prepare(
+          `SELECT 1 FROM heddle_production_error_page_attempts
+           WHERE code = ? AND attention_id = ?`,
+        )
+        .get(input.code, input.attentionId);
+      if (existing !== undefined) return false;
+      const window = this.database
+        .prepare(
+          `SELECT COUNT(*) AS attempts, MAX(attempted_at) AS lastAttemptAt
+           FROM heddle_production_error_page_attempts
+           WHERE code = ?`,
+        )
+        .get(input.code) as { attempts: number; lastAttemptAt: number | null };
+      if (
+        window.attempts >= input.maximumPagesPerWindow ||
+        (window.lastAttemptAt !== null &&
+          input.attemptedAt - window.lastAttemptAt < input.cooldownMilliseconds)
+      ) {
+        return false;
+      }
+      this.database
+        .prepare(
+          `INSERT INTO heddle_production_error_page_attempts
+             (code, attention_id, attempted_at)
+           VALUES (?, ?, ?)`,
+        )
+        .run(input.code, input.attentionId, input.attemptedAt);
+      return true;
+    })();
+  }
+
   effectIntentRecorded(effectKind: string, stableId: string): boolean {
     this.assertStableId("effectKind", effectKind);
     this.assertStableId("stableId", stableId);

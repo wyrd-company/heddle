@@ -102,6 +102,16 @@ export const initializePersistenceSchema = (
       retry_not_before INTEGER NOT NULL CHECK (retry_not_before >= 0)
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_production_error_page_attempts (
+      code TEXT NOT NULL,
+      attention_id TEXT NOT NULL,
+      attempted_at INTEGER NOT NULL CHECK (attempted_at >= 0),
+      PRIMARY KEY (code, attention_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS heddle_production_error_page_attempts_code_time
+      ON heddle_production_error_page_attempts(code, attempted_at);
+
     CREATE TABLE IF NOT EXISTS heddle_epic_projects (
       epic_id INTEGER PRIMARY KEY,
       product_name TEXT NOT NULL,

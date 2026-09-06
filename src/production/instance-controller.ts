@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 
 import type { BoardTask } from "../board-adapter/index.js";
 import { AttentionVisibleError } from "../attention-visible-error.js";
-import { describeError, errorDetail } from "../error-details.js";
+import { describeError } from "../error-details.js";
 import {
   bootstrapStageSession,
   HandoffRenderError,
@@ -39,6 +39,10 @@ import type {
 } from "../reconciler/index.js";
 import { isTodoState } from "../todo/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
+import {
+  createProductionErrorAttention,
+  type ProductionErrorCode,
+} from "./error-visibility.js";
 import { heddleSessionTitle } from "./session-title.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
@@ -67,7 +71,7 @@ const deferral = (value: JsonValue | undefined): PacingDeferral | undefined =>
 
 const synchronizationAttentionId = (
   runtime: ReconcilerRuntimeRecord,
-  code: string,
+  code: ProductionErrorCode,
 ): string => `production:${code}:task:${runtime.taskId}:${runtime.instanceId}`;
 
 export class ProductionInstanceController implements ReconcilerInstanceController {
@@ -449,7 +453,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
 
   async #raiseSynchronizationError(
     runtime: ReconcilerRuntimeRecord,
-    code: string,
+    code: ProductionErrorCode,
     error: unknown,
   ): Promise<void> {
     const attentionId = synchronizationAttentionId(runtime, code);
@@ -459,20 +463,21 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       }
       return;
     }
-    await this.attention.raise({
-      attentionId,
-      code,
-      error: errorDetail(error),
-      instanceId: runtime.instanceId,
-      kind: "production-error",
-      message: `Instance ${runtime.instanceId} synchronization failed: ${describeError(error)}`,
-      taskId: runtime.taskId,
-    });
+    await this.attention.raise(
+      createProductionErrorAttention({
+        attentionId,
+        code,
+        error,
+        instanceId: runtime.instanceId,
+        message: `Instance ${runtime.instanceId} synchronization failed: ${describeError(error)}`,
+        taskId: runtime.taskId,
+      }),
+    );
   }
 
   async #resolveSynchronizationError(
     runtime: ReconcilerRuntimeRecord,
-    code: string,
+    code: ProductionErrorCode,
   ): Promise<void> {
     const attentionId = synchronizationAttentionId(runtime, code);
     if (await this.attention.has(attentionId)) {

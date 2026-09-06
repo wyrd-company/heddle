@@ -16,15 +16,26 @@ import {
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
 import type { LifecycleBlueprint } from "../engine/index.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
-import { errorDetail } from "../error-details.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/index.js";
 import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import { createProductionComposition } from "./composition.js";
+import { createProductionErrorAttention } from "./error-visibility.js";
 import {
   execute,
   prepareProductionFixture,
   SyntheticT3,
 } from "./composition.test-support.js";
+
+const fetchedAttentionIds = (
+  calls: readonly (readonly unknown[])[],
+): Array<string | null> =>
+  calls.map((call) => {
+    const body = (call[1] as Parameters<typeof globalThis.fetch>[1])?.body;
+    const target = new globalThis.URLSearchParams(String(body)).get("url");
+    return target === null
+      ? null
+      : new globalThis.URL(target).searchParams.get("attention");
+  });
 
 describe("production composition", () => {
   let cleanup: (() => Promise<void>) | undefined;
@@ -140,7 +151,9 @@ describe("production composition", () => {
     });
 
     await expect(first.scheduler.trigger()).resolves.toBeUndefined();
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
     expect(
       first.escalation.pendingEscalations(runtime.instanceId),
     ).toMatchObject([{ attentionId, escalationId }]);
@@ -190,7 +203,9 @@ describe("production composition", () => {
     });
 
     await restarted.start();
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
     expect(
       restarted.persistence
         .listReconcilerRuntime()
@@ -218,10 +233,16 @@ describe("production composition", () => {
     });
     await restarted.scheduler.trigger();
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(2);
     expect(
       new globalThis.URLSearchParams(
-        String(fetch.mock.calls[1]?.[1]?.body),
+        String(
+          fetch.mock.calls
+            .filter((call) => fetchedAttentionIds([call])[0] === attentionId)
+            .at(-1)?.[1]?.body,
+        ),
       ).get("token"),
     ).toBe("replacement-application-token");
     expect(restarted.persistence.effectCompleted("pushover", attentionId)).toBe(
@@ -320,7 +341,9 @@ describe("production composition", () => {
     const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
 
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
     expect(composition.persistence.notificationRetry(attentionId)).toEqual({
       category: "provider-unavailable",
       retryNotBefore: 15_000,
@@ -342,7 +365,9 @@ describe("production composition", () => {
     for (now = 11_000; now < 15_000; now += 1_000) {
       await composition.scheduler.trigger();
     }
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
     expect(composition.attention.list()).toContainEqual(
       expect.objectContaining({
         kind: "production-error",
@@ -352,7 +377,9 @@ describe("production composition", () => {
 
     now = 15_000;
     await composition.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(2);
     expect(
       composition.persistence.effectCompleted("pushover", attentionId),
     ).toBe(true);
@@ -424,7 +451,9 @@ describe("production composition", () => {
     });
 
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(0);
     const recovery = composition.attention
       .list()
       .find(({ message }) => message.includes("legacy-intent-unverifiable"));
@@ -439,6 +468,7 @@ describe("production composition", () => {
             occurrence: 1,
           }),
         }),
+        expect.objectContaining({ actionId: "attention.resolve" }),
       ],
       kind: "production-error",
       notificationVerification: {
@@ -453,7 +483,9 @@ describe("production composition", () => {
       attention: recovery,
     });
     await composition.scheduler.trigger();
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
     expect(
       composition.persistence.effectCompleted("pushover", attentionId),
     ).toBe(true);
@@ -610,10 +642,11 @@ describe("production composition", () => {
     rejectTransport = false;
     now = 15_000;
     await composition.scheduler.trigger();
-    expect(deliveries).toHaveBeenCalledTimes(2);
-    expect(deliveries.mock.calls[1]?.[0]).toEqual(
-      deliveries.mock.calls[0]?.[0],
+    const pageableDeliveries = deliveries.mock.calls.filter(
+      ([message]) => message.stableId === pageable.attentionId,
     );
+    expect(pageableDeliveries).toHaveLength(2);
+    expect(pageableDeliveries[1]?.[0]).toEqual(pageableDeliveries[0]?.[0]);
     expect(
       composition.persistence.effectCompleted("pushover", pageable.attentionId),
     ).toBe(true);
@@ -625,7 +658,11 @@ describe("production composition", () => {
       }),
     );
     await composition.scheduler.trigger();
-    expect(deliveries).toHaveBeenCalledTimes(2);
+    expect(
+      deliveries.mock.calls.filter(
+        ([message]) => message.stableId === pageable.attentionId,
+      ),
+    ).toHaveLength(2);
     await composition.close();
   });
 
@@ -872,25 +909,27 @@ describe("production composition", () => {
 
     const instanceId = `task-${taskId}`;
     const absenceAttentionId = `production:lifecycle-instance-absent:task:${taskId}:${instanceId}`;
-    await composition.attention.raise({
-      attentionId: absenceAttentionId,
-      code: "lifecycle-instance-absent",
-      error: errorDetail(new Error("Synthetic stale lifecycle absence")),
-      instanceId,
-      kind: "production-error",
-      message: "Synthetic stale lifecycle absence",
-      taskId,
-    });
-    const unrelatedAttentionId = `production:unrelated-recovery-probe:task:${taskId}:${instanceId}`;
-    await composition.attention.raise({
-      attentionId: unrelatedAttentionId,
-      code: "unrelated-recovery-probe",
-      error: errorDetail(new Error("Synthetic unrelated condition")),
-      instanceId,
-      kind: "production-error",
-      message: "Synthetic unrelated condition",
-      taskId,
-    });
+    await composition.attention.raise(
+      createProductionErrorAttention({
+        attentionId: absenceAttentionId,
+        code: "lifecycle-instance-absent",
+        error: new Error("Synthetic stale lifecycle absence"),
+        instanceId,
+        message: "Synthetic stale lifecycle absence",
+        taskId,
+      }),
+    );
+    const unrelatedAttentionId = `production:task-reconciliation-failed:task:${taskId}:${instanceId}`;
+    await composition.attention.raise(
+      createProductionErrorAttention({
+        attentionId: unrelatedAttentionId,
+        code: "task-reconciliation-failed",
+        error: new Error("Synthetic unrelated condition"),
+        instanceId,
+        message: "Synthetic unrelated condition",
+        taskId,
+      }),
+    );
 
     composition.persistence.writeReconcilerRuntime({
       boardStatus: "done",
@@ -920,6 +959,8 @@ describe("production composition", () => {
   it("reports a scheduler-owned board failure as durable global attention", async () => {
     const fixture = await prepare();
     const onSchedulerError = vi.fn(async () => undefined);
+    const pages = vi.fn(async () => undefined);
+    const t3 = new SyntheticT3();
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -928,8 +969,8 @@ describe("production composition", () => {
       providerUsage: {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
       },
-      pushoverTransport: { send: vi.fn(async () => undefined) },
-      t3: new SyntheticT3(),
+      pushoverTransport: { send: pages },
+      t3,
     });
     await rm(fixture.configuration.boardDirectory, {
       force: true,
@@ -939,12 +980,17 @@ describe("production composition", () => {
     await expect(composition.start()).rejects.toThrow();
 
     expect(onSchedulerError).toHaveBeenCalledOnce();
+    expect(t3.commands).toEqual([]);
+    expect(pages).toHaveBeenCalledOnce();
+    expect(pages.mock.calls[0]?.[0]).toMatchObject({
+      level: "critical",
+      stableId: expect.stringContaining("production:scheduler-pass-failed"),
+    });
     expect(composition.attention.list()).toEqual([
       expect.objectContaining({
+        actions: [expect.objectContaining({ actionId: "attention.resolve" })],
         kind: "production-error",
-        message: expect.stringContaining(
-          "Production reconciliation pass failed",
-        ),
+        message: expect.stringContaining("Operator action is required"),
         scope: "all",
       }),
     ]);

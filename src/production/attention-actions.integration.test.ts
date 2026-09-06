@@ -12,7 +12,10 @@ import {
 import type { WorkflowMcpSessionBinding } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
 import { NotificationDeliveryError } from "./durable-adapters.js";
-import { notificationDeliveryErrorAttention } from "./error-visibility.js";
+import {
+  notificationDeliveryErrorAttention,
+  productionErrorAttention,
+} from "./error-visibility.js";
 import {
   prepareProductionFixture,
   SyntheticT3,
@@ -41,6 +44,49 @@ describe("production attention actions", () => {
 
   afterEach(async () => {
     await cleanup?.();
+  });
+
+  it("resolves a production error through durable replay-safe operator intent", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const errorAttention = productionErrorAttention({
+      code: "task-reconciliation-failed",
+      error: new Error("Synthetic task failure"),
+      summary: "Task reconciliation failed",
+      taskId: fixture.taskId,
+    });
+    await composition.attention.raise(errorAttention);
+    const attention = composition.attention
+      .list()
+      .find(({ attentionId }) => attentionId === errorAttention.attentionId)!;
+    const resolve = attention.actions.find(
+      ({ actionId }) => actionId === "attention.resolve",
+    )!;
+
+    await composition.consoleActions.execute({ action: resolve, attention });
+    await composition.consoleActions.execute({ action: resolve, attention });
+
+    expect(
+      composition.persistence.effectCompleted(
+        "console-attention-action",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    expect(await composition.attention.has(attention.attentionId)).toBe(true);
+    expect(composition.attention.list()).not.toContainEqual(
+      expect.objectContaining({ attentionId: attention.attentionId }),
+    );
+    expect(await composition.consoleState.listInstances()).toHaveLength(1);
+    await composition.close();
   });
 
   it("does not let a stale notification retry action authorize a newer rejection", async () => {

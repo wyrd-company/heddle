@@ -51,6 +51,7 @@ import {
   DurablePushoverNotifier,
   HttpPushoverTransport,
   NotificationDeliveryError,
+  ProductionErrorPager,
   type OperatorPage,
   type PushoverTransport,
 } from "./durable-adapters.js";
@@ -146,7 +147,23 @@ export const createProductionComposition = (
     const t3 = options.t3 ?? new T3ControlPlaneClient(configuration.t3);
     const resolveSystemPrompt =
       options.resolveSystemPrompt ?? resolveBuiltInSystemPrompt;
-    const attention = new DurableAttentionQueue(persistence);
+    const pushoverTransport =
+      options.pushoverTransport ??
+      new HttpPushoverTransport(
+        configuration.pushover.apiUrl,
+        options.pushoverFetch ?? globalThis.fetch,
+      );
+    const pushover = new DurablePushoverNotifier(
+      persistence,
+      configuration.pushover,
+      pushoverTransport,
+      options.afterPushoverTransportSuccess,
+      options.notificationNow,
+    );
+    const attention = new DurableAttentionQueue(
+      persistence,
+      new ProductionErrorPager(persistence, pushover, options.notificationNow),
+    );
     const epicOperations = new EpicOperationCoordinator();
     const dynamicTasks = new DynamicTaskAuthority(
       persistence,
@@ -174,17 +191,6 @@ export const createProductionComposition = (
         handoffTemplateStore.read(reference, skillNames),
       repositoryRoot: blueprintRepository.repositoryRoot,
     };
-    const pushover = new DurablePushoverNotifier(
-      persistence,
-      configuration.pushover,
-      options.pushoverTransport ??
-        new HttpPushoverTransport(
-          configuration.pushover.apiUrl,
-          options.pushoverFetch ?? globalThis.fetch,
-        ),
-      options.afterPushoverTransportSuccess,
-      options.notificationNow,
-    );
     const sendNotification = async (page: OperatorPage): Promise<void> => {
       await pushover.send(page);
       attention.resolveNotificationFailures(page.attentionId);
@@ -243,6 +249,7 @@ export const createProductionComposition = (
       error: NotificationDeliveryError,
       page: OperatorPage,
     ): Promise<void> => {
+      if (page.instanceId === undefined) throw error;
       const runtime = persistence!
         .listReconcilerRuntime()
         .find(({ instanceId }) => instanceId === page.instanceId);

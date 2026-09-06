@@ -101,8 +101,8 @@ describe("production instance controller", () => {
       todoState: null,
     });
     await attention.raise({
-      attentionId: "production:unrelated-recovery-probe:task:12:sample-12",
-      code: "unrelated-recovery-probe",
+      attentionId: "production:task-reconciliation-failed:task:12:sample-12",
+      code: "task-reconciliation-failed",
       error: {
         cause: null,
         message: "Synthetic unrelated condition",
@@ -129,7 +129,7 @@ describe("production instance controller", () => {
 
     expect(attention.list()).toEqual([
       expect.objectContaining({
-        attentionId: "production:unrelated-recovery-probe:task:12:sample-12",
+        attentionId: "production:task-reconciliation-failed:task:12:sample-12",
       }),
     ]);
     persistence.close();

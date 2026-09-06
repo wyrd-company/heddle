@@ -115,6 +115,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     input: Parameters<ConsoleAttentionActionPort["execute"]>[0],
   ): Promise<boolean> {
     const contract = input.action.contract;
+    if (contract.kind === "attention.resolve") return false;
     if (contract.kind === "notification.retry") {
       const failure = this.#notificationFailure(
         input.attention.attentionId,
@@ -144,6 +145,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
 
   async #apply(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
     const contract = input.action.contract;
+    if (contract.kind === "attention.resolve") return;
     if (contract.kind === "notification.retry") {
       const failure = this.#notificationFailure(
         input.attention.attentionId,
