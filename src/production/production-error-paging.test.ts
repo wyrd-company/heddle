@@ -301,6 +301,39 @@ describe("production error paging", () => {
     expect(deliveries).toHaveLength(1);
   });
 
+  it("attempts a floor page when SQLite fails after admission reservation", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-error-pages-"));
+    class ClosingOnDeliveryClaimPersistence extends SqlitePersistence {
+      override claimProductionErrorPageDelivery(
+        code: string,
+        attentionId: string,
+      ): boolean {
+        this.close();
+        return super.claimProductionErrorPageDelivery(code, attentionId);
+      }
+    }
+    const persistence = new ClosingOnDeliveryClaimPersistence({
+      stateDirectory: directory,
+    });
+    const deliveries: PushoverMessage[] = [];
+    const notifier = new DurablePushoverNotifier(persistence, configuration, {
+      send: async (message) => void deliveries.push(message),
+    });
+    const pager = new ProductionErrorPager(persistence, notifier);
+    const attention = productionErrorAttention({
+      code: "scheduler-pass-failed",
+      error: new Error("Synthetic scheduler failure"),
+      summary: "Scheduler pass failed",
+      varyByError: true,
+    });
+
+    await expect(pager.send(attention)).rejects.toThrow();
+
+    expect(deliveries).toMatchObject([
+      { level: "critical", stableId: attention.attentionId },
+    ]);
+  });
+
   it("bounds floor pages in memory while durable admission is unavailable", async () => {
     let now = 0;
     const { deliveries, pager, persistence } = await prepare(() => now);
