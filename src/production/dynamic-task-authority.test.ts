@@ -238,6 +238,76 @@ describe("DynamicTaskAuthority", () => {
 
   it.each([
     [
+      "record identity from another operation",
+      () => {
+        const otherIdentity = boardRecordIdentity({
+          ...record,
+          operationKey: JSON.stringify([
+            "task-12",
+            "task-12:review:1",
+            "follow-up",
+            "other-sample-operation",
+          ]),
+        });
+        const otherTask = boardTask(22);
+        return {
+          ...otherTask,
+          tags: otherTask.tags.map((tag) =>
+            tag.startsWith("heddle-operation:")
+              ? `heddle-operation:${otherIdentity.operationDigest}`
+              : tag,
+          ),
+        };
+      },
+    ],
+    [
+      "operation identity from another record",
+      () => {
+        const otherRecord = {
+          ...record,
+          title: "Another independent sample",
+        };
+        const otherIdentity = boardRecordIdentity(otherRecord);
+        const otherTask = boardTask(22);
+        return {
+          ...otherTask,
+          tags: otherTask.tags.map((tag) =>
+            tag.startsWith("heddle-record:")
+              ? `heddle-record:${otherIdentity.recordDigest}`
+              : tag,
+          ),
+          title: otherRecord.title,
+        };
+      },
+    ],
+  ] as const)(
+    "binds the sole exact match despite partial %s evidence",
+    async (_evidence, partialTask) => {
+      const persistence = await makePersistence();
+      const intent = pendingIntent(persistence);
+      const attention = attentionFixture();
+      const authority = new DynamicTaskAuthority(
+        persistence,
+        {
+          createRecord: vi.fn(),
+          readBoard: async () => [boardTask(21), partialTask()],
+          readTask: vi.fn(),
+        },
+        attention.attention,
+      );
+
+      await authority.recoverPending();
+
+      expect(
+        persistence.getDynamicTaskIntent(intent.operationDigest),
+      ).toMatchObject({ state: "completed", taskId: 21 });
+      expect(attention.records).toHaveLength(0);
+      persistence.close();
+    },
+  );
+
+  it.each([
+    [
       "kind",
       {
         tags: boardTask().tags.map((tag) =>

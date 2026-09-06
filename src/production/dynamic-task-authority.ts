@@ -179,7 +179,7 @@ export class DynamicTaskAuthority {
         await this.raiseRecovery(intent, "conflicting");
         continue;
       }
-      if (candidates.length !== 1 || exactMatches.length !== 1) {
+      if (exactMatches.length !== 1) {
         await this.raiseRecovery(intent, "ambiguous");
         continue;
       }
