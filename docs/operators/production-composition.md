@@ -322,9 +322,15 @@ empty list.
 The review snapshot identity is a gitpr schema-2 PR ID plus the exact source
 and base heads captured for review. The PR remains in `state: open` while review
 events are recorded. A review-stage approve disposition authorizes Heddle to
-record one `verdict: accepted` event for that captured basis and then invoke
-gitpr's separate merge operation. Heddle accepts completion only from
-`state: merged` with the exact accepted event and branch identities.
+record one `verdict: accepted` event for that captured basis. When the accepted
+source and base heads are equal, Heddle closes the PR as integrated with the
+base branch and exact head as closure evidence; it does not invoke gitpr's
+strict fast-forward merge. Otherwise Heddle invokes gitpr's separate merge
+operation. Heddle accepts completion only from `state: merged` with the exact
+accepted event and branch identities, or from `state: closed` with an exact
+equal-head accepted event and matching integrated closure evidence. Cleanup
+removes the worktree and task branch only while the retained review evidence,
+base ancestry, clean worktree, and task branch head still agree.
 
 Handoff templates are schema'd Markdown artifacts in `handoff-templates/`.
 Their YAML front matter declares the Heddle template schema, relationship,

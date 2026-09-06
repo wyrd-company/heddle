@@ -299,6 +299,219 @@ describe("delivery mechanical nodes", () => {
     ).rejects.toThrow();
   });
 
+  it("terminalizes and cleans an exact accepted no-op review without invoking merge", async () => {
+    const fixture = await makeChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const gitprCommands: string[][] = [];
+    const command: CommandRunner = async (
+      cwd,
+      executable,
+      arguments_,
+      input,
+    ) => {
+      if (executable === "gitpr") gitprCommands.push(arguments_);
+      return runCommand(cwd, executable, arguments_, input);
+    };
+
+    expect(snapshot.sourceHead).toBe(snapshot.baseHead);
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).resolves.toEqual({
+      alreadyMerged: true,
+      dispositions: { merged: true, remediate: false },
+      merged: false,
+      snapshotId: snapshot.snapshotId,
+    });
+    expect(gitprCommands).toContainEqual([
+      "close",
+      snapshot.snapshotId,
+      "--reason",
+      "integrated",
+      "--destination",
+      "main",
+      "--commit",
+      snapshot.sourceHead,
+    ]);
+    expect(gitprCommands.some(([subcommand]) => subcommand === "merge")).toBe(
+      false,
+    );
+    await expect(
+      readReviewSnapshot(fixture.sourcePath, snapshot.snapshotId, runCommand),
+    ).resolves.toMatchObject({
+      closure: {
+        destinationBranch: "main",
+        reason: "integrated",
+        resultingCommitShas: [snapshot.sourceHead],
+      },
+      latestEvent: {
+        baseHead: snapshot.baseHead,
+        sourceHead: snapshot.sourceHead,
+        verdict: "accepted",
+      },
+      state: "closed",
+    });
+    await expect(
+      mergeReviewSnapshot(fixture.change, snapshot, command),
+    ).resolves.toEqual({
+      alreadyMerged: true,
+      dispositions: { merged: true, remediate: false },
+      merged: false,
+      snapshotId: snapshot.snapshotId,
+    });
+    expect(
+      gitprCommands.filter(([subcommand]) => subcommand === "close"),
+    ).toHaveLength(1);
+
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).resolves.toEqual({
+      branchDeleted: true,
+      snapshotId: snapshot.snapshotId,
+      worktreeRemoved: true,
+    });
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).resolves.toEqual({
+      branchDeleted: false,
+      snapshotId: snapshot.snapshotId,
+      worktreeRemoved: false,
+    });
+    await expect(lstat(fixture.worktreePath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(
+      git(
+        fixture.sourcePath,
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/task/change",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("refuses a closed no-op review without exact integrated evidence", async () => {
+    const fixture = await makeChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "approve",
+      snapshot.snapshotId,
+      "--basis",
+      `${snapshot.sourceHead}:${snapshot.baseHead}`,
+    ]);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "close",
+      snapshot.snapshotId,
+      "--reason",
+      "abandoned",
+    ]);
+
+    await expect(mergeReviewSnapshot(fixture.change, snapshot)).rejects.toThrow(
+      /does not preserve the exact accepted no-op integration/,
+    );
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/not integrated by an exact approval/);
+    await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    expect(await git(fixture.sourcePath, "rev-parse", "task/change")).toBe(
+      snapshot.sourceHead + "\n",
+    );
+  });
+
+  it.each(["destination", "commit", "extra-commit"] as const)(
+    "refuses a closed no-op review with mismatched integrated %s evidence",
+    async (mismatch) => {
+      const fixture = await makeChange();
+      const snapshot = await ensureReviewSnapshot(fixture.change);
+      await runCommand(fixture.sourcePath, "gitpr", [
+        "approve",
+        snapshot.snapshotId,
+        "--basis",
+        `${snapshot.sourceHead}:${snapshot.baseHead}`,
+      ]);
+      await runCommand(fixture.sourcePath, "gitpr", [
+        "close",
+        snapshot.snapshotId,
+        "--reason",
+        "integrated",
+        "--destination",
+        mismatch === "destination" ? "other" : "main",
+        "--commit",
+        mismatch === "commit" ? "a".repeat(40) : snapshot.sourceHead,
+        ...(mismatch === "extra-commit" ? ["--commit", "a".repeat(40)] : []),
+      ]);
+
+      await expect(
+        mergeReviewSnapshot(fixture.change, snapshot),
+      ).rejects.toThrow(
+        /does not preserve the exact accepted no-op integration/,
+      );
+      await expect(
+        cleanupMergedChange(fixture.change, snapshot.snapshotId),
+      ).rejects.toThrow(/not integrated by an exact approval/);
+      await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+    },
+  );
+
+  it("refuses integrated closure when the accepted source contains a change", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "approve",
+      snapshot.snapshotId,
+      "--basis",
+      `${snapshot.sourceHead}:${snapshot.baseHead}`,
+    ]);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "close",
+      snapshot.snapshotId,
+      "--reason",
+      "integrated",
+      "--destination",
+      "main",
+      "--commit",
+      snapshot.sourceHead,
+    ]);
+
+    await expect(mergeReviewSnapshot(fixture.change, snapshot)).rejects.toThrow(
+      /does not preserve the exact accepted no-op integration/,
+    );
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/not integrated by an exact approval/);
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      snapshot.baseHead + "\n",
+    );
+  });
+
+  it("refuses integrated closure without an accepted event", async () => {
+    const fixture = await makeChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "reject",
+      snapshot.snapshotId,
+      "--basis",
+      `${snapshot.sourceHead}:${snapshot.baseHead}`,
+    ]);
+    await runCommand(fixture.sourcePath, "gitpr", [
+      "close",
+      snapshot.snapshotId,
+      "--reason",
+      "integrated",
+      "--destination",
+      "main",
+      "--commit",
+      snapshot.sourceHead,
+    ]);
+
+    await expect(mergeReviewSnapshot(fixture.change, snapshot)).rejects.toThrow(
+      /does not preserve the exact accepted no-op integration/,
+    );
+    await expect(
+      cleanupMergedChange(fixture.change, snapshot.snapshotId),
+    ).rejects.toThrow(/not integrated by an exact approval/);
+  });
+
   it("refuses legacy status and non-schema-2 review states", async () => {
     const record =
       (body: string): CommandRunner =>
@@ -1342,7 +1555,7 @@ describe("delivery mechanical nodes", () => {
 
     await expect(
       cleanupMergedChange(fixture.change, snapshot.snapshotId),
-    ).rejects.toThrow(/not merged by an approval/);
+    ).rejects.toThrow(/not integrated by an exact approval/);
     await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
   });
 

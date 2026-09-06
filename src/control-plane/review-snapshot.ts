@@ -25,12 +25,19 @@ export interface MechanicalChangeContext {
 export interface ReviewSnapshot extends Record<string, JsonValue> {
   baseBranch: string;
   baseHead: string;
+  closure: ReviewSnapshotClosure | null;
   latestEvent: ReviewSnapshotEvent | null;
   schema: 2;
   snapshotId: string;
   sourceBranch: string;
   sourceHead: string;
   state: "closed" | "merged" | "open";
+}
+
+export interface ReviewSnapshotClosure extends Record<string, JsonValue> {
+  destinationBranch: string | null;
+  reason: "abandoned" | "integrated" | "superseded";
+  resultingCommitShas: string[];
 }
 
 export interface ReviewSnapshotEvent extends Record<string, JsonValue> {
@@ -132,6 +139,7 @@ export const assertCleanMechanicalWorktree = async (
 
 interface GitprReviewRecord {
   baseBranch: string;
+  closure?: ReviewSnapshotClosure;
   events: ReviewSnapshotEvent[];
   mergedEventId?: string;
   schema: 2;
@@ -174,6 +182,44 @@ const requiredObjectId = (
 
 export const isReviewObjectId = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+
+const optionalString = (
+  value: Record<string, unknown>,
+  key: string,
+): string | null => {
+  const result = value[key];
+  if (result === undefined) return null;
+  if (typeof result !== "string" || result === "") {
+    throw new Error(`gitpr snapshot has invalid ${key}`);
+  }
+  return result;
+};
+
+const parseClosure = (value: unknown): ReviewSnapshotClosure => {
+  if (!isObject(value)) throw new Error("gitpr snapshot has invalid closure");
+  const reason = requiredString(value, "reason");
+  if (
+    reason !== "abandoned" &&
+    reason !== "integrated" &&
+    reason !== "superseded"
+  ) {
+    throw new Error(
+      `gitpr snapshot has invalid closure reason ${JSON.stringify(reason)}`,
+    );
+  }
+  const resultingCommitShas = value["resulting_commit_shas"] ?? [];
+  if (
+    !Array.isArray(resultingCommitShas) ||
+    !resultingCommitShas.every(isReviewObjectId)
+  ) {
+    throw new Error("gitpr snapshot has invalid resulting_commit_shas");
+  }
+  return {
+    destinationBranch: optionalString(value, "destination_branch"),
+    reason,
+    resultingCommitShas,
+  };
+};
 
 const parseReviewRecord = (
   source: string,
@@ -226,8 +272,13 @@ const parseReviewRecord = (
   if (mergedEventId !== undefined && typeof mergedEventId !== "string") {
     throw new Error("gitpr snapshot has invalid merged_event_id");
   }
+  const closure = parsed["closure"];
+  if (state === "closed" && closure === undefined) {
+    throw new Error("gitpr closed snapshot has no closure");
+  }
   return {
     baseBranch: requiredString(parsed, "base_branch"),
+    ...(closure === undefined ? {} : { closure: parseClosure(closure) }),
     events,
     ...(mergedEventId === undefined ? {} : { mergedEventId }),
     schema: 2,
@@ -313,6 +364,7 @@ const reviewSnapshotFromRecord = (
 ): ReviewSnapshot => ({
   baseBranch: record.baseBranch,
   baseHead,
+  closure: record.closure ?? null,
   latestEvent: record.events.at(-1) ?? null,
   schema: 2,
   snapshotId: record.snapshotId,
@@ -337,6 +389,10 @@ export const readReviewSnapshot = async (
     record.state === "merged"
       ? record.events.find(({ eventId }) => eventId === record.mergedEventId)
       : undefined;
+  const integratedEvent =
+    record.state === "closed" && record.closure?.reason === "integrated"
+      ? record.events.at(-1)
+      : undefined;
   if (record.state === "merged") {
     if (mergedEvent === undefined || mergedEvent.verdict !== "accepted") {
       throw new Error("gitpr merged snapshot has no accepted merged event");
@@ -345,6 +401,13 @@ export const readReviewSnapshot = async (
       record,
       mergedEvent.sourceHead,
       mergedEvent.baseHead,
+    );
+  }
+  if (integratedEvent?.verdict === "accepted") {
+    return reviewSnapshotFromRecord(
+      record,
+      integratedEvent.sourceHead,
+      integratedEvent.baseHead,
     );
   }
   const [sourceHead, baseHead] = await Promise.all([

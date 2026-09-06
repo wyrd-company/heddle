@@ -74,6 +74,20 @@ export interface CleanupMergedChangeResult extends Record<string, JsonValue> {
   worktreeRemoved: boolean;
 }
 
+const isExactAcceptedNoopClosure = (
+  change: MechanicalChangeContext,
+  snapshot: ReviewSnapshot,
+): boolean =>
+  snapshot.state === "closed" &&
+  snapshot.sourceHead === snapshot.baseHead &&
+  snapshot.latestEvent?.verdict === "accepted" &&
+  snapshot.latestEvent.sourceHead === snapshot.sourceHead &&
+  snapshot.latestEvent.baseHead === snapshot.baseHead &&
+  snapshot.closure?.reason === "integrated" &&
+  snapshot.closure.destinationBranch === change.baseBranch &&
+  snapshot.closure.resultingCommitShas.length === 1 &&
+  snapshot.closure.resultingCommitShas[0] === snapshot.sourceHead;
+
 const commandExited = (error: unknown, code: number): boolean => {
   if (typeof error !== "object" || error === null) return false;
   const actual = (error as { code?: number | string }).code;
@@ -211,6 +225,29 @@ export const mergeReviewSnapshot = async (
       snapshotId: snapshot.snapshotId,
     };
   }
+  if (current.state === "closed") {
+    if (
+      current.sourceHead !== snapshot.sourceHead ||
+      current.baseHead !== snapshot.baseHead ||
+      !isExactAcceptedNoopClosure(change, current)
+    ) {
+      throw new Error(
+        `Snapshot ${snapshot.snapshotId} does not preserve the exact accepted no-op integration`,
+      );
+    }
+    await runMechanicalGit(command, change.repositoryRoot, [
+      "merge-base",
+      "--is-ancestor",
+      snapshot.sourceHead,
+      baseHead,
+    ]);
+    return {
+      alreadyMerged: true,
+      dispositions: { merged: true, remediate: false },
+      merged: false,
+      snapshotId: snapshot.snapshotId,
+    };
+  }
   if (current.state !== "open") {
     throw new Error(`Snapshot ${snapshot.snapshotId} is not open`);
   }
@@ -333,6 +370,53 @@ export const mergeReviewSnapshot = async (
     }
   }
 
+  if (snapshot.sourceHead === snapshot.baseHead) {
+    await command(change.repositoryRoot, "gitpr", [
+      "close",
+      snapshot.snapshotId,
+      "--reason",
+      "integrated",
+      "--destination",
+      change.baseBranch,
+      "--commit",
+      snapshot.sourceHead,
+    ]);
+    const closed = await readReviewSnapshot(
+      change.repositoryRoot,
+      snapshot.snapshotId,
+      command,
+    );
+    const [closedSourceHead, closedBaseHead] = await Promise.all([
+      resolveMechanicalBranchHead(
+        command,
+        change.repositoryRoot,
+        change.branch,
+      ),
+      resolveMechanicalBranchHead(
+        command,
+        change.repositoryRoot,
+        change.baseBranch,
+      ),
+    ]);
+    if (
+      closed.sourceHead !== snapshot.sourceHead ||
+      closed.baseHead !== snapshot.baseHead ||
+      !isExactAcceptedNoopClosure(change, closed) ||
+      closedSourceHead !== snapshot.sourceHead ||
+      closedBaseHead !== snapshot.baseHead
+    ) {
+      throw new Error(
+        "gitpr did not close the exact accepted no-op integration",
+      );
+    }
+    return {
+      alreadyMerged: true,
+      dispositions: { merged: true, remediate: false },
+      merged: false,
+      snapshotId: snapshot.snapshotId,
+    };
+  }
+
   try {
     await command(change.repositoryRoot, "gitpr", [
       "merge",
@@ -404,11 +488,12 @@ export const cleanupMergedChange = async (
     command,
   );
   assertReviewSnapshotMatches(change, snapshot);
-  if (
-    snapshot.state !== "merged" ||
-    snapshot.latestEvent?.verdict !== "accepted"
-  ) {
-    throw new Error(`Snapshot ${snapshotId} is not merged by an approval`);
+  const isMergedApproval =
+    snapshot.state === "merged" && snapshot.latestEvent?.verdict === "accepted";
+  if (!isMergedApproval && !isExactAcceptedNoopClosure(change, snapshot)) {
+    throw new Error(
+      `Snapshot ${snapshotId} is not integrated by an exact approval`,
+    );
   }
   const baseHead = await resolveMechanicalBranchHead(
     command,

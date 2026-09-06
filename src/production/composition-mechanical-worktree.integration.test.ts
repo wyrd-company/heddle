@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildKanbanProjection } from "../console/index.js";
 import { deliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
+import { readLifecycleContext } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -277,6 +278,72 @@ describe("production mechanical worktree preparation", () => {
       "retrospective",
       "done",
     ]);
+    await composition.close();
+  }, 20_000);
+
+  it("completes standard delivery when review approves an unchanged task branch", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    await installStandardDelivery(fixture);
+    const composition = compose(fixture, new SyntheticT3());
+    const instanceId = `task-${fixture.taskId}`;
+    const repositoryRoot =
+      fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
+    const taskBranch = `heddle/task-${fixture.taskId}`;
+    const worktree = join(
+      fixture.configuration.session.worktreesRoot!,
+      String(fixture.taskId),
+      "sample-repository",
+    );
+
+    await composition.start();
+    expect(await git(repositoryRoot, "rev-parse", taskBranch)).toBe(
+      await git(repositoryRoot, "rev-parse", "main"),
+    );
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:implement:1`),
+    });
+    expect(await statusOf(fixture)).toBe("review");
+
+    await composition.lifecycle.resume({
+      disposition: "approve",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:review:1`),
+    });
+    expect(await statusOf(fixture)).toBe("retrospective");
+    expect(composition.attention.list()).toEqual([]);
+
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:retrospective:1`),
+    });
+    await composition.scheduler.trigger();
+    await composition.scheduler.trigger();
+
+    expect(await statusOf(fixture)).toBe("done");
+    expect(composition.attention.list()).toEqual([]);
+    await expect(stat(worktree)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      execute(
+        "git",
+        ["show-ref", "--verify", "--quiet", `refs/heads/${taskBranch}`],
+        { cwd: repositoryRoot },
+      ),
+    ).rejects.toThrow();
+    const instance = composition.persistence.getInstance(instanceId);
+    if (instance === undefined)
+      throw new Error("Lifecycle instance is missing");
+    const events = (
+      await Promise.all(
+        readLifecycleContext(instance).executionIds.map((executionId) =>
+          composition.persistence.flowcraftHistory.replay(executionId),
+        ),
+      )
+    ).flat();
+    expect(events.filter(({ type }) => type === "node:error")).toEqual([]);
     await composition.close();
   }, 20_000);
 

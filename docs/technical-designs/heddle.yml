@@ -580,15 +580,21 @@ proposed-design:
     Every step with a single correct outcome executes as a
     deterministic blueprint node running real code: creating the
     worktree and branch, creating the gitpr review record and persisting its
-    exact source/base basis, merging to
-    the epic branch on approval, deleting merged branches and
+    exact source/base basis, integrating with
+    the epic branch on approval, deleting integrated branches and
     worktrees, mirroring board status, and filing records. The merge
     node is reachable only from the review wait stage's approve disposition.
     It records an accepted gitpr schema-2 review event for the persisted exact
-    source/base basis, verifies that exact event, and asks gitpr to merge it.
+    source/base basis and verifies that exact event. When the accepted source
+    and base heads are equal, it closes the gitpr record as integrated with the
+    base branch and exact head as closure evidence without invoking merge.
+    Otherwise it asks gitpr to merge the accepted source.
     A merged record is accepted only when its merged event is accepted for that
-    same basis and the base contains the exact source head. Review events are
-    immutable and verdicts binary. Any source or base drift, or a snapshot whose
+    same basis and the base contains the exact source head. A closed record is
+    accepted only for the equal-head case when its latest event is accepted for
+    that same basis and its integrated closure names the exact base branch and
+    head. Review events are immutable and verdicts binary. Any source or base
+    drift, or a snapshot whose
     reviewed source does not contain its reviewed target, routes the instance
     back to remediation with a distinct typed cause and the exact reviewed and
     current basis. The latter requires a common history; unrelated histories
