@@ -139,6 +139,26 @@ describe("production configuration", () => {
     );
   });
 
+  it("rejects a whitespace-only recipient label through both configuration boundaries", async () => {
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const invalid = {
+      ...fixture(),
+      pushover: { ...fixture().pushover, recipientLabel: "   " },
+    };
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+
+    expect(validate(invalid)).toBe(false);
+    expect(() => validateProductionConfiguration(invalid)).toThrow(
+      "pushover.recipientLabel must not be empty",
+    );
+  });
+
   it("rejects a repository referenced by more than one product", () => {
     const invalid: ProductionConfiguration = {
       ...fixture(),

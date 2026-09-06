@@ -165,7 +165,11 @@
           "format": "uri",
           "pattern": "^https?://"
         },
-        "recipientLabel": { "type": "string", "minLength": 1 },
+        "recipientLabel": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
         "userKey": { "type": "string", "minLength": 1 }
       }
     },
