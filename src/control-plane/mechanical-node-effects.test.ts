@@ -472,6 +472,13 @@ describe("delivery mechanical nodes", () => {
       "--commit",
       snapshot.sourceHead,
     ]);
+    await git(
+      fixture.sourcePath,
+      "update-ref",
+      "refs/heads/main",
+      snapshot.sourceHead,
+      snapshot.baseHead,
+    );
 
     await expect(mergeReviewSnapshot(fixture.change, snapshot)).rejects.toThrow(
       /does not preserve the exact accepted no-op integration/,
@@ -480,7 +487,7 @@ describe("delivery mechanical nodes", () => {
       cleanupMergedChange(fixture.change, snapshot.snapshotId),
     ).rejects.toThrow(/not integrated by an exact approval/);
     expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
-      snapshot.baseHead + "\n",
+      snapshot.sourceHead + "\n",
     );
   });
 
