@@ -354,7 +354,9 @@ persistence.writeReconcilerRuntime({
 persistence.close();
 '
 
-docker rm --force "${container_id}" >/dev/null
+remove_owned_container \
+    "${container_id}" \
+    heddle.qualification
 container_id=""
 assert_head
 up

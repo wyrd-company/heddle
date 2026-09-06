@@ -257,6 +257,31 @@ describe("Heddle devcontainer feature", () => {
     );
   });
 
+  it("routes every qualification container removal through verified identity", async () => {
+    const qualification = await readFile(
+      "scripts/deployment/qualify-feature.sh",
+      "utf8",
+    );
+    const helperStart = qualification.indexOf("remove_owned_container() {");
+    const helperEnd = qualification.indexOf("\ncleanup() {", helperStart);
+    const removalInvocations = [
+      ...qualification.matchAll(/^\s*docker rm --force /gm),
+    ];
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    expect(removalInvocations).toHaveLength(1);
+    expect(removalInvocations[0]?.index).toBeGreaterThan(helperStart);
+    expect(removalInvocations[0]?.index).toBeLessThan(helperEnd);
+    expect(qualification).toContain(
+      [
+        "remove_owned_container \\",
+        '    "${container_id}" \\',
+        "    heddle.qualification",
+      ].join("\n"),
+    );
+  });
+
   it("provisions the derived qualification clone with an origin upstream", async () => {
     const qualification = await readFile(
       "scripts/deployment/qualify-feature.sh",
