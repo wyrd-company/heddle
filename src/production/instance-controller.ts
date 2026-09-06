@@ -98,36 +98,32 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const runtimeByInstanceId = new Map(
       runtimes.map((runtime) => [runtime.instanceId, runtime]),
     );
-    const topLevel = await Promise.all(
-      runtimes.map(async (runtime) => {
-        const boardStatusMirrorBlocked = await this.attention.has(
-          synchronizationAttentionId(
-            runtime,
-            "instance-synchronization-failed",
-          ),
-        );
-        return {
-          boardStatus: runtime.boardStatus,
-          ...(boardStatusMirrorBlocked ? { boardStatusMirrorBlocked } : {}),
-          ...(runtime.deferral === undefined
-            ? {}
-            : { deferral: deferral(runtime.deferral) }),
-          depth: 0,
-          instanceId: runtime.instanceId,
-          ...(runtime.provider === undefined
-            ? {}
-            : { provider: runtime.provider }),
-          ...(runtime.stageEnteredAt === undefined
-            ? {}
-            : { stageEnteredAt: runtime.stageEnteredAt }),
-          ...(runtime.stageId === undefined
-            ? {}
-            : { stageId: runtime.stageId }),
-          state: runtime.state,
-          taskId: runtime.taskId,
-        };
-      }),
+    const activeAttentionIds = new Set(
+      this.persistence.listAttention().map(({ attentionId }) => attentionId),
     );
+    const topLevel = runtimes.map((runtime) => {
+      const boardStatusMirrorBlocked = activeAttentionIds.has(
+        synchronizationAttentionId(runtime, "instance-synchronization-failed"),
+      );
+      return {
+        boardStatus: runtime.boardStatus,
+        ...(boardStatusMirrorBlocked ? { boardStatusMirrorBlocked } : {}),
+        ...(runtime.deferral === undefined
+          ? {}
+          : { deferral: deferral(runtime.deferral) }),
+        depth: 0,
+        instanceId: runtime.instanceId,
+        ...(runtime.provider === undefined
+          ? {}
+          : { provider: runtime.provider }),
+        ...(runtime.stageEnteredAt === undefined
+          ? {}
+          : { stageEnteredAt: runtime.stageEnteredAt }),
+        ...(runtime.stageId === undefined ? {} : { stageId: runtime.stageId }),
+        state: runtime.state,
+        taskId: runtime.taskId,
+      };
+    });
     const delegated = this.persistence.listInstances().flatMap((instance) => {
       const runtime = runtimeByInstanceId.get(instance.instanceId);
       if (runtime === undefined || !isTodoState(instance.state.todoState)) {

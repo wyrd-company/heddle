@@ -41,7 +41,10 @@ import {
   type ProviderUsageSource,
 } from "../pacing/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
-import { Reconciler } from "../reconciler/index.js";
+import {
+  Reconciler,
+  type ReconcilerInstanceController,
+} from "../reconciler/index.js";
 import type { SubagentCoordinator } from "../subagents/index.js";
 import {
   DurableAttentionQueue,
@@ -114,6 +117,7 @@ export type ProductionComposition = {
   dynamicTasks: DynamicTaskAuthority;
   escalation: EscalationCoordinator;
   lifecycle: ProductionLifecycleRouter;
+  instances: ReconcilerInstanceController;
   mcp: WorkflowMcpHttpHandler;
   persistence: SqlitePersistence;
   scheduler: ProductionScheduler;
@@ -484,6 +488,7 @@ export const createProductionComposition = (
       ),
       dynamicTasks,
       escalation,
+      instances,
       lifecycle,
       mcp,
       persistence,

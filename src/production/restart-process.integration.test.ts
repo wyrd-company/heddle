@@ -511,6 +511,7 @@ next_id: 1
       attention: Array<{ code: string; message: string }>;
       commands: Array<{ commandId: string; type: string }>;
       instanceCount: number;
+      instances: Array<{ boardStatusMirrorBlocked?: boolean }>;
       runtime: Array<{ state: string }>;
       statusWrites: Array<{ status: string; taskId: number }>;
       taskStatus: string;
@@ -519,6 +520,9 @@ next_id: 1
     expect(rejected, rejected.stderr).toMatchObject({ code: 0 });
     const rejectedEvidence = JSON.parse(rejected.stdout) as RestartEvidence;
     expect(rejectedEvidence.statusWrites).toEqual([]);
+    expect(rejectedEvidence.instances).toMatchObject([
+      { boardStatusMirrorBlocked: true },
+    ]);
     expect(rejectedEvidence.attention).toContainEqual(
       expect.objectContaining({
         code: "instance-synchronization-failed",
@@ -545,6 +549,27 @@ next_id: 1
     expect(evidence.runtime).toMatchObject([
       { boardStatus: "in-progress", state: "waiting" },
     ]);
+    expect(evidence.instances).toHaveLength(1);
+    expect(evidence.instances[0]).not.toHaveProperty(
+      "boardStatusMirrorBlocked",
+    );
     expect(evidence.taskStatus).toBe("in-progress");
+
+    await execute(
+      "kanban-md",
+      ["--dir", boardDirectory, "edit", "1", "--status", "todo"],
+      { cwd: root },
+    );
+    const diverged = await run("restart", configurationPath, commandLog);
+    expect(diverged, diverged.stderr).toMatchObject({ code: 0 });
+    const divergenceEvidence = JSON.parse(diverged.stdout) as RestartEvidence;
+    expect(divergenceEvidence.instances).toHaveLength(1);
+    expect(divergenceEvidence.instances[0]).not.toHaveProperty(
+      "boardStatusMirrorBlocked",
+    );
+    expect(divergenceEvidence.statusWrites).toEqual([
+      { status: "in-progress", taskId: 1 },
+    ]);
+    expect(divergenceEvidence.taskStatus).toBe("in-progress");
   }, 30_000);
 });

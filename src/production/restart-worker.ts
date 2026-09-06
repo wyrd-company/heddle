@@ -93,6 +93,7 @@ composition.board.mirrorTaskStatus = async (taskId, status) => {
 await composition.start();
 await composition.scheduler.trigger();
 const board = await composition.board.readBoard();
+const instances = await composition.instances.listInstances();
 process.stdout.write(
   JSON.stringify({
     attention: composition.persistence
@@ -100,6 +101,7 @@ process.stdout.write(
       .map(({ payload }) => payload),
     commands: recorded.map(({ commandId, type }) => ({ commandId, type })),
     instanceCount: composition.persistence.listInstances().length,
+    instances,
     runtime: composition.persistence.listReconcilerRuntime(),
     statusWrites,
     taskStatus: board[0]?.status,
