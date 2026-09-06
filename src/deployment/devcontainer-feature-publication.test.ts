@@ -51,6 +51,24 @@ describe("Heddle devcontainer feature publication", () => {
         readFile(join(stagedFeature, "heddle-1.0.0.tgz")),
       ).rejects.toMatchObject({ code: "ENOENT" });
       await expect(
+        readFile(
+          join(
+            stagedFeature,
+            "heddle-source/spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/runtime/ExecutionBridge.tsx",
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain("ExecutionBridge");
+      await expect(
+        readFile(
+          join(
+            stagedFeature,
+            "heddle-source/spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/types.ts",
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain("FlowcraftNodeShape");
+      await expect(
         execute(join(stagedFeature, "verify-feature-source.sh"), [
           stagedFeature,
         ]),

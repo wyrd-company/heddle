@@ -38,7 +38,9 @@ for path in \
     ./heddle-source/package-lock.json \
     ./heddle-source/src/deployment/server.ts \
     ./heddle-source/bin/heddle-server.mjs \
-    ./heddle-source/schemas/lifecycle-blueprint.json; do
+    ./heddle-source/schemas/lifecycle-blueprint.json \
+    ./heddle-source/spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/runtime/ExecutionBridge.tsx \
+    ./heddle-source/spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/types.ts; do
     grep -qx "${path}" "${contents}"
 done
 if grep -Eq '^\./heddle-[^/]*\.tgz$' "${contents}"; then

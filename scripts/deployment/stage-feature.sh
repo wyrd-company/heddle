@@ -44,7 +44,7 @@ source_paths=(
     package-lock.json
     package.json
     schemas
-    spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync
+    spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw
     src
     tsconfig.json
     tsconfig.viewer.json
