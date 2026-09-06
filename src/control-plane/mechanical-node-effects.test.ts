@@ -512,6 +512,65 @@ describe("delivery mechanical nodes", () => {
     ).rejects.toThrow(/not integrated by an exact approval/);
   });
 
+  it.each(["source", "base"] as const)(
+    "fails closed when the %s branch moves during no-op terminalization",
+    async (movedBranch) => {
+      const fixture = await makeChange();
+      const snapshot = await ensureReviewSnapshot(fixture.change);
+      const tree = (
+        await git(
+          fixture.sourcePath,
+          "rev-parse",
+          `${snapshot.sourceHead}^{tree}`,
+        )
+      ).trim();
+      const movedHead = (
+        await git(
+          fixture.sourcePath,
+          "commit-tree",
+          tree,
+          "-p",
+          snapshot.sourceHead,
+          "-m",
+          "advance branch",
+        )
+      ).trim();
+      let moved = false;
+      const command: CommandRunner = async (
+        cwd,
+        executable,
+        arguments_,
+        input,
+      ) => {
+        if (!moved && executable === "gitpr" && arguments_[0] === "close") {
+          moved = true;
+          await git(
+            fixture.sourcePath,
+            "update-ref",
+            movedBranch === "source"
+              ? "refs/heads/task/change"
+              : "refs/heads/main",
+            movedHead,
+            snapshot.sourceHead,
+          );
+        }
+        return runCommand(cwd, executable, arguments_, input);
+      };
+
+      await expect(
+        mergeReviewSnapshot(fixture.change, snapshot, command),
+      ).rejects.toThrow(/did not close the exact accepted no-op integration/);
+      await expect(lstat(fixture.worktreePath)).resolves.toBeDefined();
+      expect(
+        await git(
+          fixture.sourcePath,
+          "rev-parse",
+          movedBranch === "source" ? "task/change" : "main",
+        ),
+      ).toBe(movedHead + "\n");
+    },
+  );
+
   it("refuses legacy status and non-schema-2 review states", async () => {
     const record =
       (body: string): CommandRunner =>
