@@ -3,9 +3,10 @@
 //   implements: heddle
 // ---
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DispatchPacingGate } from "../pacing/index.js";
+import { EpicOperationCoordinator } from "../production/index.js";
 import { fixture, task } from "./reconciler.test-support.js";
 
 const pacing = (
@@ -27,6 +28,308 @@ const pacing = (
 });
 
 describe("Reconciler", () => {
+  it("admits one trusted delivery child after retained UAT terminal proof", async () => {
+    const epic = task(1, "uat", { tags: ["type:epic"] });
+    const acceptance = task(2, "done", { parent: epic.id, tags: ["uat"] });
+    const followUp = task(3, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      trustedTaskIds: [followUp.id],
+    });
+    subject.instances.instances.push({
+      boardStatus: "done",
+      instanceId: "task-2",
+      state: "done",
+      taskId: acceptance.id,
+    });
+
+    await subject.reconciler.reconcile();
+    await subject.reconciler.reconcile();
+
+    expect(epic.status).toBe("uat");
+    expect(followUp.status).toBe("todo");
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      followUp.id,
+    ]);
+    expect(subject.attention.entries).toHaveLength(0);
+  });
+
+  it("keeps trusted delivery quiet while UAT remains active", async () => {
+    const epic = task(4, "uat", { tags: ["type:epic"] });
+    const acceptance = task(5, "in-progress", {
+      parent: epic.id,
+      tags: ["uat"],
+    });
+    const followUp = task(6, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      trustedTaskIds: [followUp.id],
+    });
+    subject.instances.instances.push({
+      boardStatus: "in-progress",
+      instanceId: "task-5",
+      state: "waiting",
+      taskId: acceptance.id,
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(followUp.status).toBe("backlog");
+    expect(subject.instances.starts).toEqual([]);
+    expect(subject.attention.entries).toHaveLength(0);
+  });
+
+  it("fails closed when a done UAT task has no retained terminal runtime", async () => {
+    const epic = task(7, "uat", { tags: ["type:epic"] });
+    const acceptance = task(8, "done", { parent: epic.id, tags: ["uat"] });
+    const followUp = task(9, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      trustedTaskIds: [followUp.id],
+    });
+
+    await subject.reconciler.reconcile();
+    await subject.reconciler.reconcile();
+
+    expect(followUp.status).toBe("backlog");
+    expect(subject.instances.starts).toEqual([]);
+    expect([...subject.attention.entries.values()]).toEqual([
+      expect.objectContaining({
+        attentionId: "epic:7:acceptance:uat-terminal-unverified",
+        code: "uat-terminal-unverified",
+      }),
+    ]);
+  });
+
+  it("admits only exact trusted work from a mixed set", async () => {
+    const epic = task(10, "uat", { tags: ["type:epic"] });
+    const acceptance = task(11, "done", { parent: epic.id, tags: ["uat"] });
+    const trusted = task(12, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const untrusted = task(13, "backlog", {
+      lifecycle: "surface-cleaning",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, trusted, untrusted], {
+      coordinated: true,
+      trustedTaskIds: [trusted.id],
+    });
+    subject.instances.instances.push({
+      boardStatus: "done",
+      instanceId: "task-11",
+      state: "done",
+      taskId: acceptance.id,
+    });
+
+    await subject.reconciler.reconcile();
+    await subject.reconciler.reconcile();
+
+    expect(trusted.status).toBe("todo");
+    expect(untrusted.status).toBe("backlog");
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      trusted.id,
+    ]);
+    expect([...subject.attention.entries.values()]).toEqual([
+      expect.objectContaining({
+        attentionId: "epic:10:acceptance:delivery-child-incomplete",
+        code: "uat-delivery-child-incomplete",
+      }),
+    ]);
+  });
+
+  it("requires delegated UAT work to stop before trusted admission", async () => {
+    const epic = task(14, "uat", { tags: ["type:epic"] });
+    const acceptance = task(15, "done", { parent: epic.id, tags: ["uat"] });
+    const followUp = task(16, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      trustedTaskIds: [followUp.id],
+    });
+    subject.instances.instances.push(
+      {
+        boardStatus: "done",
+        instanceId: "task-15",
+        state: "done",
+        taskId: acceptance.id,
+      },
+      {
+        boardStatus: "done",
+        instanceId: "delegated-15",
+        parentSessionId: "task-15",
+        state: "waiting",
+        taskId: acceptance.id,
+      },
+    );
+
+    await subject.reconciler.reconcile();
+
+    expect(followUp.status).toBe("backlog");
+    expect(subject.instances.starts).toEqual([]);
+    expect(
+      subject.attention.entries.has(
+        "epic:14:acceptance:uat-terminal-unverified",
+      ),
+    ).toBe(true);
+  });
+
+  it("completes all dynamic work without starting a second UAT lifecycle", async () => {
+    const epic = task(17, "uat", { tags: ["type:epic"] });
+    const acceptance = task(18, "done", { parent: epic.id, tags: ["uat"] });
+    const followUp = task(19, "done", {
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      trustedTaskIds: [followUp.id],
+    });
+    subject.instances.instances.push(
+      {
+        boardStatus: "done",
+        instanceId: "task-18",
+        state: "done",
+        taskId: acceptance.id,
+      },
+      {
+        boardStatus: "done",
+        instanceId: "task-19",
+        state: "done",
+        taskId: followUp.id,
+      },
+    );
+
+    await subject.reconciler.reconcile();
+
+    expect(epic.status).toBe("done");
+    expect(subject.board.epicWrites).toEqual([
+      { status: "done", taskId: epic.id },
+    ]);
+    expect(subject.instances.starts).toEqual([]);
+  });
+
+  it("does not complete an epic while a dynamic-task intent is pending", async () => {
+    const epic = task(20, "uat", { tags: ["type:epic"] });
+    const acceptance = task(21, "done", { parent: epic.id, tags: ["uat"] });
+    const subject = fixture([epic, acceptance], {
+      coordinated: true,
+      pendingEpicIds: [epic.id],
+    });
+    subject.instances.instances.push({
+      boardStatus: "done",
+      instanceId: "task-21",
+      state: "done",
+      taskId: acceptance.id,
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(epic.status).toBe("uat");
+    expect(subject.board.epicWrites).toEqual([]);
+    expect(subject.attention.entries).toHaveLength(0);
+  });
+
+  it("lets a Console pause after promotion prevent the start reservation", async () => {
+    const operations = new EpicOperationCoordinator();
+    const epic = task(22, "uat", { tags: ["type:epic"] });
+    const acceptance = task(23, "done", { parent: epic.id, tags: ["uat"] });
+    const followUp = task(24, "backlog", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      epicOperations: operations,
+      trustedTaskIds: [followUp.id],
+    });
+    subject.instances.instances.push({
+      boardStatus: "done",
+      instanceId: "task-23",
+      state: "done",
+      taskId: acceptance.id,
+    });
+    const mirror = subject.board.mirrorTaskStatus.bind(subject.board);
+    let pause: Promise<void> | undefined;
+    vi.spyOn(subject.board, "mirrorTaskStatus").mockImplementation(
+      async (taskId, status) => {
+        await mirror(taskId, status);
+        if (taskId === followUp.id && status === "todo") {
+          pause = operations.run(epic.id, async () => {
+            epic.status = "todo";
+          });
+        }
+      },
+    );
+
+    await subject.reconciler.reconcile();
+    await pause;
+
+    expect(followUp.status).toBe("todo");
+    expect(epic.status).toBe("todo");
+    expect(subject.instances.starts).toEqual([]);
+  });
+
+  it("keeps a start in flight when its durable reservation wins the pause race", async () => {
+    const operations = new EpicOperationCoordinator();
+    const epic = task(25, "uat", { tags: ["type:epic"] });
+    const acceptance = task(26, "done", { parent: epic.id, tags: ["uat"] });
+    const followUp = task(27, "todo", {
+      lifecycle: "label-replacement",
+      parent: epic.id,
+      tags: ["type:follow-up"],
+    });
+    const subject = fixture([epic, acceptance, followUp], {
+      coordinated: true,
+      epicOperations: operations,
+      trustedTaskIds: [followUp.id],
+    });
+    subject.instances.instances.push({
+      boardStatus: "done",
+      instanceId: "task-26",
+      state: "done",
+      taskId: acceptance.id,
+    });
+    const start = subject.instances.start.bind(subject.instances);
+    let pause: Promise<void> | undefined;
+    vi.spyOn(subject.instances, "start").mockImplementation(async (input) => {
+      await start(input);
+      pause = operations.run(epic.id, async () => {
+        epic.status = "todo";
+      });
+    });
+
+    await subject.reconciler.reconcile();
+    await pause;
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      followUp.id,
+    ]);
+    expect(subject.instances.instances).toContainEqual(
+      expect.objectContaining({ taskId: followUp.id, state: "waiting" }),
+    );
+    expect(epic.status).toBe("todo");
+  });
+
   it("ignites an epic, picks up late children, and dispatches standalone todo tasks", async () => {
     const epic = task(10, "in-progress", { tags: ["type:epic"] });
     const first = task(11, "backlog", {

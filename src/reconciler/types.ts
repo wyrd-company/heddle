@@ -90,11 +90,22 @@ export interface ReconcilerPacing {
   ): Promise<string>;
 }
 
+export interface ReconcilerDynamicTaskAuthority {
+  hasPendingForEpic(epicId: number): boolean;
+  verifyTask(task: BoardTask): unknown | undefined;
+}
+
+export interface ReconcilerEpicOperations {
+  run<T>(epicId: number, operation: () => Promise<T>): Promise<T>;
+}
+
 export interface ReconcilerOptions {
   attention: ReconcilerAttentionQueue;
   board: ReconcilerBoard;
   instances: ReconcilerInstanceController;
   lifecycleResolver: ReconcilerLifecycleResolver;
+  dynamicTasks?: ReconcilerDynamicTaskAuthority;
+  epicOperations?: ReconcilerEpicOperations;
   now?: () => number;
   pacing?: ReconcilerPacing;
   staleThresholds?: Readonly<Record<string, number>>;

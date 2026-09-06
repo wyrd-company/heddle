@@ -1231,6 +1231,12 @@ describe("production composition", () => {
       ],
       { cwd: root },
     );
+    composition.persistence.writeReconcilerRuntime({
+      boardStatus: "done",
+      instanceId: `task-${uatId}`,
+      state: "done",
+      taskId: uatId,
+    });
     await composition.scheduler.trigger();
     board = await composition.board.readBoard();
     expect(board.find(({ id }) => id === epicId)?.status).toBe("done");

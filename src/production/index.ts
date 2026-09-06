@@ -36,6 +36,10 @@ export {
 } from "./session-title.js";
 export { ProductionScheduler } from "./scheduler.js";
 export {
+  EpicOperationCoordinator,
+  type EpicOperationBoundary,
+} from "./epic-operation-coordinator.js";
+export {
   DynamicTaskAuthority,
   type DynamicTaskAuthorityOptions,
 } from "./dynamic-task-authority.js";

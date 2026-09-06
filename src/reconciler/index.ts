@@ -4,6 +4,8 @@ export type {
   ReconcilerAttention,
   ReconcilerAttentionQueue,
   ReconcilerBoard,
+  ReconcilerDynamicTaskAuthority,
+  ReconcilerEpicOperations,
   ReconcilerPacing,
   ReconcilerInstance,
   ReconcilerInstanceController,

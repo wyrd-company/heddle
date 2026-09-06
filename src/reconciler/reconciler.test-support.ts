@@ -11,6 +11,7 @@ import {
   type ReconcilerInstance,
   type ReconcilerInstanceController,
   type ReconcilerLifecycleResolver,
+  type ReconcilerOptions,
   type ReconcilerPacing,
   type StartReconcilerInstanceInput,
 } from "./index.js";
@@ -166,21 +167,44 @@ const lifecycleResolver: ReconcilerLifecycleResolver = {
 export const fixture = (
   tasks: BoardTask[],
   options: {
+    coordinated?: boolean;
+    epicOperations?: ReconcilerOptions["epicOperations"];
     failingStartTaskId?: number;
     now?: () => number;
     pacing?: ReconcilerPacing;
+    pendingEpicIds?: readonly number[];
     staleThresholds?: Record<string, number>;
+    trustedTaskIds?: readonly number[];
   } = {},
 ) => {
   const board = new FixtureBoard(tasks);
   const instances = new FixtureInstances(options.failingStartTaskId);
   const attention = new FixtureAttentionQueue();
+  const trustedTaskIds = new Set(options.trustedTaskIds ?? []);
+  const pendingEpicIds = new Set(options.pendingEpicIds ?? []);
   const reconciler = new Reconciler({
     attention,
     board,
+    ...(options.coordinated
+      ? {
+          dynamicTasks: {
+            hasPendingForEpic: (epicId: number) => pendingEpicIds.has(epicId),
+            verifyTask: (item: BoardTask) =>
+              trustedTaskIds.has(item.id) ? { taskId: item.id } : undefined,
+          },
+          epicOperations: options.epicOperations ?? {
+            run: <T>(_epicId: number, operation: () => Promise<T>) =>
+              operation(),
+          },
+        }
+      : {}),
     instances,
     lifecycleResolver,
-    ...options,
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.pacing === undefined ? {} : { pacing: options.pacing }),
+    ...(options.staleThresholds === undefined
+      ? {}
+      : { staleThresholds: options.staleThresholds }),
   });
   return { attention, board, instances, reconciler };
 };

@@ -9,6 +9,7 @@ import { KanbanBoardAdapter } from "../board-adapter/index.js";
 import type {
   ConsoleAttentionActionPort,
   ConsoleBlueprintEditor,
+  ConsoleBoard,
   ConsoleLifecycleActionPort,
   ConsoleStateSource,
 } from "../console/index.js";
@@ -75,6 +76,7 @@ import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
 import { pageSessionAttentions } from "./session-attention-paging.js";
 import { DynamicTaskAuthority } from "./dynamic-task-authority.js";
+import { EpicOperationCoordinator } from "./epic-operation-coordinator.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -106,6 +108,7 @@ export type ProductionComposition = {
   blueprintEditor: ConsoleBlueprintEditor;
   close(): Promise<void>;
   consoleActions: ConsoleAttentionActionPort;
+  consoleBoard: ConsoleBoard;
   consoleLifecycleActions: ConsoleLifecycleActionPort;
   consoleState: ConsoleStateSource;
   dynamicTasks: DynamicTaskAuthority;
@@ -141,6 +144,7 @@ export const createProductionComposition = (
     const resolveSystemPrompt =
       options.resolveSystemPrompt ?? resolveBuiltInSystemPrompt;
     const attention = new DurableAttentionQueue(persistence);
+    const epicOperations = new EpicOperationCoordinator();
     const dynamicTasks = new DynamicTaskAuthority(
       persistence,
       board,
@@ -151,6 +155,7 @@ export const createProductionComposition = (
             ? undefined
             : (task) => options.afterDynamicTaskBoardEffect!(task.id),
         afterIntentRecorded: options.afterDynamicTaskIntentRecorded,
+        epicOperations,
       },
     );
     const blueprintRepository = new OrganizationBlueprintRepository(
@@ -331,6 +336,8 @@ export const createProductionComposition = (
     const reconciler = new Reconciler({
       attention,
       board,
+      dynamicTasks,
+      epicOperations,
       instances,
       lifecycleResolver: new ProductLifecycleResolver(
         routing,
@@ -452,6 +459,14 @@ export const createProductionComposition = (
         repository: blueprintRepository,
       }),
       consoleActions,
+      consoleBoard: {
+        readBoard: () => board.readBoard(),
+        readBoardStatuses: () => board.readBoardStatuses(),
+        setEpicInProgress: (taskId, inProgress) =>
+          epicOperations.run(taskId, () =>
+            board.setEpicInProgress(taskId, inProgress),
+          ),
+      },
       consoleLifecycleActions,
       consoleState: new ProductionConsoleState(
         persistence,

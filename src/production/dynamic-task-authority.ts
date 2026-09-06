@@ -21,6 +21,7 @@ import {
   dynamicTaskRecordTag,
 } from "./dynamic-task-authority-identity.js";
 import type { ProductionErrorAttention } from "./error-visibility.js";
+import type { EpicOperationBoundary } from "./epic-operation-coordinator.js";
 
 type DynamicTaskSource = {
   instanceId: string;
@@ -85,6 +86,7 @@ export type DynamicTaskAuthorityOptions = {
   afterIntentRecorded?: (
     intent: DynamicTaskIntentRecord,
   ) => Promise<void> | void;
+  epicOperations?: EpicOperationBoundary;
 };
 
 export class DynamicTaskAuthority {
@@ -96,6 +98,18 @@ export class DynamicTaskAuthority {
   ) {}
 
   public async createRecord(
+    record: CreateBoardRecord,
+    source: DynamicTaskSource,
+  ): Promise<BoardRecordWriteResult> {
+    if (this.options.epicOperations !== undefined) {
+      return this.options.epicOperations.run(record.parent, () =>
+        this.createRecordWithinBoundary(record, source),
+      );
+    }
+    return this.createRecordWithinBoundary(record, source);
+  }
+
+  private async createRecordWithinBoundary(
     record: CreateBoardRecord,
     source: DynamicTaskSource,
   ): Promise<BoardRecordWriteResult> {
@@ -148,50 +162,59 @@ export class DynamicTaskAuthority {
       }
       return;
     }
-    if (pending.length === 0) return;
+    for (const intent of pending) {
+      const recover = () => this.recoverIntent(intent.operationDigest);
+      if (this.options.epicOperations === undefined) await recover();
+      else await this.options.epicOperations.run(intent.parentEpicId, recover);
+    }
+  }
+
+  private async recoverIntent(operationDigest: string): Promise<void> {
+    const intent = this.persistence
+      .listDynamicTaskIntents("pending")
+      .find((candidate) => candidate.operationDigest === operationDigest);
+    if (intent === undefined) return;
 
     let tasks: BoardTask[];
     try {
       tasks = await this.board.readBoard();
     } catch {
-      for (const intent of pending) await this.raiseRecovery(intent, "failed");
+      await this.raiseRecovery(intent, "failed");
       return;
     }
 
-    for (const intent of pending) {
-      let candidates: BoardTask[];
-      let exactMatches: BoardTask[];
-      try {
-        candidates = tasks.filter(
-          ({ tags }) =>
-            tags.includes(dynamicTaskOperationTag(intent)) ||
-            tags.includes(dynamicTaskRecordTag(intent)),
-        );
-        exactMatches = candidates.filter((task) =>
-          dynamicTaskMatchesIntent(task, intent),
-        );
-      } catch {
-        await this.raiseRecovery(intent, "malformed");
-        continue;
-      }
-      if (candidates.length === 0) continue;
-      if (exactMatches.length === 0) {
-        await this.raiseRecovery(intent, "conflicting");
-        continue;
-      }
-      if (exactMatches.length !== 1) {
-        await this.raiseRecovery(intent, "ambiguous");
-        continue;
-      }
-      try {
-        this.persistence.completeDynamicTaskIntent(
-          intent.operationDigest,
-          exactMatches[0]!.id,
-        );
-        await this.resolveRecoveryAttention(intent);
-      } catch {
-        await this.raiseRecovery(intent, "failed");
-      }
+    let candidates: BoardTask[];
+    let exactMatches: BoardTask[];
+    try {
+      candidates = tasks.filter(
+        ({ tags }) =>
+          tags.includes(dynamicTaskOperationTag(intent)) ||
+          tags.includes(dynamicTaskRecordTag(intent)),
+      );
+      exactMatches = candidates.filter((task) =>
+        dynamicTaskMatchesIntent(task, intent),
+      );
+    } catch {
+      await this.raiseRecovery(intent, "malformed");
+      return;
+    }
+    if (candidates.length === 0) return;
+    if (exactMatches.length === 0) {
+      await this.raiseRecovery(intent, "conflicting");
+      return;
+    }
+    if (exactMatches.length !== 1) {
+      await this.raiseRecovery(intent, "ambiguous");
+      return;
+    }
+    try {
+      this.persistence.completeDynamicTaskIntent(
+        intent.operationDigest,
+        exactMatches[0]!.id,
+      );
+      await this.resolveRecoveryAttention(intent);
+    } catch {
+      await this.raiseRecovery(intent, "failed");
     }
   }
 
@@ -208,6 +231,12 @@ export class DynamicTaskAuthority {
       );
     }
     return matches[0];
+  }
+
+  public hasPendingForEpic(epicId: number): boolean {
+    return this.persistence
+      .listDynamicTaskIntents("pending")
+      .some((intent) => intent.parentEpicId === epicId);
   }
 
   private async validateSource(

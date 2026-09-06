@@ -300,7 +300,7 @@ export const startHeddleServer = async (
 
     production ??= composition.productionFactory?.();
     const board =
-      production?.board ??
+      production?.consoleBoard ??
       composition.board ??
       new KanbanBoardAdapter(options.boardDirectory!);
     persistence =
