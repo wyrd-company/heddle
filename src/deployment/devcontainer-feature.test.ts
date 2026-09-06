@@ -227,6 +227,9 @@ describe("Heddle devcontainer feature", () => {
     expect(featureQualification).toContain(
       'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',
     );
+    expect(
+      featureQualification.match(/DOCKER_CONFIG="\$\{docker_config\}"/g),
+    ).toHaveLength(2);
     expect(featureQualification).toContain(
       "persistence.writeReconcilerRuntime({",
     );

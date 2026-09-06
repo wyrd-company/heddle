@@ -159,6 +159,7 @@ up() {
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
+        DOCKER_CONFIG="${docker_config}" \
         devcontainer up \
         --workspace-folder "${repository}" \
         --config "${configuration}" \
@@ -183,9 +184,10 @@ up() {
 
 inside() {
     HEDDLE_QUALIFICATION_STATE="${state_directory}" \
-        HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+    HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
+        DOCKER_CONFIG="${docker_config}" \
         devcontainer exec \
         --workspace-folder "${repository}" \
         --config "${configuration}" \
