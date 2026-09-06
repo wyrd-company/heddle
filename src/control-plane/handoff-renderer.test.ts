@@ -376,6 +376,17 @@ describe("GitHandoffTemplateStore", () => {
     const secondCommit = (
       await execute("git", ["rev-parse", "HEAD"], { cwd: root })
     ).stdout.trim();
+    const stillPinned = await new GitHandoffTemplateStore(root).read({
+      commitSha: firstCommit,
+      path: "handoff-templates/standard.md",
+    });
+    expect(renderStageHandoff(input({ template: stillPinned }))).toContain(
+      "Pinned Arrange a sample",
+    );
+    expect(renderStageHandoff(input({ template: stillPinned }))).not.toContain(
+      "Live changed",
+    );
+
     const changed = await new GitHandoffTemplateStore(root).read({
       commitSha: secondCommit,
       path: "handoff-templates/standard.md",
