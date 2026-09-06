@@ -84,22 +84,29 @@ const createRecord = async (
 ) => {
   const task = await authority.readTask(taskIdFor(context));
   const epic = await epicFor(authority, task);
-  const write = await authority.createRecord({
-    body: input.body,
-    ...(input.dependsOn === undefined ? {} : { dependsOn: input.dependsOn }),
-    kind,
-    lifecycle: input.lifecycle,
-    operationKey: JSON.stringify([
-      context.binding.instance.instanceId,
-      context.binding.sessionKey,
+  const write = await authority.createRecord(
+    {
+      body: input.body,
+      ...(input.dependsOn === undefined ? {} : { dependsOn: input.dependsOn }),
       kind,
-      input.operationId,
-    ]),
-    parent: epic.id,
-    ...(input.priority === undefined ? {} : { priority: input.priority }),
-    status: "backlog",
-    title: input.title,
-  });
+      lifecycle: input.lifecycle,
+      operationKey: JSON.stringify([
+        context.binding.instance.instanceId,
+        context.binding.sessionKey,
+        kind,
+        input.operationId,
+      ]),
+      parent: epic.id,
+      ...(input.priority === undefined ? {} : { priority: input.priority }),
+      status: "backlog",
+      title: input.title,
+    },
+    {
+      instanceId: context.binding.instance.instanceId,
+      sessionKey: context.binding.sessionKey,
+      taskId: task.id,
+    },
+  );
   return result({
     id: write.task.id,
     kind,

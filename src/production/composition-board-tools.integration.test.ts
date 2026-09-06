@@ -166,6 +166,183 @@ describe("production MCP board tools", () => {
     await composition.close();
   });
 
+  it("keeps a pre-board crash pending and creates exactly once when the MCP operation replays", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    let failAfterIntent = true;
+    const options = {
+      afterDynamicTaskIntentRecorded: () => {
+        if (!failAfterIntent) return;
+        failAfterIntent = false;
+        throw new Error("Injected crash after dynamic task intent");
+      },
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    };
+    let composition = createProductionComposition(options);
+    await composition.start();
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(
+      Object.values(
+        composition.persistence.getInstance(`task-${fixture.taskId}`)!.state
+          .correlationTokens,
+      )[0]!,
+    );
+    const input = {
+      body: "Inspect the independent sample after a restart.",
+      lifecycle: "sample",
+      operationId: "pre-board-crash",
+      title: "Inspect another sample",
+    };
+
+    await expect(
+      callTool(composition, binding.token, "create_follow_up", input),
+    ).rejects.toThrow("MCP tool call failed");
+    expect(
+      composition.persistence.listDynamicTaskIntents("pending"),
+    ).toHaveLength(1);
+    expect(
+      (await composition.board.readBoard()).filter(({ tags }) =>
+        tags.some((tag) => tag.startsWith("heddle-operation:")),
+      ),
+    ).toHaveLength(0);
+    await composition.close();
+
+    composition = createProductionComposition({
+      ...options,
+      afterDynamicTaskIntentRecorded: undefined,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    expect(
+      composition.persistence.listDynamicTaskIntents("pending"),
+    ).toHaveLength(1);
+    expect(
+      composition.attention
+        .list()
+        .filter(({ kind }) => kind === "production-error"),
+    ).toHaveLength(0);
+    await composition.close();
+    composition = createProductionComposition({
+      ...options,
+      afterDynamicTaskIntentRecorded: undefined,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    expect(
+      composition.persistence.listDynamicTaskIntents("pending"),
+    ).toHaveLength(1);
+    expect(
+      (await composition.board.readBoard()).filter(({ tags }) =>
+        tags.some((tag) => tag.startsWith("heddle-operation:")),
+      ),
+    ).toHaveLength(0);
+    const created = await callTool(
+      composition,
+      binding.token,
+      "create_follow_up",
+      input,
+    );
+    expect(created.replayed).toBe(true);
+    expect(
+      composition.persistence.listDynamicTaskIntents("completed"),
+    ).toMatchObject([{ taskId: created.id }]);
+    expect(
+      (await composition.board.readBoard()).filter(({ tags }) =>
+        tags.some((tag) => tag.startsWith("heddle-operation:")),
+      ),
+    ).toHaveLength(1);
+    await composition.close();
+  });
+
+  it("binds one exact board task after a post-board crash before reconciliation starts", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    let failAfterBoard = true;
+    const options = {
+      afterDynamicTaskBoardEffect: () => {
+        if (!failAfterBoard) return;
+        failAfterBoard = false;
+        throw new Error("Injected crash after dynamic board effect");
+      },
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    };
+    let composition = createProductionComposition(options);
+    await composition.start();
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(
+      Object.values(
+        composition.persistence.getInstance(`task-${fixture.taskId}`)!.state
+          .correlationTokens,
+      )[0]!,
+    );
+    const input = {
+      body: "Recheck the independent sample after recovery.",
+      lifecycle: "sample",
+      operationId: "post-board-crash",
+      title: "Recheck another sample",
+    };
+
+    await expect(
+      callTool(composition, binding.token, "create_finding", input),
+    ).rejects.toThrow("MCP tool call failed");
+    const pending = composition.persistence.listDynamicTaskIntents("pending");
+    expect(pending).toHaveLength(1);
+    const boardTask = (await composition.board.readBoard()).find(({ tags }) =>
+      tags.includes(`heddle-operation:${pending[0]!.operationDigest}`),
+    );
+    expect(boardTask).toBeDefined();
+    await composition.close();
+
+    composition = createProductionComposition({
+      ...options,
+      afterDynamicTaskBoardEffect: undefined,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    expect(
+      composition.persistence.listDynamicTaskIntents("pending"),
+    ).toHaveLength(0);
+    expect(composition.dynamicTasks.verifyTask(boardTask!)).toMatchObject({
+      state: "completed",
+      taskId: boardTask!.id,
+    });
+    await composition.close();
+    composition = createProductionComposition({
+      ...options,
+      afterDynamicTaskBoardEffect: undefined,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    expect(
+      composition.persistence.listDynamicTaskIntents("completed"),
+    ).toHaveLength(1);
+    await expect(
+      callTool(composition, binding.token, "create_finding", input),
+    ).resolves.toMatchObject({ id: boardTask!.id, replayed: true });
+    expect(
+      (await composition.board.readBoard()).filter(({ tags }) =>
+        tags.some((tag) => tag.startsWith("heddle-operation:")),
+      ),
+    ).toHaveLength(1);
+    await composition.close();
+  });
+
   it("fails startup before effects when a wait node names an unregistered tool", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

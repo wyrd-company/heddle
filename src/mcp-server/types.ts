@@ -108,7 +108,14 @@ export interface WorkflowMcpToolContributor {
 }
 
 export interface WorkflowMcpBoardAuthority {
-  createRecord(record: CreateBoardRecord): Promise<BoardRecordWriteResult>;
+  createRecord(
+    record: CreateBoardRecord,
+    source: {
+      instanceId: string;
+      sessionKey: string;
+      taskId: number;
+    },
+  ): Promise<BoardRecordWriteResult>;
   readTask(taskId: number): Promise<BoardTask>;
 }
 

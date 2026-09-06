@@ -74,6 +74,7 @@ import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.
 import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
 import { pageSessionAttentions } from "./session-attention-paging.js";
+import { DynamicTaskAuthority } from "./dynamic-task-authority.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -85,6 +86,8 @@ export type ProductionCompositionOptions = {
   afterPushoverTransportSuccess?: (
     message: Parameters<PushoverTransport["send"]>[0],
   ) => Promise<void> | void;
+  afterDynamicTaskBoardEffect?: (taskId: number) => Promise<void> | void;
+  afterDynamicTaskIntentRecorded?: () => Promise<void> | void;
   blueprintsRepositoryRoot: string;
   configuration: ProductionConfiguration;
   onSchedulerError?: (error: unknown) => void;
@@ -105,6 +108,7 @@ export type ProductionComposition = {
   consoleActions: ConsoleAttentionActionPort;
   consoleLifecycleActions: ConsoleLifecycleActionPort;
   consoleState: ConsoleStateSource;
+  dynamicTasks: DynamicTaskAuthority;
   escalation: EscalationCoordinator;
   lifecycle: ProductionLifecycleRouter;
   mcp: WorkflowMcpHttpHandler;
@@ -137,6 +141,18 @@ export const createProductionComposition = (
     const resolveSystemPrompt =
       options.resolveSystemPrompt ?? resolveBuiltInSystemPrompt;
     const attention = new DurableAttentionQueue(persistence);
+    const dynamicTasks = new DynamicTaskAuthority(
+      persistence,
+      board,
+      attention,
+      {
+        afterBoardEffect:
+          options.afterDynamicTaskBoardEffect === undefined
+            ? undefined
+            : (task) => options.afterDynamicTaskBoardEffect!(task.id),
+        afterIntentRecorded: options.afterDynamicTaskIntentRecorded,
+      },
+    );
     const blueprintRepository = new OrganizationBlueprintRepository(
       resolve(options.blueprintsRepositoryRoot),
       persistence,
@@ -326,7 +342,7 @@ export const createProductionComposition = (
       staleThresholds: configuration.stageThresholds,
     });
     const mcp = createWorkflowMcpHttpHandler({
-      board,
+      board: dynamicTasks,
       escalationCoordinator: escalation,
       lifecycle,
       persistence,
@@ -443,13 +459,17 @@ export const createProductionComposition = (
         blueprintRepository.repositoryRoot,
         blueprintRepository.sourceRef,
       ),
+      dynamicTasks,
       escalation,
       lifecycle,
       mcp,
       persistence,
       scheduler,
       subagents: coordinator,
-      start: () => scheduler.start(),
+      start: async () => {
+        await dynamicTasks.recoverPending();
+        await scheduler.start();
+      },
       close: async () => {
         if (closed) return;
         try {

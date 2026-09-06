@@ -70,7 +70,10 @@ const authority = (
   },
 ) => {
   const createRecord = vi.fn<
-    (record: CreateBoardRecord) => Promise<BoardRecordWriteResult>
+    (
+      record: CreateBoardRecord,
+      source: { instanceId: string; sessionKey: string; taskId: number },
+    ) => Promise<BoardRecordWriteResult>
   >(async () => write);
   return {
     authority: {
@@ -135,22 +138,29 @@ describe("workflow MCP board tools", () => {
         status: "backlog",
       },
     });
-    expect(fixture.createRecord).toHaveBeenCalledWith({
-      body: input.body,
-      dependsOn: [13],
-      kind: "follow-up",
-      lifecycle: input.lifecycle,
-      operationKey: JSON.stringify([
-        "task-12",
-        "task-12:review:1",
-        "follow-up",
-        "record-one",
-      ]),
-      parent: 10,
-      priority: "high",
-      status: "backlog",
-      title: input.title,
-    });
+    expect(fixture.createRecord).toHaveBeenCalledWith(
+      {
+        body: input.body,
+        dependsOn: [13],
+        kind: "follow-up",
+        lifecycle: input.lifecycle,
+        operationKey: JSON.stringify([
+          "task-12",
+          "task-12:review:1",
+          "follow-up",
+          "record-one",
+        ]),
+        parent: 10,
+        priority: "high",
+        status: "backlog",
+        title: input.title,
+      },
+      {
+        instanceId: "task-12",
+        sessionKey: "task-12:review:1",
+        taskId: 12,
+      },
+    );
   });
 
   it("rejects task context that does not match the bound instance", async () => {

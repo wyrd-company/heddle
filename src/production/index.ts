@@ -35,3 +35,7 @@ export {
   MAXIMUM_SESSION_TITLE_LENGTH,
 } from "./session-title.js";
 export { ProductionScheduler } from "./scheduler.js";
+export {
+  DynamicTaskAuthority,
+  type DynamicTaskAuthorityOptions,
+} from "./dynamic-task-authority.js";
