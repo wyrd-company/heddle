@@ -361,8 +361,11 @@ describe("DynamicTaskAuthority", () => {
   it.each([
     ["operation", { operationDigest: "f".repeat(64) }],
     ["record", { recordDigest: "f".repeat(64) }],
+    ["source task", { sourceTaskId: 99 }],
+    ["source instance", { sourceInstanceId: "task-99" }],
+    ["source session", { sourceSessionKey: "task-12:other:1" }],
   ])(
-    "rejects a durable %s digest that does not reproduce its request",
+    "rejects a durable %s identity that does not reproduce its request",
     async (_kind, changedIdentity) => {
       const persistence = await makePersistence();
       const identity = boardRecordIdentity(record);
