@@ -364,8 +364,9 @@ proposed-design:
     review handoff therefore names the exact review snapshot created for it.
     Every session's
     bootstrap binds the session to its instance with a correlation token minted
-    by the reconciler, so a caller can advance only its own work, and `advance` is idempotent per instance and stage,
-    so a retried call cannot double-transition.
+    by the reconciler, so a caller can advance only its own work, and `advance`
+    is idempotent per instance and stage, so a retried call cannot
+    double-transition.
 
     Heddle supports the measured Claude Code, Codex, Cursor, Grok, and OpenCode
     drivers through pinned Wyrd Company T3 fork 0.0.37-wyrd.2. Before thread
