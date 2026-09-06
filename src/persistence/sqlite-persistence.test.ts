@@ -153,6 +153,37 @@ describe("SqlitePersistence", () => {
     persistence.close();
   });
 
+  it("keeps the first verification snapshot for one rejected occurrence", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+
+    persistence.recordNotificationFailure(
+      "sample-notification",
+      "request-rejected",
+      {
+        message: "A sample needs attention",
+        recipientLabel: "First recipient",
+      },
+    );
+    const repeated = persistence.recordNotificationFailure(
+      "sample-notification",
+      "recipient-rejected",
+      {
+        message: "A different sample",
+        recipientLabel: "Second recipient",
+      },
+    );
+
+    expect(repeated).toMatchObject({
+      category: "recipient-rejected",
+      message: "A sample needs attention",
+      occurrence: 1,
+      recipientLabel: "First recipient",
+      state: "rejected",
+    });
+    persistence.close();
+  });
+
   it("creates, reads, updates, lists, and deletes instances", async () => {
     const stateDirectory = await makeStateDirectory();
     const persistence = new SqlitePersistence({ stateDirectory });
