@@ -739,6 +739,127 @@ describe("production composition", () => {
     await restarted.close();
   });
 
+  it("recovers a permanently rejected production-error page after repair restart and operator retry", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 60_000;
+    let accepted = false;
+    const fetch = vi.fn(async () =>
+      accepted
+        ? new globalThis.Response(JSON.stringify({ status: 1 }), {
+            status: 200,
+          })
+        : new globalThis.Response(
+            JSON.stringify({ status: 0, token: "invalid" }),
+            { status: 400 },
+          ),
+    );
+    const attention = createProductionErrorAttention({
+      attentionId: `production:task-reconciliation-failed:task:${fixture.taskId}`,
+      code: "task-reconciliation-failed",
+      error: new Error("Synthetic task failure"),
+      message: "Task reconciliation failed",
+      taskId: fixture.taskId,
+    });
+    const options = {
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3: new SyntheticT3(),
+    };
+    const targetAttempts = () =>
+      fetch.mock.calls.filter(
+        (call) => fetchedAttentionIds([call])[0] === attention.attentionId,
+      );
+    const currentRecovery = (
+      composition: ReturnType<typeof createProductionComposition>,
+    ) =>
+      composition.attention
+        .list()
+        .find(
+          ({ actions, notificationVerification }) =>
+            actions.some(({ actionId }) => actionId === "notification.retry") &&
+            notificationVerification?.message === attention.message,
+        );
+    const activeNotificationFailures = (
+      composition: ReturnType<typeof createProductionComposition>,
+    ) =>
+      composition.persistence.listAttention().filter(({ payload }) => {
+        if (
+          typeof payload !== "object" ||
+          payload === null ||
+          Array.isArray(payload)
+        ) {
+          return false;
+        }
+        return String(payload["code"]).startsWith("notification-delivery-");
+      });
+
+    const first = createProductionComposition(options);
+    await first.start();
+    await first.attention.raise(attention);
+
+    expect(targetAttempts()).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(currentRecovery(first)).toMatchObject({
+      actions: [
+        expect.objectContaining({ actionId: "notification.retry" }),
+        expect.objectContaining({ actionId: "attention.resolve" }),
+      ],
+      notificationVerification: {
+        message: attention.message,
+        recipientLabel: "Primary operator",
+      },
+    });
+    await first.scheduler.trigger();
+    await first.scheduler.trigger();
+    expect(targetAttempts()).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(activeNotificationFailures(first)).toHaveLength(1);
+    await first.close();
+
+    accepted = true;
+    fixture.configuration.pushover.applicationToken =
+      "replacement-application-token";
+    const restarted = createProductionComposition(options);
+    await restarted.start();
+
+    expect(targetAttempts()).toHaveLength(1);
+    const recovery = currentRecovery(restarted);
+    if (recovery === undefined) {
+      throw new Error("Missing production-error page recovery attention");
+    }
+    const retry = recovery.actions.find(
+      ({ actionId }) => actionId === "notification.retry",
+    )!;
+    await restarted.consoleActions.execute({
+      action: retry,
+      attention: recovery,
+    });
+    await restarted.scheduler.trigger();
+
+    expect(targetAttempts()).toHaveLength(2);
+    expect(
+      new globalThis.URLSearchParams(
+        String(targetAttempts()[1]?.[1]?.body),
+      ).get("token"),
+    ).toBe("replacement-application-token");
+    expect(
+      restarted.persistence.effectCompleted("pushover", attention.attentionId),
+    ).toBe(true);
+    expect(currentRecovery(restarted)).toBeUndefined();
+    await restarted.close();
+
+    const confirmed = createProductionComposition(options);
+    await confirmed.start();
+    expect(targetAttempts()).toHaveLength(2);
+    expect(currentRecovery(confirmed)).toBeUndefined();
+    await confirmed.close();
+  });
+
   it("activates standard delivery from the organization template authority without product templates", async () => {
     const fixture = await prepare();
     const artifactPaths = [

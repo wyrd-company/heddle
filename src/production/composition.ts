@@ -160,10 +160,28 @@ export const createProductionComposition = (
       options.afterPushoverTransportSuccess,
       options.notificationNow,
     );
-    const attention = new DurableAttentionQueue(
+    let attention: DurableAttentionQueue;
+    const productionErrorPages = new ProductionErrorPager(
       persistence,
-      new ProductionErrorPager(persistence, pushover, options.notificationNow),
+      pushover,
+      options.notificationNow,
+      {
+        deliveryFailed: async (source, error) => {
+          if (source.taskId === null) return;
+          await attention.recordCurrentNotificationFailure(
+            notificationDeliveryErrorAttention({
+              error,
+              ...(source.instanceId === null
+                ? {}
+                : { instanceId: source.instanceId }),
+              stableId: source.attentionId,
+              taskId: source.taskId,
+            }),
+          );
+        },
+      },
     );
+    attention = new DurableAttentionQueue(persistence, productionErrorPages);
     const epicOperations = new EpicOperationCoordinator();
     const dynamicTasks = new DynamicTaskAuthority(
       persistence,

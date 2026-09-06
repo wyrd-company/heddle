@@ -64,13 +64,7 @@ export class DurableAttentionQueue {
   }
 
   async raise(attention: DurableAttention): Promise<void> {
-    if (
-      attention.attentionId.length > MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH
-    ) {
-      throw new Error(
-        `Attention '${attention.attentionId}' exceeds the console attention identity bound of ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
-      );
-    }
+    this.#assertAttentionIdentity(attention.attentionId);
     const productionError = isProductionErrorAttention(attention);
     const floorProductionError =
       productionError && !productionErrorIncidentEligible(attention.code);
@@ -83,10 +77,7 @@ export class DurableAttentionQueue {
       }
     }
     try {
-      this.persistence.raiseAttention(
-        attention.attentionId,
-        JSON.parse(JSON.stringify(attention)) as JsonValue,
-      );
+      this.#record(attention);
     } catch (recordError) {
       if (pageError !== undefined) {
         throw new AggregateError(
@@ -130,8 +121,37 @@ export class DurableAttentionQueue {
     );
   }
 
+  async recordCurrentNotificationFailure(
+    attention: NotificationDeliveryAttention,
+  ): Promise<void> {
+    if (!(await this.has(attention.attentionId))) {
+      this.#assertAttentionIdentity(attention.attentionId);
+      this.#record(attention);
+    }
+    this.reopen(attention.attentionId);
+    this.#resolveNotificationFailures(
+      attention.notificationStableId,
+      attention.attentionId,
+    );
+  }
+
   resolveNotificationFailures(notificationStableId: string): void {
     this.#resolveNotificationFailures(notificationStableId);
+  }
+
+  #assertAttentionIdentity(attentionId: string): void {
+    if (attentionId.length > MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH) {
+      throw new Error(
+        `Attention '${attentionId}' exceeds the console attention identity bound of ${MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH} characters`,
+      );
+    }
+  }
+
+  #record(attention: DurableAttention): void {
+    this.persistence.raiseAttention(
+      attention.attentionId,
+      JSON.parse(JSON.stringify(attention)) as JsonValue,
+    );
   }
 
   #resolveNotificationFailures(

@@ -291,6 +291,32 @@ describe("production error paging", () => {
     ]);
   });
 
+  it("preserves the degraded cooldown across the five-minute window boundary", async () => {
+    let now = 0;
+    const { deliveries, pager, persistence } = await prepare(() => now);
+    const queue = new DurableAttentionQueue(persistence, pager);
+    persistence.close();
+    const attentions = [0, 1, 2, 3].map((index) =>
+      productionErrorAttention({
+        code: "scheduler-pass-failed",
+        error: new Error(`Synthetic rollover failure ${index}`),
+        summary: "Scheduler pass failed",
+        varyByError: true,
+      }),
+    );
+
+    for (const [index, time] of [0, 60_000, 299_999, 300_000].entries()) {
+      now = time;
+      await expect(queue.raise(attentions[index]!)).rejects.toBeDefined();
+    }
+
+    expect(deliveries.map(({ stableId }) => stableId)).toEqual([
+      attentions[0]!.attentionId,
+      attentions[1]!.attentionId,
+      attentions[2]!.attentionId,
+    ]);
+  });
+
   it("documents the degraded floor rate limit in both production contracts", async () => {
     const documents = await Promise.all(
       [

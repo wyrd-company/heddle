@@ -6,6 +6,7 @@
 import { type SqlitePersistence } from "../persistence/index.js";
 import {
   DurablePushoverNotifier,
+  NotificationDeliveryError,
   type OperatorPage,
   type ProductionErrorPagePort,
 } from "./durable-adapters.js";
@@ -21,21 +22,27 @@ export const productionErrorPagePolicy = {
   windowMilliseconds: 300_000,
 } as const;
 
-type PageWindow = {
-  attempts: number;
-  lastAttemptAt: number;
-  startedAt: number;
-};
-
 const productionErrorPageEffect = "production-error-pushover";
+const notificationDeliveryCodes = new Set([
+  "notification-delivery-recovery-required",
+  "notification-delivery-rejected",
+  "notification-delivery-retryable",
+]);
+export interface ProductionErrorPageRecoveryPort {
+  deliveryFailed(
+    attention: ProductionErrorAttention,
+    error: NotificationDeliveryError,
+  ): Promise<void>;
+}
 
 export class ProductionErrorPager implements ProductionErrorPagePort {
-  readonly #windows = new Map<string, PageWindow>();
+  readonly #attempts = new Map<string, number[]>();
 
   public constructor(
     private readonly persistence: SqlitePersistence,
     private readonly notifier: DurablePushoverNotifier,
     private readonly now: () => number = Date.now,
+    private readonly recovery?: ProductionErrorPageRecoveryPort,
   ) {}
 
   async replayPending(): Promise<void> {
@@ -71,7 +78,7 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
     }
     const intent = this.#intent(attention, incidentEligible);
     if (pendingIntent) {
-      if (incidentEligible) await this.notifier.send(intent);
+      if (incidentEligible) await this.#sendDurably(attention, intent);
       this.#complete(attention.attentionId);
       return;
     }
@@ -104,7 +111,7 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
         attention.attentionId,
         intent,
       );
-      await this.notifier.send(intent);
+      await this.#sendDurably(attention, intent);
     } else {
       await this.notifier.sendBeforeDurableIntent(intent);
       this.persistence.recordEffectIntent(
@@ -114,6 +121,24 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
       );
     }
     this.#complete(attention.attentionId);
+  }
+
+  async #sendDurably(
+    attention: ProductionErrorAttention,
+    intent: OperatorPage,
+  ): Promise<void> {
+    try {
+      await this.notifier.send(intent);
+    } catch (error) {
+      if (
+        error instanceof NotificationDeliveryError &&
+        error.disposition !== "retryable" &&
+        !notificationDeliveryCodes.has(attention.code)
+      ) {
+        await this.recovery?.deliveryFailed(attention, error);
+      }
+      throw error;
+    }
   }
 
   #complete(attentionId: string): void {
@@ -168,26 +193,22 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
   }
 
   #admitInMemory(code: string, attemptedAt: number): boolean {
-    const prior = this.#windows.get(code);
-    const current =
-      prior === undefined ||
-      attemptedAt - prior.startedAt >=
-        productionErrorPagePolicy.windowMilliseconds
-        ? { attempts: 0, lastAttemptAt: -Infinity, startedAt: attemptedAt }
-        : prior;
+    const windowStart =
+      attemptedAt - productionErrorPagePolicy.windowMilliseconds;
+    const current = (this.#attempts.get(code) ?? []).filter(
+      (attempt) => attempt > windowStart,
+    );
+    const lastAttemptAt = current.at(-1);
     if (
-      attemptedAt - current.lastAttemptAt <
-        productionErrorPagePolicy.cooldownMilliseconds ||
-      current.attempts >= productionErrorPagePolicy.maximumPagesPerWindow
+      (lastAttemptAt !== undefined &&
+        attemptedAt - lastAttemptAt <
+          productionErrorPagePolicy.cooldownMilliseconds) ||
+      current.length >= productionErrorPagePolicy.maximumPagesPerWindow
     ) {
-      this.#windows.set(code, current);
+      this.#attempts.set(code, current);
       return false;
     }
-    this.#windows.set(code, {
-      attempts: current.attempts + 1,
-      lastAttemptAt: attemptedAt,
-      startedAt: current.startedAt,
-    });
+    this.#attempts.set(code, [...current, attemptedAt]);
     return true;
   }
 }

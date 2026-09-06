@@ -148,7 +148,7 @@ const notificationIdentity = (
 
 export const notificationDeliveryErrorAttention = (input: {
   error: NotificationDeliveryError;
-  instanceId: string;
+  instanceId?: string;
   stableId: string;
   taskId: number;
 }): NotificationDeliveryAttention => {
@@ -176,7 +176,9 @@ export const notificationDeliveryErrorAttention = (input: {
       attentionId: `production:${code}:task:${input.taskId}:${identity}${occurrence === undefined ? "" : `:${occurrence}`}`,
       code,
       error: input.error,
-      instanceId: input.instanceId,
+      ...(input.instanceId === undefined
+        ? {}
+        : { instanceId: input.instanceId }),
       message: `Notification delivery ${retryable ? "will be retried" : input.error.disposition === "operator-action" ? "requires recovery" : "was rejected"} (${input.error.category}). ${recovery}`,
       taskId: input.taskId,
     }),
