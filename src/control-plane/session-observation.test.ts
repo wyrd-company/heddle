@@ -493,7 +493,7 @@ describe("SessionObserver liveness", () => {
     const malformed: SessionObservationAttention = {
       attentionId: "not-the-observed-liveness-identity",
       instanceId: target.instanceId,
-      kind: "ended",
+      kind: "stalled",
       message: "Malformed observation",
       sessionKey: target.sessionKey,
       threadId: target.threadId,
@@ -511,7 +511,7 @@ describe("SessionObserver liveness", () => {
     };
 
     await expect(test.observer.observe(target)).rejects.toThrow(
-      "has no matching liveness sample",
+      "disagrees with its liveness sample",
     );
     expect(test.attention.resolved).toEqual(new Set());
     expect(
