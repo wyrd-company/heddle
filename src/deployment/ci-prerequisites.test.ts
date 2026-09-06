@@ -3,7 +3,8 @@
 //   verifies: heddle
 // ---
 
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
@@ -42,7 +43,7 @@ describe("hosted CI command prerequisites", () => {
     );
   });
 
-  it("binds both executables to their canonical immutable sources", async () => {
+  it("builds kanban-md from the exact canonical commit and verifies its supported version", async () => {
     const installer = await readFile(
       "scripts/ci/install-prerequisites.sh",
       "utf8",
@@ -58,18 +59,33 @@ describe("hosted CI command prerequisites", () => {
     expect(installer).toContain(
       `kanban_version="${supportedVersions.kanbanMd}"`,
     );
-    expect(installer).toContain('gitpr_version="0.4.0"');
-    expect(installer).toContain(
-      'gitpr_checksum="a92933afd9459074cdffb217cd02f87b29105d4ba45557290fdcd71d340cbd1a"',
-    );
     expect(installer).toContain(
       'test "$(git -C "${working_directory}/kanban-md" rev-parse HEAD)" = "${kanban_commit}"',
     );
     expect(installer).toContain(
       'test "$("${destination}/kanban-md" --version)" =',
     );
+  });
+
+  it("installs the checksummed gitpr release and verifies its version", async () => {
+    const installer = await readFile(
+      "scripts/ci/install-prerequisites.sh",
+      "utf8",
+    );
+
+    expect(installer).toContain('gitpr_version="0.4.0"');
+    expect(installer).toContain(
+      'gitpr_checksum="a92933afd9459074cdffb217cd02f87b29105d4ba45557290fdcd71d340cbd1a"',
+    );
+    expect(installer).toContain("sha256sum --check --status");
     expect(installer).toContain(
       'test "$("${destination}/gitpr" --version)" = "gitpr version ${gitpr_version}"',
     );
+  });
+
+  it("keeps the prerequisite installer executable", async () => {
+    await expect(
+      access("scripts/ci/install-prerequisites.sh", constants.X_OK),
+    ).resolves.toBeUndefined();
   });
 });
