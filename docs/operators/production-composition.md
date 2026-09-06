@@ -611,6 +611,10 @@ It performs no HTTP call and raises an exact
 `legacy-intent-unverifiable` recovery occurrence. Retry notification is the
 explicit disposition that adopts the current route; without it, ambiguous
 legacy intent stays pending.
+A pending intent from the immediately preceding two-fingerprint message shape
+also upgrades in place when both stored fingerprints match the current message
+without its level. Heddle then records the current level in both fingerprints.
+Any other disagreement remains rejected.
 Pushover receives escalations, every production error, and session-observation
 attention of kind `ended`, `failed`, or `stalled`. The first two session states
 are dead-session states. An incident-eligible production error is informational
@@ -623,6 +627,10 @@ attention identities. Approval, user-input, stale-instance, lifecycle,
 repository, and epic-acceptance attention remain console-only. Configuration
 validation fails before production composition exists, so it cannot produce an
 attention or dispatch an incident.
+A pending production-error page is replayed before each scheduler pass. A
+retryable page waits for its durable retry deadline, including across restart;
+the durable attention remains active while earlier passes contain the delivery
+failure.
 
 Every production-error card offers **Resolve**. The action records durable
 intent and completion before it resolves the entry. Repeating the action or

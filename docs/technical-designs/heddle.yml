@@ -590,6 +590,10 @@ proposed-design:
     it makes no transport call and raises an exact legacy-intent-unverifiable
     recovery occurrence. Its Retry notification disposition explicitly adopts
     the current secure route while retaining the original stable attention ID.
+    A pending two-fingerprint intent from the preceding level-less message
+    shape upgrades in place only when both prior fingerprints match the current
+    message without its level. The current level then becomes part of both new
+    fingerprints; any other disagreement remains rejected.
 
     Session observation and session page delivery fail independently. An
     observer rejection raises the stable task-scoped production error
@@ -600,6 +604,10 @@ proposed-design:
     delivery failures leave the original Pushover intent pending under its
     pageable attention ID; none relabels a notification transport failure as a
     T3 observation failure.
+    A pending production-error page is replayed before each scheduler pass.
+    Retryable transport failures honor their durable retry deadline across
+    restart; the durable attention remains active while earlier passes contain
+    the delivery error.
 
     Harness-native question tools serve assistive tasks, where the
     operator already works in T3's UI. The provider adapters map
