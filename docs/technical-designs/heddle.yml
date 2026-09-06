@@ -136,9 +136,14 @@ proposed-design:
     the standard delivery columns `in-progress`, `review`,
     `retrospective`, and `done`; production reads that declaration
     before every mechanical status mirror.
-    Agents create follow-up tasks and findings through MCP tools;
-    Heddle applies the writes, so new child tasks are visible to the
-    reconciler the moment they exist. The reconciler also enforces
+    Agents create follow-up tasks and findings through MCP tools. Heddle
+    records the bound source task, instance, and session plus the kind,
+    parent epic, lifecycle, operation digest, record digest, and complete
+    request as a durable pending intent before it applies the board write.
+    It binds the returned task ID and completes the intent after the board
+    effect. New child tasks are visible to the reconciler the moment they
+    exist, but board identity tags are evidence and never creation authority.
+    The reconciler also enforces
     pacing gates through one shared evaluator. Workspace configuration
     declares a default provider, a total active-session limit, provider
     budgets over fixed five-hour usage windows, and subagent fan-out and
@@ -162,8 +167,10 @@ proposed-design:
     constructs the real board adapter, SQLite-backed instance controller,
     lifecycle resolver and engine, session bootstrap, observation channel,
     durable attention queue, Pushover notifier, pacing evaluator, and stage
-    thresholds. A serialized scheduler coalesces ticks while one pass runs;
-    start performs an immediate pass and stop cancels its timer and drains the
+    thresholds. A serialized scheduler coalesces ticks while one pass runs.
+    Startup recovers pending dynamic-task intents before the first
+    reconciliation pass; start then performs an immediate pass and stop
+    cancels its timer and drains the
     current pass within a configured bound. Task, epic-project, instance, and
     session operations are isolated inside the pass. A failure raises one stable,
     task-scoped attention entry and does not prevent later work in the pass. This
@@ -293,9 +300,15 @@ proposed-design:
     `type:follow-up` or `type:finding`. The result contains the task ID, kind,
     parent, status, and whether the call replayed an existing write. An
     operation ID is unique to one tool call in one stage occurrence. Heddle
-    stores hashed operation and request identities as board tags, so an exact
-    replay returns the existing task after process restart; reusing the
-    operation ID with different input fails without another write.
+    stores hashed operation and request identities as board tags and anchors
+    both in its SQLite creation registry. An exact replay requires the same
+    durable source and request identity and returns the completed registry
+    row's exact live board task. Reusing the operation ID with different input
+    fails before another board write. A pending intent with no board match is a
+    quiet recoverable state. Startup binds one board task only when its kind,
+    parent, lifecycle, operation digest, record digest, and immutable request
+    fields match. Multiple, conflicting, malformed, or failed recovery raises
+    stable authority attention and remains pending.
 
     `advance` presents only the dispositions valid for
     the instance's current state, generated from the blueprint's
@@ -724,12 +737,16 @@ proposed-design:
     threads: a stage whose session no longer exists is retried cold by
     replaying its bootstrap.
 
-    The same database stores canonical scheduling intent, durable attention
+    The same database stores canonical scheduling intent, dynamic-task creation
+    intents and their append-only pending/completed evidence, durable attention
     entries with their unresolved or resolved queue lifecycle, and stable-ID
-    adapter intent and completion. These records make instance start, session
-    activation, attention routing, action replay, and completed-notification
-    replay idempotent without introducing another lifecycle or attention
-    authority. A pending Pushover notification is retried at-least-once.
+    adapter intent and completion. Dynamic-task rows survive restart and are
+    the only authority that a board task was created by Heddle; their board
+    tags are only exact-match evidence. These records make instance start,
+    session activation, dynamic-task creation, attention routing, action
+    replay, and completed-notification replay idempotent without introducing
+    another lifecycle or attention authority. A pending Pushover notification
+    is retried at-least-once.
   deployment: >
     Heddle installs as a devcontainer feature in each workspace
     container as an s6-supervised service with a caddy route serving the
