@@ -13,11 +13,13 @@ import { SqlitePersistence } from "../persistence/index.js";
 import {
   DurableAttentionQueue,
   DurablePushoverNotifier,
-  ProductionErrorPager,
-  productionErrorPagePolicy,
   type PushoverMessage,
 } from "./durable-adapters.js";
 import { productionErrorAttention } from "./error-visibility.js";
+import {
+  ProductionErrorPager,
+  productionErrorPagePolicy,
+} from "./production-error-paging.js";
 
 const configuration = {
   apiUrl: "https://notify.invalid/messages",

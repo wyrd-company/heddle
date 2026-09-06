@@ -19,13 +19,15 @@ export {
   DurableAttentionQueue,
   DurablePushoverNotifier,
   HttpPushoverTransport,
-  ProductionErrorPager,
-  productionErrorPagePolicy,
   type ProductionErrorPagePort,
   type PushoverLevel,
   type PushoverMessage,
   type PushoverTransport,
 } from "./durable-adapters.js";
+export {
+  ProductionErrorPager,
+  productionErrorPagePolicy,
+} from "./production-error-paging.js";
 export {
   createProductionErrorAttention,
   notificationDeliveryErrorAttention,

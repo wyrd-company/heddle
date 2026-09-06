@@ -51,10 +51,10 @@ import {
   DurablePushoverNotifier,
   HttpPushoverTransport,
   NotificationDeliveryError,
-  ProductionErrorPager,
   type OperatorPage,
   type PushoverTransport,
 } from "./durable-adapters.js";
+import { ProductionErrorPager } from "./production-error-paging.js";
 import {
   validateProductionConfiguration,
   type ProductionConfiguration,
