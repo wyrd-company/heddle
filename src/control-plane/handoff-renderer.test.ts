@@ -525,43 +525,42 @@ describe("GitHandoffTemplateStore", () => {
     );
   });
 
-  it("rejects a pinned skill with an unsupported top-level field", async () => {
+  it("loads a skill with top-level relationships without exposing the extension", async () => {
     const { commitSha, root } = await pinnedSkillFixture(
       "---\nname: evidence-review\ndescription: Inspect evidence.\nrelationships:\n  implements: heddle\n---\n\nInspect it.\n",
     );
 
-    await expect(
-      new GitHandoffTemplateStore(root).read(
-        {
-          commitSha,
-          path: "handoff-templates/standard.md",
-        },
-        ["evidence-review"],
-      ),
-    ).rejects.toThrow(
-      'Pinned skill "evidence-review" front matter contains unsupported fields: relationships',
+    const template = await new GitHandoffTemplateStore(root).read(
+      {
+        commitSha,
+        path: "handoff-templates/standard.md",
+      },
+      ["evidence-review"],
     );
+    const rendered = renderStageHandoff(
+      input({
+        template: {
+          ...template,
+          body: '{{ skill("evidence-review") | stableJson }}',
+        },
+      }),
+    );
+
+    expect(rendered).toContain(
+      JSON.stringify(
+        {
+          description: "Inspect evidence.",
+          name: "evidence-review",
+          path: "skills/evidence-review/SKILL.md",
+        },
+        undefined,
+        2,
+      ),
+    );
+    expect(rendered).not.toContain("relationships");
   });
 
-  it("rejects a pinned skill description containing angle brackets", async () => {
-    const { commitSha, root } = await pinnedSkillFixture(
-      "---\nname: evidence-review\ndescription: Inspect <evidence> before approval.\n---\n\nInspect it.\n",
-    );
-
-    await expect(
-      new GitHandoffTemplateStore(root).read(
-        {
-          commitSha,
-          path: "handoff-templates/standard.md",
-        },
-        ["evidence-review"],
-      ),
-    ).rejects.toThrow(
-      'Pinned skill "evidence-review" front matter description must not contain angle brackets',
-    );
-  });
-
-  it("accepts portable optional fields and nested relationship metadata", async () => {
+  it("accepts valid supported optional fields", async () => {
     const { commitSha, root } = await pinnedSkillFixture(
       [
         "---",
@@ -571,8 +570,7 @@ describe("GitHandoffTemplateStore", () => {
         "compatibility: Requires git.",
         'allowed-tools: "Read Bash(git:*)"',
         "metadata:",
-        "  relationships:",
-        "    implements: heddle",
+        "  owner: sample-team",
         "---",
         "",
         "Inspect it.",
@@ -599,22 +597,35 @@ describe("GitHandoffTemplateStore", () => {
 
   it.each([
     {
-      diagnostic:
-        "front matter compatibility must contain at most 500 characters",
-      label: "non-string compatibility",
-      serializedCompatibility: "[requires, git]",
+      diagnostic: "front matter license must be a non-empty string",
+      label: "non-string license",
+      serializedField: "license: [LICENSE.md]",
     },
     {
-      diagnostic:
-        "front matter compatibility must contain at most 500 characters",
+      diagnostic: "front matter allowed-tools must be a non-empty string",
+      label: "non-string allowed-tools",
+      serializedField: "allowed-tools: [Read]",
+    },
+    {
+      diagnostic: "front matter metadata must map string keys to string values",
+      label: "nested metadata",
+      serializedField: "metadata:\n  owner:\n    name: sample-team",
+    },
+    {
+      diagnostic: "front matter compatibility must contain 1 to 500 characters",
+      label: "non-string compatibility",
+      serializedField: "compatibility: [requires, git]",
+    },
+    {
+      diagnostic: "front matter compatibility must contain 1 to 500 characters",
       label: "overlong compatibility",
-      serializedCompatibility: "a".repeat(501),
+      serializedField: `compatibility: ${"a".repeat(501)}`,
     },
   ])(
     "rejects a pinned skill with $label",
-    async ({ diagnostic, serializedCompatibility }) => {
+    async ({ diagnostic, serializedField }) => {
       const { commitSha, root } = await pinnedSkillFixture(
-        `---\nname: evidence-review\ndescription: Inspect evidence.\ncompatibility: ${serializedCompatibility}\n---\n\nInspect it.\n`,
+        `---\nname: evidence-review\ndescription: Inspect evidence.\n${serializedField}\n---\n\nInspect it.\n`,
       );
 
       await expect(
@@ -628,6 +639,24 @@ describe("GitHandoffTemplateStore", () => {
       ).rejects.toThrow(`Pinned skill "evidence-review" ${diagnostic}`);
     },
   );
+
+  it("rejects a pinned skill with no front-matter name", async () => {
+    const { commitSha, root } = await pinnedSkillFixture(
+      "---\ndescription: Inspect evidence.\n---\n\nInspect it.\n",
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        ["evidence-review"],
+      ),
+    ).rejects.toThrow(
+      'Pinned skill "evidence-review" front matter name must equal its folder name',
+    );
+  });
 
   it.each([
     {

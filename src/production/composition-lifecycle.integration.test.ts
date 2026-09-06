@@ -244,17 +244,16 @@ kind: standard
       supportingFile: false,
     },
     {
-      diagnostic: "front matter contains unsupported fields: relationships",
-      label: "unsupported front-matter field",
+      diagnostic: "front matter is invalid",
+      label: "invalid front-matter YAML",
       source:
-        "---\nname: evidence-review\ndescription: Inspect evidence.\nrelationships:\n  implements: heddle\n---\n\nInspect it.\n",
+        "---\nname: [\ndescription: Inspect evidence.\n---\n\nInspect it.\n",
       supportingFile: false,
     },
     {
-      diagnostic: "front matter description must not contain angle brackets",
-      label: "front-matter description with angle brackets",
-      source:
-        "---\nname: evidence-review\ndescription: Inspect <evidence>.\n---\n\nInspect it.\n",
+      diagnostic: "front matter name must equal its folder name",
+      label: "missing required front-matter name",
+      source: "---\ndescription: Inspect evidence.\n---\n\nInspect it.\n",
       supportingFile: false,
     },
   ])(

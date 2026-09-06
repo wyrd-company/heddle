@@ -367,11 +367,12 @@ An agent wait node can also declare `skills: [<name>, ...]`. Each name must be
 unique, kebab-case, and no longer than 64 characters. Heddle reads
 `skills/<name>/SKILL.md` from the same
 pinned commit as the handoff template, requires the front-matter `name` to
-equal the folder name, and requires a `description` of 1 to 1,024 characters
-without angle brackets. Front matter permits only `name`, `description`,
-`license`, `compatibility`, `metadata`, and `allowed-tools`; `compatibility`, if
-present, is a string of at most 500 characters. Repository relationships belong
-under `metadata`, not in a top-level extension. The handoff
+equal the folder name, and requires a `description` of 1 to 1,024 characters.
+Known optional Agent Skills fields are validated when present: `license` and
+`allowed-tools` are non-empty strings, `compatibility` contains 1 to 500
+characters, and `metadata` maps string keys to string values. Valid YAML
+extension fields, including top-level `relationships`, do not prevent loading
+and are not exposed to the handoff template. The handoff
 stage carries the names. Templates resolve one with the `skill(name)` global,
 which returns `{name,path,description}` with a repository-relative path. This
 blueprint declaration supplies generic stage skills. A task's front-matter

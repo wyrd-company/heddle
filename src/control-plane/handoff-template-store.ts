@@ -14,14 +14,6 @@ const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const artifactId = /^[a-z]+(?:-[a-z]+)*$/;
 const validSkillName = (name: string): boolean =>
   name.length <= 64 && artifactId.test(name);
-const allowedSkillFrontMatterFields = new Set([
-  "allowed-tools",
-  "compatibility",
-  "description",
-  "license",
-  "metadata",
-  "name",
-]);
 const schemaId = "https://wyrd.company/heddle/handoff-template.schema.json";
 
 export type HandoffTemplateKind = "remediation" | "standard";
@@ -203,14 +195,6 @@ export const validateAgentSkillSource = (
     );
   }
   const skillMetadata = metadata as Record<string, unknown>;
-  const unsupportedFields = Object.keys(skillMetadata)
-    .filter((field) => !allowedSkillFrontMatterFields.has(field))
-    .sort();
-  if (unsupportedFields.length > 0) {
-    throw new HandoffTemplateError(
-      `Pinned skill ${JSON.stringify(name)} front matter contains unsupported fields: ${unsupportedFields.join(", ")}`,
-    );
-  }
   const description = skillMetadata["description"];
   if (
     typeof description !== "string" ||
@@ -221,19 +205,47 @@ export const validateAgentSkillSource = (
       `Pinned skill ${JSON.stringify(name)} front matter description must contain 1 to 1,024 characters`,
     );
   }
-  if (description.includes("<") || description.includes(">")) {
+  const license = skillMetadata["license"];
+  if (
+    license !== undefined &&
+    (typeof license !== "string" || license.trim() === "")
+  ) {
     throw new HandoffTemplateError(
-      `Pinned skill ${JSON.stringify(name)} front matter description must not contain angle brackets`,
+      `Pinned skill ${JSON.stringify(name)} front matter license must be a non-empty string`,
+    );
+  }
+  const allowedTools = skillMetadata["allowed-tools"];
+  if (
+    allowedTools !== undefined &&
+    (typeof allowedTools !== "string" || allowedTools.trim() === "")
+  ) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter allowed-tools must be a non-empty string`,
+    );
+  }
+  const additionalMetadata = skillMetadata["metadata"];
+  if (
+    additionalMetadata !== undefined &&
+    (typeof additionalMetadata !== "object" ||
+      additionalMetadata === null ||
+      Array.isArray(additionalMetadata) ||
+      Object.values(additionalMetadata).some(
+        (value) => typeof value !== "string",
+      ))
+  ) {
+    throw new HandoffTemplateError(
+      `Pinned skill ${JSON.stringify(name)} front matter metadata must map string keys to string values`,
     );
   }
   const compatibility = skillMetadata["compatibility"];
   if (
     compatibility !== undefined &&
     (typeof compatibility !== "string" ||
+      compatibility.trim() === "" ||
       Array.from(compatibility).length > 500)
   ) {
     throw new HandoffTemplateError(
-      `Pinned skill ${JSON.stringify(name)} front matter compatibility must contain at most 500 characters`,
+      `Pinned skill ${JSON.stringify(name)} front matter compatibility must contain 1 to 500 characters`,
     );
   }
   return Object.freeze({ description, name, path, source: serialized });
