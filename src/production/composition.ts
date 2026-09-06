@@ -16,7 +16,6 @@ import type {
 import {
   createMechanicalNodeEffects,
   GitHandoffTemplateStore,
-  resolveMechanicalBoardStatuses,
   resolveBuiltInSystemPrompt,
   SessionObserver,
   steerStageSession,
@@ -135,8 +134,7 @@ export const createProductionComposition = (
   let persistence: SqlitePersistence | undefined;
   try {
     const board = new KanbanBoardAdapter(configuration.boardDirectory);
-    const boardStatuses = async () =>
-      resolveMechanicalBoardStatuses(await board.readBoardStatuses());
+    const boardStatuses = () => board.readBoardStatuses();
     persistence = new SqlitePersistence({
       stateDirectory: configuration.stateDirectory,
     });
@@ -219,7 +217,7 @@ export const createProductionComposition = (
       options.workflowMcpEndpoint,
       resolveSystemPrompt,
       templateAuthority,
-      boardStatuses,
+      (instanceId, uses) => lifecycle.boardStatusFor(instanceId, uses),
       (taskId, status) => board.mirrorTaskStatus(taskId, status),
     );
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(

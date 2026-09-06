@@ -143,6 +143,51 @@ describe("organization lifecycle blueprint artifacts", () => {
     ).rejects.toThrow('Wait node "inspect" has no disposition edges');
   });
 
+  it("rejects a blueprint that omits a mechanical node board status", () => {
+    const invalid = deliveryBlueprintFixture("standard-delivery");
+    delete invalid["board-statuses"]!.merge;
+    const blueprint = {
+      ...invalid,
+      id: "standard-delivery",
+    } as LifecycleBlueprint;
+    const effects = Object.fromEntries(
+      blueprint.nodes
+        .filter(({ uses }) => uses !== "wait")
+        .map(({ uses }) => [uses, async () => ({})]),
+    ) as Record<string, LifecycleEffect>;
+
+    expect(() => validateBlueprint(blueprint, effects)).toThrow(
+      'Blueprint board-statuses is missing mechanical node use "merge"',
+    );
+  });
+
+  it("rejects a blueprint board-statuses key that is not a mechanical node use", () => {
+    const invalid = deliveryBlueprintFixture("standard-delivery");
+    (invalid["board-statuses"] as Record<string, string>)["publish"] = "done";
+    const blueprint = {
+      ...invalid,
+      id: "standard-delivery",
+    } as LifecycleBlueprint;
+    const effects = Object.fromEntries(
+      blueprint.nodes
+        .filter(({ uses }) => uses !== "wait")
+        .map(({ uses }) => [uses, async () => ({})]),
+    ) as Record<string, LifecycleEffect>;
+
+    expect(() => validateBlueprint(blueprint, effects)).toThrow(
+      'Blueprint board-statuses names unknown mechanical node use "publish"',
+    );
+  });
+
+  it("rejects an empty board status through the lifecycle schema", async () => {
+    const invalid = deliveryArtifact("trivial");
+    invalid["board-statuses"]!.finalize = "";
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid, "trivial")),
+    ).rejects.toThrow("violates the lifecycle schema");
+  });
+
   it("names the blueprint, node, and unresolved tool in registry failures", async () => {
     const invalid = artifact();
     (invalid.nodes[1] as { tools: string[] }).tools.push("missing_tool");

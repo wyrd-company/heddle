@@ -37,11 +37,22 @@ export interface LifecycleNode extends NodeDefinition {
 }
 
 export interface LifecycleBlueprint extends WorkflowBlueprint {
+  "board-statuses"?: Partial<Record<MechanicalNodeUse, string>>;
   edges: LifecycleEdge[];
   nodes: LifecycleNode[];
 }
 
+export const mechanicalNodeUses = [
+  "finalize",
+  "merge",
+  "prepare-worktree",
+  "review-snapshot",
+] as const;
+
+export type MechanicalNodeUse = (typeof mechanicalNodeUses)[number];
+
 export interface LifecycleEffectInput {
+  blueprint: LifecycleBlueprint;
   context: IAsyncContext<Record<string, unknown>>;
   idempotencyKey: string;
   input: unknown;

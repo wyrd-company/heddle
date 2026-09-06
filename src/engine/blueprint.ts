@@ -21,11 +21,55 @@ import type {
   LifecycleBlueprint,
   LifecycleEdge,
   LifecycleEffect,
+  MechanicalNodeUse,
 } from "./types.js";
+import { mechanicalNodeUses } from "./types.js";
 
 export const internalNodeIdParameter = "__heddleNodeId";
 const dispositionPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const placeholderNode: NodeFunction = async () => ({ output: null });
+const mechanicalNodeUseSet = new Set<string>(mechanicalNodeUses);
+
+export const validateBlueprintBoardStatuses = (
+  blueprint: LifecycleBlueprint,
+): void => {
+  const statuses = blueprint["board-statuses"];
+  for (const uses of Object.keys(statuses ?? {})) {
+    if (!mechanicalNodeUseSet.has(uses)) {
+      throw new BlueprintValidationError(
+        `Blueprint board-statuses names unknown mechanical node use ${JSON.stringify(uses)}`,
+      );
+    }
+  }
+  for (const uses of new Set(
+    blueprint.nodes
+      .map((node) => node.uses)
+      .filter((uses): uses is MechanicalNodeUse =>
+        mechanicalNodeUseSet.has(uses),
+      ),
+  )) {
+    const status = statuses?.[uses];
+    if (typeof status !== "string" || status.trim() === "") {
+      throw new BlueprintValidationError(
+        `Blueprint board-statuses is missing mechanical node use ${JSON.stringify(uses)}`,
+      );
+    }
+  }
+};
+
+export const boardStatusForMechanicalNode = (
+  blueprint: LifecycleBlueprint,
+  uses: MechanicalNodeUse,
+): string => {
+  validateBlueprintBoardStatuses(blueprint);
+  const status = blueprint["board-statuses"]?.[uses];
+  if (status === undefined) {
+    throw new BlueprintValidationError(
+      `Blueprint board-statuses is missing mechanical node use ${JSON.stringify(uses)}`,
+    );
+  }
+  return status;
+};
 
 const outgoingEdges = (
   blueprint: LifecycleBlueprint,
@@ -36,6 +80,7 @@ export const validateBlueprint = (
   blueprint: LifecycleBlueprint,
   effects: Record<string, LifecycleEffect>,
 ): void => {
+  validateBlueprintBoardStatuses(blueprint);
   const nodeIds = new Set<string>();
   for (const node of blueprint.nodes) {
     if (nodeIds.has(node.id)) {

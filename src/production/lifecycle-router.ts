@@ -7,6 +7,7 @@ import {
   LifecycleEngine,
   type LifecycleEffect,
   type LifecycleSnapshot,
+  type MechanicalNodeUse,
   type RebaseLifecycleInput,
   type ResumeLifecycleInput,
   type StartLifecycleInput,
@@ -41,6 +42,13 @@ export class ProductionLifecycleRouter {
 
   rebase(input: RebaseLifecycleInput): Promise<LifecycleSnapshot> {
     return this.engine.rebase(input);
+  }
+
+  boardStatusFor(
+    instanceId: string,
+    uses: MechanicalNodeUse,
+  ): Promise<string | undefined> {
+    return this.engine.boardStatusFor(instanceId, uses);
   }
 
   isTransitionActive(instanceId: string): boolean {

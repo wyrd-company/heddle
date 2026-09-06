@@ -44,6 +44,7 @@ import type {
   LifecycleEffect,
   LifecycleEngineOptions,
   LifecycleSnapshot,
+  MechanicalNodeUse,
   PendingTransition,
   RebaseLifecycleInput,
   ResumeLifecycleInput,
@@ -222,6 +223,23 @@ export class LifecycleEngine {
       readLifecycleContext(record),
       blueprint,
     );
+  }
+
+  async boardStatusFor(
+    instanceId: string,
+    uses: MechanicalNodeUse,
+  ): Promise<string | undefined> {
+    const record = this.persistence.getInstance(instanceId);
+    if (record === undefined) {
+      throw new Error(`Instance does not exist: ${instanceId}`);
+    }
+    const context = readLifecycleContext(record);
+    const blueprint = await this.blueprintStore.read(
+      context.blueprintBlobHash,
+      context.blueprintPath,
+    );
+    validateBlueprint(blueprint, this.effects);
+    return blueprint["board-statuses"]?.[uses];
   }
 
   private async execute(

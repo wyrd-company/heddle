@@ -17,6 +17,7 @@ export const executeGit = promisify(execFile);
 
 export const sampleBlueprintArtifact = () => ({
   $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+  "board-statuses": { "prepare-worktree": "in-progress" },
   relationships: { implements: "heddle", uses: ["sample-checklist"] },
   nodes: [
     { id: "prepare", uses: "prepare" },

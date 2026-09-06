@@ -81,6 +81,12 @@ export const deliveryBlueprintFixture = (
   nodes.push({ id: "finalize", uses: "finalize" });
 
   return {
+    "board-statuses": {
+      finalize: "done",
+      merge: "retrospective",
+      "prepare-worktree": "in-progress",
+      "review-snapshot": "review",
+    },
     edges: [
       { source: "prepare-worktree", target: "implement" },
       {

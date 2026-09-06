@@ -152,6 +152,7 @@ export const createLifecycleRuntime = (
       delete effectParams[internalNodeIdParameter];
       return {
         output: await effect({
+          blueprint,
           context,
           idempotencyKey: JSON.stringify([pending.id, nodeId]),
           input,

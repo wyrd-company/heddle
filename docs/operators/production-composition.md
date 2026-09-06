@@ -138,6 +138,13 @@ key that can fetch and push that repository. Heddle stores no Git credential in
 service-user SSH-agent path is qualified with `git push --dry-run` to a unique
 scratch ref; the dry run leaves no remote ref.
 
+Each lifecycle blueprint must declare a `board-statuses` object whose keys are
+the `uses` values of its mechanical nodes and whose values are statuses from
+the live board configuration. Heddle rejects a missing mechanical key, an
+unknown mechanical key, or an absent live-board status before it performs a
+mechanical effect or writes a board status. The diagnostic names the invalid
+mechanical use and, for a missing live status, the selected status.
+
 Each reconciliation pass runs `git fetch --no-tags --prune origin` under the
 repository writer lease. Fetch changes remote-tracking refs only. New instances
 and explicit instance rebases read the fetched upstream commit. Running

@@ -13,8 +13,6 @@ import {
   HandoffRenderError,
   HandoffTemplateError,
   mechanicalChangeContextKey,
-  mechanicalBoardStatusNames,
-  type MechanicalBoardStatuses,
   type SessionT3Client,
   type SessionTemplateAuthority,
   type SystemPromptResolver,
@@ -24,6 +22,7 @@ import {
   UnexpectedLandingError,
   type LifecycleContextRecord,
   type LifecycleSnapshot,
+  type MechanicalNodeUse,
 } from "../engine/index.js";
 import type { PacingDeferral } from "../pacing/index.js";
 import type {
@@ -66,11 +65,6 @@ const stableUuid = (seed: string): string => {
 const deferral = (value: JsonValue | undefined): PacingDeferral | undefined =>
   value as PacingDeferral | undefined;
 
-const defaultMechanicalBoardStatuses =
-  async (): Promise<MechanicalBoardStatuses> => ({
-    ...mechanicalBoardStatusNames,
-  });
-
 const synchronizationAttentionId = (
   runtime: ReconcilerRuntimeRecord,
   code: string,
@@ -88,7 +82,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly workflowMcpEndpoint: string,
     private readonly resolveSystemPrompt: SystemPromptResolver,
     private readonly templateAuthority: SessionTemplateAuthority,
-    private readonly boardStatuses: () => Promise<MechanicalBoardStatuses> = defaultMechanicalBoardStatuses,
+    private readonly boardStatusFor: (
+      instanceId: string,
+      uses: MechanicalNodeUse,
+    ) => Promise<string | undefined> = async () => undefined,
     private readonly mirrorBoardStatus: (
       taskId: number,
       status: string,
@@ -206,19 +203,32 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     if (stageId === undefined) {
       this.persistence.writeReconcilerRuntime({
         ...starting,
-        boardStatus: snapshot.status === "completed" ? "done" : "in-progress",
+        boardStatus:
+          snapshot.status === "completed"
+            ? ((await this.boardStatusFor(input.instanceId, "finalize")) ??
+              starting.boardStatus)
+            : starting.boardStatus,
         state: snapshot.status === "completed" ? "done" : "running",
       });
       return;
     }
+    const preparedBoardStatus = await this.boardStatusFor(
+      input.instanceId,
+      "prepare-worktree",
+    );
+    const restoreInitialBoardStatus =
+      existing !== undefined &&
+      starting.boardStatus === "todo" &&
+      preparedBoardStatus !== undefined;
     await this.#activate(
       input.task,
       input.instanceId,
       stageId,
       starting,
-      existing === undefined
-        ? (await this.boardStatuses()).inProgress
+      existing === undefined || restoreInitialBoardStatus
+        ? (preparedBoardStatus ?? input.task.status)
         : starting.boardStatus,
+      restoreInitialBoardStatus,
     );
   }
 
@@ -374,14 +384,28 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         ...runtime,
         boardStatus:
           snapshot.status === "completed"
-            ? (await this.boardStatuses()).completed
+            ? ((await this.boardStatusFor(runtime.instanceId, "finalize")) ??
+              runtime.boardStatus)
             : runtime.boardStatus,
         state: snapshot.status === "completed" ? "done" : "running",
       });
       return;
     }
     const sameStage = runtime.stageId === stageId;
-    if (sameStage && runtime.state === "waiting") return;
+    if (sameStage && runtime.state === "waiting") {
+      const preparedBoardStatus = await this.boardStatusFor(
+        runtime.instanceId,
+        "prepare-worktree",
+      );
+      if (runtime.boardStatus === "todo" && preparedBoardStatus !== undefined) {
+        this.persistence.writeReconcilerRuntime({
+          ...runtime,
+          boardStatus: preparedBoardStatus,
+        });
+        await this.mirrorBoardStatus(task.id, preparedBoardStatus);
+      }
+      return;
+    }
     const restoreInitialBoardStatus =
       runtime.state === "starting" && task.status === "todo";
     const starting: ReconcilerRuntimeRecord = {
@@ -391,7 +415,8 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     };
     this.persistence.writeReconcilerRuntime(starting);
     const boardStatus = restoreInitialBoardStatus
-      ? (await this.boardStatuses()).inProgress
+      ? ((await this.boardStatusFor(runtime.instanceId, "prepare-worktree")) ??
+        starting.boardStatus)
       : starting.boardStatus;
     await this.#activate(
       task,

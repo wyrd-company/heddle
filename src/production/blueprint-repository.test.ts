@@ -72,6 +72,9 @@ describe("organization blueprint repository", () => {
     });
     expect(old.awaitingNodeIds).toEqual(["inspect"]);
     expect(rebaseCandidate.blueprintBlobHash).toBe(old.blueprintBlobHash);
+    await expect(
+      lifecycle.boardStatusFor("instance-old", "prepare-worktree"),
+    ).resolves.toBe("in-progress");
     expect(
       (
         await executeGit(
@@ -103,8 +106,10 @@ describe("organization blueprint repository", () => {
     const upstream = await publisher(setup);
     const upstreamPath = join(upstream, "blueprints", "sample-process.json");
     const artifact = JSON.parse(await readFile(upstreamPath, "utf8")) as {
+      "board-statuses": Record<string, string>;
       edges: Array<Record<string, unknown>>;
     };
+    artifact["board-statuses"]["prepare-worktree"] = "verification";
     const waitEdge = artifact.edges.find(({ source }) => source === "inspect")!;
     waitEdge.condition = "result.output.dispositions.proceed";
     waitEdge.disposition = "proceed";
@@ -165,12 +170,24 @@ describe("organization blueprint repository", () => {
       instanceId: "instance-new",
     });
     expect(fresh.awaitingNodeIds).toEqual(["inspect"]);
+    await expect(
+      lifecycle.boardStatusFor("instance-old", "prepare-worktree"),
+    ).resolves.toBe("in-progress");
+    await expect(
+      lifecycle.boardStatusFor("instance-rebase", "prepare-worktree"),
+    ).resolves.toBe("in-progress");
+    await expect(
+      lifecycle.boardStatusFor("instance-new", "prepare-worktree"),
+    ).resolves.toBe("verification");
     const rebased = await lifecycle.rebase({
       instanceId: "instance-rebase",
       targetState: "inspect",
     });
     expect(rebased.blueprintBlobHash).toBe(fresh.blueprintBlobHash);
     expect(rebased.blueprintBlobHash).not.toBe(old.blueprintBlobHash);
+    await expect(
+      lifecycle.boardStatusFor("instance-rebase", "prepare-worktree"),
+    ).resolves.toBe("verification");
     await expect(
       lifecycle.resume({
         disposition: "complete",

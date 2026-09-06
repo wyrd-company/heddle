@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -134,6 +134,42 @@ const installStandardDelivery = async (
     ],
     { cwd: fixture.root },
   );
+};
+
+const changeMechanicalBlueprint = async (
+  fixture: ProductionFixture,
+  change: (blueprint: Record<string, unknown>) => void,
+): Promise<void> => {
+  const path = join(
+    fixture.blueprintsRepositoryRoot,
+    "blueprints/mechanical.json",
+  );
+  const blueprint = JSON.parse(await readFile(path, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  change(blueprint);
+  await writeFile(path, `${JSON.stringify(blueprint, null, 2)}\n`);
+  await execute("git", ["add", "blueprints/mechanical.json"], {
+    cwd: fixture.blueprintsRepositoryRoot,
+  });
+  await execute(
+    "git",
+    [
+      "-c",
+      "user.name=Fixture User",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "Change mechanical lifecycle fixture",
+    ],
+    { cwd: fixture.blueprintsRepositoryRoot },
+  );
+  await execute("git", ["push", "--quiet", "origin", "main"], {
+    cwd: fixture.blueprintsRepositoryRoot,
+  });
 };
 
 describe("production mechanical worktree preparation", () => {
@@ -356,7 +392,7 @@ describe("production mechanical worktree preparation", () => {
     await composition.close();
   }, 20_000);
 
-  it("stops a mechanical lifecycle before effects and board writes when a required delivery status is absent", async () => {
+  it("stops a mechanical lifecycle before effects and board writes when a declared status is absent", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     await useMechanicalLifecycle(fixture);
@@ -364,7 +400,7 @@ describe("production mechanical worktree preparation", () => {
     const statusWrites = vi.spyOn(composition.board, "mirrorTaskStatus");
     const statuses = await composition.board.readBoardStatuses();
     vi.spyOn(composition.board, "readBoardStatuses").mockResolvedValue(
-      statuses.filter((status) => status !== "review"),
+      statuses.filter((status) => status !== "in-progress"),
     );
 
     await composition.start();
@@ -382,13 +418,65 @@ describe("production mechanical worktree preparation", () => {
       expect.objectContaining({
         kind: "production-error",
         message: expect.stringContaining(
-          "Board configuration is missing required mechanical status 'review'",
+          'Blueprint board-statuses maps mechanical node use "prepare-worktree" to status "in-progress", which is absent from the board configuration',
         ),
         taskId: fixture.taskId,
       }),
     );
     await composition.close();
   });
+
+  it.each([
+    {
+      diagnostic:
+        'Blueprint board-statuses is missing mechanical node use "prepare-worktree"',
+      mutate: (blueprint: Record<string, unknown>) => {
+        delete (blueprint["board-statuses"] as Record<string, string>)[
+          "prepare-worktree"
+        ];
+      },
+      shape: "missing mechanical use",
+    },
+    {
+      diagnostic:
+        'Blueprint board-statuses names unknown mechanical node use "publish"',
+      mutate: (blueprint: Record<string, unknown>) => {
+        (blueprint["board-statuses"] as Record<string, string>)["publish"] =
+          "done";
+      },
+      shape: "unknown mechanical use",
+    },
+  ])(
+    "rejects a blueprint map with $shape before mechanical effects or board writes",
+    async ({ diagnostic, mutate }) => {
+      const fixture = await prepareProductionFixture();
+      cleanup = fixture.cleanup;
+      await useMechanicalLifecycle(fixture);
+      await changeMechanicalBlueprint(fixture, mutate);
+      const composition = compose(fixture, new SyntheticT3());
+      const statusWrites = vi.spyOn(composition.board, "mirrorTaskStatus");
+
+      await composition.start();
+
+      expect(statusWrites).not.toHaveBeenCalled();
+      await expect(
+        stat(
+          join(
+            fixture.configuration.session.worktreesRoot!,
+            String(fixture.taskId),
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      expect(composition.attention.list()).toContainEqual(
+        expect.objectContaining({
+          kind: "production-error",
+          message: expect.stringContaining(diagnostic),
+          taskId: fixture.taskId,
+        }),
+      );
+      await composition.close();
+    },
+  );
 
   it("prepares a parentless task worktree from the configured base ref at instance start", async () => {
     const fixture = await prepareProductionFixture();

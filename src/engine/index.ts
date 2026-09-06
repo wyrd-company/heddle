@@ -29,6 +29,10 @@ export type {
   WorkingBlueprintArtifact,
 } from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
+export {
+  boardStatusForMechanicalNode,
+  validateBlueprintBoardStatuses,
+} from "./blueprint.js";
 export { LifecycleResolver } from "./lifecycle-resolver.js";
 export { readLifecycleContext } from "./lifecycle-state.js";
 export {
@@ -55,10 +59,12 @@ export type {
   LifecycleNode,
   LifecyclePersistence,
   LifecycleSnapshot,
+  MechanicalNodeUse,
   PendingTransition,
   RebaseLifecycleInput,
   ResumeLifecycleInput,
   StartLifecycleInput,
 } from "./types.js";
+export { mechanicalNodeUses } from "./types.js";
 
 export const engine = "engine" as const;

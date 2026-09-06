@@ -3,7 +3,13 @@
 //   implements: heddle
 // ---
 
-import type { LifecycleEffect, LifecycleEffectInput } from "../engine/index.js";
+import {
+  boardStatusForMechanicalNode,
+  type LifecycleEffect,
+  type LifecycleEffectInput,
+  type MechanicalNodeUse,
+} from "../engine/index.js";
+
 import { ensureWorktree, type GitRunner } from "./worktree-creator.js";
 import {
   cleanupMergedChange,
@@ -38,51 +44,33 @@ export {
   type ReviewSnapshot,
 };
 
+export { mechanicalNodeUses } from "../engine/index.js";
+
 export const mechanicalChangeContextKey = "_heddleMechanicalChange";
-export const mechanicalNodeUses = [
-  "finalize",
-  "merge",
-  "prepare-worktree",
-  "review-snapshot",
-] as const;
 const reviewSnapshotOutputKey = "_outputs.review-snapshot";
 
 export interface MechanicalBoardMirror {
   mirrorTaskStatus(taskId: number, status: string): Promise<void>;
 }
 
-export interface MechanicalBoardStatuses {
-  completed: string;
-  inProgress: string;
-  merged: string;
-  review: string;
-}
-
-export const mechanicalBoardStatusNames = {
-  completed: "done",
-  inProgress: "in-progress",
-  merged: "retrospective",
-  review: "review",
-} as const satisfies MechanicalBoardStatuses;
-
 export const resolveMechanicalBoardStatuses = (
+  blueprint: LifecycleEffectInput["blueprint"],
   configuredStatuses: Iterable<string>,
-): MechanicalBoardStatuses => {
+): Readonly<Partial<Record<MechanicalNodeUse, string>>> => {
   const configured = new Set(configuredStatuses);
-  const statuses = {} as MechanicalBoardStatuses;
-  for (const [stage, status] of Object.entries(mechanicalBoardStatusNames)) {
+  const statuses = blueprint["board-statuses"] ?? {};
+  for (const [uses, status] of Object.entries(statuses)) {
     if (!configured.has(status)) {
       throw new Error(
-        `Board configuration is missing required mechanical status '${status}'`,
+        `Blueprint board-statuses maps mechanical node use ${JSON.stringify(uses)} to status ${JSON.stringify(status)}, which is absent from the board configuration`,
       );
     }
-    statuses[stage as keyof MechanicalBoardStatuses] = status;
   }
   return statuses;
 };
 
 export type MechanicalBoardStatusSource =
-  MechanicalBoardStatuses | (() => Promise<MechanicalBoardStatuses>);
+  Iterable<string> | (() => Promise<Iterable<string>>);
 
 export interface MechanicalNodeEffectOptions {
   board?: MechanicalBoardMirror;
@@ -136,23 +124,29 @@ const requireSnapshotOutput = async (
 };
 
 const mirrorStatuses = async (
+  input: LifecycleEffectInput,
   options: MechanicalNodeEffectOptions,
   change: MechanicalChangeContext,
-): Promise<MechanicalBoardStatuses | undefined> => {
+): Promise<
+  Readonly<Partial<Record<MechanicalNodeUse, string>>> | undefined
+> => {
   if (options.board === undefined || options.statuses === undefined) {
     return undefined;
   }
   if (change.taskId === undefined) return;
-  return typeof options.statuses === "function"
-    ? await options.statuses()
-    : options.statuses;
+  const configured =
+    typeof options.statuses === "function"
+      ? await options.statuses()
+      : options.statuses;
+  return resolveMechanicalBoardStatuses(input.blueprint, configured);
 };
 
 const mirror = async (
+  input: LifecycleEffectInput,
   options: MechanicalNodeEffectOptions,
   change: MechanicalChangeContext,
-  statuses: MechanicalBoardStatuses | undefined,
-  status: (statuses: MechanicalBoardStatuses) => string,
+  statuses: Readonly<Partial<Record<MechanicalNodeUse, string>>> | undefined,
+  uses: MechanicalNodeUse,
 ): Promise<void> => {
   if (
     options.board === undefined ||
@@ -161,7 +155,10 @@ const mirror = async (
   ) {
     return;
   }
-  await options.board.mirrorTaskStatus(change.taskId, status(statuses));
+  await options.board.mirrorTaskStatus(
+    change.taskId,
+    boardStatusForMechanicalNode(input.blueprint, uses),
+  );
 };
 
 export const createMechanicalNodeEffects = (
@@ -176,7 +173,7 @@ export const createMechanicalNodeEffects = (
   return {
     "prepare-worktree": async (input) => {
       const change = await requireChange(input);
-      const statuses = await mirrorStatuses(options, change);
+      const statuses = await mirrorStatuses(input, options, change);
       const prepared = await ensureWorktree(
         {
           baseRef: change.baseBranch,
@@ -188,36 +185,36 @@ export const createMechanicalNodeEffects = (
         },
         git,
       );
-      await mirror(options, change, statuses, ({ inProgress }) => inProgress);
+      await mirror(input, options, change, statuses, "prepare-worktree");
       return prepared;
     },
     "review-snapshot": async (input) => {
       const change = await requireChange(input);
-      const statuses = await mirrorStatuses(options, change);
+      const statuses = await mirrorStatuses(input, options, change);
       const snapshot = await ensureReviewSnapshot(change, command);
-      await mirror(options, change, statuses, ({ review }) => review);
+      await mirror(input, options, change, statuses, "review-snapshot");
       return snapshot;
     },
     merge: async (input) => {
       const change = await requireChange(input);
       const snapshot = await requireSnapshotOutput(input);
-      const statuses = await mirrorStatuses(options, change);
+      const statuses = await mirrorStatuses(input, options, change);
       const result = await mergeReviewSnapshot(change, snapshot, command);
       if (result.merged || result.alreadyMerged) {
-        await mirror(options, change, statuses, ({ merged }) => merged);
+        await mirror(input, options, change, statuses, "merge");
       }
       return result;
     },
     finalize: async (input) => {
       const change = await requireChange(input);
       const snapshot = await requireSnapshotOutput(input);
-      const statuses = await mirrorStatuses(options, change);
+      const statuses = await mirrorStatuses(input, options, change);
       const result = await cleanupMergedChange(
         change,
         snapshot.snapshotId,
         command,
       );
-      await mirror(options, change, statuses, ({ completed }) => completed);
+      await mirror(input, options, change, statuses, "finalize");
       return result;
     },
   };

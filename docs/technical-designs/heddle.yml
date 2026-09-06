@@ -54,7 +54,10 @@ proposed-design:
     (a trivial lifecycle omits retrospective). Blueprints are schema'd
     artifacts in one organization repository cloned at
     `<HEDDLE_CONFIG>/blueprints`; Heddle retains the schema and interpreter
-    validation authority. Each reconciliation pass fetches `origin` without
+    validation authority. Each blueprint maps every mechanical node `uses`
+    value to the board status that the completed stage mirrors. Heddle rejects
+    missing or unknown mechanical uses and statuses absent from the live board
+    configuration before an effect or board write. Each reconciliation pass fetches `origin` without
     changing the clone's branch, working tree, or held refs. New instances and
     explicit rebases resolve artifacts from the fetched upstream commit. An
     instance records the Git blob hash of the blueprint it started from, holds
@@ -152,9 +155,10 @@ proposed-design:
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else
     moves those cards. The board configuration is the authority for
-    the standard delivery columns `in-progress`, `review`,
-    `retrospective`, and `done`; production reads that declaration
-    before every mechanical status mirror.
+    available columns. The pinned lifecycle blueprint selects among those
+    columns for each mechanical stage, and production reads the live board
+    declaration before every mechanical status mirror. Fetching a changed map
+    affects new instances and explicit rebases only.
     Agents create follow-up tasks and findings through MCP tools. Heddle
     records the bound source task, instance, and session plus the kind,
     parent epic, lifecycle, operation digest, record digest, and complete
@@ -631,6 +635,9 @@ proposed-design:
     the epic branch on approval, deleting integrated branches and
     worktrees, mirroring board status, and filing records. The merge
     node is reachable only from the review wait stage's approve disposition.
+    Each mechanical effect resolves its mirror status from the running
+    instance's pinned blueprint and validates the complete declared map against
+    the live board configuration before it performs the effect.
     It records an accepted gitpr schema-2 review event for the persisted exact
     source/base basis and verifies that exact event. When the accepted source
     and base heads are equal, it closes the gitpr record as integrated with the

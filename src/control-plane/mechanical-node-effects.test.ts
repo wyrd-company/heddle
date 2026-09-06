@@ -4,7 +4,14 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -16,7 +23,10 @@ import {
   UnexpectedLandingError,
   type LifecycleEffectInput,
 } from "../engine/index.js";
-import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
+import {
+  deliveryBlueprintFixture,
+  writeDeliveryBlueprintFixture,
+} from "../engine/lifecycle-blueprint.test-support.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { ensureWorktree } from "./worktree-creator.js";
 import {
@@ -149,6 +159,7 @@ const makeLifecycle = async (
   taskId?: number,
   beforeReviewSnapshot?: (fixture: {
     change: MechanicalChangeContext;
+    engine: LifecycleEngine;
     sourcePath: string;
     worktreePath: string;
   }) => Promise<void>,
@@ -176,7 +187,7 @@ const makeLifecycle = async (
   await writeFile(join(fixture.worktreePath, "inventory.txt"), "one\ntwo\n");
   await git(fixture.worktreePath, "add", "inventory.txt");
   await git(fixture.worktreePath, "commit", "--quiet", "-m", "add item");
-  await beforeReviewSnapshot?.(fixture);
+  await beforeReviewSnapshot?.({ ...fixture, engine });
   await engine.resume({
     disposition: "complete",
     instanceId: "sample-lifecycle",
@@ -196,9 +207,15 @@ afterEach(async () => {
 describe("delivery mechanical nodes", () => {
   it("requires every declared board status before mirroring delivery", () => {
     expect(() =>
-      resolveMechanicalBoardStatuses(["done", "in-progress", "review"]),
+      resolveMechanicalBoardStatuses(
+        {
+          ...deliveryBlueprintFixture("standard-delivery"),
+          id: "standard-delivery",
+        },
+        ["done", "in-progress", "review"],
+      ),
     ).toThrow(
-      "Board configuration is missing required mechanical status 'retrospective'",
+      'Blueprint board-statuses maps mechanical node use "merge" to status "retrospective", which is absent from the board configuration',
     );
   });
 
@@ -1822,12 +1839,7 @@ describe("delivery mechanical nodes", () => {
             mirrored.push({ status, taskId });
           },
         },
-        statuses: {
-          completed: "done",
-          inProgress: "in-progress",
-          merged: "retrospective",
-          review: "review",
-        },
+        statuses: ["done", "in-progress", "retrospective", "review"],
       },
       12,
     );
@@ -1852,6 +1864,74 @@ describe("delivery mechanical nodes", () => {
     fixture.persistence.close();
   });
 
+  it("keeps every mirror on the running instance pinned blueprint map", async () => {
+    const mirrored: string[] = [];
+    const fixture = await makeLifecycle(
+      {
+        board: {
+          mirrorTaskStatus: async (_taskId, status) => {
+            mirrored.push(status);
+          },
+        },
+        statuses: [
+          "done",
+          "in-progress",
+          "retrospective",
+          "review",
+          "verification",
+        ],
+      },
+      12,
+      async ({ sourcePath }) => {
+        const path = join(sourcePath, "blueprints/standard-delivery.json");
+        const changed = JSON.parse(await readFile(path, "utf8")) as {
+          "board-statuses": Record<string, string>;
+        };
+        changed["board-statuses"]["review-snapshot"] = "verification";
+        await writeFile(path, `${JSON.stringify(changed, null, 2)}\n`);
+      },
+    );
+
+    expect(mirrored).toEqual(["in-progress", "review"]);
+    fixture.persistence.close();
+  });
+
+  it("uses a changed board-statuses map only after explicit instance rebase", async () => {
+    const mirrored: string[] = [];
+    const fixture = await makeLifecycle(
+      {
+        board: {
+          mirrorTaskStatus: async (_taskId, status) => {
+            mirrored.push(status);
+          },
+        },
+        statuses: [
+          "done",
+          "in-progress",
+          "retrospective",
+          "review",
+          "verification",
+        ],
+      },
+      12,
+      async ({ engine, sourcePath }) => {
+        const path = join(sourcePath, "blueprints/standard-delivery.json");
+        const changed = JSON.parse(await readFile(path, "utf8")) as {
+          "board-statuses": Record<string, string>;
+        };
+        changed["board-statuses"]["review-snapshot"] = "verification";
+        await writeFile(path, `${JSON.stringify(changed, null, 2)}\n`);
+        await engine.rebase({
+          instanceId: "sample-lifecycle",
+          targetState: "implement",
+        });
+      },
+    );
+
+    expect(mirrored).toEqual(["in-progress", "verification"]);
+    fixture.persistence.close();
+  });
+
   it("continues mechanical delivery without a task ID while skipping board mirroring", async () => {
     const mirrored: Array<{ status: string; taskId: number }> = [];
     const fixture = await makeLifecycle({
@@ -1860,12 +1940,7 @@ describe("delivery mechanical nodes", () => {
           mirrored.push({ status, taskId });
         },
       },
-      statuses: {
-        completed: "done",
-        inProgress: "in-progress",
-        merged: "retrospective",
-        review: "review",
-      },
+      statuses: ["done", "in-progress", "retrospective", "review"],
     });
 
     const retrospective = await fixture.engine.resume({

@@ -289,7 +289,12 @@ kind: standard
     await writeFile(
       join(blueprintsRepositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
+        "board-statuses": {
+          finalize: "done",
+          "prepare-worktree": "in-progress",
+        },
         edges: [
+          { source: "prepare-worktree", target: "implement" },
           {
             condition: "result.output.dispositions.complete",
             description: "Complete the sample",
@@ -299,6 +304,7 @@ kind: standard
           },
         ],
         nodes: [
+          { id: "prepare-worktree", uses: "prepare-worktree" },
           {
             handoff: "standard",
             "handoff-template": {
@@ -468,6 +474,33 @@ next_id: 1
       commandLog,
     );
     expect(crashed, crashed.stderr).toMatchObject({ code: 87 });
+    const crashedTask = await execute(
+      "kanban-md",
+      ["--dir", boardDirectory, "show", "1", "--json"],
+      { cwd: root },
+    );
+    expect((JSON.parse(crashedTask.stdout) as { status: string }).status).toBe(
+      "in-progress",
+    );
+    const crashedPersistence = new SqlitePersistence({
+      stateDirectory: configuration.stateDirectory,
+    });
+    const crashedContext = readLifecycleContext(
+      crashedPersistence.getInstance("task-1")!,
+    );
+    crashedPersistence.close();
+    const pinnedBlueprint = await execute(
+      "git",
+      ["cat-file", "blob", crashedContext.blueprintBlobHash],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    expect(
+      (
+        JSON.parse(pinnedBlueprint.stdout) as {
+          "board-statuses": Record<string, string>;
+        }
+      )["board-statuses"]["prepare-worktree"],
+    ).toBe("in-progress");
     const restarted = await run("restart", configurationPath, commandLog);
     expect(restarted, restarted.stderr).toMatchObject({ code: 0 });
     const evidence = JSON.parse(restarted.stdout) as {
@@ -483,7 +516,9 @@ next_id: 1
     expect(
       evidence.commands.filter(({ type }) => type === "thread.turn.start"),
     ).toHaveLength(1);
-    expect(evidence.runtime).toMatchObject([{ state: "waiting" }]);
+    expect(evidence.runtime).toMatchObject([
+      { boardStatus: "in-progress", state: "waiting" },
+    ]);
     expect(evidence.taskStatus).toBe("in-progress");
   }, 30_000);
 });

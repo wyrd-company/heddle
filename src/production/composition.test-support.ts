@@ -188,6 +188,10 @@ export const prepareProductionFixture =
       join(blueprintsRepositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
         $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+        "board-statuses": {
+          finalize: "done",
+          "prepare-worktree": "in-progress",
+        },
         relationships: {
           implements: "heddle",
           uses: ["sample-stage"],
@@ -287,6 +291,10 @@ export const prepareProductionFixture =
       join(blueprintsRepositoryRoot, "blueprints", "mechanical.json"),
       JSON.stringify({
         $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+        "board-statuses": {
+          finalize: "done",
+          "prepare-worktree": "in-progress",
+        },
         relationships: {
           implements: "heddle",
           uses: ["sample-stage"],
