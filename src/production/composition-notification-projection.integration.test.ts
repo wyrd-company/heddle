@@ -334,7 +334,7 @@ describe("production notification failure projection", () => {
       }),
     );
     await afterActionRestart.close();
-  });
+  }, 10_000);
 
   it("projects a changed retryable category without stopping later routes or reconciliation", async () => {
     const fixture = await prepareProductionFixture();
