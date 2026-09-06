@@ -1233,17 +1233,19 @@ describe("production composition", () => {
     await composition.start();
     composition.persistence.close();
 
-    await vi.waitFor(
-      () =>
-        expect(
-          pages.mock.calls.filter(([page]) =>
-            page.stableId.includes("production:scheduler-pass-failed"),
-          ),
-        ).toHaveLength(1),
-      { timeout: 4_000 },
-    );
-
-    await composition.close().catch(() => undefined);
+    try {
+      await vi.waitFor(
+        () =>
+          expect(
+            pages.mock.calls.filter(([page]) =>
+              page.stableId.includes("production:scheduler-pass-failed"),
+            ),
+          ).toHaveLength(1),
+        { timeout: 4_000 },
+      );
+    } finally {
+      await composition.close().catch(() => undefined);
+    }
   }, 10_000);
 
   it("keeps scheduler dispatch moving after one task activation fails", async () => {
