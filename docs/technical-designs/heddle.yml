@@ -507,11 +507,14 @@ proposed-design:
     operator-only floor: they page at the critical level, carry no incident
     identity, and state that an incident cannot run. Configuration validation
     fails before production composition exists and therefore cannot raise an
-    incident or production-error attention. Production-error pages have a
-    durable one-minute per-code cooldown and a cap of three attempts in five minutes,
-    so varying error text cannot bypass storm containment. Approval, user-input,
-    stale-instance, lifecycle, repository, and epic-acceptance attention remain
-    in the console without a page. Both adapters consume each pageable entry's
+    incident or production-error attention. While SQLite is available,
+    production-error pages have a durable one-minute per-code cooldown and a cap
+    of three attempts in five minutes, so varying error text cannot bypass storm
+    containment. If a floor failure makes SQLite unavailable, an in-memory
+    window applies the same bound within that process and resets when Heddle
+    restarts. Approval, user-input, stale-instance, lifecycle, repository, and
+    epic-acceptance attention remain in the console without a page. Both adapters
+    consume each pageable entry's
     stable attention ID. Every durable attention ID must fit the 128-character console
     attention identity bound; the durable adapter refuses an entry outside the
     bound before persistence. A top-level escalation derives its external

@@ -621,12 +621,14 @@ are dead-session states. An incident-eligible production error is informational
 and carries a deterministic incident identity for its later incident lifecycle.
 A scheduler-pass or durable-catalog production error is a critical floor page:
 its message states that no incident can be raised and that operator action is
-required. Heddle durably limits one production-error code to one page per minute and
-three page attempts in five minutes, even when changing error text produces new
-attention identities. Approval, user-input, stale-instance, lifecycle,
-repository, and epic-acceptance attention remain console-only. Configuration
-validation fails before production composition exists, so it cannot produce an
-attention or dispatch an incident.
+required. While SQLite is available, Heddle durably limits one production-error
+code to one page per minute and three page attempts in five minutes, even when
+changing error text produces new attention identities. If a floor failure makes
+SQLite unavailable, an in-memory window provides the same bound within the
+current process; restarting Heddle resets that degraded-path window. Approval,
+user-input, stale-instance, lifecycle, repository, and epic-acceptance attention
+remain console-only. Configuration validation fails before production
+composition exists, so it cannot produce an attention or dispatch an incident.
 A pending production-error page is replayed before each scheduler pass. A
 retryable page waits for its durable retry deadline, including across restart;
 the durable attention remains active while earlier passes contain the delivery
