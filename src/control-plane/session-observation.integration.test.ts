@@ -213,6 +213,14 @@ describe.skipIf(!t3Binary)(
           async raise(entry) {
             attention.push(entry);
           },
+          resolve(attentionId) {
+            const index = attention.findIndex(
+              (entry) => entry.attentionId === attentionId,
+            );
+            if (index < 0) return false;
+            attention.splice(index, 1);
+            return true;
+          },
         },
         escalations: {
           pendingEscalations: () => [],

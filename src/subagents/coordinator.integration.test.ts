@@ -282,7 +282,11 @@ describe.skipIf(!t3Binary)(
         },
       });
       observer = new SessionObserver({
-        attention: { has: async () => false, raise: async () => undefined },
+        attention: {
+          has: async () => false,
+          raise: async () => undefined,
+          resolve: () => false,
+        },
         childStops: coordinator,
         escalations: {
           pendingEscalations: () => [],

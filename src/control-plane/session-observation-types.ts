@@ -45,6 +45,7 @@ export type SessionObservationAttention = {
 export interface SessionObservationAttentionQueue {
   has(attentionId: string): Promise<boolean>;
   raise(attention: SessionObservationAttention): Promise<void>;
+  resolve(attentionId: string): boolean | Promise<boolean>;
 }
 
 export interface SessionObservationPersistence {

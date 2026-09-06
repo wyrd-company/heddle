@@ -308,6 +308,92 @@ kind: standard
     await composition.close();
   });
 
+  it("removes recovered-session liveness attention while preserving unrelated attention across restart", async () => {
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    const t3 = new SyntheticT3();
+    const create = () =>
+      createProductionComposition({
+        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+        blueprintsRepositoryRoot,
+        configuration,
+        providerUsage: {
+          readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        },
+        pushoverTransport: { send: vi.fn(async () => undefined) },
+        t3,
+      });
+    const first = create();
+    await first.start();
+    const instanceId = `task-${taskId}`;
+    const implement = first.persistence
+      .listSessionRuntime()
+      .find(({ stageId }) => stageId === "implement")!;
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await first.scheduler.trigger();
+    const stale = first.attention
+      .list()
+      .find(({ kind }) => kind === "stalled")!;
+    expect(stale).toMatchObject({
+      instanceId,
+      taskId,
+    });
+    const approvalId = "sample-unrelated-approval";
+    await first.attention.raise({
+      attentionId: approvalId,
+      instanceId,
+      kind: "approval",
+      message: "Session has pending approval",
+      requestId: "request-one",
+      sessionKey: implement.sessionKey,
+      threadId: implement.threadId,
+    });
+
+    await first.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(implement.sessionKey),
+    });
+    await first.scheduler.trigger();
+
+    expect(first.persistence.listReconcilerRuntime()).toContainEqual(
+      expect.objectContaining({ stageId: "review", state: "waiting", taskId }),
+    );
+    expect(first.attention.list()).toContainEqual(
+      expect.objectContaining({ attentionId: approvalId, kind: "approval" }),
+    );
+    expect(first.attention.list()).not.toContainEqual(
+      expect.objectContaining({ attentionId: stale.attentionId }),
+    );
+    expect(await first.attention.has(stale.attentionId)).toBe(true);
+    expect(
+      first.persistence
+        .replayEvents(instanceId)
+        .filter(({ type }) => type === "observation:attention-required"),
+    ).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({ attentionId: stale.attentionId }),
+      }),
+    );
+    await first.close();
+
+    const restarted = create();
+    await restarted.start();
+
+    expect(restarted.attention.list()).toContainEqual(
+      expect.objectContaining({ attentionId: approvalId, kind: "approval" }),
+    );
+    expect(restarted.attention.list()).not.toContainEqual(
+      expect.objectContaining({ attentionId: stale.attentionId }),
+    );
+    expect(await restarted.attention.has(stale.attentionId)).toBe(true);
+    await restarted.close();
+  });
+
   it("uses a new deterministic activation identity when a stage recurs", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const t3 = new SyntheticT3();

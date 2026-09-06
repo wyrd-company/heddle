@@ -24,6 +24,8 @@ import type {
 
 type LivenessKind = "blocked" | "ended" | "failed" | "stalled";
 
+type AttentionLivenessKind = Exclude<LivenessKind, "blocked">;
+
 const livenessKindFor = (
   phase: SessionObservationResult["phase"],
 ): LivenessKind => {
@@ -48,7 +50,7 @@ const stageFingerprint = (
 
 const thresholdFor = (
   options: SessionObservationOptions,
-  kind: Exclude<LivenessKind, "blocked">,
+  kind: AttentionLivenessKind,
 ): number => {
   if (kind === "ended") return options.thresholds.endedMilliseconds;
   if (kind === "failed") return options.thresholds.failedMilliseconds;
@@ -64,6 +66,92 @@ export const isStageSessionTerminal = (
     advanceOperationId(sessionKey),
   );
 
+const livenessAttentionIdsFor = (
+  options: SessionObservationOptions,
+  target: SessionObservationTarget,
+): string[] => {
+  const events = eventsForSession(
+    options.persistence.replayEvents(target.instanceId),
+    target.sessionKey,
+    target.threadId,
+  );
+  const attentionIds = new Set<string>();
+  for (const [index, event] of events.entries()) {
+    if (event.type !== sessionObservationEventTypes.attentionRequired) continue;
+    const payload = objectPayload(event);
+    const kind = payload["kind"];
+    if (kind === "approval" || kind === "user-input") continue;
+    if (kind !== "ended" && kind !== "failed" && kind !== "stalled") {
+      throw new Error(
+        `Observation attention event ${event.sequence} has an invalid kind`,
+      );
+    }
+    if (payload["instanceId"] !== target.instanceId) {
+      throw new Error(
+        `Observation attention event ${event.sequence} disagrees with its instance`,
+      );
+    }
+    const attentionId = payload["attentionId"];
+    if (typeof attentionId !== "string" || attentionId.trim() === "") {
+      throw new Error(
+        `Observation attention event ${event.sequence} has no attention identity`,
+      );
+    }
+    const sample = events
+      .slice(0, index)
+      .filter(
+        ({ type }) => type === sessionObservationEventTypes.livenessSampled,
+      )
+      .at(-1);
+    if (sample === undefined) {
+      throw new Error(
+        `Observation attention event ${event.sequence} has no matching liveness sample`,
+      );
+    }
+    const samplePayload = objectPayload(sample);
+    const observedAt = samplePayload["observedAt"];
+    const stageFingerprint = samplePayload["stageFingerprint"];
+    if (
+      samplePayload["instanceId"] !== target.instanceId ||
+      samplePayload["kind"] !== kind ||
+      typeof observedAt !== "number" ||
+      !Number.isFinite(observedAt) ||
+      typeof stageFingerprint !== "string" ||
+      stageFingerprint.trim() === ""
+    ) {
+      throw new Error(
+        `Observation attention event ${event.sequence} has no matching liveness sample`,
+      );
+    }
+    const expectedId = observationHash(
+      target.instanceId,
+      target.sessionKey,
+      kind,
+      observedAt,
+      stageFingerprint,
+    );
+    if (attentionId !== expectedId) {
+      throw new Error(
+        `Observation attention event ${event.sequence} disagrees with its liveness sample`,
+      );
+    }
+    attentionIds.add(attentionId);
+  }
+  return [...attentionIds];
+};
+
+const resolveCompletedSessionLiveness = async (
+  options: SessionObservationOptions,
+  target: SessionObservationTarget,
+): Promise<void> => {
+  const attentionIds = livenessAttentionIdsFor(options, target);
+  for (const attentionId of attentionIds) {
+    if (await options.attention.has(attentionId)) {
+      await options.attention.resolve(attentionId);
+    }
+  }
+};
+
 export const observeSessionLiveness = async (
   options: SessionObservationOptions,
   target: SessionObservationTarget,
@@ -71,7 +159,10 @@ export const observeSessionLiveness = async (
   record: InstanceRecord,
   now: () => number,
 ): Promise<SessionObservationAttention | undefined> => {
-  if (isStageSessionTerminal(record, target.sessionKey)) return undefined;
+  if (isStageSessionTerminal(record, target.sessionKey)) {
+    await resolveCompletedSessionLiveness(options, target);
+    return undefined;
+  }
   const kind = livenessKindFor(phase);
   const fingerprint = stageFingerprint(record, target.sessionKey);
   const latest = eventsForSession(

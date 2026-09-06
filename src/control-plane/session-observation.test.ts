@@ -121,6 +121,7 @@ class MemoryPersistence implements SessionObservationPersistence {
 
 class MemoryAttention implements SessionObservationAttentionQueue {
   readonly entries: SessionObservationAttention[] = [];
+  readonly resolved = new Set<string>();
 
   async has(attentionId: string) {
     return this.entries.some((entry) => entry.attentionId === attentionId);
@@ -128,6 +129,21 @@ class MemoryAttention implements SessionObservationAttentionQueue {
 
   async raise(attention: SessionObservationAttention) {
     this.entries.push(attention);
+  }
+
+  resolve(attentionId: string) {
+    if (!this.entries.some((entry) => entry.attentionId === attentionId)) {
+      throw new Error(`Attention '${attentionId}' does not exist`);
+    }
+    const unresolved = !this.resolved.has(attentionId);
+    this.resolved.add(attentionId);
+    return unresolved;
+  }
+
+  unresolved() {
+    return this.entries.filter(
+      ({ attentionId }) => !this.resolved.has(attentionId),
+    );
   }
 }
 
@@ -355,6 +371,172 @@ describe("SessionObserver liveness", () => {
     await expect(test.observer.observe(target)).resolves.toMatchObject({
       attentions: [],
     });
+  });
+
+  it("resolves every exact prior liveness kind after the bound lifecycle operation completes", async () => {
+    const test = fixture();
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestTurn: { state: "completed" },
+      session: { status: "ready" },
+    };
+    await test.observer.observe(target);
+    test.setNow(1_030);
+    await test.observer.observe(target);
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestTurn: { state: "error" },
+      session: { status: "error" },
+    };
+    await test.observer.observe(target);
+    test.setNow(1_050);
+    await test.observer.observe(target);
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestTurn: { state: "running" },
+      session: { status: "running" },
+    };
+    await test.observer.observe(target);
+    test.setNow(1_090);
+    await test.observer.observe(target);
+    const liveness = [...test.attention.entries];
+    expect(liveness.map(({ kind }) => kind)).toEqual([
+      "ended",
+      "failed",
+      "stalled",
+    ]);
+
+    const approval: SessionObservationAttention = {
+      attentionId: "approval-one",
+      instanceId: target.instanceId,
+      kind: "approval",
+      message: "Session mix-one has pending approval",
+      requestId: "request-one",
+      sessionKey: target.sessionKey,
+      threadId: target.threadId,
+    };
+    const otherThread: SessionObservationAttention = {
+      attentionId: "other-thread-ended",
+      instanceId: target.instanceId,
+      kind: "ended",
+      message: "Another session ended",
+      sessionKey: target.sessionKey,
+      threadId: "thread-two",
+    };
+    for (const attention of [approval, otherThread]) {
+      test.attention.entries.push(attention);
+      test.persistence.appendEvent(
+        target.instanceId,
+        sessionObservationEventTypes.attentionRequired,
+        attention,
+      );
+    }
+    test.persistence.record = {
+      ...test.persistence.record,
+      state: state(true),
+      version: 2,
+    };
+
+    await expect(test.observer.observe(target)).resolves.toMatchObject({
+      attentions: [],
+    });
+    expect(test.attention.resolved).toEqual(
+      new Set(liveness.map(({ attentionId }) => attentionId)),
+    );
+    expect(test.attention.unresolved()).toEqual([approval, otherThread]);
+    const eventCount = test.persistence.events.length;
+
+    await test.observer.observe(target);
+
+    expect(test.attention.resolved).toEqual(
+      new Set(liveness.map(({ attentionId }) => attentionId)),
+    );
+    expect(test.persistence.events).toHaveLength(eventCount);
+  });
+
+  it("keeps liveness attention current when only another session operation completes", async () => {
+    const test = fixture();
+    await test.observer.observe(target);
+    test.setNow(1_040);
+    await test.observer.observe(target);
+    const context = lifecycleContext() as Record<string, JsonValue>;
+    context["completedOperations"] = {
+      "mcp:advance:other-session": {
+        awaitingNodeIds: [],
+        executionIds: [],
+        requestFingerprint: "complete",
+        status: "completed",
+        transitionId: "sample-one:2",
+      },
+    };
+    test.persistence.record = {
+      ...test.persistence.record,
+      state: {
+        ...test.persistence.record.state,
+        flowcraftContext: context,
+      },
+      version: 2,
+    };
+
+    await test.observer.observe(target);
+
+    expect(test.attention.resolved).toEqual(new Set());
+    expect(test.attention.unresolved()).toHaveLength(1);
+  });
+
+  it("fails closed instead of resolving a malformed liveness attention identity", async () => {
+    const test = fixture();
+    await test.observer.observe(target);
+    test.setNow(1_040);
+    await test.observer.observe(target);
+    const validId = test.attention.entries[0]!.attentionId;
+    const malformed: SessionObservationAttention = {
+      attentionId: "not-the-observed-liveness-identity",
+      instanceId: target.instanceId,
+      kind: "ended",
+      message: "Malformed observation",
+      sessionKey: target.sessionKey,
+      threadId: target.threadId,
+    };
+    test.attention.entries.push(malformed);
+    test.persistence.appendEvent(
+      target.instanceId,
+      sessionObservationEventTypes.attentionRequired,
+      malformed,
+    );
+    test.persistence.record = {
+      ...test.persistence.record,
+      state: state(true),
+      version: 2,
+    };
+
+    await expect(test.observer.observe(target)).rejects.toThrow(
+      "has no matching liveness sample",
+    );
+    expect(test.attention.resolved).toEqual(new Set());
+    expect(
+      test.attention.unresolved().map(({ attentionId }) => attentionId),
+    ).toEqual([validId, malformed.attentionId]);
+  });
+
+  it("resolves completed-operation liveness before an independent archive failure", async () => {
+    const test = fixture();
+    await test.observer.observe(target);
+    test.setNow(1_040);
+    await test.observer.observe(target);
+    const attentionId = test.attention.entries[0]!.attentionId;
+    makeTerminal(test);
+    test.t3.beforeDispatch = ({ type }) => {
+      if (type === "thread.archive") {
+        throw new Error("Injected archive failure");
+      }
+    };
+
+    await expect(test.observer.observe(target)).rejects.toThrow(
+      "Injected archive failure",
+    );
+    expect(test.attention.resolved).toEqual(new Set([attentionId]));
+    expect(test.attention.unresolved()).toEqual([]);
   });
 });
 
