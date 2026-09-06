@@ -86,19 +86,26 @@ proposed-design:
     readiness, so the epic's dependency graph is an input to
     scheduling, not only a view.
 
-    The epic task's own status is the operator's control lever. Moving
-    an epic to `in-progress` starts it: the reconciler promotes the
-    epic's children from `backlog` to `todo` — including children
-    added later — and dispatches them as readiness allows, with
-    sequencing carried by dependency edges. It also prepares each declared
+    The epic task's own status is the operator's control lever. The Console's
+    generic lifecycle control maps `backlog` and `todo` to Start, which moves
+    the epic to `in-progress`; maps `in-progress` and `uat` to Pause, which
+    moves the epic to `todo`; and offers no action for `done` or an unknown
+    status. The board authority validates the current status before applying
+    the requested transition, so stale requests and unknown statuses fail
+    closed. Moving an epic to `in-progress` starts delivery: the reconciler
+    promotes its non-UAT children from `backlog` to `todo` — including children
+    added later — and dispatches them as readiness allows, with sequencing
+    carried by dependency edges. It also prepares each declared
     repository at `/workspaces/worktrees/{epic-id}/{repository}` on the
     `epic/{epic-id}` branch and creates a T3 project titled
     `{product} - epic-{epic-id}` with `/workspaces/worktrees/{epic-id}` as
-    its workspace root. Moving an epic out of
-    `in-progress` pauses it: no new dispatches for its children, while
-    in-flight instances run to their next wait state and hold. Paused,
-    stopped, UAT, and completed epics retain their project so archived stage
-    threads remain available for inspection. The durable `active` project
+    its workspace root. An epic in `backlog` or `todo` is paused: no new child
+    dispatch starts, while in-flight instances run to their next wait state and
+    hold. An epic in `uat` is not paused; it admits UAT child dispatch and only
+    the exact late delivery work described below. A `done` epic is terminal,
+    and an epic with an unknown status dispatches nothing. Paused, UAT, and
+    completed epics retain their project so archived stage threads remain
+    available for inspection. The durable `active` project
     state means that the T3 project exists; it does not authorize child task
     execution. The epic's board status remains dispatch authority, and a done
     epic cannot dispatch a child. Project deletion is a separate explicit
@@ -123,11 +130,13 @@ proposed-design:
     without this proof raises one stable `uat-terminal-unverified` attention and
     admits no dynamic work. Missing or conflicting authority raises the stable
     delivery-child attention, leaves that child unchanged, and does not prevent
-    another exactly trusted child from running. The operator moves the epic to
-    `in-progress` to admit untrusted delivery work, or removes or re-parents work
-    that is not part of the epic. Every child remains a completion gate. When
-    they are all done, Heddle completes the epic without starting another UAT
-    instance.
+    another exactly trusted child from running. The reconciler owns recovery
+    for untrusted late delivery: it raises attention, and the operator either
+    deliberately moves the epic from `uat` to `in-progress` through the board
+    authority or removes or re-parents work that is not part of the epic. The
+    Console's generic Start control cannot perform this recovery transition.
+    Every child remains a completion gate. When they are all done, Heddle
+    completes the epic without starting another UAT instance.
 
     Production configuration declares a complete product inventory. Each
     product owns one or more named repositories and may carry the durable T3
