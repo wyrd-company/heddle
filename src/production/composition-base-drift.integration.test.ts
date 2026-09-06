@@ -31,16 +31,7 @@ describe("production concurrent review landing", () => {
     const repositoryRoot =
       fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
     const templateRoot = fixture.blueprintsRepositoryRoot;
-    const standardHash = await git(
-      templateRoot,
-      "hash-object",
-      "handoff-templates/standard.md",
-    );
-    const remediationHash = await git(
-      templateRoot,
-      "hash-object",
-      "handoff-templates/remediation.md",
-    );
+    const templateCommitSha = await git(templateRoot, "rev-parse", "HEAD");
     const blueprint = deliveryBlueprintFixture("trivial");
     for (const node of blueprint.nodes) {
       if (node.uses !== "wait") continue;
@@ -49,11 +40,11 @@ describe("production concurrent review landing", () => {
       node["handoff-template"] =
         node.handoff === "remediation"
           ? {
-              blobHash: remediationHash,
+              commitSha: templateCommitSha,
               path: "handoff-templates/remediation.md",
             }
           : {
-              blobHash: standardHash,
+              commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",
             };
     }
@@ -249,16 +240,7 @@ describe("production concurrent review landing", () => {
     const repositoryRoot =
       fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
     const templateRoot = fixture.blueprintsRepositoryRoot;
-    const standardHash = await git(
-      templateRoot,
-      "hash-object",
-      "handoff-templates/standard.md",
-    );
-    const remediationHash = await git(
-      templateRoot,
-      "hash-object",
-      "handoff-templates/remediation.md",
-    );
+    const templateCommitSha = await git(templateRoot, "rev-parse", "HEAD");
     const blueprint = deliveryBlueprintFixture("trivial");
     for (const node of blueprint.nodes) {
       if (node.uses !== "wait") continue;
@@ -267,11 +249,11 @@ describe("production concurrent review landing", () => {
       node["handoff-template"] =
         node.handoff === "remediation"
           ? {
-              blobHash: remediationHash,
+              commitSha: templateCommitSha,
               path: "handoff-templates/remediation.md",
             }
           : {
-              blobHash: standardHash,
+              commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",
             };
     }

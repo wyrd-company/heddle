@@ -279,12 +279,39 @@ kind: standard
       join(blueprintsRepositoryRoot, "handoff-templates", "standard.md"),
       handoffTemplate,
     );
-    const handoffTemplateBlobHash = (
-      await execute(
-        "git",
-        ["hash-object", "-w", "handoff-templates/standard.md"],
-        { cwd: blueprintsRepositoryRoot },
-      )
+    await writeFile(
+      join(blueprintsRepositoryRoot, "todo-templates", "sample-stage.json"),
+      JSON.stringify({
+        items: [{ id: "deliver", text: "Deliver the sample" }],
+      }),
+    );
+    await execute(
+      "git",
+      [
+        "add",
+        "handoff-templates/standard.md",
+        "todo-templates/sample-stage.json",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add sample templates",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    const handoffTemplateCommitSha = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: blueprintsRepositoryRoot,
+      })
     ).stdout.trim();
     await writeFile(
       join(blueprintsRepositoryRoot, "blueprints", "sample.json"),
@@ -308,7 +335,7 @@ kind: standard
           {
             handoff: "standard",
             "handoff-template": {
-              blobHash: handoffTemplateBlobHash,
+              commitSha: handoffTemplateCommitSha,
               path: "handoff-templates/standard.md",
             },
             id: "implement",
@@ -320,21 +347,13 @@ kind: standard
         ],
       }),
     );
-    await writeFile(
-      join(blueprintsRepositoryRoot, "todo-templates", "sample-stage.json"),
-      JSON.stringify({
-        items: [{ id: "deliver", text: "Deliver the sample" }],
-      }),
-    );
     await writeFile(join(repositoryRoot, "README.md"), "# Sample repository\n");
     await execute("git", ["add", "README.md"], {
       cwd: repositoryRoot,
     });
-    await execute(
-      "git",
-      ["add", "blueprints", "handoff-templates", "todo-templates"],
-      { cwd: blueprintsRepositoryRoot },
-    );
+    await execute("git", ["add", "blueprints"], {
+      cwd: blueprintsRepositoryRoot,
+    });
     await execute(
       "git",
       [

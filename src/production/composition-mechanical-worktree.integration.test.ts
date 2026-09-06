@@ -58,15 +58,10 @@ const statusOf = async (
 const installStandardDelivery = async (
   fixture: ProductionFixture,
 ): Promise<void> => {
-  const standardHash = await git(
+  const templateCommitSha = await git(
     fixture.blueprintsRepositoryRoot,
-    "hash-object",
-    "handoff-templates/standard.md",
-  );
-  const remediationHash = await git(
-    fixture.blueprintsRepositoryRoot,
-    "hash-object",
-    "handoff-templates/remediation.md",
+    "rev-parse",
+    "HEAD",
   );
   const blueprint = deliveryBlueprintFixture("standard-delivery");
   for (const node of blueprint.nodes) {
@@ -76,11 +71,11 @@ const installStandardDelivery = async (
     node["handoff-template"] =
       node.handoff === "remediation"
         ? {
-            blobHash: remediationHash,
+            commitSha: templateCommitSha,
             path: "handoff-templates/remediation.md",
           }
         : {
-            blobHash: standardHash,
+            commitSha: templateCommitSha,
             path: "handoff-templates/standard.md",
           };
   }

@@ -22,6 +22,24 @@ const isDisposition = (
     value["outputContract"] === "optional" ||
     value["outputContract"] === "review-findings");
 
+export const removedHandoffTemplateBlobHashDiagnostic = (
+  value: JsonValue,
+): string | undefined => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof value["handoffTemplate"] !== "object" ||
+    value["handoffTemplate"] === null ||
+    Array.isArray(value["handoffTemplate"])
+  ) {
+    return undefined;
+  }
+  return Object.hasOwn(value["handoffTemplate"], "blobHash")
+    ? "Workflow MCP stage contract uses removed handoff template field 'blobHash'; use 'commitSha'"
+    : undefined;
+};
+
 export const isWorkflowMcpStageContract = (
   value: JsonValue,
 ): value is StoredWorkflowMcpStageContract =>
@@ -33,8 +51,14 @@ export const isWorkflowMcpStageContract = (
   typeof value["handoffTemplate"] === "object" &&
   value["handoffTemplate"] !== null &&
   !Array.isArray(value["handoffTemplate"]) &&
-  typeof value["handoffTemplate"]["blobHash"] === "string" &&
+  typeof value["handoffTemplate"]["commitSha"] === "string" &&
+  /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(
+    value["handoffTemplate"]["commitSha"],
+  ) &&
   typeof value["handoffTemplate"]["path"] === "string" &&
+  /^handoff-templates\/[a-z]+(?:-[a-z]+)*\.md$/.test(
+    value["handoffTemplate"]["path"],
+  ) &&
   typeof value["stage"] === "string" &&
   typeof value["todoTemplate"] === "string" &&
   Array.isArray(value["tools"]) &&

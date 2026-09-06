@@ -54,7 +54,7 @@ const storedHandoff = (
       { description: "Complete the assessment", name: "complete" },
     ],
     handoffTemplate: {
-      blobHash: "b".repeat(40),
+      commitSha: "b".repeat(40),
       path: "handoff-templates/sample.md",
     },
     stage: "assess",

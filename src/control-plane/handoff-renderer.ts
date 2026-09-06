@@ -3,6 +3,8 @@
 //   implements: heddle
 // ---
 
+import { posix } from "node:path";
+
 import nunjucks from "nunjucks";
 
 import type { JsonValue } from "../persistence/index.js";
@@ -147,8 +149,79 @@ const sortedJson = (value: JsonValue): JsonValue => {
   );
 };
 
-const environment = (): nunjucks.Environment => {
-  const result = new nunjucks.Environment(undefined, {
+const includeDirectory = "handoff-templates/includes/";
+
+const assertIncludeSpecifier = (name: string): void => {
+  if (
+    name.includes("\\") ||
+    posix.normalize(name) !== name ||
+    !name.startsWith(includeDirectory) ||
+    name === includeDirectory
+  ) {
+    throw new HandoffRenderError(
+      `Handoff include must use a repository-relative path inside ${includeDirectory}: ${JSON.stringify(name)}`,
+    );
+  }
+};
+
+type NunjucksSyntaxNode = {
+  [key: string]: unknown;
+  typename?: string;
+};
+
+const assertSupportedTemplateSyntax = (body: string, path: string): void => {
+  const parser = (
+    nunjucks as unknown as {
+      parser: { parse(source: string): NunjucksSyntaxNode };
+    }
+  ).parser;
+  const root = parser.parse(body);
+  const visited = new Set<object>();
+  const visit = (value: unknown): void => {
+    if (typeof value !== "object" || value === null || visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+    const node = value as NunjucksSyntaxNode;
+    if (
+      node.typename === "Extends" ||
+      node.typename === "Import" ||
+      node.typename === "FromImport"
+    ) {
+      throw new HandoffRenderError(
+        `Handoff template ${JSON.stringify(path)} uses unsupported ${node.typename} syntax; only include is supported`,
+      );
+    }
+    for (const child of Object.values(node)) {
+      if (Array.isArray(child)) child.forEach(visit);
+      else visit(child);
+    }
+  };
+  visit(root);
+};
+
+class PinnedIncludeLoader extends nunjucks.Loader {
+  constructor(private readonly includes: Readonly<Record<string, string>>) {
+    super();
+  }
+
+  getSource(name: string): nunjucks.LoaderSource {
+    assertIncludeSpecifier(name);
+    const source = this.includes[name];
+    if (source === undefined) {
+      throw new HandoffRenderError(
+        `Pinned handoff include is unavailable: ${name}`,
+      );
+    }
+    assertSupportedTemplateSyntax(source, name);
+    return { noCache: true, path: name, src: source };
+  }
+}
+
+const environment = (
+  includes: Readonly<Record<string, string>>,
+): nunjucks.Environment => {
+  const result = new nunjucks.Environment(new PinnedIncludeLoader(includes), {
     autoescape: false,
     throwOnUndefined: true,
     trimBlocks: false,
@@ -226,14 +299,24 @@ export const renderStageHandoff = (input: HandoffRenderInput): string => {
       "Stored handoff and pinned template stage metadata disagree",
     );
   }
-  const renderer = environment();
+  const renderer = environment(input.template.includes);
   let first: string;
   let second: string;
   try {
+    assertSupportedTemplateSyntax(input.template.body, input.template.path);
     const context = { handoff, task: input.task };
-    first = renderer.renderString(input.template.body, context);
-    second = renderer.renderString(input.template.body, context);
+    first = new nunjucks.Template(
+      input.template.body,
+      renderer,
+      input.template.path,
+    ).render(context);
+    second = new nunjucks.Template(
+      input.template.body,
+      renderer,
+      input.template.path,
+    ).render(context);
   } catch (error) {
+    if (error instanceof HandoffRenderError) throw error;
     throw new HandoffRenderError(
       `Handoff template render failed: ${error instanceof Error ? error.message : String(error)}`,
       error,

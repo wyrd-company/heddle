@@ -83,7 +83,7 @@ export interface StoredWorkflowMcpStageContract {
   blueprintPath: string;
   dispositions: StoredWorkflowMcpDisposition[];
   handoffTemplate: {
-    blobHash: string;
+    commitSha: string;
     path: string;
   };
   stage: string;

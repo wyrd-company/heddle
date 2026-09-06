@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { access, copyFile, readFile, rm } from "node:fs/promises";
+import { access, copyFile, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cwd } from "node:process";
 
@@ -14,6 +14,7 @@ import {
   renderStageHandoff,
 } from "../control-plane/index.js";
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
+import type { LifecycleBlueprint } from "../engine/index.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { errorDetail } from "../error-details.js";
 import { isWorkflowMcpStageContract } from "../mcp-server/index.js";
@@ -638,17 +639,13 @@ describe("production composition", () => {
       "todo-templates/standard-delivery-retrospective.json",
       "todo-templates/standard-delivery-review.json",
     ];
-    await writeDeliveryBlueprintFixture(
-      fixture.blueprintsRepositoryRoot,
-      "standard-delivery",
-    );
     for (const path of artifactPaths) {
       await copyFile(
         join(cwd(), "src/test-fixtures/standard-delivery", path),
         join(fixture.blueprintsRepositoryRoot, path),
       );
     }
-    await execute("git", ["add", "blueprints", ...artifactPaths], {
+    await execute("git", ["add", ...artifactPaths], {
       cwd: fixture.blueprintsRepositoryRoot,
     });
     await execute(
@@ -661,7 +658,49 @@ describe("production composition", () => {
         "commit",
         "--quiet",
         "-m",
-        "Add standard delivery artifacts",
+        "Add standard delivery templates",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    const templateCommitSha = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: fixture.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    const blueprintPath = await writeDeliveryBlueprintFixture(
+      fixture.blueprintsRepositoryRoot,
+      "standard-delivery",
+    );
+    const absoluteBlueprintPath = join(
+      fixture.blueprintsRepositoryRoot,
+      blueprintPath,
+    );
+    const blueprint = JSON.parse(
+      await readFile(absoluteBlueprintPath, "utf8"),
+    ) as LifecycleBlueprint;
+    for (const node of blueprint.nodes) {
+      if (node["handoff-template"] !== undefined) {
+        node["handoff-template"].commitSha = templateCommitSha;
+      }
+    }
+    await writeFile(
+      absoluteBlueprintPath,
+      `${JSON.stringify(blueprint, null, 2)}\n`,
+    );
+    await execute("git", ["add", blueprintPath], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add standard delivery blueprint",
       ],
       { cwd: fixture.blueprintsRepositoryRoot },
     );
@@ -713,9 +752,13 @@ describe("production composition", () => {
     ) {
       throw new Error("Standard delivery activation has no stored handoff");
     }
-    const pinnedBlob = await execute(
+    const pinnedTemplate = await execute(
       "git",
-      ["cat-file", "blob", stored.workflowMcp.handoffTemplate.blobHash],
+      [
+        "cat-file",
+        "-p",
+        `${stored.workflowMcp.handoffTemplate.commitSha}:${stored.workflowMcp.handoffTemplate.path}`,
+      ],
       { cwd: fixture.blueprintsRepositoryRoot },
     );
     const expectedTemplateBytes = await readFile(
@@ -725,12 +768,13 @@ describe("production composition", () => {
       ),
       "utf8",
     );
-    expect(pinnedBlob.stdout).toBe(expectedTemplateBytes);
+    expect(pinnedTemplate.stdout).toBe(expectedTemplateBytes);
     const bodyBoundary = expectedTemplateBytes.indexOf("\n---\n", 4);
     expect(bodyBoundary).toBeGreaterThan(0);
     const template = {
       ...stored.workflowMcp.handoffTemplate,
       body: expectedTemplateBytes.slice(bodyBoundary + "\n---\n".length),
+      includes: {},
       kind: "standard" as const,
     };
     const task = await composition.board.readTask(fixture.taskId);
@@ -756,7 +800,7 @@ describe("production composition", () => {
     await expect(
       execute(
         "git",
-        ["cat-file", "-e", stored.workflowMcp.handoffTemplate.blobHash],
+        ["cat-file", "-e", stored.workflowMcp.handoffTemplate.commitSha],
         { cwd: fixture.repositoryRoot },
       ),
     ).rejects.toThrow();
@@ -765,12 +809,12 @@ describe("production composition", () => {
         "git",
         [
           "rev-parse",
-          `refs/heddle/handoff-templates/${stored.workflowMcp.handoffTemplate.blobHash}`,
+          `refs/heddle/handoff-templates/${stored.workflowMcp.handoffTemplate.commitSha}`,
         ],
         { cwd: fixture.blueprintsRepositoryRoot },
       ),
     ).resolves.toMatchObject({
-      stdout: `${stored.workflowMcp.handoffTemplate.blobHash}\n`,
+      stdout: `${stored.workflowMcp.handoffTemplate.commitSha}\n`,
     });
     const productRefs = await execute(
       "git",

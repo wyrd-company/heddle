@@ -3,12 +3,12 @@
 //   verifies: heddle
 // ---
 
-import { Buffer } from "node:buffer";
-import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -21,6 +21,7 @@ import { deliveryBlueprintFixture } from "./lifecycle-blueprint.test-support.js"
 import type { LifecycleBlueprint, LifecycleEffect } from "./types.js";
 
 const roots: string[] = [];
+const execute = promisify(execFile);
 
 const sampleHandoffTemplate = "# {{ task.title }}\n";
 const sampleTodoTemplate = `${JSON.stringify(
@@ -28,12 +29,7 @@ const sampleTodoTemplate = `${JSON.stringify(
   null,
   2,
 )}\n`;
-const sampleHandoffBlobHash = createHash("sha1")
-  .update(`blob ${Buffer.byteLength(sampleHandoffTemplate)}\0`)
-  .update(sampleHandoffTemplate)
-  .digest("hex");
-
-const artifact = () => ({
+const artifact = (commitSha = "a".repeat(40)) => ({
   $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
   relationships: {
     implements: "heddle",
@@ -44,7 +40,7 @@ const artifact = () => ({
     {
       handoff: "standard",
       "handoff-template": {
-        blobHash: sampleHandoffBlobHash,
+        commitSha,
         path: "handoff-templates/sample-handoff.md",
       },
       id: "inspect",
@@ -85,16 +81,12 @@ const deliveryArtifact = (artifactId: "standard-delivery" | "trivial") => ({
 });
 
 const repository = async (
-  value: unknown = artifact(),
+  value?: unknown,
   artifactId = "sample-process",
 ): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), "heddle-blueprint-validation-"));
   roots.push(root);
   await mkdir(join(root, "blueprints"));
-  await writeFile(
-    join(root, "blueprints", `${artifactId}.json`),
-    `${JSON.stringify(value, null, 2)}\n`,
-  );
   await mkdir(join(root, "handoff-templates"));
   await writeFile(
     join(root, "handoff-templates", "sample-handoff.md"),
@@ -104,6 +96,33 @@ const repository = async (
   await writeFile(
     join(root, "todo-templates", "sample-checklist.json"),
     sampleTodoTemplate,
+  );
+  await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+    cwd: root,
+  });
+  await execute("git", ["add", "handoff-templates", "todo-templates"], {
+    cwd: root,
+  });
+  await execute(
+    "git",
+    [
+      "-c",
+      "user.name=Sample User",
+      "-c",
+      "user.email=sample@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "add sample templates",
+    ],
+    { cwd: root },
+  );
+  const commitSha = (
+    await execute("git", ["rev-parse", "HEAD"], { cwd: root })
+  ).stdout.trim();
+  await writeFile(
+    join(root, "blueprints", `${artifactId}.json`),
+    `${JSON.stringify(value ?? artifact(commitSha), null, 2)}\n`,
   );
   return root;
 };
@@ -133,6 +152,18 @@ describe("organization lifecycle blueprint artifacts", () => {
     await expect(
       validateBlueprintRepository(await repository(invalid)),
     ).rejects.toThrow("violates the lifecycle schema");
+  });
+
+  it("rejects the removed handoff blobHash schema shape", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["handoff-template"] = {
+      blobHash: "a".repeat(40),
+      path: "handoff-templates/sample-handoff.md",
+    };
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow(/commitSha[\s\S]*blobHash/);
   });
 
   it("rejects interpreter-invalid graphs", async () => {
@@ -233,46 +264,65 @@ describe("organization lifecycle blueprint artifacts", () => {
     ).rejects.toThrow("relationships must name its template artifacts");
   });
 
-  it("rejects a pinned handoff template path with no repository artifact", async () => {
+  it("resolves a pinned handoff template after its working-tree path is removed", async () => {
     const root = await repository();
     await rm(join(root, "handoff-templates", "sample-handoff.md"));
-    await expect(validateBlueprintRepository(root)).rejects.toThrow(
-      "pins handoff template 'handoff-templates/sample-handoff.md' that is not in the repository",
-    );
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
   });
 
-  it("rejects a pinned handoff template blob hash that does not match the artifact", async () => {
+  it("rejects an unavailable pinned handoff template commit", async () => {
     const invalid = artifact();
-    (invalid.nodes[1] as { "handoff-template": { blobHash: string } })[
+    (invalid.nodes[1] as { "handoff-template": { commitSha: string } })[
       "handoff-template"
-    ].blobHash = "b".repeat(40);
+    ].commitSha = "b".repeat(40);
     await expect(
       validateBlueprintRepository(await repository(invalid)),
     ).rejects.toThrow(
-      "pins handoff template blob " +
-        `${"b".repeat(40)} that does not match 'handoff-templates/sample-handoff.md'`,
+      `pins unavailable handoff template commit ${"b".repeat(40)}`,
     );
   });
 
-  it("rejects a pinned handoff template blob hash whose length is not a Git object ID", async () => {
+  it("ignores changed working-tree template bytes during pin validation", async () => {
+    const root = await repository();
+    await writeFile(
+      join(root, "handoff-templates", "sample-handoff.md"),
+      "Changed {{ task.title }}\n",
+    );
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+  });
+
+  it("rejects a pinned handoff template commit SHA whose length is not a Git object ID", async () => {
     const invalid = artifact();
-    (invalid.nodes[1] as { "handoff-template": { blobHash: string } })[
+    (invalid.nodes[1] as { "handoff-template": { commitSha: string } })[
       "handoff-template"
-    ].blobHash = "a".repeat(41);
+    ].commitSha = "a".repeat(41);
 
     await expect(
       validateBlueprintRepository(await repository(invalid)),
-    ).rejects.toThrow("pins an invalid handoff template blob hash");
+    ).rejects.toThrow(/must match pattern.*40.*64/);
   });
 
-  it("reports a non-absence handoff template read failure without relabeling it as missing", async () => {
+  it("rejects a handoff template path unavailable at its pinned commit", async () => {
     const root = await repository();
-    const path = join(root, "handoff-templates", "sample-handoff.md");
-    await rm(path);
-    await mkdir(path);
+    const commitSha = (
+      await execute("git", ["rev-parse", "HEAD"], { cwd: root })
+    ).stdout.trim();
+    const invalid = artifact(commitSha);
+    invalid.relationships.uses = ["missing", "sample-checklist"];
+    invalid.nodes[1]!["handoff-template"]!.path =
+      "handoff-templates/missing.md";
+    await writeFile(
+      join(root, "blueprints", "sample-process.json"),
+      `${JSON.stringify(invalid, null, 2)}\n`,
+    );
 
     await expect(validateBlueprintRepository(root)).rejects.toThrow(
-      "could not read handoff template 'handoff-templates/sample-handoff.md': EISDIR",
+      `pins handoff template 'handoff-templates/missing.md' that is unavailable at commit ${commitSha}`,
     );
   });
 

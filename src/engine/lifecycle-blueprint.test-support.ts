@@ -11,11 +11,11 @@ import type { LifecycleBlueprint, LifecycleNode } from "./types.js";
 type AuthoredLifecycleBlueprint = Omit<LifecycleBlueprint, "id">;
 
 const standardTemplate = {
-  blobHash: "8f266fe406517c891633d8ef90ca3716f1356f37",
+  commitSha: "8f266fe406517c891633d8ef90ca3716f1356f37",
   path: "handoff-templates/standard.md",
 };
 const remediationTemplate = {
-  blobHash: "3ed4e911f9ea17b7116ca49ea90b2136cdb57817",
+  commitSha: "3ed4e911f9ea17b7116ca49ea90b2136cdb57817",
   path: "handoff-templates/remediation.md",
 };
 const waitTools = [

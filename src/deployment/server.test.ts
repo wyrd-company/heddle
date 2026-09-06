@@ -181,7 +181,7 @@ describe("deployed Heddle service", () => {
       {
         blueprintEditor: {
           load: async (artifactId) => ({
-            blobHash: "a".repeat(40),
+            commitSha: "a".repeat(40),
             blueprint: { edges: [], id: artifactId, nodes: [] },
             path: `blueprints/${artifactId}.json`,
             positions: {},

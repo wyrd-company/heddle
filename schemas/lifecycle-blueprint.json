@@ -103,11 +103,11 @@
         "handoff-template": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["blobHash", "path"],
+          "required": ["commitSha", "path"],
           "properties": {
-            "blobHash": {
+            "commitSha": {
               "type": "string",
-              "pattern": "^[0-9a-f]{40,64}$"
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
             },
             "path": {
               "type": "string",

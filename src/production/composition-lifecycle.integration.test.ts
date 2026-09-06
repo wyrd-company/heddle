@@ -111,7 +111,7 @@ describe("production lifecycle composition", () => {
     await second.close();
   });
 
-  it("raises durable attention and performs no partial dispatch when strict rendering fails", async () => {
+  it("raises durable attention and performs no partial dispatch when a handoff include escapes containment", async () => {
     const { blueprintsRepositoryRoot, configuration } = await prepare();
     const invalidTemplate = `---
 $schema: https://wyrd.company/heddle/handoff-template.schema.json
@@ -121,7 +121,7 @@ format: heddle.handoff-template
 version: 1
 kind: standard
 ---
-# {{ task.absentTitle }}
+{% include "handoff-templates/includes/../outside.md" %}
 `;
     const invalidPath = join(
       blueprintsRepositoryRoot,
@@ -129,8 +129,25 @@ kind: standard
       "invalid.md",
     );
     await writeFile(invalidPath, invalidTemplate);
-    const invalidHash = (
-      await execute("git", ["hash-object", "-w", invalidPath], {
+    await execute("git", ["add", "--", "handoff-templates/invalid.md"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add invalid sample template",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    const invalidCommitSha = (
+      await execute("git", ["rev-parse", "HEAD"], {
         cwd: blueprintsRepositoryRoot,
       })
     ).stdout.trim();
@@ -143,15 +160,13 @@ kind: standard
       nodes: Array<Record<string, unknown>>;
     };
     blueprint.nodes[0]!["handoff-template"] = {
-      blobHash: invalidHash,
+      commitSha: invalidCommitSha,
       path: "handoff-templates/invalid.md",
     };
     await writeFile(blueprintPath, JSON.stringify(blueprint));
-    await execute(
-      "git",
-      ["add", "--", "blueprints/sample.json", "handoff-templates/invalid.md"],
-      { cwd: blueprintsRepositoryRoot },
-    );
+    await execute("git", ["add", "--", "blueprints/sample.json"], {
+      cwd: blueprintsRepositoryRoot,
+    });
     await execute(
       "git",
       [
@@ -188,7 +203,9 @@ kind: standard
     expect(composition.attention.list()).toEqual([
       expect.objectContaining({
         kind: "lifecycle-resolution",
-        message: expect.stringContaining("Handoff template render failed"),
+        message: expect.stringContaining(
+          "repository-relative path inside handoff-templates/includes/",
+        ),
       }),
     ]);
     await composition.close();

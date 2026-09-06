@@ -3,9 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,12 +18,6 @@ import type { ProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 
 export const execute = promisify(execFile);
-
-const gitBlobHash = (content: string): string =>
-  createHash("sha1")
-    .update(`blob ${Buffer.byteLength(content)}\0`)
-    .update(content)
-    .digest("hex");
 
 const standardHandoffTemplate = `---
 $schema: https://wyrd.company/heddle/handoff-template.schema.json
@@ -185,6 +177,45 @@ export const prepareProductionFixture =
     });
     await mkdir(repositoryRoot, { recursive: true });
     await writeFile(
+      join(blueprintsRepositoryRoot, "handoff-templates", "standard.md"),
+      standardHandoffTemplate,
+    );
+    await writeFile(
+      join(blueprintsRepositoryRoot, "handoff-templates", "remediation.md"),
+      remediationHandoffTemplate,
+    );
+    await writeFile(
+      join(blueprintsRepositoryRoot, "todo-templates", "sample-stage.json"),
+      JSON.stringify({
+        items: [{ id: "deliver", text: "Deliver the sample" }],
+      }),
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute("git", ["add", "handoff-templates", "todo-templates"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add sample templates",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    const templateCommitSha = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    await writeFile(
       join(blueprintsRepositoryRoot, "blueprints", "sample.json"),
       JSON.stringify({
         $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
@@ -230,7 +261,7 @@ export const prepareProductionFixture =
           {
             handoff: "standard",
             "handoff-template": {
-              blobHash: gitBlobHash(standardHandoffTemplate),
+              commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",
             },
             id: "implement",
@@ -249,7 +280,7 @@ export const prepareProductionFixture =
             id: "review",
             handoff: "standard",
             "handoff-template": {
-              blobHash: gitBlobHash(standardHandoffTemplate),
+              commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",
             },
             config: { joinStrategy: "any" },
@@ -268,7 +299,7 @@ export const prepareProductionFixture =
             id: "remediate",
             handoff: "remediation",
             "handoff-template": {
-              blobHash: gitBlobHash(remediationHandoffTemplate),
+              commitSha: templateCommitSha,
               path: "handoff-templates/remediation.md",
             },
             config: { joinStrategy: "any" },
@@ -314,7 +345,7 @@ export const prepareProductionFixture =
           {
             handoff: "standard",
             "handoff-template": {
-              blobHash: gitBlobHash(standardHandoffTemplate),
+              commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",
             },
             id: "implement",
@@ -332,20 +363,6 @@ export const prepareProductionFixture =
           },
           { id: "finalize", uses: "finalize" },
         ],
-      }),
-    );
-    await writeFile(
-      join(blueprintsRepositoryRoot, "handoff-templates", "standard.md"),
-      standardHandoffTemplate,
-    );
-    await writeFile(
-      join(blueprintsRepositoryRoot, "handoff-templates", "remediation.md"),
-      remediationHandoffTemplate,
-    );
-    await writeFile(
-      join(blueprintsRepositoryRoot, "todo-templates", "sample-stage.json"),
-      JSON.stringify({
-        items: [{ id: "deliver", text: "Deliver the sample" }],
       }),
     );
     await writeFile(join(repositoryRoot, "README.md"), "# Sample repository\n");
@@ -369,14 +386,9 @@ export const prepareProductionFixture =
       ],
       { cwd: repositoryRoot },
     );
-    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+    await execute("git", ["add", "blueprints"], {
       cwd: blueprintsRepositoryRoot,
     });
-    await execute(
-      "git",
-      ["add", "blueprints", "handoff-templates", "todo-templates"],
-      { cwd: blueprintsRepositoryRoot },
-    );
     await execute(
       "git",
       [

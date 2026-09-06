@@ -149,10 +149,22 @@ export const validateBlueprint = (
         `Agent wait node ${JSON.stringify(node.id)} has no handoff metadata`,
       );
     }
+    const handoffTemplate = node["handoff-template"] as
+      Record<string, unknown> | undefined;
+    if (
+      handoffTemplate !== undefined &&
+      Object.hasOwn(handoffTemplate, "blobHash")
+    ) {
+      throw new BlueprintValidationError(
+        `Agent wait node ${JSON.stringify(node.id)} uses removed handoff template field 'blobHash'; use 'commitSha'`,
+      );
+    }
     if (
       isAgentWait &&
       (node["handoff-template"] === undefined ||
-        !/^[0-9a-f]{40,64}$/.test(node["handoff-template"].blobHash) ||
+        !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(
+          node["handoff-template"].commitSha,
+        ) ||
         !/^handoff-templates\/[a-z]+(?:-[a-z]+)*\.md$/.test(
           node["handoff-template"].path,
         ))

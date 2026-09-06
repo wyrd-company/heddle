@@ -215,7 +215,7 @@ task validate HEDDLE_REPOSITORY_ROOT=/absolute/path/to/heddle
 Heddle owns the lifecycle blueprint schema and interpreter. The organization
 repository owns authored blueprint artifacts together with the
 `handoff-templates/` and `todo-templates/` artifacts they bind. Validation
-fails when a node's pinned handoff-template path and blob hash or named todo
+fails when a node's pinned handoff-template commit and path or named todo
 template does not resolve in the repository being validated.
 
 For example, the routing portion has this shape:
@@ -357,10 +357,11 @@ Use `escalate` for a blocking question that requires attention outside this sess
 
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
 pinned lifecycle blueprint. Each wait node also declares a `handoff-template`
-with a repository-relative Markdown path and exact Git blob hash. Heddle reads
-the pinned blob from the organization blueprint clone, retains it there under
-`refs/heddle/handoff-templates/<blob-hash>`, and does not read the mutable
-working-tree file during session activation. Product repositories receive no
+with a repository-relative Markdown path and exact Git commit SHA. Heddle reads
+the entry file and `handoff-templates/includes/` files from that commit in the
+organization blueprint clone, retains the commit under
+`refs/heddle/handoff-templates/<commit-sha>`, and does not read mutable
+working-tree files during session activation. Product repositories receive no
 template-retention refs.
 Heddle reconstructs completed wait-stage outputs in
 recorded lifecycle execution order. A standard stage receives those prior
@@ -396,6 +397,10 @@ Their YAML front matter declares the Heddle template schema, relationship,
 format version, and either `standard` or `remediation`. Template bodies use
 strict Nunjucks variables. Use `stableJson` for structured values and do not
 use `random` or `date`; Heddle disables both filters and compares two renders.
+Templates can include pinned partials with the full repository-relative form
+`{% include "handoff-templates/includes/<path>" %}`. An include path cannot
+escape that directory. Nunjucks `extends`, `import`, and `from ... import`
+directives are not supported in entry files or included files.
 The standard context supplies `task` and `handoff`, including the normalized
 task contract, prior outputs, skill pointer, and persisted todo lists. The
 remediation context supplies the same roots with canonical review findings and

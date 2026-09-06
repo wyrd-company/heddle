@@ -22,7 +22,7 @@ const blueprint = (): LifecycleBlueprint => ({
     {
       handoff: "standard",
       "handoff-template": {
-        blobHash: "a".repeat(40),
+        commitSha: "a".repeat(40),
         path: "handoff-templates/standard.md",
       },
       id: "prepare",
@@ -64,6 +64,39 @@ describe("lifecycle blueprint handoff metadata", () => {
       'Agent wait node "prepare" has no valid pinned handoff template',
     );
   });
+
+  it("rejects the removed handoff blobHash shape with a named diagnostic", () => {
+    const value = blueprint();
+    value.nodes[0]!["handoff-template"] = {
+      blobHash: "a".repeat(40),
+      path: "handoff-templates/standard.md",
+    } as unknown as NonNullable<
+      LifecycleBlueprint["nodes"][number]["handoff-template"]
+    >;
+
+    expect(() => validate(value)).toThrow(
+      "uses removed handoff template field 'blobHash'; use 'commitSha'",
+    );
+  });
+
+  it("accepts a SHA-256 handoff template commit pin", () => {
+    const value = blueprint();
+    value.nodes[0]!["handoff-template"]!.commitSha = "a".repeat(64);
+
+    expect(() => validate(value)).not.toThrow();
+  });
+
+  it.each(["a".repeat(41), "A".repeat(40)])(
+    "rejects invalid handoff template commit pin %s",
+    (commitSha) => {
+      const value = blueprint();
+      value.nodes[0]!["handoff-template"]!.commitSha = commitSha;
+
+      expect(() => validate(value)).toThrow(
+        'Agent wait node "prepare" has no valid pinned handoff template',
+      );
+    },
+  );
 
   it("rejects handoff metadata on a non-wait node", () => {
     const value = blueprint();

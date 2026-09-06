@@ -3,10 +3,10 @@
 //   implements: heddle
 // ---
 
-import type { Buffer } from "node:buffer";
-import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
 
@@ -23,6 +23,7 @@ const schemaPath = resolve(
   import.meta.dirname,
   "../../schemas/lifecycle-blueprint.json",
 );
+const execute = promisify(execFile);
 
 const json = async (path: string): Promise<unknown> =>
   JSON.parse(await readFile(path, "utf8")) as unknown;
@@ -103,12 +104,6 @@ const assertTemplateRelationships = (
   }
 };
 
-const gitBlobHash = (content: Buffer, blobHash: string): string =>
-  createHash(blobHash.length === 64 ? "sha256" : "sha1")
-    .update(`blob ${content.byteLength}\0`)
-    .update(content)
-    .digest("hex");
-
 const assertTemplateArtifacts = async (
   artifactId: string,
   nodes: LifecycleNode[],
@@ -117,36 +112,33 @@ const assertTemplateArtifacts = async (
   for (const node of nodes) {
     const pinned = node["handoff-template"];
     if (pinned !== undefined) {
-      if (!/^(?:[\da-f]{40}|[\da-f]{64})$/i.test(pinned.blobHash)) {
+      if (!/^(?:[\da-f]{40}|[\da-f]{64})$/.test(pinned.commitSha)) {
         throw new BlueprintValidationError(
-          `Blueprint '${artifactId}' node '${node.id}' pins an invalid handoff template blob hash`,
+          `Blueprint '${artifactId}' node '${node.id}' pins an invalid handoff template commit SHA`,
         );
       }
-      let content: Buffer;
       try {
-        content = await readFile(join(repositoryRoot, pinned.path));
-      } catch (error) {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error &&
-          error.code === "ENOENT"
-        ) {
-          throw new BlueprintValidationError(
-            `Blueprint '${artifactId}' node '${node.id}' pins handoff template '${pinned.path}' that is not in the repository`,
-          );
-        }
+        await execute(
+          "git",
+          ["cat-file", "-e", `${pinned.commitSha}^{commit}`],
+          {
+            cwd: repositoryRoot,
+          },
+        );
+      } catch {
         throw new BlueprintValidationError(
-          `Blueprint '${artifactId}' node '${node.id}' could not read handoff template '${pinned.path}': ${
-            typeof error === "object" && error !== null && "code" in error
-              ? String(error.code)
-              : String(error)
-          }`,
+          `Blueprint '${artifactId}' node '${node.id}' pins unavailable handoff template commit ${pinned.commitSha}`,
         );
       }
-      if (gitBlobHash(content, pinned.blobHash) !== pinned.blobHash) {
+      try {
+        await execute(
+          "git",
+          ["cat-file", "-e", `${pinned.commitSha}:${pinned.path}`],
+          { cwd: repositoryRoot },
+        );
+      } catch {
         throw new BlueprintValidationError(
-          `Blueprint '${artifactId}' node '${node.id}' pins handoff template blob ${pinned.blobHash} that does not match '${pinned.path}'`,
+          `Blueprint '${artifactId}' node '${node.id}' pins handoff template '${pinned.path}' that is unavailable at commit ${pinned.commitSha}`,
         );
       }
     }

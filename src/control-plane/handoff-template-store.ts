@@ -10,19 +10,20 @@ import { promisify } from "node:util";
 import { parse } from "yaml";
 
 const execute = promisify(execFile);
-const gitObjectId = /^[0-9a-f]{40,64}$/;
+const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const artifactId = /^[a-z]+(?:-[a-z]+)*$/;
 const schemaId = "https://wyrd.company/heddle/handoff-template.schema.json";
 
 export type HandoffTemplateKind = "remediation" | "standard";
 
 export type PinnedHandoffTemplateReference = {
-  blobHash: string;
+  commitSha: string;
   path: string;
 };
 
 export type PinnedHandoffTemplate = PinnedHandoffTemplateReference & {
   body: string;
+  includes: Readonly<Record<string, string>>;
   kind: HandoffTemplateKind;
 };
 
@@ -34,8 +35,8 @@ export class HandoffTemplateError extends Error {
 }
 
 const assertReference = (reference: PinnedHandoffTemplateReference): void => {
-  if (!gitObjectId.test(reference.blobHash)) {
-    throw new HandoffTemplateError("Handoff template blob hash is invalid");
+  if (!gitObjectId.test(reference.commitSha)) {
+    throw new HandoffTemplateError("Handoff template commit SHA is invalid");
   }
   if (
     dirname(reference.path) !== "handoff-templates" ||
@@ -51,7 +52,7 @@ const assertReference = (reference: PinnedHandoffTemplateReference): void => {
 const parseTemplate = (
   serialized: string,
   reference: PinnedHandoffTemplateReference,
-): PinnedHandoffTemplate => {
+): Omit<PinnedHandoffTemplate, "includes"> => {
   if (!serialized.startsWith("---\n")) {
     throw new HandoffTemplateError("Handoff template has no YAML front matter");
   }
@@ -99,6 +100,51 @@ const parseTemplate = (
   };
 };
 
+const includeDirectory = "handoff-templates/includes/";
+
+const readPinnedPath = async (
+  repositoryRoot: string,
+  commitSha: string,
+  path: string,
+): Promise<string> =>
+  (
+    await execute("git", ["cat-file", "-p", `${commitSha}:${path}`], {
+      cwd: repositoryRoot,
+      maxBuffer: 10 * 1024 * 1024,
+    })
+  ).stdout;
+
+const readPinnedIncludes = async (
+  repositoryRoot: string,
+  commitSha: string,
+): Promise<Readonly<Record<string, string>>> => {
+  const { stdout } = await execute(
+    "git",
+    [
+      "ls-tree",
+      "-rz",
+      "-r",
+      "--full-tree",
+      "--name-only",
+      commitSha,
+      "--",
+      includeDirectory,
+    ],
+    { cwd: repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
+  );
+  const paths = stdout.split("\0").filter((path) => path !== "");
+  return Object.freeze(
+    Object.fromEntries(
+      await Promise.all(
+        paths.map(async (path) => [
+          path,
+          await readPinnedPath(repositoryRoot, commitSha, path),
+        ]),
+      ),
+    ),
+  );
+};
+
 export class GitHandoffTemplateStore {
   constructor(private readonly repositoryRoot: string) {}
 
@@ -106,32 +152,49 @@ export class GitHandoffTemplateStore {
     reference: PinnedHandoffTemplateReference,
   ): Promise<PinnedHandoffTemplate> {
     assertReference(reference);
-    let stdout: string;
     try {
-      ({ stdout } = await execute(
+      await execute(
         "git",
-        ["cat-file", "blob", reference.blobHash],
-        { cwd: this.repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
-      ));
+        ["cat-file", "-e", `${reference.commitSha}^{commit}`],
+        {
+          cwd: this.repositoryRoot,
+        },
+      );
     } catch {
       throw new HandoffTemplateError(
-        `Pinned handoff template blob is unavailable: ${reference.blobHash}`,
+        `Pinned handoff template commit is unavailable: ${reference.commitSha}`,
       );
     }
-    const template = parseTemplate(stdout, reference);
+    let serialized: string;
+    let includes: Readonly<Record<string, string>>;
+    try {
+      [serialized, includes] = await Promise.all([
+        readPinnedPath(
+          this.repositoryRoot,
+          reference.commitSha,
+          reference.path,
+        ),
+        readPinnedIncludes(this.repositoryRoot, reference.commitSha),
+      ]);
+    } catch {
+      throw new HandoffTemplateError(
+        `Pinned handoff template path is unavailable at commit ${reference.commitSha}: ${reference.path}`,
+      );
+    }
+    const template = { ...parseTemplate(serialized, reference), includes };
     try {
       await execute(
         "git",
         [
           "update-ref",
-          `refs/heddle/handoff-templates/${reference.blobHash}`,
-          reference.blobHash,
+          `refs/heddle/handoff-templates/${reference.commitSha}`,
+          reference.commitSha,
         ],
         { cwd: this.repositoryRoot },
       );
     } catch {
       throw new HandoffTemplateError(
-        `Pinned handoff template ref could not be retained: ${reference.blobHash}`,
+        `Pinned handoff template ref could not be retained: ${reference.commitSha}`,
       );
     }
     return template;

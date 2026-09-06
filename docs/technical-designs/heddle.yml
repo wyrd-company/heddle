@@ -287,9 +287,14 @@ proposed-design:
     Every agent wait node declares explicit
     `handoff` metadata as `standard` or `remediation`; missing, invalid, or
     non-wait metadata fails closed. It also declares a `handoff-template`
-    path and exact Git blob hash. Heddle reads that blob from the organization
-    blueprint repository, retains it there under a durable Git reference,
-    verifies its schema and declared handoff kind, and never substitutes mutable
+    path and exact Git commit SHA. Heddle reads the entry file and every file
+    under `handoff-templates/includes/` from that commit in the organization
+    blueprint repository and retains the commit under
+    `refs/heddle/handoff-templates/<commit-sha>`. Include directives use the
+    full repository-relative form
+    `handoff-templates/includes/<path>`. Paths outside that directory and the
+    Nunjucks `extends` and `import` directives fail closed. Heddle verifies the
+    entry schema and declared handoff kind and never substitutes mutable
     working-tree content. Standard handoffs receive completed
     wait-stage outputs reconstructed in recorded lifecycle execution order.
     Remediation receives the latest canonical review output through the

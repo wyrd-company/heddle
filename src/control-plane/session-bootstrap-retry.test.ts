@@ -201,6 +201,68 @@ describe("stage session cold retry guards", () => {
     expect(memory.record).toMatchObject({ state: initialState(), version: 1 });
   });
 
+  it.each([
+    [
+      "an escaping include",
+      '{% include "handoff-templates/includes/../outside.md" %}',
+      "repository-relative path inside handoff-templates/includes/",
+    ],
+    [
+      "extends syntax",
+      '{% extends "handoff-templates/includes/layout.md" %}',
+      "uses unsupported Extends syntax; only include is supported",
+    ],
+    [
+      "import syntax",
+      '{% import "handoff-templates/includes/macros.md" as macros %}',
+      "uses unsupported Import syntax; only include is supported",
+    ],
+  ])(
+    "rejects %s before timeout, registration, or T3 dispatch",
+    async (_case, body, diagnostic) => {
+      const memory = memoryStore();
+      const applyHarnessToolTimeout = vi.fn(async () => undefined);
+      const dispatch = vi.fn(async () => ({ sequence: 1 }));
+      const register = vi.fn(async () => undefined);
+
+      const error = await bootstrapStageSession(input, {
+        instantiateTodoList,
+        persistence: memory.store,
+        resolveWorkflowMcpStageContract,
+        templateAuthority: {
+          repositoryRoot: sampleTemplateAuthority.repositoryRoot,
+          readHandoffTemplate: async (reference) => ({
+            ...reference,
+            body,
+            includes: {},
+            kind: "standard",
+          }),
+        },
+        workflowMcpEndpoint,
+        t3: {
+          applyHarnessToolTimeout,
+          dispatch,
+          registerWorkflowMcpProviderSession: register,
+        },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+        mintCorrelationToken: () => "correlation-token",
+        nextId: () => "stable-id",
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(HandoffRenderError);
+      expect(error).toMatchObject({
+        message: expect.stringContaining(diagnostic),
+      });
+      expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
+      expect(register).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
+    },
+  );
+
   it("persists parentage only for a child of a bound session", async () => {
     const parentHandoff = {
       correlationToken: "token-parent",
@@ -869,6 +931,48 @@ describe("stage session cold retry guards", () => {
     ).rejects.toThrow(/no valid workflow MCP contract/);
     expect(dispatch).not.toHaveBeenCalled();
     expect(memory.record.state.handoffs).toHaveLength(1);
+  });
+
+  it("rejects a stored MCP contract that uses the removed handoff blobHash field", async () => {
+    const memory = memoryStore({
+      ...initialState(),
+      correlationTokens: { "prepare-1": "token-1" },
+      handoffs: [
+        {
+          correlationToken: "token-1",
+          handoff: "stored handoff",
+          kind: "stage-handoff",
+          sessionKey: "prepare-1",
+          workflowMcp: {
+            ...workflowMcp,
+            handoffTemplate: {
+              blobHash: "b".repeat(40),
+              path: "handoff-templates/sample.md",
+            },
+          },
+        },
+      ],
+    });
+    const dispatch = vi.fn(async () => ({ sequence: 1 }));
+
+    await expect(
+      bootstrapStageSession(input, {
+        persistence: memory.store,
+        instantiateTodoList,
+        templateAuthority: sampleTemplateAuthority,
+        resolveWorkflowMcpStageContract,
+        workflowMcpEndpoint,
+        t3: { registerWorkflowMcpProviderSession, dispatch },
+        ensureWorktree: async ({ branch }) => ({
+          branch,
+          created: false,
+          path: "/workspaces/worktrees/sample-repository/task-prepare",
+        }),
+      }),
+    ).rejects.toThrow(
+      "uses removed handoff template field 'blobHash'; use 'commitSha'",
+    );
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("fails closed when a stored MCP contract names another stage", async () => {

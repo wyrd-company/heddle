@@ -7,7 +7,10 @@
 import type { InstanceRecord, JsonValue } from "../persistence/index.js";
 import { GitBlueprintStore } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
-import { isWorkflowMcpStageContract } from "../mcp-server/stage-contract.js";
+import {
+  isWorkflowMcpStageContract,
+  removedHandoffTemplateBlobHashDiagnostic,
+} from "../mcp-server/stage-contract.js";
 import { isAuthorityValidStoredStageHandoff } from "../mcp-server/session-binding.js";
 import { assignmentForChild } from "../subagents/delegation-state.js";
 import {
@@ -202,6 +205,16 @@ const resolveWorkflowMcpStageContract = async (
   const stage = blueprint.nodes.find(
     ({ id }) => id === input.handoff.stage.name,
   );
+  const handoffTemplate = stage?.["handoff-template"] as
+    Record<string, unknown> | undefined;
+  if (
+    handoffTemplate !== undefined &&
+    Object.hasOwn(handoffTemplate, "blobHash")
+  ) {
+    throw new Error(
+      "Stage session bootstrap rejects removed handoff template field 'blobHash'; use 'commitSha'",
+    );
+  }
   if (
     stage?.uses !== "wait" ||
     stage.handoff !== input.handoff.stage.kind ||
@@ -210,7 +223,7 @@ const resolveWorkflowMcpStageContract = async (
     typeof stage["handoff-template"] !== "object" ||
     stage["handoff-template"] === null ||
     Array.isArray(stage["handoff-template"]) ||
-    typeof stage["handoff-template"]["blobHash"] !== "string" ||
+    typeof stage["handoff-template"]["commitSha"] !== "string" ||
     typeof stage["handoff-template"]["path"] !== "string"
   ) {
     throw new Error(
@@ -253,7 +266,7 @@ const resolveWorkflowMcpStageContract = async (
     blueprintPath: context["blueprintPath"],
     dispositions,
     handoffTemplate: {
-      blobHash: stage["handoff-template"]["blobHash"],
+      commitSha: stage["handoff-template"]["commitSha"],
       path: stage["handoff-template"]["path"],
     },
     stage: stage.id,
@@ -307,6 +320,15 @@ const ensureStoredHandoff = async (
         );
       }
       const workflowMcp = existing["workflowMcp"];
+      const removedFieldDiagnostic =
+        workflowMcp === undefined
+          ? undefined
+          : removedHandoffTemplateBlobHashDiagnostic(workflowMcp);
+      if (removedFieldDiagnostic !== undefined) {
+        throw new Error(
+          `Stored handoff workflow MCP contract for '${input.sessionKey}' is invalid: ${removedFieldDiagnostic}`,
+        );
+      }
       if (
         workflowMcp === undefined ||
         !isWorkflowMcpStageContract(workflowMcp)

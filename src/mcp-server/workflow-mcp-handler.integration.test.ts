@@ -5,7 +5,14 @@
 
 import { execFile, spawn } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
-import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cwd, env } from "node:process";
@@ -108,7 +115,7 @@ const runHarness = (
 const blueprint = (
   tools: string[],
   acceptDescription: string,
-  handoffTemplateBlobHash: string,
+  handoffTemplateCommitSha: string,
   acceptDisposition = "accept",
 ): LifecycleBlueprint => ({
   id: "sample-process",
@@ -118,7 +125,7 @@ const blueprint = (
       id: "assess",
       handoff: "standard",
       "handoff-template": {
-        blobHash: handoffTemplateBlobHash,
+        commitSha: handoffTemplateCommitSha,
         path: "handoff-templates/standard.md",
       },
       uses: "wait",
@@ -129,7 +136,7 @@ const blueprint = (
       id: "inspect",
       handoff: "standard",
       "handoff-template": {
-        blobHash: handoffTemplateBlobHash,
+        commitSha: handoffTemplateCommitSha,
         path: "handoff-templates/standard.md",
       },
       uses: "wait",
@@ -241,12 +248,31 @@ const makeFixture = async () => {
     join(repositoryRoot, "handoff-templates", "standard.md"),
     sampleHandoffTemplate,
   );
-  const handoffTemplateBlobHash = (
-    await execFileAsync(
-      "git",
-      ["hash-object", "-w", "handoff-templates/standard.md"],
-      { cwd: repositoryRoot },
-    )
+  await execFileAsync(
+    "git",
+    [
+      "add",
+      "handoff-templates/standard.md",
+      "todo-templates/sample-stage.json",
+    ],
+    { cwd: repositoryRoot },
+  );
+  await execFileAsync(
+    "git",
+    [
+      "-c",
+      "user.name=Sample User",
+      "-c",
+      "user.email=sample@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "add sample templates",
+    ],
+    { cwd: repositoryRoot },
+  );
+  const handoffTemplateCommitSha = (
+    await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot })
   ).stdout.trim();
   const alphaPath = await writeBlueprint(
     repositoryRoot,
@@ -263,7 +289,7 @@ const makeFixture = async () => {
         "todo_reorder",
       ],
       "Accept the prepared sample",
-      handoffTemplateBlobHash,
+      handoffTemplateCommitSha,
     ),
   );
   const betaPath = await writeBlueprint(
@@ -272,7 +298,7 @@ const makeFixture = async () => {
     blueprint(
       ["get_task_context", "report_blocked"],
       "Accept the sample",
-      handoffTemplateBlobHash,
+      handoffTemplateCommitSha,
     ),
   );
   const persistence = new SqlitePersistence({
@@ -408,12 +434,69 @@ const makeFixture = async () => {
     betaToken,
     bootstrap,
     handler,
-    handoffTemplateBlobHash,
+    handoffTemplateCommitSha,
     lifecycle,
     persistence,
     repositoryRoot,
     url,
   };
+};
+
+const installDeliveryReviewFixture = async (
+  repositoryRoot: string,
+): Promise<string> => {
+  const blueprintPath = await writeDeliveryBlueprintFixture(repositoryRoot);
+  await copyFile(
+    join(
+      cwd(),
+      "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
+    ),
+    join(repositoryRoot, "handoff-templates/standard.md"),
+  );
+  await copyFile(
+    join(
+      cwd(),
+      "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-review.json",
+    ),
+    join(repositoryRoot, "todo-templates/standard-delivery-review.json"),
+  );
+  await execFileAsync(
+    "git",
+    [
+      "add",
+      "handoff-templates/standard.md",
+      "todo-templates/standard-delivery-review.json",
+    ],
+    { cwd: repositoryRoot },
+  );
+  await execFileAsync(
+    "git",
+    [
+      "-c",
+      "user.name=Sample User",
+      "-c",
+      "user.email=sample@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "add delivery review templates",
+    ],
+    { cwd: repositoryRoot },
+  );
+  const commitSha = (
+    await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot })
+  ).stdout.trim();
+  const absoluteBlueprintPath = join(repositoryRoot, blueprintPath);
+  const value = JSON.parse(
+    await readFile(absoluteBlueprintPath, "utf8"),
+  ) as LifecycleBlueprint;
+  for (const node of value.nodes) {
+    if (node["handoff-template"] !== undefined) {
+      node["handoff-template"].commitSha = commitSha;
+    }
+  }
+  await writeFile(absoluteBlueprintPath, `${JSON.stringify(value, null, 2)}\n`);
+  return blueprintPath;
 };
 
 afterEach(async () => {
@@ -827,7 +910,7 @@ describe("workflow MCP HTTP server", () => {
       blueprint(
         ["advance", "report_blocked"],
         "",
-        fixture.handoffTemplateBlobHash,
+        fixture.handoffTemplateCommitSha,
       ),
     );
     await fixture.lifecycle.rebase({
@@ -954,7 +1037,7 @@ describe("workflow MCP HTTP server", () => {
       blueprint(
         ["advance", "report_blocked"],
         "Approve the rebased sample",
-        fixture.handoffTemplateBlobHash,
+        fixture.handoffTemplateCommitSha,
         "approve",
       ),
     );
@@ -1568,29 +1651,8 @@ describe("workflow MCP HTTP server", () => {
 
   it("rejects findings-less review rejection before lifecycle persistence", async () => {
     const fixture = await makeFixture();
-    const blueprintPath = "blueprints/standard-delivery.json";
-    await writeDeliveryBlueprintFixture(fixture.repositoryRoot);
-    await copyFile(
-      join(
-        cwd(),
-        "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
-      ),
-      join(fixture.repositoryRoot, "handoff-templates/standard.md"),
-    );
-    await execFileAsync(
-      "git",
-      ["hash-object", "-w", "handoff-templates/standard.md"],
-      { cwd: fixture.repositoryRoot },
-    );
-    await copyFile(
-      join(
-        cwd(),
-        "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-review.json",
-      ),
-      join(
-        fixture.repositoryRoot,
-        "todo-templates/standard-delivery-review.json",
-      ),
+    const blueprintPath = await installDeliveryReviewFixture(
+      fixture.repositoryRoot,
     );
     await fixture.lifecycle.start({
       blueprintPath,
@@ -1654,29 +1716,8 @@ describe("workflow MCP HTTP server", () => {
 
   it("keeps an earlier session replay-only when the same wait stage recurs", async () => {
     const fixture = await makeFixture();
-    const blueprintPath = "blueprints/standard-delivery.json";
-    await writeDeliveryBlueprintFixture(fixture.repositoryRoot);
-    await copyFile(
-      join(
-        cwd(),
-        "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
-      ),
-      join(fixture.repositoryRoot, "handoff-templates/standard.md"),
-    );
-    await execFileAsync(
-      "git",
-      ["hash-object", "-w", "handoff-templates/standard.md"],
-      { cwd: fixture.repositoryRoot },
-    );
-    await copyFile(
-      join(
-        cwd(),
-        "src/test-fixtures/standard-delivery/todo-templates/standard-delivery-review.json",
-      ),
-      join(
-        fixture.repositoryRoot,
-        "todo-templates/standard-delivery-review.json",
-      ),
+    const blueprintPath = await installDeliveryReviewFixture(
+      fixture.repositoryRoot,
     );
     await fixture.lifecycle.start({
       blueprintPath,
