@@ -131,6 +131,54 @@ afterEach(async () => {
 });
 
 describe("DynamicTaskAuthority", () => {
+  it("routes creation and recovery through the same parent epic boundary", async () => {
+    const createPersistence = await makePersistence();
+    const createAttention = attentionFixture();
+    const createTasks = [
+      task(10, { tags: ["type:epic"] }),
+      task(12, { parent: 10 }),
+      task(13, { parent: 10 }),
+    ];
+    const boundaryKeys: number[] = [];
+    const epicOperations = {
+      run: async <T>(epicId: number, operation: () => Promise<T>) => {
+        boundaryKeys.push(epicId);
+        return operation();
+      },
+    };
+    const createAuthority = new DynamicTaskAuthority(
+      createPersistence,
+      {
+        createRecord: async () => ({ replayed: false, task: boardTask() }),
+        readBoard: async () => createTasks,
+        readTask: async (id: number) =>
+          createTasks.find((value) => value.id === id)!,
+      },
+      createAttention.attention,
+      { epicOperations },
+    );
+
+    await createAuthority.createRecord(record, source);
+
+    const recoveryPersistence = await makePersistence();
+    pendingIntent(recoveryPersistence);
+    const recoveryAuthority = new DynamicTaskAuthority(
+      recoveryPersistence,
+      {
+        createRecord: vi.fn(),
+        readBoard: async () => [],
+        readTask: vi.fn(),
+      },
+      attentionFixture().attention,
+      { epicOperations },
+    );
+    await recoveryAuthority.recoverPending();
+
+    expect(boundaryKeys).toEqual([record.parent, record.parent]);
+    createPersistence.close();
+    recoveryPersistence.close();
+  });
+
   it("rejects creation after its parent epic is complete", async () => {
     const persistence = await makePersistence();
     const attention = attentionFixture();
