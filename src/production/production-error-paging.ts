@@ -84,6 +84,7 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
     }
     const attemptedAt = this.now();
     let admitted: boolean;
+    let durableAdmissionAvailable = true;
     try {
       admitted = this.persistence.admitProductionErrorPage({
         attentionId: attention.attentionId,
@@ -93,19 +94,19 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
       });
     } catch (error) {
       if (incidentEligible) throw error;
+      durableAdmissionAvailable = false;
       admitted = this.#admitInMemory(attention.code, attemptedAt);
     }
-    if (
-      !admitted &&
-      (!incidentEligible ||
+    if (incidentEligible) {
+      if (
+        !admitted &&
         !this.persistence.productionErrorPageAttemptRecorded(
           attention.code,
           attention.attentionId,
-        ))
-    ) {
-      return;
-    }
-    if (incidentEligible) {
+        )
+      ) {
+        return;
+      }
       this.persistence.recordEffectIntent(
         productionErrorPageEffect,
         attention.attentionId,
@@ -113,6 +114,18 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
       );
       await this.#sendDurably(attention, intent);
     } else {
+      let deliveryClaimed = admitted;
+      if (durableAdmissionAvailable) {
+        try {
+          deliveryClaimed = this.persistence.claimProductionErrorPageDelivery(
+            attention.code,
+            attention.attentionId,
+          );
+        } catch {
+          deliveryClaimed = this.#admitInMemory(attention.code, attemptedAt);
+        }
+      }
+      if (!deliveryClaimed) return;
       await this.notifier.sendBeforeDurableIntent(intent);
       this.persistence.recordEffectIntent(
         productionErrorPageEffect,

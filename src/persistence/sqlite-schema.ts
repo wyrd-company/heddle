@@ -106,6 +106,7 @@ export const initializePersistenceSchema = (
       code TEXT NOT NULL,
       attention_id TEXT NOT NULL,
       attempted_at INTEGER NOT NULL CHECK (attempted_at >= 0),
+      delivery_attempted INTEGER NOT NULL DEFAULT 1 CHECK (delivery_attempted IN (0, 1)),
       PRIMARY KEY (code, attention_id)
     );
 
@@ -191,6 +192,18 @@ export const initializePersistenceSchema = (
   if (!effectColumns.some(({ name }) => name === "payload_json")) {
     database.exec(
       "ALTER TABLE heddle_completed_effects ADD COLUMN payload_json TEXT NOT NULL DEFAULT 'null'",
+    );
+  }
+  const productionErrorPageAttemptColumns = database
+    .prepare("PRAGMA table_info(heddle_production_error_page_attempts)")
+    .all() as Array<{ name: string }>;
+  if (
+    !productionErrorPageAttemptColumns.some(
+      ({ name }) => name === "delivery_attempted",
+    )
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_production_error_page_attempts ADD COLUMN delivery_attempted INTEGER NOT NULL DEFAULT 1 CHECK (delivery_attempted IN (0, 1))",
     );
   }
   const notificationFailureColumns = database

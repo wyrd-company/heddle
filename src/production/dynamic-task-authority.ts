@@ -166,9 +166,7 @@ export class DynamicTaskAuthority {
       pending = this.persistence.listDynamicTaskIntents("pending");
     } catch (error) {
       const attention = catalogAttention(error);
-      if (!(await this.attention.has(attention.attentionId))) {
-        await this.attention.raise(attention);
-      }
+      await this.attention.raise(attention);
       return;
     }
     for (const intent of pending) {

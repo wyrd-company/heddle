@@ -213,6 +213,55 @@ describe("SqlitePersistence", () => {
     persistence.close();
   });
 
+  it("migrates legacy page admissions as already attempted", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_production_error_page_attempts (
+        code TEXT NOT NULL,
+        attention_id TEXT NOT NULL,
+        attempted_at INTEGER NOT NULL CHECK (attempted_at >= 0),
+        PRIMARY KEY (code, attention_id)
+      );
+      INSERT INTO heddle_production_error_page_attempts VALUES
+        ('scheduler-pass-failed', 'production:legacy-page', 0);
+    `);
+    legacy.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+
+    expect(
+      persistence.claimProductionErrorPageDelivery(
+        "scheduler-pass-failed",
+        "production:legacy-page",
+      ),
+    ).toBe(false);
+    expect(
+      persistence.admitProductionErrorPage({
+        attentionId: "production:new-page",
+        attemptedAt: 60_000,
+        code: "scheduler-pass-failed",
+        cooldownMilliseconds: 60_000,
+        maximumPagesPerWindow: 3,
+        windowMilliseconds: 300_000,
+      }),
+    ).toBe(true);
+    expect(
+      persistence.claimProductionErrorPageDelivery(
+        "scheduler-pass-failed",
+        "production:new-page",
+      ),
+    ).toBe(true);
+    expect(
+      persistence.claimProductionErrorPageDelivery(
+        "scheduler-pass-failed",
+        "production:new-page",
+      ),
+    ).toBe(false);
+    persistence.close();
+  });
+
   it("keeps legacy notification failures unverifiable until details are reconstructed", async () => {
     const stateDirectory = await makeStateDirectory();
     const databasePath = join(stateDirectory, "heddle-state.sqlite");

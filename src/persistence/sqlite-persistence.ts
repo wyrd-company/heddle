@@ -456,12 +456,26 @@ export class SqlitePersistence {
       this.database
         .prepare(
           `INSERT INTO heddle_production_error_page_attempts
-             (code, attention_id, attempted_at)
-           VALUES (?, ?, ?)`,
+             (code, attention_id, attempted_at, delivery_attempted)
+           VALUES (?, ?, ?, 0)`,
         )
         .run(input.code, input.attentionId, input.attemptedAt);
       return true;
     })();
+  }
+
+  claimProductionErrorPageDelivery(code: string, attentionId: string): boolean {
+    this.assertStableId("code", code);
+    this.assertStableId("attentionId", attentionId);
+    return (
+      this.database
+        .prepare(
+          `UPDATE heddle_production_error_page_attempts
+           SET delivery_attempted = 1
+           WHERE code = ? AND attention_id = ? AND delivery_attempted = 0`,
+        )
+        .run(code, attentionId).changes > 0
+    );
   }
 
   productionErrorPageAttemptRecorded(

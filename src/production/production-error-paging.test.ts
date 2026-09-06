@@ -212,6 +212,42 @@ describe("production error paging", () => {
     persistence.close();
   });
 
+  it("replays an admitted floor page after a crash before transport", async () => {
+    const { deliveries, pager, persistence } = await prepare();
+    const attention = productionErrorAttention({
+      code: "scheduler-pass-failed",
+      error: new Error("Synthetic scheduler failure"),
+      summary: "Scheduler pass failed",
+      varyByError: true,
+    });
+    persistence.raiseAttention(
+      attention.attentionId,
+      JSON.parse(JSON.stringify(attention)),
+    );
+    expect(
+      persistence.admitProductionErrorPage({
+        attentionId: attention.attentionId,
+        attemptedAt: 0,
+        code: attention.code,
+        ...productionErrorPagePolicy,
+      }),
+    ).toBe(true);
+
+    await pager.replayPending();
+    await pager.replayPending();
+
+    expect(deliveries).toMatchObject([
+      { level: "critical", stableId: attention.attentionId },
+    ]);
+    expect(
+      persistence.effectCompleted(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    persistence.close();
+  });
+
   it("completes a pending floor page without repeating its delivered transport", async () => {
     const { deliveries, pager, persistence } = await prepare();
     const attention = productionErrorAttention({

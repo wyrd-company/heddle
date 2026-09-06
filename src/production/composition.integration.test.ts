@@ -1191,6 +1191,61 @@ describe("production composition", () => {
     await composition.close().catch(() => undefined);
   });
 
+  it("attempts the catalog floor page when persistence is closed before start", async () => {
+    const fixture = await prepare();
+    const pages = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: pages },
+      t3: new SyntheticT3(),
+    });
+    composition.persistence.close();
+
+    await expect(composition.start()).rejects.toThrow();
+
+    expect(pages).toHaveBeenCalledOnce();
+    expect(pages.mock.calls[0]?.[0]).toMatchObject({
+      level: "critical",
+      stableId: "production:dynamic-task-authority-failed:global:catalog",
+    });
+    await composition.close().catch(() => undefined);
+  });
+
+  it("attempts the scheduler floor page after persistence becomes unavailable", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 2_000;
+    const pages = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: pages },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    composition.persistence.close();
+
+    await vi.waitFor(
+      () =>
+        expect(
+          pages.mock.calls.filter(([page]) =>
+            page.stableId.includes("production:scheduler-pass-failed"),
+          ),
+        ).toHaveLength(1),
+      { timeout: 4_000 },
+    );
+
+    await composition.close().catch(() => undefined);
+  }, 10_000);
+
   it("keeps scheduler dispatch moving after one task activation fails", async () => {
     const fixture = await prepare();
     const created = await execute(

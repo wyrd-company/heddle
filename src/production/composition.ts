@@ -427,9 +427,7 @@ export const createProductionComposition = (
           varyByError: true,
         });
         try {
-          if (!(await attention.has(failure.attentionId))) {
-            await attention.raise(failure);
-          }
+          await attention.raise(failure);
         } finally {
           await options.onSchedulerError?.(error);
         }
