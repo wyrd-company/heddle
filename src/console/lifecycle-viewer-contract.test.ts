@@ -10,17 +10,43 @@ import { describe, expect, it } from "vitest";
 
 describe("lifecycle blueprint editor contract", () => {
   it("gives the bare tldraw editor an interactive select tool", async () => {
-    const source = await readFile("src/console/lifecycle-viewer.tsx", "utf8");
+    const source = await readFile(
+      "src/console/lifecycle-canvas-surface.tsx",
+      "utf8",
+    );
+    const viewer = await readFile("src/console/lifecycle-viewer.tsx", "utf8");
 
     expect(source).toContain('initialState="select"');
     expect(source).toContain("tools={defaultTools}");
+    expect(source).toContain("<TldrawEditor");
+    expect(source).not.toContain("<Tldraw ");
     expect(
-      source.indexOf("editor.updateInstanceState({ isReadonly: false })"),
+      viewer.indexOf("editor.updateInstanceState({ isReadonly: false })"),
     ).toBeLessThan(
-      source.indexOf(
+      viewer.indexOf(
         "sync.applyBlueprint(editing.blueprint, editing.positions)",
       ),
     );
+  });
+
+  it("offers local read-only navigation and observes canvas resizes", async () => {
+    const source = await readFile(
+      "src/console/lifecycle-canvas-surface.tsx",
+      "utf8",
+    );
+    const navigation = await readFile(
+      "src/console/lifecycle-canvas-navigation.tsx",
+      "utf8",
+    );
+
+    expect(source).toContain('aria-label="Lifecycle canvas controls"');
+    expect(source).toContain('aria-label="Zoom out"');
+    expect(source).toContain('aria-label="Zoom in"');
+    expect(source).toContain('title="Fit readable graph"');
+    expect(source).toContain('title="Focus current stage"');
+    expect(source).toContain("new ResizeObserver(frame)");
+    expect(navigation).toContain("MIN_READABLE_NODE_SCALE");
+    expect(navigation).toContain("editor.setCameraOptions");
   });
 
   it("exposes native keyboard controls and a live save result", async () => {

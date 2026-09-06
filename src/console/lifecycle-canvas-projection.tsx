@@ -13,6 +13,15 @@ import {
 } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/types";
 import type { ConsoleLifecycleSnapshot } from "./types.js";
 
+export const lifecycleNodeContentHeight = (
+  nodeData: Record<string, unknown> | undefined,
+): number =>
+  80 +
+  (nodeData?.["inputs"] === undefined || nodeData["inputs"] === null ? 0 : 62) +
+  (nodeData?.["outputs"] === undefined || nodeData["outputs"] === null
+    ? 0
+    : 62);
+
 export const projectLifecycleCanvas = (
   editor: Editor,
   snapshot: ConsoleLifecycleSnapshot,
@@ -67,6 +76,7 @@ export const projectLifecycleCanvas = (
       ...shape,
       props: {
         ...shape.props,
+        h: lifecycleNodeContentHeight(state?.nodeData),
         nodeData: state?.nodeData,
         status: current.has(id) ? "pending" : (state?.status ?? "idle"),
       },

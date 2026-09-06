@@ -13,19 +13,12 @@ import {
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  ArrowBindingUtil,
-  ArrowShapeUtil,
-  defaultTools,
-  type Editor,
-  TldrawEditor,
-} from "tldraw";
+import type { Editor } from "tldraw";
 import type { WorkflowBlueprint } from "flowcraft";
 import "tldraw/tldraw.css";
 import "./lifecycle-viewer.css";
 
 import { useExecutionBridge } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/runtime/ExecutionBridge";
-import { FlowcraftNodeUtil } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/FlowcraftNodeUtil";
 import { EventBus } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/EventBus";
 import { FlowcraftSync } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/FlowcraftSync";
 import { blueprintToCanvas } from "../../spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/blueprint-to-canvas";
@@ -40,6 +33,8 @@ import {
   assertLifecycleReplacement,
   lifecycleTraversalCounts,
 } from "./lifecycle-tail.js";
+import { lifecycleCanvasPositions } from "./lifecycle-canvas-layout.js";
+import { LifecycleCanvasSurface } from "./lifecycle-canvas-surface.js";
 
 interface LifecycleViewerPort {
   append(snapshot: ConsoleLifecycleSnapshot): void;
@@ -74,19 +69,6 @@ window.heddleLifecycleViewer = {
     }
     mountedPort.replace(snapshot);
   },
-};
-
-const bindingUtils = [ArrowBindingUtil];
-const shapeUtils = [FlowcraftNodeUtil, ArrowShapeUtil];
-
-const positionsFor = (
-  snapshot: ConsoleLifecycleSnapshot,
-): Record<string, { x: number; y: number }> => {
-  const positions: Record<string, { x: number; y: number }> = {};
-  snapshot.blueprint.nodes.forEach(({ id }, index) => {
-    positions[id] = { x: index * 300, y: index % 2 === 0 ? 140 : 20 };
-  });
-  return positions;
 };
 
 const asFlowcraftEvent = (event: ConsoleLifecycleEvent) => ({
@@ -135,12 +117,18 @@ function LifecycleViewer() {
   const [rebasing, setRebasing] = useState(false);
   const [saving, setSaving] = useState(false);
   const bus = useRef(new EventBus());
+  const defaultZoomSteps = useRef<number[]>([]);
   const editRequestGeneration = useRef(0);
   const rebaseRequestGeneration = useRef(0);
   const replayedIdentity = useRef("");
   const snapshotRef = useRef<ConsoleLifecycleSnapshot | null>(null);
 
   useExecutionBridge(editor, bus.current);
+
+  const mountEditor = useCallback((mountedEditor: Editor) => {
+    defaultZoomSteps.current = [...mountedEditor.getCameraOptions().zoomSteps];
+    setEditor(mountedEditor);
+  }, []);
 
   const resetEditing = useCallback(() => {
     editRequestGeneration.current += 1;
@@ -219,7 +207,13 @@ function LifecycleViewer() {
     const identity = `${snapshot.instanceId}:${snapshot.blueprint.blobHash}`;
     if (replayedIdentity.current !== identity) {
       const sync = new FlowcraftSync(editor);
-      sync.applyBlueprint(snapshot.blueprint as never, positionsFor(snapshot));
+      sync.applyBlueprint(
+        snapshot.blueprint as never,
+        lifecycleCanvasPositions(
+          snapshot.blueprint.nodes,
+          snapshot.blueprint.edges,
+        ),
+      );
       // Keep the primitive explicit at the production integration boundary.
       void blueprintToCanvas;
       for (const event of snapshot.events) {
@@ -244,8 +238,12 @@ function LifecycleViewer() {
       },
     });
     projectLifecycleCanvas(editor, snapshot);
-    editor.zoomToFit({ animation: { duration: 0 } });
   }, [editing, editor, snapshot]);
+
+  const frameIdentity =
+    snapshot === null
+      ? ""
+      : `${snapshot.instanceId}:${snapshot.blueprint.blobHash}:${snapshot.currentStageIds.join("\u0000")}`;
 
   useEffect(() => {
     if (editor === null || editing === null) return;
@@ -257,6 +255,7 @@ function LifecycleViewer() {
       });
       setEditStatus("Unsaved canvas changes");
     });
+    editor.setCameraOptions({ zoomSteps: defaultZoomSteps.current });
     editor.updateInstanceState({ isReadonly: false });
     sync.applyBlueprint(editing.blueprint, editing.positions);
     sync.startListening();
@@ -386,26 +385,30 @@ function LifecycleViewer() {
   );
 
   return (
-    <div className="lifecycle-renderer" data-ready={snapshot !== null}>
-      <div
-        className="lifecycle-canvas-shell"
-        aria-label="Lifecycle graph"
-        role="region"
-      >
-        {snapshot === null ? (
+    <div
+      className="lifecycle-renderer"
+      data-editing={editing !== null}
+      data-ready={snapshot !== null}
+    >
+      {snapshot === null ? (
+        <div
+          className="lifecycle-canvas-shell"
+          aria-label="Lifecycle graph"
+          role="region"
+        >
           <p className="lifecycle-empty">
             Select a task lifecycle to render its pinned history.
           </p>
-        ) : (
-          <TldrawEditor
-            bindingUtils={bindingUtils}
-            initialState="select"
-            onMount={setEditor}
-            shapeUtils={shapeUtils}
-            tools={defaultTools}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <LifecycleCanvasSurface
+          currentStageIds={snapshot.currentStageIds}
+          editing={editing !== null}
+          editor={editor}
+          frameIdentity={frameIdentity}
+          onMount={mountEditor}
+        />
+      )}
       <aside
         className="lifecycle-history"
         aria-labelledby="lifecycle-history-title"

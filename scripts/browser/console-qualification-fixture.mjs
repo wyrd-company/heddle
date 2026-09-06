@@ -62,46 +62,76 @@ const initialTasks = [
   },
 ];
 
-const lifecycleEvents = [
-  {
-    executionId: "execution-a",
-    payload: { input: { source: "fixture" }, nodeId: "measure" },
-    sequence: 1,
-    type: "node:start",
-  },
-  {
-    executionId: "execution-a",
-    payload: { nodeId: "measure", result: { output: { recorded: true } } },
-    sequence: 2,
-    type: "node:finish",
-  },
-  {
-    executionId: "execution-a",
-    payload: { input: { pass: 1 }, nodeId: "arrange" },
-    sequence: 3,
-    type: "node:start",
-  },
-  {
-    executionId: "execution-a",
-    payload: { nodeId: "arrange", result: { output: { pass: 1 } } },
-    sequence: 4,
-    type: "node:finish",
-  },
-  {
-    executionId: "execution-b",
-    payload: { input: { pass: 2 }, nodeId: "arrange" },
-    sequence: 5,
-    type: "node:start",
-  },
+const lifecycleNodeIds = [
+  "measure",
+  "catalogue",
+  "plan",
+  "prepare",
+  "arrange",
+  "inspect",
+  "refine",
+  "finish",
 ];
+
+const lifecycleEvents = Array.from({ length: 118 }, (_, index) => {
+  const nodeId =
+    lifecycleNodeIds[Math.floor(index / 2) % lifecycleNodeIds.length];
+  const pass = Math.floor(index / (lifecycleNodeIds.length * 2)) + 1;
+  const executionId = `execution-${pass}`;
+  const sequence = index + 1;
+  return index % 2 === 0
+    ? {
+        executionId,
+        payload: {
+          input: {
+            notes:
+              "Recorded fixture detail remains readable inside a lifecycle node.",
+            pass,
+          },
+          nodeId,
+        },
+        sequence,
+        type: "node:start",
+      }
+    : {
+        executionId,
+        payload: {
+          nodeId,
+          result: {
+            output: {
+              notes:
+                "Completed fixture detail remains readable inside a lifecycle node.",
+              pass,
+            },
+          },
+        },
+        sequence,
+        type: "node:finish",
+      };
+});
 
 const lifecycleBlueprint = {
   blobHash: "a".repeat(40),
-  edges: [{ source: "measure", target: "arrange" }],
+  edges: [
+    { source: "measure", target: "catalogue" },
+    { source: "catalogue", target: "plan" },
+    { source: "plan", target: "prepare" },
+    { source: "prepare", target: "arrange" },
+    { source: "arrange", target: "inspect" },
+    { source: "inspect", target: "finish" },
+    { source: "inspect", target: "refine" },
+    { source: "refine", target: "arrange" },
+  ],
   id: "room-refresh",
   nodes: [
     { id: "measure", uses: "wait" },
+    { id: "catalogue", uses: "wait" },
+    { id: "plan", uses: "wait" },
+    { id: "prepare", uses: "wait" },
     { id: "arrange", uses: "wait" },
+    { id: "inspect", uses: "wait" },
+    { id: "refine", uses: "wait" },
+    { id: "finish", uses: "wait" },
   ],
   path: "blueprints/room-refresh.json",
 };
@@ -446,10 +476,10 @@ export const createConsoleQualificationFixture = async () => {
       if (taskId !== 43) throw new Error("fixture lifecycle task is unknown");
       lifecycleTrace.push(afterSequence);
       const tails = new Map([
-        [0, lifecycleEvents.slice(0, 3)],
-        [3, lifecycleEvents.slice(3, 4)],
-        [4, lifecycleEvents.slice(4, 5)],
-        [5, []],
+        [0, lifecycleEvents.slice(0, 116)],
+        [116, lifecycleEvents.slice(116, 117)],
+        [117, lifecycleEvents.slice(117, 118)],
+        [118, []],
       ]);
       const events = tails.get(afterSequence);
       if (events === undefined)
@@ -462,7 +492,7 @@ export const createConsoleQualificationFixture = async () => {
         currentStageIds: ["arrange"],
         events,
         instanceId: "instance-43",
-        nextSequence: events.at(-1)?.sequence ?? 5,
+        nextSequence: events.at(-1)?.sequence ?? 118,
         rebase:
           lifecycleTargetState === "upstream-target-unavailable"
             ? { state: "upstream-target-unavailable" }

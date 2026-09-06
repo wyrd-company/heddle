@@ -27,10 +27,62 @@ relationships:
   color: var(--muted) !important;
 }
 
+.lifecycle-renderer[data-editing="false"] .tl-html-container pre {
+  overflow: hidden !important;
+}
+
 .lifecycle-empty {
   margin: 28px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.lifecycle-canvas-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  border: 1px solid var(--ink);
+  box-shadow: 3px 3px 0 rgb(31 37 38 / 18%);
+}
+
+.lifecycle-canvas-controls button {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 7px 9px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 0;
+  border-right: 1px solid var(--ink);
+  border-radius: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.lifecycle-canvas-controls button:first-child,
+.lifecycle-canvas-controls button:nth-child(2) {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.lifecycle-canvas-controls button:last-child {
+  border-right: 0;
+}
+
+.lifecycle-canvas-controls button:hover {
+  color: var(--paper-raised);
+  background: var(--ink);
+}
+
+.lifecycle-canvas-controls button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--signal);
+  outline-offset: -3px;
 }
 
 .lifecycle-history {

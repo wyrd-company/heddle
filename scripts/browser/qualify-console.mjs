@@ -192,7 +192,11 @@ const computedContrastTargets = async (targets) =>
         color: parse(style.color).slice(0, 3),
         fontSize: Number.parseFloat(style.fontSize),
         fontWeight: Number.parseInt(style.fontWeight, 10),
+        inLifecycleControl: element.closest(".lifecycle-canvas-controls") !== null,
+        inLifecycleHeader:
+          element.closest("#lifecycle-view > .lifecycle-header") !== null,
         inLifecycleNode: element.closest("[data-shape-id^='shape:'] .tl-html-container") !== null,
+        inLifecycleStatus: element.matches("#console-status"),
         target,
       };
     });
@@ -237,7 +241,12 @@ const assertLifecycleAxe = async (result, context) => {
   invariant(
     violations.length === 0,
     "axe-wcag-a-aa",
-    `${context} has ${violations.length} violation(s)`,
+    `${context} has ${violations.length} violation(s): ${JSON.stringify(
+      violations.map(({ id, nodes }) => ({
+        id,
+        targets: nodes.flatMap(({ target }) => target),
+      })),
+    )}`,
   );
   const incomplete = result.incomplete ?? [];
   invariant(
@@ -249,18 +258,23 @@ const assertLifecycleAxe = async (result, context) => {
   );
   const targets = incomplete[0].nodes.flatMap(({ target }) => target);
   const computed = await computedContrastTargets(targets);
-  for (const item of computed) {
-    invariant(
-      item.inLifecycleNode,
-      "axe-incomplete-disposition",
-      `${item.target} is outside the bounded lifecycle-node disposition`,
-    );
-  }
+  const outside = computed.filter(
+    (item) =>
+      !item.inLifecycleNode &&
+      !item.inLifecycleControl &&
+      !item.inLifecycleHeader &&
+      !item.inLifecycleStatus,
+  );
+  invariant(
+    outside.length === 0,
+    "axe-incomplete-disposition",
+    `${JSON.stringify(outside.map(({ target }) => target))} are outside the bounded lifecycle canvas disposition`,
+  );
   assertComputedContrast(computed, "lifecycle-node-contrast");
   observations.push({
     context,
     disposition:
-      "axe cannot determine lifecycle-node backgrounds because tldraw layers overlap; computed foreground/background contrast is checked for every incomplete target",
+      "axe cannot determine lifecycle-node, overlaid control, lifecycle-heading, or lifecycle-status backgrounds because tldraw layers overlap; computed foreground/background contrast is checked for every bounded incomplete target",
     incomplete: incomplete[0].nodes.length,
   });
 };
@@ -703,6 +717,13 @@ const editorControlRosters = {
   ],
 };
 
+const canvasControlRoster = [
+  { ariaLabel: "Zoom out", label: "−", title: "Zoom out" },
+  { ariaLabel: "Zoom in", label: "+", title: "Zoom in" },
+  { ariaLabel: null, label: "FIT", title: "Fit readable graph" },
+  { ariaLabel: null, label: "CURRENT", title: "Focus current stage" },
+];
+
 const editorControlRoster = () =>
   evaluate(`(() => {
     const actions = document.querySelector(".blueprint-editor-actions");
@@ -733,8 +754,11 @@ const assertEditorControlRoster = async (
 
 const assertReadOnlySurface = async (editorState = "closed") => {
   const expectedEditorControls = editorControlRosters[editorState];
+  const expectedCanvasControls =
+    editorState === "closed" ? canvasControlRoster : [];
   const result = await evaluate(`(() => {
     const expectedEditorControls = ${JSON.stringify(expectedEditorControls)};
+    const expectedCanvasControls = ${JSON.stringify(expectedCanvasControls)};
     const editorActions = document.querySelector(".blueprint-editor-actions");
     const editorButtons = [...editorActions.querySelectorAll("button")];
     const editorControl = (element) => ({
@@ -759,6 +783,19 @@ const assertReadOnlySurface = async (editorState = "closed") => {
       )
         ? new Set(rebaseControls)
         : new Set();
+    const canvasButtons = [...document.querySelectorAll(
+      ".lifecycle-canvas-controls > button",
+    )];
+    const canvasControl = (element) => ({
+      ariaLabel: element.getAttribute("aria-label"),
+      label: element.textContent.trim(),
+      title: element.getAttribute("title"),
+    });
+    const acceptedCanvasControls =
+      JSON.stringify(canvasButtons.map(canvasControl)) ===
+        JSON.stringify(expectedCanvasControls)
+        ? new Set(canvasButtons)
+        : new Set();
     const tabbableMutation = [...document.querySelectorAll(
       "#board button, #board input, #board textarea, #dependency-graph button, #dependency-graph input, #dependency-graph textarea, #lifecycle-view button, #lifecycle-view input, #lifecycle-view textarea, [contenteditable='true']",
     )].filter((element) => {
@@ -767,6 +804,7 @@ const assertReadOnlySurface = async (editorState = "closed") => {
         element.tabIndex < 0 ||
         element.matches(".epic-lever") ||
         acceptedEditorButtons.has(element) ||
+        acceptedCanvasControls.has(element) ||
         acceptedRebaseControls.has(element)
       ) {
         return false;
@@ -1217,21 +1255,236 @@ const assertAttentionLayout = async (attentionId, context) => {
 
 const assertLifecycleSettled = async () => {
   await waitFor(
-    `document.querySelectorAll("[data-event-sequence]").length === 5 && document.querySelector(".lifecycle-renderer")?.dataset.ready === "true"`,
+    `document.querySelectorAll("[data-event-sequence]").length === 118 && document.querySelector(".lifecycle-renderer")?.dataset.ready === "true"`,
   );
   const counts = await evaluate(`(() => ({
     events: document.querySelectorAll("[data-event-sequence]").length,
     nodes: document.querySelectorAll("[data-shape-type='flowcraft-node']").length,
   }))()`);
   invariant(
-    counts.events === 5,
+    counts.events === 118,
     "lifecycle-readiness",
-    `rendered ${counts.events} ordered events instead of 5`,
+    `rendered ${counts.events} ordered events instead of 118`,
   );
   invariant(
-    counts.nodes === 2,
+    counts.nodes === 8,
     "lifecycle-readiness",
-    `rendered ${counts.nodes} lifecycle nodes instead of 2`,
+    `rendered ${counts.nodes} lifecycle nodes instead of 8`,
+  );
+};
+
+const lifecycleGeometry = () =>
+  evaluate(`(() => {
+    const shell = document.querySelector(".lifecycle-canvas-shell");
+    const shellRect = shell.getBoundingClientRect();
+    const nodes = [...document.querySelectorAll("[data-shape-type='flowcraft-node']")].map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        bottom: rect.bottom,
+        height: rect.height,
+        id: node.dataset.shapeId,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        width: rect.width,
+      };
+    });
+    const current = nodes.find(({ id }) => id === "shape:arrange");
+    const controls = document.querySelector(".lifecycle-canvas-controls");
+    const controlsRect = controls.getBoundingClientRect();
+    const history = document.querySelector(".lifecycle-history");
+    return {
+      controls: {
+        buttons: controls.querySelectorAll(":scope > button").length,
+        bottom: controlsRect.bottom,
+        top: controlsRect.top,
+      },
+      current,
+      history: {
+        clientHeight: history.clientHeight,
+        scrollHeight: history.scrollHeight,
+        tabIndex: history.tabIndex,
+      },
+      innerHeight: window.innerHeight,
+      nodes,
+      shell: {
+        bottom: shellRect.bottom,
+        height: shellRect.height,
+        left: shellRect.left,
+        right: shellRect.right,
+        top: shellRect.top,
+        width: shellRect.width,
+      },
+    };
+  })()`);
+
+const assertLifecycleGeometry = async (context) => {
+  await delay(180);
+  const geometry = await lifecycleGeometry();
+  invariant(
+    geometry.nodes.length === 8,
+    "lifecycle-readable-geometry",
+    `${context} rendered ${geometry.nodes.length} lifecycle nodes`,
+  );
+  const visibleNodes = geometry.nodes.filter(({ width }) => width > 0);
+  const narrow = visibleNodes.filter(({ width }) => width < 175.5);
+  invariant(
+    visibleNodes.length > 0 && narrow.length === 0,
+    "lifecycle-readable-geometry",
+    `${context} reduced lifecycle nodes below 176px: ${JSON.stringify(narrow)}`,
+  );
+  invariant(
+    geometry.current !== undefined &&
+      geometry.current.height >= 163 &&
+      geometry.current.left >= geometry.shell.left &&
+      geometry.current.right <= geometry.shell.right &&
+      geometry.current.top >= Math.max(0, geometry.shell.top) - 0.5 &&
+      geometry.current.bottom <=
+        Math.min(geometry.innerHeight, geometry.shell.bottom) + 0.5,
+    "lifecycle-current-stage-visibility",
+    `${context} current stage is outside the visible canvas: ${JSON.stringify(geometry)}`,
+  );
+  invariant(
+    geometry.controls.buttons === 4 &&
+      geometry.controls.bottom > 0 &&
+      geometry.controls.top < geometry.innerHeight,
+    "lifecycle-navigation-reachability",
+    `${context} canvas controls are not visible: ${JSON.stringify(geometry.controls)}`,
+  );
+  invariant(
+    geometry.history.tabIndex === 0 &&
+      geometry.history.scrollHeight > geometry.history.clientHeight,
+    "lifecycle-history-scroll-ownership",
+    `${context} event history is not an independent scroll region: ${JSON.stringify(geometry.history)}`,
+  );
+  return geometry;
+};
+
+const exerciseLifecycleNavigation = async (baseUrl) => {
+  fixture.reset();
+  await setViewport({ height: 844, width: 390 });
+  await resetPageEvidence();
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  let geometry = await assertLifecycleGeometry("lifecycle navigation 390x844");
+  invariant(
+    geometry.current.width >= 219.5,
+    "lifecycle-current-stage-focus",
+    `initial current stage width is ${geometry.current.width}px`,
+  );
+
+  await command(
+    "focus",
+    '.lifecycle-canvas-controls button[aria-label="Zoom out"]',
+  );
+  await press("Enter");
+  await press("Enter");
+  await delay(180);
+  geometry = await lifecycleGeometry();
+  invariant(
+    geometry.current.width >= 175.5 && geometry.current.width < 177,
+    "lifecycle-minimum-readable-scale",
+    `zoom out produced ${geometry.current.width}px lifecycle nodes`,
+  );
+
+  await command(
+    "focus",
+    '.lifecycle-canvas-controls button[title="Fit readable graph"]',
+  );
+  await press("Enter");
+  await delay(180);
+  geometry = await lifecycleGeometry();
+  invariant(
+    geometry.nodes
+      .filter(({ width }) => width > 0)
+      .every(({ width }) => width >= 175.5),
+    "lifecycle-minimum-readable-scale",
+    `fit reduced lifecycle nodes below 176px: ${JSON.stringify(geometry.nodes)}`,
+  );
+
+  await command(
+    "focus",
+    '.lifecycle-canvas-controls button[title="Focus current stage"]',
+  );
+  await press("Enter");
+  await delay(180);
+  geometry = await lifecycleGeometry();
+  invariant(
+    geometry.current.width >= 219.5 &&
+      geometry.current.top >= geometry.shell.top &&
+      geometry.current.bottom <= geometry.shell.bottom,
+    "lifecycle-current-stage-focus",
+    `current-stage control produced ${JSON.stringify(geometry.current)}`,
+  );
+
+  const historyScroll = await evaluate(`(() => {
+    const history = document.querySelector(".lifecycle-history");
+    const pageBefore = window.scrollY;
+    history.scrollTop = history.scrollHeight;
+    return { pageAfter: window.scrollY, pageBefore, scrollTop: history.scrollTop };
+  })()`);
+  invariant(
+    historyScroll.scrollTop > 0 &&
+      historyScroll.pageAfter === historyScroll.pageBefore,
+    "lifecycle-history-scroll-ownership",
+    `history scroll escaped its panel: ${JSON.stringify(historyScroll)}`,
+  );
+};
+
+const exerciseLifecycleResize = async (baseUrl) => {
+  fixture.reset();
+  await setViewport({ height: 900, width: 801 });
+  await resetPageEvidence();
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  let geometry = await assertLifecycleGeometry("lifecycle breakpoint 801x900");
+  invariant(
+    geometry.shell.height === 560,
+    "lifecycle-responsive-resize",
+    `801px canvas height is ${geometry.shell.height}px`,
+  );
+
+  await setViewport({ height: 900, width: 800 });
+  await waitFor(
+    `document.querySelector(".lifecycle-canvas-shell")?.getBoundingClientRect().height === 430`,
+  );
+  geometry = await assertLifecycleGeometry("lifecycle breakpoint 800x900");
+  invariant(
+    geometry.shell.height === 430,
+    "lifecycle-responsive-resize",
+    `800px canvas height is ${geometry.shell.height}px`,
+  );
+  const centerAt800 =
+    (geometry.current.top + geometry.current.bottom) / 2 - geometry.shell.top;
+
+  await setViewport({ height: 900, width: 801 });
+  await waitFor(
+    `document.querySelector(".lifecycle-canvas-shell")?.getBoundingClientRect().height === 560`,
+  );
+  geometry = await assertLifecycleGeometry("lifecycle live resize 801x900");
+  const centerAt801 =
+    (geometry.current.top + geometry.current.bottom) / 2 - geometry.shell.top;
+  invariant(
+    centerAt801 - centerAt800 > 35,
+    "lifecycle-responsive-resize",
+    `current stage did not recenter after resize: ${centerAt800}px → ${centerAt801}px`,
+  );
+};
+
+const auditLifecycleGeometryViewport = async (baseUrl, viewport) => {
+  fixture.reset();
+  await setViewport(viewport);
+  await resetPageEvidence();
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await settleVisuals();
+  await assertLifecycleGeometry(
+    `lifecycle ${viewport.width}x${viewport.height}`,
+  );
+  await assertReadOnlySurface("closed");
+  await assertNoRuntimeOrNetworkErrors(
+    new URL(baseUrl).origin,
+    `lifecycle ${viewport.width}x${viewport.height}`,
   );
 };
 
@@ -1242,9 +1495,9 @@ const assertLifecycleTrace = async () => {
   }
   invariant(
     JSON.stringify(fixture.lifecycleTrace().slice(0, 4)) ===
-      JSON.stringify([0, 3, 4, 5]),
+      JSON.stringify([0, 116, 117, 118]),
     "lifecycle-cursor-trace",
-    `observed ${fixture.lifecycleTrace().join(" → ")} instead of 0 → 3 → 4 → 5`,
+    `observed ${fixture.lifecycleTrace().join(" → ")} instead of 0 → 116 → 117 → 118`,
   );
 };
 
@@ -1413,6 +1666,9 @@ const auditView = async (baseUrl, viewport, view) => {
       tree.includes("Lifecycle graph") && tree.includes("Instance events"),
       "computed-accessible-name",
       "lifecycle regions lack computed names",
+    );
+    await assertLifecycleGeometry(
+      `${view} ${viewport.width}x${viewport.height}`,
     );
   }
   if (view === "attention") {
@@ -1962,6 +2218,77 @@ const mutationBattery = async (baseUrl) => {
 
   await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
   await assertLifecycleSettled();
+  await expectSoleKill(
+    "lifecycle-readable-geometry",
+    () =>
+      evaluate(
+        `document.querySelector('[data-shape-id="shape:arrange"]').style.scale = "0.5"`,
+      ),
+    () => assertLifecycleGeometry("mutated lifecycle scale"),
+  );
+
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "lifecycle-current-stage-visibility",
+    () =>
+      evaluate(
+        `document.querySelector('[data-shape-id="shape:arrange"]').style.translate = "1000px 0"`,
+      ),
+    () => assertLifecycleGeometry("mutated lifecycle focus"),
+  );
+
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "lifecycle-navigation-reachability",
+    () =>
+      evaluate(
+        `document.querySelector('.lifecycle-canvas-controls button:last-child').remove()`,
+      ),
+    () => assertLifecycleGeometry("mutated lifecycle navigation"),
+  );
+
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "lifecycle-history-scroll-ownership",
+    () =>
+      evaluate(
+        `document.querySelector(".lifecycle-history").removeAttribute("tabindex")`,
+      ),
+    () => assertLifecycleGeometry("mutated lifecycle history"),
+  );
+
+  await setViewport({ height: 900, width: 801 });
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
+  await expectSoleKill(
+    "lifecycle-responsive-resize",
+    async () => {
+      const height = await evaluate(`(() => {
+        const shell = document.querySelector(".lifecycle-canvas-shell");
+        shell.style.setProperty("height", "430px", "important");
+        return shell.getBoundingClientRect().height;
+      })()`);
+      invariant(
+        height === 430,
+        "mutation-application",
+        `responsive mutation produced ${height}px`,
+      );
+    },
+    async () => {
+      const geometry = await lifecycleGeometry();
+      invariant(
+        geometry.shell.height === 560,
+        "lifecycle-responsive-resize",
+        `mutated 801px canvas height is ${geometry.shell.height}px`,
+      );
+    },
+  );
+
+  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await assertLifecycleSettled();
   await settleVisuals();
   await expectSoleKill(
     "lifecycle-node-contrast",
@@ -1978,6 +2305,24 @@ const mutationBattery = async (baseUrl) => {
       assertComputedContrast(
         await computedContrastTargets([target]),
         "lifecycle-node-contrast",
+      );
+    },
+  );
+
+  await expectSoleKill(
+    "lifecycle-control-contrast",
+    () =>
+      evaluate(`(() => {
+        const button = document.querySelector('.lifecycle-canvas-controls button[aria-label="Zoom out"]');
+        button.style.setProperty("color", "#77746b", "important");
+        button.style.setProperty("background", "#77746b", "important");
+      })()`),
+    async () => {
+      assertComputedContrast(
+        await computedContrastTargets([
+          '.lifecycle-canvas-controls button[aria-label="Zoom out"]',
+        ]),
+        "lifecycle-control-contrast",
       );
     },
   );
@@ -2008,6 +2353,14 @@ const main = async () => {
         await auditView(baseUrl, viewport, view);
       }
     }
+    for (const viewport of [
+      { height: 577, width: 1280 },
+      { height: 720, width: 1280 },
+    ]) {
+      await auditLifecycleGeometryViewport(baseUrl, viewport);
+    }
+    await exerciseLifecycleNavigation(baseUrl);
+    await exerciseLifecycleResize(baseUrl);
     await setViewport({ height: 844, width: 390 });
     await assertBoardKeyboard(baseUrl);
     await assertSafeEpicControls(baseUrl);
@@ -2045,7 +2398,14 @@ const main = async () => {
         ),
         stableAttentionIds: fixture.stableAttentionIds,
         status: "passed",
-        viewports: ["1440x1000", "390x844", "679/690/740/800/801x900"],
+        viewports: [
+          "1440x1000",
+          "1280x577",
+          "1280x720",
+          "390x844",
+          "800/801x900 live resize",
+          "679/690/740/800/801x900 attention",
+        ],
       },
       null,
       2,
