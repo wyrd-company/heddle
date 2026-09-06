@@ -4,7 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -22,6 +22,8 @@ describe("Heddle devcontainer feature publication", () => {
     const collection = join(directory, "features");
 
     try {
+      await mkdir(collection);
+      await writeFile(join(collection, "sibling-feature"), "preserve me");
       await execute("bash", [
         "scripts/deployment/stage-feature.sh",
         collection,
@@ -47,6 +49,9 @@ describe("Heddle devcontainer feature publication", () => {
         private: true,
         version: manifest.version,
       });
+      await expect(
+        readFile(join(collection, "sibling-feature"), "utf8"),
+      ).resolves.toBe("preserve me");
       await expect(
         readFile(join(stagedFeature, "heddle-1.0.0.tgz")),
       ).rejects.toMatchObject({ code: "ENOENT" });

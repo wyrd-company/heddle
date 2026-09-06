@@ -21,7 +21,7 @@ case "${collection_directory}" in
 esac
 
 install -d -m 0755 "${collection_directory}"
-find "${collection_directory}" -mindepth 1 -delete
+rm -rf -- "${staged_feature}"
 install -d -m 0755 "${staged_source}"
 
 for file in \
