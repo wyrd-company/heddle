@@ -124,7 +124,14 @@
           "minItems": 1,
           "uniqueItems": true,
           "items": {
-            "$ref": "#/$defs/artifact-id"
+            "allOf": [
+              {
+                "$ref": "#/$defs/artifact-id"
+              },
+              {
+                "maxLength": 64
+              }
+            ]
           }
         },
         "todo-template": {

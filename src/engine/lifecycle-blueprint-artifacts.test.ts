@@ -160,7 +160,7 @@ describe("organization lifecycle blueprint artifacts", () => {
 
     await expect(
       validateBlueprintRepository(await repository(invalid)),
-    ).rejects.toThrow(/violates the lifecycle schema/);
+    ).rejects.toThrow(/violates the lifecycle schema[\s\S]*"keyword":"type"/);
   });
 
   it("rejects duplicate stage skills through the lifecycle schema", async () => {
@@ -172,7 +172,20 @@ describe("organization lifecycle blueprint artifacts", () => {
 
     await expect(
       validateBlueprintRepository(await repository(invalid)),
-    ).rejects.toThrow(/violates the lifecycle schema/);
+    ).rejects.toThrow(
+      /violates the lifecycle schema[\s\S]*"keyword":"uniqueItems"/,
+    );
+  });
+
+  it("rejects a stage skill longer than 64 characters through the lifecycle schema", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["skills"] = ["a".repeat(65)];
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow(
+      /violates the lifecycle schema[\s\S]*"keyword":"maxLength"/,
+    );
   });
 
   it("rejects the removed handoff blobHash schema shape", async () => {

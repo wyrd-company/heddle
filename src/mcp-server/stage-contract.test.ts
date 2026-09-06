@@ -52,6 +52,7 @@ describe("workflow MCP stage contract", () => {
   it.each([
     { label: "non-string", skills: [17] },
     { label: "non-kebab", skills: ["EvidenceReview"] },
+    { label: "long", skills: ["a".repeat(65)] },
     { label: "duplicate", skills: ["evidence-review", "evidence-review"] },
   ])("rejects $label stage skills", ({ skills }) => {
     const value = contract();

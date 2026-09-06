@@ -296,7 +296,7 @@ proposed-design:
     Nunjucks `extends` and `import` directives fail closed. Heddle verifies the
     entry schema and declared handoff kind and never substitutes mutable
     working-tree content. A wait node can declare a unique, non-empty array of
-    kebab-case `skills` names. Each name resolves from
+    kebab-case `skills` names no longer than 64 characters. Each name resolves from
     `skills/<name>/SKILL.md` at the handoff template's pinned commit. The skill
     must have YAML front matter whose `name` equals its folder and whose
     `description` is non-empty. The handoff stage carries the names, and the

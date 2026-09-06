@@ -533,6 +533,22 @@ describe("GitHandoffTemplateStore", () => {
     ).rejects.toThrow('Pinned skill name is invalid: "EvidenceReview"');
   });
 
+  it("rejects a pinned skill name longer than 64 characters", async () => {
+    const name = "a".repeat(65);
+    const { commitSha, root } = await pinnedSkillFixture(
+      `---\nname: ${name}\ndescription: Inspect evidence.\n---\n\nInspect it.\n`,
+    );
+    await expect(
+      new GitHandoffTemplateStore(root).read(
+        {
+          commitSha,
+          path: "handoff-templates/standard.md",
+        },
+        [name],
+      ),
+    ).rejects.toThrow(`Pinned skill name is invalid: ${JSON.stringify(name)}`);
+  });
+
   it("reads entry and include bytes from one pinned commit", async () => {
     const root = await mkdtemp(join(tmpdir(), "handoff-template-store-"));
     cleanup.push(root);

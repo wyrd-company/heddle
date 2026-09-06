@@ -111,6 +111,15 @@ describe("lifecycle blueprint handoff metadata", () => {
     );
   });
 
+  it("rejects a stage skill name longer than 64 characters", () => {
+    const value = blueprint();
+    value.nodes[0]!.skills = ["a".repeat(65)];
+
+    expect(() => validate(value)).toThrow(
+      'Node "prepare" skills must be a non-empty array of kebab-case names no longer than 64 characters',
+    );
+  });
+
   it("rejects stage skills on a non-wait node", () => {
     const value = blueprint();
     value.nodes[1]!.skills = ["evidence-review"];

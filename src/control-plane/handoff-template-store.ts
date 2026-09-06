@@ -12,6 +12,8 @@ import { parse } from "yaml";
 const execute = promisify(execFile);
 const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const artifactId = /^[a-z]+(?:-[a-z]+)*$/;
+const validSkillName = (name: string): boolean =>
+  name.length <= 64 && artifactId.test(name);
 const schemaId = "https://wyrd.company/heddle/handoff-template.schema.json";
 
 export type HandoffTemplateKind = "remediation" | "standard";
@@ -155,6 +157,11 @@ const readPinnedIncludes = async (
 
 const parseSkill = (serialized: string, name: string): PinnedSkill => {
   const path = `skills/${name}/SKILL.md`;
+  if (!validSkillName(name)) {
+    throw new HandoffTemplateError(
+      `Pinned skill name is invalid: ${JSON.stringify(name)}`,
+    );
+  }
   if (!serialized.startsWith("---\n")) {
     throw new HandoffTemplateError(
       `Pinned skill ${JSON.stringify(name)} has no YAML front matter`,
@@ -200,7 +207,7 @@ const readPinnedSkills = async (
 ): Promise<Readonly<Record<string, PinnedSkill>>> => {
   const skills: Array<readonly [string, PinnedSkill]> = [];
   for (const name of skillNames) {
-    if (!artifactId.test(name)) {
+    if (!validSkillName(name)) {
       throw new HandoffTemplateError(
         `Pinned skill name is invalid: ${JSON.stringify(name)}`,
       );

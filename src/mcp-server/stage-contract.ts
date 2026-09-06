@@ -61,7 +61,10 @@ export const isWorkflowMcpStageContract = (
   ) &&
   Array.isArray(value["skills"]) &&
   value["skills"].every(
-    (skill) => typeof skill === "string" && /^[a-z]+(?:-[a-z]+)*$/.test(skill),
+    (skill) =>
+      typeof skill === "string" &&
+      skill.length <= 64 &&
+      /^[a-z]+(?:-[a-z]+)*$/.test(skill),
   ) &&
   new Set(value["skills"]).size === value["skills"].length &&
   typeof value["stage"] === "string" &&

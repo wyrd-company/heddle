@@ -364,7 +364,8 @@ organization blueprint clone, retains the commit under
 working-tree files during session activation. Product repositories receive no
 template-retention refs.
 An agent wait node can also declare `skills: [<name>, ...]`. Each name must be
-unique and kebab-case. Heddle reads `skills/<name>/SKILL.md` from the same
+unique, kebab-case, and no longer than 64 characters. Heddle reads
+`skills/<name>/SKILL.md` from the same
 pinned commit as the handoff template, requires the front-matter `name` to
 equal the folder name, and requires a non-empty `description`. The handoff
 stage carries the names. Templates resolve one with the `skill(name)` global,

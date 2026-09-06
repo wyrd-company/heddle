@@ -191,11 +191,13 @@ export const validateBlueprint = (
         skills.length === 0 ||
         skills.some(
           (skill) =>
-            typeof skill !== "string" || !/^[a-z]+(?:-[a-z]+)*$/.test(skill),
+            typeof skill !== "string" ||
+            skill.length > 64 ||
+            !/^[a-z]+(?:-[a-z]+)*$/.test(skill),
         ))
     ) {
       throw new BlueprintValidationError(
-        `Node ${JSON.stringify(node.id)} skills must be a non-empty array of kebab-case names`,
+        `Node ${JSON.stringify(node.id)} skills must be a non-empty array of kebab-case names no longer than 64 characters`,
       );
     }
     if (Array.isArray(skills) && new Set(skills).size !== skills.length) {
