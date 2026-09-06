@@ -76,7 +76,12 @@ const livenessAttentionIdsFor = (
     target.threadId,
   );
   const attentionIds = new Set<string>();
-  for (const [index, event] of events.entries()) {
+  let latestSample: (typeof events)[number] | undefined;
+  for (const event of events) {
+    if (event.type === sessionObservationEventTypes.livenessSampled) {
+      latestSample = event;
+      continue;
+    }
     if (event.type !== sessionObservationEventTypes.attentionRequired) continue;
     const payload = objectPayload(event);
     const kind = payload["kind"];
@@ -97,18 +102,12 @@ const livenessAttentionIdsFor = (
         `Observation attention event ${event.sequence} has no attention identity`,
       );
     }
-    const sample = events
-      .slice(0, index)
-      .filter(
-        ({ type }) => type === sessionObservationEventTypes.livenessSampled,
-      )
-      .at(-1);
-    if (sample === undefined) {
+    if (latestSample === undefined) {
       throw new Error(
         `Observation attention event ${event.sequence} has no matching liveness sample`,
       );
     }
-    const samplePayload = objectPayload(sample);
+    const samplePayload = objectPayload(latestSample);
     const observedAt = samplePayload["observedAt"];
     const stageFingerprint = samplePayload["stageFingerprint"];
     if (
