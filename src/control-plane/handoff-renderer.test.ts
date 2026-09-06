@@ -144,13 +144,19 @@ describe("renderStageHandoff", () => {
     expect(rendered).toContain("Included Arrange a sample");
   });
 
-  it("rejects an include specifier that escapes the pinned include directory", () => {
+  it.each([
+    "handoff-templates/includes/../outside.md",
+    "handoff-templates/outside.md",
+    "handoff-templates\\includes\\outside.md",
+    "handoff-templates/includes/",
+  ])("rejects contained-include violation %s", (includePath) => {
     expect(() =>
       renderStageHandoff(
         input({
           template: {
             ...input().template,
-            body: '{% include "handoff-templates/includes/../outside.md" %}',
+            body: `{% include ${JSON.stringify(includePath)} %}`,
+            includes: { [includePath]: "Outside content" },
           },
         }),
       ),
@@ -217,23 +223,30 @@ describe("renderStageHandoff", () => {
     ).toThrow("Handoff template render is not deterministic");
   });
 
-  it("applies correlation-token and filter guards to included content", () => {
+  const withInclude = (body: string) => {
     const includePath = "handoff-templates/includes/summary.md";
-    const withInclude = (body: string) =>
-      input({
-        template: {
-          ...input().template,
-          body: `{% include "${includePath}" %}`,
-          includes: { [includePath]: body },
-        },
-      });
+    return input({
+      template: {
+        ...input().template,
+        body: `{% include "${includePath}" %}`,
+        includes: { [includePath]: body },
+      },
+    });
+  };
 
+  it("rejects the correlation token from included content", () => {
     expect(() =>
       renderStageHandoff(withInclude("opaque-fallback-token")),
     ).toThrow("Handoff template body contains the correlation token");
+  });
+
+  it("disables the random filter in included content", () => {
     expect(() =>
       renderStageHandoff(withInclude("{{ [1, 2, 3] | random }}")),
     ).toThrow(/filter not found: random/);
+  });
+
+  it("disables the date filter in included content", () => {
     expect(() =>
       renderStageHandoff(withInclude("{{ '2026-01-01' | date }}")),
     ).toThrow(/filter not found: date/);
