@@ -83,14 +83,16 @@ const boardTask = (id = 21): BoardTask => {
 
 const attentionFixture = () => {
   const records = new Map<string, ProductionErrorAttention>();
+  const raise = vi.fn(async (attention: ProductionErrorAttention) => {
+    records.set(attention.attentionId, attention);
+  });
   return {
     attention: {
       has: async (attentionId: string) => records.has(attentionId),
-      raise: async (attention: ProductionErrorAttention) => {
-        records.set(attention.attentionId, attention);
-      },
+      raise,
       resolve: (attentionId: string) => records.delete(attentionId),
     },
+    raise,
     records,
   };
 };
@@ -227,19 +229,48 @@ describe("DynamicTaskAuthority", () => {
   });
 
   it.each([
-    ["conflicting", [{ ...boardTask(21), lifecycle: "changed-lifecycle" }]],
-    ["ambiguous", [boardTask(21), boardTask(22)]],
+    [
+      "kind",
+      {
+        tags: boardTask().tags.map((tag) =>
+          tag === "type:follow-up" ? "type:finding" : tag,
+        ),
+      },
+    ],
+    ["parent", { parent: 11 }],
+    ["lifecycle", { lifecycle: "changed-lifecycle" }],
+    [
+      "operation digest",
+      {
+        tags: boardTask().tags.map((tag) =>
+          tag.startsWith("heddle-operation:")
+            ? `heddle-operation:${"f".repeat(64)}`
+            : tag,
+        ),
+      },
+    ],
+    [
+      "record digest",
+      {
+        tags: boardTask().tags.map((tag) =>
+          tag.startsWith("heddle-record:")
+            ? `heddle-record:${"f".repeat(64)}`
+            : tag,
+        ),
+      },
+    ],
   ] as const)(
-    "fails %s recovery closed with one stable attention",
-    async (failure, boardTasks) => {
+    "rejects a conflicting %s identity with one stable attention",
+    async (_identity, change) => {
       const persistence = await makePersistence();
       pendingIntent(persistence);
       const attention = attentionFixture();
+      const changed = { ...boardTask(), ...change };
       const authority = new DynamicTaskAuthority(
         persistence,
         {
           createRecord: vi.fn(),
-          readBoard: async () => [...boardTasks],
+          readBoard: async () => [changed],
           readTask: vi.fn(),
         },
         attention.attention,
@@ -250,11 +281,36 @@ describe("DynamicTaskAuthority", () => {
 
       expect(persistence.listDynamicTaskIntents("pending")).toHaveLength(1);
       expect([...attention.records.values()]).toMatchObject([
-        { code: `dynamic-task-authority-${failure}`, taskId: 10 },
+        { code: "dynamic-task-authority-conflicting", taskId: 10 },
       ]);
+      expect(attention.raise).toHaveBeenCalledTimes(1);
       persistence.close();
     },
   );
+
+  it("rejects multiple exact board identities as ambiguous", async () => {
+    const persistence = await makePersistence();
+    pendingIntent(persistence);
+    const attention = attentionFixture();
+    const authority = new DynamicTaskAuthority(
+      persistence,
+      {
+        createRecord: vi.fn(),
+        readBoard: async () => [boardTask(21), boardTask(22)],
+        readTask: vi.fn(),
+      },
+      attention.attention,
+    );
+
+    await authority.recoverPending();
+    await authority.recoverPending();
+
+    expect([...attention.records.values()]).toMatchObject([
+      { code: "dynamic-task-authority-ambiguous", taskId: 10 },
+    ]);
+    expect(attention.raise).toHaveBeenCalledTimes(1);
+    persistence.close();
+  });
 
   it("raises stable malformed and board-failure recovery attention", async () => {
     const malformedPersistence = await makePersistence();

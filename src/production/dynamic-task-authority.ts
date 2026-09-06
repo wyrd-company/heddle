@@ -117,6 +117,9 @@ const recordFromIntent = (
 const operationTag = (intent: DynamicTaskIntentRecord): string =>
   `heddle-operation:${intent.operationDigest}`;
 
+const recordTag = (intent: DynamicTaskIntentRecord): string =>
+  `heddle-record:${intent.recordDigest}`;
+
 const matchesIntent = (
   task: BoardTask,
   intent: DynamicTaskIntentRecord,
@@ -256,25 +259,25 @@ export class DynamicTaskAuthority {
     }
 
     for (const intent of pending) {
-      let occurrenceMatches: BoardTask[];
+      let candidates: BoardTask[];
       let exactMatches: BoardTask[];
       try {
-        occurrenceMatches = tasks.filter(({ tags }) =>
-          tags.includes(operationTag(intent)),
+        candidates = tasks.filter(
+          ({ tags }) =>
+            tags.includes(operationTag(intent)) ||
+            tags.includes(recordTag(intent)),
         );
-        exactMatches = occurrenceMatches.filter((task) =>
-          matchesIntent(task, intent),
-        );
+        exactMatches = candidates.filter((task) => matchesIntent(task, intent));
       } catch {
         await this.raiseRecovery(intent, "malformed");
         continue;
       }
-      if (occurrenceMatches.length === 0) continue;
+      if (candidates.length === 0) continue;
       if (exactMatches.length === 0) {
         await this.raiseRecovery(intent, "conflicting");
         continue;
       }
-      if (occurrenceMatches.length !== 1 || exactMatches.length !== 1) {
+      if (candidates.length !== 1 || exactMatches.length !== 1) {
         await this.raiseRecovery(intent, "ambiguous");
         continue;
       }

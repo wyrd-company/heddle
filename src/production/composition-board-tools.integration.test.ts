@@ -314,7 +314,19 @@ describe("production MCP board tools", () => {
       afterDynamicTaskBoardEffect: undefined,
       t3: new SyntheticT3(),
     });
+    const registryStateAtBoardRead: string[] = [];
+    const readBoard = composition.board.readBoard.bind(composition.board);
+    vi.spyOn(composition.board, "readBoard").mockImplementation(async () => {
+      registryStateAtBoardRead.push(
+        composition.persistence.listDynamicTaskIntents()[0]!.state,
+      );
+      return readBoard();
+    });
     await composition.start();
+    expect(registryStateAtBoardRead.slice(0, 2)).toEqual([
+      "pending",
+      "completed",
+    ]);
     expect(
       composition.persistence.listDynamicTaskIntents("pending"),
     ).toHaveLength(0);
