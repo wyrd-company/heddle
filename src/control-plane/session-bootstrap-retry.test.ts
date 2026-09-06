@@ -258,13 +258,13 @@ describe("stage session cold retry guards", () => {
         nextId: () => "stable-id",
       }).catch((caught: unknown) => caught);
 
+      expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
+      expect(register).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
       expect(error).toBeInstanceOf(HandoffRenderError);
       expect(error).toMatchObject({
         message: expect.stringContaining(diagnostic),
       });
-      expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
-      expect(register).not.toHaveBeenCalled();
-      expect(dispatch).not.toHaveBeenCalled();
     },
   );
 
