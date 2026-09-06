@@ -358,44 +358,92 @@ describe("DynamicTaskAuthority", () => {
     failedPersistence.close();
   });
 
-  it("rejects a durable record digest that does not reproduce its request", async () => {
-    const persistence = await makePersistence();
+  it.each([
+    ["operation", { operationDigest: "f".repeat(64) }],
+    ["record", { recordDigest: "f".repeat(64) }],
+  ])(
+    "rejects a durable %s digest that does not reproduce its request",
+    async (_kind, changedIdentity) => {
+      const persistence = await makePersistence();
+      const identity = boardRecordIdentity(record);
+      persistence.recordDynamicTaskIntent({
+        kind: record.kind,
+        lifecycle: record.lifecycle,
+        operationDigest: identity.operationDigest,
+        parentEpicId: record.parent,
+        recordDigest: identity.recordDigest,
+        request: {
+          body: record.body,
+          dependsOn: record.dependsOn,
+          operationKey: record.operationKey,
+          priority: record.priority,
+          status: record.status,
+          title: record.title,
+        } as never,
+        sourceInstanceId: source.instanceId,
+        sourceSessionKey: source.sessionKey,
+        sourceTaskId: source.taskId,
+        ...changedIdentity,
+      });
+      const attention = attentionFixture();
+      const authority = new DynamicTaskAuthority(
+        persistence,
+        {
+          createRecord: vi.fn(),
+          readBoard: async () => [boardTask()],
+          readTask: vi.fn(),
+        },
+        attention.attention,
+      );
+
+      await authority.recoverPending();
+
+      expect([...attention.records.values()]).toMatchObject([
+        { code: "dynamic-task-authority-malformed" },
+      ]);
+      expect(persistence.listDynamicTaskIntents("pending")).toHaveLength(1);
+      persistence.close();
+    },
+  );
+
+  it("does not verify a pending row even if a malformed adapter supplies a task ID", () => {
     const identity = boardRecordIdentity(record);
-    persistence.recordDynamicTaskIntent({
-      kind: record.kind,
-      lifecycle: record.lifecycle,
-      operationDigest: identity.operationDigest,
-      parentEpicId: record.parent,
-      recordDigest: "f".repeat(64),
-      request: {
-        body: record.body,
-        dependsOn: record.dependsOn,
-        operationKey: record.operationKey,
-        priority: record.priority,
-        status: record.status,
-        title: record.title,
-      } as never,
-      sourceInstanceId: source.instanceId,
-      sourceSessionKey: source.sessionKey,
-      sourceTaskId: source.taskId,
-    });
-    const attention = attentionFixture();
     const authority = new DynamicTaskAuthority(
-      persistence,
+      {
+        completeDynamicTaskIntent: vi.fn(),
+        listDynamicTaskIntents: () => [
+          {
+            kind: record.kind,
+            lifecycle: record.lifecycle,
+            operationDigest: identity.operationDigest,
+            parentEpicId: record.parent,
+            recordDigest: identity.recordDigest,
+            recordedAt: "2026-01-01T00:00:00.000Z",
+            request: {
+              body: record.body,
+              dependsOn: record.dependsOn ?? [],
+              operationKey: record.operationKey,
+              priority: record.priority ?? null,
+              status: record.status ?? null,
+              title: record.title,
+            },
+            sourceInstanceId: source.instanceId,
+            sourceSessionKey: source.sessionKey,
+            sourceTaskId: source.taskId,
+            state: "pending",
+            taskId: 21,
+          },
+        ],
+        recordDynamicTaskIntent: vi.fn(),
+      },
       {
         createRecord: vi.fn(),
-        readBoard: async () => [boardTask()],
+        readBoard: vi.fn(),
         readTask: vi.fn(),
       },
-      attention.attention,
+      attentionFixture().attention,
     );
 
-    await authority.recoverPending();
-
-    expect([...attention.records.values()]).toMatchObject([
-      { code: "dynamic-task-authority-malformed" },
-    ]);
-    expect(persistence.listDynamicTaskIntents("pending")).toHaveLength(1);
-    persistence.close();
+    expect(authority.verifyTask(boardTask())).toBeUndefined();
   });
 });

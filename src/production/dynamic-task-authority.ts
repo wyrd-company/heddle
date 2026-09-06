@@ -296,7 +296,9 @@ export class DynamicTaskAuthority {
   public verifyTask(task: BoardTask): DynamicTaskIntentRecord | undefined {
     const matches = this.persistence
       .listDynamicTaskIntents("completed")
-      .filter((intent) => intent.taskId === task.id);
+      .filter(
+        (intent) => intent.state === "completed" && intent.taskId === task.id,
+      );
     if (matches.length === 0) return undefined;
     if (matches.length !== 1 || !matchesIntent(task, matches[0]!)) {
       throw new Error(
