@@ -148,6 +148,29 @@ describe("ProviderSelectionResolver", () => {
     );
   });
 
+  it("keys provider budgets by an own provider-instance property", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: aliases.primary },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, instanceId: "constructor" },
+        ],
+      },
+    );
+
+    const resolved = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: { primary: { usageLimit: 50 } },
+      runtimeMode: "auto",
+    });
+
+    expect(resolved.providerBudgets).toEqual({
+      constructor: { usageLimit: 50 },
+    });
+    expect(Object.hasOwn(resolved.providerBudgets, "constructor")).toBe(true);
+  });
+
   it.each([
     {
       aliases,
@@ -188,6 +211,19 @@ describe("ProviderSelectionResolver", () => {
 
     expect(error).toBeInstanceOf(ProviderSelectionError);
     expect((error as ProviderSelectionError).reason).toBe(testCase.expected);
+  });
+
+  it("treats a schema-valid inherited prototype alias as not allowed", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => catalog(),
+    });
+
+    await expect(
+      resolver.resolve("constructor", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-alias-not-allowed" });
   });
 
   it("rejects ambiguous names before provider availability or model checks", async () => {

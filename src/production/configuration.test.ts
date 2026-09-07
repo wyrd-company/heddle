@@ -128,6 +128,29 @@ describe("production configuration", () => {
     );
   });
 
+  it("rejects an inherited prototype key as the default alias", () => {
+    const invalidDefault = {
+      ...fixture(),
+      session: { ...fixture().session, defaultProviderAlias: "constructor" },
+    };
+    expect(() => validateProductionConfiguration(invalidDefault)).toThrow(
+      "session.defaultProviderAlias 'constructor' is not configured in providerAliases",
+    );
+  });
+
+  it("rejects an inherited prototype key as a budget alias", () => {
+    const invalidBudget = {
+      ...fixture(),
+      pacing: {
+        ...fixture().pacing,
+        providerBudgets: { constructor: { usageLimit: 1 } },
+      },
+    };
+    expect(() => validateProductionConfiguration(invalidBudget)).toThrow(
+      "pacing.providerBudgets alias 'constructor' is not configured in providerAliases",
+    );
+  });
+
   it("rejects malformed alias keys and pacing aliases outside the allowlist", () => {
     expect(() =>
       validateProductionConfiguration({

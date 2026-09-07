@@ -103,14 +103,14 @@ const selectionError = (
   );
 
 export class ProviderSelectionResolver {
-  readonly #aliases: ProviderAliasCatalog;
+  readonly #aliases: ReadonlyMap<string, ProviderAliasConfiguration>;
   readonly #catalog: T3ProviderCatalogReader;
 
   public constructor(
     aliases: ProviderAliasCatalog,
     catalog: T3ProviderCatalogReader,
   ) {
-    this.#aliases = Object.fromEntries(
+    this.#aliases = new Map(
       Object.entries(aliases).map(([alias, configuration]) => [
         alias,
         { ...configuration },
@@ -142,7 +142,7 @@ export class ProviderSelectionResolver {
     alias: string,
     inputs: ProviderSelectionInputs,
   ): ResolvedProviderSelection {
-    const configured = this.#aliases[alias];
+    const configured = this.#aliases.get(alias);
     if (configured === undefined) {
       throw selectionError(
         "provider-alias-not-allowed",
@@ -205,26 +205,30 @@ export class ProviderSelectionResolver {
   ): Promise<ResolvedProviderStartup> {
     const catalog = await this.readCatalog();
     const aliases = new Map<string, ResolvedProviderSelection>();
-    for (const alias of Object.keys(this.#aliases).sort()) {
+    for (const alias of [...this.#aliases.keys()].sort()) {
       aliases.set(alias, this.resolveFromCatalog(catalog, alias, inputs));
     }
     const defaultSelection =
       aliases.get(inputs.defaultAlias) ??
       this.resolveFromCatalog(catalog, inputs.defaultAlias, inputs);
-    const providerBudgets: Record<string, ProviderUsageBudget> = {};
+    const providerBudgets = new Map<string, ProviderUsageBudget>();
     const budgetAliases = new Map<string, string>();
     for (const [alias, budget] of Object.entries(inputs.providerBudgets)) {
       const selection =
         aliases.get(alias) ?? this.resolveFromCatalog(catalog, alias, inputs);
-      const prior = providerBudgets[selection.providerInstanceId];
+      const prior = providerBudgets.get(selection.providerInstanceId);
       if (prior !== undefined && prior.usageLimit !== budget.usageLimit) {
         throw new TypeError(
           `Provider aliases '${budgetAliases.get(selection.providerInstanceId)}' and '${alias}' select provider instance '${selection.providerInstanceId}' with conflicting pacing limits`,
         );
       }
-      providerBudgets[selection.providerInstanceId] = { ...budget };
+      providerBudgets.set(selection.providerInstanceId, { ...budget });
       budgetAliases.set(selection.providerInstanceId, alias);
     }
-    return { aliases, defaultSelection, providerBudgets };
+    return {
+      aliases,
+      defaultSelection,
+      providerBudgets: Object.fromEntries(providerBudgets),
+    };
   }
 }

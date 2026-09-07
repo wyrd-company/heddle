@@ -242,9 +242,10 @@ const validateCommonProductionConfiguration = (
     requireNonEmpty(`providerAliases.${alias}.model`, provider.model);
   }
   if (
-    configuration.providerAliases[
-      configuration.session.defaultProviderAlias
-    ] === undefined
+    !Object.hasOwn(
+      configuration.providerAliases,
+      configuration.session.defaultProviderAlias,
+    )
   ) {
     throw new TypeError(
       `session.defaultProviderAlias '${configuration.session.defaultProviderAlias}' is not configured in providerAliases`,
@@ -252,7 +253,7 @@ const validateCommonProductionConfiguration = (
   }
   if (validateBudgetAliases) {
     for (const alias of Object.keys(configuration.pacing.providerBudgets)) {
-      if (configuration.providerAliases[alias] === undefined) {
+      if (!Object.hasOwn(configuration.providerAliases, alias)) {
         throw new TypeError(
           `pacing.providerBudgets alias '${alias}' is not configured in providerAliases`,
         );
