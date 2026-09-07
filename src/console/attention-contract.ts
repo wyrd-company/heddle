@@ -23,6 +23,8 @@ export const CONSOLE_ATTENTION_KIND_LABELS = {
   escalation: "Escalation",
   failed: "Session failed",
   "epic-acceptance": "Epic acceptance",
+  "incident-production-mutation-approval":
+    "Incident production mutation approval",
   "lifecycle-resolution": "Lifecycle resolution",
   "production-error": "Production error",
   stalled: "Session stalled",

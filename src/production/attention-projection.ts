@@ -199,6 +199,40 @@ export const projectProductionAttention = (
       attentionId,
     );
   }
+  if (kind === "incident-production-mutation-approval") {
+    const instanceId = requiredIdentifier(payload, "incidentId", attentionId);
+    const taskId = validTaskId(payload["taskId"], attentionId);
+    if (taskForInstance(instanceId, instanceRuntimes, attentionId) !== taskId) {
+      throw new Error(
+        `Attention '${attentionId}' disagrees with its production task`,
+      );
+    }
+    const proposalDigest = requiredIdentifier(
+      payload,
+      "proposalDigest",
+      attentionId,
+    );
+    return createConsoleAttention({
+      actions: [
+        {
+          actionId: "incident.production-mutation.approve",
+          contract: {
+            instanceId,
+            kind: "incident.production-mutation.approve",
+            proposalDigest,
+          },
+          input: { kind: "none" },
+          label: "Approve production mutation",
+        },
+      ],
+      attentionId,
+      instanceId,
+      kind,
+      message: requiredString(payload, "message", attentionId),
+      scope: `task:${taskId}`,
+      taskId,
+    });
+  }
   if (
     kind === "approval" ||
     kind === "user-input" ||

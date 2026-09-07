@@ -17,6 +17,8 @@ import {
   type JsonValue,
 } from "../persistence/index.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
+import { ProductionAttentionActions } from "./attention-actions.js";
+import { projectProductionAttention } from "./attention-projection.js";
 import {
   productionErrorAttention,
   productionErrorCodeDeclarations,
@@ -516,45 +518,94 @@ describe("production incident coordinator", () => {
     expect(persistence!.listIncidentRuntime()).toHaveLength(1);
   });
 
-  it("holds a production mutation until the current finalize session has accepted operator approval", async () => {
-    const { attention, coordinator } = await createSubject();
+  it("creates no production-capable finalizer before durable proposal approval and activates it once after approval replay", async () => {
+    const { attention, coordinator, harness } = await createSubject();
     const source = await raise(attention);
     await coordinator.reconcile([task()]);
-    const runtime = persistence!.listIncidentRuntime()[0]!;
-    const finalize = {
-      ...runtime,
-      accepted: true,
-      diagnosis: {
+    await coordinator.resume({
+      disposition: "diagnosed",
+      instanceId: source.incidentId!,
+      operationId: "diagnose-once",
+      output: {
         conditionState: "live",
         proposedActions: [
           { kind: "production-mutation", summary: "Repair synthetic state" },
         ],
         rootCauseAnalysis: "Synthetic analysis",
       },
-      sessionKey: `${runtime.incidentId}:finalize:1`,
-      stageId: "finalize",
-      state: "waiting" as const,
-    };
-    persistence!.writeIncidentRuntime(finalize);
-    persistence!.updateInstance(runtime.incidentId, lifecycleState("finalize"));
-
-    await expect(
-      coordinator.resume({
-        disposition: "complete",
-        instanceId: runtime.incidentId,
-        operationId: "finalize-once",
-      }),
-    ).rejects.toThrow("accepted operator approval");
-    expect(persistence!.hasAttention(source.attentionId)).toBe(true);
-
-    persistence!.appendEvent(runtime.incidentId, "operator:approval-accepted", {
-      attentionId: "approval:synthetic",
-      requestId: "request-synthetic",
-      sessionKey: finalize.sessionKey,
     });
     await coordinator.resume({
+      disposition: "approve",
+      instanceId: source.incidentId!,
+      operationId: "approve-once",
+    });
+
+    expect(harness.activations).toEqual(["implement", "review"]);
+    expect(
+      vi
+        .mocked(harness.instances.prepareIncidentStart)
+        .mock.calls.map(([, stageId]) => stageId),
+    ).toEqual(["implement", "review"]);
+    const approvalRecord = persistence!
+      .listAttention()
+      .find(({ payload }) =>
+        JSON.stringify(payload).includes(
+          "incident-production-mutation-approval",
+        ),
+      )!;
+    const approval = projectProductionAttention(
+      approvalRecord,
+      persistence!.listReconcilerRuntime(),
+      undefined,
+      undefined,
+      persistence!.listIncidentRuntime(),
+    );
+    expect(approval).toMatchObject({
+      actions: [
+        expect.objectContaining({
+          actionId: "incident.production-mutation.approve",
+        }),
+      ],
+      instanceId: source.incidentId,
+      taskId: 17,
+    });
+    const actions = new ProductionAttentionActions(
+      persistence!,
+      attention,
+      { answerAsOperator: vi.fn() } as never,
+      {} as never,
+    );
+    await actions.execute({
+      action: approval.actions[0]!,
+      attention: approval,
+    });
+
+    await coordinator.reconcile([task()]);
+    const restarted = new ProductionIncidentCoordinator(
+      persistence!,
+      attention,
+      harness.lifecycle,
+      harness.instances,
+    );
+    await restarted.reconcile([task()]);
+    expect(harness.activations).toEqual(["implement", "review", "finalize"]);
+    expect(
+      vi
+        .mocked(harness.instances.prepareIncidentStart)
+        .mock.calls.map(([, stageId]) => stageId),
+    ).toEqual(["implement", "review", "finalize"]);
+    expect(
+      persistence!
+        .replayEvents(source.incidentId!)
+        .filter(
+          ({ type }) =>
+            type === "operator:incident-production-mutation-approved",
+        ),
+    ).toHaveLength(1);
+
+    await coordinator.resume({
       disposition: "complete",
-      instanceId: runtime.incidentId,
+      instanceId: source.incidentId!,
       operationId: "finalize-once",
     });
     expect(

@@ -81,6 +81,11 @@ export type ConsoleAttentionActionContract =
       ownerSessionKey: string;
     }
   | {
+      instanceId: string;
+      kind: "incident.production-mutation.approve";
+      proposalDigest: string;
+    }
+  | {
       decision: "accept" | "reject";
       instanceId: string;
       kind: "t3.approval.respond";

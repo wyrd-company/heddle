@@ -640,22 +640,26 @@ proposed-design:
     permitted; another rejection raises floor attention and leaves the source
     attention unresolved.
 
-    Every incident stage uses the ordinary resolved stage-session binding,
-    durable occurrence identity, bootstrap, and T3 dispatch path. Incident
-    execution adds no provider selector and no GitHub output port. Finalize
-    starts only for an accepted diagnosis. An accepted GitHub issue is authored
-    by the agent through `gh`; the handoff requires the incident identity in the
-    body and inspection for an existing identity before creation. The durable
-    finalizer stage occurrence prevents another issuing session after restart.
-    Missing `gh` fails the stage closed. Agent-authored external text retains an
-    unmitigated accidental-publication risk.
+    Every activated incident stage uses the ordinary resolved stage-session
+    binding, durable occurrence identity, bootstrap, and T3 dispatch path.
+    Incident execution adds no provider selector and no GitHub output port.
+    Finalize starts only for an accepted diagnosis. When the accepted proposal
+    contains a production mutation, Heddle projects a proposal-digest-bound
+    approval through the existing attention action port and creates no
+    finalizer session until the operator accepts it. An accepted GitHub issue
+    is authored by the agent through `gh`; the handoff requires the incident
+    identity in the body and inspection for an existing identity before
+    creation. The durable finalizer stage occurrence and T3 command identity
+    prevent another issuing attempt after process restart. Missing `gh` fails
+    the stage closed. Agent-authored external text retains an unmitigated
+    accidental-publication risk.
 
     Finalize records durable intent before resolving the originating attention
     and records the incident identity as resolution justification. The resolved
     attention row is retained. Issue creation, operator escalation, and
     resolution need no additional approval. A production mutation requires an
-    accepted operator approval event for the current finalize session through
-    the existing attention action port. Known correlation tokens, configured
+    accepted operator approval event for the exact accepted proposal before
+    finalizer activation. Known correlation tokens, configured
     secrets, and credential-bearing URLs are redacted before production-error
     attention persistence and incident handoff assembly. The Console projects
     the incident identity from the originating attention and reads the pinned

@@ -30,6 +30,11 @@ import {
 import type { ProductionInstanceController } from "./instance-controller.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { sanitizeIncidentValue } from "./incident-redaction.js";
+import {
+  incidentProductionMutationApproval,
+  incidentProductionMutationApproved,
+  incidentProposedActionKinds,
+} from "./incident-approval.js";
 
 export { sanitizeIncidentValue } from "./incident-redaction.js";
 
@@ -125,19 +130,6 @@ const taskForIncident = (
     ...(retained?.repos === undefined ? {} : { repos: retained.repos }),
   };
   return { ...base, frontMatter: {}, incident } as BoardTask;
-};
-
-const proposedActionKinds = (runtime: IncidentRuntimeRecord): Set<string> => {
-  const diagnosis = asRecord(runtime.diagnosis);
-  const actions = diagnosis?.["proposedActions"];
-  return new Set(
-    Array.isArray(actions)
-      ? actions.flatMap((action) => {
-          const kind = asRecord(action)?.["kind"];
-          return typeof kind === "string" ? [kind] : [];
-        })
-      : [],
-  );
 };
 
 export class ProductionIncidentCoordinator {
@@ -325,12 +317,24 @@ export class ProductionIncidentCoordinator {
         throw new Error("Incident finalization requires accepted diagnosis");
       }
       if (
-        proposedActionKinds(runtime).has("github-issue") &&
+        incidentProposedActionKinds(runtime).has("github-issue") &&
         !(await (this.options.commandAvailable ?? executableOnPath)("gh"))
       ) {
         throw new Error(
           "Incident finalize prerequisite is missing from PATH: gh",
         );
+      }
+      if (
+        incidentProposedActionKinds(runtime).has("production-mutation") &&
+        !incidentProductionMutationApproved(this.persistence, runtime)
+      ) {
+        const approval = incidentProductionMutationApproval(runtime);
+        if (!(await this.attention.has(approval.attentionId))) {
+          await this.attention.raise(approval);
+        } else {
+          this.attention.reopen(approval.attentionId);
+        }
+        return;
       }
     }
     const source = this.#sourceAttention(runtime);
@@ -361,15 +365,9 @@ export class ProductionIncidentCoordinator {
     if (!runtime.accepted) {
       throw new Error("Incident finalization requires accepted diagnosis");
     }
-    if (!proposedActionKinds(runtime).has("production-mutation")) return;
-    const approved = this.persistence
-      .replayEvents(runtime.incidentId)
-      .some(
-        (event) =>
-          event.type === "operator:approval-accepted" &&
-          asRecord(event.payload)?.["sessionKey"] === runtime.sessionKey,
-      );
-    if (!approved) {
+    if (!incidentProposedActionKinds(runtime).has("production-mutation"))
+      return;
+    if (!incidentProductionMutationApproved(this.persistence, runtime)) {
       throw new Error(
         "Incident production mutation requires accepted operator approval",
       );

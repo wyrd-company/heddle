@@ -901,14 +901,15 @@ proposes zero or more GitHub issue, operator escalation, or production mutation
 actions. Review accepts or rejects that diagnosis. A rejection returns to
 diagnosis for at most three rounds. Exhaustion raises critical operator
 attention and leaves the source attention unresolved. Finalization runs only
-after acceptance. A production mutation also waits for an accepted approval
-through the existing attention action. Issue creation and escalation do not
-require that approval.
+after acceptance. For a production mutation, Heddle raises a proposal-bound
+approval card and creates no finalizer session until the operator selects
+**Approve production mutation**. Issue creation and escalation do not require
+that approval.
 
 The issue body includes the incident identity. The finalizer inspects existing
 issues for that identity before it creates one. The durable stage occurrence
-prevents another finalizer session after restart. Heddle has no GitHub network
-port; the agent uses `gh`. If `gh` is absent, finalization fails closed and
+and T3 command identity prevent another issue attempt after restart. Heddle has
+no GitHub network port; the agent uses `gh`. If `gh` is absent, finalization fails closed and
 raises incident failure attention. A failed incident retains both the source
 attention and its visible failure. An incident execution failure is a floor
 error and cannot create another incident.
