@@ -25,6 +25,8 @@ type ToolResult = {
   status: string;
 };
 
+const productionReplayUnderParallelLoadTimeoutMilliseconds = 10_000;
+
 const callTool = async (
   composition: ReturnType<typeof createProductionComposition>,
   token: string,
@@ -68,103 +70,107 @@ describe("production MCP board tools", () => {
     await cleanup?.();
   });
 
-  it("creates findings and follow-ups through the board authority without duplicating restart replays", async () => {
-    const fixture = await prepareProductionEpicFixture();
-    cleanup = fixture.cleanup;
-    const options = {
-      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
-      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration: fixture.configuration,
-      providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
-      },
-      pushoverTransport: { send: vi.fn(async () => undefined) },
-      t3: new SyntheticT3(),
-    };
-    let composition = createProductionComposition(options);
-    await composition.start();
-    const binding = await new WorkflowMcpSessionResolver(
-      composition.persistence,
-    ).resolve(
-      Object.values(
-        composition.persistence.getInstance(`task-${fixture.taskId}`)!.state
-          .correlationTokens,
-      )[0]!,
-    );
-    const followUpInput = {
-      body: "Check the sample with a separate fixture.",
-      lifecycle: "sample",
-      operationId: "follow-up-one",
-      title: "Check another sample",
-    };
-    const followUp = await callTool(
-      composition,
-      binding.token,
-      "create_follow_up",
-      followUpInput,
-    );
-    const findingInput = {
-      body: "The sample fixture does not cover the alternate arrangement.",
-      dependsOn: [followUp.id],
-      lifecycle: "sample",
-      operationId: "finding-one",
-      priority: "high",
-      title: "Cover the alternate arrangement",
-    };
-    const finding = await callTool(
-      composition,
-      binding.token,
-      "create_finding",
-      findingInput,
-    );
+  it(
+    "creates findings and follow-ups through the board authority without duplicating restart replays",
+    async () => {
+      const fixture = await prepareProductionEpicFixture();
+      cleanup = fixture.cleanup;
+      const options = {
+        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration: fixture.configuration,
+        providerUsage: {
+          readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        },
+        pushoverTransport: { send: vi.fn(async () => undefined) },
+        t3: new SyntheticT3(),
+      };
+      let composition = createProductionComposition(options);
+      await composition.start();
+      const binding = await new WorkflowMcpSessionResolver(
+        composition.persistence,
+      ).resolve(
+        Object.values(
+          composition.persistence.getInstance(`task-${fixture.taskId}`)!.state
+            .correlationTokens,
+        )[0]!,
+      );
+      const followUpInput = {
+        body: "Check the sample with a separate fixture.",
+        lifecycle: "sample",
+        operationId: "follow-up-one",
+        title: "Check another sample",
+      };
+      const followUp = await callTool(
+        composition,
+        binding.token,
+        "create_follow_up",
+        followUpInput,
+      );
+      const findingInput = {
+        body: "The sample fixture does not cover the alternate arrangement.",
+        dependsOn: [followUp.id],
+        lifecycle: "sample",
+        operationId: "finding-one",
+        priority: "high",
+        title: "Cover the alternate arrangement",
+      };
+      const finding = await callTool(
+        composition,
+        binding.token,
+        "create_finding",
+        findingInput,
+      );
 
-    expect(followUp).toMatchObject({
-      kind: "follow-up",
-      parent: fixture.epicId,
-      replayed: false,
-      status: "backlog",
-    });
-    expect(finding).toMatchObject({
-      kind: "finding",
-      parent: fixture.epicId,
-      replayed: false,
-      status: "backlog",
-    });
-    let board = await composition.board.readBoard();
-    expect(board.find(({ id }) => id === followUp.id)).toMatchObject({
-      parent: fixture.epicId,
-      status: "backlog",
-      tags: expect.arrayContaining(["type:follow-up", "lifecycle:sample"]),
-    });
-    expect(board.find(({ id }) => id === finding.id)).toMatchObject({
-      dependencies: [followUp.id],
-      parent: fixture.epicId,
-      priority: "high",
-      status: "backlog",
-      tags: expect.arrayContaining(["type:finding", "lifecycle:sample"]),
-    });
+      expect(followUp).toMatchObject({
+        kind: "follow-up",
+        parent: fixture.epicId,
+        replayed: false,
+        status: "backlog",
+      });
+      expect(finding).toMatchObject({
+        kind: "finding",
+        parent: fixture.epicId,
+        replayed: false,
+        status: "backlog",
+      });
+      let board = await composition.board.readBoard();
+      expect(board.find(({ id }) => id === followUp.id)).toMatchObject({
+        parent: fixture.epicId,
+        status: "backlog",
+        tags: expect.arrayContaining(["type:follow-up", "lifecycle:sample"]),
+      });
+      expect(board.find(({ id }) => id === finding.id)).toMatchObject({
+        dependencies: [followUp.id],
+        parent: fixture.epicId,
+        priority: "high",
+        status: "backlog",
+        tags: expect.arrayContaining(["type:finding", "lifecycle:sample"]),
+      });
 
-    await composition.close();
-    composition = createProductionComposition({
-      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
-      ...options,
-      t3: new SyntheticT3(),
-    });
-    await composition.start();
-    await expect(
-      callTool(composition, binding.token, "create_follow_up", followUpInput),
-    ).resolves.toMatchObject({ id: followUp.id, replayed: true });
-    await expect(
-      callTool(composition, binding.token, "create_finding", findingInput),
-    ).resolves.toMatchObject({ id: finding.id, replayed: true });
-    board = await composition.board.readBoard();
-    expect(
-      board.filter(({ tags }) =>
-        tags.some((tag) => tag.startsWith("heddle-operation:")),
-      ),
-    ).toHaveLength(2);
-    await composition.close();
-  });
+      await composition.close();
+      composition = createProductionComposition({
+        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+        ...options,
+        t3: new SyntheticT3(),
+      });
+      await composition.start();
+      await expect(
+        callTool(composition, binding.token, "create_follow_up", followUpInput),
+      ).resolves.toMatchObject({ id: followUp.id, replayed: true });
+      await expect(
+        callTool(composition, binding.token, "create_finding", findingInput),
+      ).resolves.toMatchObject({ id: finding.id, replayed: true });
+      board = await composition.board.readBoard();
+      expect(
+        board.filter(({ tags }) =>
+          tags.some((tag) => tag.startsWith("heddle-operation:")),
+        ),
+      ).toHaveLength(2);
+      await composition.close();
+    },
+    productionReplayUnderParallelLoadTimeoutMilliseconds,
+  );
 
   it("keeps a pre-board crash pending and creates exactly once when the MCP operation replays", async () => {
     const fixture = await prepareProductionEpicFixture();
