@@ -211,6 +211,27 @@ const attentionCatalog = () => [
   createConsoleAttention({
     actions: [
       {
+        actionId: "incident.production-mutation.approve",
+        contract: {
+          instanceId: "instance-43",
+          kind: "incident.production-mutation.approve",
+          proposalDigest: "a".repeat(64),
+        },
+        input: { kind: "none" },
+        label: "Approve production mutation",
+      },
+    ],
+    attentionId: "incident-mutation-approval-a",
+    instanceId: "instance-43",
+    kind: "incident-production-mutation-approval",
+    message:
+      "An accepted incident proposal requires production mutation approval.",
+    scope: "task:43",
+    taskId: 43,
+  }),
+  createConsoleAttention({
+    actions: [
+      {
         actionId: "accept",
         contract: {
           decision: "accept",
