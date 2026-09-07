@@ -11,6 +11,7 @@ import {
   type ConsoleAttentionActionPort,
 } from "../console/index.js";
 import type { SessionObserver } from "../control-plane/index.js";
+import { readLifecycleContext } from "../engine/index.js";
 import type {
   EscalationAnswers,
   EscalationCoordinator,
@@ -218,8 +219,17 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       const runtime = this.persistence
         .listIncidentRuntime()
         .find(({ incidentId }) => incidentId === contract.instanceId);
+      const record = this.persistence.getInstance(contract.instanceId);
+      const lifecycle =
+        record === undefined ? undefined : readLifecycleContext(record);
       if (
         runtime === undefined ||
+        lifecycle === undefined ||
+        lifecycle.status !== "awaiting" ||
+        lifecycle.awaitingNodeIds.length !== 1 ||
+        lifecycle.awaitingNodeIds[0] !== "finalize" ||
+        runtime.state === "done" ||
+        runtime.state === "failed" ||
         !runtime.accepted ||
         incidentProposalDigest(runtime) !== contract.proposalDigest
       ) {

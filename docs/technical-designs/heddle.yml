@@ -646,7 +646,10 @@ proposed-design:
     Finalize starts only for an accepted diagnosis. When the accepted proposal
     contains a production mutation, Heddle projects a proposal-digest-bound
     approval through the existing attention action port and creates no
-    finalizer session until the operator accepts it. An accepted GitHub issue
+    finalizer session until the operator accepts it. It records durable
+    production-mutation effect intent before that action-capable session and
+    completion after activation; occurrence and command replay retain the same
+    session. An accepted GitHub issue
     is authored by the agent through `gh`; the handoff requires the incident
     identity in the body and inspection for an existing identity before
     creation. The durable finalizer stage occurrence and T3 command identity

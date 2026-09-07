@@ -903,8 +903,9 @@ diagnosis for at most three rounds. Exhaustion raises critical operator
 attention and leaves the source attention unresolved. Finalization runs only
 after acceptance. For a production mutation, Heddle raises a proposal-bound
 approval card and creates no finalizer session until the operator selects
-**Approve production mutation**. Issue creation and escalation do not require
-that approval.
+**Approve production mutation**. Heddle records durable mutation intent before
+starting that action-capable finalizer and records completion after activation.
+Issue creation and escalation do not require that approval.
 
 The issue body includes the incident identity. The finalizer inspects existing
 issues for that identity before it creates one. The durable stage occurrence

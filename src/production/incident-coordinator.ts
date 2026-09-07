@@ -33,6 +33,7 @@ import { sanitizeIncidentValue } from "./incident-redaction.js";
 import {
   incidentProductionMutationApproval,
   incidentProductionMutationApproved,
+  incidentProposalDigest,
   incidentProposedActionKinds,
 } from "./incident-approval.js";
 
@@ -46,6 +47,7 @@ export const incidentAdmissionPolicy = {
 
 const incidentBlueprintPath = "blueprints/incident.json";
 const finalizeEffect = "incident-finalize";
+const productionMutationEffect = "incident-production-mutation";
 
 type RecordValue = Record<string, JsonValue>;
 
@@ -173,7 +175,13 @@ export class ProductionIncidentCoordinator {
           : { sourceInstanceId: source.instanceId }),
         taskId: source.taskId,
       });
-      if (admission.kind === "suppressed") continue;
+      if (
+        admission.kind === "suppressed" ||
+        admission.runtime.state === "done" ||
+        admission.runtime.state === "failed"
+      ) {
+        continue;
+      }
       await this.#synchronize(
         admission.runtime,
         tasks,
@@ -343,6 +351,20 @@ export class ProductionIncidentCoordinator {
       tasks.some(({ id }) => id === runtime.taskId),
     );
     const task = taskForIncident(this.persistence, tasks, source, incident);
+    const productionMutation =
+      stageId === "finalize" &&
+      incidentProposedActionKinds(runtime).has("production-mutation");
+    const productionMutationStableId = `${runtime.incidentId}:${incidentProposalDigest(runtime)}`;
+    if (productionMutation) {
+      this.persistence.recordEffectIntent(
+        productionMutationEffect,
+        productionMutationStableId,
+        {
+          diagnosis: runtime.diagnosis ?? null,
+          incidentId: runtime.incidentId,
+        },
+      );
+    }
     const starting =
       runtime.stageId === stageId && runtime.state === "starting"
         ? runtime
@@ -359,6 +381,21 @@ export class ProductionIncidentCoordinator {
             stageId,
           );
     await this.instances.activateIncident(task, starting, stageId);
+    if (
+      productionMutation &&
+      !this.persistence.recordEffectCompleted(
+        productionMutationEffect,
+        productionMutationStableId,
+      ) &&
+      !this.persistence.effectCompleted(
+        productionMutationEffect,
+        productionMutationStableId,
+      )
+    ) {
+      throw new Error(
+        "Incident production mutation completion lost its intent",
+      );
+    }
   }
 
   #assertFinalizationAuthorized(runtime: IncidentRuntimeRecord): void {

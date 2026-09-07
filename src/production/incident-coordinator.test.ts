@@ -19,6 +19,7 @@ import {
 import { DurableAttentionQueue } from "./durable-adapters.js";
 import { ProductionAttentionActions } from "./attention-actions.js";
 import { projectProductionAttention } from "./attention-projection.js";
+import { incidentProposalDigest } from "./incident-approval.js";
 import {
   productionErrorAttention,
   productionErrorCodeDeclarations,
@@ -71,6 +72,7 @@ class IncidentHarness {
   readonly activations: string[] = [];
   readonly boardWrites: string[] = [];
   readonly lifecycle: ProductionLifecycleRouter;
+  readonly productionMutations: string[] = [];
   readonly instances: ProductionInstanceController;
 
   constructor(readonly persistence: SqlitePersistence) {
@@ -138,6 +140,12 @@ class IncidentHarness {
           stageId: string,
         ) => {
           this.activations.push(stageId);
+          if (
+            stageId === "finalize" &&
+            JSON.stringify(runtime.diagnosis).includes("production-mutation")
+          ) {
+            this.productionMutations.push("Repair synthetic state");
+          }
           this.persistence.writeIncidentRuntime({
             ...runtime,
             stageId,
@@ -518,6 +526,39 @@ describe("production incident coordinator", () => {
     expect(persistence!.listIncidentRuntime()).toHaveLength(1);
   });
 
+  it("does not reactivate a failed incident from its retained source attention", async () => {
+    const { attention, coordinator, harness } = await createSubject({
+      commandAvailable: async () => true,
+    });
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    await coordinator.resume({
+      disposition: "diagnosed",
+      instanceId: source.incidentId!,
+      operationId: "diagnose-once",
+      output: {
+        conditionState: "live",
+        proposedActions: [{ kind: "github-issue", summary: "Record it" }],
+        rootCauseAnalysis: "Synthetic analysis",
+      },
+    });
+    vi.mocked(harness.instances.activateIncident).mockRejectedValueOnce(
+      new Error("Synthetic finalizer activation failure"),
+    );
+
+    await coordinator.resume({
+      disposition: "approve",
+      instanceId: source.incidentId!,
+      operationId: "approve-once",
+    });
+    expect(persistence!.listIncidentRuntime()[0]?.state).toBe("failed");
+    expect(harness.instances.activateIncident).toHaveBeenCalledTimes(3);
+
+    await coordinator.reconcile([task()]);
+    expect(harness.instances.activateIncident).toHaveBeenCalledTimes(3);
+    expect(persistence!.hasAttention(source.attentionId)).toBe(true);
+  });
+
   it("creates no production-capable finalizer before durable proposal approval and activates it once after approval replay", async () => {
     const { attention, coordinator, harness } = await createSubject();
     const source = await raise(attention);
@@ -541,6 +582,7 @@ describe("production incident coordinator", () => {
     });
 
     expect(harness.activations).toEqual(["implement", "review"]);
+    expect(harness.productionMutations).toEqual([]);
     expect(
       vi
         .mocked(harness.instances.prepareIncidentStart)
@@ -575,6 +617,18 @@ describe("production incident coordinator", () => {
       { answerAsOperator: vi.fn() } as never,
       {} as never,
     );
+    persistence!.updateInstance(
+      source.incidentId!,
+      lifecycleState(undefined, "completed"),
+    );
+    await expect(
+      actions.execute({
+        action: approval.actions[0]!,
+        attention: approval,
+      }),
+    ).rejects.toThrow("proposal is no longer current");
+    expect(harness.productionMutations).toEqual([]);
+    persistence!.updateInstance(source.incidentId!, lifecycleState("finalize"));
     await actions.execute({
       action: approval.actions[0]!,
       attention: approval,
@@ -589,6 +643,7 @@ describe("production incident coordinator", () => {
     );
     await restarted.reconcile([task()]);
     expect(harness.activations).toEqual(["implement", "review", "finalize"]);
+    expect(harness.productionMutations).toEqual(["Repair synthetic state"]);
     expect(
       vi
         .mocked(harness.instances.prepareIncidentStart)
@@ -602,6 +657,13 @@ describe("production incident coordinator", () => {
             type === "operator:incident-production-mutation-approved",
         ),
     ).toHaveLength(1);
+    const approvedRuntime = persistence!.listIncidentRuntime()[0]!;
+    expect(
+      persistence!.effectCompleted(
+        "incident-production-mutation",
+        `${approvedRuntime.incidentId}:${incidentProposalDigest(approvedRuntime)}`,
+      ),
+    ).toBe(true);
 
     await coordinator.resume({
       disposition: "complete",
