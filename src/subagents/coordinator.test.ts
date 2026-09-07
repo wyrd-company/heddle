@@ -151,7 +151,7 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
     ),
     persistence: store,
     providerSelection: {
-      defaultRuntimeMode: "auto",
+      defaultRuntimeMode: "approval-required",
       list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
       resolve: async ({ alias, runtimeMode, sessionKey, threadId }) =>
         resolvedSessionBindingFixture({
@@ -221,6 +221,7 @@ describe("SubagentCoordinator", () => {
 
     await expect(spawn(test.coordinator, test.store)).resolves.toMatchObject({
       assignment: {
+        binding: { runtimeMode: "approval-required" },
         correlationToken: "child-token",
         depth: 1,
         parentSessionKey: "parent",
