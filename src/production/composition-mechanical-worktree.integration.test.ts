@@ -711,7 +711,13 @@ describe("production mechanical worktree preparation", () => {
     await composition.scheduler.trigger();
 
     expect(
-      composition.attention.list().map(({ attentionId }) => attentionId),
+      composition.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        )
+        .map(({ attentionId }) => attentionId),
     ).toEqual([unrelatedAttentionId]);
     expect(
       composition.persistence

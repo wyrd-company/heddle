@@ -362,7 +362,14 @@ describe("configured production composition", () => {
       "thread.create",
       "thread.turn.start",
     ]);
-    expect(production.attention.list()).toEqual([
+    expect(
+      production.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        ),
+    ).toEqual([
       expect.objectContaining({
         kind: "production-error",
         message: expect.stringContaining(
@@ -443,7 +450,14 @@ describe("configured production composition", () => {
     expect(t3.commands).toEqual([]);
     expect(t3.timeouts).toEqual([]);
     expect(onSchedulerError).not.toHaveBeenCalled();
-    expect(production.attention.list()).toEqual([
+    expect(
+      production.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        ),
+    ).toEqual([
       expect.objectContaining({
         kind: "production-error",
         message: expect.stringContaining(

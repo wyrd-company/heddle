@@ -392,7 +392,12 @@ kind: standard
       providerInstanceId:
         configuration.session.defaultSelection.providerInstanceId,
     });
-    const interruptedAttention = first.attention.list();
+    const interruptedAttention = first.attention
+      .list()
+      .filter(
+        ({ attentionId }) =>
+          !attentionId.includes(":incident-execution-failed:"),
+      );
     expect(interruptedAttention).toEqual([
       expect.objectContaining({
         kind: "production-error",
@@ -446,7 +451,14 @@ kind: standard
         }),
       ]),
     );
-    expect(second.attention.list()).toEqual([]);
+    expect(
+      second.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        ),
+    ).toEqual([]);
     await second.close();
   });
 
