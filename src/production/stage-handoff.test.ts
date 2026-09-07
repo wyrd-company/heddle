@@ -67,6 +67,63 @@ afterEach(async () => {
 });
 
 describe("production stage handoff", () => {
+  it("reads provider selection from the pinned wait stage", async () => {
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-selection-"));
+    temporaryDirectories.push(repositoryRoot);
+    await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
+    await mkdir(join(repositoryRoot, "blueprints"));
+    const blueprintPath = await writeDeliveryBlueprintFixture(
+      repositoryRoot,
+      "standard-delivery",
+    );
+    const blueprint = JSON.parse(
+      await readFile(join(repositoryRoot, blueprintPath), "utf8"),
+    ) as {
+      nodes: Array<{
+        id: string;
+        "provider-alias"?: string;
+        "runtime-mode"?: string;
+      }>;
+    };
+    const review = blueprint.nodes.find(({ id }) => id === "review")!;
+    review["provider-alias"] = "reviewer";
+    review["runtime-mode"] = "full-access";
+    await writeFile(
+      join(repositoryRoot, blueprintPath),
+      `${JSON.stringify(blueprint, null, 2)}\n`,
+    );
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(repositoryRoot, "state"),
+    });
+    const engine = new LifecycleEngine({
+      effects: {
+        finalize: async () => ({}),
+        merge: async () => ({}),
+        "prepare-worktree": async () => ({}),
+        "review-snapshot": async () => ({}),
+      },
+      persistence,
+      repositoryRoot,
+    });
+    await engine.start({
+      blueprintPath,
+      instanceId: "sample-instance",
+    });
+
+    await expect(
+      readProductionHandoffStage({
+        instanceId: "sample-instance",
+        persistence,
+        repositoryRoot,
+        stageId: "review",
+      }),
+    ).resolves.toMatchObject({
+      providerAlias: "reviewer",
+      runtimeMode: "full-access",
+    });
+    persistence.close();
+  });
+
   it("carries a mechanical snapshot identity into the review handoff", async () => {
     const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-handoff-"));
     temporaryDirectories.push(repositoryRoot);

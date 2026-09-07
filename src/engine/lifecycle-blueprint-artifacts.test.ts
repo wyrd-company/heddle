@@ -195,6 +195,76 @@ describe("organization lifecycle blueprint artifacts", () => {
     );
   });
 
+  it("accepts provider alias and runtime mode on an agent wait node", async () => {
+    const root = await repository();
+    const valid = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    const wait = valid.nodes[1] as Record<string, unknown>;
+    wait["provider-alias"] = "reviewer";
+    wait["runtime-mode"] = "full-access";
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(valid, null, 2)}\n`,
+    );
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+  });
+
+  it.each([
+    ["provider-alias", null],
+    ["provider-alias", ""],
+    ["provider-alias", "Not-Valid"],
+    ["provider-alias", "a".repeat(65)],
+    ["runtime-mode", "unrestricted"],
+  ])(
+    "rejects an invalid wait-node %s through the lifecycle schema",
+    async (field, value) => {
+      const invalid = artifact();
+      (invalid.nodes[1] as Record<string, unknown>)[field] = value;
+
+      await expect(
+        validateBlueprintRepository(await repository(invalid)),
+      ).rejects.toThrow("violates the lifecycle schema");
+    },
+  );
+
+  it.each(["provider-alias", "runtime-mode"])(
+    "rejects mechanical-node %s through the lifecycle schema",
+    async (field) => {
+      const invalid = artifact();
+      (invalid.nodes[0] as Record<string, unknown>)[field] =
+        field === "provider-alias" ? "primary" : "auto";
+
+      await expect(
+        validateBlueprintRepository(await repository(invalid)),
+      ).rejects.toThrow("violates the lifecycle schema");
+    },
+  );
+
+  it.each([
+    ["provider-alias", "Not-Valid", "provider-alias"],
+    ["runtime-mode", "unrestricted", "runtime-mode"],
+  ])("rejects interpreter-invalid wait-node %s", (field, value, message) => {
+    const invalid = deliveryBlueprintFixture("trivial");
+    (
+      invalid.nodes.find(({ id }) => id === "implement") as Record<
+        string,
+        unknown
+      >
+    )[field] = value;
+    const blueprint = { ...invalid, id: "trivial" } as LifecycleBlueprint;
+    const effects = Object.fromEntries(
+      blueprint.nodes
+        .filter(({ uses }) => uses !== "wait")
+        .map(({ uses }) => [uses, async () => ({})]),
+    ) as Record<string, LifecycleEffect>;
+
+    expect(() => validateBlueprint(blueprint, effects)).toThrow(message);
+  });
+
   it("rejects the removed handoff blobHash schema shape", async () => {
     const invalid = artifact();
     (invalid.nodes[1] as Record<string, unknown>)["handoff-template"] = {

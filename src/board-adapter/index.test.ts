@@ -198,6 +198,81 @@ next_id: 1
     });
   });
 
+  it("normalizes and preserves a provider alias through supported board mutations", async () => {
+    const taskId = await createTask("Arrange sample items");
+    const task = JSON.parse(
+      await runKanban([
+        "--dir",
+        boardDirectory,
+        "show",
+        String(taskId),
+        "--json",
+      ]),
+    ) as { file: string };
+    const source = await readFile(task.file, "utf8");
+    await writeFile(
+      task.file,
+      source.replace(
+        "class: standard\n---",
+        "class: standard\nprovider-alias: specialist\n---",
+      ),
+    );
+
+    await adapter.mirrorTaskStatus(taskId, "in-progress");
+    await runKanban([
+      "--dir",
+      boardDirectory,
+      "edit",
+      String(taskId),
+      "--block",
+      "Waiting for a sample fixture",
+      "--json",
+    ]);
+
+    await expect(adapter.readTask(taskId)).resolves.toMatchObject({
+      blocked: true,
+      frontMatter: { "provider-alias": "specialist" },
+      providerAlias: "specialist",
+      status: "in-progress",
+    });
+  });
+
+  it.each([
+    "provider-alias:",
+    "provider-alias: ''",
+    "provider-alias: 17",
+    "provider-alias: [sample]",
+    "provider-alias: { sample: value }",
+    "provider-alias: Not-Valid",
+    `provider-alias: ${"a".repeat(65)}`,
+  ])(
+    "rejects a present invalid task provider alias: %s",
+    async (declaration) => {
+      const taskId = await createTask("Arrange sample items");
+      const task = JSON.parse(
+        await runKanban([
+          "--dir",
+          boardDirectory,
+          "show",
+          String(taskId),
+          "--json",
+        ]),
+      ) as { file: string };
+      const source = await readFile(task.file, "utf8");
+      await writeFile(
+        task.file,
+        source.replace(
+          "class: standard\n---",
+          `class: standard\n${declaration}\n---`,
+        ),
+      );
+
+      await expect(adapter.readTask(taskId)).rejects.toThrow(
+        `task ${taskId} provider-alias must be a lower-kebab scalar of at most 64 characters`,
+      );
+    },
+  );
+
   it.each([
     "repos: []",
     "repos: [sample-alpha, sample-alpha]",

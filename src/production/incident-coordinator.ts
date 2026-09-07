@@ -128,6 +128,9 @@ const taskForIncident = (
       ? {}
       : { lifecycle: retained.lifecycle }),
     ...(retained?.parent === undefined ? {} : { parent: retained.parent }),
+    ...(retained?.providerAlias === undefined
+      ? {}
+      : { providerAlias: retained.providerAlias }),
     ...(retained?.product === undefined ? {} : { product: retained.product }),
     ...(retained?.repos === undefined ? {} : { repos: retained.repos }),
   };
@@ -261,9 +264,14 @@ export class ProductionIncidentCoordinator {
         if (stageId === undefined) {
           throw new Error("Incident lifecycle has no initial agent stage");
         }
-        runtime = this.instances.prepareIncidentStart(runtime, stageId);
         const source = this.#sourceAttention(runtime);
         const incident = this.#incidentContext(source, taskOnBoard);
+        const task = taskForIncident(this.persistence, tasks, source, incident);
+        runtime = await this.instances.prepareIncidentStart(
+          runtime,
+          stageId,
+          task,
+        );
         const snapshot = await this.lifecycle.start({
           blueprintPath: incidentBlueprintPath,
           initialContext: { incident },
@@ -368,7 +376,7 @@ export class ProductionIncidentCoordinator {
     const starting =
       runtime.stageId === stageId && runtime.state === "starting"
         ? runtime
-        : this.instances.prepareIncidentStart(
+        : await this.instances.prepareIncidentStart(
             {
               ...runtime,
               provider: undefined,
@@ -379,6 +387,7 @@ export class ProductionIncidentCoordinator {
               threadId: undefined,
             },
             stageId,
+            task,
           );
     await this.instances.activateIncident(task, starting, stageId);
     if (

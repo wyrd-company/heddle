@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { parse } from "yaml";
 
 import type { JsonValue } from "../persistence/index.js";
+import { isProviderAlias } from "../provider-alias.js";
 import { epicControlForStatus } from "./epic-control.js";
 
 const executeFile = promisify(execFile);
@@ -29,6 +30,7 @@ export interface BoardTask {
   dependencies: number[];
   parent?: number;
   lifecycle?: string;
+  providerAlias?: string;
   product?: string;
   repos?: string[];
 }
@@ -456,6 +458,15 @@ export class KanbanBoardAdapter {
     const lifecycle = validateLifecycle(
       lifecycleFromFrontMatter(source) ?? lifecycleFromTag(tags),
     );
+    const parsedFrontMatter = rawFrontMatter(frontMatter);
+    const providerAlias = (parsedFrontMatter as Record<string, JsonValue>)[
+      "provider-alias"
+    ];
+    if (providerAlias !== undefined && !isProviderAlias(providerAlias)) {
+      throw new Error(
+        `task ${task.id} provider-alias must be a lower-kebab scalar of at most 64 characters`,
+      );
+    }
     const product = scalarFromFrontMatter(frontMatter, "product");
     if (product !== undefined && product.trim() === "") {
       throw new Error("task product declaration must not be empty");
@@ -463,7 +474,7 @@ export class KanbanBoardAdapter {
     const repos = repositoriesFromFrontMatter(frontMatter);
     return {
       blocked: task.blocked ?? false,
-      frontMatter: rawFrontMatter(frontMatter),
+      frontMatter: parsedFrontMatter,
       id: task.id,
       title: task.title,
       status: task.status,
@@ -472,6 +483,7 @@ export class KanbanBoardAdapter {
       dependencies: task.depends_on ?? [],
       parent: task.parent,
       lifecycle,
+      ...(providerAlias === undefined ? {} : { providerAlias }),
       ...(product === undefined ? {} : { product }),
       ...(repos === undefined ? {} : { repos }),
     };

@@ -13,6 +13,7 @@ import {
   type T3RuntimeMode,
 } from "../control-plane/provider-selection.js";
 import type { PacingConfiguration } from "../pacing/index.js";
+import { isProviderAlias } from "../provider-alias.js";
 
 export type ProductionSessionConfiguration = {
   baseRef: string;
@@ -81,8 +82,6 @@ export type ResolvedProductionConfiguration = Omit<
   pacing: PacingConfiguration;
   session: ResolvedProductionSessionConfiguration;
 };
-
-const providerAliasPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 const requireAbsolute = (name: string, value: string): void => {
   if (!value.startsWith("/")) throw new TypeError(`${name} must be absolute`);
@@ -231,7 +230,7 @@ const validateCommonProductionConfiguration = (
     throw new TypeError("providerAliases must not be empty");
   }
   for (const [alias, provider] of aliases) {
-    if (alias.length > 64 || !providerAliasPattern.test(alias)) {
+    if (!isProviderAlias(alias)) {
       throw new TypeError(
         `providerAliases key '${alias}' must be a lower-kebab alias of at most 64 characters`,
       );

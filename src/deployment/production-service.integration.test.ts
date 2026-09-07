@@ -386,6 +386,11 @@ describe("configured production service entry point", () => {
         payload: {},
         tag: "server.getConfig",
       }),
+      expect.objectContaining({
+        _tag: "Request",
+        payload: {},
+        tag: "server.getConfig",
+      }),
     ]);
     const timeoutRequest = JSON.parse(
       await readFile(timeoutRequestPath, "utf8"),

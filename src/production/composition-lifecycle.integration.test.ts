@@ -4,7 +4,7 @@
 // ---
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -361,8 +361,30 @@ kind: standard
     },
   );
 
-  it("does not retarget a cold retry through the changed shared default", async () => {
+  it("does not retarget a cold retry through a task edit or changed shared default", async () => {
     const { blueprintsRepositoryRoot, configuration } = await prepare();
+    configuration.session.resolvedSelections.push({
+      ...configuration.session.defaultSelection,
+      alias: "specialist",
+      model: {
+        ...configuration.session.defaultSelection.model,
+        name: "Sample Specialist Model",
+        slug: "sample-specialist-model",
+      },
+      providerDisplayName: "Sample Specialist Workbench",
+      providerInstanceId: "specialist-provider",
+    });
+    const [taskFilename] = await readdir(
+      join(configuration.boardDirectory, "tasks"),
+    );
+    const taskPath = join(configuration.boardDirectory, "tasks", taskFilename!);
+    await writeFile(
+      taskPath,
+      (await readFile(taskPath, "utf8")).replace(
+        "class: standard\n---",
+        "class: standard\nprovider-alias: specialist\n---",
+      ),
+    );
     class InterruptedT3 extends SyntheticT3 {
       override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
         await super.dispatch(command);
@@ -384,13 +406,11 @@ kind: standard
     expect(firstT3.commands).toHaveLength(1);
     const storedBinding = first.persistence.listSessionRuntime()[0]!.binding;
     expect(storedBinding).toMatchObject({
-      alias: configuration.session.defaultSelection.alias,
+      alias: "specialist",
       driverKind: configuration.session.defaultSelection.driverKind,
-      modelSlug: configuration.session.defaultSelection.model.slug,
-      providerDisplayName:
-        configuration.session.defaultSelection.providerDisplayName,
-      providerInstanceId:
-        configuration.session.defaultSelection.providerInstanceId,
+      modelSlug: "sample-specialist-model",
+      providerDisplayName: "Sample Specialist Workbench",
+      providerInstanceId: "specialist-provider",
     });
     const interruptedAttention = first.attention
       .list()
@@ -406,6 +426,13 @@ kind: standard
     ]);
     first.attention.resolve(interruptedAttention[0]!.attentionId);
     await first.close();
+    await writeFile(
+      taskPath,
+      (await readFile(taskPath, "utf8")).replace(
+        "provider-alias: specialist",
+        "provider-alias: unknown",
+      ),
+    );
 
     const changedConfiguration = {
       ...configuration,
@@ -447,7 +474,7 @@ kind: standard
       expect.arrayContaining([
         expect.objectContaining({
           driver: "codex",
-          providerInstanceId: "codex",
+          providerInstanceId: "specialist-provider",
         }),
       ]),
     );
@@ -464,6 +491,53 @@ kind: standard
 
   it("activates the next accepted lifecycle wait stage without losing prior observation", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    const reviewSelection = {
+      alias: "review-selection",
+      driverKind: "cursor" as const,
+      interactionMode: "plan" as const,
+      model: {
+        isCustom: false,
+        name: "Sample Review Model",
+        slug: "sample-review-model",
+      },
+      observedCliVersion: "sample-review-version",
+      providerDisplayName: "Sample Review Workbench",
+      providerInstanceId: "review-provider",
+      runtimeMode: "full-access" as const,
+    };
+    configuration.session.resolvedSelections.push(reviewSelection);
+    const blueprintPath = join(
+      blueprintsRepositoryRoot,
+      "blueprints/sample.json",
+    );
+    const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    blueprint.nodes.find(({ id }) => id === "review")!["provider-alias"] =
+      "review-selection";
+    blueprint.nodes.find(({ id }) => id === "review")!["runtime-mode"] =
+      "full-access";
+    await writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Select sample review provider",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet"], {
+      cwd: blueprintsRepositoryRoot,
+    });
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -478,20 +552,6 @@ kind: standard
     await composition.start();
     const implementBinding =
       composition.persistence.listSessionRuntime()[0]!.binding;
-    configuration.session.defaultSelection = {
-      alias: "review-selection",
-      driverKind: "cursor",
-      interactionMode: "plan",
-      model: {
-        isCustom: false,
-        name: "Sample Review Model",
-        slug: "sample-review-model",
-      },
-      observedCliVersion: "sample-review-version",
-      providerDisplayName: "Sample Review Workbench",
-      providerInstanceId: "review-provider",
-      runtimeMode: "full-access",
-    };
     await composition.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
@@ -509,7 +569,7 @@ kind: standard
         binding: {
           alias: "review-selection",
           driverKind: "cursor",
-          interactionMode: "plan",
+          interactionMode: "default",
           modelSlug: "sample-review-model",
           observedCliVersion: "sample-review-version",
           providerDisplayName: "Sample Review Workbench",

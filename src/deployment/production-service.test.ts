@@ -20,10 +20,13 @@ import process from "node:process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  execute,
   prepareProductionFixture,
   SyntheticT3,
 } from "../production/composition.test-support.js";
 import { T3ControlPlaneClient } from "../control-plane/index.js";
+import { readLifecycleContext } from "../engine/index.js";
+import { advanceOperationId } from "../mcp-server/operations.js";
 import type { ProductionComposition } from "../production/index.js";
 import type {
   ProductionConfiguration,
@@ -164,6 +167,320 @@ describe("configured production composition", () => {
     expect(readProviderCatalog).toHaveBeenCalledTimes(1);
     expect(t3.commands).toEqual([]);
   });
+
+  it("selects task, pinned stage, and configured default aliases for new stage occurrences", async () => {
+    fixture = await prepareProductionFixture();
+    const configuration = configuredConfiguration(fixture.configuration);
+    configuration.providerAliases = {
+      primary: {
+        model: "model-primary",
+        providerDisplayName: "Workbench Alpha",
+      },
+      reviewer: {
+        model: "model-review",
+        providerDisplayName: "Workbench Beta",
+      },
+      specialist: {
+        model: "model-specialist",
+        providerDisplayName: "Workbench Alpha",
+      },
+    };
+    const blueprintPath = join(
+      fixture.blueprintsRepositoryRoot,
+      "blueprints/sample.json",
+    );
+    const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    const review = blueprint.nodes.find(({ id }) => id === "review")!;
+    review["provider-alias"] = "reviewer";
+    review["runtime-mode"] = "full-access";
+    await writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Select sample stage provider",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    const [taskFilename] = await readdir(
+      join(configuration.boardDirectory, "tasks"),
+    );
+    const taskPath = join(configuration.boardDirectory, "tasks", taskFilename!);
+    const authoredTask = await readFile(taskPath, "utf8");
+    await writeFile(
+      taskPath,
+      authoredTask.replace(
+        "class: standard\n---",
+        "class: standard\nprovider-alias: specialist\n---",
+      ),
+    );
+    const readProviderCatalog = vi.fn(async () => [
+      {
+        availability: "available" as const,
+        displayName: "Workbench Alpha",
+        driverKind: "codex",
+        enabled: true,
+        installed: true,
+        instanceId: "instance-alpha",
+        models: [
+          {
+            isCustom: false,
+            name: "Primary Model",
+            slug: "model-primary",
+          },
+          {
+            isCustom: false,
+            name: "Specialist Model",
+            slug: "model-specialist",
+          },
+        ],
+        observedCliVersion: "sample-version",
+        state: "ready",
+      },
+      {
+        availability: "available" as const,
+        displayName: "Workbench Beta",
+        driverKind: "codex",
+        enabled: true,
+        installed: true,
+        instanceId: "instance-beta",
+        models: [
+          {
+            isCustom: false,
+            name: "Review Model",
+            slug: "model-review",
+          },
+        ],
+        observedCliVersion: "sample-version",
+        state: "ready",
+      },
+    ]);
+    const t3 = new SyntheticT3();
+    production = await createConfiguredProductionComposition(
+      {
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration,
+        configurationDirectory: fixture.root,
+        configurationPath: join(fixture.root, "config.yml"),
+        server: { host: "127.0.0.1", port: 3774 },
+      },
+      { providerCatalog: { readProviderCatalog }, t3 },
+    );
+
+    await production.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const initialContext = JSON.parse(
+      readLifecycleContext(production.persistence.getInstance(instanceId)!)
+        .serializedContext!,
+    ) as Record<string, unknown>;
+    expect(initialContext).toMatchObject({
+      taskContract: { providerAlias: "specialist" },
+    });
+    const implementKey = `${instanceId}:implement:1`;
+    await production.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(implementKey),
+    });
+    await writeFile(
+      taskPath,
+      (await readFile(taskPath, "utf8")).replace(
+        "provider-alias: specialist\n",
+        "",
+      ),
+    );
+    await production.scheduler.trigger();
+    await production.lifecycle.resume({
+      disposition: "reject",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:review:1`),
+      output: { findings: [] },
+    });
+    await production.scheduler.trigger();
+
+    expect(production.persistence.listSessionRuntime()).toMatchObject([
+      {
+        binding: {
+          alias: "specialist",
+          modelSlug: "model-specialist",
+          providerInstanceId: "instance-alpha",
+          runtimeMode: "auto-accept-edits",
+        },
+        stageId: "implement",
+      },
+      {
+        binding: {
+          alias: "primary",
+          modelSlug: "model-primary",
+          providerInstanceId: "instance-alpha",
+          runtimeMode: "auto-accept-edits",
+        },
+        stageId: "remediate",
+      },
+      {
+        binding: {
+          alias: "reviewer",
+          modelSlug: "model-review",
+          providerInstanceId: "instance-beta",
+          runtimeMode: "full-access",
+        },
+        stageId: "review",
+      },
+    ]);
+    expect(readProviderCatalog).toHaveBeenCalledTimes(4);
+    expect(
+      t3.commands
+        .filter(({ type }) => type === "thread.create")
+        .map(({ modelSelection, runtimeMode }) => ({
+          modelSelection,
+          runtimeMode,
+        })),
+    ).toEqual([
+      {
+        modelSelection: {
+          instanceId: "instance-alpha",
+          model: "model-specialist",
+        },
+        runtimeMode: "auto-accept-edits",
+      },
+      {
+        modelSelection: {
+          instanceId: "instance-beta",
+          model: "model-review",
+        },
+        runtimeMode: "full-access",
+      },
+      {
+        modelSelection: {
+          instanceId: "instance-alpha",
+          model: "model-primary",
+        },
+        runtimeMode: "auto-accept-edits",
+      },
+    ]);
+  });
+
+  it.each(["task override", "stage alias"] as const)(
+    "raises task-and-stage attention without dispatch for an unknown %s",
+    async (selectionSource) => {
+      fixture = await prepareProductionFixture();
+      const configuration = configuredConfiguration(fixture.configuration);
+      if (selectionSource === "task override") {
+        const [taskFilename] = await readdir(
+          join(configuration.boardDirectory, "tasks"),
+        );
+        const taskPath = join(
+          configuration.boardDirectory,
+          "tasks",
+          taskFilename!,
+        );
+        await writeFile(
+          taskPath,
+          (await readFile(taskPath, "utf8")).replace(
+            "class: standard\n---",
+            "class: standard\nprovider-alias: unknown\n---",
+          ),
+        );
+      } else {
+        const blueprintPath = join(
+          fixture.blueprintsRepositoryRoot,
+          "blueprints/sample.json",
+        );
+        const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
+          nodes: Array<Record<string, unknown>>;
+        };
+        blueprint.nodes.find(({ id }) => id === "implement")![
+          "provider-alias"
+        ] = "unknown";
+        await writeFile(
+          blueprintPath,
+          `${JSON.stringify(blueprint, null, 2)}\n`,
+        );
+        await execute("git", ["add", "blueprints/sample.json"], {
+          cwd: fixture.blueprintsRepositoryRoot,
+        });
+        await execute(
+          "git",
+          [
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "Select unavailable sample provider",
+          ],
+          { cwd: fixture.blueprintsRepositoryRoot },
+        );
+        await execute("git", ["push", "--quiet"], {
+          cwd: fixture.blueprintsRepositoryRoot,
+        });
+      }
+      const t3 = new SyntheticT3();
+      production = await createConfiguredProductionComposition(
+        {
+          blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+          configuration,
+          configurationDirectory: fixture.root,
+          configurationPath: join(fixture.root, "config.yml"),
+          server: { host: "127.0.0.1", port: 3774 },
+        },
+        {
+          providerCatalog: {
+            readProviderCatalog: async () => [
+              {
+                availability: "available",
+                displayName: "Workbench Alpha",
+                driverKind: "codex",
+                enabled: true,
+                installed: true,
+                instanceId: "instance-alpha",
+                models: [
+                  {
+                    isCustom: false,
+                    name: "Model Alpha",
+                    slug: "sample-model",
+                  },
+                ],
+                observedCliVersion: "sample-version",
+                state: "ready",
+              },
+            ],
+          },
+          t3,
+        },
+      );
+
+      await production.start();
+
+      expect(t3.commands).toEqual([]);
+      expect(production.attention.list()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "production-error",
+            message: expect.stringContaining(
+              `Task ${fixture.taskId} stage 'implement' cannot select a session`,
+            ),
+          }),
+        ]),
+      );
+    },
+  );
 
   it.each(["claudeAgent", "codex", "cursor", "grok", "opencode"] as const)(
     "dispatches a resolved full-access %s selection through the production T3 client",

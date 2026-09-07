@@ -17,6 +17,7 @@ import type {
   InstanceState,
   JsonValue,
   PersistedEvent,
+  ResolvedSessionRuntimeMode,
 } from "../persistence/index.js";
 import type { ErrorDetail } from "../error-details.js";
 
@@ -36,6 +37,8 @@ export interface LifecycleNode extends NodeDefinition {
     path: string;
   };
   repo?: string;
+  "provider-alias"?: string;
+  "runtime-mode"?: ResolvedSessionRuntimeMode;
   skills?: string[];
   "todo-template"?: string;
   tools?: string[];

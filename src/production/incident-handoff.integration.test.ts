@@ -197,6 +197,8 @@ describe("production incident handoff", () => {
       ],
       session: {
         baseRef: "main",
+        defaultProviderAlias: "primary",
+        defaultRuntimeMode: "auto-accept-edits" as const,
         defaultSelection: {
           alias: "primary",
           driverKind: "codex",
@@ -209,13 +211,29 @@ describe("production incident handoff", () => {
           observedCliVersion: "0.91.0",
           providerDisplayName: "Workbench Alpha",
           providerInstanceId: "codex",
-          runtimeMode: "auto-accept-edits",
+          runtimeMode: "auto-accept-edits" as const,
         },
         interactionMode: "default",
+        resolvedSelections: [
+          {
+            alias: "primary",
+            driverKind: "codex",
+            interactionMode: "default",
+            model: {
+              isCustom: false,
+              name: "Sample Model",
+              slug: "sample-model",
+            },
+            observedCliVersion: "0.91.0",
+            providerDisplayName: "Workbench Alpha",
+            providerInstanceId: "codex",
+            runtimeMode: "auto-accept-edits" as const,
+          },
+        ],
         skillPointer: "skill://sample",
         worktreesRoot: join(root, "worktrees"),
       },
-    } as ResolvedProductionConfiguration;
+    } as unknown as ResolvedProductionConfiguration;
     const routing = new ProductRoutingCatalog(configuration);
     const boardTask: BoardTask = {
       blocked: false,

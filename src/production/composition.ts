@@ -292,6 +292,8 @@ export const createProductionComposition = (
         return status;
       },
       (taskId, status) => board.mirrorTaskStatus(taskId, status),
+      undefined,
+      providerResolver,
     );
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(
       persistence,

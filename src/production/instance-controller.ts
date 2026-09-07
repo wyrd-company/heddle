@@ -51,6 +51,11 @@ import {
   providerContextFromBinding,
 } from "./session-binding.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
+import {
+  resolveStageSessionSelection,
+  StartupProviderSelectionResolver,
+  type StageProviderSelectionResolver,
+} from "./stage-session-selection.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import {
@@ -101,7 +106,17 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       status: string,
     ) => Promise<void> = async () => undefined,
     private readonly now: () => number = Date.now,
+    private readonly providerSelection?: StageProviderSelectionResolver,
   ) {}
+
+  private sessionSelectionResolver(): StageProviderSelectionResolver {
+    return (
+      this.providerSelection ??
+      new StartupProviderSelectionResolver(
+        this.configuration.session.resolvedSelections,
+      )
+    );
+  }
 
   async listInstances(): Promise<ReconcilerInstance[]> {
     const runtimes = this.persistence.listReconcilerRuntime();
@@ -234,8 +249,24 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           starting.sessionKey ?? `${input.instanceId}:${stageId}:${activation}`;
         const threadId =
           starting.threadId ?? stableUuid(`${sessionKey}:thread`);
+        const stage = await readProductionHandoffStage({
+          instanceId: input.instanceId,
+          persistence: this.persistence,
+          repositoryRoot: this.templateAuthority.repositoryRoot,
+          stageId,
+        });
         const binding = bindResolvedSession(
-          this.configuration.session.defaultSelection,
+          await resolveStageSessionSelection(
+            {
+              session: this.configuration.session,
+              stageId,
+              stageProviderAlias: stage.providerAlias,
+              stageRuntimeMode: stage.runtimeMode,
+              taskId: input.task.id,
+              taskProviderAlias: input.task.providerAlias,
+            },
+            this.sessionSelectionResolver(),
+          ),
           sessionKey,
           threadId,
         );
@@ -369,10 +400,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     );
   }
 
-  prepareIncidentStart(
+  async prepareIncidentStart(
     runtime: IncidentRuntimeRecord,
     stageId: string,
-  ): IncidentRuntimeRecord {
+    task?: Pick<BoardTask, "id" | "providerAlias">,
+  ): Promise<IncidentRuntimeRecord> {
     const priorSessions = this.persistence
       .listSessionRuntime()
       .filter(
@@ -387,8 +419,24 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       ) + 1;
     const sessionKey = `${runtime.incidentId}:${stageId}:${activation}`;
     const threadId = stableUuid(`${sessionKey}:thread`);
+    const stage = await readProductionHandoffStage({
+      instanceId: runtime.incidentId,
+      persistence: this.persistence,
+      repositoryRoot: this.templateAuthority.repositoryRoot,
+      stageId,
+    });
     const binding = bindResolvedSession(
-      this.configuration.session.defaultSelection,
+      await resolveStageSessionSelection(
+        {
+          session: this.configuration.session,
+          stageId,
+          stageProviderAlias: stage.providerAlias,
+          stageRuntimeMode: stage.runtimeMode,
+          taskId: task?.id ?? runtime.taskId,
+          taskProviderAlias: task?.providerAlias,
+        },
+        this.sessionSelectionResolver(),
+      ),
       sessionKey,
       threadId,
     );
@@ -704,16 +752,30 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       idIndex += 1;
       return value;
     };
-    const session = this.configuration.session;
-    const binding =
-      intendedSession?.binding ??
-      bindResolvedSession(session.defaultSelection, sessionKey, threadId);
     const stage = await readProductionHandoffStage({
       instanceId,
       persistence: this.persistence,
       repositoryRoot: this.templateAuthority.repositoryRoot,
       stageId,
     });
+    const session = this.configuration.session;
+    const binding =
+      intendedSession?.binding ??
+      bindResolvedSession(
+        await resolveStageSessionSelection(
+          {
+            session,
+            stageId,
+            stageProviderAlias: stage.providerAlias,
+            stageRuntimeMode: stage.runtimeMode,
+            taskId: task.id,
+            taskProviderAlias: task.providerAlias,
+          },
+          this.sessionSelectionResolver(),
+        ),
+        sessionKey,
+        threadId,
+      );
     if (stage.contractIssue !== undefined) {
       const attentionId = `${sessionKey}:advance-output:${stage.contractIssue.field}`;
       if (!(await this.attention.has(attentionId))) {

@@ -119,6 +119,19 @@
           "type": "string",
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
         },
+        "provider-alias": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "runtime-mode": {
+          "enum": [
+            "approval-required",
+            "auto-accept-edits",
+            "auto",
+            "full-access"
+          ]
+        },
         "skills": {
           "type": "array",
           "minItems": 1,
@@ -216,6 +229,12 @@
                 },
                 {
                   "required": ["skills"]
+                },
+                {
+                  "required": ["provider-alias"]
+                },
+                {
+                  "required": ["runtime-mode"]
                 }
               ]
             }

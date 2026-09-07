@@ -17,6 +17,7 @@ import {
 } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
+import type { ResolvedSessionRuntimeMode } from "../persistence/index.js";
 
 export type ProductionHandoffStage = StageHandoffInput["stage"];
 export type ProductionHandoffContractIssue = {
@@ -26,7 +27,9 @@ export type ProductionHandoffContractIssue = {
 export type ProductionStageMetadata = {
   contractIssue?: ProductionHandoffContractIssue;
   handoff: ProductionHandoffStage;
+  providerAlias?: string;
   repositoryName?: string;
+  runtimeMode?: ResolvedSessionRuntimeMode;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
@@ -211,7 +214,13 @@ export const readProductionHandoffStage = async (input: {
         ],
         skills: node.skills ?? [],
       },
+      ...(node["provider-alias"] === undefined
+        ? {}
+        : { providerAlias: node["provider-alias"] }),
       ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
+      ...(node["runtime-mode"] === undefined
+        ? {}
+        : { runtimeMode: node["runtime-mode"] }),
     };
   }
   const currentMechanicalOutputs = await currentMechanicalOutputsForStage(
@@ -261,6 +270,12 @@ export const readProductionHandoffStage = async (input: {
       },
       skills: node.skills ?? [],
     },
+    ...(node["provider-alias"] === undefined
+      ? {}
+      : { providerAlias: node["provider-alias"] }),
     ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
+    ...(node["runtime-mode"] === undefined
+      ? {}
+      : { runtimeMode: node["runtime-mode"] }),
   };
 };

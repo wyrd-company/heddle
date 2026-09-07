@@ -11,6 +11,8 @@ import {
 } from "flowcraft";
 
 import { BlueprintValidationError } from "./errors.js";
+import { RESOLVED_SESSION_RUNTIME_MODES } from "../persistence/index.js";
+import { isProviderAlias } from "../provider-alias.js";
 import {
   combineExclusiveLandings,
   combineLandings,
@@ -136,6 +138,31 @@ export const validateBlueprint = (
         node["todo-template"] !== undefined ||
         node["handoff-template"] !== undefined ||
         node.skills !== undefined);
+    const providerAlias = node["provider-alias"] as unknown;
+    if (providerAlias !== undefined && !isProviderAlias(providerAlias)) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} provider-alias must be a lower-kebab scalar of at most 64 characters`,
+      );
+    }
+    const runtimeMode = node["runtime-mode"] as unknown;
+    if (
+      runtimeMode !== undefined &&
+      !RESOLVED_SESSION_RUNTIME_MODES.some(
+        (candidate) => candidate === runtimeMode,
+      )
+    ) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} runtime-mode is invalid`,
+      );
+    }
+    if (
+      node.uses !== "wait" &&
+      (providerAlias !== undefined || runtimeMode !== undefined)
+    ) {
+      throw new BlueprintValidationError(
+        `Non-wait node ${JSON.stringify(node.id)} must not declare session selection`,
+      );
+    }
     if (
       node.handoff !== undefined &&
       node.handoff !== "standard" &&
