@@ -123,7 +123,7 @@ describe("dependency graph projection", () => {
     });
   });
 
-  it("uses the same all, epic, and task scope agreement as the board", () => {
+  it("uses the same all and epic scope agreement as the board", () => {
     const ids = (
       scope: Parameters<typeof buildDependencyGraphProjection>[0]["scope"],
     ) =>
@@ -136,7 +136,6 @@ describe("dependency graph projection", () => {
 
     expect(ids({ kind: "all" })).toEqual([10, 11, 12, 13, 14, 80]);
     expect(ids({ epicId: 10, kind: "epic" })).toEqual([10, 11, 12, 13, 14]);
-    expect(ids({ kind: "task", taskId: 12 })).toEqual([12]);
     expect(() => ids({ epicId: 11, kind: "epic" })).toThrow(
       "epic scope 11 must name a root type:epic task",
     );

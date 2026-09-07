@@ -41,33 +41,38 @@ const lifecycle = {
 
 describe("global console attention overlay", () => {
   it.each([
-    ["board", "http://console.test/?scope=task:11&attention=attention-11"],
+    ["board", "http://console.test/?scope=all&attention=attention-11", "all"],
     [
       "dependencies",
-      "http://console.test/?view=dependencies&scope=task:11&attention=attention-11",
+      "http://console.test/?view=dependencies&scope=epic:10&attention=attention-11",
+      "epic:10",
     ],
     [
       "lifecycle",
-      "http://console.test/?view=lifecycle&scope=task:11&attention=attention-11",
+      "http://console.test/?view=lifecycle&task=11&scope=all&attention=attention-11",
+      "all",
     ],
-  ])("opens and focuses the linked entry on the %s view", async (view, url) => {
-    const harness = await clientHarness(
-      [rootTask, childTask],
-      url,
-      undefined,
-      view === "lifecycle" ? lifecycle : undefined,
-      [informational("attention-11", "stale-work")],
-    );
+  ])(
+    "opens and focuses the linked entry on the %s view",
+    async (view, url, expectedScope) => {
+      const harness = await clientHarness(
+        [rootTask, childTask],
+        url,
+        undefined,
+        view === "lifecycle" ? lifecycle : undefined,
+        [informational("attention-11", "stale-work")],
+      );
 
-    const entry = harness
-      .attentionElements()
-      .find(({ dataset }) => dataset.attentionId === "attention-11");
-    expect(harness.attentionOverlay.open).toBe(true);
-    expect(entry?.dataset.focused).toBe("true");
-    expect(entry?.dataset.focusedByTest).toBe("true");
-    expect(harness.scope.value).toBe("task:11");
-    expect(harness.location()).toBe(url);
-  });
+      const entry = harness
+        .attentionElements()
+        .find(({ dataset }) => dataset.attentionId === "attention-11");
+      expect(harness.attentionOverlay.open).toBe(true);
+      expect(entry?.dataset.focused).toBe("true");
+      expect(entry?.dataset.focusedByTest).toBe("true");
+      expect(harness.scope.value).toBe(expectedScope);
+      expect(harness.location()).toBe(url);
+    },
+  );
 
   it("renders the exact current badge count and informational states", async () => {
     const entries = [
@@ -133,7 +138,7 @@ describe("global console attention overlay", () => {
     });
     const harness = await clientHarness(
       [rootTask, childTask],
-      "http://console.test/?view=dependencies&scope=task:11&attention=attention-11",
+      "http://console.test/?view=dependencies&scope=epic:10&attention=attention-11",
       undefined,
       undefined,
       [entry],
@@ -160,10 +165,10 @@ describe("global console attention overlay", () => {
       fingerprint: entry.fingerprint,
     });
     expect(harness.location()).toBe(
-      "http://console.test/?view=dependencies&scope=task:11&attention=attention-11",
+      "http://console.test/?view=dependencies&scope=epic:10&attention=attention-11",
     );
     expect(harness.boardViewLink.href).toBe(
-      "/?scope=task%3A11&attention=attention-11",
+      "/?scope=epic%3A10&attention=attention-11",
     );
   });
 

@@ -80,7 +80,7 @@ describe("console client request ownership", () => {
     });
     const harness = await clientHarness(
       [rootTask, childTask],
-      "http://console.test/?view=lifecycle&scope=task:11",
+      "http://console.test/?view=lifecycle&task=11&scope=all",
       undefined,
       lifecycle([{ sequence: 1 }, { sequence: 2 }, { sequence: 3 }], 3),
     );
@@ -108,7 +108,7 @@ describe("console client request ownership", () => {
       { events: [{ sequence: 5 }], nextSequence: 5 },
     ]);
     expect(harness.location()).toBe(
-      "http://console.test/?view=lifecycle&scope=task:11",
+      "http://console.test/?view=lifecycle&task=11&scope=all",
     );
     expect(harness.status.textContent).toBe(
       "Lifecycle live · 5 ordered events",
@@ -140,9 +140,9 @@ describe("console client request ownership", () => {
   it("ignores a stale successful scope load after a newer failure", async () => {
     const harness = await clientHarness();
     const heldSuccess = deferred<BrowserResponse>();
-    harness.holdProjection("task:11", heldSuccess.promise);
+    harness.holdProjection("epic:10", heldSuccess.promise);
 
-    harness.navigate("task:11");
+    harness.navigate("epic:10");
     harness.navigate("epic:999");
     await vi.waitFor(() => expect(harness.status.dataset.error).toBe("true"));
     expect(harness.scope.selectedIndex).toBe(-1);
@@ -162,12 +162,12 @@ describe("console client request ownership", () => {
     harness.holdProjection("epic:999", heldFailure.promise);
 
     harness.navigate("epic:999");
-    harness.navigate("task:11");
+    harness.navigate("epic:10");
     await vi.waitFor(() =>
-      expect(harness.status.textContent).toBe("1 visible records"),
+      expect(harness.status.textContent).toBe("2 visible records"),
     );
-    expect(harness.scope.value).toBe("task:11");
-    expect(harness.cardIds()).toEqual(["11"]);
+    expect(harness.scope.value).toBe("epic:10");
+    expect(harness.cardIds()).toEqual(["10", "11"]);
 
     heldFailure.resolve(
       response("scope epic:999 is invalid", { ok: false, status: 400 }),
@@ -175,7 +175,7 @@ describe("console client request ownership", () => {
     await delay(0);
 
     expect(harness.status.dataset.error).toBe("false");
-    expect(harness.scope.value).toBe("task:11");
-    expect(harness.cardIds()).toEqual(["11"]);
+    expect(harness.scope.value).toBe("epic:10");
+    expect(harness.cardIds()).toEqual(["10", "11"]);
   });
 });

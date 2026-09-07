@@ -738,14 +738,18 @@ proposed-design:
     with the reconciler as their single writer. Task authoring and
     editing remain in kanban-md.
 
-    A workspace can host several epics and standalone tasks at once,
-    so every view carries a scope filter: all work, one epic (its
-    children and its own lifecycle), or one task. The filter is part
-    of the console URL, so a pushover deep link lands already scoped
-    to the entry that raised it. The board and dependency projections
-    poll their existing read endpoints every second without changing
-    the current scope or viewport position. The header reports LIVE
-    BOARD while updates arrive and BOARD STALE when no update arrives
+    A workspace can host several epics and standalone tasks at once.
+    The board and dependency graph share one URL scope filter: all work
+    or one root epic with its children. The scope control lists only
+    those choices. A lifecycle route identifies its positive task ID in
+    a separate URL parameter while retaining the current board scope.
+    Its BOARD and DEPENDENCIES links omit the lifecycle target, so either
+    projection is identical before and after the lifecycle detour. A URL
+    with a positive task-shaped scope is normalized to the lifecycle for
+    that task with all-work board scope. The board and dependency
+    projections poll their existing read endpoints every second without
+    changing the current scope or viewport position. The header reports
+    LIVE BOARD while updates arrive and BOARD STALE when no update arrives
     within two polling intervals.
 
     The lifecycle view consumes one canonical read model assembled

@@ -310,25 +310,35 @@ describe("console live board polling", () => {
   });
 
   it("does not let an old live poll overwrite a newer scoped view", async () => {
-    const harness = await clientHarness();
+    const otherEpic = {
+      ...rootTask,
+      id: 20,
+      title: "Other example group",
+    };
+    const harness = await clientHarness([rootTask, childTask, otherEpic]);
     const heldBoard = deferred<BrowserResponse>();
     harness.holdBoard(heldBoard.promise);
     harness.runNextTimeout();
     harness.releaseBoard();
 
-    harness.navigate("task:11");
-    await vi.waitFor(() => expect(harness.cardIds()).toEqual(["11"]));
-    heldBoard.resolve(response({ tasks: [rootTask, childTask] }));
+    harness.navigate("epic:10");
+    await vi.waitFor(() => expect(harness.cardIds()).toEqual(["10", "11"]));
+    heldBoard.resolve(response({ tasks: [rootTask, childTask, otherEpic] }));
 
     await delay(20);
-    expect(harness.cardIds()).toEqual(["11"]);
+    expect(harness.cardIds()).toEqual(["10", "11"]);
     expect(harness.board.replaceCount).toBe(0);
-    expect(harness.scope.value).toBe("task:11");
-    expect(harness.projectionRequests).toEqual(["all", "task:11"]);
+    expect(harness.scope.value).toBe("epic:10");
+    expect(harness.projectionRequests).toEqual(["all", "epic:10"]);
   });
 
   it("does not render an old live projection after scope navigation", async () => {
-    const harness = await clientHarness();
+    const otherEpic = {
+      ...rootTask,
+      id: 20,
+      title: "Other example group",
+    };
+    const harness = await clientHarness([rootTask, childTask, otherEpic]);
     const heldProjection = deferred<BrowserResponse>();
     harness.holdProjection("all", heldProjection.promise);
     harness.runNextTimeout();
@@ -338,16 +348,16 @@ describe("console live board polling", () => {
       ).toHaveLength(2),
     );
 
-    harness.navigate("task:11");
-    await vi.waitFor(() => expect(harness.cardIds()).toEqual(["11"]));
+    harness.navigate("epic:10");
+    await vi.waitFor(() => expect(harness.cardIds()).toEqual(["10", "11"]));
     heldProjection.resolve(
-      response(projection([rootTask, childTask, refreshedTask])),
+      response(projection([rootTask, childTask, otherEpic])),
     );
 
     await delay(20);
-    expect(harness.cardIds()).toEqual(["11"]);
+    expect(harness.cardIds()).toEqual(["10", "11"]);
     expect(harness.board.replaceCount).toBe(0);
-    expect(harness.scope.value).toBe("task:11");
+    expect(harness.scope.value).toBe("epic:10");
   });
 
   it("does not reopen dismissed linked attention while refreshing its data", async () => {
@@ -430,14 +440,14 @@ describe("console live board polling", () => {
     );
 
     harness.navigateUrl(
-      "http://console.test/?view=dependencies&scope=task%3A11",
+      "http://console.test/?view=dependencies&scope=epic%3A10",
     );
     await vi.waitFor(() =>
       expect(
         harness.graphCanvas.children
           .filter(({ tagName }) => tagName === "a")
           .map(({ dataset }) => dataset.taskId),
-      ).toEqual(["11"]),
+      ).toEqual(["10", "11"]),
     );
     heldGraph.resolve(response(refreshedGraph));
 
@@ -446,8 +456,8 @@ describe("console live board polling", () => {
       harness.graphCanvas.children
         .filter(({ tagName }) => tagName === "a")
         .map(({ dataset }) => dataset.taskId),
-    ).toEqual(["11"]);
+    ).toEqual(["10", "11"]);
     expect(harness.graphCanvas.replaceCount).toBe(0);
-    expect(harness.scope.value).toBe("task:11");
+    expect(harness.scope.value).toBe("epic:10");
   });
 });

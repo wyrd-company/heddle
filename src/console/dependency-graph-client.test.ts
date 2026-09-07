@@ -17,7 +17,7 @@ import {
 } from "./page-client.test-support.js";
 
 describe("console client request ownership", () => {
-  it("renders traced graph nodes with task-scoped lifecycle links", async () => {
+  it("opens graph-node lifecycle targets without mutating scope", async () => {
     const harness = await clientHarness(
       [rootTask, childTask],
       "http://console.test/?view=dependencies&scope=epic%3A10",
@@ -36,7 +36,7 @@ describe("console client request ownership", () => {
       "attention",
       "blocked",
     ]);
-    expect(links[1]?.href).toBe("/?view=lifecycle&scope=task%3A11");
+    expect(links[1]?.href).toBe("/?view=lifecycle&task=11&scope=epic%3A10");
     expect(links[1]?.getAttribute("aria-label")).toContain(
       "Open lifecycle view",
     );
@@ -59,37 +59,123 @@ describe("console client request ownership", () => {
       ["338px", "28px"],
     ]);
 
-    harness.scope.value = "task:11";
+    harness.scope.value = "all";
     harness.scope.dispatch("change");
     await vi.waitFor(() =>
       expect(harness.status.textContent).toBe(
-        "1 visible nodes · 0 dependency edges",
+        "2 visible nodes · 1 dependency edges",
       ),
     );
     expect(harness.location()).toBe(
-      "http://console.test/?view=dependencies&scope=task%3A11",
+      "http://console.test/?view=dependencies&scope=all",
     );
+    expect(
+      harness.graphCanvas.children.find(
+        ({ dataset }) => dataset.taskId === "11",
+      )?.href,
+    ).toBe("/?view=lifecycle&task=11&scope=all");
   });
 
-  it("opens the task-scoped lifecycle route selected by a graph node", async () => {
+  it("opens a separate lifecycle target while retaining the epic scope", async () => {
     const harness = await clientHarness(
       [rootTask, childTask],
-      "http://console.test/?view=lifecycle&scope=task%3A11",
+      "http://console.test/?view=lifecycle&task=11&scope=epic%3A10",
     );
 
     expect(harness.lifecycle.hidden).toBe(false);
     expect(harness.lifecycleTask.textContent).toBe("Task #11 · Example item");
-    expect(harness.scope.value).toBe("task:11");
-    expect(
-      harness.scope.options.map(({ textContent }) => textContent),
-    ).toContain("Task #11 · Example item");
+    expect(harness.scope.value).toBe("epic:10");
     expect(harness.status.textContent).toBe("Lifecycle view for task #11");
+    expect(harness.boardViewLink.href).toBe("/?scope=epic%3A10");
+    expect(harness.dependenciesViewLink.href).toBe(
+      "/?view=dependencies&scope=epic%3A10",
+    );
+  });
+
+  it("returns from lifecycle to identical board and dependency projections", async () => {
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?scope=epic%3A10",
+    );
+    const expectedRecords = harness.cardIds();
+    const lifecycleUrl =
+      "http://console.test/?view=lifecycle&task=11&scope=epic%3A10";
+
+    harness.navigateUrl(lifecycleUrl);
+    await vi.waitFor(() =>
+      expect(harness.status.textContent).toBe("Lifecycle view for task #11"),
+    );
+    harness.navigateUrl("http://console.test" + harness.boardViewLink.href);
+    await vi.waitFor(() => expect(harness.cardIds()).toEqual(expectedRecords));
+    expect(harness.scope.value).toBe("epic:10");
+
+    harness.navigateUrl(lifecycleUrl);
+    await vi.waitFor(() =>
+      expect(harness.status.textContent).toBe("Lifecycle view for task #11"),
+    );
+    harness.navigateUrl(
+      "http://console.test" + harness.dependenciesViewLink.href,
+    );
+    await vi.waitFor(() =>
+      expect(
+        harness.graphCanvas.children
+          .filter(({ tagName }) => tagName === "a")
+          .map(({ dataset }) => dataset.taskId),
+      ).toEqual(expectedRecords),
+    );
+    expect(harness.scope.value).toBe("epic:10");
+  });
+
+  it("lists All work and root epics only in the scope control", async () => {
+    const harness = await clientHarness([rootTask, childTask]);
+
+    expect(
+      harness.scope.options.map(({ textContent, value }) => ({
+        label: textContent,
+        value,
+      })),
+    ).toEqual([
+      { label: "All work", value: "all" },
+      { label: "Epic #10 · Example group", value: "epic:10" },
+    ]);
+  });
+
+  it("normalizes a legacy task scope into the split lifecycle route", async () => {
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?scope=task%3A11&attention=attention-11",
+    );
+
+    expect(harness.location()).toBe(
+      "http://console.test/?view=lifecycle&task=11&scope=all&attention=attention-11",
+    );
+    expect(harness.lifecycle.hidden).toBe(false);
+    expect(harness.lifecycleTask.textContent).toBe("Task #11 · Example item");
+    expect(harness.scope.value).toBe("all");
+  });
+
+  it("rejects non-canonical and unsafe lifecycle targets", async () => {
+    const nonCanonical = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?view=lifecycle&task=01&scope=all",
+    );
+    expect(nonCanonical.status.textContent).toBe(
+      "lifecycle view requires a positive task id",
+    );
+
+    const unsafe = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?view=lifecycle&task=99999999999999999&scope=all",
+    );
+    expect(unsafe.status.textContent).toBe(
+      "lifecycle task id must be a safe integer",
+    );
   });
 
   it("shows an identified not-yet-started state for an undispatched task", async () => {
     const harness = await clientHarness(
       [rootTask, childTask],
-      "http://console.test/?view=lifecycle&scope=task%3A11",
+      "http://console.test/?view=lifecycle&task=11&scope=all",
       undefined,
       response(
         {
@@ -102,7 +188,7 @@ describe("console client request ownership", () => {
 
     expect(harness.lifecycle.hidden).toBe(false);
     expect(harness.lifecycleTask.textContent).toBe("Task #11 · Example item");
-    expect(harness.scope.value).toBe("task:11");
+    expect(harness.scope.value).toBe("all");
     expect(harness.lifecycleEmpty.hidden).toBe(false);
     expect(harness.lifecycleEmpty.textContent).toBe(
       "No lifecycle instance exists for this task. It has not started yet.",
@@ -173,7 +259,7 @@ describe("console client request ownership", () => {
     );
     expect(invalidLifecycle.status.dataset.error).toBe("true");
     expect(invalidLifecycle.status.textContent).toBe(
-      "lifecycle view requires task:<id> scope",
+      "lifecycle view requires a positive task id",
     );
   });
 
@@ -186,7 +272,9 @@ describe("console client request ownership", () => {
       "http://console.test/?view=dependencies&scope=epic%3A10",
     );
     await delay(0);
-    harness.navigateUrl("http://console.test/?view=lifecycle&scope=task%3A11");
+    harness.navigateUrl(
+      "http://console.test/?view=lifecycle&task=11&scope=epic%3A10",
+    );
     await vi.waitFor(() =>
       expect(harness.status.textContent).toBe("Lifecycle view for task #11"),
     );

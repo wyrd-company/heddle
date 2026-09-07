@@ -423,9 +423,6 @@ export const clientHarness = async (
           },
         ],
       };
-      if (requestedScope === "task:11") {
-        return response({ edges: [], nodes: [graph.nodes[1]] });
-      }
       return response(graph);
     }
     if (input.startsWith("/api/projection?")) {
@@ -438,18 +435,11 @@ export const clientHarness = async (
       const scopedTasks =
         requestedScope === "all"
           ? boardTasks
-          : requestedScope.startsWith("epic:")
-            ? boardTasks.filter(
-                (task) =>
-                  task.id === Number(requestedScope.slice("epic:".length)) ||
-                  task.parent === Number(requestedScope.slice("epic:".length)),
-              )
-            : boardTasks.filter(
-                (task) =>
-                  task.id === Number(requestedScope.slice("task:".length)),
-              );
-      if (requestedScope.startsWith("task:"))
-        return response(projection(scopedTasks));
+          : boardTasks.filter(
+              (task) =>
+                task.id === Number(requestedScope.slice("epic:".length)) ||
+                task.parent === Number(requestedScope.slice("epic:".length)),
+            );
       if (requestedScope === "epic:10") {
         return response(projection(scopedTasks));
       }
@@ -516,6 +506,9 @@ export const clientHarness = async (
     },
     history: {
       pushState: (_state: object, _unused: string, url: URL) => {
+        locationHref = url.href;
+      },
+      replaceState: (_state: object, _unused: string, url: URL) => {
         locationHref = url.href;
       },
     },

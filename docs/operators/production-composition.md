@@ -470,6 +470,12 @@ context. One global cursor covers the complete ordered history. A missing
 production runtime or instance returns unavailable; it does not synthesize an
 identity or substitute working-tree blueprint content.
 
+The board and dependency graph URL `scope` accepts `all` or `epic:<id>`. Their
+scope control lists All work and root epics. A lifecycle URL carries its target
+as `task=<id>` and retains the board scope, so BOARD and DEPENDENCIES return to
+the same projection. A positive `scope=task:<id>` URL is normalized to the
+lifecycle for that task with `scope=all`.
+
 The console attention source projects the current unresolved durable queue
 through the same reconciler runtime records. Those records supply task scope;
 the source does not infer a task from an attention message or instance-name

@@ -535,6 +535,31 @@ let scopeOptionsSignature;
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
 const attentionFromUrl = () => new URL(window.location.href).searchParams.get("attention");
 
+const taskFromUrl = () => {
+  const value = new URL(window.location.href).searchParams.get("task");
+  if (value === null || !/^[1-9][0-9]*$/.test(value)) {
+    throw new Error("lifecycle view requires a positive task id");
+  }
+  const taskId = Number(value);
+  if (!Number.isSafeInteger(taskId)) {
+    throw new Error("lifecycle task id must be a safe integer");
+  }
+  return taskId;
+};
+
+const normalizeLegacyTaskScope = () => {
+  const url = new URL(window.location.href);
+  const match = /^task:([1-9][0-9]*)$/.exec(url.searchParams.get("scope") || "");
+  if (match === null) return;
+  const normalized = new URL("/", url);
+  normalized.searchParams.set("view", "lifecycle");
+  normalized.searchParams.set("task", match[1]);
+  normalized.searchParams.set("scope", "all");
+  const attention = url.searchParams.get("attention");
+  if (attention !== null) normalized.searchParams.set("attention", attention);
+  window.history.replaceState({}, "", normalized);
+};
+
 const viewFromUrl = () => {
   const view = new URL(window.location.href).searchParams.get("view") || "board";
   if (view !== "board" && view !== "dependencies" && view !== "lifecycle") {
@@ -543,9 +568,10 @@ const viewFromUrl = () => {
   return view;
 };
 
-const consoleUrl = (view, scope) => {
+const consoleUrl = (view, scope, taskId) => {
   const url = new URL("/", window.location.href);
   if (view !== "board") url.searchParams.set("view", view);
+  if (view === "lifecycle") url.searchParams.set("task", taskId);
   url.searchParams.set("scope", scope);
   const attention = attentionFromUrl();
   if (attention !== null) url.searchParams.set("attention", attention);
@@ -969,7 +995,7 @@ const graphPosition = (node) => ({
   y: graphPadding + node.row * (graphNodeHeight + graphRowGap),
 });
 
-const renderDependencyGraph = (graph) => {
+const renderDependencyGraph = (graph, scope) => {
   const maxLayer = graph.nodes.reduce((maximum, node) => Math.max(maximum, node.layer), 0);
   const maxRow = graph.nodes.reduce((maximum, node) => Math.max(maximum, node.row), 0);
   const width = graphPadding * 2 + graphNodeWidth + maxLayer * (graphNodeWidth + graphColumnGap);
@@ -1032,8 +1058,8 @@ const renderDependencyGraph = (graph) => {
     link.dataset.taskId = String(node.id);
     link.dataset.treatment = node.treatment;
     link.dataset.renderKey = "task:" + node.id;
-    link.dataset.renderSignature = JSON.stringify(node);
-    link.href = consoleUrl("lifecycle", "task:" + node.id);
+    link.dataset.renderSignature = JSON.stringify({ node, scope });
+    link.href = consoleUrl("lifecycle", scope, node.id);
     link.style.left = position.x + "px";
     link.style.top = position.y + "px";
     link.setAttribute("aria-label", "Task #" + node.id + ", " + node.title + ", " + node.treatment + ". Open lifecycle view");
@@ -1074,9 +1100,6 @@ const addScopeOptions = (tasks, selected) => {
   const options = [new Option("All work", "all")];
   for (const task of tasks.filter(isEpic)) {
     options.push(new Option("Epic #" + task.id + " · " + task.title, "epic:" + task.id));
-  }
-  for (const task of tasks) {
-    options.push(new Option("Task #" + task.id + " · " + task.title, "task:" + task.id));
   }
   const signature = JSON.stringify(options.map((option) => [option.value, option.textContent]));
   if (signature !== scopeOptionsSignature) {
@@ -1156,7 +1179,7 @@ const pollBoard = (view, scope, generation) => {
           "/api/dependency-graph?scope=" + encodeURIComponent(scope),
         );
         if (generation !== loadGeneration) return;
-        renderDependencyGraph(graph);
+        renderDependencyGraph(graph, scope);
       }
       markLiveBoardUpdate();
     } catch {
@@ -1175,6 +1198,7 @@ async function load() {
   setLiveBoardHealth("connecting");
   statusElement.dataset.error = "false";
   statusElement.textContent = "Loading board…";
+  normalizeLegacyTaskScope();
   const requestedScope = scopeFromUrl();
   try {
     const view = viewFromUrl();
@@ -1201,14 +1225,13 @@ async function load() {
     } else if (view === "dependencies") {
       const graph = await fetchJson("/api/dependency-graph?scope=" + encodeURIComponent(requestedScope));
       if (generation !== loadGeneration) return;
-      renderDependencyGraph(graph);
+      renderDependencyGraph(graph, requestedScope);
       statusElement.textContent = graph.nodes.length + " visible nodes · " + graph.edges.length + " dependency edges";
       markLiveBoardUpdate();
       pollBoard(view, requestedScope, generation);
     } else {
-      const match = /^task:([1-9][0-9]*)$/.exec(requestedScope);
-      if (!match) throw new Error("lifecycle view requires task:<id> scope");
-      const task = board.tasks.find(({ id }) => id === Number(match[1]));
+      const requestedTaskId = taskFromUrl();
+      const task = board.tasks.find(({ id }) => id === requestedTaskId);
       if (!task) throw new Error("lifecycle task does not exist");
       lifecycleTaskElement.textContent = "Task #" + task.id + " · " + task.title;
       lifecycleEmptyElement.hidden = true;

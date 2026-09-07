@@ -65,7 +65,7 @@ describe("console page state", () => {
       'fetchJson("/api/dependency-graph?scope=" + encodeURIComponent(requestedScope))',
     );
     expect(consoleClient).toContain(
-      'link.href = consoleUrl("lifecycle", "task:" + node.id)',
+      'link.href = consoleUrl("lifecycle", scope, node.id)',
     );
     expect(consoleClient).toContain(
       'url.searchParams.set("scope", scopeElement.value)',
