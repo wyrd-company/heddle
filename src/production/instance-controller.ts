@@ -180,6 +180,8 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   }
 
   async start(input: StartReconcilerInstanceInput): Promise<void> {
+    const lifecycleExistedAtStart =
+      this.persistence.getInstance(input.instanceId) !== undefined;
     const previous = this.persistence
       .listReconcilerRuntime()
       .find(({ instanceId }) => instanceId === input.instanceId);
@@ -307,7 +309,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       "prepare-worktree",
     );
     const restoreInitialBoardStatus =
-      existing !== undefined &&
+      lifecycleExistedAtStart &&
       starting.boardStatus === "todo" &&
       preparedBoardStatus !== undefined;
     await this.#activate(
@@ -315,7 +317,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       input.instanceId,
       stageId,
       starting,
-      existing === undefined || restoreInitialBoardStatus
+      !lifecycleExistedAtStart || restoreInitialBoardStatus
         ? (preparedBoardStatus ?? input.task.status)
         : starting.boardStatus,
       restoreInitialBoardStatus,
