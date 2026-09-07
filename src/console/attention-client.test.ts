@@ -219,4 +219,35 @@ describe("global console attention overlay", () => {
     ]);
     expect(action?.textContent).toBe("Retry notification →");
   });
+
+  it("links an originating production error to its incident lifecycle canvas", async () => {
+    const entry = createConsoleAttention({
+      actions: [],
+      attentionId: "production-error-11",
+      incidentId: "incident:synthetic-11",
+      instanceId: "instance-11",
+      kind: "production-error",
+      message: "A synthetic production condition needs diagnosis",
+      scope: "task:11",
+      taskId: 11,
+    });
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      undefined,
+      undefined,
+      undefined,
+      [entry],
+    );
+    const link = harness
+      .attentionElements()
+      .find(({ className }) => className === "attention-incident-link");
+
+    expect(link?.textContent).toBe("Open incident lifecycle →");
+    expect(link?.href).toBe(
+      "/?view=lifecycle&task=11&scope=task%3A11&instance=incident%3Asynthetic-11",
+    );
+    expect(link?.getAttribute("aria-label")).toBe(
+      "Open incident lifecycle for task #11",
+    );
+  });
 });

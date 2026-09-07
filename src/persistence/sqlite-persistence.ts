@@ -636,6 +636,27 @@ export class SqlitePersistence {
       );
   }
 
+  writeStartingIncidentSessionRuntime(
+    runtime: IncidentRuntimeRecord,
+    session: SessionRuntimeRecord,
+  ): void {
+    if (
+      runtime.state !== "starting" ||
+      runtime.incidentId !== session.instanceId ||
+      runtime.sessionKey !== session.sessionKey ||
+      runtime.stageId !== session.stageId ||
+      runtime.threadId !== session.threadId
+    ) {
+      throw new Error(
+        "Starting incident runtime and resolved session binding identify different occurrences",
+      );
+    }
+    this.database.transaction(() => {
+      this.writeSessionRuntime(session);
+      this.writeIncidentRuntime(runtime);
+    })();
+  }
+
   effectCompleted(effectKind: string, stableId: string): boolean {
     this.assertStableId("effectKind", effectKind);
     this.assertStableId("stableId", stableId);

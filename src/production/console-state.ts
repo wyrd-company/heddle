@@ -108,11 +108,26 @@ export class ProductionConsoleState implements ConsoleStateSource {
 
   async readLifecycle(input: {
     afterSequence: number;
+    instanceId?: string;
     taskId: number;
   }): Promise<ConsoleLifecycleSnapshot> {
-    const runtimes = this.persistence
-      .listReconcilerRuntime()
-      .filter(({ taskId }) => taskId === input.taskId);
+    const incident =
+      input.instanceId === undefined
+        ? undefined
+        : this.persistence
+            .listIncidentRuntime()
+            .find(({ incidentId }) => incidentId === input.instanceId);
+    if (input.instanceId !== undefined && incident?.taskId !== input.taskId) {
+      throw new ConsoleLifecycleNotStartedError(
+        `Task ${input.taskId} has no production incident '${input.instanceId}'`,
+      );
+    }
+    const runtimes =
+      incident === undefined
+        ? this.persistence
+            .listReconcilerRuntime()
+            .filter(({ taskId }) => taskId === input.taskId)
+        : [{ instanceId: incident.incidentId, taskId: incident.taskId }];
     if (runtimes.length === 0) {
       throw new ConsoleLifecycleNotStartedError(
         `Task ${input.taskId} has no production lifecycle instance`,
@@ -140,11 +155,13 @@ export class ProductionConsoleState implements ConsoleStateSource {
         context.blueprintBlobHash,
         context.blueprintPath,
       ),
-      inspectUpstreamRebaseTarget(
-        repositoryRoot,
-        this.sourceRef,
-        context.blueprintPath,
-      ),
+      incident === undefined
+        ? inspectUpstreamRebaseTarget(
+            repositoryRoot,
+            this.sourceRef,
+            context.blueprintPath,
+          )
+        : Promise.resolve({ state: "upstream-target-unavailable" as const }),
     ]);
     const executionHistories = await Promise.all(
       context.executionIds.map(async (executionId) => ({

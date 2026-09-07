@@ -110,6 +110,11 @@ class FixtureState implements ConsoleStateSource {
   ];
   lifecycleBlueprintBlobHash = "a".repeat(40);
   lifecycleTargetBlobHash = "b".repeat(40);
+  readonly lifecycleReads: Array<{
+    afterSequence: number;
+    instanceId?: string;
+    taskId: number;
+  }> = [];
 
   async listAttention(): Promise<ConsoleAttention[]> {
     return this.attention;
@@ -136,8 +141,10 @@ class FixtureState implements ConsoleStateSource {
 
   async readLifecycle(input: {
     afterSequence: number;
+    instanceId?: string;
     taskId: number;
   }): Promise<ConsoleLifecycleSnapshot> {
+    this.lifecycleReads.push(input);
     return {
       blueprint: {
         blobHash: this.lifecycleBlueprintBlobHash,
@@ -300,6 +307,19 @@ describe("console server", () => {
     expect(malformedTask.status).toBe(400);
     expect(malformedCursor.status).toBe(400);
     expect(board.writes).toEqual([]);
+  });
+
+  it("routes a bounded incident identity to the lifecycle reader", async () => {
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/lifecycle?task=52&instance=incident%3Asynthetic-52&after=0`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(state.lifecycleReads.at(-1)).toEqual({
+      afterSequence: 0,
+      instanceId: "incident:synthetic-52",
+      taskId: 52,
+    });
   });
 
   it("re-reads lifecycle identity and delegates one explicit rebase action", async () => {

@@ -38,6 +38,7 @@ export interface ConsoleAttention {
   attentionId: string;
   fingerprint: string;
   heading: string;
+  incidentId?: string;
   instanceId?: string;
   kind: string;
   message: string;
@@ -188,6 +189,7 @@ export interface ConsoleStateSource {
   listInstances(): Promise<ConsoleInstance[]>;
   readLifecycle(input: {
     afterSequence: number;
+    instanceId?: string;
     taskId: number;
   }): Promise<ConsoleLifecycleSnapshot>;
 }

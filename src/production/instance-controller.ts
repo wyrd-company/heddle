@@ -27,6 +27,7 @@ import {
 import type { PacingDeferral } from "../pacing/index.js";
 import type {
   JsonValue,
+  IncidentRuntimeRecord,
   ReconcilerRuntimeRecord,
   SqlitePersistence,
 } from "../persistence/index.js";
@@ -324,6 +325,92 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     );
   }
 
+  async activateIncident(
+    task: BoardTask,
+    runtime: IncidentRuntimeRecord,
+    stageId: string,
+  ): Promise<void> {
+    const starting: ReconcilerRuntimeRecord = {
+      boardStatus: "incident",
+      instanceId: runtime.incidentId,
+      ...(runtime.provider === undefined ? {} : { provider: runtime.provider }),
+      ...(runtime.sessionKey === undefined
+        ? {}
+        : { sessionKey: runtime.sessionKey }),
+      ...(runtime.stageEnteredAt === undefined
+        ? {}
+        : { stageEnteredAt: runtime.stageEnteredAt }),
+      ...(runtime.stageId === undefined ? {} : { stageId: runtime.stageId }),
+      state: "starting",
+      taskId: runtime.taskId,
+      ...(runtime.threadId === undefined ? {} : { threadId: runtime.threadId }),
+    };
+    await this.#activate(
+      task,
+      runtime.incidentId,
+      stageId,
+      starting,
+      "incident",
+      false,
+      (next) =>
+        this.persistence.writeIncidentRuntime({
+          ...runtime,
+          ...(next.provider === undefined ? {} : { provider: next.provider }),
+          ...(next.sessionKey === undefined
+            ? {}
+            : { sessionKey: next.sessionKey }),
+          ...(next.stageEnteredAt === undefined
+            ? {}
+            : { stageEnteredAt: next.stageEnteredAt }),
+          ...(next.stageId === undefined ? {} : { stageId: next.stageId }),
+          state: next.state === "waiting" ? "waiting" : "starting",
+          ...(next.threadId === undefined ? {} : { threadId: next.threadId }),
+        }),
+    );
+  }
+
+  prepareIncidentStart(
+    runtime: IncidentRuntimeRecord,
+    stageId: string,
+  ): IncidentRuntimeRecord {
+    const priorSessions = this.persistence
+      .listSessionRuntime()
+      .filter(
+        (session) =>
+          session.instanceId === runtime.incidentId &&
+          session.stageId === stageId,
+      );
+    const activation =
+      priorSessions.reduce(
+        (maximum, session) => Math.max(maximum, session.activation),
+        0,
+      ) + 1;
+    const sessionKey = `${runtime.incidentId}:${stageId}:${activation}`;
+    const threadId = stableUuid(`${sessionKey}:thread`);
+    const binding = bindResolvedSession(
+      this.configuration.session.defaultSelection,
+      sessionKey,
+      threadId,
+    );
+    const prepared: IncidentRuntimeRecord = {
+      ...runtime,
+      provider: binding.providerInstanceId,
+      sessionKey,
+      stageId,
+      state: "starting",
+      threadId,
+    };
+    this.persistence.writeStartingIncidentSessionRuntime(prepared, {
+      activation,
+      binding,
+      instanceId: runtime.incidentId,
+      sessionKey,
+      stageId,
+      threadId,
+    });
+    return prepared;
+  }
+
   async #mechanicalChange(
     task: BoardTask,
     instanceId: string,
@@ -569,6 +656,8 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     starting: ReconcilerRuntimeRecord,
     boardStatus: string = starting.boardStatus,
     mirrorBoardStatus: boolean = false,
+    writeRuntime: (runtime: ReconcilerRuntimeRecord) => void = (runtime) =>
+      this.persistence.writeReconcilerRuntime(runtime),
   ): Promise<void> {
     const retryingIntent =
       starting.state === "starting" &&
@@ -599,7 +688,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const threadId = retryingIntent
       ? starting.threadId!
       : stableUuid(`${sessionKey}:thread`);
-    this.persistence.writeReconcilerRuntime({
+    writeRuntime({
       ...starting,
       sessionKey,
       stageEnteredAt: this.now(),
@@ -730,7 +819,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       }
       throw new AttentionVisibleError(error);
     }
-    this.persistence.writeReconcilerRuntime({
+    writeRuntime({
       ...starting,
       boardStatus,
       sessionKey,

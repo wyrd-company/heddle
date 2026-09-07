@@ -10,6 +10,7 @@ import {
 } from "../console/index.js";
 import type {
   DurableAttentionRecord,
+  IncidentRuntimeRecord,
   NotificationFailureRecord,
   ReconcilerRuntimeRecord,
 } from "../persistence/index.js";
@@ -54,7 +55,7 @@ const validTaskId = (value: unknown, attentionId: string): number => {
 
 const taskForInstance = (
   instanceId: string,
-  runtimes: ReconcilerRuntimeRecord[],
+  runtimes: Array<Pick<ReconcilerRuntimeRecord, "instanceId" | "taskId">>,
   attentionId: string,
 ): number => {
   const matches = runtimes.filter(
@@ -166,7 +167,15 @@ export const projectProductionAttention = (
   runtimes: ReconcilerRuntimeRecord[],
   notificationFailure?: NotificationFailureRecord,
   schedulerFailureSequence?: number,
+  incidents: IncidentRuntimeRecord[] = [],
 ): ConsoleAttention => {
+  const instanceRuntimes = [
+    ...runtimes,
+    ...incidents.map((runtime) => ({
+      instanceId: runtime.incidentId,
+      taskId: runtime.taskId,
+    })),
+  ];
   const payload = recordPayload(record);
   const attentionId = record.attentionId;
   const kind = payload["kind"];
@@ -186,7 +195,7 @@ export const projectProductionAttention = (
     return projectEscalation(
       payload,
       instanceId,
-      taskForInstance(instanceId, runtimes, attentionId),
+      taskForInstance(instanceId, instanceRuntimes, attentionId),
       attentionId,
     );
   }
@@ -201,7 +210,7 @@ export const projectProductionAttention = (
     return projectSessionAttention(
       payload,
       instanceId,
-      taskForInstance(instanceId, runtimes, attentionId),
+      taskForInstance(instanceId, instanceRuntimes, attentionId),
       attentionId,
       kind,
     );
@@ -219,7 +228,7 @@ export const projectProductionAttention = (
     }
     if (
       typeof instanceId === "string" &&
-      taskForInstance(instanceId, runtimes, attentionId) !== taskId
+      taskForInstance(instanceId, instanceRuntimes, attentionId) !== taskId
     ) {
       throw new Error(
         `Attention '${attentionId}' disagrees with its production task`,
@@ -271,7 +280,8 @@ export const projectProductionAttention = (
     if (
       typeof instanceIdValue === "string" &&
       (taskId === undefined ||
-        taskForInstance(instanceIdValue, runtimes, attentionId) !== taskId)
+        taskForInstance(instanceIdValue, instanceRuntimes, attentionId) !==
+          taskId)
     ) {
       throw new Error(
         `Attention '${attentionId}' disagrees with its production task`,
@@ -333,6 +343,9 @@ export const projectProductionAttention = (
     return createConsoleAttention({
       actions,
       attentionId,
+      ...(typeof expectedIncidentId === "string"
+        ? { incidentId: expectedIncidentId }
+        : {}),
       ...(typeof instanceIdValue === "string"
         ? { instanceId: instanceIdValue }
         : {}),

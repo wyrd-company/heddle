@@ -85,6 +85,7 @@ import { ProductRoutingCatalog } from "./product-routing.js";
 import { pageSessionAttentions } from "./session-attention-paging.js";
 import { DynamicTaskAuthority } from "./dynamic-task-authority.js";
 import { EpicOperationCoordinator } from "./epic-operation-coordinator.js";
+import { ProductionIncidentCoordinator } from "./incident-coordinator.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -187,7 +188,11 @@ export const createProductionComposition = (
         },
       },
     );
-    attention = new DurableAttentionQueue(persistence, productionErrorPages);
+    attention = new DurableAttentionQueue(persistence, productionErrorPages, [
+      configuration.pushover.applicationToken,
+      configuration.pushover.userKey,
+      configuration.t3.accessToken,
+    ]);
     const schedulerPassAttention = new SchedulerPassAttentionLifecycle(
       persistence,
       attention,
@@ -225,6 +230,7 @@ export const createProductionComposition = (
     };
     const effects: Record<string, LifecycleEffect> =
       createMechanicalNodeEffects({ board, statuses: boardStatuses });
+    effects["complete"] = async () => ({});
     const routing = new ProductRoutingCatalog(configuration);
     const lifecycle = new ProductionLifecycleRouter({
       effects,
@@ -369,6 +375,19 @@ export const createProductionComposition = (
       workflowMcpEndpoint: options.workflowMcpEndpoint,
     });
     subagents = coordinator;
+    const incidents = new ProductionIncidentCoordinator(
+      persistence,
+      attention,
+      lifecycle,
+      instances,
+      {
+        secrets: [
+          configuration.pushover.applicationToken,
+          configuration.pushover.userKey,
+          configuration.t3.accessToken,
+        ],
+      },
+    );
     const consoleActions = new ProductionAttentionActions(
       persistence,
       attention,
@@ -393,7 +412,7 @@ export const createProductionComposition = (
     const mcp = createWorkflowMcpHttpHandler({
       board: dynamicTasks,
       escalationCoordinator: escalation,
-      lifecycle,
+      lifecycle: incidents,
       persistence,
       subagentCoordinator: coordinator,
     });
@@ -447,6 +466,7 @@ export const createProductionComposition = (
         await projects.reconcile(after);
         routing.update(after);
         await instances.synchronize(after);
+        await incidents.reconcile(after);
         for (const session of productionSessionTargets(persistence!)) {
           const record = persistence!.getInstance(session.instanceId);
           if (

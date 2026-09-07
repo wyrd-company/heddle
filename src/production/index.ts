@@ -45,6 +45,11 @@ export {
 } from "./error-visibility.js";
 export { ProductionInstanceController } from "./instance-controller.js";
 export {
+  incidentAdmissionPolicy,
+  ProductionIncidentCoordinator,
+  sanitizeIncidentValue,
+} from "./incident-coordinator.js";
+export {
   blueprintRepositoryStateAttention,
   BlueprintPushError,
   OrganizationBlueprintRepository,

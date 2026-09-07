@@ -377,6 +377,19 @@ describe("production attention actions", () => {
         threadId: runtime.threadId,
       },
     ]);
+    expect(
+      composition.persistence
+        .replayEvents(runtime.instanceId)
+        .filter(({ type }) => type === "operator:approval-accepted"),
+    ).toMatchObject([
+      {
+        payload: {
+          attentionId: "approval-attention",
+          requestId: "approval-one",
+          sessionKey: runtime.sessionKey,
+        },
+      },
+    ]);
 
     await composition.attention.raise({
       attentionId: "user-input-attention",

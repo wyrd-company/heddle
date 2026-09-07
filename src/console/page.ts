@@ -534,6 +534,7 @@ let scopeOptionsSignature;
 
 const scopeFromUrl = () => new URL(window.location.href).searchParams.get("scope") || "all";
 const attentionFromUrl = () => new URL(window.location.href).searchParams.get("attention");
+const instanceFromUrl = () => new URL(window.location.href).searchParams.get("instance");
 
 const taskFromUrl = () => {
   const value = new URL(window.location.href).searchParams.get("task");
@@ -575,6 +576,12 @@ const consoleUrl = (view, scope, taskId) => {
   url.searchParams.set("scope", scope);
   const attention = attentionFromUrl();
   if (attention !== null) url.searchParams.set("attention", attention);
+  return url.pathname + url.search;
+};
+
+const incidentLifecycleUrl = (entry) => {
+  const url = new URL(consoleUrl("lifecycle", entry.scope, entry.taskId), window.location.href);
+  url.searchParams.set("instance", entry.incidentId);
   return url.pathname + url.search;
 };
 
@@ -810,6 +817,19 @@ const renderAttention = (entries, focusRequested = false, refreshEntries = true)
     article.append(meta);
     article.append(text("h3", entry.heading));
     article.append(text("p", entry.message, "attention-entry-message"));
+    if (entry.incidentId && entry.taskId) {
+      const lifecycleLink = text(
+        "a",
+        "Open incident lifecycle →",
+        "attention-incident-link",
+      );
+      lifecycleLink.href = incidentLifecycleUrl(entry);
+      lifecycleLink.setAttribute(
+        "aria-label",
+        "Open incident lifecycle for task #" + entry.taskId,
+      );
+      article.append(lifecycleLink);
+    }
     if (entry.notificationVerification) {
       const verification = document.createElement("dl");
       verification.className = "attention-notification-verification";
@@ -1136,18 +1156,23 @@ const lifecycleViewer = () => {
   return window.heddleLifecycleViewer;
 };
 
-const pollLifecycle = (taskId, generation, afterSequence) => {
+const lifecycleRequest = (taskId, instanceId, afterSequence) =>
+  "/api/lifecycle?task=" + taskId +
+  (instanceId === null ? "" : "&instance=" + encodeURIComponent(instanceId)) +
+  "&after=" + afterSequence;
+
+const pollLifecycle = (taskId, instanceId, generation, afterSequence) => {
   lifecyclePollTimer = window.setTimeout(async () => {
     if (generation !== loadGeneration) return;
     try {
       const tail = await fetchJson(
-        "/api/lifecycle?task=" + taskId + "&after=" + afterSequence,
+        lifecycleRequest(taskId, instanceId, afterSequence),
       );
       if (generation !== loadGeneration) return;
       lifecycleViewer().append(tail);
       statusElement.textContent =
         "Lifecycle live · " + tail.nextSequence + " ordered events";
-      pollLifecycle(taskId, generation, tail.nextSequence);
+      pollLifecycle(taskId, instanceId, generation, tail.nextSequence);
     } catch (error) {
       if (generation !== loadGeneration) return;
       window.heddleLifecycleViewer?.clear();
@@ -1231,6 +1256,7 @@ async function load() {
       pollBoard(view, requestedScope, generation);
     } else {
       const requestedTaskId = taskFromUrl();
+      const requestedInstanceId = instanceFromUrl();
       const task = board.tasks.find(({ id }) => id === requestedTaskId);
       if (!task) throw new Error("lifecycle task does not exist");
       lifecycleTaskElement.textContent = "Task #" + task.id + " · " + task.title;
@@ -1238,7 +1264,7 @@ async function load() {
       let lifecycle;
       try {
         lifecycle = await fetchJson(
-          "/api/lifecycle?task=" + task.id + "&after=0",
+          lifecycleRequest(task.id, requestedInstanceId, 0),
         );
       } catch (error) {
         if (error?.code !== "lifecycle-not-started") throw error;
@@ -1252,9 +1278,16 @@ async function load() {
       }
       if (generation !== loadGeneration) return;
       lifecycleViewer().replace(lifecycle);
-      statusElement.textContent = "Lifecycle view for task #" + task.id;
+      statusElement.textContent =
+        (requestedInstanceId === null ? "Lifecycle" : "Incident lifecycle") +
+        " view for task #" + task.id;
       setLiveBoardHealth("snapshot");
-      pollLifecycle(task.id, generation, lifecycle.nextSequence);
+      pollLifecycle(
+        task.id,
+        requestedInstanceId,
+        generation,
+        lifecycle.nextSequence,
+      );
     }
   } catch (error) {
     if (generation !== loadGeneration) return;

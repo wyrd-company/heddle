@@ -26,6 +26,7 @@ describe("production error visibility", () => {
       "dynamic-task-authority-malformed": { incidentEligible: true },
       "epic-project-reconciliation-failed": { incidentEligible: true },
       "epic-status-transition-failed": { incidentEligible: true },
+      "incident-execution-failed": { incidentEligible: false },
       "instance-synchronization-failed": { incidentEligible: true },
       "lifecycle-attention-bridge-failed": { incidentEligible: true },
       "lifecycle-execution-failed": { incidentEligible: true },

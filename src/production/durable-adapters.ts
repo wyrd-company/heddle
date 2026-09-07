@@ -30,6 +30,7 @@ import type {
   ProductionErrorAttention,
 } from "./error-visibility.js";
 import { productionErrorIncidentEligible } from "./error-visibility.js";
+import { sanitizeIncidentValue } from "./incident-coordinator.js";
 
 export type DurableAttention =
   | BlueprintRepositoryAttention
@@ -58,6 +59,7 @@ export class DurableAttentionQueue {
   public constructor(
     private readonly persistence: SqlitePersistence,
     private readonly productionErrorPages?: ProductionErrorPagePort,
+    private readonly configuredSecrets: readonly string[] = [],
   ) {}
 
   async has(attentionId: string): Promise<boolean> {
@@ -65,14 +67,18 @@ export class DurableAttentionQueue {
   }
 
   async raise(attention: DurableAttention): Promise<void> {
+    attention = this.#sanitized(attention);
     this.#assertAttentionIdentity(attention.attentionId);
-    const productionError = isProductionErrorAttention(attention);
+    const errorAttention = isProductionErrorAttention(attention)
+      ? attention
+      : undefined;
     const floorProductionError =
-      productionError && !productionErrorIncidentEligible(attention.code);
+      errorAttention !== undefined &&
+      !productionErrorIncidentEligible(errorAttention.code);
     let pageError: unknown;
     if (floorProductionError) {
       try {
-        await this.productionErrorPages?.send(attention);
+        await this.productionErrorPages?.send(errorAttention!);
       } catch (error) {
         pageError = error;
       }
@@ -88,13 +94,29 @@ export class DurableAttentionQueue {
       }
       throw recordError;
     }
-    if (productionError && !floorProductionError) {
+    if (errorAttention !== undefined && !floorProductionError) {
       try {
-        await this.productionErrorPages?.send(attention);
+        await this.productionErrorPages?.send(errorAttention);
       } catch {
         // The durable console record is the fallback when paging is unavailable.
       }
     }
+  }
+
+  #sanitized(attention: DurableAttention): DurableAttention {
+    if (!isProductionErrorAttention(attention)) return attention;
+    let correlationTokens: string[] = [];
+    try {
+      correlationTokens = this.persistence
+        .listInstances()
+        .flatMap(({ state }) => Object.values(state.correlationTokens));
+    } catch {
+      // Paging remains available when persistence itself is the floor failure.
+    }
+    return sanitizeIncidentValue(attention, [
+      ...this.configuredSecrets,
+      ...correlationTokens,
+    ]) as ProductionErrorAttention;
   }
 
   async replayProductionErrorPages(): Promise<void> {
@@ -177,6 +199,7 @@ export class DurableAttentionQueue {
 
   list() {
     const runtimes = this.persistence.listReconcilerRuntime();
+    const incidents = this.persistence.listIncidentRuntime();
     const schedulerFailureSequence =
       this.persistence.currentSchedulerPassFailureSequence();
     return this.persistence.listAttention().map((record) => {
@@ -195,6 +218,7 @@ export class DurableAttentionQueue {
           ? undefined
           : this.persistence.notificationFailure(stableId),
         schedulerFailureSequence,
+        incidents,
       );
     });
   }

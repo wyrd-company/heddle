@@ -278,7 +278,7 @@ const readPublicAttention = async (
 
 const readPublicLifecycle = async (
   options: ConsoleServerOptions,
-  input: { afterSequence: number; taskId: number },
+  input: { afterSequence: number; instanceId?: string; taskId: number },
 ): Promise<ConsoleLifecycleSnapshot> => {
   const lifecycle = await options.state.readLifecycle(input);
   const correlationTokens = await options.state.listCorrelationTokens();
@@ -467,6 +467,14 @@ export const createConsoleServer = (options: ConsoleServerOptions) => {
             url.searchParams.get("task") ?? "",
             "task id",
           ),
+          ...(url.searchParams.get("instance") === null
+            ? {}
+            : {
+                instanceId: decodePathSegment(
+                  url.searchParams.get("instance")!,
+                  "instance id",
+                ),
+              }),
         });
         json(response, 200, lifecycle);
         return;

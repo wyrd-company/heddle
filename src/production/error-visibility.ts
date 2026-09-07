@@ -26,6 +26,7 @@ export const productionErrorCodeDeclarations = {
   "epic-project-reconciliation-failed": { incidentEligible: true },
   "epic-status-transition-failed": { incidentEligible: true },
   "instance-synchronization-failed": { incidentEligible: true },
+  "incident-execution-failed": { incidentEligible: false },
   "lifecycle-attention-bridge-failed": { incidentEligible: true },
   "lifecycle-execution-failed": { incidentEligible: true },
   "lifecycle-instance-absent": { incidentEligible: true },
@@ -125,7 +126,7 @@ export const productionErrorAttention = (input: {
   const identity =
     input.taskId === undefined
       ? `global:${input.varyByError === true ? errorFingerprint(input.error) : input.code}`
-      : `task:${input.taskId}${input.instanceId === undefined ? "" : `:${input.instanceId}`}`;
+      : `task:${input.taskId}${input.instanceId === undefined ? "" : `:${input.instanceId}`}${input.varyByError === true ? `:${errorFingerprint(input.error)}` : ""}`;
   return createProductionErrorAttention({
     attentionId: `production:${input.code}:${identity}`,
     code: input.code,

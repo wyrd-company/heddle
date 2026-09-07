@@ -115,6 +115,42 @@ describe("console client request ownership", () => {
     );
   });
 
+  it("reads and tails a selected incident through the lifecycle canvas", async () => {
+    const snapshot = {
+      blueprint: {
+        blobHash: "a".repeat(40),
+        edges: [],
+        id: "incident",
+        nodes: [{ id: "implement", uses: "wait" }],
+        path: "blueprints/incident.json",
+      },
+      currentStageIds: ["implement"],
+      events: [],
+      instanceId: "incident:synthetic-11",
+      nextSequence: 0,
+      status: "awaiting",
+      taskId: 11,
+    };
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      "http://console.test/?view=lifecycle&task=11&instance=incident%3Asynthetic-11&scope=all",
+      undefined,
+      snapshot,
+    );
+    await vi.waitFor(() => expect(harness.lifecycleSnapshots).toHaveLength(1));
+
+    expect(harness.lifecycleRequests).toEqual([
+      "/api/lifecycle?task=11&instance=incident%3Asynthetic-11&after=0",
+    ]);
+    expect(harness.lifecycleSnapshots[0]).toMatchObject({
+      blueprint: { id: "incident" },
+      instanceId: "incident:synthetic-11",
+    });
+    expect(harness.status.textContent).toBe(
+      "Incident lifecycle view for task #11",
+    );
+  });
+
   it("renders a visible structured deferral on a ready card", async () => {
     const harness = await clientHarness([rootTask, deferredTask]);
 

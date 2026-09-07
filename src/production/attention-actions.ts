@@ -103,6 +103,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       if (!(await this.#effectRecorded(validated))) {
         await this.#apply(validated);
       }
+      this.#recordAcceptedApproval(validated);
       if (
         !this.persistence.recordEffectCompleted(effectKind, stableId) &&
         !this.persistence.effectCompleted(effectKind, stableId)
@@ -112,6 +113,39 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     }
     if (!this.#schedulerResolutionIsCurrent(validated)) return;
     this.attention.resolve(input.attention.attentionId);
+  }
+
+  #recordAcceptedApproval(
+    input: Parameters<ConsoleAttentionActionPort["execute"]>[0],
+  ): void {
+    const contract = input.action.contract;
+    if (
+      contract.kind !== "t3.approval.respond" ||
+      contract.decision !== "accept"
+    ) {
+      return;
+    }
+    const alreadyRecorded = this.persistence
+      .replayEvents(contract.instanceId)
+      .some(
+        ({ payload, type }) =>
+          type === "operator:approval-accepted" &&
+          typeof payload === "object" &&
+          payload !== null &&
+          !Array.isArray(payload) &&
+          payload["requestId"] === contract.requestId &&
+          payload["sessionKey"] === contract.sessionKey,
+      );
+    if (alreadyRecorded) return;
+    this.persistence.appendEvent(
+      contract.instanceId,
+      "operator:approval-accepted",
+      {
+        attentionId: input.attention.attentionId,
+        requestId: contract.requestId,
+        sessionKey: contract.sessionKey,
+      },
+    );
   }
 
   #schedulerResolutionIsCurrent(
