@@ -8,6 +8,7 @@ import { URL } from "node:url";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { ProviderSelectionResolver } from "./provider-selection.js";
 import {
   resolveT3AwarenessPhase,
   T3ControlPlaneClient,
@@ -115,6 +116,23 @@ const waitForRequest = async (
   }
   throw new Error("Expected catalog RPC request");
 };
+
+const resolverFor = (client: T3ControlPlaneClient) =>
+  new ProviderSelectionResolver(
+    {
+      primary: {
+        model: "sample-model",
+        providerDisplayName: "Workbench Alpha",
+      },
+    },
+    client,
+  );
+
+const resolvePrimary = (client: T3ControlPlaneClient) =>
+  resolverFor(client).resolve("primary", {
+    interactionMode: "default",
+    runtimeMode: "auto",
+  });
 
 describe("resolveT3AwarenessPhase", () => {
   it.each<[string, Partial<T3ShellThread>, string]>([
@@ -285,6 +303,99 @@ describe("T3ControlPlaneClient", () => {
     await expect(reading).rejects.toThrow(
       "T3 server.getConfig RPC did not return a successful provider catalog",
     );
+    expect(socket.readyState).toBe(CatalogWebSocket.CLOSED);
+  });
+
+  it("normalizes a malformed WebSocket ticket through the resolver without disclosure", async () => {
+    const { constructor: webSocket, sockets } = catalogSocketFactory();
+    const client = new T3ControlPlaneClient({
+      accessToken: "access-token",
+      baseUrl: "http://t3.test",
+      catalogTimeoutMilliseconds: 10,
+      fetch: vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValue(
+          jsonResponse({ ticket: { detail: "ticket-payload-secret" } }),
+        ),
+      webSocket,
+    });
+
+    const resolution = resolvePrimary(client);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await Promise.resolve();
+    }
+    const socket = sockets[0];
+    if (socket !== undefined) {
+      socket.open();
+      const request = await waitForRequest(socket);
+      socket.message({
+        _tag: "Exit",
+        requestId: request.id,
+        exit: {
+          _tag: "Success",
+          value: {
+            providers: [
+              {
+                displayName: "Workbench Alpha",
+                driver: "sample-driver",
+                enabled: true,
+                installed: true,
+                instanceId: "instance-alpha",
+                models: [
+                  {
+                    isCustom: false,
+                    name: "Sample Model",
+                    slug: "sample-model",
+                  },
+                ],
+                status: "ready",
+                version: null,
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    const error = await resolution.catch((candidate: unknown) => candidate);
+    expect(error).toMatchObject({
+      message: "T3 provider catalog is unavailable",
+      reason: "provider-catalog-unavailable",
+    });
+    expect(String(error)).not.toContain("ticket-payload-secret");
+    expect(sockets).toHaveLength(0);
+  });
+
+  it("normalizes a successful RPC without a provider catalog through the resolver", async () => {
+    const { constructor: webSocket, sockets } = catalogSocketFactory();
+    const client = new T3ControlPlaneClient({
+      accessToken: "access-token",
+      baseUrl: "http://t3.test",
+      fetch: vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValue(jsonResponse({ ticket: "ticket" })),
+      webSocket,
+    });
+
+    const resolution = resolvePrimary(client);
+    const socket = await waitForSocket(sockets);
+    socket.open();
+    const request = await waitForRequest(socket);
+    socket.message({
+      _tag: "Exit",
+      requestId: request.id,
+      exit: {
+        _tag: "Success",
+        value: { settings: { secret: "catalog-payload-secret" } },
+      },
+    });
+
+    const error = await resolution.catch((candidate: unknown) => candidate);
+    expect(error).toMatchObject({
+      message: "T3 provider catalog is unavailable",
+      reason: "provider-catalog-unavailable",
+    });
+    expect(String(error)).not.toContain("catalog-payload-secret");
     expect(socket.readyState).toBe(CatalogWebSocket.CLOSED);
   });
 

@@ -194,6 +194,73 @@ describe("configured production composition", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("requires the relocated timeout adapter for a resolved codex selection", async () => {
+    fixture = await prepareProductionFixture();
+    const t3 = new SyntheticT3();
+
+    await expect(
+      createConfiguredProductionComposition(
+        {
+          blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+          configuration: configuredConfiguration(fixture.configuration),
+          configurationDirectory: fixture.root,
+          configurationPath: join(fixture.root, "config.yml"),
+          server: { host: "127.0.0.1", port: 3774 },
+        },
+        { t3 },
+      ),
+    ).rejects.toThrow(
+      "session.timeoutApplication is required for driver 'codex'",
+    );
+    expect(t3.commands).toEqual([]);
+  });
+
+  it("rejects the relocated timeout adapter for a resolved other driver", async () => {
+    fixture = await prepareProductionFixture();
+    const t3 = new SyntheticT3();
+    const readProviderCatalog = vi.fn(async () => [
+      {
+        availability: "available" as const,
+        displayName: "Workbench Alpha",
+        driverKind: "cursor",
+        enabled: true,
+        installed: true,
+        instanceId: "cursor",
+        models: [
+          {
+            isCustom: false,
+            name: "Sample Model",
+            slug: "sample-model",
+          },
+        ],
+        observedCliVersion: "2026.08.25-3e8eec8",
+        state: "ready",
+      },
+    ]);
+
+    await expect(
+      createConfiguredProductionComposition(
+        {
+          blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+          configuration: configuredConfiguration(fixture.configuration),
+          configurationDirectory: fixture.root,
+          configurationPath: join(fixture.root, "config.yml"),
+          server: { host: "127.0.0.1", port: 3774 },
+          timeoutApplication: {
+            arguments: [],
+            executable: process.execPath,
+            timeoutMilliseconds: 1_000,
+          },
+        },
+        { providerCatalog: { readProviderCatalog }, t3 },
+      ),
+    ).rejects.toThrow(
+      "session.timeoutApplication must be omitted for driver 'cursor'",
+    );
+    expect(readProviderCatalog).toHaveBeenCalledTimes(1);
+    expect(t3.commands).toEqual([]);
+  });
+
   it("isolates a configured provider-usage error before any T3 dispatch", async () => {
     fixture = await prepareProductionFixture();
     commandDirectory = await mkdtemp(
