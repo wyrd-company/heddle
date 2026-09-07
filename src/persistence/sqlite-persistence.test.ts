@@ -157,6 +157,25 @@ describe("SqlitePersistence", () => {
       },
     ]);
     const database = new Database(recovered.databasePath);
+    const rollbackAttentionId =
+      "production:scheduler-pass-failed:rollback-sample";
+    recovered.raiseAttention(rollbackAttentionId, {
+      code: "scheduler-pass-failed",
+      kind: "production-error",
+    });
+    const insertHistory = database.prepare(
+      `INSERT INTO heddle_scheduler_pass_history
+         (episode, type, error_json, recorded_at)
+       VALUES (?, ?, ?, ?)`,
+    );
+    insertHistory.run(2, "recovery", null, "2026-01-01T00:00:00.000Z");
+    insertHistory.run(2, "failure", "{}", "2026-01-01T00:00:01.000Z");
+    expect(() => recovered.recoverSchedulerPass([rollbackAttentionId])).toThrow(
+      /UNIQUE constraint failed/,
+    );
+    expect(recovered.listAttention()).toMatchObject([
+      { attentionId: rollbackAttentionId },
+    ]);
     expect(() =>
       database
         .prepare(
