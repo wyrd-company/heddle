@@ -14,6 +14,8 @@ import type {
   T3DispatchCommand,
   T3ProviderDispatchContext,
   T3WorkflowMcpProviderSession,
+  T3ProviderCatalogEntry,
+  T3ProviderCatalogModel,
 } from "../control-plane/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
@@ -79,6 +81,29 @@ export class SyntheticT3 implements ProductionT3Client {
   }> = [];
   readonly providerContexts: T3ProviderDispatchContext[] = [];
   readonly mcpRegistrations: T3WorkflowMcpProviderSession[] = [];
+  readonly providerCatalog: Array<
+    Omit<T3ProviderCatalogEntry, "models"> & {
+      models: T3ProviderCatalogModel[];
+    }
+  > = [
+    {
+      availability: "available",
+      displayName: "Workbench Alpha",
+      driverKind: "codex",
+      enabled: true,
+      installed: true,
+      instanceId: "codex",
+      models: [
+        {
+          isCustom: false,
+          name: "Sample Model",
+          slug: "sample-model",
+        },
+      ],
+      observedCliVersion: "0.91.0",
+      state: "ready",
+    },
+  ];
   readonly timeouts: HarnessToolTimeoutLaunchInput[] = [];
   readonly threads = new Set<string>();
   readonly userInputResponses: Array<{
@@ -136,25 +161,7 @@ export class SyntheticT3 implements ProductionT3Client {
   }
 
   async readProviderCatalog() {
-    return [
-      {
-        availability: "available" as const,
-        displayName: "Workbench Alpha",
-        driverKind: "codex",
-        enabled: true,
-        installed: true,
-        instanceId: "codex",
-        models: [
-          {
-            isCustom: false,
-            name: "Sample Model",
-            slug: "sample-model",
-          },
-        ],
-        observedCliVersion: "0.91.0",
-        state: "ready",
-      },
-    ];
+    return globalThis.structuredClone(this.providerCatalog);
   }
 
   async respondToApproval(
@@ -311,6 +318,7 @@ export const prepareProductionFixture =
               "answer",
               "create_finding",
               "create_follow_up",
+              "list_providers",
               "liveness",
               "spawn",
             ],
@@ -330,6 +338,7 @@ export const prepareProductionFixture =
               "answer",
               "create_finding",
               "create_follow_up",
+              "list_providers",
               "liveness",
               "spawn",
             ],
@@ -349,6 +358,7 @@ export const prepareProductionFixture =
               "answer",
               "create_finding",
               "create_follow_up",
+              "list_providers",
               "liveness",
               "spawn",
             ],
@@ -396,6 +406,7 @@ export const prepareProductionFixture =
               "answer",
               "create_finding",
               "create_follow_up",
+              "list_providers",
               "liveness",
               "spawn",
             ],

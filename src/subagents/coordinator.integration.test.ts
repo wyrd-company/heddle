@@ -259,6 +259,13 @@ describe.skipIf(!t3Binary)(
           { readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }) },
         ),
         persistence,
+        providerSelection: {
+          defaultRuntimeMode: "auto",
+          list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
+          resolve: async () => {
+            throw new Error("spawn is not used by this integration");
+          },
+        },
         prepareSession: async () => {
           throw new Error("spawn is not used by this integration");
         },

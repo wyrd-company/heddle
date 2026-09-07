@@ -6,6 +6,7 @@
 import {
   HandoffRenderError,
   HandoffTemplateError,
+  type ProviderSelectionResolver,
   type SessionObservationTarget,
   type SessionObserver,
   type SessionTemplateAuthority,
@@ -94,24 +95,6 @@ const uniqueTarget = (
     );
   }
   return matches[0]!;
-};
-
-const resolvedSelectionFor = (
-  configuration: ResolvedProductionConfiguration,
-  providerInstanceId: string,
-  modelSlug: string,
-) => {
-  const selections = configuration.session.resolvedSelections.filter(
-    (candidate) =>
-      candidate.providerInstanceId === providerInstanceId &&
-      candidate.model.slug === modelSlug,
-  );
-  if (selections.length !== 1) {
-    throw new Error(
-      `Provider instance '${providerInstanceId}' and model '${modelSlug}' do not identify one resolved startup selection`,
-    );
-  }
-  return selections[0]!;
 };
 
 export const productionSessionBindingFor = (
@@ -219,6 +202,7 @@ export const createProductionSubagentCoordinator = (options: {
   observer: SessionObserver;
   pacing: DispatchPacingEvaluator;
   persistence: SqlitePersistence;
+  providerResolver: ProviderSelectionResolver;
   resolveSystemPrompt: SystemPromptResolver;
   t3: ProductionT3Client;
   templateAuthority: SessionTemplateAuthority;
@@ -231,6 +215,7 @@ export const createProductionSubagentCoordinator = (options: {
     observer,
     pacing,
     persistence,
+    providerResolver,
     resolveSystemPrompt,
     t3,
     templateAuthority,
@@ -279,13 +264,27 @@ export const createProductionSubagentCoordinator = (options: {
     },
     pacing,
     persistence,
-    prepareSession: async ({
-      binding,
-      identity,
-      model,
-      provider,
-      resolvedBinding,
-    }) => {
+    providerSelection: {
+      defaultRuntimeMode: configuration.session.defaultRuntimeMode,
+      list: () =>
+        providerResolver.listAllowed(
+          {
+            interactionMode: configuration.session.interactionMode,
+            runtimeMode: configuration.session.defaultRuntimeMode,
+          },
+          configuration.session.resolvedSelections,
+        ),
+      resolve: async ({ alias, runtimeMode, sessionKey, threadId }) =>
+        bindResolvedSession(
+          await providerResolver.resolve(alias, {
+            interactionMode: configuration.session.interactionMode,
+            runtimeMode,
+          }),
+          sessionKey,
+          threadId,
+        ),
+    },
+    prepareSession: async ({ binding, identity, resolvedBinding }) => {
       const runtimes = persistence
         .listReconcilerRuntime()
         .filter(({ instanceId }) => instanceId === binding.instance.instanceId);
@@ -297,11 +296,9 @@ export const createProductionSubagentCoordinator = (options: {
       const session = configuration.session;
       const sessionBinding =
         resolvedBinding ??
-        bindResolvedSession(
-          resolvedSelectionFor(configuration, provider, model),
-          identity.sessionKey,
-          identity.threadId,
-        );
+        (() => {
+          throw new Error("Subagent provider selection was not resolved");
+        })();
       assertResolvedSessionBinding(
         sessionBinding,
         identity.sessionKey,

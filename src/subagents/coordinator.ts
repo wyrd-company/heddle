@@ -20,7 +20,9 @@ import type {
 import {
   sameResolvedSessionBinding,
   type ResolvedSessionBinding,
+  type ResolvedSessionRuntimeMode,
 } from "../persistence/index.js";
+import type { ProviderAliasListing } from "../control-plane/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/types.js";
 import { isTodoState } from "../todo/index.js";
 import {
@@ -33,10 +35,10 @@ import { stopTodoAssignmentTree } from "./delegation-teardown.js";
 import type { TodoAssignment } from "../todo/types.js";
 
 export type SpawnSubagentInput = {
-  model: string;
   operationId: string;
-  provider: string;
+  providerAlias: string;
   rootItemId: string;
+  runtimeMode?: ResolvedSessionRuntimeMode;
 };
 
 export type SpawnSubagentResult =
@@ -92,6 +94,16 @@ export type SubagentCoordinatorOptions = {
   }): Promise<void>;
   pacing: DispatchPacingEvaluator;
   persistence: DelegationStateStore;
+  providerSelection: {
+    readonly defaultRuntimeMode: ResolvedSessionRuntimeMode;
+    list(): Promise<ProviderAliasListing>;
+    resolve(input: {
+      alias: string;
+      runtimeMode: ResolvedSessionRuntimeMode;
+      sessionKey: string;
+      threadId: string;
+    }): Promise<ResolvedSessionBinding>;
+  };
   prepareSession(input: {
     binding: WorkflowMcpSessionBinding;
     identity: ChildIdentity;
@@ -152,8 +164,9 @@ export class SubagentCoordinator {
     if (
       existing !== undefined &&
       (existing.rootItemId !== input.rootItemId ||
-        existing.provider !== input.provider ||
-        existing.model !== input.model)
+        existing.binding.alias !== input.providerAlias ||
+        (input.runtimeMode !== undefined &&
+          existing.binding.runtimeMode !== input.runtimeMode))
     ) {
       throw new Error(
         `Subagent operation '${input.operationId}' does not match its stored assignment`,
@@ -167,6 +180,14 @@ export class SubagentCoordinator {
         sessionKey: this.#nextId(),
         threadId: this.#nextId(),
       };
+      const resolvedBinding = await this.options.providerSelection.resolve({
+        alias: input.providerAlias,
+        runtimeMode:
+          input.runtimeMode ??
+          this.options.providerSelection.defaultRuntimeMode,
+        sessionKey: identity.sessionKey,
+        threadId: identity.threadId,
+      });
       const activeSessions = await this.options.activeSessions();
       const parent = activeSessions.find(
         ({ sessionId }) => sessionId === binding.sessionKey,
@@ -180,7 +201,7 @@ export class SubagentCoordinator {
         {
           kind: "subagent",
           parentSessionId: binding.sessionKey,
-          provider: input.provider,
+          provider: resolvedBinding.providerInstanceId,
           sessionId: identity.sessionKey,
         },
         activeSessions,
@@ -191,8 +212,9 @@ export class SubagentCoordinator {
       preparation = await this.options.prepareSession({
         binding,
         identity,
-        model: input.model,
-        provider: input.provider,
+        model: resolvedBinding.modelSlug,
+        provider: resolvedBinding.providerInstanceId,
+        resolvedBinding,
         rootItemId: input.rootItemId,
       });
       assignment = claimTodoAssignment(this.options.persistence, {
@@ -277,6 +299,10 @@ export class SubagentCoordinator {
       throw error;
     }
     return { assignment, kind: "spawned" };
+  }
+
+  async listProviders(): Promise<ProviderAliasListing> {
+    return this.options.providerSelection.list();
   }
 
   async liveness(

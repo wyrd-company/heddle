@@ -150,12 +150,27 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
       { readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }) },
     ),
     persistence: store,
-    prepareSession: async ({ identity, model }) => ({
-      binding: resolvedSessionBindingFixture({
-        modelSlug: model,
-        sessionKey: identity.sessionKey,
-        threadId: identity.threadId,
-      }),
+    providerSelection: {
+      defaultRuntimeMode: "auto",
+      list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
+      resolve: async ({ alias, runtimeMode, sessionKey, threadId }) =>
+        resolvedSessionBindingFixture({
+          alias,
+          modelSlug: "sample-model",
+          providerInstanceId: "sample-provider",
+          runtimeMode,
+          sessionKey,
+          threadId,
+        }),
+    },
+    prepareSession: async ({ identity, model, resolvedBinding }) => ({
+      binding:
+        resolvedBinding ??
+        resolvedSessionBindingFixture({
+          modelSlug: model,
+          sessionKey: identity.sessionKey,
+          threadId: identity.threadId,
+        }),
       interactionMode: "default",
       modelSelection: { instanceId: "sample-driver", model },
       projectId: "sample-project",
@@ -195,9 +210,8 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
 
 const spawn = (coordinator: SubagentCoordinator, store: MemoryStore) =>
   coordinator.spawn(binding(store), {
-    model: "sample-model",
     operationId: "spawn-one",
-    provider: "sample-provider",
+    providerAlias: "primary",
     rootItemId: "root",
   });
 
@@ -249,9 +263,8 @@ describe("SubagentCoordinator", () => {
     );
     await expect(
       test.coordinator.spawn(binding(test.store), {
-        model: "different-model",
         operationId: "spawn-one",
-        provider: "sample-provider",
+        providerAlias: "different-selection",
         rootItemId: "root",
       }),
     ).rejects.toThrow(/does not match its stored assignment/);
@@ -431,6 +444,13 @@ describe("SubagentCoordinator", () => {
         { readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }) },
       ),
       persistence: racingStore,
+      providerSelection: {
+        defaultRuntimeMode: "auto",
+        list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
+        resolve: async () => {
+          throw new Error("not used");
+        },
+      },
       prepareSession: async () => {
         throw new Error("not used");
       },

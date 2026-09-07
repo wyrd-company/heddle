@@ -54,6 +54,22 @@ const aliases = {
   },
 };
 
+const startupSelections = async () => {
+  const resolver = new ProviderSelectionResolver(aliases, {
+    readProviderCatalog: async () => catalog(),
+  });
+  return [
+    ...(
+      await resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: {},
+        runtimeMode: "auto",
+      })
+    ).aliases.values(),
+  ];
+};
+
 describe("ProviderSelectionResolver", () => {
   it("keeps provider instance identity separate from a shared driver kind", async () => {
     const readProviderCatalog = vi.fn(async () => catalog());
@@ -312,5 +328,143 @@ describe("ProviderSelectionResolver", () => {
       reason: "provider-catalog-unavailable",
     });
     expect(String(error)).not.toContain("sensitive detail");
+  });
+
+  it("lists only configured aliases in alias order without provider instance data", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => [
+        ...catalog(),
+        {
+          ...catalog()[0]!,
+          displayName: "Unconfigured Workbench",
+          instanceId: "unconfigured-instance",
+        },
+      ],
+    });
+
+    const listing = await resolver.listAllowed(
+      { interactionMode: "default", runtimeMode: "auto" },
+      await startupSelections(),
+    );
+
+    expect(listing).toEqual({
+      aliases: [
+        {
+          alias: "primary",
+          driverKind: "sample-driver",
+          model: {
+            isCustom: false,
+            name: "Model Alpha",
+            slug: "model-alpha",
+          },
+          providerDisplayName: "Workbench Alpha",
+          reason: null,
+          selectable: true,
+        },
+        {
+          alias: "reviewer",
+          driverKind: "sample-driver",
+          model: {
+            isCustom: false,
+            name: "Model Beta",
+            slug: "model-beta",
+          },
+          providerDisplayName: "Workbench Beta",
+          reason: null,
+          selectable: true,
+        },
+        {
+          alias: "specialist",
+          driverKind: "sample-driver",
+          model: {
+            isCustom: true,
+            name: "Custom Model",
+            slug: "custom-model",
+          },
+          providerDisplayName: "Workbench Alpha",
+          reason: null,
+          selectable: true,
+        },
+      ],
+      runtimeModes: [
+        "approval-required",
+        "auto-accept-edits",
+        "auto",
+        "full-access",
+      ],
+      version: 1,
+    });
+    expect(JSON.stringify(listing)).not.toMatch(
+      /instance-alpha|instance-beta|unconfigured-instance|observedCliVersion/,
+    );
+  });
+
+  it.each([
+    {
+      catalog: () =>
+        catalog().filter(
+          ({ displayName }) => displayName !== "Workbench Alpha",
+        ),
+      reason: "provider-name-not-found",
+    },
+    {
+      catalog: () => [
+        catalog()[0]!,
+        { ...catalog()[0]!, instanceId: "instance-duplicate" },
+        catalog()[1]!,
+      ],
+      reason: "provider-name-ambiguous",
+    },
+    {
+      catalog: () => [{ ...catalog()[0]!, enabled: false }, catalog()[1]!],
+      reason: "provider-unavailable",
+    },
+    {
+      catalog: () => [{ ...catalog()[0]!, models: [] }, catalog()[1]!],
+      reason: "provider-model-not-found",
+    },
+  ] as const)(
+    "retains a nonselectable configured alias with $reason",
+    async (testCase) => {
+      const resolver = new ProviderSelectionResolver(aliases, {
+        readProviderCatalog: async () => testCase.catalog(),
+      });
+
+      const listing = await resolver.listAllowed(
+        { interactionMode: "default", runtimeMode: "auto" },
+        await startupSelections(),
+      );
+
+      expect(listing.aliases.find(({ alias }) => alias === "primary")).toEqual({
+        alias: "primary",
+        driverKind: "sample-driver",
+        model: {
+          isCustom: false,
+          name: "Model Alpha",
+          slug: "model-alpha",
+        },
+        providerDisplayName: "Workbench Alpha",
+        reason: testCase.reason,
+        selectable: false,
+      });
+    },
+  );
+
+  it("fails listing with the same safe catalog error used by selection", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => {
+        throw new Error("credential-shaped catalog failure");
+      },
+    });
+
+    await expect(
+      resolver.listAllowed(
+        { interactionMode: "default", runtimeMode: "auto" },
+        await startupSelections(),
+      ),
+    ).rejects.toMatchObject({
+      message: "T3 provider catalog is unavailable",
+      reason: "provider-catalog-unavailable",
+    });
   });
 });

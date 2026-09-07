@@ -21,10 +21,12 @@ import {
   SessionObserver,
   steerStageSession,
   T3ControlPlaneClient,
+  ProviderSelectionResolver,
   type SessionObservationT3Client,
   type SessionTemplateAuthority,
   type SessionT3Client,
   type SystemPromptResolver,
+  type T3ProviderCatalogReader,
 } from "../control-plane/index.js";
 import {
   type LifecycleEffect,
@@ -105,6 +107,7 @@ export type ProductionCompositionOptions = {
   onSchedulerError?: (error: unknown) => void;
   notificationNow?: () => number;
   providerUsage: ProviderUsageSource;
+  providerResolver?: ProviderSelectionResolver;
   pushoverFetch?: typeof globalThis.fetch;
   pushoverTransport?: PushoverTransport;
   resolveSystemPrompt?: SystemPromptResolver;
@@ -153,6 +156,20 @@ export const createProductionComposition = (
       stateDirectory: configuration.stateDirectory,
     });
     const t3 = options.t3 ?? new T3ControlPlaneClient(configuration.t3);
+    const providerCatalog =
+      "readProviderCatalog" in t3
+        ? (t3 as ProductionT3Client & T3ProviderCatalogReader)
+        : {
+            readProviderCatalog: async () => {
+              throw new Error("T3 provider catalog reader is not configured");
+            },
+          };
+    const providerResolver =
+      options.providerResolver ??
+      new ProviderSelectionResolver(
+        configuration.providerAliases,
+        providerCatalog,
+      );
     const resolveSystemPrompt =
       options.resolveSystemPrompt ?? resolveBuiltInSystemPrompt;
     const pushoverTransport =
@@ -370,6 +387,7 @@ export const createProductionComposition = (
       observer,
       pacing,
       persistence,
+      providerResolver,
       resolveSystemPrompt,
       t3,
       templateAuthority,

@@ -79,7 +79,7 @@ const configuredCompositionInputs = async (
     loaded.configuration,
     providerResolver,
   );
-  return { configuration, t3 };
+  return { configuration, providerResolver, t3 };
 };
 
 const productionOptions = (
@@ -95,6 +95,7 @@ const productionOptions = (
     blueprintsRepositoryRoot: loaded.blueprintsRepositoryRoot,
     configuration: inputs.configuration,
     providerUsage: providerUsageSource(loaded),
+    providerResolver: inputs.providerResolver,
     resolveSystemPrompt: configurationDirectorySystemPromptResolver(
       loaded.configurationDirectory,
     ),

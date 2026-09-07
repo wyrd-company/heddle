@@ -86,6 +86,26 @@ export type ResolvedProviderStartup = {
   readonly providerBudgets: Readonly<Record<string, ProviderUsageBudget>>;
 };
 
+export type ProviderAliasAvailabilityReason = Exclude<
+  ProviderSelectionReason,
+  "provider-alias-not-allowed" | "provider-catalog-unavailable"
+>;
+
+export type ProviderAliasAvailability = {
+  readonly alias: string;
+  readonly driverKind: string;
+  readonly model: T3ProviderCatalogModel;
+  readonly providerDisplayName: string;
+  readonly reason: ProviderAliasAvailabilityReason | null;
+  readonly selectable: boolean;
+};
+
+export type ProviderAliasListing = {
+  readonly aliases: readonly ProviderAliasAvailability[];
+  readonly runtimeModes: readonly T3RuntimeMode[];
+  readonly version: 1;
+};
+
 export type ProviderStartupInputs = ProviderSelectionInputs & {
   readonly defaultAlias: string;
   readonly providerBudgets: Readonly<Record<string, ProviderUsageBudget>>;
@@ -134,6 +154,56 @@ export class ProviderSelectionResolver {
     inputs: ProviderSelectionInputs,
   ): Promise<ResolvedProviderSelection> {
     return this.resolveFromCatalog(await this.readCatalog(), alias, inputs);
+  }
+
+  public async listAllowed(
+    inputs: ProviderSelectionInputs,
+    startupSelections: readonly ResolvedProviderSelection[],
+  ): Promise<ProviderAliasListing> {
+    const catalog = await this.readCatalog();
+    const startupByAlias = new Map(
+      startupSelections.map((selection) => [selection.alias, selection]),
+    );
+    const aliases = [...this.#aliases.keys()].sort().map((alias) => {
+      const startup = startupByAlias.get(alias);
+      if (startup === undefined) {
+        throw new TypeError(
+          `Provider alias '${alias}' has no resolved startup selection`,
+        );
+      }
+      try {
+        const current = this.resolveFromCatalog(catalog, alias, inputs);
+        return {
+          alias,
+          driverKind: current.driverKind,
+          model: { ...current.model },
+          providerDisplayName: current.providerDisplayName,
+          reason: null,
+          selectable: true,
+        } satisfies ProviderAliasAvailability;
+      } catch (error) {
+        if (
+          !(error instanceof ProviderSelectionError) ||
+          error.reason === "provider-alias-not-allowed" ||
+          error.reason === "provider-catalog-unavailable"
+        ) {
+          throw error;
+        }
+        return {
+          alias,
+          driverKind: startup.driverKind,
+          model: { ...startup.model },
+          providerDisplayName: startup.providerDisplayName,
+          reason: error.reason,
+          selectable: false,
+        } satisfies ProviderAliasAvailability;
+      }
+    });
+    return {
+      aliases,
+      runtimeModes: [...T3_RUNTIME_MODES],
+      version: 1,
+    };
   }
 
   public resolveFromCatalog(

@@ -11,11 +11,33 @@ import type {
   WorkflowMcpToolContributor,
 } from "../mcp-server/types.js";
 import type { SubagentCoordinator } from "./coordinator.js";
+import {
+  ProviderSelectionError,
+  T3_RUNTIME_MODES,
+} from "../control-plane/index.js";
 
 const result = (value: Record<string, unknown>) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value) }],
   structuredContent: value,
 });
+
+const selectionResult = async (
+  action: () => Promise<Record<string, unknown>>,
+) => {
+  try {
+    return result(await action());
+  } catch (error) {
+    if (!(error instanceof ProviderSelectionError)) throw error;
+    const structuredContent = {
+      error: { message: error.message, reason: error.reason },
+    };
+    return {
+      content: [{ type: "text" as const, text: error.message }],
+      isError: true,
+      structuredContent,
+    };
+  }
+};
 
 const registerSpawn = (
   coordinator: SubagentCoordinator,
@@ -29,14 +51,29 @@ const registerSpawn = (
         "Assign a todo subtree and start an asynchronous child session",
       inputSchema: z
         .object({
-          model: z.string().trim().min(1),
           operationId: z.string().trim().min(1),
-          provider: z.string().trim().min(1),
+          providerAlias: z.string().trim().min(1),
           rootItemId: z.string().trim().min(1),
+          runtimeMode: z.enum(T3_RUNTIME_MODES).optional(),
         })
         .strict(),
     },
-    async (input) => result(await coordinator.spawn(context.binding, input)),
+    async (input) =>
+      selectionResult(() => coordinator.spawn(context.binding, input)),
+  );
+};
+
+const registerListProviders = (
+  coordinator: SubagentCoordinator,
+  server: McpServer,
+): void => {
+  server.registerTool(
+    "list_providers",
+    {
+      description: "List the configured provider aliases available to spawn",
+      inputSchema: z.object({}).strict(),
+    },
+    async () => selectionResult(() => coordinator.listProviders()),
   );
 };
 
@@ -63,6 +100,10 @@ export const workflowMcpSubagentTools = (
     name: "liveness",
     register: (server, context) =>
       registerLiveness(coordinator, server, context),
+  },
+  {
+    name: "list_providers",
+    register: (server) => registerListProviders(coordinator, server),
   },
   {
     name: "spawn",

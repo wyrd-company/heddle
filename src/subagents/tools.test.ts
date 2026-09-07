@@ -16,14 +16,23 @@ describe("subagent MCP tool contributors", () => {
     for (const kind of ["standard-delivery", "trivial"] as const) {
       const blueprint = deliveryBlueprintFixture(kind);
       for (const tool of blueprint.nodes.flatMap(({ tools }) => tools ?? [])) {
-        if (tool === "spawn" || tool === "liveness") declared.add(tool);
+        if (
+          tool === "spawn" ||
+          tool === "liveness" ||
+          tool === "list_providers"
+        )
+          declared.add(tool);
       }
     }
 
     expect(contributors.map(({ name }) => name).sort()).toEqual(
       [...declared].sort(),
     );
-    expect([...declared].sort()).toEqual(["liveness", "spawn"]);
+    expect([...declared].sort()).toEqual([
+      "list_providers",
+      "liveness",
+      "spawn",
+    ]);
 
     const registered: string[] = [];
     const server = {
@@ -34,6 +43,6 @@ describe("subagent MCP tool contributors", () => {
     for (const contributor of contributors) {
       contributor.register(server as never, {} as never);
     }
-    expect(registered.sort()).toEqual(["liveness", "spawn"]);
+    expect(registered.sort()).toEqual(["list_providers", "liveness", "spawn"]);
   });
 });

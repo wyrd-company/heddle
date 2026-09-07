@@ -17,6 +17,7 @@ import {
   SyntheticT3,
 } from "./composition.test-support.js";
 import { productionSessionTargets } from "./subagent-composition.js";
+import type { SpawnSubagentResult } from "../subagents/index.js";
 
 const storedCorrelationToken = (handoffs: JsonValue[]): string => {
   const stored = handoffs.find(
@@ -36,6 +37,38 @@ const storedCorrelationToken = (handoffs: JsonValue[]): string => {
     throw new Error("Fixture stage has no correlation token");
   }
   return stored["correlationToken"];
+};
+
+const callMcpTool = async (
+  composition: ReturnType<typeof createProductionComposition>,
+  token: string,
+  name: string,
+  arguments_: Record<string, unknown>,
+) => {
+  const response = await composition.mcp.fetch(
+    new globalThis.Request("http://production.invalid/mcp", {
+      body: JSON.stringify({
+        id: globalThis.crypto.randomUUID(),
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { arguments: arguments_, name },
+      }),
+      headers: {
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    }),
+  );
+  expect(response.status).toBe(200);
+  return (await response.json()) as {
+    result?: {
+      content?: Array<{ text?: string }>;
+      isError?: boolean;
+      structuredContent?: unknown;
+    };
+  };
 };
 
 describe("production subagent composition", () => {
@@ -59,11 +92,40 @@ describe("production subagent composition", () => {
           slug: "sample-child-model",
         },
       },
+      {
+        ...fixture.configuration.session.defaultSelection,
+        alias: "grandchild-selection",
+        model: {
+          isCustom: false,
+          name: "Sample Grandchild Model",
+          slug: "sample-grandchild-model",
+        },
+      },
     ];
+    fixture.configuration.providerAliases["child-selection"] = {
+      model: "sample-child-model",
+      providerDisplayName: "Workbench Alpha",
+    };
+    fixture.configuration.providerAliases["grandchild-selection"] = {
+      model: "sample-grandchild-model",
+      providerDisplayName: "Workbench Alpha",
+    };
     fixture.configuration.pacing.providerBudgets = {
       codex: { usageLimit: 100 },
     };
     const t3 = new SyntheticT3();
+    t3.providerCatalog[0]!.models.push(
+      {
+        isCustom: false,
+        name: "Sample Child Model",
+        slug: "sample-child-model",
+      },
+      {
+        isCustom: false,
+        name: "Sample Grandchild Model",
+        slug: "sample-grandchild-model",
+      },
+    );
     const systemPrompt = "# Operator session guidance";
     const resolveSystemPrompt = vi.fn(async () => systemPrompt);
     const readProviderUsage = vi.fn(async () => ({
@@ -109,18 +171,43 @@ describe("production subagent composition", () => {
       result?: { tools?: Array<{ name: string }> };
     };
     expect(toolsBody.result?.tools?.map(({ name }) => name)).toEqual(
-      expect.arrayContaining(["liveness", "spawn"]),
+      expect.arrayContaining(["list_providers", "liveness", "spawn"]),
     );
+    const listed = await callMcpTool(
+      composition,
+      parent.token,
+      "list_providers",
+      {},
+    );
+    expect(listed.result?.structuredContent).toMatchObject({
+      aliases: [
+        expect.objectContaining({ alias: "child-selection", selectable: true }),
+        expect.objectContaining({
+          alias: "grandchild-selection",
+          selectable: true,
+        }),
+        expect.objectContaining({ alias: "primary", selectable: true }),
+      ],
+      version: 1,
+    });
+    expect(JSON.stringify(listed)).not.toContain("providerInstanceId");
     const parentRuntime = composition.persistence
       .listSessionRuntime()
       .find(({ sessionKey }) => sessionKey === parent.sessionKey)!;
 
-    const spawned = await composition.subagents.spawn(parent, {
-      model: "sample-child-model",
-      operationId: "spawn-child-one",
-      provider: "codex",
-      rootItemId: "deliver",
-    });
+    const spawnResponse = await callMcpTool(
+      composition,
+      parent.token,
+      "spawn",
+      {
+        operationId: "spawn-child-one",
+        providerAlias: "child-selection",
+        rootItemId: "deliver",
+      },
+    );
+    expect(spawnResponse.result?.isError).not.toBe(true);
+    const spawned = spawnResponse.result
+      ?.structuredContent as SpawnSubagentResult;
     expect(spawned).toMatchObject({
       assignment: {
         depth: 1,
@@ -184,6 +271,7 @@ describe("production subagent composition", () => {
     const originalChildCommands = t3.commands.filter(
       ({ threadId }) => threadId === spawned.assignment.threadId,
     );
+    t3.providerCatalog.splice(0);
     fixture.configuration.session.resolvedSelections = [];
     fixture.configuration.session.defaultSelection = {
       ...fixture.configuration.session.defaultSelection,
@@ -192,9 +280,8 @@ describe("production subagent composition", () => {
     };
     await expect(
       composition.subagents.spawn(parent, {
-        model: "sample-child-model",
         operationId: "spawn-child-one",
-        provider: "codex",
+        providerAlias: "child-selection",
         rootItemId: "deliver",
       }),
     ).resolves.toMatchObject({
@@ -219,9 +306,8 @@ describe("production subagent composition", () => {
 
     await expect(
       composition.subagents.spawn(parent, {
-        model: "sample-child-model",
         operationId: "spawn-child-two",
-        provider: "codex",
+        providerAlias: "child-selection",
         rootItemId: "deliver",
       }),
     ).resolves.toMatchObject({
@@ -230,9 +316,8 @@ describe("production subagent composition", () => {
     });
     await expect(
       composition.subagents.spawn(child, {
-        model: "sample-grandchild-model",
         operationId: "spawn-grandchild",
-        provider: "codex",
+        providerAlias: "grandchild-selection",
         rootItemId: "deliver",
       }),
     ).resolves.toMatchObject({
@@ -278,7 +363,7 @@ describe("production subagent composition", () => {
       ...fixture.configuration.session.resolvedSelections,
       {
         alias: "secondary",
-        driverKind: "cursor",
+        driverKind: "codex",
         interactionMode: "default",
         model: {
           isCustom: false,
@@ -299,6 +384,23 @@ describe("production subagent composition", () => {
       windowStartedAt: 0,
     }));
     const t3 = new SyntheticT3();
+    t3.providerCatalog.push({
+      availability: "available",
+      displayName: "Workbench Beta",
+      driverKind: "codex",
+      enabled: true,
+      installed: true,
+      instanceId: "provider-beta",
+      models: [
+        {
+          isCustom: false,
+          name: "Sample Model",
+          slug: "sample-model",
+        },
+      ],
+      observedCliVersion: "catalog-version-secondary",
+      state: "ready",
+    });
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -321,22 +423,22 @@ describe("production subagent composition", () => {
       .find(({ sessionKey }) => sessionKey === parent.sessionKey)!;
 
     const spawned = await composition.subagents.spawn(parent, {
-      model: "sample-model",
       operationId: "delegated-provider",
-      provider: "provider-beta",
+      providerAlias: "secondary",
       rootItemId: "deliver",
+      runtimeMode: "full-access",
     });
     expect(spawned).toMatchObject({
       assignment: {
         binding: {
           alias: "secondary",
-          driverKind: "cursor",
+          driverKind: "codex",
           interactionMode: "default",
           modelSlug: "sample-model",
           observedCliVersion: "catalog-version-secondary",
           providerDisplayName: "Workbench Beta",
           providerInstanceId: "provider-beta",
-          runtimeMode: "auto-accept-edits",
+          runtimeMode: "full-access",
           sessionKey: expect.any(String),
           threadId: expect.any(String),
         },
@@ -374,12 +476,17 @@ describe("production subagent composition", () => {
           threadId: spawned.assignment.threadId,
           type: "thread.create",
         }),
+        expect.objectContaining({
+          runtimeMode: "full-access",
+          threadId: spawned.assignment.threadId,
+          type: "thread.turn.start",
+        }),
       ]),
     );
     expect(t3.timeouts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          driver: "cursor",
+          driver: "codex",
           providerInstanceId: "provider-beta",
           threadId: spawned.assignment.threadId,
         }),
@@ -389,7 +496,7 @@ describe("production subagent composition", () => {
       expect.arrayContaining([
         expect.objectContaining({
           cliVersion: "catalog-version-secondary",
-          driver: "cursor",
+          driver: "codex",
           providerInstanceId: "provider-beta",
         }),
       ]),
@@ -447,6 +554,146 @@ describe("production subagent composition", () => {
     await composition.close();
   });
 
+  it("rechecks listed aliases at spawn and contains forbidden selections before effects", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    fixture.configuration.providerAliases.secondary = {
+      model: "model-beta",
+      providerDisplayName: "Workbench Beta",
+    };
+    fixture.configuration.session.resolvedSelections.push({
+      alias: "secondary",
+      driverKind: "sample-driver",
+      interactionMode: "default",
+      model: {
+        isCustom: false,
+        name: "Model Beta",
+        slug: "model-beta",
+      },
+      observedCliVersion: "2.0.0",
+      providerDisplayName: "Workbench Beta",
+      providerInstanceId: "provider-beta",
+      runtimeMode: "auto-accept-edits",
+    });
+    const t3 = new SyntheticT3();
+    t3.providerCatalog.push({
+      availability: "available",
+      displayName: "Workbench Beta",
+      driverKind: "sample-driver",
+      enabled: true,
+      installed: true,
+      instanceId: "provider-beta",
+      models: [
+        {
+          isCustom: false,
+          name: "Model Beta",
+          slug: "model-beta",
+        },
+      ],
+      observedCliVersion: "2.0.0",
+      state: "ready",
+    });
+    const readProviderUsage = vi.fn(async () => ({
+      used: 0,
+      windowStartedAt: 0,
+    }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: { readFiveHourWindow: readProviderUsage },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    const record = composition.persistence.getInstance(
+      `task-${fixture.taskId}`,
+    )!;
+    const parent = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(storedCorrelationToken(record.state.handoffs));
+
+    const listed = await callMcpTool(
+      composition,
+      parent.token,
+      "list_providers",
+      {},
+    );
+    expect(listed.result?.structuredContent).toMatchObject({
+      aliases: expect.arrayContaining([
+        expect.objectContaining({ alias: "secondary", selectable: true }),
+      ]),
+    });
+    const effectsBefore = {
+      commands: t3.commands.length,
+      mcpRegistrations: t3.mcpRegistrations.length,
+      timeouts: t3.timeouts.length,
+      usageReads: readProviderUsage.mock.calls.length,
+    };
+    t3.providerCatalog.find(
+      ({ instanceId }) => instanceId === "provider-beta",
+    )!.enabled = false;
+
+    for (const [providerAlias, reason] of [
+      ["secondary", "provider-unavailable"],
+      ["unknown", "provider-alias-not-allowed"],
+    ] as const) {
+      const rejected = await callMcpTool(composition, parent.token, "spawn", {
+        operationId: `reject-${providerAlias}`,
+        providerAlias,
+        rootItemId: "deliver",
+      });
+      expect(rejected.result?.isError).toBe(true);
+      expect(rejected.result?.structuredContent).toMatchObject({
+        error: { reason },
+      });
+    }
+    const rawSelection = await callMcpTool(composition, parent.token, "spawn", {
+      model: "model-beta",
+      operationId: "reject-raw-selection",
+      provider: "provider-beta",
+      rootItemId: "deliver",
+    });
+    expect(rawSelection.result?.isError).toBe(true);
+    const catalogFailure = vi
+      .spyOn(t3, "readProviderCatalog")
+      .mockRejectedValueOnce(new Error("credential-shaped transport detail"));
+    const failedListing = await callMcpTool(
+      composition,
+      parent.token,
+      "list_providers",
+      {},
+    );
+    expect(failedListing.result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: {
+          message: "T3 provider catalog is unavailable",
+          reason: "provider-catalog-unavailable",
+        },
+      },
+    });
+    expect(JSON.stringify(failedListing)).not.toContain(
+      "credential-shaped transport detail",
+    );
+    expect(catalogFailure).toHaveBeenCalledTimes(1);
+    const current = composition.persistence.getInstance(record.instanceId)!;
+    expect(isTodoState(current.state.todoState)).toBe(true);
+    if (!isTodoState(current.state.todoState)) {
+      throw new Error("Todo state is absent");
+    }
+    expect(
+      current.state.todoState.lists.flatMap((list) => list.assignments ?? []),
+    ).toEqual([]);
+    expect({
+      commands: t3.commands.length,
+      mcpRegistrations: t3.mcpRegistrations.length,
+      timeouts: t3.timeouts.length,
+      usageReads: readProviderUsage.mock.calls.length,
+    }).toEqual(effectsBefore);
+    await composition.close();
+  });
+
   it("routes a pending child escalation after restart through the durable parent binding", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
@@ -471,6 +718,24 @@ describe("production subagent composition", () => {
         runtimeMode: "full-access",
       },
     ];
+    const firstT3 = new SyntheticT3();
+    firstT3.providerCatalog.push({
+      availability: "available",
+      displayName: "Workbench Beta",
+      driverKind: "cursor",
+      enabled: true,
+      installed: true,
+      instanceId: "provider-beta",
+      models: [
+        {
+          isCustom: false,
+          name: "Model Secondary",
+          slug: "model-secondary",
+        },
+      ],
+      observedCliVersion: "2.0.0",
+      state: "ready",
+    });
     const first = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -479,7 +744,7 @@ describe("production subagent composition", () => {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
-      t3: new SyntheticT3(),
+      t3: firstT3,
     });
     await first.start();
     const instanceId = `task-${fixture.taskId}`;
@@ -492,9 +757,8 @@ describe("production subagent composition", () => {
       .listSessionRuntime()
       .find(({ sessionKey }) => sessionKey === parent.sessionKey)!.binding;
     const spawned = await first.subagents.spawn(parent, {
-      model: "model-secondary",
       operationId: "spawn-escalating-child",
-      provider: "provider-beta",
+      providerAlias: "secondary",
       rootItemId: "deliver",
     });
     if (spawned.kind !== "spawned") throw new Error("Child was deferred");

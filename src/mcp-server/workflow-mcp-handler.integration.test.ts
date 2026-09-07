@@ -1846,6 +1846,7 @@ describe("workflow MCP HTTP server", () => {
       "todo_add",
       "todo_edit",
       "todo_reorder",
+      "list_providers",
       "spawn",
       "liveness",
       "answer",
