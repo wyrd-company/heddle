@@ -72,8 +72,8 @@ Mechanical worktree preparation, review snapshots, review landing, and board
 status mirroring invoke these tools without a shell. Startup does not replace
 or infer their locations.
 
-This complete single-product example uses Cursor and no provider budget, so it
-omits both executable adapters:
+This complete single-product example uses one provider alias and no provider
+budget, so it omits the provider-usage executable:
 
 ```yaml
 adHocProject:
@@ -87,13 +87,16 @@ observationThresholds:
   failedMilliseconds: 60000
   stalledMilliseconds: 60000
 pacing:
-  defaultProvider: cursor
   maxConcurrentSessions: 2
   providerBudgets: {}
   subagents:
     maxDepth: 2
     maxFanOut: 2
   usageWindowHours: 5
+providerAliases:
+  primary:
+    providerDisplayName: Workbench Alpha
+    model: model-alpha
 products:
   - name: Sample collection
     repos:
@@ -110,11 +113,9 @@ server:
   port: 3774
 session:
   baseRef: main
-  cliVersion: 2026.08.25-3e8eec8
-  driver: cursor
+  defaultProviderAlias: primary
+  defaultRuntimeMode: auto
   interactionMode: default
-  model: sample-model
-  runtimeMode: auto
   skillPointer: skill://sample
   worktreesRoot: /workspaces/worktrees
 stageThresholds:
@@ -139,17 +140,177 @@ attention when a task, epic, or lifecycle stage refers to authority outside
 these declarations; it does not inspect diffs or branches to guess.
 
 Other required values are the absolute board and state directories, optional
-worktree root, reconciliation cadence, bounded stop timeout, provider pacing,
-session provider settings, observation and per-stage staleness thresholds, and
-Pushover routing. The server port is a fixed integer from 1 through 65535. T3
+worktree root, reconciliation cadence, bounded stop timeout, provider aliases,
+provider pacing, session defaults, observation and per-stage staleness
+thresholds, and Pushover routing. The server port is a fixed integer from 1
+through 65535. T3
 and Pushover secrets enter only through operator-owned
-`config.yml`; Heddle does not log, emit, or persist them. The configured pacing
-`defaultProvider` must equal the session
-`driver` used for top-level lifecycle stages. Delegated subagents carry their
-explicit provider and model through the same pacing evaluator and T3 provider
-preconditions.
+`config.yml`; Heddle does not log, emit, or persist them. Every lifecycle and
+delegated session resolves an allowed alias before it enters pacing or T3.
 T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
 the runtime validator and configuration schema reject other schemes.
+
+## Provider and session selection
+
+`providerAliases` is the operator-owned allowlist. An alias matches
+`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, is at most 64 characters, and contains
+exactly `providerDisplayName` and `model`. Both values are nonempty strings.
+`providerDisplayName` is the exact, case-sensitive display name from the T3
+provider catalog. `model` is the exact, case-sensitive T3 model slug. It is not
+a model display name or model alias.
+
+Heddle reads `ServerConfig.providers` through T3's authenticated
+`server.getConfig` WebSocket RPC. It sends the configured bearer token to
+`POST /api/auth/websocket-ticket`, changes `http` to `ws` or `https` to `wss`,
+connects to `/ws?wsTicket=<ticket>`, performs one bounded RPC, and
+closes the connection. The one-use ticket is not persisted, logged, or reused.
+The control token needs `orchestration:read`, the same read scope used for the
+orchestration shell. Heddle discards the rest of the returned configuration. It
+keeps these values distinct:
+
+| Value                 | Authority and use                                      |
+| --------------------- | ------------------------------------------------------ |
+| provider alias        | Heddle authorization and operator configuration        |
+| provider display name | T3 catalog matching and operator diagnostics           |
+| provider instance ID  | T3 routing and pacing identity                         |
+| driver kind           | T3 capability metadata and optional launch preparation |
+| model slug            | T3 dispatch model identity                             |
+
+Startup validates and resolves every alias, `session.defaultProviderAlias`, and
+each `pacing.providerBudgets` key against one catalog snapshot. A selectable
+provider has one exact display-name match and is available, enabled, installed,
+and `ready`; its model catalog contains the configured slug. Providers without
+a display name cannot be selected. Duplicate display names are ambiguous.
+Startup fails before the server binds when this authority is invalid or the
+catalog cannot be read.
+
+New stage occurrences, new subagent assignments, and `list_providers` use a
+fresh catalog snapshot. Selection failures use one of these safe reasons:
+`provider-catalog-unavailable`, `provider-alias-not-allowed`,
+`provider-name-not-found`, `provider-name-ambiguous`,
+`provider-unavailable`, or `provider-model-not-found`. No failure tries another
+alias, provider, or model. A T3 rejection after resolution is reported as that
+T3 failure and also has no fallback.
+
+Task front matter can override provider selection with this exact optional
+scalar field:
+
+```yaml
+provider-alias: specialist
+```
+
+A wait node in a lifecycle blueprint can declare these exact optional fields:
+
+```yaml
+provider-alias: reviewer
+runtime-mode: full-access
+```
+
+Effective provider selection is task `provider-alias`, then wait-node
+`provider-alias`, then `session.defaultProviderAlias`. Only absence falls
+through. A present null, empty, non-string, malformed, or unknown alias is an
+error with no fallback. Mechanical nodes cannot declare these fields. Tasks
+cannot override runtime mode. Effective runtime mode is wait-node
+`runtime-mode`, then `session.defaultRuntimeMode`.
+
+Runtime mode is independent from provider selection. Heddle uses T3's exact
+vocabulary: `approval-required`, `auto-accept-edits`, `auto`, and
+`full-access`. `full-access` is selectable for every configured provider and is
+forwarded unchanged. It is not mandatory; the operator chooses the default.
+
+Heddle stores one resolved session binding before worktree creation, timeout
+preparation, MCP registration, thread creation, or first-turn dispatch.
+
+The binding records the session and occurrence identity, selected alias,
+display-name snapshot,
+provider instance ID, open driver kind, observed provider CLI version, model
+slug, runtime mode, and interaction mode. It contains no provider setting or
+credential. Dispatch, observation, steering, stop, retry, restart, and a cold
+replacement thread for the same occurrence use this binding. A configuration,
+task, blueprint, catalog, provider-display-name, or alias change cannot retarget
+an existing occurrence. If T3 can no longer use the bound provider or model,
+the session fails visibly. A new stage occurrence or subagent assignment makes
+a new selection.
+
+The observed provider CLI version is evidence, not a Heddle compatibility pin.
+T3 owns provider discovery, driver support, CLI authentication, CLI
+compatibility, and launch wrappers. Heddle pins the deployed T3 application
+version separately in `deployment/supported-versions.json`. Adding a T3 driver
+or upgrading a provider CLI does not require a Heddle driver-name or CLI-version
+allowlist change.
+
+The MCP `list_providers` tool accepts an empty object and returns version 1 of
+the current allowed view:
+
+```json
+{
+  "version": 1,
+  "aliases": [
+    {
+      "alias": "primary",
+      "providerDisplayName": "Workbench Alpha",
+      "driverKind": "sample-driver",
+      "model": {
+        "slug": "model-alpha",
+        "name": "Model Alpha",
+        "isCustom": false
+      },
+      "selectable": true,
+      "reason": null
+    }
+  ],
+  "runtimeModes": [
+    "approval-required",
+    "auto-accept-edits",
+    "auto",
+    "full-access"
+  ]
+}
+```
+
+Rows are sorted by alias. The tool returns only configured aliases and their
+configured provider and model. It does not expose provider instance IDs,
+credentials, provider settings, or T3 browser and desktop visibility
+preferences. A configured alias that is not currently selectable remains in
+the result with `selectable: false` and one safe selection reason. A catalog
+read failure fails the tool. This result is discovery, not a reservation;
+`spawn` resolves again.
+
+The MCP `spawn` tool replaces raw provider and model inputs with this strict
+input:
+
+```json
+{
+  "operationId": "operation-alpha",
+  "rootItemId": "item-alpha",
+  "providerAlias": "specialist",
+  "runtimeMode": "full-access"
+}
+```
+
+`providerAlias` is required and must be configured. `runtimeMode` is optional;
+when absent, `session.defaultRuntimeMode` applies. A child does not inherit its
+parent's provider or runtime mode. An invalid or nonselectable choice creates no
+todo assignment, pacing reservation, timeout effect, MCP registration, or T3
+thread. The existing idempotent `operationId`, todo-subtree authority, pacing,
+and spawn result contracts remain unchanged. The result records the resolved
+session binding instead of raw provider and model input.
+
+Qualification uses an isolated recipe-catalog board, packaged Heddle service,
+and pinned T3 release. Configure distinct default, execution, review, override,
+and delegated aliases, including two aliases for one provider instance. Prove
+the default, wait-node, and task-front-matter precedence paths; then call
+`list_providers` and `spawn` from a real parent agent to create a child on a
+different provider. Claude Code, Codex, Cursor, Grok, and OpenCode must each run
+a stage and delegated child, invoke a real Heddle MCP tool, and perform a benign
+command and file action in explicit `full-access` without an approval prompt.
+Steer parent and child, restart Heddle, replace one missing thread cold, and
+confirm that stored bindings and provider-instance pacing remain unchanged
+after alias, display-name, task-front-matter, and default changes. Record exact
+Heddle, Blueprints, T3, provider CLI, and model provenance without credentials.
+Ambiguous, unavailable, unknown, and forbidden selections must produce the
+documented no-effect error with no fallback. A skipped native driver leaves the
+qualification incomplete.
 
 ## Organization blueprint repository
 
@@ -245,25 +406,51 @@ For example, the routing portion has this shape:
 }
 ```
 
-The provider-usage source and session timeout application are distinct explicit
-runtime ports. A nonempty `pacing.providerBudgets` requires top-level
+The provider-usage source and session launch-preparation catalog are distinct
+explicit runtime ports. A nonempty `pacing.providerBudgets` requires top-level
 `providerUsage`; an empty budget catalog forbids it. Its absolute executable is
 started without a shell, receives one version-1 JSON request on stdin containing
-the provider and fixed five-hour window, and must return exactly one version-1
-JSON response with finite nonnegative `used` and a nonnegative safe-integer
-`windowStartedAt`. The configured timeout bounds execution and response output.
-The executable owns any provider authentication; no credential belongs in its
-arguments or Heddle output.
+the resolved provider instance ID and fixed five-hour window, and must return
+exactly one version-1 JSON response with finite nonnegative `used` and a
+nonnegative safe-integer `windowStartedAt`. The configured timeout bounds
+execution and response output. The executable owns usage-service
+authentication; no credential belongs in its arguments or Heddle output.
 
-A `session.driver` of `codex` or `claudeAgent` requires nested
-`session.timeoutApplication`; other drivers forbid it. This separately
-preflighted absolute executable receives the accepted timeout-consumer input as
-one version-1 JSON request and must return exactly
+Provider budgets are keyed by configured alias for operator readability. At
+startup, Heddle resolves those keys and applies limits by provider instance ID.
+All aliases for one instance consume the same usage and concurrent-session
+capacity. If two aliases for one instance declare different limits,
+configuration is invalid. Omitting a second alias does not give that alias an
+unbudgeted route to the instance.
+
+`session.launchPreparation` is an optional map keyed by the exact open T3 driver
+kind. Each configured entry is a separately preflighted absolute executable.
+It receives the accepted timeout-consumer input, including the resolved driver
+kind and provider instance ID, as one version-1 JSON request and must return
+exactly
 `{"version":1,"applied":true}`. Heddle invokes it before `thread.create` and
-fails closed on startup, process, timeout, output, or acknowledgement errors.
-Both executable configurations accept optional `arguments` and a bounded
-`timeoutMilliseconds` default of 10000. Heddle terminates failed or timed-out
-children and does not expose their output.
+fails closed on process, timeout, output, or acknowledgement errors. An entry
+accepts optional `arguments`. Its bounded `timeoutMilliseconds` defaults to 10000.
+
+Heddle terminates failed or timed-out children and does not expose their output.
+The production catalog configures Codex with
+`tool_timeout_sec = 100000` and Claude Code with
+`MCP_TOOL_TIMEOUT=100000000` milliseconds. A driver without a configured entry
+skips this Heddle-specific preparation; it is not rejected by a Heddle roster.
+T3 owns provider CLI authentication and launch configuration.
+
+For example, a production timeout-preparation catalog can contain:
+
+```yaml
+session:
+  launchPreparation:
+    claudeAgent:
+      executable: /opt/heddle/bin/configure-claude-timeout
+      timeoutMilliseconds: 10000
+    codex:
+      executable: /opt/heddle/bin/configure-codex-timeout
+      timeoutMilliseconds: 10000
+```
 
 An in-progress epic gets one T3 project titled
 `{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
@@ -432,20 +619,24 @@ records the effective prompt, exact rendered document, and task, instance,
 session, stage, and thread identity in `session:activated`. Restart accepts
 only an exact payload match and does not append or dispatch a second activation.
 
-Pinned Wyrd Company T3 fork 0.0.37-wyrd.2 supports authenticated per-thread MCP
-registration for Claude Code, Codex, Cursor, Grok, and OpenCode. Heddle derives
+Pinned Wyrd Company T3 fork 0.0.37-wyrd.2 supplies authenticated per-thread MCP
+registration through each of its provider adapters. Heddle derives
 the workflow MCP endpoint from the configured server host and port, then sends
 that endpoint and the session's bearer correlation token to
 `PUT /api/mcp/provider-session` before thread creation. T3 supplies the
-registration through each driver's native launch path. No Heddle-specific MCP
-configuration file is required. The rendered handoff contains no token. A
-driver outside this measured set fails before worktree or T3 effects.
+registration through the selected adapter's native launch path. No
+Heddle-specific provider roster or MCP configuration file is required. The
+rendered handoff contains no token. A new T3 driver needs no Heddle name or
+version allowlist entry; an adapter that cannot accept the MCP registration
+fails at the T3 boundary.
 
 The workflow MCP handler negotiates protocol 2025-11-25 or older. It advertises
 no Tasks capability and returns ordinary tool results, not
-`InputRequiredResult`. Session preparation keeps the existing Claude Code and
-Codex tool-timeout configuration; Cursor, Grok, and OpenCode need no separate
-timeout setup.
+`InputRequiredResult`. Session preparation applies the optional
+launch-preparation entry for the bound driver kind before registration. The
+Heddle `escalate` tool remains available through this MCP registration for every
+provider. It is independent from a provider's native question tool, which T3
+owns and records as user-input state.
 
 The deployed `/api/events` feed is not a durable-state export. It omits the
 payloads of `instance:created` and `instance:updated` records and structurally

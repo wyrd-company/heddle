@@ -597,7 +597,7 @@ describe("deployed configuration directory", () => {
       expect(guide).toContain("503 Service Unavailable");
     }
     expect(operatorGuide).toContain("providerUsage");
-    expect(operatorGuide).toContain("session.timeoutApplication");
+    expect(operatorGuide).toContain("session.launchPreparation");
     expect(operatorGuide).toContain(
       "Configuration changes require service restart",
     );

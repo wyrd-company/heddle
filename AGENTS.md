@@ -113,6 +113,18 @@ When this file does not settle a question, decide with these.
   moves to completion.
 - **mechanical stage** is a stage Heddle executes itself — worktree, snapshot,
   merge — with no agent session.
+- **provider alias** is an operator-owned Heddle allowlist name that maps to one
+  T3 provider display name and model slug.
+- **provider display name** is the operator-visible T3 name that a provider alias
+  matches exactly; it is not a routing key.
+- **provider instance ID** is T3's stable routing identity for one configured
+  provider instance.
+- **driver kind** is T3's open capability and adapter identifier; Heddle does
+  not use it as provider identity.
+- **resolved session binding** is the durable provider instance, model, runtime,
+  and interaction selection for one session occurrence.
+- **runtime mode** is T3's approval and access mode for a session, independent
+  from provider and model selection.
 - **session** is one agent thread bound to one instance at one stage, addressed
   by a session key.
 - **stage** is a specific step in a lifecycle.
@@ -199,8 +211,9 @@ Pinned dependencies that the service checks or assumes:
   unrecognized front-matter properties through every task mutation. The service
   verifies this at startup and refuses to run against another build.
 - **Wyrd Company T3Code fork `0.0.37-wyrd.2`**, against which the control-plane integration is qualified from its public release tarball.
-- **Driver CLI versions** are pinned in configuration, and a session refuses to
-  dispatch when the running provider does not match its pinned version.
+- **Provider CLI versions** are discovered and enforced by T3. Heddle records
+  the observed version as diagnostic and qualification evidence and keeps no
+  driver-name or CLI-version allowlist.
 
 The service requires a dedicated bind mount for its state directory and refuses
 to start otherwise. Configuration is operator-owned and carries secrets; read
