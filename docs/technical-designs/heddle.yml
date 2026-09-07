@@ -252,6 +252,11 @@ proposed-design:
     are client-local and never enter Heddle selection. The deployed T3
     application remains separately pinned as a Heddle dependency.
 
+    The reader rejects a missing or malformed ticket, a failed or malformed RPC,
+    and a response without a provider catalog. The resolver maps every such
+    failure to `provider-catalog-unavailable`; transport details and returned
+    configuration payloads do not enter the operator-safe selection error.
+
     Configuration syntax is validated before composition. Startup also
     resolves every configured alias, the default alias, and every pacing-budget
     alias against one catalog snapshot before it binds the server. New stage

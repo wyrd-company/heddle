@@ -33,7 +33,12 @@
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/heddle",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind",
-  "runArgs": ["--add-host", "heddle.localhost:127.0.0.1"],
+  "runArgs": [
+    "--add-host",
+    "heddle.localhost:127.0.0.1",
+    "--add-host",
+    "t3.qualification:host-gateway"
+  ],
   "overrideCommand": false,
   "shutdownAction": "none"
 }

@@ -178,6 +178,10 @@ keeps these values distinct:
 | driver kind           | T3 capability metadata and optional launch preparation |
 | model slug            | T3 dispatch model identity                             |
 
+A missing or malformed ticket, failed or malformed RPC, or response without a
+provider catalog is `provider-catalog-unavailable`. Heddle does not include
+transport details or returned configuration payloads in that selection error.
+
 Startup validates and resolves every alias, `session.defaultProviderAlias`, and
 each `pacing.providerBudgets` key against one catalog snapshot. A selectable
 provider has one exact display-name match and is available, enabled, installed,

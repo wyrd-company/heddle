@@ -21,6 +21,10 @@ config_directory=""
 publication_directory=""
 container_id=""
 registry_container_id=""
+t3_mock_error=""
+t3_mock_log=""
+t3_mock_pid=""
+t3_mock_port=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
 remove_owned_container() {
@@ -55,6 +59,10 @@ cleanup() {
     local cleanup_failed=0
     local scratch_container
     local -a scratch_containers
+    if [ -n "${t3_mock_pid}" ]; then
+        kill "${t3_mock_pid}" 2>/dev/null || true
+        wait "${t3_mock_pid}" 2>/dev/null || true
+    fi
     mapfile -t scratch_containers < <(
         docker ps --all --quiet \
             --filter "label=heddle.qualification=${qualification_label}" \
@@ -77,6 +85,8 @@ cleanup() {
     [ -z "${tools_directory}" ] || rm -rf "${tools_directory}"
     [ -z "${config_directory}" ] || rm -rf "${config_directory}"
     [ -z "${publication_directory}" ] || rm -rf "${publication_directory}"
+    [ -z "${t3_mock_log}" ] || rm -f "${t3_mock_log}"
+    [ -z "${t3_mock_error}" ] || rm -f "${t3_mock_error}"
     return "${cleanup_failed}"
 }
 trap cleanup EXIT
@@ -96,6 +106,24 @@ tools_directory="$(allocate_scratch_directory tools)"
 config_directory="$(allocate_scratch_directory config)"
 publication_directory="$(allocate_scratch_directory publication)"
 configuration="${publication_directory}/devcontainer.json"
+t3_mock_log="$(mktemp)"
+t3_mock_error="$(mktemp)"
+node "${repository}/scripts/deployment/qualification-t3.mjs" \
+    >"${t3_mock_log}" 2>"${t3_mock_error}" &
+t3_mock_pid="$!"
+for attempt in $(seq 1 100); do
+    t3_mock_port="$(sed -n '1p' "${t3_mock_log}")"
+    if [[ "${t3_mock_port}" =~ ^[0-9]+$ ]]; then break; fi
+    if ! kill -0 "${t3_mock_pid}" 2>/dev/null; then
+        cat "${t3_mock_error}" >&2
+        exit 1
+    fi
+    [ "${attempt}" -lt 100 ] || {
+        echo "The qualification T3 catalog did not become ready." >&2
+        exit 1
+    }
+    sleep 0.1
+done
 
 install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
 
@@ -135,13 +163,16 @@ observationThresholds:
   failedMilliseconds: 60000
   stalledMilliseconds: 60000
 pacing:
-  defaultProvider: cursor
   maxConcurrentSessions: 1
   providerBudgets: {}
   subagents:
     maxDepth: 1
     maxFanOut: 1
   usageWindowHours: 5
+providerAliases:
+  default:
+    providerDisplayName: Workbench Alpha
+    model: sample-model
 products:
   - name: Sample collection
     repos:
@@ -157,11 +188,9 @@ server:
   port: 4317
 session:
   baseRef: main
-  cliVersion: 2026.08.25-3e8eec8
-  driver: cursor
+  defaultProviderAlias: default
+  defaultRuntimeMode: auto
   interactionMode: default
-  model: sample-model
-  runtimeMode: auto
   skillPointer: skill://sample
 stageThresholds:
   inspect: 60000
@@ -169,8 +198,9 @@ stateDirectory: /var/lib/heddle
 stopTimeoutMilliseconds: 1000
 t3:
   accessToken: sample-access-token
-  baseUrl: http://127.0.0.1:9
+  baseUrl: http://t3.qualification:T3_MOCK_PORT
 EOF
+sed -i "s/T3_MOCK_PORT/${t3_mock_port}/" "${config_directory}/config.yml"
 chmod 0600 "${config_directory}/config.yml"
 
 assert_head() {
