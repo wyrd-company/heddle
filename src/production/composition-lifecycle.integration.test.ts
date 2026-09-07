@@ -395,7 +395,14 @@ kind: standard
     const changedConfiguration = {
       ...configuration,
       pacing: { ...configuration.pacing, defaultProvider: "claudeAgent" },
-      session: { ...configuration.session, driver: "claudeAgent" },
+      session: {
+        ...configuration.session,
+        defaultSelection: {
+          ...configuration.session.defaultSelection,
+          driverKind: "claudeAgent",
+          providerInstanceId: "claudeAgent",
+        },
+      },
     };
     const secondT3 = new SyntheticT3();
     const second = createProductionComposition({
@@ -791,18 +798,21 @@ kind: standard
             taskContract: { title: "Example Item" },
           },
           instanceId: `task-${taskId}`,
-          interactionMode: configuration.session.interactionMode,
+          interactionMode:
+            configuration.session.defaultSelection.interactionMode,
           modelSelection: {
-            instanceId: configuration.session.driver,
-            model: configuration.session.model,
+            instanceId:
+              configuration.session.defaultSelection.providerInstanceId,
+            model: configuration.session.defaultSelection.model.slug,
           },
           projectId: configuration.adHocProject.projectId,
           providerContext: {
-            cliVersion: configuration.session.cliVersion,
-            driver: configuration.session.driver,
+            cliVersion:
+              configuration.session.defaultSelection.observedCliVersion ?? "",
+            driver: configuration.session.defaultSelection.providerInstanceId,
             lifecycle: "independent",
           },
-          runtimeMode: configuration.session.runtimeMode,
+          runtimeMode: configuration.session.defaultSelection.runtimeMode,
           sessionKey: `task-${taskId}:mismatch:1`,
           task: { id: taskId, title: "Example Item" },
           taskId,

@@ -24,6 +24,10 @@ import {
   SyntheticT3,
 } from "../production/composition.test-support.js";
 import type { ProductionComposition } from "../production/index.js";
+import type {
+  ProductionConfiguration,
+  ResolvedProductionConfiguration,
+} from "../production/index.js";
 import type { LoadedDeploymentConfiguration } from "./configuration.js";
 import {
   createConfiguredProductionComposition,
@@ -63,6 +67,16 @@ const directorySnapshot = async (directory: string): Promise<string> => {
   return JSON.stringify(files);
 };
 
+const configuredConfiguration = (
+  resolved: ResolvedProductionConfiguration,
+): ProductionConfiguration => {
+  const { defaultProvider: _defaultProvider, ...pacing } = resolved.pacing;
+  const { defaultSelection: _defaultSelection, ...session } = resolved.session;
+  void _defaultProvider;
+  void _defaultSelection;
+  return { ...resolved, pacing, session };
+};
+
 describe("configured production composition", () => {
   let fixture: Awaited<ReturnType<typeof prepareProductionFixture>> | undefined;
   let commandDirectory = "";
@@ -85,6 +99,101 @@ describe("configured production composition", () => {
     vi.restoreAllMocks();
   });
 
+  it("resolves every loaded alias from one catalog snapshot before composition", async () => {
+    fixture = await prepareProductionFixture();
+    const configuration = configuredConfiguration(fixture.configuration);
+    configuration.providerAliases = {
+      primary: {
+        model: "model-alpha",
+        providerDisplayName: "Workbench Alpha",
+      },
+      reviewer: {
+        model: "model-beta",
+        providerDisplayName: "Workbench Beta",
+      },
+      specialist: {
+        model: "custom-model",
+        providerDisplayName: "Workbench Alpha",
+      },
+    };
+    const readProviderCatalog = vi.fn(async () => [
+      {
+        availability: "available" as const,
+        displayName: "Workbench Alpha",
+        driverKind: "codex",
+        enabled: true,
+        installed: true,
+        instanceId: "instance-alpha",
+        models: [
+          { isCustom: false, name: "Model Alpha", slug: "model-alpha" },
+          { isCustom: true, name: "Custom Model", slug: "custom-model" },
+        ],
+        observedCliVersion: "0.91.0",
+        state: "ready",
+      },
+      {
+        availability: "available" as const,
+        displayName: "Workbench Beta",
+        driverKind: "codex",
+        enabled: true,
+        installed: true,
+        instanceId: "instance-beta",
+        models: [{ isCustom: false, name: "Model Beta", slug: "model-beta" }],
+        observedCliVersion: "0.91.0",
+        state: "ready",
+      },
+    ]);
+    const t3 = new SyntheticT3();
+    production = await createConfiguredProductionComposition(
+      {
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration,
+        configurationDirectory: fixture.root,
+        configurationPath: join(fixture.root, "config.yml"),
+        server: { host: "127.0.0.1", port: 3774 },
+        timeoutApplication: {
+          arguments: [],
+          executable: process.execPath,
+          timeoutMilliseconds: 1_000,
+        },
+      },
+      { providerCatalog: { readProviderCatalog }, t3 },
+    );
+
+    expect(readProviderCatalog).toHaveBeenCalledTimes(1);
+    expect(t3.commands).toEqual([]);
+  });
+
+  it("fails catalog startup without creating service state or disclosing transport detail", async () => {
+    fixture = await prepareProductionFixture();
+    const error = await createConfiguredProductionComposition(
+      {
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration: configuredConfiguration(fixture.configuration),
+        configurationDirectory: fixture.root,
+        configurationPath: join(fixture.root, "config.yml"),
+        server: { host: "127.0.0.1", port: 3774 },
+      },
+      {
+        providerCatalog: {
+          readProviderCatalog: async () => {
+            throw new Error("transport included sensitive detail");
+          },
+        },
+        t3: new SyntheticT3(),
+      },
+    ).catch((candidate: unknown) => candidate);
+
+    expect(error).toMatchObject({
+      message: "T3 provider catalog is unavailable",
+      reason: "provider-catalog-unavailable",
+    });
+    expect(String(error)).not.toContain("sensitive detail");
+    await expect(
+      access(fixture.configuration.stateDirectory),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("isolates a configured provider-usage error before any T3 dispatch", async () => {
     fixture = await prepareProductionFixture();
     commandDirectory = await mkdtemp(
@@ -95,11 +204,12 @@ describe("configured production composition", () => {
       command,
       'process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("invalid\\n"));\n',
     );
+    const configured = configuredConfiguration(fixture.configuration);
     const configuration = {
-      ...fixture.configuration,
+      ...configured,
       pacing: {
-        ...fixture.configuration.pacing,
-        providerBudgets: { codex: { usageLimit: 80 } },
+        ...configured.pacing,
+        providerBudgets: { primary: { usageLimit: 80 } },
       },
     };
     const loaded: LoadedDeploymentConfiguration = {
@@ -121,7 +231,7 @@ describe("configured production composition", () => {
     };
     const t3 = new SyntheticT3();
     const onSchedulerError = vi.fn(async () => undefined);
-    production = createConfiguredProductionComposition(loaded, {
+    production = await createConfiguredProductionComposition(loaded, {
       onSchedulerError,
       t3,
     });
@@ -141,11 +251,12 @@ describe("configured production composition", () => {
     ]);
   });
 
-  it("binds before board, T3, Pushover, or persistence effects", async () => {
+  it("resolves catalog authority before bind without board, dispatch, Pushover, or persistence effects", async () => {
     fixture = await prepareProductionFixture();
     occupiedPort = createServer();
     const port = await listen(occupiedPort);
     const t3 = new SyntheticT3();
+    const readProviderCatalog = vi.spyOn(t3, "readProviderCatalog");
     const notifications: unknown[] = [];
     const beforeBoard = await directorySnapshot(
       fixture.configuration.boardDirectory,
@@ -155,7 +266,7 @@ describe("configured production composition", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
     const loaded: LoadedDeploymentConfiguration = {
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration: fixture.configuration,
+      configuration: configuredConfiguration(fixture.configuration),
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port },
@@ -184,6 +295,7 @@ describe("configured production composition", () => {
       access(fixture.configuration.stateDirectory),
     ).rejects.toMatchObject({ code: "ENOENT" });
     expect(t3.commands).toEqual([]);
+    expect(readProviderCatalog).toHaveBeenCalledTimes(1);
     expect(t3.timeouts).toEqual([]);
     expect(notifications).toEqual([]);
   });
@@ -192,10 +304,15 @@ describe("configured production composition", () => {
     fixture = await prepareProductionFixture();
     const loaded: LoadedDeploymentConfiguration = {
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration: fixture.configuration,
+      configuration: configuredConfiguration(fixture.configuration),
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port: 0 },
+      timeoutApplication: {
+        arguments: [],
+        executable: process.execPath,
+        timeoutMilliseconds: 1_000,
+      },
     };
     await rm(fixture.configuration.boardDirectory, {
       force: true,
@@ -222,7 +339,7 @@ describe("configured production composition", () => {
     const t3 = new SyntheticT3();
     const loaded: LoadedDeploymentConfiguration = {
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration: fixture.configuration,
+      configuration: configuredConfiguration(fixture.configuration),
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port: 3774 },
@@ -232,7 +349,7 @@ describe("configured production composition", () => {
         timeoutMilliseconds: 1_000,
       },
     };
-    production = createConfiguredProductionComposition(loaded, { t3 });
+    production = await createConfiguredProductionComposition(loaded, { t3 });
 
     await production.start();
 
@@ -259,7 +376,7 @@ describe("configured production composition", () => {
     const t3 = new SyntheticT3();
     const loaded: LoadedDeploymentConfiguration = {
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration: fixture.configuration,
+      configuration: configuredConfiguration(fixture.configuration),
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port: 3774 },
@@ -269,7 +386,7 @@ describe("configured production composition", () => {
         timeoutMilliseconds: 1_000,
       },
     };
-    production = createConfiguredProductionComposition(loaded, { t3 });
+    production = await createConfiguredProductionComposition(loaded, { t3 });
 
     await expect(production.start()).resolves.toBeUndefined();
 

@@ -244,22 +244,6 @@ const preflightBlueprintRepository = async (
   }
 };
 
-export const validateTimeoutApplicationConfiguration = (
-  configuration: ProductionConfiguration,
-  timeoutApplication: ExecutableTimeoutApplicationConfiguration | undefined,
-): void => {
-  const requiresTimeoutApplication =
-    configuration.session.driver === "codex" ||
-    configuration.session.driver === "claudeAgent";
-  if (requiresTimeoutApplication !== (timeoutApplication !== undefined)) {
-    throw new TypeError(
-      requiresTimeoutApplication
-        ? `session.timeoutApplication is required for driver '${configuration.session.driver}'`
-        : `session.timeoutApplication must be omitted for driver '${configuration.session.driver}'`,
-    );
-  }
-};
-
 export const loadDeploymentConfiguration = async (
   configurationDirectory: string,
 ): Promise<LoadedDeploymentConfiguration> => {
@@ -315,7 +299,6 @@ export const loadDeploymentConfiguration = async (
     }
     const validated = validateProductionConfiguration(configuration);
     validateProviderUsageConfiguration(validated, providerUsage);
-    validateTimeoutApplicationConfiguration(validated, timeoutApplication);
     await preflightExecutable("providerUsage", providerUsage);
     await preflightExecutable("session.timeoutApplication", timeoutApplication);
     const blueprintsRepositoryRoot =

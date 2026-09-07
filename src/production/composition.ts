@@ -56,8 +56,8 @@ import {
 } from "./durable-adapters.js";
 import { ProductionErrorPager } from "./production-error-paging.js";
 import {
-  validateProductionConfiguration,
-  type ProductionConfiguration,
+  validateResolvedProductionConfiguration,
+  type ResolvedProductionConfiguration,
 } from "./configuration.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import { ProductionConsoleState } from "./console-state.js";
@@ -96,7 +96,7 @@ export type ProductionCompositionOptions = {
   afterDynamicTaskBoardEffect?: (taskId: number) => Promise<void> | void;
   afterDynamicTaskIntentRecorded?: () => Promise<void> | void;
   blueprintsRepositoryRoot: string;
-  configuration: ProductionConfiguration;
+  configuration: ResolvedProductionConfiguration;
   onSchedulerError?: (error: unknown) => void;
   notificationNow?: () => number;
   providerUsage: ProviderUsageSource;
@@ -132,7 +132,9 @@ const activeWorkspaces = new Set<string>();
 export const createProductionComposition = (
   options: ProductionCompositionOptions,
 ): ProductionComposition => {
-  const configuration = validateProductionConfiguration(options.configuration);
+  const configuration = validateResolvedProductionConfiguration(
+    options.configuration,
+  );
   const workspaceId = resolve(configuration.boardDirectory);
   if (activeWorkspaces.has(workspaceId)) {
     throw new Error(`A production composition already owns '${workspaceId}'`);
@@ -311,14 +313,18 @@ export const createProductionComposition = (
           }
           await steerStageSession(
             {
-              interactionMode: configuration.session.interactionMode,
+              interactionMode:
+                configuration.session.defaultSelection.interactionMode,
               message: `Child escalation ${pending.attentionId} requires an answer`,
               providerContext: {
-                cliVersion: configuration.session.cliVersion,
-                driver: configuration.session.driver,
+                cliVersion:
+                  configuration.session.defaultSelection.observedCliVersion ??
+                  "",
+                driver:
+                  configuration.session.defaultSelection.providerInstanceId,
                 lifecycle: "independent",
               },
-              runtimeMode: configuration.session.runtimeMode,
+              runtimeMode: configuration.session.defaultSelection.runtimeMode,
               threadId: parent.threadId,
             },
             { t3 },

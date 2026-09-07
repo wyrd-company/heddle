@@ -28,6 +28,7 @@
     "observationThresholds",
     "pacing",
     "products",
+    "providerAliases",
     "pushover",
     "session",
     "stageThresholds",
@@ -66,14 +67,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "defaultProvider",
         "maxConcurrentSessions",
         "providerBudgets",
         "subagents",
         "usageWindowHours"
       ],
       "properties": {
-        "defaultProvider": { "type": "string", "minLength": 1 },
         "maxConcurrentSessions": { "type": "integer", "minimum": 0 },
         "providerBudgets": {
           "type": "object",
@@ -94,6 +93,27 @@
           }
         },
         "usageWindowHours": { "const": 5 }
+      }
+    },
+    "providerAliases": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["providerDisplayName", "model"],
+        "properties": {
+          "providerDisplayName": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "model": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        }
       }
     },
     "products": {
@@ -176,36 +196,25 @@
     "session": {
       "type": "object",
       "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "driver": { "enum": ["codex", "claudeAgent"] }
-            },
-            "required": ["driver"]
-          },
-          "then": { "required": ["timeoutApplication"] },
-          "else": {
-            "not": { "required": ["timeoutApplication"] }
-          }
-        }
-      ],
       "required": [
         "baseRef",
-        "cliVersion",
-        "driver",
+        "defaultProviderAlias",
+        "defaultRuntimeMode",
         "interactionMode",
-        "model",
-        "runtimeMode",
         "skillPointer"
       ],
       "properties": {
         "baseRef": { "type": "string", "minLength": 1 },
-        "cliVersion": { "type": "string", "minLength": 1 },
-        "driver": { "type": "string", "minLength": 1 },
+        "defaultProviderAlias": { "type": "string", "minLength": 1 },
+        "defaultRuntimeMode": {
+          "enum": [
+            "approval-required",
+            "auto-accept-edits",
+            "auto",
+            "full-access"
+          ]
+        },
         "interactionMode": { "type": "string", "minLength": 1 },
-        "model": { "type": "string", "minLength": 1 },
-        "runtimeMode": { "type": "string", "minLength": 1 },
         "skillPointer": { "type": "string", "minLength": 1 },
         "timeoutApplication": {
           "type": "object",
@@ -215,7 +224,10 @@
             "arguments": {
               "type": "array",
               "default": [],
-              "items": { "type": "string", "pattern": "^[^\\u0000]*$" }
+              "items": {
+                "type": "string",
+                "pattern": "^[^\\u0000]*$"
+              }
             },
             "executable": { "type": "string", "pattern": "^/" },
             "timeoutMilliseconds": {

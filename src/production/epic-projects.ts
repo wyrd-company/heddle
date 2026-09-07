@@ -18,7 +18,7 @@ import type {
   SqlitePersistence,
 } from "../persistence/index.js";
 import type { ReconcilerAttentionQueue } from "../reconciler/index.js";
-import type { ProductionConfiguration } from "./configuration.js";
+import type { ResolvedProductionConfiguration } from "./configuration.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
 import type { ProductRoutingCatalog } from "./product-routing.js";
 
@@ -39,7 +39,7 @@ const stableUuid = (seed: string): string => {
 
 export class EpicProjectCoordinator {
   constructor(
-    private readonly configuration: ProductionConfiguration,
+    private readonly configuration: ResolvedProductionConfiguration,
     private readonly persistence: SqlitePersistence,
     private readonly routing: ProductRoutingCatalog,
     private readonly t3: EpicProjectT3Client,

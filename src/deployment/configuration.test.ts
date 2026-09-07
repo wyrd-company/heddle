@@ -30,7 +30,6 @@ import {
   parseHeddleServerArguments,
   resolveConfigurationDirectory,
   validateProviderUsageConfiguration,
-  validateTimeoutApplicationConfiguration,
 } from "./configuration.js";
 
 const fixture = (root: string): ProductionConfiguration => ({
@@ -47,11 +46,16 @@ const fixture = (root: string): ProductionConfiguration => ({
     stalledMilliseconds: 1_000,
   },
   pacing: {
-    defaultProvider: "cursor",
     maxConcurrentSessions: 1,
     providerBudgets: {},
     subagents: { maxDepth: 1, maxFanOut: 1 },
     usageWindowHours: 5,
+  },
+  providerAliases: {
+    primary: {
+      model: "sample-model",
+      providerDisplayName: "Workbench Alpha",
+    },
   },
   products: [
     {
@@ -72,11 +76,9 @@ const fixture = (root: string): ProductionConfiguration => ({
   },
   session: {
     baseRef: "main",
-    cliVersion: "1.0.0",
-    driver: "cursor",
+    defaultProviderAlias: "primary",
+    defaultRuntimeMode: "auto",
     interactionMode: "default",
-    model: "sample-model",
-    runtimeMode: "sample-mode",
     skillPointer: "skill://sample",
   },
   stageThresholds: { inspect: 10_000 },
@@ -374,7 +376,7 @@ describe("deployed configuration directory", () => {
     await prepareBlueprintRepository(root);
     const path = join(root, "config.yml");
     const budgeted = fixture(root);
-    budgeted.pacing.providerBudgets = { codex: { usageLimit: 80 } };
+    budgeted.pacing.providerBudgets = { primary: { usageLimit: 80 } };
     await writeFile(path, stringify(budgeted));
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
       "providerUsage",
@@ -426,7 +428,7 @@ describe("deployed configuration directory", () => {
     ).toThrow("providerUsage must be omitted");
   });
 
-  it("requires a preflighted timeout application exactly for codex and claudeAgent", async () => {
+  it("loads and preflights the existing optional timeout application", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await prepareBlueprintRepository(root);
     const path = join(root, "config.yml");
@@ -434,13 +436,6 @@ describe("deployed configuration directory", () => {
     await writeFile(executable, "#!/bin/sh\nexit 0\n");
     await chmod(executable, 0o755);
     const configuration = fixture(root);
-    configuration.pacing.defaultProvider = "codex";
-    configuration.session.driver = "codex";
-
-    await writeFile(path, stringify(configuration));
-    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      "timeoutApplication",
-    );
 
     await writeFile(
       path,
@@ -461,48 +456,12 @@ describe("deployed configuration directory", () => {
     expect(loaded.configuration.session).not.toHaveProperty(
       "timeoutApplication",
     );
-
-    const cursor = fixture(root);
-    await writeFile(
-      path,
-      stringify({
-        ...cursor,
-        session: {
-          ...cursor.session,
-          timeoutApplication: { executable },
-        },
-      }),
-    );
-    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      "must NOT be valid",
-    );
-  });
-
-  it("enforces the timeout-application conditional in runtime validation", () => {
-    const configuration = fixture("/tmp/sample-root");
-    configuration.pacing.defaultProvider = "claudeAgent";
-    configuration.session.driver = "claudeAgent";
-    expect(() =>
-      validateTimeoutApplicationConfiguration(configuration, undefined),
-    ).toThrow("session.timeoutApplication is required");
-
-    configuration.pacing.defaultProvider = "cursor";
-    configuration.session.driver = "cursor";
-    expect(() =>
-      validateTimeoutApplicationConfiguration(configuration, {
-        arguments: [],
-        executable: "/tmp/sample-executable",
-        timeoutMilliseconds: 1_000,
-      }),
-    ).toThrow("session.timeoutApplication must be omitted");
   });
 
   it("fails startup preflight when the timeout application is unavailable", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const path = join(root, "config.yml");
     const configuration = fixture(root);
-    configuration.pacing.defaultProvider = "codex";
-    configuration.session.driver = "codex";
     const executable = join(root, "missing-timeout-application-command");
     await writeFile(
       path,
@@ -524,7 +483,7 @@ describe("deployed configuration directory", () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const path = join(root, "config.yml");
     const configuration = fixture(root);
-    configuration.pacing.providerBudgets = { codex: { usageLimit: 80 } };
+    configuration.pacing.providerBudgets = { primary: { usageLimit: 80 } };
     const executable = join(root, "missing-provider-usage-command");
     await writeFile(
       path,

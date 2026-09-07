@@ -12,7 +12,7 @@ import {
   createProductionComposition,
   type ProductionT3Client,
 } from "./composition.js";
-import type { ProductionConfiguration } from "./configuration.js";
+import type { ResolvedProductionConfiguration } from "./configuration.js";
 
 const [mode, configurationPath, commandLog] = process.argv.slice(2);
 if (
@@ -25,7 +25,7 @@ if (
 
 const configuration = JSON.parse(
   await readFile(configurationPath, "utf8"),
-) as ProductionConfiguration;
+) as ResolvedProductionConfiguration;
 const recorded = (await readFile(commandLog, "utf8").catch(() => ""))
   .split("\n")
   .filter(Boolean)

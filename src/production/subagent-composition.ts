@@ -20,7 +20,7 @@ import type {
 import type { SqlitePersistence } from "../persistence/index.js";
 import { SubagentCoordinator } from "../subagents/index.js";
 import { isTodoState, type TodoAssignment } from "../todo/index.js";
-import type { ProductionConfiguration } from "./configuration.js";
+import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 import type { KanbanBoardAdapter } from "../board-adapter/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
@@ -122,7 +122,7 @@ export const productionSessionTargets = (
 };
 
 const activeSessions = async (
-  configuration: ProductionConfiguration,
+  configuration: ResolvedProductionConfiguration,
   persistence: SqlitePersistence,
   t3: ProductionT3Client,
 ): Promise<PacingSession[]> => {
@@ -143,7 +143,7 @@ const activeSessions = async (
       .filter(({ threadId }) => activeThreadIds.has(threadId))
       .map(({ sessionKey }) => ({
         depth: 0,
-        provider: configuration.session.driver,
+        provider: configuration.session.defaultSelection.providerInstanceId,
         sessionId: sessionKey,
       })),
     ...assignments(persistence)
@@ -163,7 +163,7 @@ const activeSessions = async (
 export const createProductionSubagentCoordinator = (options: {
   attention: DurableAttentionQueue;
   board: Pick<KanbanBoardAdapter, "readTask">;
-  configuration: ProductionConfiguration;
+  configuration: ResolvedProductionConfiguration;
   observer: SessionObserver;
   pacing: DispatchPacingEvaluator;
   persistence: SqlitePersistence;
@@ -237,6 +237,7 @@ export const createProductionSubagentCoordinator = (options: {
       const taskId = runtimes[0]!.taskId;
       const task = await board.readTask(taskId);
       const session = configuration.session;
+      const selection = session.defaultSelection;
       const route = parentSessionRoute(persistence, binding.sessionKey);
       const repository = configuration.products
         .flatMap(({ repos }) => repos)
@@ -245,15 +246,15 @@ export const createProductionSubagentCoordinator = (options: {
         throw new Error("Subagent parent repository is not configured");
       }
       return {
-        interactionMode: session.interactionMode,
+        interactionMode: selection.interactionMode,
         modelSelection: { instanceId: provider, model },
         projectId: route.projectId,
         providerContext: {
-          cliVersion: session.cliVersion,
+          cliVersion: selection.observedCliVersion ?? "",
           driver: provider,
           lifecycle: "independent",
         },
-        runtimeMode: session.runtimeMode,
+        runtimeMode: selection.runtimeMode,
         task: task.frontMatter,
         taskId,
         title: heddleSessionTitle(
@@ -288,19 +289,20 @@ export const createProductionSubagentCoordinator = (options: {
         throw new Error("Subagent stop has no durable notification intent");
       }
       const session = configuration.session;
+      const selection = session.defaultSelection;
       await steerStageSession(
         {
           commandId: notice.commandId,
           createdAt: notice.createdAt,
-          interactionMode: session.interactionMode,
+          interactionMode: selection.interactionMode,
           message,
           messageId: notice.messageId,
           providerContext: {
-            cliVersion: session.cliVersion,
+            cliVersion: selection.observedCliVersion ?? "",
             driver: assignment.provider,
             lifecycle: "independent",
           },
-          runtimeMode: session.runtimeMode,
+          runtimeMode: selection.runtimeMode,
           threadId: assignment.parentThreadId,
         },
         { t3 },

@@ -8,6 +8,7 @@ import {
   spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
+import { Buffer } from "node:buffer";
 import { createServer, type Server as HttpServer } from "node:http";
 import { createHash } from "node:crypto";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
@@ -15,6 +16,7 @@ import { join } from "node:path";
 import process from "node:process";
 import { URL } from "node:url";
 import { promisify } from "node:util";
+import type { Duplex } from "node:stream";
 
 import {
   Client,
@@ -80,6 +82,92 @@ const closeServer = async (server: HttpServer | undefined): Promise<void> => {
   });
 };
 
+const webSocketTextFrame = (value: unknown): Buffer => {
+  const payload = Buffer.from(JSON.stringify(value));
+  if (payload.length >= 126) {
+    const frame = Buffer.allocUnsafe(payload.length + 4);
+    frame[0] = 0x81;
+    frame[1] = 126;
+    frame.writeUInt16BE(payload.length, 2);
+    payload.copy(frame, 4);
+    return frame;
+  }
+  return Buffer.concat([Buffer.from([0x81, payload.length]), payload]);
+};
+
+const readMaskedWebSocketText = (source: Buffer): string | undefined => {
+  if (source.length < 6 || (source[0]! & 0x0f) !== 1) return undefined;
+  const encodedLength = source[1]! & 0x7f;
+  let offset = 2;
+  let length = encodedLength;
+  if (encodedLength === 126) {
+    if (source.length < 8) return undefined;
+    length = source.readUInt16BE(offset);
+    offset += 2;
+  }
+  const mask = source.subarray(offset, offset + 4);
+  offset += 4;
+  if (source.length < offset + length) return undefined;
+  const payload = Buffer.allocUnsafe(length);
+  for (let index = 0; index < length; index += 1) {
+    payload[index] = source[offset + index]! ^ mask[index % 4]!;
+  }
+  return payload.toString("utf8");
+};
+
+const acceptProviderCatalogSocket = (
+  socket: Duplex,
+  webSocketKey: string,
+  onRequest: (request: Record<string, unknown>) => void,
+): void => {
+  const accept = createHash("sha1")
+    .update(`${webSocketKey}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+    .digest("base64");
+  socket.write(
+    `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
+  );
+  socket.once("data", (chunk: Buffer) => {
+    const source = readMaskedWebSocketText(chunk);
+    if (source === undefined) {
+      socket.destroy(new Error("Incomplete provider catalog request frame"));
+      return;
+    }
+    const request = JSON.parse(source) as Record<string, unknown>;
+    onRequest(request);
+    socket.write(
+      webSocketTextFrame({
+        _tag: "Exit",
+        requestId: request["id"],
+        exit: {
+          _tag: "Success",
+          value: {
+            providers: [
+              {
+                availability: "available",
+                displayName: "Workbench Alpha",
+                driver: "claudeAgent",
+                enabled: true,
+                installed: true,
+                instanceId: "claudeAgent",
+                models: [
+                  {
+                    isCustom: false,
+                    name: "Sample Model",
+                    slug: "sample-model",
+                  },
+                ],
+                status: "ready",
+                version: "2.1.250",
+              },
+            ],
+          },
+        },
+      }),
+      () => socket.end(),
+    );
+  });
+};
+
 describe("configured production service entry point", () => {
   let fixture: Awaited<ReturnType<typeof prepareProductionFixture>> | undefined;
   let t3Server: HttpServer | undefined;
@@ -131,9 +219,22 @@ describe("configured production service entry point", () => {
     const threads = new Set<string>();
     const commands: Array<Record<string, unknown>> = [];
     const registrations: Array<Record<string, unknown>> = [];
+    const catalogRequests: Array<Record<string, unknown>> = [];
     t3Server = createServer(async (request, response) => {
       expect(request.headers.authorization).toBe("Bearer t3-secret-value");
       response.setHeader("content-type", "application/json");
+      if (
+        request.method === "POST" &&
+        request.url === "/api/auth/websocket-ticket"
+      ) {
+        response.end(
+          JSON.stringify({
+            expiresAt: "2026-09-07T00:05:00.000Z",
+            ticket: "isolated-ticket",
+          }),
+        );
+        return;
+      }
       if (
         request.method === "GET" &&
         request.url === "/api/orchestration/shell"
@@ -188,22 +289,34 @@ describe("configured production service entry point", () => {
       response.statusCode = 404;
       response.end(JSON.stringify({ error: "not found" }));
     });
+    t3Server.on("upgrade", (request, socket) => {
+      expect(request.url).toBe("/ws?wsTicket=isolated-ticket");
+      const key = request.headers["sec-websocket-key"];
+      if (typeof key !== "string") {
+        socket.destroy(new Error("Missing WebSocket key"));
+        return;
+      }
+      acceptProviderCatalogSocket(socket, key, (rpc) => {
+        catalogRequests.push(rpc);
+      });
+    });
     const t3Port = await listen(t3Server);
 
     const portProbe = createServer();
     const servicePort = await listen(portProbe);
     await closeServer(portProbe);
+    const { defaultProvider: _defaultProvider, ...configuredPacing } =
+      fixture.configuration.pacing;
+    const { defaultSelection: _defaultSelection, ...configuredSession } =
+      fixture.configuration.session;
+    void _defaultProvider;
+    void _defaultSelection;
     const configured = {
       ...fixture.configuration,
-      pacing: {
-        ...fixture.configuration.pacing,
-        defaultProvider: "claudeAgent",
-      },
+      pacing: configuredPacing,
       server: { host: "127.0.0.1", port: servicePort },
       session: {
-        ...fixture.configuration.session,
-        cliVersion: "2.1.250",
-        driver: "claudeAgent",
+        ...configuredSession,
         timeoutApplication: {
           arguments: [timeoutScript, timeoutRequestPath, orderPath],
           executable: process.execPath,
@@ -245,7 +358,9 @@ describe("configured production service entry point", () => {
     });
     const origin = `http://127.0.0.1:${servicePort}`;
     await waitFor(async () => {
-      const response = await globalThis.fetch(`${origin}/api/instances`);
+      const response = await globalThis.fetch(`${origin}/api/instances`, {
+        signal: globalThis.AbortSignal.timeout(500),
+      });
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual([
         expect.objectContaining({
@@ -259,6 +374,13 @@ describe("configured production service entry point", () => {
     expect((await readFile(orderPath, "utf8")).split("\n").slice(0, 3)).toEqual(
       ["timeout-applied", "mcp-registered", "thread-created"],
     );
+    expect(catalogRequests).toEqual([
+      expect.objectContaining({
+        _tag: "Request",
+        payload: {},
+        tag: "server.getConfig",
+      }),
+    ]);
     const timeoutRequest = JSON.parse(
       await readFile(timeoutRequestPath, "utf8"),
     ) as Record<string, unknown>;

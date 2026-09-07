@@ -5,11 +5,16 @@
 
 import process from "node:process";
 
-import { T3ControlPlaneClient } from "../control-plane/index.js";
+import {
+  ProviderSelectionResolver,
+  T3ControlPlaneClient,
+  type T3ProviderCatalogReader,
+} from "../control-plane/index.js";
 import { describeError } from "../error-details.js";
 import type { ProviderUsageSource } from "../pacing/index.js";
 import {
   createProductionComposition,
+  resolveProductionConfiguration,
   type ProductionComposition,
   type ProductionCompositionOptions,
   type ProductionT3Client,
@@ -32,7 +37,9 @@ export type ConfiguredProductionServiceDependencies = Partial<
     | "pushoverTransport"
     | "t3"
   >
->;
+> & {
+  providerCatalog?: T3ProviderCatalogReader;
+};
 
 const providerUsageSource = (
   loaded: LoadedDeploymentConfiguration,
@@ -49,39 +56,89 @@ const t3Client = (loaded: LoadedDeploymentConfiguration): ProductionT3Client =>
         loaded.timeoutApplication,
       );
 
-export const createConfiguredProductionComposition = (
+const configuredCompositionInputs = async (
   loaded: LoadedDeploymentConfiguration,
-  dependencies: ConfiguredProductionServiceDependencies = {},
-): ProductionComposition =>
-  createProductionComposition({
-    ...dependencies,
+  dependencies: ConfiguredProductionServiceDependencies,
+) => {
+  const t3 = dependencies.t3 ?? t3Client(loaded);
+  const providerCatalog =
+    dependencies.providerCatalog ??
+    ("readProviderCatalog" in t3
+      ? (t3 as ProductionT3Client & T3ProviderCatalogReader)
+      : undefined);
+  if (providerCatalog === undefined) {
+    throw new Error(
+      "Configured production composition requires a T3 provider catalog reader",
+    );
+  }
+  const providerResolver = new ProviderSelectionResolver(
+    loaded.configuration.providerAliases,
+    providerCatalog,
+  );
+  const configuration = await resolveProductionConfiguration(
+    loaded.configuration,
+    providerResolver,
+  );
+  const driverKind = configuration.session.defaultSelection.driverKind;
+  const requiresTimeoutApplication =
+    driverKind === "codex" || driverKind === "claudeAgent";
+  if (
+    requiresTimeoutApplication !==
+    (loaded.timeoutApplication !== undefined)
+  ) {
+    throw new TypeError(
+      requiresTimeoutApplication
+        ? `session.timeoutApplication is required for driver '${driverKind}'`
+        : `session.timeoutApplication must be omitted for driver '${driverKind}'`,
+    );
+  }
+  return { configuration, t3 };
+};
+
+const productionOptions = (
+  loaded: LoadedDeploymentConfiguration,
+  dependencies: ConfiguredProductionServiceDependencies,
+  inputs: Awaited<ReturnType<typeof configuredCompositionInputs>>,
+): ProductionCompositionOptions => {
+  const { providerCatalog: _providerCatalog, ...compositionDependencies } =
+    dependencies;
+  void _providerCatalog;
+  return {
+    ...compositionDependencies,
     blueprintsRepositoryRoot: loaded.blueprintsRepositoryRoot,
-    configuration: loaded.configuration,
+    configuration: inputs.configuration,
     providerUsage: providerUsageSource(loaded),
     resolveSystemPrompt: configurationDirectorySystemPromptResolver(
       loaded.configurationDirectory,
     ),
-    t3: dependencies.t3 ?? t3Client(loaded),
+    t3: inputs.t3,
     workflowMcpEndpoint: `http://${loaded.server.host}:${loaded.server.port}/mcp`,
-  });
+  };
+};
+
+export const createConfiguredProductionComposition = async (
+  loaded: LoadedDeploymentConfiguration,
+  dependencies: ConfiguredProductionServiceDependencies = {},
+): Promise<ProductionComposition> => {
+  const inputs = await configuredCompositionInputs(loaded, dependencies);
+  return createProductionComposition(
+    productionOptions(loaded, dependencies, inputs),
+  );
+};
 
 export const startConfiguredProductionService = async (
   loaded: LoadedDeploymentConfiguration,
   dependencies: ConfiguredProductionServiceDependencies = {},
-): Promise<HeddleDeploymentServer> =>
-  startHeddleServer(
+): Promise<HeddleDeploymentServer> => {
+  const inputs = await configuredCompositionInputs(loaded, dependencies);
+  const options = productionOptions(loaded, dependencies, inputs);
+  options.onSchedulerError ??= (error) => {
+    process.stderr.write(
+      `Heddle reconciliation pass failed: ${describeError(error)}\n`,
+    );
+  };
+  return startHeddleServer(
     { host: loaded.server.host, port: loaded.server.port },
-    {
-      productionFactory: () =>
-        createConfiguredProductionComposition(loaded, {
-          ...dependencies,
-          onSchedulerError:
-            dependencies.onSchedulerError ??
-            ((error) => {
-              process.stderr.write(
-                `Heddle reconciliation pass failed: ${describeError(error)}\n`,
-              );
-            }),
-        }),
-    },
+    { productionFactory: () => createProductionComposition(options) },
   );
+};

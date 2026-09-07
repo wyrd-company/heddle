@@ -5,18 +5,28 @@
 
 import { URL } from "node:url";
 
+import {
+  T3_RUNTIME_MODES,
+  type ProviderAliasCatalog,
+  type ProviderSelectionResolver,
+  type ResolvedProviderSelection,
+  type T3RuntimeMode,
+} from "../control-plane/provider-selection.js";
 import type { PacingConfiguration } from "../pacing/index.js";
 
 export type ProductionSessionConfiguration = {
   baseRef: string;
-  cliVersion: string;
-  driver: string;
+  defaultProviderAlias: string;
+  defaultRuntimeMode: T3RuntimeMode;
   interactionMode: string;
-  model: string;
-  runtimeMode: string;
   skillPointer: string;
   worktreesRoot?: string;
 };
+
+export type ResolvedProductionSessionConfiguration =
+  ProductionSessionConfiguration & {
+    defaultSelection: ResolvedProviderSelection;
+  };
 
 export type ProductRepositoryConfiguration = {
   name: string;
@@ -47,13 +57,14 @@ export type ProductionConfiguration = {
   adHocProject: AdHocProjectConfiguration;
   boardDirectory: string;
   cadenceMilliseconds: number;
-  pacing: PacingConfiguration;
+  pacing: Omit<PacingConfiguration, "defaultProvider">;
   observationThresholds: {
     endedMilliseconds: number;
     failedMilliseconds: number;
     stalledMilliseconds: number;
   };
   products: ProductConfiguration[];
+  providerAliases: ProviderAliasCatalog;
   pushover: PushoverConfiguration;
   session: ProductionSessionConfiguration;
   stageThresholds: Readonly<Record<string, number>>;
@@ -61,6 +72,16 @@ export type ProductionConfiguration = {
   stopTimeoutMilliseconds: number;
   t3: { accessToken: string; baseUrl: string };
 };
+
+export type ResolvedProductionConfiguration = Omit<
+  ProductionConfiguration,
+  "pacing" | "session"
+> & {
+  pacing: PacingConfiguration;
+  session: ResolvedProductionSessionConfiguration;
+};
+
+const providerAliasPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 const requireAbsolute = (name: string, value: string): void => {
   if (!value.startsWith("/")) throw new TypeError(`${name} must be absolute`);
@@ -88,9 +109,13 @@ const requirePositiveInteger = (name: string, value: number): void => {
   }
 };
 
-export const validateProductionConfiguration = (
-  configuration: ProductionConfiguration,
-): ProductionConfiguration => {
+const validateCommonProductionConfiguration = (
+  configuration: Omit<ProductionConfiguration, "pacing" | "session"> & {
+    pacing: Omit<PacingConfiguration, "defaultProvider">;
+    session: ProductionSessionConfiguration;
+  },
+  validateBudgetAliases = true,
+): void => {
   requireNonEmpty("adHocProject.name", configuration.adHocProject.name);
   requireNonEmpty(
     "adHocProject.projectId",
@@ -175,13 +200,64 @@ export const validateProductionConfiguration = (
   )) {
     requirePositiveInteger(`observationThresholds.${kind}`, threshold);
   }
-  for (const [name, value] of Object.entries(configuration.session)) {
-    if (value !== undefined) requireNonEmpty(`session.${name}`, value);
-  }
-  if (configuration.pacing.defaultProvider !== configuration.session.driver) {
-    throw new TypeError(
-      "pacing.defaultProvider must equal session.driver for the configured session provider",
+  requireNonEmpty("session.baseRef", configuration.session.baseRef);
+  requireNonEmpty(
+    "session.defaultProviderAlias",
+    configuration.session.defaultProviderAlias,
+  );
+  requireNonEmpty(
+    "session.interactionMode",
+    configuration.session.interactionMode,
+  );
+  requireNonEmpty("session.skillPointer", configuration.session.skillPointer);
+  if (configuration.session.worktreesRoot !== undefined) {
+    requireNonEmpty(
+      "session.worktreesRoot",
+      configuration.session.worktreesRoot,
     );
+    requireAbsolute(
+      "session.worktreesRoot",
+      configuration.session.worktreesRoot,
+    );
+  }
+  if (!T3_RUNTIME_MODES.includes(configuration.session.defaultRuntimeMode)) {
+    throw new TypeError(
+      `session.defaultRuntimeMode must be one of '${T3_RUNTIME_MODES.join("', '")}'`,
+    );
+  }
+  const aliases = Object.entries(configuration.providerAliases);
+  if (aliases.length === 0) {
+    throw new TypeError("providerAliases must not be empty");
+  }
+  for (const [alias, provider] of aliases) {
+    if (alias.length > 64 || !providerAliasPattern.test(alias)) {
+      throw new TypeError(
+        `providerAliases key '${alias}' must be a lower-kebab alias of at most 64 characters`,
+      );
+    }
+    requireNonEmpty(
+      `providerAliases.${alias}.providerDisplayName`,
+      provider.providerDisplayName,
+    );
+    requireNonEmpty(`providerAliases.${alias}.model`, provider.model);
+  }
+  if (
+    configuration.providerAliases[
+      configuration.session.defaultProviderAlias
+    ] === undefined
+  ) {
+    throw new TypeError(
+      `session.defaultProviderAlias '${configuration.session.defaultProviderAlias}' is not configured in providerAliases`,
+    );
+  }
+  if (validateBudgetAliases) {
+    for (const alias of Object.keys(configuration.pacing.providerBudgets)) {
+      if (configuration.providerAliases[alias] === undefined) {
+        throw new TypeError(
+          `pacing.providerBudgets alias '${alias}' is not configured in providerAliases`,
+        );
+      }
+    }
   }
   requireHttpUrl("pushover.apiUrl", configuration.pushover.apiUrl);
   requireNonEmpty(
@@ -212,5 +288,60 @@ export const validateProductionConfiguration = (
     }
   }
   requireNonEmpty("pushover.userKey", configuration.pushover.userKey);
+};
+
+export const validateProductionConfiguration = (
+  configuration: ProductionConfiguration,
+): ProductionConfiguration => {
+  validateCommonProductionConfiguration(configuration);
   return configuration;
+};
+
+export const validateResolvedProductionConfiguration = (
+  configuration: ResolvedProductionConfiguration,
+): ResolvedProductionConfiguration => {
+  const { defaultSelection, ...session } = configuration.session;
+  const { defaultProvider: _defaultProvider, ...pacing } = configuration.pacing;
+  void _defaultProvider;
+  validateCommonProductionConfiguration(
+    { ...configuration, pacing, session },
+    false,
+  );
+  if (
+    defaultSelection.alias !== session.defaultProviderAlias ||
+    defaultSelection.interactionMode !== session.interactionMode ||
+    defaultSelection.runtimeMode !== session.defaultRuntimeMode ||
+    defaultSelection.providerInstanceId !== configuration.pacing.defaultProvider
+  ) {
+    throw new TypeError(
+      "session.defaultSelection must match the configured default alias, runtime, interaction, and pacing provider",
+    );
+  }
+  return configuration;
+};
+
+export const resolveProductionConfiguration = async (
+  configuration: ProductionConfiguration,
+  resolver: ProviderSelectionResolver,
+): Promise<ResolvedProductionConfiguration> => {
+  const validated = validateProductionConfiguration(configuration);
+  const startup = await resolver.resolveStartup({
+    defaultAlias: validated.session.defaultProviderAlias,
+    interactionMode: validated.session.interactionMode,
+    providerBudgets: validated.pacing.providerBudgets,
+    runtimeMode: validated.session.defaultRuntimeMode,
+  });
+  const resolved: ResolvedProductionConfiguration = {
+    ...validated,
+    pacing: {
+      ...validated.pacing,
+      defaultProvider: startup.defaultSelection.providerInstanceId,
+      providerBudgets: startup.providerBudgets,
+    },
+    session: {
+      ...validated.session,
+      defaultSelection: startup.defaultSelection,
+    },
+  };
+  return validateResolvedProductionConfiguration(resolved);
 };

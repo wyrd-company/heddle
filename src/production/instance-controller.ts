@@ -38,7 +38,7 @@ import type {
   StartReconcilerInstanceInput,
 } from "../reconciler/index.js";
 import { isTodoState } from "../todo/index.js";
-import type { ProductionConfiguration } from "./configuration.js";
+import type { ResolvedProductionConfiguration } from "./configuration.js";
 import {
   createProductionErrorAttention,
   type ProductionErrorCode,
@@ -76,7 +76,7 @@ const synchronizationAttentionId = (
 
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(
-    private readonly configuration: ProductionConfiguration,
+    private readonly configuration: ResolvedProductionConfiguration,
     private readonly persistence: SqlitePersistence,
     private readonly lifecycle: ProductionLifecycleRouter,
     private readonly routing: ProductRoutingCatalog,
@@ -539,6 +539,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       return value;
     };
     const session = this.configuration.session;
+    const selection = session.defaultSelection;
     const stage = await readProductionHandoffStage({
       instanceId,
       persistence: this.persistence,
@@ -585,15 +586,18 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             taskContract: taskContract(task),
           },
           instanceId,
-          interactionMode: session.interactionMode,
-          modelSelection: { instanceId: session.driver, model: session.model },
+          interactionMode: selection.interactionMode,
+          modelSelection: {
+            instanceId: selection.providerInstanceId,
+            model: selection.model.slug,
+          },
           projectId,
           providerContext: {
-            cliVersion: session.cliVersion,
-            driver: session.driver,
+            cliVersion: selection.observedCliVersion ?? "",
+            driver: selection.providerInstanceId,
             lifecycle: "independent",
           },
-          runtimeMode: session.runtimeMode,
+          runtimeMode: selection.runtimeMode,
           sessionKey,
           task: task.frontMatter,
           taskId: task.id,

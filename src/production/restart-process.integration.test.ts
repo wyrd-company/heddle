@@ -23,7 +23,7 @@ import {
 import { terminateAtBoundary } from "../control-plane/mechanical-process-termination-client.js";
 import { readLifecycleContext } from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
-import type { ProductionConfiguration } from "./configuration.js";
+import type { ResolvedProductionConfiguration } from "./configuration.js";
 
 const execute = promisify(execFile);
 
@@ -163,7 +163,7 @@ next_id: 1
     ).toMatchObject({ operationId: mergeResume.operationId });
     persistence.close();
 
-    const configuration: ProductionConfiguration = {
+    const configuration: ResolvedProductionConfiguration = {
       adHocProject: {
         name: "Shared tasks",
         projectId: "workspace-project",
@@ -182,6 +182,12 @@ next_id: 1
         providerBudgets: {},
         subagents: { maxDepth: 1, maxFanOut: 1 },
         usageWindowHours: 5,
+      },
+      providerAliases: {
+        primary: {
+          model: "sample-model",
+          providerDisplayName: "Workbench Alpha",
+        },
       },
       products: [
         {
@@ -202,11 +208,23 @@ next_id: 1
       },
       session: {
         baseRef: "main",
-        cliVersion: "0.91.0",
-        driver: "codex",
+        defaultProviderAlias: "primary",
+        defaultRuntimeMode: "auto-accept-edits",
+        defaultSelection: {
+          alias: "primary",
+          driverKind: "codex",
+          interactionMode: "default",
+          model: {
+            isCustom: false,
+            name: "Sample Model",
+            slug: "sample-model",
+          },
+          observedCliVersion: "0.91.0",
+          providerDisplayName: "Workbench Alpha",
+          providerInstanceId: "codex",
+          runtimeMode: "auto-accept-edits",
+        },
         interactionMode: "default",
-        model: "sample-model",
-        runtimeMode: "auto-accept-edits",
         skillPointer: "skill://sample",
         worktreesRoot: fixture.change.worktreesRoot,
       },
@@ -433,7 +451,7 @@ next_id: 1
       ],
       { cwd: root },
     );
-    const configuration: ProductionConfiguration = {
+    const configuration: ResolvedProductionConfiguration = {
       adHocProject: {
         name: "Shared tasks",
         projectId: "workspace-project",
@@ -453,6 +471,12 @@ next_id: 1
         subagents: { maxDepth: 1, maxFanOut: 1 },
         usageWindowHours: 5,
       },
+      providerAliases: {
+        primary: {
+          model: "sample-model",
+          providerDisplayName: "Workbench Alpha",
+        },
+      },
       products: [
         {
           name: "Sample product",
@@ -467,11 +491,23 @@ next_id: 1
       },
       session: {
         baseRef: "main",
-        cliVersion: "0.91.0",
-        driver: "codex",
+        defaultProviderAlias: "primary",
+        defaultRuntimeMode: "auto-accept-edits",
+        defaultSelection: {
+          alias: "primary",
+          driverKind: "codex",
+          interactionMode: "default",
+          model: {
+            isCustom: false,
+            name: "Sample Model",
+            slug: "sample-model",
+          },
+          observedCliVersion: "0.91.0",
+          providerDisplayName: "Workbench Alpha",
+          providerInstanceId: "codex",
+          runtimeMode: "auto-accept-edits",
+        },
         interactionMode: "default",
-        model: "sample-model",
-        runtimeMode: "auto-accept-edits",
         skillPointer: "skill://sample",
         worktreesRoot: join(root, "worktrees"),
       },

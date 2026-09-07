@@ -12,8 +12,12 @@ export {
 export {
   type ProductionConfiguration,
   type ProductionSessionConfiguration,
+  type ResolvedProductionConfiguration,
+  type ResolvedProductionSessionConfiguration,
   type PushoverConfiguration,
   validateProductionConfiguration,
+  validateResolvedProductionConfiguration,
+  resolveProductionConfiguration,
 } from "./configuration.js";
 export {
   DurableAttentionQueue,

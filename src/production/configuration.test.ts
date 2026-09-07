@@ -27,11 +27,16 @@ const fixture = (): ProductionConfiguration => ({
     stalledMilliseconds: 1_000,
   },
   pacing: {
-    defaultProvider: "provider-a",
     maxConcurrentSessions: 1,
-    providerBudgets: { "provider-a": { usageLimit: 1 } },
+    providerBudgets: { primary: { usageLimit: 1 } },
     subagents: { maxDepth: 1, maxFanOut: 1 },
     usageWindowHours: 5,
+  },
+  providerAliases: {
+    primary: {
+      model: "sample-model",
+      providerDisplayName: "Workbench Alpha",
+    },
   },
   products: [
     {
@@ -54,11 +59,9 @@ const fixture = (): ProductionConfiguration => ({
   },
   session: {
     baseRef: "main",
-    cliVersion: "1.0.0",
-    driver: "provider-a",
+    defaultProviderAlias: "primary",
+    defaultRuntimeMode: "auto",
     interactionMode: "default",
-    model: "sample-model",
-    runtimeMode: "sample-mode",
     skillPointer: "skill://sample",
   },
   stageThresholds: { implement: 10_000 },
@@ -114,14 +117,38 @@ describe("production configuration", () => {
     );
   });
 
-  it("rejects a pacing provider that the session boundary cannot dispatch", () => {
+  it("rejects a default alias outside the configured allowlist", () => {
     const invalid = {
       ...fixture(),
-      pacing: { ...fixture().pacing, defaultProvider: "provider-b" },
+      session: { ...fixture().session, defaultProviderAlias: "missing" },
     };
 
     expect(() => validateProductionConfiguration(invalid)).toThrow(
-      "pacing.defaultProvider must equal session.driver",
+      "session.defaultProviderAlias 'missing' is not configured in providerAliases",
+    );
+  });
+
+  it("rejects malformed alias keys and pacing aliases outside the allowlist", () => {
+    expect(() =>
+      validateProductionConfiguration({
+        ...fixture(),
+        providerAliases: {
+          "Not Valid": fixture().providerAliases["primary"]!,
+        },
+        session: { ...fixture().session, defaultProviderAlias: "Not Valid" },
+      }),
+    ).toThrow("must be a lower-kebab alias");
+
+    expect(() =>
+      validateProductionConfiguration({
+        ...fixture(),
+        pacing: {
+          ...fixture().pacing,
+          providerBudgets: { missing: { usageLimit: 1 } },
+        },
+      }),
+    ).toThrow(
+      "pacing.providerBudgets alias 'missing' is not configured in providerAliases",
     );
   });
 

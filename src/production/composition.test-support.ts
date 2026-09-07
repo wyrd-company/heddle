@@ -14,7 +14,7 @@ import type {
   T3DispatchCommand,
   T3WorkflowMcpProviderSession,
 } from "../control-plane/index.js";
-import type { ProductionConfiguration } from "./configuration.js";
+import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 
 export const execute = promisify(execFile);
@@ -116,6 +116,28 @@ export class SyntheticT3 implements ProductionT3Client {
     return { thread: { activities: [] } };
   }
 
+  async readProviderCatalog() {
+    return [
+      {
+        availability: "available" as const,
+        displayName: "Workbench Alpha",
+        driverKind: "codex",
+        enabled: true,
+        installed: true,
+        instanceId: "codex",
+        models: [
+          {
+            isCustom: false,
+            name: "Sample Model",
+            slug: "sample-model",
+          },
+        ],
+        observedCliVersion: "0.91.0",
+        state: "ready",
+      },
+    ];
+  }
+
   async respondToApproval(
     threadId: string,
     requestId: string,
@@ -150,7 +172,7 @@ export class SyntheticT3 implements ProductionT3Client {
 export type ProductionFixture = {
   blueprintsRepositoryRoot: string;
   cleanup(): Promise<void>;
-  configuration: ProductionConfiguration;
+  configuration: ResolvedProductionConfiguration;
   repositoryRoot: string;
   root: string;
   taskId: number;
@@ -492,6 +514,12 @@ next_id: 1
           subagents: { maxDepth: 1, maxFanOut: 1 },
           usageWindowHours: 5,
         },
+        providerAliases: {
+          primary: {
+            model: "sample-model",
+            providerDisplayName: "Workbench Alpha",
+          },
+        },
         products: [
           {
             name: "Sample product",
@@ -512,11 +540,23 @@ next_id: 1
         },
         session: {
           baseRef: "main",
-          cliVersion: "0.91.0",
-          driver: "codex",
+          defaultProviderAlias: "primary",
+          defaultRuntimeMode: "auto-accept-edits",
+          defaultSelection: {
+            alias: "primary",
+            driverKind: "codex",
+            interactionMode: "default",
+            model: {
+              isCustom: false,
+              name: "Sample Model",
+              slug: "sample-model",
+            },
+            observedCliVersion: "0.91.0",
+            providerDisplayName: "Workbench Alpha",
+            providerInstanceId: "codex",
+            runtimeMode: "auto-accept-edits",
+          },
           interactionMode: "default",
-          model: "sample-model",
-          runtimeMode: "auto-accept-edits",
           skillPointer: "skill://sample",
           worktreesRoot: join(root, "worktrees"),
         },

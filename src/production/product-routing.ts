@@ -7,7 +7,7 @@ import type { BoardTask } from "../board-adapter/index.js";
 import type {
   ProductConfiguration,
   ProductRepositoryConfiguration,
-  ProductionConfiguration,
+  ResolvedProductionConfiguration,
 } from "./configuration.js";
 
 export type TaskRoute = {
@@ -43,7 +43,7 @@ export class ProductRoutingCatalog {
   >;
   private tasksById = new Map<number, BoardTask>();
 
-  constructor(private readonly configuration: ProductionConfiguration) {
+  constructor(private readonly configuration: ResolvedProductionConfiguration) {
     this.productsByName = new Map(
       configuration.products.map((product) => [product.name, product]),
     );

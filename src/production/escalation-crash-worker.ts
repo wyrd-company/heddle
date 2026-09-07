@@ -13,7 +13,7 @@ import {
   createProductionComposition,
   type ProductionT3Client,
 } from "./composition.js";
-import type { ProductionConfiguration } from "./configuration.js";
+import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { PushoverMessage, PushoverTransport } from "./durable-adapters.js";
 
 const [mode, root, deliveriesPath] = process.argv.slice(2);
@@ -27,7 +27,7 @@ if (
   throw new Error("mode, root, and deliveries path are required");
 }
 
-const configuration: ProductionConfiguration = {
+const configuration: ResolvedProductionConfiguration = {
   adHocProject: {
     name: "Shared tasks",
     projectId: "workspace-project",
@@ -46,6 +46,12 @@ const configuration: ProductionConfiguration = {
     providerBudgets: {},
     subagents: { maxDepth: 1, maxFanOut: 1 },
     usageWindowHours: 5,
+  },
+  providerAliases: {
+    primary: {
+      model: "sample-model",
+      providerDisplayName: "Workbench Alpha",
+    },
   },
   products: [
     {
@@ -66,11 +72,23 @@ const configuration: ProductionConfiguration = {
   },
   session: {
     baseRef: "main",
-    cliVersion: "0.91.0",
-    driver: "codex",
+    defaultProviderAlias: "primary",
+    defaultRuntimeMode: "auto-accept-edits",
+    defaultSelection: {
+      alias: "primary",
+      driverKind: "codex",
+      interactionMode: "default",
+      model: {
+        isCustom: false,
+        name: "Sample Model",
+        slug: "sample-model",
+      },
+      observedCliVersion: "0.91.0",
+      providerDisplayName: "Workbench Alpha",
+      providerInstanceId: "codex",
+      runtimeMode: "auto-accept-edits",
+    },
     interactionMode: "default",
-    model: "sample-model",
-    runtimeMode: "auto-accept-edits",
     skillPointer: "skill://sample",
   },
   stageThresholds: { implement: 60_000 },
