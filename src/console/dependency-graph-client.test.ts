@@ -143,7 +143,10 @@ describe("console client request ownership", () => {
       expect(harness.status.textContent).toBe("Lifecycle view for task #11"),
     );
     harness.navigateUrl("http://console.test" + harness.boardViewLink.href);
-    await vi.waitFor(() => expect(harness.cardIds()).toEqual(expectedRecords));
+    await vi.waitFor(() =>
+      expect(harness.status.textContent).toBe("2 visible records"),
+    );
+    expect(harness.cardIds()).toEqual(expectedRecords);
     expect(harness.scope.value).toBe("epic:10");
 
     harness.navigateUrl(lifecycleUrl);
@@ -154,12 +157,15 @@ describe("console client request ownership", () => {
       "http://console.test" + harness.dependenciesViewLink.href,
     );
     await vi.waitFor(() =>
-      expect(
-        harness.graphCanvas.children
-          .filter(({ tagName }) => tagName === "a")
-          .map(({ dataset }) => dataset.taskId),
-      ).toEqual(expectedRecords),
+      expect(harness.status.textContent).toBe(
+        "2 visible nodes · 1 dependency edges",
+      ),
     );
+    expect(
+      harness.graphCanvas.children
+        .filter(({ tagName }) => tagName === "a")
+        .map(({ dataset }) => dataset.taskId),
+    ).toEqual(expectedRecords);
     expect(harness.scope.value).toBe("epic:10");
   });
 
