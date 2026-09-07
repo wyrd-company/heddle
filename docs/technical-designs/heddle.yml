@@ -704,8 +704,12 @@ proposed-design:
     the current secure route while retaining the original stable attention ID.
     A pending two-fingerprint intent from the preceding level-less message
     shape upgrades in place only when both prior fingerprints match the current
-    message without its level. The current level then becomes part of both new
-    fingerprints; any other disagreement remains rejected.
+    message without its level. A pending two-fingerprint task notification whose
+    route is the exact legacy `scope=task:<id>` form also upgrades to the
+    canonical split lifecycle route when its task identity, stable attention
+    identity, and every other fingerprint field match. The current level and
+    canonical route then become part of both new fingerprints; any other
+    disagreement remains rejected.
 
     Session observation and session page delivery fail independently. An
     observer rejection raises the stable task-scoped production error

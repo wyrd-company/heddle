@@ -865,7 +865,71 @@ describe("durable production adapters", () => {
     persistence.close();
   });
 
-  it("upgrades the preceding two-fingerprint pending intent after restart", async () => {
+  it("migrates an exact two-fingerprint legacy task route and retries the canonical URL", async () => {
+    directory = await mkdtemp(
+      join(tmpdir(), "heddle-pushover-route-migration-"),
+    );
+    const first = new SqlitePersistence({ stateDirectory: directory });
+    first.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "sample-instance",
+      state: "waiting",
+      taskId: 28,
+    });
+    const attention = {
+      attentionId: "attention-28",
+      instanceId: "sample-instance",
+      message: "A sample needs attention",
+    };
+    const configuration = {
+      apiUrl: "https://notify.invalid/messages",
+      applicationToken: "application-token",
+      consoleBaseUrl: "https://console.invalid/",
+      userKey: "operator-key",
+    };
+    const priorMessage = {
+      applicationToken: configuration.applicationToken,
+      level: "normal",
+      message: attention.message,
+      stableId: attention.attentionId,
+      title: "Heddle needs attention",
+      url: "https://console.invalid/?view=lifecycle&scope=task%3A28&attention=attention-28",
+      userKey: configuration.userKey,
+    };
+    const hash = (value: unknown): string =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    first.recordEffectIntent("pushover", attention.attentionId, {
+      attemptFingerprint: hash(priorMessage),
+      logicalFingerprint: hash({
+        level: priorMessage.level,
+        message: priorMessage.message,
+        stableId: priorMessage.stableId,
+        title: priorMessage.title,
+        url: priorMessage.url,
+        userKey: priorMessage.userKey,
+      }),
+    });
+    first.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory: directory });
+    const transport = { send: vi.fn(async () => undefined) };
+    await new DurablePushoverNotifier(restarted, configuration, transport).send(
+      attention,
+    );
+
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stableId: attention.attentionId,
+        url: "https://console.invalid/?view=lifecycle&task=28&scope=all&attention=attention-28",
+      }),
+    );
+    expect(restarted.effectCompleted("pushover", attention.attentionId)).toBe(
+      true,
+    );
+    restarted.close();
+  });
+
+  it("migrates a preceding level-less two-fingerprint legacy task route after restart", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-prior-"));
     const first = new SqlitePersistence({ stateDirectory: directory });
     first.writeReconcilerRuntime({
@@ -890,7 +954,7 @@ describe("durable production adapters", () => {
       message: attention.message,
       stableId: attention.attentionId,
       title: "Heddle needs attention",
-      url: "https://console.invalid/?view=lifecycle&task=29&scope=all&attention=task-29%3Asession%3Achoice",
+      url: "https://console.invalid/?view=lifecycle&scope=task%3A29&attention=task-29%3Asession%3Achoice",
       userKey: configuration.userKey,
     };
     const hash = (value: unknown): string =>
@@ -919,6 +983,89 @@ describe("durable production adapters", () => {
     );
     restarted.close();
   });
+
+  it.each([
+    [
+      "task identity",
+      {
+        url: "https://console.invalid/?view=lifecycle&scope=task%3A32&attention=attention-31",
+      },
+    ],
+    [
+      "deep-link attention identity",
+      {
+        url: "https://console.invalid/?view=lifecycle&scope=task%3A31&attention=attention-32",
+      },
+    ],
+    ["stable attention identity", { stableId: "attention-32" }],
+    ["level", { level: "critical" }],
+    ["message", { message: "A different sample needs attention" }],
+    ["title", { title: "A different title" }],
+    ["recipient", { userKey: "different-operator-key" }],
+    [
+      "application credential",
+      { applicationToken: "different-application-token" },
+    ],
+  ] as const)(
+    "rejects legacy task route migration when %s disagrees",
+    async (_field, changed) => {
+      directory = await mkdtemp(
+        join(tmpdir(), "heddle-pushover-route-migration-bad-"),
+      );
+      const first = new SqlitePersistence({ stateDirectory: directory });
+      first.writeReconcilerRuntime({
+        boardStatus: "in-progress",
+        instanceId: "sample-instance",
+        state: "waiting",
+        taskId: 31,
+      });
+      const attention = {
+        attentionId: "attention-31",
+        instanceId: "sample-instance",
+        message: "A sample needs attention",
+      };
+      const configuration = {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        userKey: "operator-key",
+      };
+      const priorMessage = {
+        applicationToken: configuration.applicationToken,
+        level: "normal",
+        message: attention.message,
+        stableId: attention.attentionId,
+        title: "Heddle needs attention",
+        url: "https://console.invalid/?view=lifecycle&scope=task%3A31&attention=attention-31",
+        userKey: configuration.userKey,
+        ...changed,
+      };
+      const hash = (value: unknown): string =>
+        createHash("sha256").update(JSON.stringify(value)).digest("hex");
+      first.recordEffectIntent("pushover", attention.attentionId, {
+        attemptFingerprint: hash(priorMessage),
+        logicalFingerprint: hash({
+          level: priorMessage.level,
+          message: priorMessage.message,
+          stableId: priorMessage.stableId,
+          title: priorMessage.title,
+          url: priorMessage.url,
+          userKey: priorMessage.userKey,
+        }),
+      });
+      first.close();
+
+      const restarted = new SqlitePersistence({ stateDirectory: directory });
+      const transport = { send: vi.fn(async () => undefined) };
+      await expect(
+        new DurablePushoverNotifier(restarted, configuration, transport).send(
+          attention,
+        ),
+      ).rejects.toThrow("changed durable identity");
+      expect(transport.send).not.toHaveBeenCalled();
+      restarted.close();
+    },
+  );
 
   it.each(["attemptFingerprint", "logicalFingerprint"] as const)(
     "rejects preceding intent with %s disagreement after restart",

@@ -620,7 +620,7 @@ export class SqlitePersistence {
     stableId: string,
     fingerprint: NotificationIntentFingerprint,
     legacyFingerprint: string,
-    precedingFingerprint?: NotificationIntentFingerprint,
+    equivalentFingerprints: readonly NotificationIntentFingerprint[] = [],
   ): boolean {
     this.assertStableId("stableId", stableId);
     const effectKind = "pushover";
@@ -647,12 +647,14 @@ export class SqlitePersistence {
       .get(effectKind, stableId) as { payloadJson: string } | undefined;
     if (prior?.payloadJson === payloadJson) return false;
     if (
-      precedingFingerprint !== undefined &&
-      prior?.payloadJson ===
-        serialize({
-          attemptFingerprint: precedingFingerprint.attemptFingerprint,
-          logicalFingerprint: precedingFingerprint.logicalFingerprint,
-        })
+      equivalentFingerprints.some(
+        (equivalent) =>
+          prior?.payloadJson ===
+          serialize({
+            attemptFingerprint: equivalent.attemptFingerprint,
+            logicalFingerprint: equivalent.logicalFingerprint,
+          }),
+      )
     ) {
       this.database
         .prepare(

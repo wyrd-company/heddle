@@ -11,6 +11,7 @@ import type { SessionObservationAttention } from "../control-plane/index.js";
 import type {
   JsonValue,
   NotificationFailureCategory,
+  NotificationIntentFingerprint,
   NotificationRetryCategory,
   NotificationVerification,
   SqlitePersistence,
@@ -239,6 +240,84 @@ export type OperatorPage = {
   scope?: "all" | `task:${number}`;
 };
 
+const notificationFingerprint = (value: unknown): string =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+const precedingNotificationMessage = (message: PushoverMessage) => ({
+  applicationToken: message.applicationToken,
+  message: message.message,
+  stableId: message.stableId,
+  title: message.title,
+  url: message.url,
+  userKey: message.userKey,
+});
+
+const notificationLogicalMessage = (message: PushoverMessage) => ({
+  level: message.level,
+  message: message.message,
+  stableId: message.stableId,
+  title: message.title,
+  url: message.url,
+  userKey: message.userKey,
+});
+
+const precedingNotificationLogicalMessage = (message: PushoverMessage) => ({
+  message: message.message,
+  stableId: message.stableId,
+  title: message.title,
+  url: message.url,
+  userKey: message.userKey,
+});
+
+const notificationIntentFingerprints = (
+  message: PushoverMessage,
+  legacyTaskRouteUrl?: string,
+): {
+  attemptFingerprint: string;
+  equivalentFingerprints: NotificationIntentFingerprint[];
+  legacyFingerprint: string;
+  logicalFingerprint: string;
+} => {
+  const legacyFingerprint = notificationFingerprint(
+    precedingNotificationMessage(message),
+  );
+  const equivalentFingerprints: NotificationIntentFingerprint[] = [
+    {
+      attemptFingerprint: legacyFingerprint,
+      logicalFingerprint: notificationFingerprint(
+        precedingNotificationLogicalMessage(message),
+      ),
+    },
+  ];
+  if (legacyTaskRouteUrl !== undefined) {
+    const legacyTaskRouteMessage = { ...message, url: legacyTaskRouteUrl };
+    equivalentFingerprints.push(
+      {
+        attemptFingerprint: notificationFingerprint(legacyTaskRouteMessage),
+        logicalFingerprint: notificationFingerprint(
+          notificationLogicalMessage(legacyTaskRouteMessage),
+        ),
+      },
+      {
+        attemptFingerprint: notificationFingerprint(
+          precedingNotificationMessage(legacyTaskRouteMessage),
+        ),
+        logicalFingerprint: notificationFingerprint(
+          precedingNotificationLogicalMessage(legacyTaskRouteMessage),
+        ),
+      },
+    );
+  }
+  return {
+    attemptFingerprint: notificationFingerprint(message),
+    equivalentFingerprints,
+    legacyFingerprint,
+    logicalFingerprint: notificationFingerprint(
+      notificationLogicalMessage(message),
+    ),
+  };
+};
+
 export class HttpPushoverTransport implements PushoverTransport {
   public constructor(
     private readonly apiUrl: string,
@@ -345,43 +424,20 @@ export class DurablePushoverNotifier {
     if (this.persistence.effectCompleted("pushover", page.attentionId)) {
       return;
     }
-    const message = this.#message(page);
-    const fingerprint = (value: unknown): string =>
-      createHash("sha256").update(JSON.stringify(value)).digest("hex");
-    const legacyFingerprint = fingerprint({
-      applicationToken: message.applicationToken,
-      message: message.message,
-      stableId: message.stableId,
-      title: message.title,
-      url: message.url,
-      userKey: message.userKey,
-    });
-    const logicalFingerprint = fingerprint({
-      level: message.level,
-      message: message.message,
-      stableId: message.stableId,
-      title: message.title,
-      url: message.url,
-      userKey: message.userKey,
-    });
-    const precedingFingerprint = {
-      attemptFingerprint: legacyFingerprint,
-      logicalFingerprint: fingerprint({
-        message: message.message,
-        stableId: message.stableId,
-        title: message.title,
-        url: message.url,
-        userKey: message.userKey,
-      }),
-    };
-    const attemptFingerprint = fingerprint(message);
+    const { legacyTaskRouteUrl, message } = this.#messageRoute(page);
+    const {
+      attemptFingerprint,
+      equivalentFingerprints,
+      legacyFingerprint,
+      logicalFingerprint,
+    } = notificationIntentFingerprints(message, legacyTaskRouteUrl);
     const verification = this.#verification(page);
     try {
       this.persistence.recordNotificationIntent(
         page.attentionId,
         { attemptFingerprint, logicalFingerprint },
         legacyFingerprint,
-        precedingFingerprint,
+        equivalentFingerprints,
       );
     } catch (error) {
       if (!(error instanceof LegacyNotificationIntentMismatchError)) {
@@ -467,16 +523,25 @@ export class DurablePushoverNotifier {
   }
 
   async sendBeforeDurableIntent(page: OperatorPage): Promise<void> {
-    await this.#sendTransport(this.#message(page));
+    await this.#sendTransport(this.#messageRoute(page).message);
   }
 
-  #message(page: OperatorPage): PushoverMessage {
+  #messageRoute(page: OperatorPage): {
+    legacyTaskRouteUrl?: string;
+    message: PushoverMessage;
+  } {
     const scopeValue = page.scope ?? this.#scopeForInstance(page);
     const scope = new globalThis.URL(this.configuration.consoleBaseUrl);
+    let legacyTaskRouteUrl: string | undefined;
     scope.searchParams.set("view", "lifecycle");
     if (scopeValue.startsWith("task:")) {
       scope.searchParams.set("task", scopeValue.slice("task:".length));
       scope.searchParams.set("scope", "all");
+      const legacyScope = new globalThis.URL(this.configuration.consoleBaseUrl);
+      legacyScope.searchParams.set("view", "lifecycle");
+      legacyScope.searchParams.set("scope", scopeValue);
+      legacyScope.searchParams.set("attention", page.attentionId);
+      legacyTaskRouteUrl = legacyScope.toString();
     } else {
       scope.searchParams.set("scope", scopeValue);
     }
@@ -490,7 +555,7 @@ export class DurablePushoverNotifier {
       url: scope.toString(),
       userKey: this.configuration.userKey,
     };
-    return message;
+    return { legacyTaskRouteUrl, message };
   }
 
   async #sendTransport(message: PushoverMessage): Promise<void> {

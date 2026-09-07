@@ -841,8 +841,11 @@ explicit disposition that adopts the current route; without it, ambiguous
 legacy intent stays pending.
 A pending intent from the immediately preceding two-fingerprint message shape
 also upgrades in place when both stored fingerprints match the current message
-without its level. Heddle then records the current level in both fingerprints.
-Any other disagreement remains rejected.
+without its level. A pending two-fingerprint task notification whose route is
+the exact legacy `scope=task:<id>` form also upgrades to the canonical split
+lifecycle route when its task identity, stable attention identity, and every
+other fingerprint field match. Heddle then records the current level and route
+in both fingerprints. Any other disagreement remains rejected.
 Pushover receives escalations, every production error, and session-observation
 attention of kind `ended`, `failed`, or `stalled`. The first two session states
 are dead-session states. An incident-eligible production error is informational
