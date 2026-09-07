@@ -472,6 +472,50 @@ describe("production incident coordinator", () => {
     expect(persistence!.hasAttention(source.attentionId)).toBe(true);
   });
 
+  it("refuses to activate finalize before review acceptance", async () => {
+    const { attention, coordinator, harness } = await createSubject();
+    await raise(attention);
+    await coordinator.reconcile([task()]);
+    const runtime = persistence!.listIncidentRuntime()[0]!;
+    persistence!.writeIncidentRuntime({
+      ...runtime,
+      accepted: false,
+      diagnosis: {
+        conditionState: "live",
+        proposedActions: [],
+        rootCauseAnalysis: "Synthetic analysis",
+      },
+      stageId: "review",
+      state: "waiting",
+    });
+    persistence!.updateInstance(runtime.incidentId, lifecycleState("finalize"));
+
+    await coordinator.reconcile([task()]);
+
+    expect(harness.activations).toEqual(["implement"]);
+    expect(persistence!.listIncidentRuntime()[0]?.state).toBe("failed");
+  });
+
+  it("does not recursively dispatch an eligible error whose source is an incident", async () => {
+    const { attention, coordinator } = await createSubject();
+    await raise(attention);
+    await coordinator.reconcile([task()]);
+    const runtime = persistence!.listIncidentRuntime()[0]!;
+    await attention.raise(
+      productionErrorAttention({
+        code: "lifecycle-execution-failed",
+        error: new Error("Synthetic incident lifecycle failure"),
+        instanceId: runtime.incidentId,
+        summary: "Incident lifecycle failed",
+        taskId: runtime.taskId,
+      }),
+    );
+
+    await coordinator.reconcile([task()]);
+
+    expect(persistence!.listIncidentRuntime()).toHaveLength(1);
+  });
+
   it("holds a production mutation until the current finalize session has accepted operator approval", async () => {
     const { attention, coordinator } = await createSubject();
     const source = await raise(attention);
