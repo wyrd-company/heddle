@@ -218,7 +218,11 @@
         "skillPointer": { "type": "string", "minLength": 1 },
         "launchPreparation": {
           "type": "object",
-          "propertyNames": { "minLength": 1, "pattern": "\\S" },
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,

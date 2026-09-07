@@ -462,6 +462,43 @@ describe("deployed configuration directory", () => {
     );
   });
 
+  it.each([
+    ["whitespace-padded", " sample-driver"],
+    ["embedded-whitespace", "sample driver"],
+    ["digit-prefixed", "1sample-driver"],
+    ["overlong", "s".repeat(65)],
+  ])(
+    "rejects a %s launch-preparation driver kind before startup dispatch",
+    async (_case, driverKind) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+      await prepareBlueprintRepository(root);
+      const path = join(root, "config.yml");
+      const executable = join(root, "timeout-application-command");
+      await writeFile(executable, "#!/bin/sh\nexit 0\n");
+      await chmod(executable, 0o755);
+      const configuration = fixture(root);
+      await writeFile(
+        path,
+        stringify({
+          ...configuration,
+          session: {
+            ...configuration.session,
+            launchPreparation: {
+              [driverKind]: { executable },
+            },
+          },
+        }),
+      );
+
+      await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+        `Configuration file '${path}' is invalid`,
+      );
+      await expect(
+        access(configuration.stateDirectory, constants.F_OK),
+      ).rejects.toThrow();
+    },
+  );
+
   it("fails startup preflight when launch preparation is unavailable", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const path = join(root, "config.yml");

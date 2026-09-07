@@ -431,10 +431,11 @@ configuration is invalid. Omitting a second alias does not give that alias an
 unbudgeted route to the instance.
 
 `session.launchPreparation` is an optional map keyed by the exact open T3 driver
-kind. Each configured entry is a separately preflighted absolute executable.
-It receives the accepted timeout-consumer input, including the resolved driver
-kind and provider instance ID, as one version-1 JSON request and must return
-exactly
+kind. A key is a 1–64 character `ProviderDriverKind` slug: it starts with a
+letter and contains only letters, digits, `-`, and `_`. Each configured entry is
+a separately preflighted absolute executable. It receives the accepted
+timeout-consumer input, including the resolved driver kind and provider instance
+ID, as one version-1 JSON request and must return exactly
 `{"version":1,"applied":true}`. Heddle invokes it before `thread.create` and
 fails closed on process, timeout, output, or acknowledgement errors. An entry
 accepts optional `arguments`. Its bounded `timeoutMilliseconds` defaults to 10000.

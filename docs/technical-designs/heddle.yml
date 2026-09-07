@@ -557,11 +557,13 @@ proposed-design:
     notification, and the operator answers from the console.
     Session preparation configures the Heddle MCP server for these long-held
     calls through an optional operator-configured launch-preparation executable
-    keyed by the open T3 driver kind. This port exists because the pinned T3
-    application exposes no authenticated pre-thread setting capability. Heddle
-    invokes the matching adapter without a shell through a closed, versioned
-    JSON protocol before it creates the T3 thread and fails closed when a
-    configured adapter does not acknowledge success. Operators configure Codex
+    keyed by the open T3 `ProviderDriverKind` slug contract: 1–64 characters,
+    starting with a letter, with only letters, digits, `-`, and `_`. This port
+    exists because the pinned T3 application exposes no authenticated pre-thread
+    setting capability. Heddle invokes the matching adapter without a shell
+    through a closed, versioned JSON protocol before it creates the T3 thread and
+    fails closed when a configured adapter does not acknowledge success.
+    Operators configure Codex
     to receive `tool_timeout_sec = 100000` and Claude Code to receive
     `MCP_TOOL_TIMEOUT=100000000` milliseconds. The absence of an adapter never
     makes an otherwise unknown driver unsupported by Heddle. Every driver

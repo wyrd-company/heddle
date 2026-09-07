@@ -22,6 +22,7 @@ const defaultConfigurationDirectory = "/home/vscode/.heddle";
 const configurationFileName = "config.yml";
 const blueprintsDirectoryName = "blueprints";
 const execute = promisify(execFile);
+const providerDriverKindPattern = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 type DeploymentEnvironment = Record<string, string | undefined>;
 
@@ -254,9 +255,9 @@ export const validateLaunchPreparationConfiguration = (
     | undefined,
 ): void => {
   for (const driverKind of Object.keys(launchPreparation ?? {})) {
-    if (driverKind.trim() === "") {
+    if (!providerDriverKindPattern.test(driverKind)) {
       throw new TypeError(
-        "session.launchPreparation driver kind must not be empty",
+        "session.launchPreparation driver kind must be a 1-64 character T3 ProviderDriverKind slug",
       );
     }
   }
