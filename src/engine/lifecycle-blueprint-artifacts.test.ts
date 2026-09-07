@@ -234,6 +234,25 @@ describe("organization lifecycle blueprint artifacts", () => {
     ]);
   });
 
+  it("accepts explicit review findings when rejection returns to a standard handoff", async () => {
+    const root = await repository();
+    const valid = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    valid.edges[1] = {
+      ...valid.edges[1]!,
+      "output-contract": "review-findings",
+    };
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(valid, null, 2)}\n`,
+    );
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+  });
+
   it("rejects a blueprint that omits a mechanical node board status", () => {
     const invalid = deliveryBlueprintFixture("standard-delivery");
     delete invalid["board-statuses"]!.merge;
