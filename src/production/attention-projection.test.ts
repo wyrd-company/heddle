@@ -203,6 +203,32 @@ describe("production attention projection", () => {
     ).toMatchObject({ actions: [], scope: "epic:45", taskId: 45 });
   });
 
+  it("binds scheduler resolution to the current failed-pass sequence", () => {
+    const projected = projectProductionAttention(
+      record("production:scheduler-pass-failed:global:episode:1", {
+        code: "scheduler-pass-failed",
+        incidentId: null,
+        instanceId: null,
+        kind: "production-error",
+        message: "Production reconciliation pass failed",
+        taskId: null,
+      }),
+      [],
+      undefined,
+      11,
+    );
+
+    expect(projected.actions).toMatchObject([
+      {
+        actionId: "attention.resolve",
+        contract: {
+          kind: "attention.resolve",
+          schedulerFailureSequence: 11,
+        },
+      },
+    ]);
+  });
+
   it("offers exact notification recovery only with verifiable recipient and message details", () => {
     const failureRecord = {
       category: "request-rejected" as const,

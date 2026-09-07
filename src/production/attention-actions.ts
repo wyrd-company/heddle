@@ -17,8 +17,20 @@ import type {
 } from "../mcp-server/index.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
+import { schedulerPassAttentionId } from "./scheduler-pass-attention.js";
 
 const effectKind = "console-attention-action";
+
+const actionStableId = (
+  attentionId: string,
+  action: ConsoleAttentionAction,
+): string => {
+  const contract = action.contract;
+  return contract.kind === "attention.resolve" &&
+    contract.schedulerFailureSequence !== undefined
+    ? `${attentionId}:scheduler-failure:${contract.schedulerFailureSequence}`
+    : attentionId;
+};
 
 const canonicalAnswers = (
   answers: ConsoleAttentionActionAnswers | undefined,
@@ -84,31 +96,40 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       ...(request.answers === undefined ? {} : { answers: request.answers }),
     };
     const intent = actionIntent(input.action, request.answers);
-    this.persistence.recordEffectIntent(
-      effectKind,
-      input.attention.attentionId,
-      intent,
-    );
-    if (
-      !this.persistence.effectCompleted(effectKind, input.attention.attentionId)
-    ) {
+    if (!this.#schedulerResolutionIsCurrent(validated)) return;
+    const stableId = actionStableId(input.attention.attentionId, input.action);
+    this.persistence.recordEffectIntent(effectKind, stableId, intent);
+    if (!this.persistence.effectCompleted(effectKind, stableId)) {
       if (!(await this.#effectRecorded(validated))) {
         await this.#apply(validated);
       }
       if (
-        !this.persistence.recordEffectCompleted(
-          effectKind,
-          input.attention.attentionId,
-        ) &&
-        !this.persistence.effectCompleted(
-          effectKind,
-          input.attention.attentionId,
-        )
+        !this.persistence.recordEffectCompleted(effectKind, stableId) &&
+        !this.persistence.effectCompleted(effectKind, stableId)
       ) {
         throw new Error("Attention action completion lost its durable intent");
       }
     }
+    if (!this.#schedulerResolutionIsCurrent(validated)) return;
     this.attention.resolve(input.attention.attentionId);
+  }
+
+  #schedulerResolutionIsCurrent(
+    input: Parameters<ConsoleAttentionActionPort["execute"]>[0],
+  ): boolean {
+    if (input.action.contract.kind !== "attention.resolve") return true;
+    const current = this.persistence
+      .listAttention()
+      .find(
+        (record) =>
+          record.attentionId === input.attention.attentionId &&
+          schedulerPassAttentionId(record) !== undefined,
+      );
+    if (current === undefined) return true;
+    return (
+      input.action.contract.schedulerFailureSequence ===
+      this.persistence.currentSchedulerPassFailureSequence()
+    );
   }
 
   async #effectRecorded(

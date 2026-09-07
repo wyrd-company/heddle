@@ -565,6 +565,11 @@ export class SqlitePersistence {
     return rows.map((row) => this.toSchedulerPassHistory(row));
   }
 
+  currentSchedulerPassFailureSequence(): number | undefined {
+    const latest = this.latestSchedulerPassHistory();
+    return latest?.type === "failure" ? latest.sequence : undefined;
+  }
+
   effectIntentRecorded(effectKind: string, stableId: string): boolean {
     this.assertStableId("effectKind", effectKind);
     this.assertStableId("stableId", stableId);

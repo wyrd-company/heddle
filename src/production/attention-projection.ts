@@ -24,6 +24,7 @@ import {
   productionErrorCodeDeclarations,
   productionErrorIncidentEligible,
   productionErrorIncidentId,
+  schedulerPassFailureCode,
   type ProductionErrorCode,
 } from "./error-visibility.js";
 
@@ -164,6 +165,7 @@ export const projectProductionAttention = (
   record: DurableAttentionRecord,
   runtimes: ReconcilerRuntimeRecord[],
   notificationFailure?: NotificationFailureRecord,
+  schedulerFailureSequence?: number,
 ): ConsoleAttention => {
   const payload = recordPayload(record);
   const attentionId = record.attentionId;
@@ -317,7 +319,13 @@ export const projectProductionAttention = (
       ...notificationActions,
       {
         actionId: "attention.resolve",
-        contract: { kind: "attention.resolve" },
+        contract: {
+          kind: "attention.resolve",
+          ...(code === schedulerPassFailureCode &&
+          schedulerFailureSequence !== undefined
+            ? { schedulerFailureSequence }
+            : {}),
+        },
         input: { kind: "none" },
         label: "Resolve",
       },

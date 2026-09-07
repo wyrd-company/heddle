@@ -532,10 +532,13 @@ proposed-design:
     retains the episode's first diagnostic, so differing error details do not
     create additional active cards; the active scheduler-pass bound is one.
     Resolve acknowledges that card through the standard production-error
-    action. A later failed pass in the same episode reopens it, including after
-    replay of the earlier resolution intent, so resolution cannot mask a
-    recurring fault. Only completion of the whole production pass appends the
-    episode's recovery event and resolves every active scheduler-pass card.
+    action. Its replay boundary is the latest durable failed-pass sequence. A
+    later failed pass in the same episode reopens the card and advances that
+    boundary. Replay of a completed Resolve from an earlier sequence is a
+    no-op; a Resolve projected for the current sequence can acknowledge the
+    card, so resolution cannot mask a recurring fault. Only completion of the
+    whole production pass appends the episode's recovery event and resolves
+    every active scheduler-pass card.
     This also retires a legacy error-fingerprint card. A later failure opens a
     new numbered episode and attention ID. Prior attention rows remain durable;
     ordered failure and recovery events remain inspectable and immutable across

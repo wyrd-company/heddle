@@ -525,11 +525,13 @@ durable history. One episode has one active card, even when its errors differ;
 the card keeps the first diagnostic and its stable ID ends in
 `global:episode:<number>`.
 
-**Resolve** acknowledges the active scheduler card. If another pass fails in
-the same episode, Heddle reopens that card, including when an earlier resolution
-intent is replayed. One complete production pass is the only recovery evidence:
-it appends the episode's recovery event and resolves every active
-`scheduler-pass-failed` card, including a legacy error-fingerprint card. A
+**Resolve** acknowledges the active scheduler card for the latest durable
+failed-pass sequence. If another pass fails in the same episode, Heddle reopens
+that card and advances the action replay boundary. Replaying a completed Resolve
+from an earlier sequence has no effect; Resolve from the current projection can
+acknowledge the reopened card. One complete production pass is the only
+recovery evidence: it appends the episode's recovery event and resolves every
+active `scheduler-pass-failed` card, including a legacy error-fingerprint card. A
 later failure starts the next episode with a new stable ID. The prior attention
 rows and ordered failure and recovery events stay in SQLite for inspection and
 do not return to the active catalog.

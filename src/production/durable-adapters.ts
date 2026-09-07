@@ -176,6 +176,8 @@ export class DurableAttentionQueue {
 
   list() {
     const runtimes = this.persistence.listReconcilerRuntime();
+    const schedulerFailureSequence =
+      this.persistence.currentSchedulerPassFailureSequence();
     return this.persistence.listAttention().map((record) => {
       const payload = record.payload;
       const stableId =
@@ -191,6 +193,7 @@ export class DurableAttentionQueue {
         stableId === undefined
           ? undefined
           : this.persistence.notificationFailure(stableId),
+        schedulerFailureSequence,
       );
     });
   }

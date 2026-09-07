@@ -15,7 +15,7 @@ import {
   schedulerPassFailureCode,
 } from "./error-visibility.js";
 
-const schedulerPassAttentionId = (
+export const schedulerPassAttentionId = (
   record: DurableAttentionRecord,
 ): string | undefined => {
   const payload = record.payload;

@@ -120,6 +120,7 @@ describe("SqlitePersistence", () => {
       },
       type: "failure",
     });
+    expect(restarted.currentSchedulerPassFailureSequence()).toBe(3);
     expect(
       restarted.recoverSchedulerPass([
         "production:scheduler-pass-failed:legacy",
@@ -130,12 +131,14 @@ describe("SqlitePersistence", () => {
         "production:scheduler-pass-failed:legacy",
       ]),
     ).toBeUndefined();
+    expect(restarted.currentSchedulerPassFailureSequence()).toBeUndefined();
     expect(restarted.listAttention()).toEqual([]);
     const recurrence = restarted.recordSchedulerPassFailure({
       message: "First sample failure",
       name: "Error",
     });
     expect(recurrence).toMatchObject({ episode: 2, type: "failure" });
+    expect(restarted.currentSchedulerPassFailureSequence()).toBe(5);
     restarted.close();
 
     const recovered = new SqlitePersistence({ stateDirectory });

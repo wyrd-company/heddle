@@ -64,7 +64,7 @@ export type ConsoleAttentionActionInput =
   | { kind: "questions"; questions: ConsoleAttentionQuestion[] };
 
 export type ConsoleAttentionActionContract =
-  | { kind: "attention.resolve" }
+  | { kind: "attention.resolve"; schedulerFailureSequence?: number }
   | {
       kind: "notification.retry";
       occurrence: number;

@@ -152,6 +152,10 @@ describe("production scheduler pass attention", () => {
       const resolve = visible.actions.find(
         ({ actionId }) => actionId === "attention.resolve",
       )!;
+      expect(resolve.contract).toEqual({
+        kind: "attention.resolve",
+        schedulerFailureSequence: 2,
+      });
       await repeatedFailure.consoleActions.execute({
         action: resolve,
         attention: visible,
@@ -168,6 +172,36 @@ describe("production scheduler pass attention", () => {
         "The organization blueprint repository could not fetch origin",
       );
       expect(schedulerAttention(afterResolution)).toHaveLength(1);
+      await afterResolution.consoleActions.execute({
+        action: resolve,
+        attention: visible,
+      });
+      expect(schedulerAttention(afterResolution)).toHaveLength(1);
+      const current = schedulerAttention(afterResolution)[0]!;
+      const currentResolve = current.actions.find(
+        ({ actionId }) => actionId === "attention.resolve",
+      )!;
+      expect(currentResolve.contract).toEqual({
+        kind: "attention.resolve",
+        schedulerFailureSequence: 3,
+      });
+      await afterResolution.consoleActions.execute({
+        action: currentResolve,
+        attention: current,
+      });
+      expect(schedulerAttention(afterResolution)).toEqual([]);
+      expect(
+        afterResolution.persistence.effectCompleted(
+          "console-attention-action",
+          `${current.attentionId}:scheduler-failure:2`,
+        ),
+      ).toBe(true);
+      expect(
+        afterResolution.persistence.effectCompleted(
+          "console-attention-action",
+          `${current.attentionId}:scheduler-failure:3`,
+        ),
+      ).toBe(true);
       await close();
 
       await rename(fixture.configuration.boardDirectory, displacedBoard);
