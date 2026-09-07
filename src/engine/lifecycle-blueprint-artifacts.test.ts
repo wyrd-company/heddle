@@ -244,6 +244,25 @@ describe("organization lifecycle blueprint artifacts", () => {
     },
   );
 
+  it.each(["provider-alias", "runtime-mode"])(
+    "rejects interpreter-invalid mechanical-node %s",
+    (field) => {
+      const invalid = deliveryBlueprintFixture("trivial");
+      (invalid.nodes[0] as Record<string, unknown>)[field] =
+        field === "provider-alias" ? "primary" : "auto";
+      const blueprint = { ...invalid, id: "trivial" } as LifecycleBlueprint;
+      const effects = Object.fromEntries(
+        blueprint.nodes
+          .filter(({ uses }) => uses !== "wait")
+          .map(({ uses }) => [uses, async () => ({})]),
+      ) as Record<string, LifecycleEffect>;
+
+      expect(() => validateBlueprint(blueprint, effects)).toThrow(
+        "must not declare session selection",
+      );
+    },
+  );
+
   it.each([
     ["provider-alias", "Not-Valid", "provider-alias"],
     ["runtime-mode", "unrestricted", "runtime-mode"],

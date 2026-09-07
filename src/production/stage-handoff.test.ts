@@ -124,6 +124,63 @@ describe("production stage handoff", () => {
     persistence.close();
   });
 
+  it("reads provider selection from a pinned remediation stage", async () => {
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-selection-"));
+    temporaryDirectories.push(repositoryRoot);
+    await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
+    await mkdir(join(repositoryRoot, "blueprints"));
+    const blueprintPath = await writeDeliveryBlueprintFixture(
+      repositoryRoot,
+      "standard-delivery",
+    );
+    const blueprint = JSON.parse(
+      await readFile(join(repositoryRoot, blueprintPath), "utf8"),
+    ) as {
+      nodes: Array<{
+        id: string;
+        "provider-alias"?: string;
+        "runtime-mode"?: string;
+      }>;
+    };
+    const remediation = blueprint.nodes.find(({ id }) => id === "remediate")!;
+    remediation["provider-alias"] = "primary";
+    remediation["runtime-mode"] = "auto-accept-edits";
+    await writeFile(
+      join(repositoryRoot, blueprintPath),
+      `${JSON.stringify(blueprint, null, 2)}\n`,
+    );
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(repositoryRoot, "state"),
+    });
+    const engine = new LifecycleEngine({
+      effects: {
+        finalize: async () => ({}),
+        merge: async () => ({}),
+        "prepare-worktree": async () => ({}),
+        "review-snapshot": async () => ({}),
+      },
+      persistence,
+      repositoryRoot,
+    });
+    await engine.start({
+      blueprintPath,
+      instanceId: "sample-instance",
+    });
+
+    await expect(
+      readProductionHandoffStage({
+        instanceId: "sample-instance",
+        persistence,
+        repositoryRoot,
+        stageId: "remediate",
+      }),
+    ).resolves.toMatchObject({
+      providerAlias: "primary",
+      runtimeMode: "auto-accept-edits",
+    });
+    persistence.close();
+  });
+
   it("carries a mechanical snapshot identity into the review handoff", async () => {
     const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-handoff-"));
     temporaryDirectories.push(repositoryRoot);
