@@ -462,6 +462,42 @@ describe("deployed configuration directory", () => {
     );
   });
 
+  it("loads an inclusive 64-character launch-preparation driver kind with the full T3 alphabet", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
+    const path = join(root, "config.yml");
+    const executable = join(root, "timeout-application-command");
+    await writeFile(executable, "#!/bin/sh\nexit 0\n");
+    await chmod(executable, 0o755);
+    const configuration = fixture(root);
+    const driverKind =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    expect(driverKind).toHaveLength(64);
+
+    await writeFile(
+      path,
+      stringify({
+        ...configuration,
+        session: {
+          ...configuration.session,
+          launchPreparation: {
+            [driverKind]: { executable },
+          },
+        },
+      }),
+    );
+
+    await expect(loadDeploymentConfiguration(root)).resolves.toMatchObject({
+      launchPreparation: {
+        [driverKind]: {
+          arguments: [],
+          executable,
+          timeoutMilliseconds: 10_000,
+        },
+      },
+    });
+  });
+
   it.each([
     ["whitespace-padded", " sample-driver"],
     ["embedded-whitespace", "sample driver"],
