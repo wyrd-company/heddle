@@ -626,6 +626,16 @@ describe("production subagent composition", () => {
         expect.objectContaining({ alias: "secondary", selectable: true }),
       ]),
     });
+    const listedWithInput = await callMcpTool(
+      composition,
+      parent.token,
+      "list_providers",
+      { provider: "provider-beta" },
+    );
+    expect(listedWithInput.result?.isError).toBe(true);
+    expect(listedWithInput.result?.content?.[0]?.text).toMatch(
+      /Input validation error.*Unrecognized key.*provider/,
+    );
     const effectsBefore = {
       commands: t3.commands.length,
       mcpRegistrations: t3.mcpRegistrations.length,
