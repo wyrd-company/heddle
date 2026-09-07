@@ -13,6 +13,8 @@ import {
 import type { JsonValue } from "../persistence/index.js";
 import type { NotificationDeliveryError } from "./durable-adapters.js";
 
+export const schedulerPassFailureCode = "scheduler-pass-failed" as const;
+
 export const productionErrorCodeDeclarations = {
   "board-task-absent": { incidentEligible: true },
   "child-promotion-failed": { incidentEligible: true },
@@ -29,7 +31,7 @@ export const productionErrorCodeDeclarations = {
   "notification-delivery-recovery-required": { incidentEligible: true },
   "notification-delivery-rejected": { incidentEligible: true },
   "notification-delivery-retryable": { incidentEligible: true },
-  "scheduler-pass-failed": { incidentEligible: false },
+  [schedulerPassFailureCode]: { incidentEligible: false },
   "session-observation-failed": { incidentEligible: true },
   "session-page-delivery-failed": { incidentEligible: true },
   "stale-attention-failed": { incidentEligible: true },
@@ -130,6 +132,23 @@ export const productionErrorAttention = (input: {
     ...(input.instanceId === undefined ? {} : { instanceId: input.instanceId }),
     message: `${input.summary}: ${describeError(input.error)}`,
     ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
+  });
+};
+
+export const schedulerPassFailureAttention = (input: {
+  episode: number;
+  error: unknown;
+}): ProductionErrorAttention => {
+  if (!Number.isSafeInteger(input.episode) || input.episode <= 0) {
+    throw new TypeError(
+      "Scheduler pass episode must be a positive safe integer",
+    );
+  }
+  return createProductionErrorAttention({
+    attentionId: `production:${schedulerPassFailureCode}:global:episode:${input.episode}`,
+    code: schedulerPassFailureCode,
+    error: input.error,
+    message: `Production reconciliation pass failed: ${describeError(input.error)}`,
   });
 };
 

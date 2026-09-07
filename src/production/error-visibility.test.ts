@@ -10,6 +10,7 @@ import {
   productionErrorCodeDeclarations,
   productionErrorIncidentEligible,
   productionErrorIncidentId,
+  schedulerPassFailureAttention,
   type ProductionErrorCode,
 } from "./error-visibility.js";
 
@@ -80,4 +81,23 @@ describe("production error visibility", () => {
       );
     },
   );
+
+  it("derives scheduler attention identity from its positive episode", () => {
+    expect(
+      schedulerPassFailureAttention({
+        episode: 7,
+        error: new Error("Synthetic failure"),
+      }),
+    ).toMatchObject({
+      attentionId: "production:scheduler-pass-failed:global:episode:7",
+      code: "scheduler-pass-failed",
+      incidentId: null,
+    });
+    expect(() =>
+      schedulerPassFailureAttention({
+        episode: 0,
+        error: new Error("Synthetic failure"),
+      }),
+    ).toThrow("Scheduler pass episode must be a positive safe integer");
+  });
 });

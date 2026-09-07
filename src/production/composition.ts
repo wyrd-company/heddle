@@ -62,6 +62,7 @@ import {
 import { ProductionInstanceController } from "./instance-controller.js";
 import { ProductionConsoleState } from "./console-state.js";
 import { ProductionScheduler } from "./scheduler.js";
+import { SchedulerPassAttentionLifecycle } from "./scheduler-pass-attention.js";
 import {
   createProductionSubagentCoordinator,
   productionSessionTargets,
@@ -182,6 +183,10 @@ export const createProductionComposition = (
       },
     );
     attention = new DurableAttentionQueue(persistence, productionErrorPages);
+    const schedulerPassAttention = new SchedulerPassAttentionLifecycle(
+      persistence,
+      attention,
+    );
     const epicOperations = new EpicOperationCoordinator();
     const dynamicTasks = new DynamicTaskAuthority(
       persistence,
@@ -420,14 +425,8 @@ export const createProductionComposition = (
     const scheduler = new ProductionScheduler({
       cadenceMilliseconds: configuration.cadenceMilliseconds,
       onError: async (error) => {
-        const failure = productionErrorAttention({
-          code: "scheduler-pass-failed",
-          error,
-          summary: "Production reconciliation pass failed",
-          varyByError: true,
-        });
         try {
-          await attention.raise(failure);
+          await schedulerPassAttention.failure(error);
         } finally {
           await options.onSchedulerError?.(error);
         }
@@ -484,6 +483,7 @@ export const createProductionComposition = (
           }
         }
         await lifecycleAttentionBridge.flush();
+        schedulerPassAttention.recovery();
       },
       stopTimeoutMilliseconds: configuration.stopTimeoutMilliseconds,
     });

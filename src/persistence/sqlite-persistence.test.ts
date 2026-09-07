@@ -95,28 +95,44 @@ describe("SqlitePersistence", () => {
 
     expect(firstFailure).toMatchObject({ episode: 1, type: "failure" });
     expect(secondFailure).toMatchObject({ episode: 1, type: "failure" });
+    first.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    const repeatedAfterRestart = restarted.recordSchedulerPassFailure({
+      message: "First sample failure",
+      name: "Error",
+    });
+    expect(repeatedAfterRestart).toMatchObject({
+      episode: 1,
+      type: "failure",
+    });
     expect(
-      first.recoverSchedulerPass(["production:scheduler-pass-failed:legacy"]),
+      restarted.recoverSchedulerPass([
+        "production:scheduler-pass-failed:legacy",
+      ]),
     ).toMatchObject({ episode: 1, error: null, type: "recovery" });
     expect(
-      first.recoverSchedulerPass(["production:scheduler-pass-failed:legacy"]),
+      restarted.recoverSchedulerPass([
+        "production:scheduler-pass-failed:legacy",
+      ]),
     ).toBeUndefined();
-    expect(first.listAttention()).toEqual([]);
-    const recurrence = first.recordSchedulerPassFailure({
+    expect(restarted.listAttention()).toEqual([]);
+    const recurrence = restarted.recordSchedulerPassFailure({
       message: "First sample failure",
       name: "Error",
     });
     expect(recurrence).toMatchObject({ episode: 2, type: "failure" });
-    first.close();
+    restarted.close();
 
     const recovered = new SqlitePersistence({ stateDirectory });
     expect(recovered.listSchedulerPassHistory()).toEqual([
       firstFailure,
       secondFailure,
+      repeatedAfterRestart,
       expect.objectContaining({
         episode: 1,
         error: null,
-        sequence: 3,
+        sequence: 4,
         type: "recovery",
       }),
       recurrence,
