@@ -733,8 +733,37 @@ describe("T3ControlPlaneClient", () => {
       fetch,
     });
 
-    await expect(
-      client.dispatch({ type: "project.create", commandId: "command-1" }),
-    ).rejects.toMatchObject<T3HttpError>({ status: 500, body: opaque });
+    const error = await client
+      .dispatch({ type: "project.create", commandId: "command-1" })
+      .catch((candidate: unknown) => candidate);
+
+    expect(error).toMatchObject<T3HttpError>({ status: 500, body: opaque });
+    expect(String(error)).not.toContain("trace-1");
+  });
+
+  it("surfaces the released safe dispatch reason and trace identity", async () => {
+    const body = {
+      _tag: "EnvironmentInternalError",
+      code: "internal_error",
+      reason: "orchestration_dispatch_failed",
+      traceId: "00000000000000000000000000000001",
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(jsonResponse(body, 500));
+    const client = new T3ControlPlaneClient({
+      baseUrl: "http://t3.test",
+      accessToken: "access-token",
+      fetch,
+    });
+
+    const error = await client
+      .dispatch({ type: "project.create", commandId: "command-1" })
+      .catch((candidate: unknown) => candidate);
+
+    expect(error).toMatchObject<T3HttpError>({ status: 500, body });
+    expect(String(error)).toContain(
+      'reason orchestration_dispatch_failed; trace ID "00000000000000000000000000000001"',
+    );
   });
 });

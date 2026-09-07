@@ -73,6 +73,10 @@ export class SyntheticT3 implements ProductionT3Client {
     threadId: string;
   }> = [];
   readonly commands: T3DispatchCommand[] = [];
+  readonly dispatches: Array<{
+    command: T3DispatchCommand;
+    providerContext?: T3ProviderDispatchContext;
+  }> = [];
   readonly providerContexts: T3ProviderDispatchContext[] = [];
   readonly mcpRegistrations: T3WorkflowMcpProviderSession[] = [];
   readonly timeouts: HarnessToolTimeoutLaunchInput[] = [];
@@ -94,7 +98,14 @@ export class SyntheticT3 implements ProductionT3Client {
     command: T3DispatchCommand,
     providerContext?: T3ProviderDispatchContext,
   ): Promise<{ sequence: number }> {
-    this.commands.push(globalThis.structuredClone(command));
+    const storedCommand = globalThis.structuredClone(command);
+    this.commands.push(storedCommand);
+    this.dispatches.push({
+      command: storedCommand,
+      ...(providerContext === undefined
+        ? {}
+        : { providerContext: globalThis.structuredClone(providerContext) }),
+    });
     if (providerContext !== undefined) {
       this.providerContexts.push(globalThis.structuredClone(providerContext));
     }

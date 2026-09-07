@@ -102,6 +102,32 @@ const resolvedSelectionFor = (
   return selection;
 };
 
+const parentResolvedSelection = (
+  configuration: ResolvedProductionConfiguration,
+  persistence: SqlitePersistence,
+  assignment: TodoAssignment,
+) => {
+  const topLevelMatches = persistence
+    .listSessionRuntime()
+    .filter(
+      ({ sessionKey, threadId }) =>
+        sessionKey === assignment.parentSessionKey &&
+        threadId === assignment.parentThreadId,
+    );
+  const delegatedMatches = assignments(persistence).filter(
+    ({ sessionKey, threadId }) =>
+      sessionKey === assignment.parentSessionKey &&
+      threadId === assignment.parentThreadId,
+  );
+  if (topLevelMatches.length + delegatedMatches.length !== 1) {
+    throw new Error("Subagent parent has no canonical provider selection");
+  }
+  if (topLevelMatches.length === 1) {
+    return configuration.session.defaultSelection;
+  }
+  return resolvedSelectionFor(configuration, delegatedMatches[0]!.provider);
+};
+
 export const productionSessionTargets = (
   persistence: SqlitePersistence,
 ): SessionObservationTarget[] => {
@@ -304,9 +330,10 @@ export const createProductionSubagentCoordinator = (options: {
       if (notice === undefined) {
         throw new Error("Subagent stop has no durable notification intent");
       }
-      const selection = resolvedSelectionFor(
+      const selection = parentResolvedSelection(
         configuration,
-        assignment.provider,
+        persistence,
+        assignment,
       );
       await steerStageSession(
         {
@@ -319,7 +346,7 @@ export const createProductionSubagentCoordinator = (options: {
             cliVersion: selection.observedCliVersion,
             driver: selection.driverKind,
             lifecycle: "independent",
-            providerInstanceId: assignment.provider,
+            providerInstanceId: selection.providerInstanceId,
           },
           runtimeMode: selection.runtimeMode,
           threadId: assignment.parentThreadId,

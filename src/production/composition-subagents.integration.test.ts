@@ -248,6 +248,9 @@ describe("production subagent composition", () => {
     const parent = await new WorkflowMcpSessionResolver(
       composition.persistence,
     ).resolve(storedCorrelationToken(record.state.handoffs));
+    const parentRuntime = composition.persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === parent.sessionKey)!;
 
     const spawned = await composition.subagents.spawn(parent, {
       model: "sample-model",
@@ -306,6 +309,30 @@ describe("production subagent composition", () => {
         }),
       ]),
     );
+
+    t3.threads.delete(spawned.assignment.threadId);
+    await composition.scheduler.trigger();
+
+    const parentContinuation = t3.dispatches
+      .filter(
+        ({ command }) =>
+          command.type === "thread.turn.start" &&
+          command.threadId === parentRuntime.threadId,
+      )
+      .at(-1);
+    expect(parentContinuation).toMatchObject({
+      command: {
+        runtimeMode: "auto-accept-edits",
+        threadId: parentRuntime.threadId,
+        type: "thread.turn.start",
+      },
+      providerContext: {
+        cliVersion: "0.91.0",
+        driver: "codex",
+        lifecycle: "independent",
+        providerInstanceId: "codex",
+      },
+    });
     await composition.close();
   });
 

@@ -254,12 +254,20 @@ describe("configured production composition", () => {
         "thread.create",
         "thread.turn.start",
       ]);
-      expect(commands[1]).toMatchObject({
+      const expectedSelection = {
         modelSelection: {
           instanceId: "provider-alpha",
           model: "sample-model",
         },
         runtimeMode: "full-access",
+      };
+      expect(commands[0]).toMatchObject({
+        ...expectedSelection,
+        type: "thread.create",
+      });
+      expect(commands[1]).toMatchObject({
+        ...expectedSelection,
+        type: "thread.turn.start",
       });
     },
   );
@@ -299,8 +307,13 @@ describe("configured production composition", () => {
           });
         }
         return new globalThis.Response(
-          JSON.stringify({ error: { code: "driver-rejected" } }),
-          { status: 422 },
+          JSON.stringify({
+            _tag: "EnvironmentInternalError",
+            code: "internal_error",
+            reason: "orchestration_dispatch_failed",
+            traceId: "00000000000000000000000000000001",
+          }),
+          { status: 500 },
         );
       }
       throw new Error(`Unexpected T3 request: ${url}`);
@@ -353,7 +366,7 @@ describe("configured production composition", () => {
       expect.objectContaining({
         kind: "production-error",
         message: expect.stringContaining(
-          "T3 POST /api/orchestration/dispatch failed with HTTP 422",
+          'reason orchestration_dispatch_failed; trace ID "00000000000000000000000000000001"',
         ),
       }),
     ]);

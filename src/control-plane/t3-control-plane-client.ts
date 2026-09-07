@@ -141,6 +141,35 @@ const requireCatalogString = (value: unknown, field: string): string => {
   return value;
 };
 
+const releasedDispatchFailureDetail = (
+  path: string,
+  status: number,
+  body: unknown,
+): string | undefined => {
+  if (
+    path !== "/api/orchestration/dispatch" ||
+    status !== 500 ||
+    typeof body !== "object" ||
+    body === null ||
+    Array.isArray(body)
+  ) {
+    return undefined;
+  }
+  const record = body as Record<string, unknown>;
+  if (
+    Object.keys(record).sort().join(",") !== "_tag,code,reason,traceId" ||
+    record["_tag"] !== "EnvironmentInternalError" ||
+    record["code"] !== "internal_error" ||
+    record["reason"] !== "orchestration_dispatch_failed" ||
+    typeof record["traceId"] !== "string" ||
+    record["traceId"].trim() === "" ||
+    record["traceId"].trim() !== record["traceId"]
+  ) {
+    return undefined;
+  }
+  return `; reason orchestration_dispatch_failed; trace ID ${JSON.stringify(record["traceId"])}`;
+};
+
 const projectCatalogModel = (value: unknown): T3ProviderCatalogModel => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new T3ProviderCatalogReadError(
@@ -617,7 +646,7 @@ export class T3ControlPlaneClient implements T3ProviderCatalogReader {
     }
     if (!response.ok)
       throw new T3HttpError(
-        `T3 ${init.method ?? "GET"} ${path} failed with HTTP ${response.status}`,
+        `T3 ${init.method ?? "GET"} ${path} failed with HTTP ${response.status}${releasedDispatchFailureDetail(path, response.status, body) ?? ""}`,
         response.status,
         body,
       );
