@@ -363,6 +363,10 @@ kind: standard
 
   it("does not retarget a cold retry through a task edit or changed shared default", async () => {
     const { blueprintsRepositoryRoot, configuration } = await prepare();
+    configuration.providerAliases["specialist"] = {
+      model: "sample-specialist-model",
+      providerDisplayName: "Sample Specialist Workbench",
+    };
     configuration.session.resolvedSelections.push({
       ...configuration.session.defaultSelection,
       alias: "specialist",
@@ -392,6 +396,23 @@ kind: standard
       }
     }
     const firstT3 = new InterruptedT3();
+    firstT3.providerCatalog.push({
+      availability: "available",
+      displayName: "Sample Specialist Workbench",
+      driverKind: "codex",
+      enabled: true,
+      installed: true,
+      instanceId: "specialist-provider",
+      models: [
+        {
+          isCustom: false,
+          name: "Sample Specialist Model",
+          slug: "sample-specialist-model",
+        },
+      ],
+      observedCliVersion: "0.91.0",
+      state: "ready",
+    });
     const first = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
@@ -436,21 +457,28 @@ kind: standard
 
     const changedConfiguration = {
       ...configuration,
-      pacing: { ...configuration.pacing, defaultProvider: "claudeAgent" },
+      providerAliases: {
+        ...configuration.providerAliases,
+        changed: {
+          model: configuration.session.defaultSelection.model.slug,
+          providerDisplayName:
+            configuration.session.defaultSelection.providerDisplayName,
+        },
+      },
       session: {
         ...configuration.session,
         defaultSelection: {
           ...configuration.session.defaultSelection,
-          driverKind: "claudeAgent",
-          providerInstanceId: "claudeAgent",
+          alias: "changed",
         },
-        resolvedSelections: configuration.session.resolvedSelections.map(
-          (selection) => ({
-            ...selection,
-            driverKind: "claudeAgent",
-            providerInstanceId: "claudeAgent",
-          }),
-        ),
+        defaultProviderAlias: "changed",
+        resolvedSelections: [
+          ...configuration.session.resolvedSelections,
+          {
+            ...configuration.session.defaultSelection,
+            alias: "changed",
+          },
+        ],
       },
     };
     const secondT3 = new SyntheticT3();
@@ -491,6 +519,10 @@ kind: standard
 
   it("activates the next accepted lifecycle wait stage without losing prior observation", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    configuration.providerAliases["review-selection"] = {
+      model: "sample-review-model",
+      providerDisplayName: "Sample Review Workbench",
+    };
     const reviewSelection = {
       alias: "review-selection",
       driverKind: "cursor" as const,
@@ -539,6 +571,23 @@ kind: standard
       cwd: blueprintsRepositoryRoot,
     });
     const t3 = new SyntheticT3();
+    t3.providerCatalog.push({
+      availability: "available",
+      displayName: "Sample Review Workbench",
+      driverKind: "cursor",
+      enabled: true,
+      installed: true,
+      instanceId: "review-provider",
+      models: [
+        {
+          isCustom: false,
+          name: "Sample Review Model",
+          slug: "sample-review-model",
+        },
+      ],
+      observedCliVersion: "sample-review-version",
+      state: "ready",
+    });
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot,
