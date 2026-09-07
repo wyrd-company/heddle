@@ -92,6 +92,9 @@ describe("SqlitePersistence", () => {
       code: "scheduler-pass-failed",
       kind: "production-error",
     });
+    expect(() => first.recoverSchedulerPass([" "])).toThrow(
+      "attentionId must not be empty",
+    );
 
     expect(firstFailure).toMatchObject({ episode: 1, type: "failure" });
     expect(secondFailure).toMatchObject({
@@ -154,6 +157,42 @@ describe("SqlitePersistence", () => {
       },
     ]);
     const database = new Database(recovered.databasePath);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(1, "recovery", null, "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/UNIQUE constraint failed/);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(0, "failure", "{}", "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(3, "sample", "{}", "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(3, "failure", null, "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
     expect(() =>
       database.exec(
         "UPDATE heddle_scheduler_pass_history SET episode = episode + 1",

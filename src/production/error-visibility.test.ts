@@ -94,11 +94,13 @@ describe("production error visibility", () => {
       code: "scheduler-pass-failed",
       incidentId: null,
     });
-    expect(() =>
-      schedulerPassFailureAttention({
-        episode: 0,
-        error: errorDetail(new Error("Synthetic failure")),
-      }),
-    ).toThrow("Scheduler pass episode must be a positive safe integer");
+    for (const episode of [0, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        schedulerPassFailureAttention({
+          episode,
+          error: errorDetail(new Error("Synthetic failure")),
+        }),
+      ).toThrow("Scheduler pass episode must be a positive safe integer");
+    }
   });
 });
