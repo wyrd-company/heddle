@@ -4,6 +4,8 @@
 //   references: t3-headless
 // ---
 
+import { URL } from "node:url";
+
 import {
   resolveT3AwarenessPhase,
   type T3AwarenessPhase,
@@ -15,6 +17,12 @@ import {
   type T3ProviderDispatchContext,
   type T3ProviderPreconditionTable,
 } from "./t3-provider-preconditions.js";
+import type {
+  T3ProviderCatalog,
+  T3ProviderCatalogEntry,
+  T3ProviderCatalogModel,
+  T3ProviderCatalogReader,
+} from "./provider-selection.js";
 
 export {
   resolveT3AwarenessPhase,
@@ -106,28 +114,147 @@ export class T3HttpError extends Error {
   }
 }
 
+export class T3ProviderCatalogReadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "T3ProviderCatalogReadError";
+  }
+}
+
+export type T3WebSocketConstructor = new (
+  url: string | URL,
+  protocols?: string | string[],
+) => InstanceType<typeof globalThis.WebSocket>;
+
 export type T3ControlPlaneClientOptions = {
   baseUrl: string;
   accessToken?: string;
+  catalogTimeoutMilliseconds?: number;
   fetch?: typeof globalThis.fetch;
   providerPreconditions?: T3ProviderPreconditionTable;
+  webSocket?: T3WebSocketConstructor;
 };
 
 type FetchRequestInit = NonNullable<Parameters<typeof globalThis.fetch>[1]>;
 type FetchAbortSignal = NonNullable<FetchRequestInit["signal"]>;
 
-export class T3ControlPlaneClient {
+const requireCatalogString = (value: unknown, field: string): string => {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new T3ProviderCatalogReadError(
+      `T3 server.getConfig returned an invalid ${field}`,
+    );
+  }
+  return value;
+};
+
+const projectCatalogModel = (value: unknown): T3ProviderCatalogModel => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned an invalid provider model",
+    );
+  }
+  const model = value as Record<string, unknown>;
+  if (typeof model["isCustom"] !== "boolean") {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned an invalid provider model custom flag",
+    );
+  }
+  return {
+    isCustom: model["isCustom"],
+    name: requireCatalogString(model["name"], "provider model name"),
+    slug: requireCatalogString(model["slug"], "provider model slug"),
+  };
+};
+
+const projectCatalogEntry = (value: unknown): T3ProviderCatalogEntry => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned an invalid provider",
+    );
+  }
+  const provider = value as Record<string, unknown>;
+  if (
+    typeof provider["enabled"] !== "boolean" ||
+    typeof provider["installed"] !== "boolean" ||
+    !Array.isArray(provider["models"]) ||
+    (provider["availability"] !== undefined &&
+      provider["availability"] !== "available" &&
+      provider["availability"] !== "unavailable") ||
+    (provider["displayName"] !== undefined &&
+      typeof provider["displayName"] !== "string") ||
+    (provider["version"] !== null &&
+      provider["version"] !== undefined &&
+      typeof provider["version"] !== "string")
+  ) {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned an invalid provider catalog entry",
+    );
+  }
+  return {
+    availability:
+      provider["availability"] === "unavailable" ? "unavailable" : "available",
+    ...(provider["displayName"] === undefined
+      ? {}
+      : {
+          displayName: requireCatalogString(
+            provider["displayName"],
+            "provider display name",
+          ),
+        }),
+    driverKind: requireCatalogString(provider["driver"], "provider driver"),
+    enabled: provider["enabled"],
+    installed: provider["installed"],
+    instanceId: requireCatalogString(
+      provider["instanceId"],
+      "provider instance ID",
+    ),
+    models: provider["models"].map(projectCatalogModel),
+    observedCliVersion:
+      provider["version"] === undefined ? null : provider["version"],
+    state: requireCatalogString(provider["status"], "provider state"),
+  };
+};
+
+const projectProviderCatalog = (value: unknown): T3ProviderCatalog => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned an invalid configuration",
+    );
+  }
+  const providers = (value as Record<string, unknown>)["providers"];
+  if (!Array.isArray(providers)) {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned no provider catalog",
+    );
+  }
+  return providers.map(projectCatalogEntry);
+};
+
+export class T3ControlPlaneClient implements T3ProviderCatalogReader {
   readonly #baseUrl: string;
+  readonly #catalogTimeoutMilliseconds: number;
   readonly #fetch: typeof globalThis.fetch;
   readonly #providerPreconditions: T3ProviderPreconditionTable;
+  readonly #webSocket: T3WebSocketConstructor;
   #accessToken?: string;
 
   constructor(options: T3ControlPlaneClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, "");
     this.#accessToken = options.accessToken;
+    this.#catalogTimeoutMilliseconds =
+      options.catalogTimeoutMilliseconds ?? 10_000;
+    if (
+      !Number.isSafeInteger(this.#catalogTimeoutMilliseconds) ||
+      this.#catalogTimeoutMilliseconds <= 0
+    ) {
+      throw new T3PreconditionError(
+        "Provider catalog timeout must be a positive safe integer",
+      );
+    }
     this.#fetch = options.fetch ?? globalThis.fetch;
     this.#providerPreconditions =
       options.providerPreconditions ?? t3ProviderPreconditions;
+    this.#webSocket = options.webSocket ?? globalThis.WebSocket;
   }
 
   async exchangePairingToken(
@@ -165,6 +292,149 @@ export class T3ControlPlaneClient {
   async getShell(): Promise<T3ShellSnapshot> {
     this.#requireAccessToken("read the orchestration shell");
     return this.#request<T3ShellSnapshot>("/api/orchestration/shell");
+  }
+
+  async readProviderCatalog(): Promise<T3ProviderCatalog> {
+    this.#requireAccessToken("read the provider catalog");
+    const ticket = await this.#request<{ ticket?: unknown }>(
+      "/api/auth/websocket-ticket",
+      {
+        method: "POST",
+        signal: globalThis.AbortSignal.timeout(
+          this.#catalogTimeoutMilliseconds,
+        ),
+      },
+    );
+    const ticketValue = requireCatalogString(ticket.ticket, "WebSocket ticket");
+    const socketUrl = new URL(this.#baseUrl);
+    socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+    socketUrl.pathname = "/ws";
+    socketUrl.search = "";
+    socketUrl.hash = "";
+    socketUrl.searchParams.set("wsTicket", ticketValue);
+    const socket = new this.#webSocket(socketUrl);
+    const requestId = globalThis.crypto.randomUUID();
+    try {
+      const config = await new Promise<unknown>((resolve, reject) => {
+        const finish = (result: () => void): void => {
+          globalThis.clearTimeout(timer);
+          socket.removeEventListener("open", onOpen);
+          socket.removeEventListener("message", onMessage);
+          socket.removeEventListener("error", onError);
+          socket.removeEventListener("close", onClose);
+          result();
+        };
+        const onOpen = (): void => {
+          socket.send(
+            JSON.stringify({
+              _tag: "Request",
+              id: requestId,
+              payload: {},
+              tag: "server.getConfig",
+            }),
+          );
+        };
+        const onMessage = (
+          event: InstanceType<typeof globalThis.MessageEvent>,
+        ): void => {
+          if (typeof event.data !== "string") {
+            finish(() =>
+              reject(
+                new T3ProviderCatalogReadError(
+                  "T3 server.getConfig RPC returned a non-text response",
+                ),
+              ),
+            );
+            return;
+          }
+          let response: unknown;
+          try {
+            response = JSON.parse(event.data) as unknown;
+          } catch {
+            finish(() =>
+              reject(
+                new T3ProviderCatalogReadError(
+                  "T3 server.getConfig RPC returned invalid JSON",
+                ),
+              ),
+            );
+            return;
+          }
+          if (
+            typeof response !== "object" ||
+            response === null ||
+            Array.isArray(response)
+          ) {
+            return;
+          }
+          const record = response as Record<string, unknown>;
+          if (record["_tag"] !== "Exit" || record["requestId"] !== requestId) {
+            return;
+          }
+          const exit = record["exit"];
+          if (
+            typeof exit !== "object" ||
+            exit === null ||
+            Array.isArray(exit)
+          ) {
+            finish(() =>
+              reject(
+                new T3ProviderCatalogReadError(
+                  "T3 server.getConfig RPC returned an invalid result",
+                ),
+              ),
+            );
+            return;
+          }
+          const result = exit as Record<string, unknown>;
+          if (result["_tag"] !== "Success") {
+            finish(() =>
+              reject(
+                new T3ProviderCatalogReadError(
+                  "T3 server.getConfig RPC did not return a successful provider catalog",
+                ),
+              ),
+            );
+            return;
+          }
+          finish(() => resolve(result["value"]));
+        };
+        const onError = (): void =>
+          finish(() =>
+            reject(
+              new T3ProviderCatalogReadError(
+                "T3 provider catalog WebSocket failed",
+              ),
+            ),
+          );
+        const onClose = (): void =>
+          finish(() =>
+            reject(
+              new T3ProviderCatalogReadError(
+                "T3 provider catalog WebSocket closed before the RPC completed",
+              ),
+            ),
+          );
+        const timer = globalThis.setTimeout(
+          () =>
+            finish(() =>
+              reject(
+                new T3ProviderCatalogReadError(
+                  `T3 server.getConfig RPC exceeded ${this.#catalogTimeoutMilliseconds}ms`,
+                ),
+              ),
+            ),
+          this.#catalogTimeoutMilliseconds,
+        );
+        socket.addEventListener("open", onOpen);
+        socket.addEventListener("message", onMessage);
+        socket.addEventListener("error", onError);
+        socket.addEventListener("close", onClose);
+      });
+      return projectProviderCatalog(config);
+    } finally {
+      if (socket.readyState < globalThis.WebSocket.CLOSING) socket.close();
+    }
   }
 
   async getThread(threadId: string): Promise<T3ThreadSnapshot> {

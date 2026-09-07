@@ -99,8 +99,27 @@ export {
 } from "./session-observation.js";
 export {
   T3ControlPlaneClient,
+  T3ProviderCatalogReadError,
   type T3ControlPlaneClientOptions,
+  type T3WebSocketConstructor,
   type T3WorkflowMcpProviderSession,
 } from "./t3-control-plane-client.js";
+export {
+  ProviderSelectionError,
+  ProviderSelectionResolver,
+  T3_RUNTIME_MODES,
+  type ProviderAliasCatalog,
+  type ProviderAliasConfiguration,
+  type ProviderSelectionInputs,
+  type ProviderSelectionReason,
+  type ProviderStartupInputs,
+  type ResolvedProviderSelection,
+  type ResolvedProviderStartup,
+  type T3ProviderCatalog,
+  type T3ProviderCatalogEntry,
+  type T3ProviderCatalogModel,
+  type T3ProviderCatalogReader,
+  type T3RuntimeMode,
+} from "./provider-selection.js";
 
 export const controlPlane = "control-plane" as const;
