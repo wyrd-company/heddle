@@ -3,7 +3,10 @@
 //   implements: heddle
 // ---
 
-import type { JsonValue } from "../persistence/index.js";
+import type {
+  JsonValue,
+  ResolvedSessionBinding,
+} from "../persistence/index.js";
 
 export type TodoItem = Record<string, JsonValue> & {
   checked: boolean;
@@ -13,6 +16,7 @@ export type TodoItem = Record<string, JsonValue> & {
 };
 
 export type TodoAssignment = Record<string, JsonValue> & {
+  binding: ResolvedSessionBinding;
   bootstrap: {
     createCommandId: string;
     createdAt: string;

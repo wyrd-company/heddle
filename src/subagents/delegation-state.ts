@@ -3,7 +3,12 @@
 //   implements: heddle
 // ---
 
-import type { InstanceRecord, InstanceState } from "../persistence/index.js";
+import {
+  assertResolvedSessionBinding,
+  sameResolvedSessionBinding,
+  type InstanceRecord,
+  type InstanceState,
+} from "../persistence/index.js";
 import { isTodoState, todoSubtreeIds } from "../todo/index.js";
 import type { TodoAssignment, TodoList } from "../todo/types.js";
 
@@ -21,6 +26,7 @@ export interface DelegationStateStore {
 }
 
 export type ClaimTodoAssignmentInput = {
+  binding: TodoAssignment["binding"];
   bootstrap: TodoAssignment["bootstrap"];
   correlationToken: string;
   depth: number;
@@ -98,7 +104,17 @@ export const claimTodoAssignment = (
   store: DelegationStateStore,
   input: ClaimTodoAssignmentInput,
 ): TodoAssignment => {
+  assertResolvedSessionBinding(input.binding, input.sessionKey, input.threadId);
+  if (
+    input.binding.providerInstanceId !== input.provider ||
+    input.binding.modelSlug !== input.model
+  ) {
+    throw new Error(
+      "Todo assignment provider and model must match its resolved session binding",
+    );
+  }
   const candidate: TodoAssignment = {
+    binding: input.binding,
     bootstrap: input.bootstrap,
     correlationToken: input.correlationToken,
     depth: input.depth,
@@ -123,7 +139,8 @@ export const claimTodoAssignment = (
         existing.parentSessionKey !== input.parentSessionKey ||
         existing.rootItemId !== input.rootItemId ||
         existing.provider !== input.provider ||
-        existing.model !== input.model
+        existing.model !== input.model ||
+        !sameResolvedSessionBinding(existing.binding, input.binding)
       ) {
         throw new Error(
           `Subagent operation '${input.operationId}' does not match its stored assignment`,
@@ -251,6 +268,7 @@ export const mutateTodoAssignment = (
     const next = mutate(assignment);
     for (const field of [
       "bootstrap",
+      "binding",
       "correlationToken",
       "depth",
       "model",

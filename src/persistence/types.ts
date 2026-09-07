@@ -134,8 +134,32 @@ export interface ReconcilerRuntimeRecord {
   threadId?: string;
 }
 
+export const RESOLVED_SESSION_RUNTIME_MODES = [
+  "approval-required",
+  "auto-accept-edits",
+  "auto",
+  "full-access",
+] as const;
+
+export type ResolvedSessionRuntimeMode =
+  (typeof RESOLVED_SESSION_RUNTIME_MODES)[number];
+
+export interface ResolvedSessionBinding extends Record<string, JsonValue> {
+  alias: string;
+  driverKind: string;
+  interactionMode: string;
+  modelSlug: string;
+  observedCliVersion: string | null;
+  providerDisplayName: string;
+  providerInstanceId: string;
+  runtimeMode: ResolvedSessionRuntimeMode;
+  sessionKey: string;
+  threadId: string;
+}
+
 export interface SessionRuntimeRecord {
   activation: number;
+  binding: ResolvedSessionBinding;
   instanceId: string;
   projectId?: string;
   repositoryName?: string;

@@ -17,7 +17,11 @@ import type {
   DispatchPacingEvaluator,
   PacingSession,
 } from "../pacing/index.js";
-import type { SqlitePersistence } from "../persistence/index.js";
+import {
+  assertResolvedSessionBinding,
+  type ResolvedSessionBinding,
+  type SqlitePersistence,
+} from "../persistence/index.js";
 import { SubagentCoordinator } from "../subagents/index.js";
 import { isTodoState, type TodoAssignment } from "../todo/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
@@ -25,6 +29,11 @@ import type { ProductionT3Client } from "./composition.js";
 import type { KanbanBoardAdapter } from "../board-adapter/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
 import { heddleSessionTitle } from "./session-title.js";
+import {
+  bindResolvedSession,
+  modelSelectionFromBinding,
+  providerContextFromBinding,
+} from "./session-binding.js";
 
 const assignments = (persistence: SqlitePersistence): TodoAssignment[] =>
   persistence
@@ -90,42 +99,45 @@ const uniqueTarget = (
 const resolvedSelectionFor = (
   configuration: ResolvedProductionConfiguration,
   providerInstanceId: string,
+  modelSlug: string,
 ) => {
-  const selection = configuration.session.resolvedSelections.find(
-    (candidate) => candidate.providerInstanceId === providerInstanceId,
+  const selections = configuration.session.resolvedSelections.filter(
+    (candidate) =>
+      candidate.providerInstanceId === providerInstanceId &&
+      candidate.model.slug === modelSlug,
   );
-  if (selection === undefined) {
+  if (selections.length !== 1) {
     throw new Error(
-      `Provider instance '${providerInstanceId}' has no resolved startup selection`,
+      `Provider instance '${providerInstanceId}' and model '${modelSlug}' do not identify one resolved startup selection`,
     );
   }
-  return selection;
+  return selections[0]!;
 };
 
-const parentResolvedSelection = (
-  configuration: ResolvedProductionConfiguration,
+export const productionSessionBindingFor = (
   persistence: SqlitePersistence,
-  assignment: TodoAssignment,
-) => {
+  sessionKey: string,
+  threadId?: string,
+): ResolvedSessionBinding => {
   const topLevelMatches = persistence
     .listSessionRuntime()
     .filter(
-      ({ sessionKey, threadId }) =>
-        sessionKey === assignment.parentSessionKey &&
-        threadId === assignment.parentThreadId,
+      (session) =>
+        session.sessionKey === sessionKey &&
+        (threadId === undefined || session.threadId === threadId),
     );
   const delegatedMatches = assignments(persistence).filter(
-    ({ sessionKey, threadId }) =>
-      sessionKey === assignment.parentSessionKey &&
-      threadId === assignment.parentThreadId,
+    (assignment) =>
+      assignment.sessionKey === sessionKey &&
+      (threadId === undefined || assignment.threadId === threadId),
   );
   if (topLevelMatches.length + delegatedMatches.length !== 1) {
-    throw new Error("Subagent parent has no canonical provider selection");
+    throw new Error("Session has no canonical resolved binding");
   }
   if (topLevelMatches.length === 1) {
-    return configuration.session.defaultSelection;
+    return topLevelMatches[0]!.binding;
   }
-  return resolvedSelectionFor(configuration, delegatedMatches[0]!.provider);
+  return delegatedMatches[0]!.binding;
 };
 
 export const productionSessionTargets = (
@@ -163,7 +175,6 @@ export const productionSessionTargets = (
 };
 
 const activeSessions = async (
-  configuration: ResolvedProductionConfiguration,
   persistence: SqlitePersistence,
   t3: ProductionT3Client,
 ): Promise<PacingSession[]> => {
@@ -182,9 +193,9 @@ const activeSessions = async (
     ...persistence
       .listSessionRuntime()
       .filter(({ threadId }) => activeThreadIds.has(threadId))
-      .map(({ sessionKey }) => ({
+      .map(({ binding, sessionKey }) => ({
         depth: 0,
-        provider: configuration.session.defaultSelection.providerInstanceId,
+        provider: binding.providerInstanceId,
         sessionId: sessionKey,
       })),
     ...assignments(persistence)
@@ -226,7 +237,7 @@ export const createProductionSubagentCoordinator = (options: {
     workflowMcpEndpoint,
   } = options;
   return new SubagentCoordinator({
-    activeSessions: () => activeSessions(configuration, persistence, t3),
+    activeSessions: () => activeSessions(persistence, t3),
     bootstrapDependencies: {
       activationEvents: persistence,
       persistence,
@@ -268,7 +279,13 @@ export const createProductionSubagentCoordinator = (options: {
     },
     pacing,
     persistence,
-    prepareSession: async ({ binding, identity, model, provider }) => {
+    prepareSession: async ({
+      binding,
+      identity,
+      model,
+      provider,
+      resolvedBinding,
+    }) => {
       const runtimes = persistence
         .listReconcilerRuntime()
         .filter(({ instanceId }) => instanceId === binding.instance.instanceId);
@@ -278,7 +295,18 @@ export const createProductionSubagentCoordinator = (options: {
       const taskId = runtimes[0]!.taskId;
       const task = await board.readTask(taskId);
       const session = configuration.session;
-      const selection = resolvedSelectionFor(configuration, provider);
+      const sessionBinding =
+        resolvedBinding ??
+        bindResolvedSession(
+          resolvedSelectionFor(configuration, provider, model),
+          identity.sessionKey,
+          identity.threadId,
+        );
+      assertResolvedSessionBinding(
+        sessionBinding,
+        identity.sessionKey,
+        identity.threadId,
+      );
       const route = parentSessionRoute(persistence, binding.sessionKey);
       const repository = configuration.products
         .flatMap(({ repos }) => repos)
@@ -287,16 +315,12 @@ export const createProductionSubagentCoordinator = (options: {
         throw new Error("Subagent parent repository is not configured");
       }
       return {
-        interactionMode: selection.interactionMode,
-        modelSelection: { instanceId: provider, model },
+        binding: sessionBinding,
+        interactionMode: sessionBinding.interactionMode,
+        modelSelection: modelSelectionFromBinding(sessionBinding),
         projectId: route.projectId,
-        providerContext: {
-          cliVersion: selection.observedCliVersion,
-          driver: selection.driverKind,
-          lifecycle: "independent",
-          providerInstanceId: provider,
-        },
-        runtimeMode: selection.runtimeMode,
+        providerContext: providerContextFromBinding(sessionBinding),
+        runtimeMode: sessionBinding.runtimeMode,
         task: task.frontMatter,
         taskId,
         title: heddleSessionTitle(
@@ -330,25 +354,20 @@ export const createProductionSubagentCoordinator = (options: {
       if (notice === undefined) {
         throw new Error("Subagent stop has no durable notification intent");
       }
-      const selection = parentResolvedSelection(
-        configuration,
+      const binding = productionSessionBindingFor(
         persistence,
-        assignment,
+        assignment.parentSessionKey,
+        assignment.parentThreadId,
       );
       await steerStageSession(
         {
           commandId: notice.commandId,
           createdAt: notice.createdAt,
-          interactionMode: selection.interactionMode,
+          interactionMode: binding.interactionMode,
           message,
           messageId: notice.messageId,
-          providerContext: {
-            cliVersion: selection.observedCliVersion,
-            driver: selection.driverKind,
-            lifecycle: "independent",
-            providerInstanceId: selection.providerInstanceId,
-          },
-          runtimeMode: selection.runtimeMode,
+          providerContext: providerContextFromBinding(binding),
+          runtimeMode: binding.runtimeMode,
           threadId: assignment.parentThreadId,
         },
         { t3 },

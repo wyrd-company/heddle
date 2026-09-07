@@ -14,6 +14,7 @@ import {
   type InstanceRecord,
   type InstanceState,
 } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import { isTodoState, scopedTodoItems, todoSubtreeIds } from "../todo/index.js";
 import {
   assignmentForChild,
@@ -107,6 +108,12 @@ const claim = (
   overrides: Partial<Parameters<typeof claimTodoAssignment>[1]> = {},
 ) =>
   claimTodoAssignment(store, {
+    binding: resolvedSessionBindingFixture({
+      modelSlug: overrides.model ?? "sample-model",
+      providerInstanceId: overrides.provider ?? "sample-provider",
+      sessionKey: overrides.sessionKey ?? "child-session",
+      threadId: overrides.threadId ?? "child-thread",
+    }),
     bootstrap: {
       createCommandId: "create-child",
       createdAt: new Date(0).toISOString(),
@@ -244,6 +251,10 @@ describe("todo subtree assignments", () => {
       rootItemId: "child",
       sessionKey: "nested-session",
       threadId: "nested-thread",
+      binding: resolvedSessionBindingFixture({
+        sessionKey: "nested-session",
+        threadId: "nested-thread",
+      }),
     });
     const notice = {
       commandId: "stop-command",
@@ -313,6 +324,10 @@ describe("todo subtree assignments", () => {
 });
 
 const claimInput = (): Parameters<typeof claimTodoAssignment>[1] => ({
+  binding: resolvedSessionBindingFixture({
+    sessionKey: "child-session",
+    threadId: "child-thread",
+  }),
   bootstrap: {
     createCommandId: "create-child",
     createdAt: new Date(0).toISOString(),

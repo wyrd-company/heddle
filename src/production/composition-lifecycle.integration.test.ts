@@ -361,7 +361,7 @@ kind: standard
     },
   );
 
-  it("raises durable attention without partial dispatch when a cold retry changes handoff authentication policy", async () => {
+  it("does not retarget a cold retry through the changed shared default", async () => {
     const { blueprintsRepositoryRoot, configuration } = await prepare();
     class InterruptedT3 extends SyntheticT3 {
       override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
@@ -382,6 +382,16 @@ kind: standard
     });
     await expect(first.start()).resolves.toBeUndefined();
     expect(firstT3.commands).toHaveLength(1);
+    const storedBinding = first.persistence.listSessionRuntime()[0]!.binding;
+    expect(storedBinding).toMatchObject({
+      alias: configuration.session.defaultSelection.alias,
+      driverKind: configuration.session.defaultSelection.driverKind,
+      modelSlug: configuration.session.defaultSelection.model.slug,
+      providerDisplayName:
+        configuration.session.defaultSelection.providerDisplayName,
+      providerInstanceId:
+        configuration.session.defaultSelection.providerInstanceId,
+    });
     const interruptedAttention = first.attention.list();
     expect(interruptedAttention).toEqual([
       expect.objectContaining({
@@ -424,17 +434,19 @@ kind: standard
     });
 
     await expect(second.start()).resolves.toBeUndefined();
-    expect(secondT3.commands).toHaveLength(0);
-    expect(secondT3.timeouts).toHaveLength(0);
-    expect(second.attention.list()).toEqual([
-      expect.objectContaining({
-        attentionId: expect.stringContaining(":handoff-render"),
-        kind: "lifecycle-resolution",
-        message: expect.stringContaining(
-          "authentication binding is incompatible",
-        ),
-      }),
-    ]);
+    expect(second.persistence.listSessionRuntime()[0]!.binding).toEqual(
+      storedBinding,
+    );
+    expect(secondT3.commands).toHaveLength(2);
+    expect(secondT3.providerContexts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          driver: "codex",
+          providerInstanceId: "codex",
+        }),
+      ]),
+    );
+    expect(second.attention.list()).toEqual([]);
     await second.close();
   });
 
@@ -452,6 +464,22 @@ kind: standard
       t3,
     });
     await composition.start();
+    const implementBinding =
+      composition.persistence.listSessionRuntime()[0]!.binding;
+    configuration.session.defaultSelection = {
+      alias: "review-selection",
+      driverKind: "cursor",
+      interactionMode: "plan",
+      model: {
+        isCustom: false,
+        name: "Sample Review Model",
+        slug: "sample-review-model",
+      },
+      observedCliVersion: "sample-review-version",
+      providerDisplayName: "Sample Review Workbench",
+      providerInstanceId: "review-provider",
+      runtimeMode: "full-access",
+    };
     await composition.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
@@ -464,8 +492,20 @@ kind: standard
       { stageId: "review", state: "waiting", taskId },
     ]);
     expect(composition.persistence.listSessionRuntime()).toMatchObject([
-      { stageId: "implement" },
-      { stageId: "review" },
+      { binding: implementBinding, stageId: "implement" },
+      {
+        binding: {
+          alias: "review-selection",
+          driverKind: "cursor",
+          interactionMode: "plan",
+          modelSlug: "sample-review-model",
+          observedCliVersion: "sample-review-version",
+          providerDisplayName: "Sample Review Workbench",
+          providerInstanceId: "review-provider",
+          runtimeMode: "full-access",
+        },
+        stageId: "review",
+      },
     ]);
     const creates = t3.commands.filter(({ type }) => type === "thread.create");
     expect(creates).toHaveLength(2);
@@ -1003,6 +1043,22 @@ kind: standard
     for (let activation = 1; activation <= 10; activation += 1) {
       first.persistence.writeSessionRuntime({
         activation,
+        binding: {
+          alias: configuration.session.defaultSelection.alias,
+          driverKind: configuration.session.defaultSelection.driverKind,
+          interactionMode:
+            configuration.session.defaultSelection.interactionMode,
+          modelSlug: configuration.session.defaultSelection.model.slug,
+          observedCliVersion:
+            configuration.session.defaultSelection.observedCliVersion,
+          providerDisplayName:
+            configuration.session.defaultSelection.providerDisplayName,
+          providerInstanceId:
+            configuration.session.defaultSelection.providerInstanceId,
+          runtimeMode: configuration.session.defaultSelection.runtimeMode,
+          sessionKey: `task-${taskId}:review:${activation}`,
+          threadId: `review-thread-${activation}`,
+        },
         instanceId: `task-${taskId}`,
         projectId: configuration.adHocProject.projectId,
         repositoryName: configuration.products[0]!.repos[0]!.name,

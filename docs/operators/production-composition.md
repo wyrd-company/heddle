@@ -238,6 +238,20 @@ an existing occurrence. If T3 can no longer use the bound provider or model,
 the session fails visibly. A new stage occurrence or subagent assignment makes
 a new selection.
 
+SQLite stores a top-level binding with its stage-session runtime row and a
+delegated binding with its todo assignment. The binding and session identity
+are immutable after publication. A pre-release state directory that contains a
+stage-session row without a binding cannot start recovery; clear that isolated
+state directory and restart Heddle.
+
+The existing instance runtime response includes a sorted `sessionBindings`
+array for each instance. Each entry contains only `sessionKey`, `threadId`,
+`alias`, `providerDisplayName`, `providerInstanceId`, `driverKind`,
+`observedCliVersion`, `modelSlug`, `runtimeMode`, and `interactionMode`. This is
+the operator-safe projection used to diagnose routing. It never contains T3 or
+provider credentials, provider settings, correlation tokens, or handoff
+content.
+
 The observed provider CLI version is evidence, not a Heddle compatibility pin.
 T3 owns provider discovery, driver support, CLI authentication, CLI
 compatibility, and launch wrappers. Heddle pins the deployed T3 application

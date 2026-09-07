@@ -65,8 +65,10 @@ import { ProductionScheduler } from "./scheduler.js";
 import { SchedulerPassAttentionLifecycle } from "./scheduler-pass-attention.js";
 import {
   createProductionSubagentCoordinator,
+  productionSessionBindingFor,
   productionSessionTargets,
 } from "./subagent-composition.js";
+import { providerContextFromBinding } from "./session-binding.js";
 import { ProductionAttentionActions } from "./attention-actions.js";
 import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
@@ -305,27 +307,17 @@ export const createProductionComposition = (
       },
       parent: {
         steer: async (pending: ParentEscalation) => {
-          const parent = persistence!
-            .listReconcilerRuntime()
-            .find(({ sessionKey }) => sessionKey === pending.parentSessionKey);
-          if (parent?.threadId === undefined) {
-            throw new Error("Parent escalation thread is not active");
-          }
+          const binding = productionSessionBindingFor(
+            persistence!,
+            pending.parentSessionKey,
+          );
           await steerStageSession(
             {
-              interactionMode:
-                configuration.session.defaultSelection.interactionMode,
+              interactionMode: binding.interactionMode,
               message: `Child escalation ${pending.attentionId} requires an answer`,
-              providerContext: {
-                cliVersion:
-                  configuration.session.defaultSelection.observedCliVersion,
-                driver: configuration.session.defaultSelection.driverKind,
-                lifecycle: "independent",
-                providerInstanceId:
-                  configuration.session.defaultSelection.providerInstanceId,
-              },
-              runtimeMode: configuration.session.defaultSelection.runtimeMode,
-              threadId: parent.threadId,
+              providerContext: providerContextFromBinding(binding),
+              runtimeMode: binding.runtimeMode,
+              threadId: binding.threadId,
             },
             { t3 },
           );

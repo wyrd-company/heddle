@@ -44,6 +44,11 @@ import {
   type ProductionErrorCode,
 } from "./error-visibility.js";
 import { heddleSessionTitle } from "./session-title.js";
+import {
+  bindResolvedSession,
+  modelSelectionFromBinding,
+  providerContextFromBinding,
+} from "./session-binding.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
@@ -102,10 +107,21 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const runtimeByInstanceId = new Map(
       runtimes.map((runtime) => [runtime.instanceId, runtime]),
     );
+    const sessionByKey = new Map(
+      this.persistence
+        .listSessionRuntime()
+        .map((session) => [session.sessionKey, session]),
+    );
     const activeAttentionIds = new Set(
       this.persistence.listAttention().map(({ attentionId }) => attentionId),
     );
     const topLevel = runtimes.map((runtime) => {
+      const boundSession =
+        runtime.sessionKey === undefined
+          ? undefined
+          : sessionByKey.get(runtime.sessionKey);
+      const provider =
+        boundSession?.binding.providerInstanceId ?? runtime.provider;
       const boardStatusMirrorBlocked = activeAttentionIds.has(
         synchronizationAttentionId(runtime, "instance-synchronization-failed"),
       );
@@ -117,9 +133,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           : { deferral: deferral(runtime.deferral) }),
         depth: 0,
         instanceId: runtime.instanceId,
-        ...(runtime.provider === undefined
-          ? {}
-          : { provider: runtime.provider }),
+        ...(provider === undefined ? {} : { provider }),
         ...(runtime.stageEnteredAt === undefined
           ? {}
           : { stageEnteredAt: runtime.stageEnteredAt }),
@@ -539,7 +553,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       return value;
     };
     const session = this.configuration.session;
-    const selection = session.defaultSelection;
+    const binding =
+      intendedSession?.binding ??
+      bindResolvedSession(session.defaultSelection, sessionKey, threadId);
     const stage = await readProductionHandoffStage({
       instanceId,
       persistence: this.persistence,
@@ -570,6 +586,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const projectId = this.projects.projectForTask(task);
     this.persistence.writeSessionRuntime({
       activation,
+      binding,
       instanceId,
       projectId,
       repositoryName: repository.name,
@@ -586,19 +603,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             taskContract: taskContract(task),
           },
           instanceId,
-          interactionMode: selection.interactionMode,
-          modelSelection: {
-            instanceId: selection.providerInstanceId,
-            model: selection.model.slug,
-          },
+          interactionMode: binding.interactionMode,
+          modelSelection: modelSelectionFromBinding(binding),
           projectId,
-          providerContext: {
-            cliVersion: selection.observedCliVersion,
-            driver: selection.driverKind,
-            lifecycle: "independent",
-            providerInstanceId: selection.providerInstanceId,
-          },
-          runtimeMode: selection.runtimeMode,
+          providerContext: providerContextFromBinding(binding),
+          runtimeMode: binding.runtimeMode,
           sessionKey,
           task: task.frontMatter,
           taskId: task.id,

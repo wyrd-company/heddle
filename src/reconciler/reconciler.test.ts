@@ -1019,6 +1019,35 @@ describe("Reconciler", () => {
     );
   });
 
+  it("reuses a starting occurrence provider instead of resolving the changed default", async () => {
+    const ready = task(89, "todo", { lifecycle: "label-replacement" });
+    const providerFor = vi.fn(async () => "provider-b");
+    const subject = fixture([ready], {
+      pacing: {
+        ...pacing({ used: 0, windowStartedAt: 1_000 }, () => 2_000, 2),
+        providerFor,
+      },
+    });
+    subject.instances.instances.push({
+      boardStatus: "todo",
+      depth: 0,
+      instanceId: "task-89",
+      provider: "provider-a",
+      state: "starting",
+      taskId: ready.id,
+    });
+
+    await subject.reconciler.reconcile();
+
+    expect(providerFor).not.toHaveBeenCalled();
+    expect(subject.instances.starts).toEqual([
+      expect.objectContaining({
+        dispatch: { depth: 0, provider: "provider-a" },
+        instanceId: "task-89",
+      }),
+    ]);
+  });
+
   it("counts starting parent and delegated child sessions against WIP", async () => {
     const starting = task(82, "in-progress", { lifecycle: "inventory-count" });
     const ready = task(83, "todo", { lifecycle: "label-replacement" });

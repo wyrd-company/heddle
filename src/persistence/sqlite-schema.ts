@@ -57,6 +57,7 @@ export const initializePersistenceSchema = (
     CREATE TABLE IF NOT EXISTS heddle_session_runtime (
       session_key TEXT PRIMARY KEY,
       activation INTEGER NOT NULL CHECK (activation > 0),
+      binding_json TEXT NOT NULL,
       instance_id TEXT NOT NULL,
       project_id TEXT,
       repository_name TEXT,
@@ -262,6 +263,11 @@ export const initializePersistenceSchema = (
   const sessionColumns = database
     .prepare("PRAGMA table_info(heddle_session_runtime)")
     .all() as Array<{ name: string }>;
+  if (!sessionColumns.some(({ name }) => name === "binding_json")) {
+    database.exec(
+      "ALTER TABLE heddle_session_runtime ADD COLUMN binding_json TEXT",
+    );
+  }
   if (!sessionColumns.some(({ name }) => name === "project_id")) {
     database.exec(
       "ALTER TABLE heddle_session_runtime ADD COLUMN project_id TEXT",

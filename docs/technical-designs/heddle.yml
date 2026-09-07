@@ -946,6 +946,14 @@ proposed-design:
     replaying its stored bootstrap and resolved session binding. Recovery never
     retargets an existing occurrence through current provider configuration.
 
+    A top-level stage-session runtime row owns its immutable resolved binding.
+    A delegated todo assignment owns the same binding shape for its child.
+    Runtime instance projection joins both stores by the owning lifecycle
+    instance and exposes only the binding's non-secret identity fields. A
+    pre-release stage-session row without a resolved binding fails recovery
+    with an explicit state-directory reset instruction; Heddle does not infer
+    the missing authority from current configuration.
+
     The same database stores canonical scheduling intent, dynamic-task creation
     intents and their append-only pending/completed evidence, durable attention
     entries with their unresolved or resolved queue lifecycle, and stable-ID

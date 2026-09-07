@@ -30,6 +30,7 @@ import {
 } from "../mcp-server/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import type { ProductionComposition } from "../production/index.js";
+import { isTodoState } from "../todo/index.js";
 
 type DeploymentEnvironment = Record<string, string | undefined>;
 
@@ -93,6 +94,7 @@ class PersistenceConsoleStateSource implements ConsoleStateSource {
   }
 
   public async listInstances(): Promise<ConsoleInstance[]> {
+    const topLevel = this.persistence.listSessionRuntime();
     return this.persistence.listInstances().flatMap((record) => {
       const match = taskInstance.exec(record.instanceId);
       if (match === null) return [];
@@ -110,6 +112,18 @@ class PersistenceConsoleStateSource implements ConsoleStateSource {
       return [
         {
           instanceId: record.instanceId,
+          sessionBindings: [
+            ...topLevel
+              .filter(({ instanceId }) => instanceId === record.instanceId)
+              .map(({ binding }) => binding),
+            ...(isTodoState(record.state.todoState)
+              ? record.state.todoState.lists.flatMap((list) =>
+                  (list.assignments ?? []).map(({ binding }) => binding),
+                )
+              : []),
+          ].sort((left, right) =>
+            left.sessionKey.localeCompare(right.sessionKey),
+          ),
           taskId,
           ...(stageId === undefined ? {} : { stageId }),
         },

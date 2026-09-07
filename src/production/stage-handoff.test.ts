@@ -45,6 +45,19 @@ const sourceBehindCause = {
 const executeFile = promisify(execFile);
 const temporaryDirectories: string[] = [];
 
+const binding = (sessionKey: string, threadId: string) => ({
+  alias: "primary",
+  driverKind: "codex",
+  interactionMode: "default",
+  modelSlug: "sample-model",
+  observedCliVersion: "sample-version",
+  providerDisplayName: "Workbench Alpha",
+  providerInstanceId: "provider-alpha",
+  runtimeMode: "auto" as const,
+  sessionKey,
+  threadId,
+});
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories
@@ -94,6 +107,7 @@ describe("production stage handoff", () => {
     });
     persistence.writeSessionRuntime({
       activation: 1,
+      binding: binding(sessionKey, "sample-thread"),
       instanceId,
       sessionKey,
       stageId: "implement",
@@ -229,6 +243,7 @@ describe("production stage handoff", () => {
         const sessionKey = `${instanceId}:${stageId}:${activation}`;
         persistence.writeSessionRuntime({
           activation,
+          binding: binding(sessionKey, `${stageId}-thread-${activation}`),
           instanceId,
           sessionKey,
           stageId,
@@ -404,6 +419,7 @@ describe("production stage handoff", () => {
         const sessionKey = `${instanceId}:${stageId}:${activation}`;
         persistence.writeSessionRuntime({
           activation,
+          binding: binding(sessionKey, `${stageId}-thread-${activation}`),
           instanceId,
           sessionKey,
           stageId,

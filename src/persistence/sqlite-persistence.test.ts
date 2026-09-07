@@ -16,7 +16,8 @@ import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqlitePersistence } from "./sqlite-persistence.js";
-import type { InstanceState } from "./types.js";
+import { resolvedSessionBindingFixture } from "./resolved-session-binding.test-support.js";
+import type { InstanceState, ResolvedSessionBinding } from "./types.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -76,6 +77,104 @@ afterEach(async () => {
 });
 
 describe("SqlitePersistence", () => {
+  it("retains one complete non-secret session binding across restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const binding = resolvedSessionBindingFixture({
+      alias: "secondary-selection",
+      driverKind: "cursor",
+      interactionMode: "plan",
+      modelSlug: "sample-secondary-model",
+      observedCliVersion: null,
+      providerDisplayName: "Sample Secondary Workbench",
+      providerInstanceId: "provider-secondary",
+      runtimeMode: "approval-required",
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+    const first = new SqlitePersistence({ stateDirectory });
+
+    first.writeSessionRuntime({
+      activation: 1,
+      binding,
+      instanceId: "instance-one",
+      projectId: "project-one",
+      repositoryName: "sample-repository",
+      sessionKey: "session-one",
+      stageId: "implement",
+      threadId: "thread-one",
+    });
+    first.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    expect(restarted.listSessionRuntime()).toEqual([
+      {
+        activation: 1,
+        binding,
+        instanceId: "instance-one",
+        projectId: "project-one",
+        repositoryName: "sample-repository",
+        sessionKey: "session-one",
+        stageId: "implement",
+        threadId: "thread-one",
+      },
+    ]);
+    expect(() =>
+      restarted.writeSessionRuntime({
+        activation: 1,
+        binding: { ...binding, alias: "changed-selection" },
+        instanceId: "instance-one",
+        projectId: "project-one",
+        repositoryName: "sample-repository",
+        sessionKey: "session-one",
+        stageId: "implement",
+        threadId: "thread-one",
+      }),
+    ).toThrow("changed durable identity");
+    expect(() =>
+      restarted.writeSessionRuntime({
+        activation: 2,
+        binding: {
+          ...resolvedSessionBindingFixture({
+            sessionKey: "session-two",
+            threadId: "thread-two",
+          }),
+          accessToken: "must-not-persist",
+        } as ResolvedSessionBinding,
+        instanceId: "instance-one",
+        sessionKey: "session-two",
+        stageId: "verify",
+        threadId: "thread-two",
+      }),
+    ).toThrow("invalid non-secret field set");
+    restarted.close();
+  });
+
+  it("fails closed when pre-release session rows have no resolved binding", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    database.exec(`
+      CREATE TABLE heddle_session_runtime (
+        session_key TEXT PRIMARY KEY,
+        activation INTEGER NOT NULL,
+        instance_id TEXT NOT NULL,
+        project_id TEXT,
+        repository_name TEXT,
+        stage_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL UNIQUE
+      );
+      INSERT INTO heddle_session_runtime
+        (session_key, activation, instance_id, stage_id, thread_id)
+      VALUES ('legacy-session', 1, 'instance-one', 'implement', 'legacy-thread');
+    `);
+    database.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+    expect(() => persistence.listSessionRuntime()).toThrow(
+      "clear the pre-release state directory before restart",
+    );
+    persistence.close();
+  });
+
   it("retains immutable scheduler failure and recovery episodes across restart", async () => {
     const stateDirectory = await makeStateDirectory();
     const first = new SqlitePersistence({ stateDirectory });

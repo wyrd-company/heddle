@@ -15,6 +15,7 @@ import {
   type InstanceRecord,
   type InstanceState,
 } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/types.js";
 import {
   assignmentForChild,
@@ -150,6 +151,11 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
     ),
     persistence: store,
     prepareSession: async ({ identity, model }) => ({
+      binding: resolvedSessionBindingFixture({
+        modelSlug: model,
+        sessionKey: identity.sessionKey,
+        threadId: identity.threadId,
+      }),
       interactionMode: "default",
       modelSelection: { instanceId: "sample-driver", model },
       projectId: "sample-project",
@@ -342,6 +348,10 @@ describe("SubagentCoordinator", () => {
       depth: number,
     ) =>
       claimTodoAssignment(persistence, {
+        binding: resolvedSessionBindingFixture({
+          sessionKey,
+          threadId: `thread-${sessionKey}`,
+        }),
         bootstrap: {
           createCommandId: `create-${sessionKey}`,
           createdAt: new Date(0).toISOString(),

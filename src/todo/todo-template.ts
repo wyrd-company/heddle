@@ -6,7 +6,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { JsonValue } from "../persistence/index.js";
+import {
+  isResolvedSessionBinding,
+  type JsonValue,
+} from "../persistence/index.js";
 import type {
   TodoAssignment,
   TodoItem,
@@ -146,6 +149,7 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
     for (const assignment of candidate["assignments"] ?? []) {
       if (
         !isObject(assignment) ||
+        !isResolvedSessionBinding(assignment["binding"]) ||
         !isObject(assignment["bootstrap"]) ||
         typeof assignment["bootstrap"]["createCommandId"] !== "string" ||
         assignment["bootstrap"]["createCommandId"].trim() === "" ||
@@ -180,6 +184,14 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
           assignment["status"] !== "stopped") ||
         typeof assignment["threadId"] !== "string" ||
         assignment["threadId"].trim() === ""
+      ) {
+        return false;
+      }
+      if (
+        assignment["binding"].sessionKey !== assignment["sessionKey"] ||
+        assignment["binding"].threadId !== assignment["threadId"] ||
+        assignment["binding"].providerInstanceId !== assignment["provider"] ||
+        assignment["binding"].modelSlug !== assignment["model"]
       ) {
         return false;
       }

@@ -27,6 +27,10 @@ import {
   stateEventTypes,
 } from "./sqlite-instance-recovery.js";
 import {
+  assertResolvedSessionBinding,
+  sameResolvedSessionBinding,
+} from "./resolved-session-binding.js";
+import {
   initializePersistenceSchema,
   protectFlowcraftHistory,
 } from "./sqlite-schema.js";
@@ -51,6 +55,7 @@ import type {
   PersistedEvent,
   PersistenceConfiguration,
   ReconcilerRuntimeRecord,
+  ResolvedSessionBinding,
   SchedulerPassFailureRecord,
   SchedulerPassHistoryRecord,
   SessionRuntimeRecord,
@@ -94,6 +99,21 @@ const serialize = (value: JsonValue | InstanceState): string => {
     throw new TypeError("Persistence values must be JSON serializable");
   }
   return serialized;
+};
+
+const parseResolvedSessionBinding = (
+  serialized: string,
+  sessionKey: string,
+  threadId: string,
+): ResolvedSessionBinding => {
+  let value: unknown;
+  try {
+    value = JSON.parse(serialized) as unknown;
+  } catch {
+    throw new Error(`Session '${sessionKey}' has an invalid resolved binding`);
+  }
+  assertResolvedSessionBinding(value, sessionKey, threadId);
+  return value;
 };
 
 export type FlowcraftHistory = SqliteFlowcraftHistory;
@@ -1159,23 +1179,38 @@ export class SqlitePersistence {
   listSessionRuntime(): SessionRuntimeRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT activation, instance_id AS instanceId, project_id AS projectId,
+        `SELECT activation, binding_json AS bindingJson,
+                instance_id AS instanceId, project_id AS projectId,
                 repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
          ORDER BY instance_id, stage_id, activation`,
       )
       .all() as Array<
-      Omit<SessionRuntimeRecord, "projectId" | "repositoryName"> & {
+      Omit<SessionRuntimeRecord, "binding" | "projectId" | "repositoryName"> & {
+        bindingJson: string | null;
         projectId: string | null;
         repositoryName: string | null;
       }
     >;
-    return rows.map(({ projectId, repositoryName, ...row }) => ({
-      ...row,
-      ...(projectId === null ? {} : { projectId }),
-      ...(repositoryName === null ? {} : { repositoryName }),
-    }));
+    return rows.map(({ bindingJson, projectId, repositoryName, ...row }) => {
+      if (bindingJson === null) {
+        throw new Error(
+          `Session '${row.sessionKey}' predates resolved session bindings; clear the pre-release state directory before restart`,
+        );
+      }
+      const binding = parseResolvedSessionBinding(
+        bindingJson,
+        row.sessionKey,
+        row.threadId,
+      );
+      return {
+        ...row,
+        binding,
+        ...(projectId === null ? {} : { projectId }),
+        ...(repositoryName === null ? {} : { repositoryName }),
+      };
+    });
   }
 
   writeSessionRuntime(record: SessionRuntimeRecord): void {
@@ -1196,16 +1231,26 @@ export class SqlitePersistence {
     if (record.repositoryName !== undefined) {
       this.assertStableId("repositoryName", record.repositoryName);
     }
+    assertResolvedSessionBinding(
+      record.binding,
+      record.sessionKey,
+      record.threadId,
+    );
     const priorRow = this.database
       .prepare(
-        `SELECT activation, instance_id AS instanceId, project_id AS projectId,
+        `SELECT activation, binding_json AS bindingJson,
+                instance_id AS instanceId, project_id AS projectId,
                 repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
          WHERE session_key = ?`,
       )
       .get(record.sessionKey) as
-      | (Omit<SessionRuntimeRecord, "projectId" | "repositoryName"> & {
+      | (Omit<
+          SessionRuntimeRecord,
+          "binding" | "projectId" | "repositoryName"
+        > & {
+          bindingJson: string | null;
           projectId: string | null;
           repositoryName: string | null;
         })
@@ -1215,6 +1260,14 @@ export class SqlitePersistence {
         ? undefined
         : {
             ...priorRow,
+            binding:
+              priorRow.bindingJson === null
+                ? undefined
+                : parseResolvedSessionBinding(
+                    priorRow.bindingJson,
+                    priorRow.sessionKey,
+                    priorRow.threadId,
+                  ),
             ...(priorRow.projectId === null
               ? { projectId: undefined }
               : { projectId: priorRow.projectId }),
@@ -1225,6 +1278,8 @@ export class SqlitePersistence {
     if (prior !== undefined) {
       const coreChanged =
         prior.activation !== record.activation ||
+        prior.binding === undefined ||
+        !sameResolvedSessionBinding(prior.binding, record.binding) ||
         prior.instanceId !== record.instanceId ||
         prior.sessionKey !== record.sessionKey ||
         prior.stageId !== record.stageId ||
@@ -1264,13 +1319,14 @@ export class SqlitePersistence {
     this.database
       .prepare(
         `INSERT INTO heddle_session_runtime
-           (session_key, activation, instance_id, project_id, repository_name,
+           (session_key, activation, binding_json, instance_id, project_id, repository_name,
             stage_id, thread_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.sessionKey,
         record.activation,
+        serialize(record.binding),
         record.instanceId,
         record.projectId ?? null,
         record.repositoryName ?? null,

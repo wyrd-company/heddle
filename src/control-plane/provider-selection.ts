@@ -4,6 +4,10 @@
 // ---
 
 import type { ProviderUsageBudget } from "../pacing/index.js";
+import {
+  RESOLVED_SESSION_RUNTIME_MODES,
+  type ResolvedSessionRuntimeMode,
+} from "../persistence/types.js";
 
 export type ProviderAliasConfiguration = {
   readonly model: string;
@@ -46,14 +50,9 @@ export type ProviderSelectionReason =
   | "provider-unavailable"
   | "provider-model-not-found";
 
-export const T3_RUNTIME_MODES = [
-  "approval-required",
-  "auto-accept-edits",
-  "auto",
-  "full-access",
-] as const;
+export const T3_RUNTIME_MODES = RESOLVED_SESSION_RUNTIME_MODES;
 
-export type T3RuntimeMode = (typeof T3_RUNTIME_MODES)[number];
+export type T3RuntimeMode = ResolvedSessionRuntimeMode;
 
 export class ProviderSelectionError extends Error {
   public constructor(

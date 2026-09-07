@@ -573,7 +573,59 @@ next_id: 1
     const crashedContext = readLifecycleContext(
       crashedPersistence.getInstance("task-1")!,
     );
+    expect(crashedPersistence.listSessionRuntime()).toMatchObject([
+      {
+        binding: {
+          alias: "primary",
+          driverKind: "codex",
+          modelSlug: "sample-model",
+          providerDisplayName: "Workbench Alpha",
+          providerInstanceId: "codex",
+        },
+      },
+    ]);
     crashedPersistence.close();
+    const changedConfiguration: ResolvedProductionConfiguration = {
+      ...configuration,
+      pacing: { ...configuration.pacing, defaultProvider: "changed-provider" },
+      providerAliases: {
+        "changed-selection": {
+          model: "changed-sample-model",
+          providerDisplayName: "Changed Sample Workbench",
+        },
+      },
+      session: {
+        ...configuration.session,
+        defaultProviderAlias: "changed-selection",
+        defaultSelection: {
+          ...configuration.session.defaultSelection,
+          alias: "changed-selection",
+          driverKind: "claudeAgent",
+          model: {
+            isCustom: false,
+            name: "Changed Sample Model",
+            slug: "changed-sample-model",
+          },
+          providerDisplayName: "Changed Sample Workbench",
+          providerInstanceId: "changed-provider",
+        },
+        resolvedSelections: [
+          {
+            ...configuration.session.defaultSelection,
+            alias: "changed-selection",
+            driverKind: "claudeAgent",
+            model: {
+              isCustom: false,
+              name: "Changed Sample Model",
+              slug: "changed-sample-model",
+            },
+            providerDisplayName: "Changed Sample Workbench",
+            providerInstanceId: "changed-provider",
+          },
+        ],
+      },
+    };
+    await writeFile(configurationPath, JSON.stringify(changedConfiguration));
     const pinnedBlueprint = await execute(
       "git",
       ["cat-file", "blob", crashedContext.blueprintBlobHash],
@@ -596,6 +648,13 @@ next_id: 1
     await writeFile(join(boardDirectory, "config.yml"), missingPreparedStatus);
     type RestartEvidence = {
       attention: Array<{ code: string; message: string }>;
+      bindings: Array<{
+        alias: string;
+        driverKind: string;
+        modelSlug: string;
+        providerDisplayName: string;
+        providerInstanceId: string;
+      }>;
       commands: Array<{ commandId: string; type: string }>;
       instanceCount: number;
       instances: Array<{ boardStatusMirrorBlocked?: boolean }>;
@@ -627,6 +686,15 @@ next_id: 1
       expect.objectContaining({ code: "instance-synchronization-failed" }),
     );
     expect(evidence.instanceCount).toBe(1);
+    expect(evidence.bindings).toMatchObject([
+      {
+        alias: "primary",
+        driverKind: "codex",
+        modelSlug: "sample-model",
+        providerDisplayName: "Workbench Alpha",
+        providerInstanceId: "codex",
+      },
+    ]);
     expect(
       evidence.commands.filter(({ type }) => type === "thread.create"),
     ).toHaveLength(1);

@@ -5,7 +5,10 @@
 
 import type { BoardTask } from "../board-adapter/index.js";
 import type { PacingDeferral } from "../pacing/index.js";
-import type { JsonValue } from "../persistence/index.js";
+import type {
+  JsonValue,
+  ResolvedSessionBinding,
+} from "../persistence/index.js";
 
 export interface ConsoleBoard {
   readBoard(): Promise<BoardTask[]>;
@@ -16,6 +19,7 @@ export interface ConsoleBoard {
 export interface ConsoleInstance {
   deferral?: PacingDeferral;
   instanceId: string;
+  sessionBindings: ResolvedSessionBinding[];
   stageEnteredAt?: number;
   stageId?: string;
   taskId: number;

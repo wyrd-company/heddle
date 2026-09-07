@@ -16,6 +16,7 @@ import {
 import { GitBlueprintStore, readLifecycleContext } from "../engine/index.js";
 import type { SqlitePersistence } from "../persistence/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
+import { isTodoState } from "../todo/index.js";
 
 const inspectUpstreamRebaseTarget = async (
   repositoryRoot: string,
@@ -73,11 +74,30 @@ export class ProductionConsoleState implements ConsoleStateSource {
   }
 
   async listInstances(): Promise<ConsoleInstance[]> {
+    const topLevel = this.persistence.listSessionRuntime();
+    const delegated = this.persistence.listInstances().flatMap((instance) =>
+      isTodoState(instance.state.todoState)
+        ? instance.state.todoState.lists.flatMap((list) =>
+            (list.assignments ?? []).map(({ binding }) => ({
+              binding,
+              instanceId: instance.instanceId,
+            })),
+          )
+        : [],
+    );
     return this.persistence.listReconcilerRuntime().map((runtime) => ({
       ...(runtime.deferral === undefined
         ? {}
         : { deferral: runtime.deferral as ConsoleInstance["deferral"] }),
       instanceId: runtime.instanceId,
+      sessionBindings: [
+        ...topLevel
+          .filter(({ instanceId }) => instanceId === runtime.instanceId)
+          .map(({ binding }) => binding),
+        ...delegated
+          .filter(({ instanceId }) => instanceId === runtime.instanceId)
+          .map(({ binding }) => binding),
+      ].sort((left, right) => left.sessionKey.localeCompare(right.sessionKey)),
       ...(runtime.stageEnteredAt === undefined
         ? {}
         : { stageEnteredAt: runtime.stageEnteredAt }),

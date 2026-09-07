@@ -565,9 +565,11 @@ export class Reconciler {
         let dispatch: { depth: 0; provider: string } | undefined;
         if (this.options.pacing !== undefined) {
           const provider =
-            this.options.pacing.providerFor === undefined
-              ? this.options.pacing.evaluator.defaultProvider
-              : await this.options.pacing.providerFor(task, resolution);
+            existing?.state === "starting" && existing.provider !== undefined
+              ? existing.provider
+              : this.options.pacing.providerFor === undefined
+                ? this.options.pacing.evaluator.defaultProvider
+                : await this.options.pacing.providerFor(task, resolution);
           const decision = await this.options.pacing.evaluator.evaluate(
             { kind: "task", provider, sessionId: instanceId },
             activeSessions,

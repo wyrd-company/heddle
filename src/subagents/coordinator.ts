@@ -17,6 +17,10 @@ import type {
   PacingDeferral,
   PacingSession,
 } from "../pacing/index.js";
+import {
+  sameResolvedSessionBinding,
+  type ResolvedSessionBinding,
+} from "../persistence/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/types.js";
 import { isTodoState } from "../todo/index.js";
 import {
@@ -69,7 +73,7 @@ export type SubagentSessionPreparation = Pick<
   | "taskId"
   | "title"
   | "worktree"
->;
+> & { binding: ResolvedSessionBinding };
 
 export type SubagentCoordinatorOptions = {
   activeSessions(): Promise<readonly PacingSession[]>;
@@ -93,6 +97,7 @@ export type SubagentCoordinatorOptions = {
     identity: ChildIdentity;
     model: string;
     provider: string;
+    resolvedBinding?: ResolvedSessionBinding;
     rootItemId: string;
   }): Promise<SubagentSessionPreparation>;
   sessionTargetFor(
@@ -155,6 +160,7 @@ export class SubagentCoordinator {
       );
     }
     let assignment = existing;
+    let preparation: SubagentSessionPreparation;
     if (assignment === undefined) {
       const identity: ChildIdentity = {
         correlationToken: this.#nextId(),
@@ -182,8 +188,16 @@ export class SubagentCoordinator {
       if (decision.kind === "defer") {
         return { deferral: decision.deferral, kind: "deferred" };
       }
+      preparation = await this.options.prepareSession({
+        binding,
+        identity,
+        model: input.model,
+        provider: input.provider,
+        rootItemId: input.rootItemId,
+      });
       assignment = claimTodoAssignment(this.options.persistence, {
         ...identity,
+        binding: preparation.binding,
         bootstrap: {
           createCommandId: this.#nextId(),
           createdAt: this.#now(),
@@ -194,29 +208,36 @@ export class SubagentCoordinator {
         instanceId: binding.instance.instanceId,
         listSessionKey:
           binding.todoAssignment?.listSessionKey ?? binding.sessionKey,
-        model: input.model,
+        model: preparation.binding.modelSlug,
         operationId: input.operationId,
         parentSessionKey: binding.sessionKey,
         parentThreadId: parentTarget.threadId,
-        provider: input.provider,
+        provider: preparation.binding.providerInstanceId,
         rootItemId: input.rootItemId,
         stage: binding.stage.id,
+      });
+    } else {
+      preparation = await this.options.prepareSession({
+        binding,
+        identity: assignment,
+        model: assignment.model,
+        provider: assignment.provider,
+        resolvedBinding: assignment.binding,
+        rootItemId: assignment.rootItemId,
       });
     }
     if (assignment.status === "stopped") {
       return { assignment, kind: "spawned" };
     }
-    const preparation = await this.options.prepareSession({
-      binding,
-      identity: assignment,
-      model: assignment.model,
-      provider: assignment.provider,
-      rootItemId: assignment.rootItemId,
-    });
+    if (!sameResolvedSessionBinding(preparation.binding, assignment.binding)) {
+      throw new Error("Prepared subagent session changed its durable binding");
+    }
+    const { binding: _resolvedBinding, ...bootstrapPreparation } = preparation;
+    void _resolvedBinding;
     try {
       await this.#bootstrap(
         {
-          ...preparation,
+          ...bootstrapPreparation,
           handoff: {
             skillPointer: this.#skillPointer(binding),
             stage: {

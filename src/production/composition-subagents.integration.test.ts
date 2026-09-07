@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
 import type { JsonValue } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import { isTodoState } from "../todo/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -46,15 +47,34 @@ describe("production subagent composition", () => {
   it("shares organization template authority, persistence, pacing, observation, and tokens", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
+    fixture.configuration.session.resolvedSelections = [
+      ...fixture.configuration.session.resolvedSelections,
+      {
+        ...fixture.configuration.session.defaultSelection,
+        alias: "child-selection",
+        model: {
+          isCustom: false,
+          name: "Sample Child Model",
+          slug: "sample-child-model",
+        },
+      },
+    ];
+    fixture.configuration.pacing.providerBudgets = {
+      codex: { usageLimit: 100 },
+    };
     const t3 = new SyntheticT3();
     const systemPrompt = "# Operator session guidance";
     const resolveSystemPrompt = vi.fn(async () => systemPrompt);
+    const readProviderUsage = vi.fn(async () => ({
+      used: 0,
+      windowStartedAt: 0,
+    }));
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        readFiveHourWindow: readProviderUsage,
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
       resolveSystemPrompt,
@@ -111,6 +131,10 @@ describe("production subagent composition", () => {
       kind: "spawned",
     });
     if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    expect(readProviderUsage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(
+      readProviderUsage.mock.calls.every(([provider]) => provider === "codex"),
+    ).toBe(true);
     const child = await resolver.resolve(spawned.assignment.correlationToken);
     expect(child.todoAssignment).toEqual({
       listSessionKey: parent.sessionKey,
@@ -155,6 +179,42 @@ describe("production subagent composition", () => {
       ).toBe(true);
     }
     expect(resolveSystemPrompt).toHaveBeenCalledTimes(2);
+
+    const originalChildCommands = t3.commands.filter(
+      ({ threadId }) => threadId === spawned.assignment.threadId,
+    );
+    fixture.configuration.session.resolvedSelections = [];
+    fixture.configuration.session.defaultSelection = {
+      ...fixture.configuration.session.defaultSelection,
+      driverKind: "claudeAgent",
+      providerInstanceId: "changed-provider",
+    };
+    await expect(
+      composition.subagents.spawn(parent, {
+        model: "sample-child-model",
+        operationId: "spawn-child-one",
+        provider: "codex",
+        rootItemId: "deliver",
+      }),
+    ).resolves.toMatchObject({
+      assignment: { binding: spawned.assignment.binding },
+      kind: "spawned",
+    });
+    expect(
+      t3.commands
+        .filter(({ threadId }) => threadId === spawned.assignment.threadId)
+        .slice(-2),
+    ).toEqual(originalChildCommands);
+    expect(t3.providerContexts.slice(-2)).toEqual([
+      expect.objectContaining({
+        driver: "codex",
+        providerInstanceId: "codex",
+      }),
+      expect.objectContaining({
+        driver: "codex",
+        providerInstanceId: "codex",
+      }),
+    ]);
 
     await expect(
       composition.subagents.spawn(parent, {
@@ -230,13 +290,20 @@ describe("production subagent composition", () => {
         runtimeMode: "auto-accept-edits",
       },
     ];
+    fixture.configuration.pacing.providerBudgets = {
+      "provider-beta": { usageLimit: 100 },
+    };
+    const readProviderUsage = vi.fn(async () => ({
+      used: 0,
+      windowStartedAt: 0,
+    }));
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        readFiveHourWindow: readProviderUsage,
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
       t3,
@@ -259,10 +326,27 @@ describe("production subagent composition", () => {
       rootItemId: "deliver",
     });
     expect(spawned).toMatchObject({
-      assignment: { model: "sample-model", provider: "provider-beta" },
+      assignment: {
+        binding: {
+          alias: "secondary",
+          driverKind: "cursor",
+          interactionMode: "default",
+          modelSlug: "sample-model",
+          observedCliVersion: "catalog-version-secondary",
+          providerDisplayName: "Workbench Beta",
+          providerInstanceId: "provider-beta",
+          runtimeMode: "auto-accept-edits",
+          sessionKey: expect.any(String),
+          threadId: expect.any(String),
+        },
+        model: "sample-model",
+        provider: "provider-beta",
+      },
       kind: "spawned",
     });
     if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    expect(readProviderUsage).toHaveBeenCalledWith("provider-beta");
+    expect(readProviderUsage).not.toHaveBeenCalledWith("secondary");
     const current = composition.persistence.getInstance(record.instanceId)!;
     expect(isTodoState(current.state.todoState)).toBe(true);
     if (!isTodoState(current.state.todoState)) {
@@ -309,6 +393,32 @@ describe("production subagent composition", () => {
         }),
       ]),
     );
+
+    const operatorProjection = await composition.consoleState.listInstances();
+    expect(operatorProjection).toEqual([
+      expect.objectContaining({
+        instanceId: record.instanceId,
+        sessionBindings: expect.arrayContaining([
+          expect.objectContaining({
+            alias: "primary",
+            providerInstanceId: "codex",
+            sessionKey: parentRuntime.sessionKey,
+          }),
+          expect.objectContaining({
+            alias: "secondary",
+            providerInstanceId: "provider-beta",
+            sessionKey: spawned.assignment.sessionKey,
+          }),
+        ]),
+      }),
+    ]);
+    expect(JSON.stringify(operatorProjection)).not.toContain("access-token");
+
+    fixture.configuration.session.defaultSelection = {
+      ...fixture.configuration.session.defaultSelection,
+      driverKind: "claudeAgent",
+      providerInstanceId: "changed-provider",
+    };
 
     t3.threads.delete(spawned.assignment.threadId);
     await composition.scheduler.trigger();
@@ -366,6 +476,16 @@ describe("production subagent composition", () => {
             ...list,
             assignments: [
               {
+                binding: resolvedSessionBindingFixture({
+                  alias: "primary",
+                  driverKind: "codex",
+                  modelSlug: "sample-model",
+                  providerDisplayName: "Workbench Alpha",
+                  providerInstanceId: "codex",
+                  runtimeMode: "auto-accept-edits",
+                  sessionKey: parent.sessionKey,
+                  threadId: "child-thread",
+                }),
                 bootstrap: {
                   createCommandId: "create-command",
                   createdAt: "2026-01-01T00:00:00.000Z",

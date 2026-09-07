@@ -100,6 +100,9 @@ process.stdout.write(
       .listAttention()
       .map(({ payload }) => payload),
     commands: recorded.map(({ commandId, type }) => ({ commandId, type })),
+    bindings: composition.persistence
+      .listSessionRuntime()
+      .map(({ binding }) => binding),
     instanceCount: composition.persistence.listInstances().length,
     instances,
     runtime: composition.persistence.listReconcilerRuntime(),

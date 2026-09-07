@@ -85,6 +85,7 @@ class FixtureState implements ConsoleStateSource {
   readonly events: ConsoleEvent[] = [
     {
       instanceId: "instance-52",
+      sessionBindings: [],
       payload: { disposition: "ready" },
       recordedAt: "2026-01-01T00:02:00.000Z",
       sequence: 7,

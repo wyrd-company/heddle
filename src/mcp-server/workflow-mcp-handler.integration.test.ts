@@ -38,6 +38,7 @@ import {
 } from "../engine/index.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import { SqlitePersistence } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import {
   claimTodoAssignment,
   mutateTodoAssignment,
@@ -1248,6 +1249,10 @@ describe("workflow MCP HTTP server", () => {
     const insideId = (inside.structuredContent as { id: string }).id;
     const outsideId = (outside.structuredContent as { id: string }).id;
     claimTodoAssignment(fixture.persistence, {
+      binding: resolvedSessionBindingFixture({
+        sessionKey: "child-session",
+        threadId: "child-thread",
+      }),
       bootstrap: {
         createCommandId: "create-child",
         createdAt: new Date(0).toISOString(),
@@ -1269,6 +1274,10 @@ describe("workflow MCP HTTP server", () => {
       threadId: "child-thread",
     });
     claimTodoAssignment(fixture.persistence, {
+      binding: resolvedSessionBindingFixture({
+        sessionKey: "sibling-session",
+        threadId: "sibling-thread",
+      }),
       bootstrap: {
         createCommandId: "create-sibling",
         createdAt: new Date(0).toISOString(),
@@ -1480,6 +1489,10 @@ describe("workflow MCP HTTP server", () => {
     });
     const nestedItemId = (nestedItem.structuredContent as { id: string }).id;
     claimTodoAssignment(fixture.persistence, {
+      binding: resolvedSessionBindingFixture({
+        sessionKey: "child-session",
+        threadId: "child-thread",
+      }),
       bootstrap: {
         createCommandId: "create-child",
         createdAt: new Date(0).toISOString(),
@@ -1501,6 +1514,10 @@ describe("workflow MCP HTTP server", () => {
       threadId: "child-thread",
     });
     claimTodoAssignment(fixture.persistence, {
+      binding: resolvedSessionBindingFixture({
+        sessionKey: "nested-session",
+        threadId: "nested-thread",
+      }),
       bootstrap: {
         createCommandId: "create-nested",
         createdAt: new Date(0).toISOString(),

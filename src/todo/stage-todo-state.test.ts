@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { InstanceRecord, InstanceState } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import {
   ensureStageTodoList,
   mutateStageTodoList,
@@ -262,6 +263,10 @@ describe("stage todo state", () => {
             {
               assignments: [
                 {
+                  binding: resolvedSessionBindingFixture({
+                    sessionKey: "child-session",
+                    threadId: "child-thread",
+                  }),
                   bootstrap: {
                     createCommandId: "create-child",
                     createdAt: new Date(0).toISOString(),

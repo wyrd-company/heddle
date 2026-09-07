@@ -26,10 +26,19 @@ export {
   type PersistedEvent,
   type PersistenceConfiguration,
   type ReconcilerRuntimeRecord,
+  RESOLVED_SESSION_RUNTIME_MODES,
+  type ResolvedSessionBinding,
+  type ResolvedSessionRuntimeMode,
   type SchedulerPassFailureRecord,
   type SchedulerPassHistoryRecord,
   type SessionRuntimeRecord,
 } from "./types.js";
+export {
+  assertResolvedSessionBinding,
+  isResolvedSessionBinding,
+  resolvedSessionBindingFields,
+  sameResolvedSessionBinding,
+} from "./resolved-session-binding.js";
 export {
   LegacyNotificationIntentMismatchError,
   SqlitePersistence,
