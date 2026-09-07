@@ -76,6 +76,7 @@ import { EpicProjectCoordinator } from "./epic-projects.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { LifecycleAttentionBridge } from "./lifecycle-attention-bridge.js";
 import {
+  createProductionErrorAttention,
   notificationDeliveryErrorAttention,
   productionErrorAttention,
 } from "./error-visibility.js";
@@ -424,18 +425,32 @@ export const createProductionComposition = (
       const runtime = persistence!
         .listReconcilerRuntime()
         .find(({ instanceId }) => instanceId === session.instanceId);
-      if (runtime === undefined) throw error;
+      const incident = persistence!
+        .listIncidentRuntime()
+        .find(({ incidentId }) => incidentId === session.instanceId);
+      if (runtime === undefined && incident === undefined) throw error;
       const summary =
         code === "session-observation-failed"
           ? `Session ${session.sessionKey} observation failed`
           : `Session ${session.sessionKey} page delivery failed`;
-      const failure = productionErrorAttention({
-        code,
-        error,
-        instanceId: session.instanceId,
-        summary,
-        taskId: runtime.taskId,
-      });
+      const taskId = runtime?.taskId ?? incident!.taskId;
+      const failure =
+        incident === undefined
+          ? productionErrorAttention({
+              code,
+              error,
+              instanceId: session.instanceId,
+              summary,
+              taskId,
+            })
+          : createProductionErrorAttention({
+              attentionId: `production:incident-execution-failed:task:${taskId}:${incident.incidentId}`,
+              code: "incident-execution-failed",
+              error,
+              instanceId: incident.incidentId,
+              message: `Incident ${incident.incidentId} session failed`,
+              taskId,
+            });
       if (!(await attention.has(failure.attentionId))) {
         await attention.raise(failure);
       }

@@ -30,7 +30,7 @@ import type {
   ProductionErrorAttention,
 } from "./error-visibility.js";
 import { productionErrorIncidentEligible } from "./error-visibility.js";
-import { sanitizeIncidentValue } from "./incident-coordinator.js";
+import { sanitizeIncidentValue } from "./incident-redaction.js";
 
 export type DurableAttention =
   | BlueprintRepositoryAttention

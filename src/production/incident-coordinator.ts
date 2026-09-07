@@ -29,6 +29,9 @@ import {
 } from "./error-visibility.js";
 import type { ProductionInstanceController } from "./instance-controller.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
+import { sanitizeIncidentValue } from "./incident-redaction.js";
+
+export { sanitizeIncidentValue } from "./incident-redaction.js";
 
 export const incidentAdmissionPolicy = {
   cooldownMilliseconds: 60_000,
@@ -74,34 +77,6 @@ const executableOnPath = async (name: string): Promise<boolean> => {
   return false;
 };
 
-const sanitizeString = (value: string, secrets: readonly string[]): string => {
-  let sanitized = value.replace(
-    /\b(https?:\/\/)[^\s/@:]+:[^\s/@]+@/giu,
-    "$1[redacted]@",
-  );
-  for (const secret of secrets) {
-    if (secret !== "") sanitized = sanitized.replaceAll(secret, "[redacted]");
-  }
-  return sanitized;
-};
-
-export const sanitizeIncidentValue = (
-  value: JsonValue,
-  secrets: readonly string[],
-): JsonValue => {
-  if (typeof value === "string") return sanitizeString(value, secrets);
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeIncidentValue(item, secrets));
-  }
-  if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      sanitizeIncidentValue(item, secrets),
-    ]),
-  );
-};
-
 const sourceTaskContract = (
   persistence: SqlitePersistence,
   sourceInstanceId: string | undefined,
@@ -127,10 +102,10 @@ const taskForIncident = (
   incident: JsonValue,
 ): BoardTask => {
   const boardTask = boardTasks.find(({ id }) => id === attention.taskId);
-  const retained = sourceTaskContract(
-    persistence,
-    attention.instanceId ?? undefined,
-  );
+  const retained =
+    boardTask === undefined
+      ? sourceTaskContract(persistence, attention.instanceId ?? undefined)
+      : undefined;
   const taskId = attention.taskId;
   if (taskId === null) throw new Error("Incident attention has no task ID");
   const base: BoardTask = boardTask ?? {
@@ -231,6 +206,7 @@ export class ProductionIncidentCoordinator {
       .listIncidentRuntime()
       .find(({ incidentId }) => incidentId === input.instanceId);
     if (runtime === undefined) return this.lifecycle.resume(input);
+    let intended = runtime;
     if (runtime.stageId === "review" && input.disposition === "reject") {
       const rejections = new Set(runtime.rejectionOperationIds);
       rejections.add(input.operationId);
@@ -243,25 +219,25 @@ export class ProductionIncidentCoordinator {
           `Incident review rejection bound of ${incidentAdmissionPolicy.maximumReviewRejections} is exhausted`,
         );
       }
-      this.persistence.writeIncidentRuntime({
+      intended = {
         ...runtime,
         rejectionOperationIds: [...rejections],
-      });
+      };
     }
     if (runtime.stageId === "finalize" && input.disposition === "complete") {
       this.#assertFinalizationAuthorized(runtime);
     }
-    const snapshot = await this.lifecycle.resume(input);
-    let next = this.persistence
-      .listIncidentRuntime()
-      .find(({ incidentId }) => incidentId === runtime.incidentId)!;
     if (runtime.stageId === "implement" && input.disposition === "diagnosed") {
-      next = { ...next, diagnosis: input.output ?? {} };
+      intended = { ...intended, diagnosis: input.output ?? {} };
     }
     if (runtime.stageId === "review" && input.disposition === "approve") {
-      next = { ...next, accepted: true };
+      intended = { ...intended, accepted: true };
     }
-    this.persistence.writeIncidentRuntime(next);
+    this.persistence.writeIncidentRuntime(intended);
+    const snapshot = await this.lifecycle.resume(input);
+    const next = this.persistence
+      .listIncidentRuntime()
+      .find(({ incidentId }) => incidentId === runtime.incidentId)!;
     try {
       await this.#synchronizeSnapshot(next, snapshot, []);
     } catch (error) {
@@ -419,6 +395,19 @@ export class ProductionIncidentCoordinator {
     const correlationTokens = this.persistence
       .listInstances()
       .flatMap(({ state }) => Object.values(state.correlationTokens));
+    const observations = { ...source } as Record<string, JsonValue>;
+    for (const key of [
+      "attentionId",
+      "code",
+      "error",
+      "incidentId",
+      "instanceId",
+      "kind",
+      "message",
+      "taskId",
+    ]) {
+      delete observations[key];
+    }
     return sanitizeIncidentValue(
       {
         attentionId: source.attentionId,
@@ -427,6 +416,7 @@ export class ProductionIncidentCoordinator {
         incidentId: productionErrorIncidentId(source.attentionId),
         message: source.message,
         observations: {
+          ...observations,
           sourceInstanceId: source.instanceId,
           taskOnBoard,
         },

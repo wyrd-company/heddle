@@ -321,6 +321,64 @@ describe("production incident coordinator", () => {
     expect(persistence!.listIncidentRuntime()[0]?.state).toBe("done");
   });
 
+  it("retains diagnosis and acceptance intent when the process stops after each lifecycle transition", async () => {
+    const { attention, coordinator, harness } = await createSubject({
+      commandAvailable: async () => true,
+    });
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    const underlyingResume = harness.lifecycle.resume.bind(harness.lifecycle);
+    vi.spyOn(harness.lifecycle, "resume").mockImplementationOnce(
+      async (input) => {
+        await underlyingResume(input);
+        throw new Error("Injected stop after diagnosis transition");
+      },
+    );
+
+    await expect(
+      coordinator.resume({
+        disposition: "diagnosed",
+        instanceId: source.incidentId!,
+        operationId: "diagnose-before-stop",
+        output: {
+          conditionState: "live",
+          proposedActions: [
+            { kind: "github-issue", summary: "Record the condition" },
+          ],
+          rootCauseAnalysis: "Synthetic restart analysis",
+        },
+      }),
+    ).rejects.toThrow("Injected stop");
+    await coordinator.reconcile([task()]);
+    expect(persistence!.listIncidentRuntime()[0]).toMatchObject({
+      diagnosis: { rootCauseAnalysis: "Synthetic restart analysis" },
+      stageId: "review",
+      state: "waiting",
+    });
+
+    vi.spyOn(harness.lifecycle, "resume").mockImplementationOnce(
+      async (input) => {
+        await underlyingResume(input);
+        throw new Error("Injected stop after acceptance transition");
+      },
+    );
+    await expect(
+      coordinator.resume({
+        disposition: "approve",
+        instanceId: source.incidentId!,
+        operationId: "approve-before-stop",
+      }),
+    ).rejects.toThrow("Injected stop");
+    await coordinator.reconcile([task()]);
+
+    expect(persistence!.listIncidentRuntime()[0]).toMatchObject({
+      accepted: true,
+      stageId: "finalize",
+      state: "waiting",
+    });
+    expect(harness.activations).toEqual(["implement", "review", "finalize"]);
+  });
+
   it("returns one rejected review to implement and escalates when the review bound is exhausted", async () => {
     const { attention, coordinator, harness } = await createSubject();
     const source = await raise(attention);
