@@ -93,9 +93,46 @@ describe("console client request ownership", () => {
   });
 
   it("returns from lifecycle to identical board and dependency projections", async () => {
+    const otherEpic = {
+      ...rootTask,
+      id: 20,
+      title: "Other example group",
+    };
     const harness = await clientHarness(
-      [rootTask, childTask],
+      [rootTask, childTask, otherEpic],
       "http://console.test/?scope=epic%3A10",
+      {
+        edges: [{ from: 10, to: 11, trace: true }],
+        nodes: [
+          {
+            id: 10,
+            layer: 0,
+            priority: "medium",
+            row: 0,
+            status: "in-progress",
+            title: "Example group",
+            treatment: "running",
+          },
+          {
+            id: 11,
+            layer: 1,
+            priority: "medium",
+            row: 0,
+            status: "in-progress",
+            title: "Example item",
+            treatment: "running",
+          },
+          {
+            id: 20,
+            layer: 0,
+            priority: "medium",
+            row: 1,
+            status: "in-progress",
+            title: "Other example group",
+            treatment: "running",
+          },
+        ],
+      },
     );
     const expectedRecords = harness.cardIds();
     const lifecycleUrl =

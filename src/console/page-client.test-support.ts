@@ -423,7 +423,23 @@ export const clientHarness = async (
           },
         ],
       };
-      return response(graph);
+      const visibleIds = new Set(
+        requestedScope === "all"
+          ? graph.nodes.map(({ id }) => id)
+          : boardTasks
+              .filter(
+                (task) =>
+                  task.id === Number(requestedScope!.slice("epic:".length)) ||
+                  task.parent === Number(requestedScope!.slice("epic:".length)),
+              )
+              .map(({ id }) => id),
+      );
+      return response({
+        edges: graph.edges.filter(
+          ({ from, to }) => visibleIds.has(from) && visibleIds.has(to),
+        ),
+        nodes: graph.nodes.filter(({ id }) => visibleIds.has(id)),
+      });
     }
     if (input.startsWith("/api/projection?")) {
       const requestedScope = new URL(input, locationHref).searchParams.get(
