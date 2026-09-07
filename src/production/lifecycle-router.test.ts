@@ -6,7 +6,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   cleanupFixtures,
@@ -148,6 +148,86 @@ describe("production lifecycle router", () => {
     expect(fixture.persistence.listInstances()).toEqual([]);
   });
 
+  it("rejects exclusive initial session stages before the selecting effect runs", async () => {
+    const blueprint: LifecycleBlueprint = {
+      id: "sample-process",
+      nodes: [
+        { id: "choose", uses: "choose" },
+        { config: { joinStrategy: "any" }, id: "left", uses: "wait" },
+        { config: { joinStrategy: "any" }, id: "right", uses: "wait" },
+        { id: "finish", uses: "finish" },
+      ],
+      edges: [
+        {
+          condition: "result.output.dispositions.left",
+          disposition: "left",
+          source: "choose",
+          target: "left",
+        },
+        {
+          condition: "result.output.dispositions.right",
+          disposition: "right",
+          source: "choose",
+          target: "right",
+        },
+        {
+          condition: "result.output.dispositions.complete",
+          description: "Complete the left sample",
+          disposition: "complete",
+          source: "left",
+          target: "finish",
+        },
+        {
+          condition: "result.output.dispositions.complete",
+          description: "Complete the right sample",
+          disposition: "complete",
+          source: "right",
+          target: "finish",
+        },
+      ],
+    };
+    const choose = vi.fn<LifecycleEffect>(async () => ({
+      dispositions: { right: true },
+    }));
+    const effects = {
+      choose,
+      finish: async () => ({}),
+    } satisfies Record<string, LifecycleEffect>;
+    const fixture = await makeFixture(blueprint, effects);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: fixture.repositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add exclusive sample",
+      ],
+      { cwd: fixture.repositoryRoot },
+    );
+    const router = new ProductionLifecycleRouter({
+      effects,
+      persistence: fixture.persistence,
+      repositoryRoot: fixture.repositoryRoot,
+      sourceRef: "HEAD",
+    });
+
+    await expect(
+      router.plannedStartStage({
+        blueprintPath: fixture.blueprintPath,
+        instanceId: "sample-instance",
+      }),
+    ).rejects.toThrow("multiple possible initial session stages");
+    expect(choose).not.toHaveBeenCalled();
+    expect(fixture.persistence.listInstances()).toEqual([]);
+  });
+
   it("rejects an initial route that cannot bind one session stage before effects", async () => {
     const blueprint: LifecycleBlueprint = {
       id: "sample-process",
@@ -157,9 +237,15 @@ describe("production lifecycle router", () => {
         { id: "finish", uses: "finish" },
       ],
       edges: [
-        { condition: "result.output.left", source: "choose", target: "left" },
         {
-          condition: "result.output.right",
+          condition: "result.output.dispositions.left",
+          disposition: "left",
+          source: "choose",
+          target: "left",
+        },
+        {
+          condition: "result.output.dispositions.right",
+          disposition: "right",
           source: "choose",
           target: "finish",
         },
@@ -173,7 +259,7 @@ describe("production lifecycle router", () => {
       ],
     };
     const effects = {
-      choose: async () => ({ left: true }),
+      choose: async () => ({ dispositions: { left: true } }),
       finish: async () => ({}),
     } satisfies Record<string, LifecycleEffect>;
     const fixture = await makeFixture(blueprint, effects);

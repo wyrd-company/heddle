@@ -12,7 +12,11 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import type { LifecycleSnapshot } from "../engine/index.js";
+import type {
+  LifecycleBlueprint,
+  LifecycleEffect,
+  LifecycleSnapshot,
+} from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
@@ -311,5 +315,126 @@ describe("production instance controller", () => {
       { instanceId: "task-2", state: "done", taskId: 2 },
     ]);
     persistence.close();
+  });
+
+  it("keeps an exclusive initial stage choice unbound and effect-free across restart", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-exclusive-start-"));
+    const blueprint: LifecycleBlueprint = {
+      id: "exclusive-sample",
+      nodes: [
+        { id: "choose", uses: "choose" },
+        { config: { joinStrategy: "any" }, id: "left", uses: "wait" },
+        { config: { joinStrategy: "any" }, id: "right", uses: "wait" },
+        { id: "finish", uses: "finish" },
+      ],
+      edges: [
+        {
+          condition: "result.output.dispositions.left",
+          disposition: "left",
+          source: "choose",
+          target: "left",
+        },
+        {
+          condition: "result.output.dispositions.right",
+          disposition: "right",
+          source: "choose",
+          target: "right",
+        },
+        {
+          condition: "result.output.dispositions.complete",
+          description: "Complete the left sample",
+          disposition: "complete",
+          source: "left",
+          target: "finish",
+        },
+        {
+          condition: "result.output.dispositions.complete",
+          description: "Complete the right sample",
+          disposition: "complete",
+          source: "right",
+          target: "finish",
+        },
+      ],
+    };
+    await mkdir(join(root, "blueprints"));
+    const artifact: Partial<LifecycleBlueprint> = { ...blueprint };
+    delete artifact.id;
+    await writeFile(
+      join(root, "blueprints", "exclusive.json"),
+      JSON.stringify(artifact),
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: root,
+    });
+    await execute("git", ["add", "blueprints/exclusive.json"], {
+      cwd: root,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add exclusive lifecycle fixture",
+      ],
+      { cwd: root },
+    );
+    const choose = vi.fn<LifecycleEffect>(async () => ({
+      dispositions: { right: true },
+    }));
+    const task: BoardTask = {
+      blocked: false,
+      dependencies: [],
+      frontMatter: {},
+      id: 3,
+      priority: "medium",
+      status: "todo",
+      tags: [],
+      title: "Arrange inventory",
+    };
+    const attempt = async (): Promise<void> => {
+      const persistence = new SqlitePersistence({
+        stateDirectory: join(root, "state"),
+      });
+      const lifecycle = new ProductionLifecycleRouter({
+        effects: { choose, finish: async () => ({}) },
+        persistence,
+        repositoryRoot: root,
+        sourceRef: "HEAD",
+      });
+      const controller = new ProductionInstanceController(
+        {} as ProductionConfiguration,
+        persistence,
+        lifecycle,
+        {} as ProductRoutingCatalog,
+        {} as EpicProjectCoordinator,
+        { has: async () => false, raise: async () => undefined },
+        {} as never,
+        "http://127.0.0.1:4774/mcp",
+        async () => "",
+        { readHandoffTemplate: async () => "", repositoryRoot: root },
+      );
+
+      await expect(
+        controller.start({
+          blueprintPath: "blueprints/exclusive.json",
+          instanceId: "task-3",
+          task,
+        }),
+      ).rejects.toThrow("multiple possible initial session stages");
+      expect(persistence.listInstances()).toEqual([]);
+      expect(persistence.listReconcilerRuntime()).toEqual([]);
+      expect(persistence.listSessionRuntime()).toEqual([]);
+      persistence.close();
+    };
+
+    await attempt();
+    await attempt();
+
+    expect(choose).not.toHaveBeenCalled();
   });
 });

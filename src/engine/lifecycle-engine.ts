@@ -15,6 +15,7 @@ import {
   validateBlueprint,
 } from "./blueprint.js";
 import {
+  BlueprintValidationError,
   InvalidDispositionError,
   TransitionConflictError,
   UnexpectedLandingError,
@@ -92,6 +93,19 @@ export class LifecycleEngine {
     const stageIds = new Set(
       landings.flatMap(({ awaitingNodeIds }) => awaitingNodeIds),
     );
+    if (stageIds.size > 1) {
+      throw new BlueprintValidationError(
+        "Initial route has multiple possible initial session stages",
+      );
+    }
+    if (
+      stageIds.size === 1 &&
+      landings.some(({ terminalNodeIds }) => terminalNodeIds.length > 0)
+    ) {
+      throw new BlueprintValidationError(
+        "Initial route mixes wait and terminal landings",
+      );
+    }
     return stageIds.values().next().value;
   }
 

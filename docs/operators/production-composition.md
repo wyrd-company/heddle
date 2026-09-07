@@ -227,6 +227,10 @@ forwarded unchanged. It is not mandatory; the operator chooses the default.
 Heddle stores one resolved session binding before the lifecycle starts any
 mechanical effect, including worktree creation, and before timeout preparation,
 MCP registration, thread creation, or first-turn dispatch.
+If any valid initial lifecycle landing identifies a wait stage, every valid
+initial landing must identify that same wait stage. Heddle rejects a different
+wait stage or terminal alternative before it runs the selecting effect. An
+initial route with only terminal landings needs no session binding.
 
 The binding records the session and occurrence identity, selected alias,
 display-name snapshot,

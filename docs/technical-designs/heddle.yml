@@ -289,9 +289,14 @@ proposed-design:
     session and occurrence identity, selected
     alias, display-name snapshot, provider instance ID, driver kind, observed
     provider version, model slug, runtime mode, and interaction mode. It contains
-    no credential or provider setting. The instance ID routes T3 requests; the
-    alias explains authorization, the display name supports diagnostics, and
-    the driver kind selects an optional configured launch-preparation adapter.
+    no credential or provider setting. If any valid initial lifecycle landing
+    identifies a wait stage, every valid initial landing must identify that same
+    wait stage so the stored occurrence is authoritative for execution. Heddle
+    rejects a different wait stage or terminal alternative before it runs the
+    selecting effect. An initial route with only terminal landings needs no
+    session binding. The instance ID routes T3 requests; the alias explains
+    authorization, the display name supports diagnostics, and the driver kind
+    selects an optional configured launch-preparation adapter.
     First dispatch, observation, steering, stop, retry, recovery, and a cold
     replacement thread for the same stage or assignment occurrence use this
     stored binding. They never resolve current task front matter, blueprint,
