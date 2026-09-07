@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 
 import type { T3DispatchCommand } from "../control-plane/t3-control-plane-client.js";
+import type { T3ProviderCatalogReader } from "../control-plane/provider-selection.js";
 import {
   createProductionComposition,
   type ProductionT3Client,
@@ -31,7 +32,7 @@ const recorded = (await readFile(commandLog, "utf8").catch(() => ""))
   .filter(Boolean)
   .map((line) => JSON.parse(line) as T3DispatchCommand);
 const seen = new Set(recorded.map(({ commandId }) => commandId));
-const t3: ProductionT3Client = {
+const t3: ProductionT3Client & T3ProviderCatalogReader = {
   applyHarnessToolTimeout: async () => {
     await Promise.resolve();
   },
@@ -65,6 +66,20 @@ const t3: ProductionT3Client = {
       ),
   }),
   getThread: async () => ({ thread: { activities: [] } }),
+  readProviderCatalog: async () => [
+    {
+      availability: "available",
+      displayName: configuration.session.defaultSelection.providerDisplayName,
+      driverKind: configuration.session.defaultSelection.driverKind,
+      enabled: true,
+      installed: true,
+      instanceId: configuration.session.defaultSelection.providerInstanceId,
+      models: [configuration.session.defaultSelection.model],
+      observedCliVersion:
+        configuration.session.defaultSelection.observedCliVersion,
+      state: "ready",
+    },
+  ],
   respondToApproval: async () => ({ sequence: 1 }),
   respondToUserInput: async () => ({ sequence: 1 }),
   registerWorkflowMcpProviderSession: async () => undefined,
