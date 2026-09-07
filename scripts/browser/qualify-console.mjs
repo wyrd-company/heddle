@@ -887,7 +887,7 @@ const beginBlueprintEditing = async (
   fixture.prepareBlueprintEditor();
   await setViewport({ height: 1000, width: 1440 });
   await resetPageEvidence();
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await assertEditorControlRoster("closed");
   await assertReadOnlySurface("closed");
@@ -1035,7 +1035,7 @@ const waitForAction = async () => {
 const openAttentionEntry = async (baseUrl, attentionId) => {
   fixture.reset();
   await open(
-    `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=${encodeURIComponent(attentionId)}`,
+    `${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40&attention=${encodeURIComponent(attentionId)}`,
   );
   await waitFor(
     `document.querySelector('.attention-entry[data-attention-id=${JSON.stringify(attentionId)}]')?.dataset.focused === "true"`,
@@ -1212,6 +1212,7 @@ const assertAttentionLayout = async (attentionId, context) => {
       lifecycleReady: document.querySelector(".lifecycle-renderer")?.dataset.ready,
       modal: dialog.open,
       scope: document.querySelector("#scope").value,
+      task: new URL(window.location.href).searchParams.get("task"),
     };
   })()`);
   invariant(
@@ -1225,9 +1226,9 @@ const assertAttentionLayout = async (attentionId, context) => {
     `${context} did not focus ${attentionId}`,
   );
   invariant(
-    state.scope === "task:43",
+    state.scope === "epic:40" && state.task === "43",
     "attention-deep-link-scope",
-    `${context} did not preserve task:43 scope`,
+    `${context} did not preserve epic:40 scope and task 43 target`,
   );
   invariant(
     state.lifecycleReady === "true",
@@ -1364,7 +1365,7 @@ const exerciseLifecycleNavigation = async (baseUrl) => {
   fixture.reset();
   await setViewport({ height: 844, width: 390 });
   await resetPageEvidence();
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   let geometry = await assertLifecycleGeometry("lifecycle navigation 390x844");
   invariant(
@@ -1435,7 +1436,7 @@ const exerciseLifecycleResize = async (baseUrl) => {
   fixture.reset();
   await setViewport({ height: 900, width: 801 });
   await resetPageEvidence();
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   let geometry = await assertLifecycleGeometry("lifecycle breakpoint 801x900");
   invariant(
@@ -1475,7 +1476,7 @@ const auditLifecycleGeometryViewport = async (baseUrl, viewport) => {
   fixture.reset();
   await setViewport(viewport);
   await resetPageEvidence();
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await settleVisuals();
   await assertLifecycleGeometry(
@@ -1505,7 +1506,7 @@ const exerciseLifecycleRebase = async (baseUrl) => {
   fixture.reset();
   await setViewport({ height: 1000, width: 1440 });
   await resetPageEvidence();
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   invariant(
     (await evaluate(
@@ -1582,7 +1583,7 @@ const exerciseUnavailableLifecycleTarget = async (baseUrl, cause) => {
   fixture.reset();
   await setViewport({ height: 1000, width: 1440 });
   await resetPageEvidence();
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   if (cause === "missing-path") {
     fixture.removeLifecycleBlueprintFromUpstream();
@@ -1620,7 +1621,7 @@ const auditView = async (baseUrl, viewport, view) => {
     attention: "/?scope=epic%3A40&attention=choice-a",
     board: "/?scope=epic%3A40",
     dependencies: "/?view=dependencies&scope=epic%3A40",
-    lifecycle: "/?view=lifecycle&scope=task%3A43",
+    lifecycle: "/?view=lifecycle&task=43&scope=epic%3A40",
   };
   await open(baseUrl + routes[view]);
   if (view === "board" || view === "attention") {
@@ -1733,7 +1734,9 @@ const auditIntermediateAttention = async (baseUrl) => {
   for (const width of [679, 690, 740, 800, 801]) {
     fixture.reset();
     await setViewport({ height: 900, width });
-    await open(`${baseUrl}/?view=lifecycle&scope=task%3A43&attention=choice-a`);
+    await open(
+      `${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40&attention=choice-a`,
+    );
     await assertLifecycleSettled();
     await assertAttentionLayout("choice-a", `${width}x900`);
     await settleVisuals();
@@ -1743,7 +1746,7 @@ const auditIntermediateAttention = async (baseUrl) => {
   for (const attentionId of fixture.stableAttentionIds) {
     fixture.reset();
     await open(
-      `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=${attentionId}`,
+      `${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40&attention=${attentionId}`,
     );
     await assertLifecycleSettled();
     await assertAttentionLayout(attentionId, `740x900 ${attentionId}`);
@@ -1752,7 +1755,7 @@ const auditIntermediateAttention = async (baseUrl) => {
   }
   fixture.reset();
   await open(
-    `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=notification-recovery-a`,
+    `${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40&attention=notification-recovery-a`,
   );
   await assertLifecycleSettled();
   await assertNotificationRecoveryDetails();
@@ -1826,7 +1829,7 @@ const mutationBattery = async (baseUrl) => {
 
   fixture.reset();
   await open(
-    `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=notification-recovery-a`,
+    `${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40&attention=notification-recovery-a`,
   );
   await assertLifecycleSettled();
   await expectSoleKill(
@@ -1840,7 +1843,7 @@ const mutationBattery = async (baseUrl) => {
 
   fixture.reset();
   await open(
-    `${baseUrl}/?view=lifecycle&scope=task%3A43&attention=notification-recovery-a`,
+    `${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40&attention=notification-recovery-a`,
   );
   await assertLifecycleSettled();
   await expectSoleKill(
@@ -1978,7 +1981,7 @@ const mutationBattery = async (baseUrl) => {
     },
   );
 
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "read-only-console",
@@ -1991,7 +1994,7 @@ const mutationBattery = async (baseUrl) => {
     assertReadOnlySurface,
   );
 
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "editor-control-roster",
@@ -2004,7 +2007,7 @@ const mutationBattery = async (baseUrl) => {
 
   fixture.reset();
   fixture.prepareBlueprintEditor();
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "editor-edit-activation",
@@ -2216,7 +2219,7 @@ const mutationBattery = async (baseUrl) => {
     },
   );
 
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "lifecycle-readable-geometry",
@@ -2227,7 +2230,7 @@ const mutationBattery = async (baseUrl) => {
     () => assertLifecycleGeometry("mutated lifecycle scale"),
   );
 
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "lifecycle-current-stage-visibility",
@@ -2238,7 +2241,7 @@ const mutationBattery = async (baseUrl) => {
     () => assertLifecycleGeometry("mutated lifecycle focus"),
   );
 
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "lifecycle-navigation-reachability",
@@ -2249,7 +2252,7 @@ const mutationBattery = async (baseUrl) => {
     () => assertLifecycleGeometry("mutated lifecycle navigation"),
   );
 
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "lifecycle-history-scroll-ownership",
@@ -2261,7 +2264,7 @@ const mutationBattery = async (baseUrl) => {
   );
 
   await setViewport({ height: 900, width: 801 });
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await expectSoleKill(
     "lifecycle-responsive-resize",
@@ -2287,7 +2290,7 @@ const mutationBattery = async (baseUrl) => {
     },
   );
 
-  await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+  await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
   await assertLifecycleSettled();
   await settleVisuals();
   await expectSoleKill(
@@ -2370,7 +2373,7 @@ const main = async () => {
 
     fixture.reset();
     await setViewport({ height: 1000, width: 1440 });
-    await open(`${baseUrl}/?view=lifecycle&scope=task%3A43`);
+    await open(`${baseUrl}/?view=lifecycle&task=43&scope=epic%3A40`);
     await assertLifecycleSettled();
     await assertLifecycleTrace();
     await exerciseUnavailableLifecycleTarget(baseUrl, "missing-path");
