@@ -265,7 +265,8 @@ const resolveWorkflowMcpStageContract = async (
       ({ disposition, source }) =>
         source === stage.id && disposition !== undefined,
     )
-    .map(({ description, disposition, target }) => {
+    .map((edge) => {
+      const { description, disposition, target } = edge;
       if (
         disposition === undefined ||
         description === undefined ||
@@ -285,9 +286,10 @@ const resolveWorkflowMcpStageContract = async (
         description,
         name: disposition,
         outputContract:
-          targetNode.handoff === "remediation"
+          edge["output-contract"] ??
+          (targetNode.handoff === "remediation"
             ? ("review-findings" as const)
-            : ("optional" as const),
+            : ("optional" as const)),
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));

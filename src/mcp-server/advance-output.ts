@@ -7,9 +7,16 @@ import { readFileSync } from "node:fs";
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 
+import type { LifecycleOutputContract } from "../engine/index.js";
 import type { JsonValue } from "../persistence/index.js";
 
-export type AdvanceOutputContract = "optional" | "review-findings";
+export type AdvanceOutputContract = LifecycleOutputContract;
+
+export const incidentActionKinds = [
+  "github-issue",
+  "operator-escalation",
+  "production-mutation",
+] as const;
 
 const schema = JSON.parse(
   readFileSync(
@@ -32,6 +39,29 @@ export const assertAdvanceOutput = (
   contract: AdvanceOutputContract,
   output: Record<string, JsonValue> | undefined,
 ): void => {
+  if (contract === "incident-diagnosis" && output !== undefined) {
+    const actions = output["proposedActions"];
+    if (Array.isArray(actions)) {
+      for (const [index, action] of actions.entries()) {
+        const kind =
+          typeof action === "object" &&
+          action !== null &&
+          !Array.isArray(action)
+            ? action["kind"]
+            : undefined;
+        if (
+          typeof kind === "string" &&
+          !incidentActionKinds.includes(
+            kind as (typeof incidentActionKinds)[number],
+          )
+        ) {
+          throw new TypeError(
+            `Advance disposition ${JSON.stringify(disposition)} names unknown incident action kind ${JSON.stringify(kind)} at proposedActions[${index}]`,
+          );
+        }
+      }
+    }
+  }
   const candidate = {
     contract,
     ...(output === undefined ? {} : { output }),

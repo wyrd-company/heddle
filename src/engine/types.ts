@@ -20,9 +20,13 @@ import type {
 } from "../persistence/index.js";
 import type { ErrorDetail } from "../error-details.js";
 
+export type LifecycleOutputContract =
+  "incident-diagnosis" | "optional" | "review-findings";
+
 export interface LifecycleEdge extends EdgeDefinition {
   description?: string;
   disposition?: string;
+  "output-contract"?: LifecycleOutputContract;
 }
 
 export interface LifecycleNode extends NodeDefinition {

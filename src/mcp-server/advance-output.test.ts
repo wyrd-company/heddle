@@ -42,4 +42,31 @@ describe("advance output contract", () => {
       }),
     ).not.toThrow();
   });
+
+  it("requires the incident condition state and known proposed action kinds", () => {
+    expect(() =>
+      assertAdvanceOutput("diagnosed", "incident-diagnosis", {
+        proposedActions: [],
+        rootCauseAnalysis: "A sample dependency was unavailable.",
+      }),
+    ).toThrow(/diagnosed.*incident-diagnosis.*conditionState/);
+    expect(() =>
+      assertAdvanceOutput("diagnosed", "incident-diagnosis", {
+        conditionState: "live",
+        proposedActions: [{ kind: "unknown-action", summary: "Do a thing" }],
+        rootCauseAnalysis: "A sample dependency was unavailable.",
+      }),
+    ).toThrow(/unknown incident action kind "unknown-action"/);
+    expect(() =>
+      assertAdvanceOutput("diagnosed", "incident-diagnosis", {
+        conditionState: "cleared",
+        proposedActions: [
+          { kind: "github-issue", summary: "Record the diagnosis" },
+          { kind: "operator-escalation", summary: "Ask for a decision" },
+          { kind: "production-mutation", summary: "Repair the dependency" },
+        ],
+        rootCauseAnalysis: "The condition ended after rechecking it.",
+      }),
+    ).not.toThrow();
+  });
 });

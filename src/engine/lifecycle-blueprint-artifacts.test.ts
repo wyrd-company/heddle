@@ -4,7 +4,14 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -206,6 +213,25 @@ describe("organization lifecycle blueprint artifacts", () => {
     await expect(
       validateBlueprintRepository(await repository(invalid)),
     ).rejects.toThrow('Wait node "inspect" has no disposition edges');
+  });
+
+  it("accepts an explicit producer output contract on a disposition", async () => {
+    const root = await repository();
+    const valid = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    valid.edges[1] = {
+      ...valid.edges[1]!,
+      "output-contract": "incident-diagnosis",
+    };
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(valid, null, 2)}\n`,
+    );
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
   });
 
   it("rejects a blueprint that omits a mechanical node board status", () => {

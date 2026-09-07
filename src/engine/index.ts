@@ -57,6 +57,7 @@ export type {
   LifecycleEffectInput,
   LifecycleEngineOptions,
   LifecycleNode,
+  LifecycleOutputContract,
   LifecyclePersistence,
   LifecycleSnapshot,
   MechanicalNodeUse,

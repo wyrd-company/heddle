@@ -19,6 +19,7 @@ const isDisposition = (
   typeof value["description"] === "string" &&
   value["description"].trim() !== "" &&
   (value["outputContract"] === undefined ||
+    value["outputContract"] === "incident-diagnosis" ||
     value["outputContract"] === "optional" ||
     value["outputContract"] === "review-findings");
 

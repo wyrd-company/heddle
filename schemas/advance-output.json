@@ -10,6 +10,60 @@
     {
       "type": "object",
       "additionalProperties": false,
+      "required": ["contract", "output"],
+      "properties": {
+        "contract": {
+          "const": "incident-diagnosis"
+        },
+        "output": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/json-object"
+            },
+            {
+              "required": [
+                "conditionState",
+                "rootCauseAnalysis",
+                "proposedActions"
+              ],
+              "properties": {
+                "conditionState": {
+                  "enum": ["live", "cleared", "undetermined"]
+                },
+                "rootCauseAnalysis": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "proposedActions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "summary"],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "github-issue",
+                          "operator-escalation",
+                          "production-mutation"
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
       "required": ["contract"],
       "properties": {
         "contract": {

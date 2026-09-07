@@ -249,9 +249,13 @@
         "description": {
           "type": "string",
           "minLength": 1
+        },
+        "output-contract": {
+          "enum": ["incident-diagnosis", "optional", "review-findings"]
         }
       },
       "dependentRequired": {
+        "output-contract": ["disposition"],
         "disposition": ["condition", "description"]
       }
     }

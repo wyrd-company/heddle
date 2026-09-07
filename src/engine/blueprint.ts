@@ -247,6 +247,15 @@ export const validateBlueprint = (
         );
       }
       dispositions.add(disposition);
+      if (
+        edge["output-contract"] === "review-findings" &&
+        blueprint.nodes.find(({ id }) => id === edge.target)?.handoff !==
+          "remediation"
+      ) {
+        throw new BlueprintValidationError(
+          `Disposition ${JSON.stringify(disposition)} from wait node ${JSON.stringify(node.id)} uses review-findings without a remediation target`,
+        );
+      }
       const expectedCondition = `result.output.dispositions.${disposition}`;
       if (edge.condition !== expectedCondition) {
         throw new BlueprintValidationError(
