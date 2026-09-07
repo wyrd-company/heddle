@@ -1823,6 +1823,12 @@ describe("workflow MCP HTTP server", () => {
         arguments: { message: "A late blocked report" },
       }),
     ).rejects.toThrow(/Tool report_blocked not found/);
+    await expect(
+      firstRetry.callTool({
+        name: "list_providers",
+        arguments: {},
+      }),
+    ).rejects.toThrow(/Tool list_providers not found/);
     expect(
       (await firstRetry.listTools()).tools.map(({ name }) => name),
     ).toEqual(["advance"]);

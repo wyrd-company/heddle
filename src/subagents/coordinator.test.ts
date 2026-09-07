@@ -268,6 +268,14 @@ describe("SubagentCoordinator", () => {
         rootItemId: "root",
       }),
     ).rejects.toThrow(/does not match its stored assignment/);
+    await expect(
+      test.coordinator.spawn(binding(test.store), {
+        operationId: "spawn-one",
+        providerAlias: "primary",
+        rootItemId: "root",
+        runtimeMode: "full-access",
+      }),
+    ).rejects.toThrow(/does not match its stored assignment/);
   });
 
   it("returns the shared pacing deferral without claiming the subtree", async () => {

@@ -271,6 +271,7 @@ describe("production subagent composition", () => {
     const originalChildCommands = t3.commands.filter(
       ({ threadId }) => threadId === spawned.assignment.threadId,
     );
+    const catalogBeforeReplay = globalThis.structuredClone(t3.providerCatalog);
     t3.providerCatalog.splice(0);
     fixture.configuration.session.resolvedSelections = [];
     fixture.configuration.session.defaultSelection = {
@@ -303,6 +304,7 @@ describe("production subagent composition", () => {
         providerInstanceId: "codex",
       }),
     ]);
+    t3.providerCatalog.push(...catalogBeforeReplay);
 
     await expect(
       composition.subagents.spawn(parent, {
@@ -652,9 +654,22 @@ describe("production subagent composition", () => {
       model: "model-beta",
       operationId: "reject-raw-selection",
       provider: "provider-beta",
+      providerAlias: "primary",
       rootItemId: "deliver",
     });
     expect(rawSelection.result?.isError).toBe(true);
+    const invalidRuntime = await callMcpTool(
+      composition,
+      parent.token,
+      "spawn",
+      {
+        operationId: "reject-invalid-runtime",
+        providerAlias: "primary",
+        rootItemId: "deliver",
+        runtimeMode: "default",
+      },
+    );
+    expect(invalidRuntime.result?.isError).toBe(true);
     const catalogFailure = vi
       .spyOn(t3, "readProviderCatalog")
       .mockRejectedValueOnce(new Error("credential-shaped transport detail"));
