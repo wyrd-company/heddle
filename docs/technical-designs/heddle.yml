@@ -235,11 +235,13 @@ proposed-design:
 
     Heddle reads the authenticated T3 provider catalog through the existing
     `server.getConfig` WebSocket RPC with the `orchestration:read` scope. Using
-    the configured bearer token, it requests a one-use ticket from
+    the configured bearer token, it requests a ticket from
     `POST /api/auth/websocket-ticket`, connects to `/ws?wsTicket=<ticket>`,
-    performs one bounded RPC, and closes the connection. It neither persists
-    nor logs the ticket and consumes only `ServerConfig.providers`. Each
-    provider snapshot keeps four
+    performs one bounded RPC, and closes the connection. The WebSocket ticket
+    is short-lived. T3 accepts ticket reuse until expiry or parent-session
+    revocation; Heddle never reuses a ticket. Heddle also never persists or
+    logs the ticket and consumes only `ServerConfig.providers`. Each provider
+    snapshot keeps four
     distinct values: `displayName` is the operator-facing configuration name,
     `instanceId` is the stable T3 routing key, open `driver` is capability and
     launch-preparation metadata, and a selected model's `slug` is the dispatch

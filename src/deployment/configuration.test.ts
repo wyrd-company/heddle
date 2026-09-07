@@ -605,4 +605,16 @@ describe("deployed configuration directory", () => {
     expect(featureGuide).not.toContain("`statePath`");
     expect(featureGuide).not.toContain("`port`");
   });
+
+  it("keeps the T3 ticket lifetime distinct from Heddle's client rule", async () => {
+    const [operatorGuide, technicalDesign] = await Promise.all([
+      readFile("docs/operators/production-composition.md", "utf8"),
+      readFile("docs/technical-designs/heddle.yml", "utf8"),
+    ]);
+    const ticketContract =
+      "The WebSocket ticket is short-lived. T3 accepts ticket reuse until expiry or parent-session revocation; Heddle never reuses a ticket.";
+
+    expect(operatorGuide.replace(/\s+/g, " ")).toContain(ticketContract);
+    expect(technicalDesign.replace(/\s+/g, " ")).toContain(ticketContract);
+  });
 });

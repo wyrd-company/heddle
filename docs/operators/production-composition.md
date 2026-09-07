@@ -163,7 +163,9 @@ Heddle reads `ServerConfig.providers` through T3's authenticated
 `server.getConfig` WebSocket RPC. It sends the configured bearer token to
 `POST /api/auth/websocket-ticket`, changes `http` to `ws` or `https` to `wss`,
 connects to `/ws?wsTicket=<ticket>`, performs one bounded RPC, and
-closes the connection. The one-use ticket is not persisted, logged, or reused.
+closes the connection. The WebSocket ticket is short-lived. T3 accepts ticket
+reuse until expiry or parent-session revocation; Heddle never reuses a ticket.
+Heddle also never persists or logs the ticket.
 The control token needs `orchestration:read`, the same read scope used for the
 orchestration shell. Heddle discards the rest of the returned configuration. It
 keeps these values distinct:
