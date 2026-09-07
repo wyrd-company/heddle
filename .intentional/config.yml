@@ -1,0 +1,32 @@
+$schema: https://intentional.foo/schemas/config.yml
+contract: contract-1
+settings:
+  internal-dependency-bump: patch
+  pre-1-0-bump-mapping: compatibility
+discovery:
+  managed-paths:
+    - detector: devcontainer-feature
+      path: .devcontainer/features/heddle/devcontainer-feature.json
+      release-unit: heddle
+    - detector: npm-package
+      path: package.json
+      release-unit: heddle
+  excluded-paths:
+    - detector: npm-package
+      path: spikes/flowcraft-gate/package.json
+      evidence-digest: sha256:b3383a192ac03030b83d5da83e62307aeb64fca5d0b2f6f153570e9344839590
+release-units:
+  heddle:
+    path: .
+    projections:
+      - adapter: npm
+        file: package.json
+        mode: committed
+      - adapter: json
+        file: .devcontainer/features/heddle/devcontainer-feature.json
+        mode: committed
+        pointer: /version
+    tags:
+      primary:
+        role: primary
+        template: "{id}@{version}"
