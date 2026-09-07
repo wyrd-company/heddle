@@ -658,6 +658,9 @@ describe("production subagent composition", () => {
       rootItemId: "deliver",
     });
     expect(rawSelection.result?.isError).toBe(true);
+    expect(rawSelection.result?.content?.[0]?.text).toMatch(
+      /Input validation error.*Unrecognized keys.*model.*provider/,
+    );
     const invalidRuntime = await callMcpTool(
       composition,
       parent.token,
@@ -670,6 +673,9 @@ describe("production subagent composition", () => {
       },
     );
     expect(invalidRuntime.result?.isError).toBe(true);
+    expect(invalidRuntime.result?.content?.[0]?.text).toMatch(
+      /Input validation error.*runtimeMode.*Invalid option/,
+    );
     const catalogFailure = vi
       .spyOn(t3, "readProviderCatalog")
       .mockRejectedValueOnce(new Error("credential-shaped transport detail"));
