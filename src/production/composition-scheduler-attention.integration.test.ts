@@ -17,6 +17,7 @@ import {
   prepareProductionFixture,
   SyntheticT3,
 } from "./composition.test-support.js";
+import { createProductionErrorAttention } from "./error-visibility.js";
 
 describe("production scheduler pass attention", () => {
   let cleanup: (() => Promise<void>) | undefined;
@@ -119,10 +120,23 @@ describe("production scheduler pass attention", () => {
         cwd: fixture.blueprintsRepositoryRoot,
       });
       const firstFailure = open();
+      firstFailure.persistence.raiseAttention(
+        "production:scheduler-pass-failed:legacy",
+        createProductionErrorAttention({
+          attentionId: "production:scheduler-pass-failed:legacy",
+          code: "scheduler-pass-failed",
+          error: new Error("Historical sample failure"),
+          message: "Historical scheduler pass failed",
+        }),
+      );
       await expect(firstFailure.start()).rejects.toThrow(
         "The organization blueprint repository could not fetch origin",
       );
-      expect(schedulerAttention(firstFailure)).toHaveLength(1);
+      expect(schedulerAttention(firstFailure)).toMatchObject([
+        {
+          attentionId: "production:scheduler-pass-failed:global:episode:1",
+        },
+      ]);
       await close();
 
       const repeatedFailure = open();

@@ -110,4 +110,32 @@ describe("scheduler pass attention lifecycle", () => {
     );
     persistence.close();
   });
+
+  it("restores the first episode diagnostic when history survives attention insertion", async () => {
+    directory = await mkdtemp(join(tmpdir(), "scheduler-pass-attention-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.recordSchedulerPassFailure({
+      cause: null,
+      message: "First sample failure",
+      name: "Error",
+    });
+    const attention = new DurableAttentionQueue(persistence, {
+      replayPending: vi.fn(),
+      send: vi.fn(),
+    });
+    const lifecycle = new SchedulerPassAttentionLifecycle(
+      persistence,
+      attention,
+    );
+
+    await lifecycle.failure(new TypeError("Second sample failure"));
+
+    expect(attention.list()).toMatchObject([
+      {
+        attentionId: "production:scheduler-pass-failed:global:episode:1",
+        message: expect.stringContaining("First sample failure"),
+      },
+    ]);
+    persistence.close();
+  });
 });

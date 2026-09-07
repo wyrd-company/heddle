@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 
 import {
   describeError,
+  describeErrorDetail,
   errorDetail,
   type ErrorDetail,
 } from "../error-details.js";
@@ -137,7 +138,7 @@ export const productionErrorAttention = (input: {
 
 export const schedulerPassFailureAttention = (input: {
   episode: number;
-  error: unknown;
+  error: ErrorDetail;
 }): ProductionErrorAttention => {
   if (!Number.isSafeInteger(input.episode) || input.episode <= 0) {
     throw new TypeError(
@@ -147,8 +148,8 @@ export const schedulerPassFailureAttention = (input: {
   return createProductionErrorAttention({
     attentionId: `production:${schedulerPassFailureCode}:global:episode:${input.episode}`,
     code: schedulerPassFailureCode,
-    error: input.error,
-    message: `Production reconciliation pass failed: ${describeError(input.error)}`,
+    parsedError: input.error,
+    message: `Production reconciliation pass failed: ${describeErrorDetail(input.error)}`,
   });
 };
 

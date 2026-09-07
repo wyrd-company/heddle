@@ -51,6 +51,7 @@ import type {
   PersistedEvent,
   PersistenceConfiguration,
   ReconcilerRuntimeRecord,
+  SchedulerPassFailureRecord,
   SchedulerPassHistoryRecord,
   SessionRuntimeRecord,
 } from "./types.js";
@@ -503,7 +504,7 @@ export class SqlitePersistence {
     );
   }
 
-  recordSchedulerPassFailure(error: JsonValue): SchedulerPassHistoryRecord {
+  recordSchedulerPassFailure(error: JsonValue): SchedulerPassFailureRecord {
     const errorJson = serialize(error);
     return this.database.transaction(() => {
       const latest = this.latestSchedulerPassHistory();
@@ -513,7 +514,17 @@ export class SqlitePersistence {
           : latest.type === "failure"
             ? latest.episode
             : latest.episode + 1;
-      return this.insertSchedulerPassHistory(episode, "failure", errorJson);
+      const event = this.insertSchedulerPassHistory(
+        episode,
+        "failure",
+        errorJson,
+      );
+      return {
+        ...event,
+        episodeFirstError: this.firstSchedulerPassFailure(episode),
+        error,
+        type: "failure" as const,
+      };
     })();
   }
 
@@ -1412,6 +1423,22 @@ export class SqlitePersistence {
       )
       .get() as SchedulerPassHistoryRow | undefined;
     return row === undefined ? undefined : this.toSchedulerPassHistory(row);
+  }
+
+  private firstSchedulerPassFailure(episode: number): JsonValue {
+    const row = this.database
+      .prepare(
+        `SELECT error_json AS errorJson
+         FROM heddle_scheduler_pass_history
+         WHERE episode = ? AND type = 'failure'
+         ORDER BY sequence
+         LIMIT 1`,
+      )
+      .get(episode) as { errorJson: string } | undefined;
+    if (row === undefined) {
+      throw new Error(`Scheduler pass episode ${episode} has no failure`);
+    }
+    return JSON.parse(row.errorJson) as JsonValue;
   }
 
   private insertSchedulerPassHistory(

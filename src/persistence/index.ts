@@ -26,6 +26,7 @@ export {
   type PersistedEvent,
   type PersistenceConfiguration,
   type ReconcilerRuntimeRecord,
+  type SchedulerPassFailureRecord,
   type SchedulerPassHistoryRecord,
   type SessionRuntimeRecord,
 } from "./types.js";

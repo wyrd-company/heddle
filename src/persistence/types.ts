@@ -51,6 +51,12 @@ export interface SchedulerPassHistoryRecord {
   type: "failure" | "recovery";
 }
 
+export interface SchedulerPassFailureRecord extends SchedulerPassHistoryRecord {
+  episodeFirstError: JsonValue;
+  error: JsonValue;
+  type: "failure";
+}
+
 export type NotificationFailureCategory =
   | "application-credential-rejected"
   | "legacy-intent-unverifiable"

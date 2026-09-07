@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { errorDetail } from "../error-details.js";
 import {
   productionErrorAttention,
   productionErrorCodeDeclarations,
@@ -86,7 +87,7 @@ describe("production error visibility", () => {
     expect(
       schedulerPassFailureAttention({
         episode: 7,
-        error: new Error("Synthetic failure"),
+        error: errorDetail(new Error("Synthetic failure")),
       }),
     ).toMatchObject({
       attentionId: "production:scheduler-pass-failed:global:episode:7",
@@ -96,7 +97,7 @@ describe("production error visibility", () => {
     expect(() =>
       schedulerPassFailureAttention({
         episode: 0,
-        error: new Error("Synthetic failure"),
+        error: errorDetail(new Error("Synthetic failure")),
       }),
     ).toThrow("Scheduler pass episode must be a positive safe integer");
   });

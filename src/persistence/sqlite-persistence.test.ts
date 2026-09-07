@@ -94,7 +94,14 @@ describe("SqlitePersistence", () => {
     });
 
     expect(firstFailure).toMatchObject({ episode: 1, type: "failure" });
-    expect(secondFailure).toMatchObject({ episode: 1, type: "failure" });
+    expect(secondFailure).toMatchObject({
+      episode: 1,
+      episodeFirstError: {
+        message: "First sample failure",
+        name: "Error",
+      },
+      type: "failure",
+    });
     first.close();
 
     const restarted = new SqlitePersistence({ stateDirectory });
@@ -104,6 +111,10 @@ describe("SqlitePersistence", () => {
     });
     expect(repeatedAfterRestart).toMatchObject({
       episode: 1,
+      episodeFirstError: {
+        message: "First sample failure",
+        name: "Error",
+      },
       type: "failure",
     });
     expect(
@@ -125,17 +136,22 @@ describe("SqlitePersistence", () => {
     restarted.close();
 
     const recovered = new SqlitePersistence({ stateDirectory });
-    expect(recovered.listSchedulerPassHistory()).toEqual([
-      firstFailure,
-      secondFailure,
-      repeatedAfterRestart,
+    expect(recovered.listSchedulerPassHistory()).toMatchObject([
+      { episode: 1, sequence: 1, type: "failure" },
+      { episode: 1, sequence: 2, type: "failure" },
+      { episode: 1, sequence: 3, type: "failure" },
       expect.objectContaining({
         episode: 1,
         error: null,
         sequence: 4,
         type: "recovery",
       }),
-      recurrence,
+      {
+        episode: 2,
+        error: { message: "First sample failure", name: "Error" },
+        sequence: 5,
+        type: "failure",
+      },
     ]);
     const database = new Database(recovered.databasePath);
     expect(() =>

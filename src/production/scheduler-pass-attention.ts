@@ -3,7 +3,7 @@
 //   implements: heddle
 // ---
 
-import { errorDetail } from "../error-details.js";
+import { errorDetail, type ErrorDetail } from "../error-details.js";
 import type {
   DurableAttentionRecord,
   SqlitePersistence,
@@ -36,16 +36,22 @@ export class SchedulerPassAttentionLifecycle {
 
   async failure(error: unknown): Promise<void> {
     let episode: number;
+    let episodeFirstError: ErrorDetail;
     try {
-      episode = this.persistence.recordSchedulerPassFailure(
+      const recorded = this.persistence.recordSchedulerPassFailure(
         errorDetail(error),
-      ).episode;
+      );
+      episode = recorded.episode;
+      episodeFirstError = recorded.episodeFirstError as ErrorDetail;
     } catch (historyError) {
       await this.#raiseWithoutPersistence(error, historyError);
       return;
     }
 
-    const failure = schedulerPassFailureAttention({ episode, error });
+    const failure = schedulerPassFailureAttention({
+      episode,
+      error: episodeFirstError,
+    });
     if (await this.attention.has(failure.attentionId)) {
       this.attention.reopen(failure.attentionId);
     } else {
