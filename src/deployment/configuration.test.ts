@@ -612,7 +612,7 @@ describe("deployed configuration directory", () => {
       readFile("docs/technical-designs/heddle.yml", "utf8"),
     ]);
     const ticketContract =
-      "The WebSocket ticket is short-lived. T3 accepts ticket reuse until expiry or parent-session revocation; Heddle never reuses a ticket.";
+      "The WebSocket ticket is short-lived. T3 accepts ticket reuse until expiry or parent-session revocation. Heddle never reuses the ticket and never persists or logs it.";
 
     expect(operatorGuide.replace(/\s+/g, " ")).toContain(ticketContract);
     expect(technicalDesign.replace(/\s+/g, " ")).toContain(ticketContract);

@@ -164,8 +164,8 @@ Heddle reads `ServerConfig.providers` through T3's authenticated
 `POST /api/auth/websocket-ticket`, changes `http` to `ws` or `https` to `wss`,
 connects to `/ws?wsTicket=<ticket>`, performs one bounded RPC, and
 closes the connection. The WebSocket ticket is short-lived. T3 accepts ticket
-reuse until expiry or parent-session revocation; Heddle never reuses a ticket.
-Heddle also never persists or logs the ticket.
+reuse until expiry or parent-session revocation. Heddle never reuses the ticket
+and never persists or logs it.
 The control token needs `orchestration:read`, the same read scope used for the
 orchestration shell. Heddle discards the rest of the returned configuration. It
 keeps these values distinct:
@@ -278,8 +278,7 @@ the result with `selectable: false` and one safe selection reason. A catalog
 read failure fails the tool. This result is discovery, not a reservation;
 `spawn` resolves again.
 
-The MCP `spawn` tool replaces raw provider and model inputs with this strict
-input:
+The MCP `spawn` tool accepts this strict input:
 
 ```json
 {
@@ -294,9 +293,11 @@ input:
 when absent, `session.defaultRuntimeMode` applies. A child does not inherit its
 parent's provider or runtime mode. An invalid or nonselectable choice creates no
 todo assignment, pacing reservation, timeout effect, MCP registration, or T3
-thread. The existing idempotent `operationId`, todo-subtree authority, pacing,
-and spawn result contracts remain unchanged. The result records the resolved
-session binding instead of raw provider and model input.
+thread. `operationId` is the replay-safe request identity. `rootItemId` names
+the requested todo-subtree root, and Heddle accepts it only within the caller's
+todo authority. The shared pacing gate evaluates an accepted request and can
+return a bounded deferral. A successful spawn returns the child assignment and
+records its resolved session binding.
 
 Qualification uses an isolated recipe-catalog board, packaged Heddle service,
 and pinned T3 release. Configure distinct default, execution, review, override,

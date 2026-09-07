@@ -239,10 +239,10 @@ proposed-design:
     `POST /api/auth/websocket-ticket`, connects to `/ws?wsTicket=<ticket>`,
     performs one bounded RPC, and closes the connection. The WebSocket ticket
     is short-lived. T3 accepts ticket reuse until expiry or parent-session
-    revocation; Heddle never reuses a ticket. Heddle also never persists or
-    logs the ticket and consumes only `ServerConfig.providers`. Each provider
-    snapshot keeps four
-    distinct values: `displayName` is the operator-facing configuration name,
+    revocation. Heddle never reuses the ticket and never persists or logs it.
+    The catalog reader consumes only `ServerConfig.providers`. Each provider
+    snapshot keeps four distinct values: `displayName` is the operator-facing
+    configuration name,
     `instanceId` is the stable T3 routing key, open `driver` is capability and
     launch-preparation metadata, and a selected model's `slug` is the dispatch
     model identity. The observed provider CLI `version` is diagnostic and
