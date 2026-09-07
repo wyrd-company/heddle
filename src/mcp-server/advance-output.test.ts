@@ -43,13 +43,16 @@ describe("advance output contract", () => {
     ).not.toThrow();
   });
 
-  it("requires the incident condition state and known proposed action kinds", () => {
+  it("rejects an incident diagnosis without condition state at the producer boundary", () => {
     expect(() =>
       assertAdvanceOutput("diagnosed", "incident-diagnosis", {
         proposedActions: [],
         rootCauseAnalysis: "A sample dependency was unavailable.",
       }),
     ).toThrow(/diagnosed.*incident-diagnosis.*conditionState/);
+  });
+
+  it("rejects an unknown incident action kind with a named diagnostic", () => {
     expect(() =>
       assertAdvanceOutput("diagnosed", "incident-diagnosis", {
         conditionState: "live",
@@ -57,6 +60,9 @@ describe("advance output contract", () => {
         rootCauseAnalysis: "A sample dependency was unavailable.",
       }),
     ).toThrow(/unknown incident action kind "unknown-action"/);
+  });
+
+  it("accepts the declared incident action kinds", () => {
     expect(() =>
       assertAdvanceOutput("diagnosed", "incident-diagnosis", {
         conditionState: "cleared",
