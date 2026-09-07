@@ -19,7 +19,11 @@ import {
 import { DurableAttentionQueue } from "./durable-adapters.js";
 import { ProductionAttentionActions } from "./attention-actions.js";
 import { projectProductionAttention } from "./attention-projection.js";
-import { incidentProposalDigest } from "./incident-approval.js";
+import {
+  incidentProductionMutationApproval,
+  incidentProductionMutationApproved,
+  incidentProposalDigest,
+} from "./incident-approval.js";
 import {
   productionErrorAttention,
   productionErrorCodeDeclarations,
@@ -675,6 +679,80 @@ describe("production incident coordinator", () => {
         .listAttention()
         .some(({ attentionId }) => attentionId === source.attentionId),
     ).toBe(false);
+  });
+
+  it("binds production mutation approval to one canonical proposal", async () => {
+    const { attention, coordinator, harness } = await createSubject();
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    await coordinator.resume({
+      disposition: "diagnosed",
+      instanceId: source.incidentId!,
+      operationId: "diagnose-candidate-one",
+      output: {
+        conditionState: "live",
+        proposedActions: [
+          { kind: "production-mutation", summary: "Apply candidate one" },
+        ],
+        rootCauseAnalysis: "Candidate one",
+      },
+    });
+    await coordinator.resume({
+      disposition: "approve",
+      instanceId: source.incidentId!,
+      operationId: "approve-candidate-one",
+    });
+
+    const candidateOne = persistence!.listIncidentRuntime()[0]!;
+    const approvalOne = incidentProductionMutationApproval(candidateOne);
+    const approvalRecord = persistence!.getAttention(approvalOne.attentionId)!;
+    const projectedApproval = projectProductionAttention(
+      approvalRecord,
+      persistence!.listReconcilerRuntime(),
+      undefined,
+      undefined,
+      persistence!.listIncidentRuntime(),
+    );
+    const actions = new ProductionAttentionActions(
+      persistence!,
+      attention,
+      { answerAsOperator: vi.fn() } as never,
+      {} as never,
+    );
+    await actions.execute({
+      action: projectedApproval.actions[0]!,
+      attention: projectedApproval,
+    });
+    expect(incidentProductionMutationApproved(persistence!, candidateOne)).toBe(
+      true,
+    );
+
+    const candidateTwo: IncidentRuntimeRecord = {
+      ...candidateOne,
+      diagnosis: {
+        conditionState: "live",
+        proposedActions: [
+          { kind: "production-mutation", summary: "Apply candidate two" },
+        ],
+        rootCauseAnalysis: "Candidate two",
+      },
+    };
+    persistence!.writeIncidentRuntime(candidateTwo);
+    const approvalTwo = incidentProductionMutationApproval(candidateTwo);
+
+    expect(approvalTwo.proposalDigest).not.toBe(approvalOne.proposalDigest);
+    expect(approvalTwo.attentionId).not.toBe(approvalOne.attentionId);
+    expect(incidentProductionMutationApproved(persistence!, candidateTwo)).toBe(
+      false,
+    );
+
+    await coordinator.reconcile([task()]);
+    expect(harness.activations).toEqual(["implement", "review"]);
+    const activeAttentionIds = persistence!
+      .listAttention()
+      .map(({ attentionId }) => attentionId);
+    expect(activeAttentionIds).toContain(approvalTwo.attentionId);
+    expect(activeAttentionIds).not.toContain(approvalOne.attentionId);
   });
 
   it("removes correlation tokens, configured secrets, and credential-bearing URLs from incident values", () => {
