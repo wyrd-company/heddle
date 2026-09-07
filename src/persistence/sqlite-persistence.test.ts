@@ -194,6 +194,15 @@ describe("SqlitePersistence", () => {
         .run(3, "failure", null, "2026-01-01T00:00:00.000Z"),
     ).toThrow(/CHECK constraint failed/);
     expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(3, "recovery", "{}", "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
+    expect(() =>
       database.exec(
         "UPDATE heddle_scheduler_pass_history SET episode = episode + 1",
       ),

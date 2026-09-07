@@ -138,4 +138,23 @@ describe("scheduler pass attention lifecycle", () => {
     ]);
     persistence.close();
   });
+
+  it("retires a legacy card when the first observed pass is successful", async () => {
+    directory = await mkdtemp(join(tmpdir(), "scheduler-pass-attention-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.raiseAttention("production:scheduler-pass-failed:legacy", {
+      code: "scheduler-pass-failed",
+      kind: "production-error",
+    });
+    const lifecycle = new SchedulerPassAttentionLifecycle(
+      persistence,
+      new DurableAttentionQueue(persistence),
+    );
+
+    lifecycle.recovery();
+
+    expect(persistence.listAttention()).toEqual([]);
+    expect(persistence.listSchedulerPassHistory()).toEqual([]);
+    persistence.close();
+  });
 });
