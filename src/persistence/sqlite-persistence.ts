@@ -51,6 +51,7 @@ import type {
   PersistedEvent,
   PersistenceConfiguration,
   ReconcilerRuntimeRecord,
+  SchedulerPassHistoryRecord,
   SessionRuntimeRecord,
 } from "./types.js";
 
@@ -70,6 +71,14 @@ type DynamicTaskIntentRow = {
   source_task_id: number;
   state: DynamicTaskIntentRecord["state"];
   task_id: number | null;
+};
+
+type SchedulerPassHistoryRow = {
+  episode: number;
+  errorJson: string | null;
+  recordedAt: string;
+  sequence: number;
+  type: SchedulerPassHistoryRecord["type"];
 };
 
 export class LegacyNotificationIntentMismatchError extends Error {
@@ -492,6 +501,57 @@ export class SqlitePersistence {
         )
         .get(code, attentionId) !== undefined
     );
+  }
+
+  recordSchedulerPassFailure(error: JsonValue): SchedulerPassHistoryRecord {
+    const errorJson = serialize(error);
+    return this.database.transaction(() => {
+      const latest = this.latestSchedulerPassHistory();
+      const episode =
+        latest === undefined
+          ? 1
+          : latest.type === "failure"
+            ? latest.episode
+            : latest.episode + 1;
+      return this.insertSchedulerPassHistory(episode, "failure", errorJson);
+    })();
+  }
+
+  recoverSchedulerPass(
+    attentionIds: readonly string[],
+  ): SchedulerPassHistoryRecord | undefined {
+    const uniqueAttentionIds = [...new Set(attentionIds)];
+    for (const attentionId of uniqueAttentionIds) {
+      this.assertStableId("attentionId", attentionId);
+    }
+    return this.database.transaction(() => {
+      const latest = this.latestSchedulerPassHistory();
+      const resolvedAt = new Date().toISOString();
+      const resolve = this.database.prepare(
+        `UPDATE heddle_attention
+         SET resolved_at = ?
+         WHERE attention_id = ? AND resolved_at IS NULL`,
+      );
+      for (const attentionId of uniqueAttentionIds) {
+        resolve.run(resolvedAt, attentionId);
+      }
+      if (latest === undefined || latest.type === "recovery") {
+        return undefined;
+      }
+      return this.insertSchedulerPassHistory(latest.episode, "recovery", null);
+    })();
+  }
+
+  listSchedulerPassHistory(): SchedulerPassHistoryRecord[] {
+    const rows = this.database
+      .prepare(
+        `SELECT sequence, episode, type, error_json AS errorJson,
+                recorded_at AS recordedAt
+         FROM heddle_scheduler_pass_history
+         ORDER BY sequence`,
+      )
+      .all() as SchedulerPassHistoryRow[];
+    return rows.map((row) => this.toSchedulerPassHistory(row));
   }
 
   effectIntentRecorded(effectKind: string, stableId: string): boolean {
@@ -1338,6 +1398,56 @@ export class SqlitePersistence {
       sourceTaskId: row.source_task_id,
       state: row.state,
       ...(row.task_id === null ? {} : { taskId: row.task_id }),
+    };
+  }
+
+  private latestSchedulerPassHistory(): SchedulerPassHistoryRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT sequence, episode, type, error_json AS errorJson,
+                recorded_at AS recordedAt
+         FROM heddle_scheduler_pass_history
+         ORDER BY sequence DESC
+         LIMIT 1`,
+      )
+      .get() as SchedulerPassHistoryRow | undefined;
+    return row === undefined ? undefined : this.toSchedulerPassHistory(row);
+  }
+
+  private insertSchedulerPassHistory(
+    episode: number,
+    type: SchedulerPassHistoryRecord["type"],
+    errorJson: string | null,
+  ): SchedulerPassHistoryRecord {
+    const recordedAt = new Date().toISOString();
+    const result = this.database
+      .prepare(
+        `INSERT INTO heddle_scheduler_pass_history
+           (episode, type, error_json, recorded_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(episode, type, errorJson, recordedAt);
+    return {
+      episode,
+      error: errorJson === null ? null : (JSON.parse(errorJson) as JsonValue),
+      recordedAt,
+      sequence: Number(result.lastInsertRowid),
+      type,
+    };
+  }
+
+  private toSchedulerPassHistory(
+    row: SchedulerPassHistoryRow,
+  ): SchedulerPassHistoryRecord {
+    return {
+      episode: row.episode,
+      error:
+        row.errorJson === null
+          ? null
+          : (JSON.parse(row.errorJson) as JsonValue),
+      recordedAt: row.recordedAt,
+      sequence: row.sequence,
+      type: row.type,
     };
   }
 

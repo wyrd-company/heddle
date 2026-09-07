@@ -76,6 +76,64 @@ afterEach(async () => {
 });
 
 describe("SqlitePersistence", () => {
+  it("retains immutable scheduler failure and recovery episodes across restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const first = new SqlitePersistence({ stateDirectory });
+    const firstFailure = first.recordSchedulerPassFailure({
+      message: "First sample failure",
+      name: "Error",
+    });
+    const secondFailure = first.recordSchedulerPassFailure({
+      message: "Second sample failure",
+      name: "TypeError",
+    });
+    first.raiseAttention("production:scheduler-pass-failed:legacy", {
+      attentionId: "production:scheduler-pass-failed:legacy",
+      code: "scheduler-pass-failed",
+      kind: "production-error",
+    });
+
+    expect(firstFailure).toMatchObject({ episode: 1, type: "failure" });
+    expect(secondFailure).toMatchObject({ episode: 1, type: "failure" });
+    expect(
+      first.recoverSchedulerPass(["production:scheduler-pass-failed:legacy"]),
+    ).toMatchObject({ episode: 1, error: null, type: "recovery" });
+    expect(
+      first.recoverSchedulerPass(["production:scheduler-pass-failed:legacy"]),
+    ).toBeUndefined();
+    expect(first.listAttention()).toEqual([]);
+    const recurrence = first.recordSchedulerPassFailure({
+      message: "First sample failure",
+      name: "Error",
+    });
+    expect(recurrence).toMatchObject({ episode: 2, type: "failure" });
+    first.close();
+
+    const recovered = new SqlitePersistence({ stateDirectory });
+    expect(recovered.listSchedulerPassHistory()).toEqual([
+      firstFailure,
+      secondFailure,
+      expect.objectContaining({
+        episode: 1,
+        error: null,
+        sequence: 3,
+        type: "recovery",
+      }),
+      recurrence,
+    ]);
+    const database = new Database(recovered.databasePath);
+    expect(() =>
+      database.exec(
+        "UPDATE heddle_scheduler_pass_history SET episode = episode + 1",
+      ),
+    ).toThrow(/append-only/);
+    expect(() =>
+      database.exec("DELETE FROM heddle_scheduler_pass_history"),
+    ).toThrow(/append-only/);
+    database.close();
+    recovered.close();
+  });
+
   it("persists and exactly replays one dynamic task intent across restart", async () => {
     const stateDirectory = await makeStateDirectory();
     const operationDigest = "a".repeat(64);

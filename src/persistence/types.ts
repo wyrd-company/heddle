@@ -43,6 +43,14 @@ export interface DurableAttentionRecord {
   recordedAt: string;
 }
 
+export interface SchedulerPassHistoryRecord {
+  episode: number;
+  error: JsonValue | null;
+  recordedAt: string;
+  sequence: number;
+  type: "failure" | "recovery";
+}
+
 export type NotificationFailureCategory =
   | "application-credential-rejected"
   | "legacy-intent-unverifiable"

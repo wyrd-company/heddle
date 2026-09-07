@@ -113,6 +113,22 @@ export const initializePersistenceSchema = (
     CREATE INDEX IF NOT EXISTS heddle_production_error_page_attempts_code_time
       ON heddle_production_error_page_attempts(code, attempted_at);
 
+    CREATE TABLE IF NOT EXISTS heddle_scheduler_pass_history (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      episode INTEGER NOT NULL CHECK (episode > 0),
+      type TEXT NOT NULL CHECK (type IN ('failure', 'recovery')),
+      error_json TEXT,
+      recorded_at TEXT NOT NULL,
+      CHECK (
+        (type = 'failure' AND error_json IS NOT NULL) OR
+        (type = 'recovery' AND error_json IS NULL)
+      )
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS heddle_scheduler_pass_one_recovery
+      ON heddle_scheduler_pass_history(episode)
+      WHERE type = 'recovery';
+
     CREATE TABLE IF NOT EXISTS heddle_epic_projects (
       epic_id INTEGER PRIMARY KEY,
       product_name TEXT NOT NULL,
@@ -177,6 +193,18 @@ export const initializePersistenceSchema = (
     BEFORE DELETE ON heddle_dynamic_task_intent_events
     BEGIN
       SELECT RAISE(ABORT, 'dynamic task intent history is append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS heddle_scheduler_pass_history_no_update
+    BEFORE UPDATE ON heddle_scheduler_pass_history
+    BEGIN
+      SELECT RAISE(ABORT, 'scheduler pass history is append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS heddle_scheduler_pass_history_no_delete
+    BEFORE DELETE ON heddle_scheduler_pass_history
+    BEGIN
+      SELECT RAISE(ABORT, 'scheduler pass history is append-only');
     END;
   `);
 
