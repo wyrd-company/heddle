@@ -284,8 +284,9 @@ proposed-design:
     unchanged, but the operator chooses the default. Provider selection never
     infers a runtime mode from the driver or model.
 
-    Before the first external session effect, Heddle durably stores one resolved
-    session binding containing the session and occurrence identity, selected
+    Before the lifecycle starts any mechanical effect or external session
+    effect, Heddle durably stores one resolved session binding containing the
+    session and occurrence identity, selected
     alias, display-name snapshot, provider instance ID, driver kind, observed
     provider version, model slug, runtime mode, and interaction mode. It contains
     no credential or provider setting. The instance ID routes T3 requests; the

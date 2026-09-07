@@ -77,6 +77,84 @@ afterEach(async () => {
 });
 
 describe("SqlitePersistence", () => {
+  it("rejects a starting binding that identifies a different occurrence", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const binding = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+
+    expect(() =>
+      persistence.writeStartingSessionRuntime(
+        {
+          boardStatus: "todo",
+          instanceId: "instance-one",
+          provider: binding.providerInstanceId,
+          sessionKey: "session-other",
+          stageId: "implement",
+          state: "starting",
+          taskId: 1,
+          threadId: "thread-one",
+        },
+        {
+          activation: 1,
+          binding,
+          instanceId: "instance-one",
+          sessionKey: "session-one",
+          stageId: "implement",
+          threadId: "thread-one",
+        },
+      ),
+    ).toThrow("identify different occurrences");
+    expect(persistence.listReconcilerRuntime()).toEqual([]);
+    expect(persistence.listSessionRuntime()).toEqual([]);
+    persistence.close();
+  });
+
+  it("rolls back a starting binding when its runtime record conflicts", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "todo",
+      instanceId: "instance-existing",
+      state: "starting",
+      taskId: 1,
+    });
+    const binding = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+
+    expect(() =>
+      persistence.writeStartingSessionRuntime(
+        {
+          boardStatus: "todo",
+          instanceId: "instance-one",
+          provider: binding.providerInstanceId,
+          sessionKey: "session-one",
+          stageId: "implement",
+          state: "starting",
+          taskId: 1,
+          threadId: "thread-one",
+        },
+        {
+          activation: 1,
+          binding,
+          instanceId: "instance-one",
+          sessionKey: "session-one",
+          stageId: "implement",
+          threadId: "thread-one",
+        },
+      ),
+    ).toThrow();
+    expect(persistence.listReconcilerRuntime()).toEqual([
+      expect.objectContaining({ instanceId: "instance-existing" }),
+    ]);
+    expect(persistence.listSessionRuntime()).toEqual([]);
+    persistence.close();
+  });
+
   it("retains one complete non-secret session binding across restart", async () => {
     const stateDirectory = await makeStateDirectory();
     const binding = resolvedSessionBindingFixture({

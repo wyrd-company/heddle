@@ -64,6 +64,37 @@ export class LifecycleEngine {
     this.persistence = options.persistence;
   }
 
+  async plannedStartStage(input: {
+    blueprintPath: string;
+    instanceId: string;
+  }): Promise<string | undefined> {
+    const existing = this.persistence.getInstance(input.instanceId);
+    let blueprint: LifecycleBlueprint;
+    if (existing === undefined) {
+      blueprint = (await this.blueprintStore.inspect(input.blueprintPath))
+        .blueprint;
+    } else {
+      const context = readLifecycleContext(existing);
+      if (
+        context.pendingTransition?.kind !== "start" ||
+        context.blueprintPath !==
+          this.blueprintStore.normalize(input.blueprintPath)
+      ) {
+        throw new Error(`Instance already exists: ${input.instanceId}`);
+      }
+      blueprint = await this.blueprintStore.read(
+        context.blueprintBlobHash,
+        context.blueprintPath,
+      );
+    }
+    validateBlueprint(blueprint, this.effects);
+    const landings = startLanding(blueprint);
+    const stageIds = new Set(
+      landings.flatMap(({ awaitingNodeIds }) => awaitingNodeIds),
+    );
+    return stageIds.values().next().value;
+  }
+
   async start(input: StartLifecycleInput): Promise<LifecycleSnapshot> {
     let existing = this.persistence.getInstance(input.instanceId);
     if (existing !== undefined) {

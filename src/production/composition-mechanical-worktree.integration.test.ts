@@ -505,6 +505,108 @@ describe("production mechanical worktree preparation", () => {
     await composition.close();
   });
 
+  it("retains the complete session binding when restart follows the first mechanical effect", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    await useMechanicalLifecycle(fixture);
+    const firstT3 = new SyntheticT3();
+    const first = compose(fixture, firstT3);
+    vi.spyOn(first.board, "mirrorTaskStatus").mockRejectedValue(
+      new Error("Injected crash after worktree preparation"),
+    );
+
+    await first.start();
+
+    const worktreePath = join(
+      fixture.configuration.session.worktreesRoot!,
+      String(fixture.taskId),
+      "sample-repository",
+    );
+    await expect(stat(join(worktreePath, ".git"))).resolves.toBeDefined();
+    const original = first.persistence.listSessionRuntime()[0]!;
+    expect(original.binding).toEqual({
+      alias: "primary",
+      driverKind: "codex",
+      interactionMode: "default",
+      modelSlug: "sample-model",
+      observedCliVersion: "0.91.0",
+      providerDisplayName: "Workbench Alpha",
+      providerInstanceId: "codex",
+      runtimeMode: "auto-accept-edits",
+      sessionKey: `task-${fixture.taskId}:implement:1`,
+      threadId: expect.any(String),
+    });
+    expect(firstT3.commands).toHaveLength(0);
+    expect(first.attention.list()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          attentionId: expect.stringContaining(
+            "production:session-observation-failed",
+          ),
+        }),
+      ]),
+    );
+    await first.close();
+
+    fixture.configuration.pacing.defaultProvider = "provider-changed";
+    fixture.configuration.providerAliases = {
+      changed: {
+        model: "model-changed",
+        providerDisplayName: "Workbench Changed",
+      },
+    };
+    fixture.configuration.session.defaultProviderAlias = "changed";
+    fixture.configuration.session.defaultRuntimeMode = "full-access";
+    fixture.configuration.session.interactionMode = "review";
+    fixture.configuration.session.defaultSelection = {
+      alias: "changed",
+      driverKind: "claudeAgent",
+      interactionMode: "review",
+      model: {
+        isCustom: true,
+        name: "Model Changed",
+        slug: "model-changed",
+      },
+      observedCliVersion: "9.9.9",
+      providerDisplayName: "Workbench Changed",
+      providerInstanceId: "provider-changed",
+      runtimeMode: "full-access",
+    };
+    fixture.configuration.session.resolvedSelections = [
+      fixture.configuration.session.defaultSelection,
+    ];
+    const restartedT3 = new SyntheticT3();
+    const restarted = compose(fixture, restartedT3);
+
+    await restarted.start();
+
+    expect(restarted.persistence.listSessionRuntime()).toEqual([
+      expect.objectContaining(original),
+    ]);
+    expect(restartedT3.commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          interactionMode: "default",
+          modelSelection: { instanceId: "codex", model: "sample-model" },
+          runtimeMode: "auto-accept-edits",
+          threadId: original.threadId,
+          type: "thread.create",
+        }),
+      ]),
+    );
+    expect(restartedT3.providerContexts).toEqual(
+      expect.arrayContaining([
+        {
+          cliVersion: "0.91.0",
+          driver: "codex",
+          lifecycle: "independent",
+          providerInstanceId: "codex",
+        },
+      ]),
+    );
+    await restarted.close();
+  });
+
   it("raises routing attention and runs no mechanical node when a task targets more than one repository", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

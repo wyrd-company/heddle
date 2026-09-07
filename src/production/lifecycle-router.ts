@@ -36,6 +36,13 @@ export class ProductionLifecycleRouter {
     return this.#track(input.instanceId, () => this.engine.start(input));
   }
 
+  plannedStartStage(input: {
+    blueprintPath: string;
+    instanceId: string;
+  }): Promise<string | undefined> {
+    return this.engine.plannedStartStage(input);
+  }
+
   resume(input: ResumeLifecycleInput): Promise<LifecycleSnapshot> {
     return this.#track(input.instanceId, () => this.engine.resume(input));
   }

@@ -184,7 +184,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       .listReconcilerRuntime()
       .find(({ instanceId }) => instanceId === input.instanceId);
     const provider = input.dispatch?.provider ?? previous?.provider;
-    const starting: ReconcilerRuntimeRecord = {
+    let starting: ReconcilerRuntimeRecord = {
       ...(previous?.state === "starting" ? previous : {}),
       boardStatus: input.task.status,
       instanceId: input.instanceId,
@@ -192,7 +192,67 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       state: "starting",
       taskId: input.task.id,
     };
-    this.persistence.writeReconcilerRuntime(starting);
+    const priorSessions = this.persistence
+      .listSessionRuntime()
+      .filter(({ instanceId }) => instanceId === input.instanceId);
+    const retainedSession =
+      starting.sessionKey === undefined
+        ? undefined
+        : priorSessions.find(
+            ({ sessionKey }) => sessionKey === starting.sessionKey,
+          );
+    if (retainedSession !== undefined) {
+      starting = {
+        ...starting,
+        provider: retainedSession.binding.providerInstanceId,
+        sessionKey: retainedSession.sessionKey,
+        stageId: retainedSession.stageId,
+        threadId: retainedSession.threadId,
+      };
+      this.persistence.writeStartingSessionRuntime(starting, retainedSession);
+    } else {
+      const stageId =
+        starting.stageId ??
+        (await this.lifecycle.plannedStartStage({
+          blueprintPath: input.blueprintPath,
+          instanceId: input.instanceId,
+        }));
+      if (stageId === undefined) {
+        this.persistence.writeReconcilerRuntime(starting);
+      } else {
+        const activation =
+          priorSessions
+            .filter((session) => session.stageId === stageId)
+            .reduce(
+              (maximum, session) => Math.max(maximum, session.activation),
+              0,
+            ) + 1;
+        const sessionKey =
+          starting.sessionKey ?? `${input.instanceId}:${stageId}:${activation}`;
+        const threadId =
+          starting.threadId ?? stableUuid(`${sessionKey}:thread`);
+        const binding = bindResolvedSession(
+          this.configuration.session.defaultSelection,
+          sessionKey,
+          threadId,
+        );
+        starting = {
+          ...starting,
+          provider: binding.providerInstanceId,
+          sessionKey,
+          stageId,
+          threadId,
+        };
+        this.persistence.writeStartingSessionRuntime(starting, {
+          activation,
+          binding,
+          instanceId: input.instanceId,
+          sessionKey,
+          stageId,
+          threadId,
+        });
+      }
+    }
 
     const existing = this.persistence.getInstance(input.instanceId);
     const existingContext =

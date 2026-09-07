@@ -46,6 +46,7 @@ import {
   type ReconcilerInstanceController,
 } from "../reconciler/index.js";
 import type { SubagentCoordinator } from "../subagents/index.js";
+import { isTodoState } from "../todo/index.js";
 import {
   DurableAttentionQueue,
   DurablePushoverNotifier,
@@ -447,6 +448,20 @@ export const createProductionComposition = (
         routing.update(after);
         await instances.synchronize(after);
         for (const session of productionSessionTargets(persistence!)) {
+          const record = persistence!.getInstance(session.instanceId);
+          if (
+            record === undefined ||
+            !isTodoState(record.state.todoState) ||
+            !record.state.todoState.lists.some(
+              (list) =>
+                list.sessionKey === session.sessionKey ||
+                (list.assignments ?? []).some(
+                  ({ sessionKey }) => sessionKey === session.sessionKey,
+                ),
+            )
+          ) {
+            continue;
+          }
           let observation: Awaited<ReturnType<SessionObserver["observe"]>>;
           try {
             observation = await observer.observe({

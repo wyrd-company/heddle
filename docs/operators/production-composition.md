@@ -224,8 +224,9 @@ vocabulary: `approval-required`, `auto-accept-edits`, `auto`, and
 `full-access`. `full-access` is selectable for every configured provider and is
 forwarded unchanged. It is not mandatory; the operator chooses the default.
 
-Heddle stores one resolved session binding before worktree creation, timeout
-preparation, MCP registration, thread creation, or first-turn dispatch.
+Heddle stores one resolved session binding before the lifecycle starts any
+mechanical effect, including worktree creation, and before timeout preparation,
+MCP registration, thread creation, or first-turn dispatch.
 
 The binding records the session and occurrence identity, selected alias,
 display-name snapshot,

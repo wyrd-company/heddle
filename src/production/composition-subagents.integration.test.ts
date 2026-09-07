@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
+import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import type { JsonValue } from "../persistence/index.js";
 import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import { isTodoState } from "../todo/index.js";
@@ -444,6 +445,160 @@ describe("production subagent composition", () => {
       },
     });
     await composition.close();
+  });
+
+  it("routes a pending child escalation after restart through the durable parent binding", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    fixture.configuration.providerAliases.secondary = {
+      model: "model-secondary",
+      providerDisplayName: "Workbench Beta",
+    };
+    fixture.configuration.session.resolvedSelections = [
+      ...fixture.configuration.session.resolvedSelections,
+      {
+        alias: "secondary",
+        driverKind: "cursor",
+        interactionMode: "review",
+        model: {
+          isCustom: false,
+          name: "Model Secondary",
+          slug: "model-secondary",
+        },
+        observedCliVersion: "2.0.0",
+        providerDisplayName: "Workbench Beta",
+        providerInstanceId: "provider-beta",
+        runtimeMode: "full-access",
+      },
+    ];
+    const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await first.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const record = first.persistence.getInstance(instanceId)!;
+    const resolver = new WorkflowMcpSessionResolver(first.persistence);
+    const parent = await resolver.resolve(
+      storedCorrelationToken(record.state.handoffs),
+    );
+    const parentBinding = first.persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === parent.sessionKey)!.binding;
+    const spawned = await first.subagents.spawn(parent, {
+      model: "model-secondary",
+      operationId: "spawn-escalating-child",
+      provider: "provider-beta",
+      rootItemId: "deliver",
+    });
+    if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    const child = await resolver.resolve(spawned.assignment.correlationToken);
+    const escalationId = "pending-child-choice";
+    const attentionId = escalationAttentionId(
+      instanceId,
+      child.sessionKey,
+      escalationId,
+    );
+    first.persistence.appendEvent(instanceId, "mcp:escalation-opened", {
+      attentionId,
+      escalationId,
+      instanceId,
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: child.sessionKey,
+      parentSessionKey: parent.sessionKey,
+      questions: [
+        {
+          id: "selection",
+          options: [
+            {
+              description: "Use the first sample",
+              id: "first",
+              label: "First",
+            },
+            {
+              description: "Use the second sample",
+              id: "second",
+              label: "Second",
+            },
+          ],
+          prompt: "Which sample should be selected?",
+        },
+      ],
+      stage: child.stage.id,
+    });
+    await first.close();
+
+    fixture.configuration.pacing.defaultProvider = "provider-changed";
+    fixture.configuration.providerAliases = {
+      changed: {
+        model: "model-changed",
+        providerDisplayName: "Workbench Changed",
+      },
+    };
+    fixture.configuration.session.defaultProviderAlias = "changed";
+    fixture.configuration.session.defaultRuntimeMode = "approval-required";
+    fixture.configuration.session.interactionMode = "alternate";
+    fixture.configuration.session.defaultSelection = {
+      alias: "changed",
+      driverKind: "claudeAgent",
+      interactionMode: "alternate",
+      model: {
+        isCustom: true,
+        name: "Model Changed",
+        slug: "model-changed",
+      },
+      observedCliVersion: "9.9.9",
+      providerDisplayName: "Workbench Changed",
+      providerInstanceId: "provider-changed",
+      runtimeMode: "approval-required",
+    };
+    fixture.configuration.session.resolvedSelections = [
+      fixture.configuration.session.defaultSelection,
+    ];
+    const restartedT3 = new SyntheticT3();
+    const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: restartedT3,
+    });
+
+    await restarted.start();
+
+    expect(restartedT3.dispatches).toContainEqual({
+      command: expect.objectContaining({
+        interactionMode: parentBinding.interactionMode,
+        runtimeMode: parentBinding.runtimeMode,
+        threadId: parentBinding.threadId,
+        type: "thread.turn.start",
+      }),
+      providerContext: {
+        cliVersion: parentBinding.observedCliVersion,
+        driver: parentBinding.driverKind,
+        lifecycle: "independent",
+        providerInstanceId: parentBinding.providerInstanceId,
+      },
+    });
+    expect(restartedT3.dispatches).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerContext: expect.objectContaining({
+            providerInstanceId: "provider-changed",
+          }),
+        }),
+      ]),
+    );
+    await restarted.close();
   });
 
   it("fails closed when persisted parent and child session identities collide", async () => {
