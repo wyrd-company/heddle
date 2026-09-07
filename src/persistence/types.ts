@@ -41,7 +41,32 @@ export interface DurableAttentionRecord {
   attentionId: string;
   payload: JsonValue;
   recordedAt: string;
+  resolutionJustification?: string;
+  resolvedAt?: string;
 }
+
+export interface IncidentRuntimeRecord {
+  accepted: boolean;
+  attentionId: string;
+  code: string;
+  createdAt: number;
+  diagnosis?: JsonValue;
+  incidentId: string;
+  provider?: string;
+  rejectionOperationIds: string[];
+  sessionKey?: string;
+  sourceInstanceId?: string;
+  stageEnteredAt?: number;
+  stageId?: string;
+  state: "done" | "failed" | "starting" | "waiting";
+  taskId: number;
+  threadId?: string;
+}
+
+export type IncidentAdmission =
+  | { kind: "admitted"; runtime: IncidentRuntimeRecord }
+  | { kind: "existing"; runtime: IncidentRuntimeRecord }
+  | { kind: "suppressed"; reason: "concurrency-cap" | "per-code-cooldown" };
 
 export interface SchedulerPassHistoryRecord {
   episode: number;

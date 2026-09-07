@@ -54,6 +54,27 @@ export const initializePersistenceSchema = (
       resolved_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_incident_runtime (
+      incident_id TEXT PRIMARY KEY,
+      attention_id TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL,
+      task_id INTEGER NOT NULL CHECK (task_id > 0),
+      source_instance_id TEXT,
+      created_at INTEGER NOT NULL CHECK (created_at >= 0),
+      state TEXT NOT NULL CHECK (state IN ('starting', 'waiting', 'done', 'failed')),
+      provider TEXT,
+      stage_id TEXT,
+      stage_entered_at INTEGER,
+      session_key TEXT,
+      thread_id TEXT,
+      diagnosis_json TEXT,
+      accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
+      rejection_operation_ids_json TEXT NOT NULL DEFAULT '[]'
+    );
+
+    CREATE INDEX IF NOT EXISTS heddle_incident_runtime_code_time
+      ON heddle_incident_runtime(code, created_at);
+
     CREATE TABLE IF NOT EXISTS heddle_session_runtime (
       session_key TEXT PRIMARY KEY,
       activation INTEGER NOT NULL CHECK (activation > 0),
@@ -214,6 +235,13 @@ export const initializePersistenceSchema = (
     .all() as Array<{ name: string }>;
   if (!attentionColumns.some(({ name }) => name === "resolved_at")) {
     database.exec("ALTER TABLE heddle_attention ADD COLUMN resolved_at TEXT");
+  }
+  if (
+    !attentionColumns.some(({ name }) => name === "resolution_justification")
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_attention ADD COLUMN resolution_justification TEXT",
+    );
   }
   const effectColumns = database
     .prepare("PRAGMA table_info(heddle_completed_effects)")

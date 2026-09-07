@@ -42,6 +42,8 @@ import type {
   EpicProjectRecord,
   EventRow,
   InstanceEventClaim,
+  IncidentAdmission,
+  IncidentRuntimeRecord,
   InstanceRecord,
   InstanceRow,
   InstanceState,
@@ -384,16 +386,51 @@ export class SqlitePersistence {
     }));
   }
 
-  resolveAttention(attentionId: string): boolean {
+  getAttention(attentionId: string): DurableAttentionRecord | undefined {
     this.assertStableId("attentionId", attentionId);
+    const row = this.database
+      .prepare(
+        `SELECT attention_id, payload_json, recorded_at, resolved_at,
+                resolution_justification
+         FROM heddle_attention
+         WHERE attention_id = ?`,
+      )
+      .get(attentionId) as
+      | {
+          attention_id: string;
+          payload_json: string;
+          recorded_at: string;
+          resolution_justification: string | null;
+          resolved_at: string | null;
+        }
+      | undefined;
+    return row === undefined
+      ? undefined
+      : {
+          attentionId: row.attention_id,
+          payload: JSON.parse(row.payload_json) as JsonValue,
+          recordedAt: row.recorded_at,
+          ...(row.resolution_justification === null
+            ? {}
+            : { resolutionJustification: row.resolution_justification }),
+          ...(row.resolved_at === null ? {} : { resolvedAt: row.resolved_at }),
+        };
+  }
+
+  resolveAttention(attentionId: string, justification?: string): boolean {
+    this.assertStableId("attentionId", attentionId);
+    if (justification !== undefined) {
+      this.assertStableId("resolutionJustification", justification);
+    }
     const resolved =
       this.database
         .prepare(
           `UPDATE heddle_attention
-           SET resolved_at = ?
+           SET resolved_at = ?, resolution_justification = ?
            WHERE attention_id = ? AND resolved_at IS NULL`,
         )
-        .run(new Date().toISOString(), attentionId).changes > 0;
+        .run(new Date().toISOString(), justification ?? null, attentionId)
+        .changes > 0;
     if (resolved) return true;
     if (this.hasAttention(attentionId)) return false;
     throw new Error(`Attention ${JSON.stringify(attentionId)} does not exist`);
@@ -405,13 +442,198 @@ export class SqlitePersistence {
       this.database
         .prepare(
           `UPDATE heddle_attention
-           SET resolved_at = NULL
+           SET resolved_at = NULL, resolution_justification = NULL
            WHERE attention_id = ? AND resolved_at IS NOT NULL`,
         )
         .run(attentionId).changes > 0;
     if (reopened) return true;
     if (this.hasAttention(attentionId)) return false;
     throw new Error(`Attention ${JSON.stringify(attentionId)} does not exist`);
+  }
+
+  admitIncident(input: {
+    attentionId: string;
+    code: string;
+    cooldownMilliseconds: number;
+    createdAt: number;
+    incidentId: string;
+    maximumConcurrent: number;
+    sourceInstanceId?: string;
+    taskId: number;
+  }): IncidentAdmission {
+    this.assertStableId("attentionId", input.attentionId);
+    this.assertStableId("incidentId", input.incidentId);
+    if (
+      !Number.isSafeInteger(input.taskId) ||
+      input.taskId <= 0 ||
+      !Number.isSafeInteger(input.createdAt) ||
+      input.createdAt < 0 ||
+      !Number.isSafeInteger(input.cooldownMilliseconds) ||
+      input.cooldownMilliseconds < 0 ||
+      !Number.isSafeInteger(input.maximumConcurrent) ||
+      input.maximumConcurrent <= 0
+    ) {
+      throw new TypeError("Incident admission bounds are invalid");
+    }
+    return this.database.transaction((): IncidentAdmission => {
+      const existing = this.listIncidentRuntime().find(
+        ({ attentionId, incidentId }) =>
+          attentionId === input.attentionId || incidentId === input.incidentId,
+      );
+      if (existing !== undefined) {
+        if (
+          existing.attentionId !== input.attentionId ||
+          existing.incidentId !== input.incidentId ||
+          existing.code !== input.code ||
+          existing.taskId !== input.taskId ||
+          existing.sourceInstanceId !== input.sourceInstanceId
+        ) {
+          throw new Error("Incident admission changed durable identity");
+        }
+        return { kind: "existing", runtime: existing };
+      }
+      const recent = this.database
+        .prepare(
+          `SELECT 1 FROM heddle_incident_runtime
+           WHERE code = ? AND created_at > ?
+           LIMIT 1`,
+        )
+        .get(input.code, input.createdAt - input.cooldownMilliseconds);
+      if (recent !== undefined) {
+        return { kind: "suppressed", reason: "per-code-cooldown" };
+      }
+      const active = this.database
+        .prepare(
+          `SELECT count(*) AS count FROM heddle_incident_runtime
+           WHERE state IN ('starting', 'waiting')`,
+        )
+        .get() as { count: number };
+      if (active.count >= input.maximumConcurrent) {
+        return { kind: "suppressed", reason: "concurrency-cap" };
+      }
+      const runtime: IncidentRuntimeRecord = {
+        accepted: false,
+        attentionId: input.attentionId,
+        code: input.code,
+        createdAt: input.createdAt,
+        incidentId: input.incidentId,
+        rejectionOperationIds: [],
+        ...(input.sourceInstanceId === undefined
+          ? {}
+          : { sourceInstanceId: input.sourceInstanceId }),
+        state: "starting",
+        taskId: input.taskId,
+      };
+      this.writeIncidentRuntime(runtime);
+      return { kind: "admitted", runtime };
+    })();
+  }
+
+  listIncidentRuntime(): IncidentRuntimeRecord[] {
+    const rows = this.database
+      .prepare(
+        `SELECT incident_id, attention_id, code, task_id, source_instance_id,
+                created_at, state, provider, stage_id, stage_entered_at,
+                session_key, thread_id, diagnosis_json, accepted,
+                rejection_operation_ids_json
+         FROM heddle_incident_runtime
+         ORDER BY created_at, incident_id`,
+      )
+      .all() as Array<{
+      accepted: number;
+      attention_id: string;
+      code: string;
+      created_at: number;
+      diagnosis_json: string | null;
+      incident_id: string;
+      provider: string | null;
+      rejection_operation_ids_json: string;
+      session_key: string | null;
+      source_instance_id: string | null;
+      stage_entered_at: number | null;
+      stage_id: string | null;
+      state: IncidentRuntimeRecord["state"];
+      task_id: number;
+      thread_id: string | null;
+    }>;
+    return rows.map((row) => ({
+      accepted: row.accepted === 1,
+      attentionId: row.attention_id,
+      code: row.code,
+      createdAt: row.created_at,
+      ...(row.diagnosis_json === null
+        ? {}
+        : { diagnosis: JSON.parse(row.diagnosis_json) as JsonValue }),
+      incidentId: row.incident_id,
+      ...(row.provider === null ? {} : { provider: row.provider }),
+      rejectionOperationIds: JSON.parse(
+        row.rejection_operation_ids_json,
+      ) as string[],
+      ...(row.session_key === null ? {} : { sessionKey: row.session_key }),
+      ...(row.source_instance_id === null
+        ? {}
+        : { sourceInstanceId: row.source_instance_id }),
+      ...(row.stage_entered_at === null
+        ? {}
+        : { stageEnteredAt: row.stage_entered_at }),
+      ...(row.stage_id === null ? {} : { stageId: row.stage_id }),
+      state: row.state,
+      taskId: row.task_id,
+      ...(row.thread_id === null ? {} : { threadId: row.thread_id }),
+    }));
+  }
+
+  writeIncidentRuntime(record: IncidentRuntimeRecord): void {
+    this.assertStableId("incidentId", record.incidentId);
+    const prior = this.listIncidentRuntime().find(
+      ({ incidentId }) => incidentId === record.incidentId,
+    );
+    if (
+      prior !== undefined &&
+      (prior.attentionId !== record.attentionId ||
+        prior.code !== record.code ||
+        prior.createdAt !== record.createdAt ||
+        prior.sourceInstanceId !== record.sourceInstanceId ||
+        prior.taskId !== record.taskId)
+    ) {
+      throw new Error("Incident runtime changed durable identity");
+    }
+    this.database
+      .prepare(
+        `INSERT INTO heddle_incident_runtime
+           (incident_id, attention_id, code, task_id, source_instance_id,
+            created_at, state, provider, stage_id, stage_entered_at,
+            session_key, thread_id, diagnosis_json, accepted,
+            rejection_operation_ids_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(incident_id) DO UPDATE SET
+           state = excluded.state,
+           provider = excluded.provider,
+           stage_id = excluded.stage_id,
+           stage_entered_at = excluded.stage_entered_at,
+           session_key = excluded.session_key,
+           thread_id = excluded.thread_id,
+           diagnosis_json = excluded.diagnosis_json,
+           accepted = excluded.accepted,
+           rejection_operation_ids_json = excluded.rejection_operation_ids_json`,
+      )
+      .run(
+        record.incidentId,
+        record.attentionId,
+        record.code,
+        record.taskId,
+        record.sourceInstanceId ?? null,
+        record.createdAt,
+        record.state,
+        record.provider ?? null,
+        record.stageId ?? null,
+        record.stageEnteredAt ?? null,
+        record.sessionKey ?? null,
+        record.threadId ?? null,
+        record.diagnosis === undefined ? null : serialize(record.diagnosis),
+        record.accepted ? 1 : 0,
+        serialize(record.rejectionOperationIds),
+      );
   }
 
   effectCompleted(effectKind: string, stableId: string): boolean {

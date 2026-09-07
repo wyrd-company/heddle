@@ -10,6 +10,8 @@ export {
   type InstanceRecord,
   type InstanceEventClaim,
   type InstanceState,
+  type IncidentAdmission,
+  type IncidentRuntimeRecord,
   type NotificationFailureCategory,
   type NotificationFailureRecord,
   type NotificationIntentFingerprint,
