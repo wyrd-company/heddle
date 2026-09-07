@@ -518,7 +518,21 @@ A failure that cannot be attributed to one item aborts that pass. The scheduler
 raises global durable attention and `heddle-server` writes one
 `Heddle reconciliation pass failed` line to stderr with the error cause chain.
 The immediate startup pass still fails service readiness; a later failed cadence
-does not overlap or stop future cadence passes.
+does not overlap or stop future cadence passes. The first failed pass starts a
+numbered scheduler failure episode. Every later failure before one completed
+pass belongs to that episode and appends its exact structured error to ordered
+durable history. One episode has one active card, even when its errors differ;
+the card keeps the first diagnostic and its stable ID ends in
+`global:episode:<number>`.
+
+**Resolve** acknowledges the active scheduler card. If another pass fails in
+the same episode, Heddle reopens that card, including when an earlier resolution
+intent is replayed. One complete production pass is the only recovery evidence:
+it appends the episode's recovery event and resolves every active
+`scheduler-pass-failed` card, including a legacy error-fingerprint card. A
+later failure starts the next episode with a new stable ID. The prior attention
+rows and ordered failure and recovery events stay in SQLite for inspection and
+do not return to the active catalog.
 
 Attention and notification delivery use the stable attention ID from the
 accepted lifecycle or escalation contract. SQLite stores attention and adapter

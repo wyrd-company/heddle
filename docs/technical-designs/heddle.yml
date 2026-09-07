@@ -523,6 +523,24 @@ proposed-design:
     75-character external identity is stable and sensitive to every component;
     history, waiters, replay, and answer authority continue to use the exact
     tuple components rather than the digest.
+
+    Scheduler-pass health is one durable failure episode at a time. A failed
+    pass with no unrecovered scheduler episode opens the next positive episode
+    and uses `production:scheduler-pass-failed:global:episode:<number>` as its
+    stable attention ID. Every failed pass in that episode appends its exact
+    structured error to immutable scheduler-pass history. The active card
+    retains the episode's first diagnostic, so differing error details do not
+    create additional active cards; the active scheduler-pass bound is one.
+    Resolve acknowledges that card through the standard production-error
+    action. A later failed pass in the same episode reopens it, including after
+    replay of the earlier resolution intent, so resolution cannot mask a
+    recurring fault. Only completion of the whole production pass appends the
+    episode's recovery event and resolves every active scheduler-pass card.
+    This also retires a legacy error-fingerprint card. A later failure opens a
+    new numbered episode and attention ID. Prior attention rows remain durable;
+    ordered failure and recovery events remain inspectable and immutable across
+    recurrence and restart.
+
     Adapter persistence rejects a different logical recipient or message
     fingerprint under the same stable ID. It keeps the application credential
     in a separate attempt fingerprint. That attempt fingerprint can change only
