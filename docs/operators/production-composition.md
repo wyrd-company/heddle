@@ -224,9 +224,12 @@ vocabulary: `approval-required`, `auto-accept-edits`, `auto`, and
 `full-access`. `full-access` is selectable for every configured provider and is
 forwarded unchanged. It is not mandatory; the operator chooses the default.
 
-Heddle stores one resolved session binding before the lifecycle starts any
-mechanical effect, including worktree creation, and before timeout preparation,
-MCP registration, thread creation, or first-turn dispatch.
+Heddle pins the lifecycle blueprint source ref and persists the pending start
+with that blueprint path and blob hash before it resolves the session binding.
+Planning, lifecycle execution, and recovery use this same snapshot even when
+the source ref moves. Heddle stores one resolved session binding before the
+lifecycle starts any mechanical effect, including worktree creation, and before
+timeout preparation, MCP registration, thread creation, or first-turn dispatch.
 If any valid initial lifecycle landing identifies a wait stage, every valid
 initial landing must identify that same wait stage. Heddle rejects a different
 wait stage or terminal alternative before it runs the selecting effect. An

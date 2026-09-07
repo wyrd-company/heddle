@@ -263,7 +263,8 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         ? await this.lifecycle
             .start({
               blueprintPath: input.blueprintPath,
-              ...(existing === undefined
+              ...(existing === undefined ||
+              existingContext?.pendingTransition?.initialContext === null
                 ? {
                     initialContext: {
                       ...(await this.#mechanicalChange(

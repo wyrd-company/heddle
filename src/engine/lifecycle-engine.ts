@@ -65,15 +65,17 @@ export class LifecycleEngine {
     this.persistence = options.persistence;
   }
 
-  async plannedStartStage(input: {
-    blueprintPath: string;
-    instanceId: string;
-  }): Promise<string | undefined> {
+  async plannedStartStage(
+    input: StartLifecycleInput,
+  ): Promise<string | undefined> {
     const existing = this.persistence.getInstance(input.instanceId);
     let blueprint: LifecycleBlueprint;
+    let pinned:
+      | { blobHash: string; blueprint: LifecycleBlueprint; path: string }
+      | undefined;
     if (existing === undefined) {
-      blueprint = (await this.blueprintStore.inspect(input.blueprintPath))
-        .blueprint;
+      pinned = await this.blueprintStore.pin(input.blueprintPath);
+      blueprint = pinned.blueprint;
     } else {
       const context = readLifecycleContext(existing);
       if (
@@ -106,6 +108,9 @@ export class LifecycleEngine {
         "Initial route mixes wait and terminal landings",
       );
     }
+    if (pinned !== undefined) {
+      this.createStartRecord(input, pinned.blobHash, pinned.path);
+    }
     return stageIds.values().next().value;
   }
 
@@ -126,15 +131,32 @@ export class LifecycleEngine {
         context.blueprintPath,
       );
       validateBlueprint(blueprint, this.effects);
-      return this.execute(existing, blueprint, startLanding(blueprint));
+      const prepared =
+        context.pendingTransition.initialContext === null
+          ? this.preparePlannedStart(existing, input, context)
+          : existing;
+      return this.execute(prepared, blueprint, startLanding(blueprint));
     }
 
     const pinned = await this.blueprintStore.pin(input.blueprintPath);
     validateBlueprint(pinned.blueprint, this.effects);
+    const record = this.createStartRecord(input, pinned.blobHash, pinned.path);
+    return this.execute(
+      record,
+      pinned.blueprint,
+      startLanding(pinned.blueprint),
+    );
+  }
+
+  private createStartRecord(
+    input: StartLifecycleInput,
+    blueprintBlobHash: string,
+    blueprintPath: string,
+  ): InstanceRecord {
     const pendingTransition: PendingTransition = {
       disposition: null,
       id: `${input.instanceId}:1`,
-      initialContext: input.initialContext ?? {},
+      initialContext: input.initialContext ?? null,
       kind: "start",
       operationId: null,
       output: null,
@@ -142,8 +164,8 @@ export class LifecycleEngine {
     };
     const context: LifecycleContextRecord = {
       awaitingNodeIds: [],
-      blueprintBlobHash: pinned.blobHash,
-      blueprintPath: pinned.path,
+      blueprintBlobHash,
+      blueprintPath,
       completedOperations: {},
       executionIds: [],
       nextTransitionNumber: 2,
@@ -152,14 +174,39 @@ export class LifecycleEngine {
       serializedContext: null,
       status: "pending",
     };
-    const record = this.persistence.createInstance(
+    return this.persistence.createInstance(
       input.instanceId,
       initialInstanceState(input, context),
     );
-    return this.execute(
-      record,
-      pinned.blueprint,
-      startLanding(pinned.blueprint),
+  }
+
+  private preparePlannedStart(
+    record: InstanceRecord,
+    input: StartLifecycleInput,
+    context: LifecycleContextRecord,
+  ): InstanceRecord {
+    const pendingTransition = context.pendingTransition;
+    if (pendingTransition?.kind !== "start") {
+      throw new Error("Lifecycle start transition is not pending");
+    }
+    return this.persistence.updateInstance(
+      record.instanceId,
+      writeLifecycleContext(
+        {
+          ...record.state,
+          correlationTokens:
+            input.state?.correlationTokens ?? record.state.correlationTokens,
+          handoffs: input.state?.handoffs ?? record.state.handoffs,
+          todoState: input.state?.todoState ?? record.state.todoState,
+        },
+        {
+          ...context,
+          pendingTransition: {
+            ...pendingTransition,
+            initialContext: input.initialContext ?? {},
+          },
+        },
+      ),
     );
   }
 

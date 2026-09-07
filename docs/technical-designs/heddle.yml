@@ -284,9 +284,12 @@ proposed-design:
     unchanged, but the operator chooses the default. Provider selection never
     infers a runtime mode from the driver or model.
 
-    Before the lifecycle starts any mechanical effect or external session
-    effect, Heddle durably stores one resolved session binding containing the
-    session and occurrence identity, selected
+    Before session binding resolution, Heddle pins the lifecycle blueprint
+    source ref and durably stores a pending start with the blueprint path and
+    blob hash. Initial-route planning, lifecycle execution, and recovery use
+    this same snapshot even if the source ref moves. Before the lifecycle
+    starts any mechanical effect or external session effect, Heddle durably
+    stores one resolved session binding containing the session and occurrence identity, selected
     alias, display-name snapshot, provider instance ID, driver kind, observed
     provider version, model slug, runtime mode, and interaction mode. It contains
     no credential or provider setting. If any valid initial lifecycle landing
