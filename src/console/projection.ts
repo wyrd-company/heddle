@@ -7,10 +7,7 @@ import type { BoardTask } from "../board-adapter/index.js";
 import type { PacingDeferral } from "../pacing/index.js";
 import type { ConsoleInstance } from "./types.js";
 
-export type ConsoleScope =
-  | { kind: "all" }
-  | { epicId: number; kind: "epic" }
-  | { kind: "task"; taskId: number };
+export type ConsoleScope = { kind: "all" } | { epicId: number; kind: "epic" };
 
 export interface PublicBoardTask {
   blocked: boolean;
@@ -58,7 +55,7 @@ export interface KanbanProjection {
 
 export class ConsoleScopeError extends Error {}
 
-const scopedId = /^(epic|task):([1-9][0-9]*)$/;
+const scopedId = /^epic:([1-9][0-9]*)$/;
 
 export const parseConsoleScope = (value: string | null): ConsoleScope => {
   if (value === null || value === "" || value === "all") {
@@ -66,15 +63,13 @@ export const parseConsoleScope = (value: string | null): ConsoleScope => {
   }
   const match = scopedId.exec(value);
   if (match === null) {
-    throw new Error("scope must be all, epic:<id>, or task:<id>");
+    throw new Error("scope must be all or epic:<id>");
   }
-  const id = Number(match[2]);
+  const id = Number(match[1]);
   if (!Number.isSafeInteger(id)) {
     throw new Error("scope id must be a safe integer");
   }
-  return match[1] === "epic"
-    ? { epicId: id, kind: "epic" }
-    : { kind: "task", taskId: id };
+  return { epicId: id, kind: "epic" };
 };
 
 export const serializeConsoleScope = (scope: ConsoleScope): string => {
@@ -83,8 +78,6 @@ export const serializeConsoleScope = (scope: ConsoleScope): string => {
       return "all";
     case "epic":
       return `epic:${scope.epicId}`;
-    case "task":
-      return `task:${scope.taskId}`;
   }
 };
 
@@ -110,14 +103,6 @@ export const projectTasksForScope = (
       return tasks.filter(
         ({ id, parent }) => id === scope.epicId || parent === scope.epicId,
       );
-    }
-    case "task": {
-      if (!tasks.some(({ id }) => id === scope.taskId)) {
-        throw new ConsoleScopeError(
-          `task scope ${scope.taskId} does not name an existing task`,
-        );
-      }
-      return tasks.filter(({ id }) => id === scope.taskId);
     }
   }
 };

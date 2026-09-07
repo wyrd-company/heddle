@@ -114,11 +114,13 @@ describe("kanban console projection", () => {
         },
       ],
       now: 121_000,
-      scope: { kind: "task", taskId: 42 },
+      scope: { kind: "all" },
       statuses: ["todo", "in-progress", "done"],
       tasks,
     });
-    expect(futureStage.columns[1]?.tasks[0]).toMatchObject({
+    expect(
+      futureStage.columns[1]?.tasks.find(({ id }) => id === 42),
+    ).toMatchObject({
       dwellMilliseconds: 0,
     });
   });
@@ -137,12 +139,12 @@ describe("kanban console projection", () => {
         },
       ],
       now: 121_000,
-      scope: { kind: "task", taskId: 43 },
+      scope: { kind: "all" },
       statuses: ["todo", "in-progress", "done"],
       tasks,
     });
 
-    expect(projection.columns[0]?.tasks).toEqual([
+    expect(projection.columns[0]?.tasks.find(({ id }) => id === 43)).toEqual(
       expect.objectContaining({
         deferral: {
           activeSessions: 2,
@@ -152,11 +154,13 @@ describe("kanban console projection", () => {
         instanceId: "instance-43",
         status: "todo",
       }),
-    ]);
-    expect(projection.columns[1]?.tasks).toEqual([]);
+    );
+    expect(projection.columns[1]?.tasks).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 43 })]),
+    );
   });
 
-  it("filters all, epic, and task scopes without changing board columns", () => {
+  it("filters all and epic scopes without changing board columns", () => {
     const project = (scope: ReturnType<typeof parseConsoleScope>) =>
       buildKanbanProjection({
         instances: [],
@@ -172,13 +176,15 @@ describe("kanban console projection", () => {
 
     expect(ids(parseConsoleScope("all"))).toEqual([43, 41, 42, 90]);
     expect(ids(parseConsoleScope("epic:41"))).toEqual([43, 41, 42]);
-    expect(ids(parseConsoleScope("task:42"))).toEqual([42]);
     expect(serializeConsoleScope(parseConsoleScope("epic:41"))).toBe("epic:41");
     expect(() => parseConsoleScope("epic:0")).toThrow(
-      "scope must be all, epic:<id>, or task:<id>",
+      "scope must be all or epic:<id>",
     );
-    expect(() => parseConsoleScope("task:99999999999999999")).toThrow(
+    expect(() => parseConsoleScope("epic:99999999999999999")).toThrow(
       "scope id must be a safe integer",
+    );
+    expect(() => parseConsoleScope("task:42")).toThrow(
+      "scope must be all or epic:<id>",
     );
   });
 
@@ -200,9 +206,6 @@ describe("kanban console projection", () => {
     );
     expect(() => project(parseConsoleScope("epic:999"))).toThrow(
       "epic scope 999 does not name an existing task",
-    );
-    expect(() => project(parseConsoleScope("task:999"))).toThrow(
-      "task scope 999 does not name an existing task",
     );
   });
 

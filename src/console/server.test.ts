@@ -628,16 +628,19 @@ stage: "inspect"
   });
 
   it("rejects semantic URL scopes before rendering a projection", async () => {
-    const [childAsEpicScope, missingEpicScope, missingTaskScope] =
+    const [childAsEpicScope, missingEpicScope, legacyTaskScope] =
       await Promise.all([
         globalThis.fetch(`${baseUrl}/api/projection?scope=epic:52`),
         globalThis.fetch(`${baseUrl}/api/projection?scope=epic:999`),
-        globalThis.fetch(`${baseUrl}/api/projection?scope=task:999`),
+        globalThis.fetch(`${baseUrl}/api/projection?scope=task:52`),
       ]);
 
     expect(childAsEpicScope.status).toBe(400);
     expect(missingEpicScope.status).toBe(400);
-    expect(missingTaskScope.status).toBe(400);
+    expect(legacyTaskScope.status).toBe(400);
+    await expect(legacyTaskScope.json()).resolves.toEqual({
+      error: "scope must be all or epic:<id>",
+    });
     expect(board.writes).toEqual([]);
   });
 
