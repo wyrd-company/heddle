@@ -428,7 +428,7 @@ describe("deployed configuration directory", () => {
     ).toThrow("providerUsage must be omitted");
   });
 
-  it("loads and preflights the existing optional timeout application", async () => {
+  it("loads and preflights optional launch preparation by open driver kind", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await prepareBlueprintRepository(root);
     const path = join(root, "config.yml");
@@ -443,22 +443,26 @@ describe("deployed configuration directory", () => {
         ...configuration,
         session: {
           ...configuration.session,
-          timeoutApplication: { executable },
+          launchPreparation: {
+            "sample-driver": { executable },
+          },
         },
       }),
     );
     const loaded = await loadDeploymentConfiguration(root);
-    expect(loaded.timeoutApplication).toEqual({
-      arguments: [],
-      executable,
-      timeoutMilliseconds: 10_000,
+    expect(loaded.launchPreparation).toEqual({
+      "sample-driver": {
+        arguments: [],
+        executable,
+        timeoutMilliseconds: 10_000,
+      },
     });
     expect(loaded.configuration.session).not.toHaveProperty(
-      "timeoutApplication",
+      "launchPreparation",
     );
   });
 
-  it("fails startup preflight when the timeout application is unavailable", async () => {
+  it("fails startup preflight when launch preparation is unavailable", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const path = join(root, "config.yml");
     const configuration = fixture(root);
@@ -469,13 +473,15 @@ describe("deployed configuration directory", () => {
         ...configuration,
         session: {
           ...configuration.session,
-          timeoutApplication: { executable },
+          launchPreparation: {
+            "sample-driver": { executable },
+          },
         },
       }),
     );
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `Configuration file '${path}' is invalid: session.timeoutApplication.executable '${executable}' must be an available executable file`,
+      `Configuration file '${path}' is invalid: session.launchPreparation.sample-driver.executable '${executable}' must be an available executable file`,
     );
   });
 

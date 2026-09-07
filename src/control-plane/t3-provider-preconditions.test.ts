@@ -1,18 +1,23 @@
 // ---
 // relationships:
 //   verifies: heddle
-//   references: cursor-headless
+//   references: t3-headless
 // ---
 
 import { describe, expect, it } from "vitest";
 
 import {
   assertT3ProviderDispatchPreconditions,
-  t3ProviderPreconditions,
   T3ProviderPreconditionError,
   type T3ProviderPreconditionReason,
-  type T3ProviderPreconditionTable,
 } from "./t3-provider-preconditions.js";
+
+const context = {
+  cliVersion: null,
+  driver: "new-driver",
+  lifecycle: "independent" as const,
+  providerInstanceId: "provider-alpha",
+};
 
 const expectReason = (
   operation: () => void,
@@ -29,149 +34,56 @@ const expectReason = (
 };
 
 describe("T3 provider dispatch preconditions", () => {
-  it("uses the injected table instead of driver constants", () => {
-    const table: T3ProviderPreconditionTable = {
-      configurable: {
-        "9.4.1": {
-          runtimeModes: ["review-required", "unattended"],
-          questionToolAvailable: true,
-        },
-      },
-    };
-
-    expect(() =>
-      assertT3ProviderDispatchPreconditions(
-        table,
-        {
-          driver: "configurable",
-          cliVersion: "9.4.1",
-          lifecycle: "assistive",
-        },
-        "unattended",
-      ),
-    ).not.toThrow();
-  });
-
-  it("keeps allowed runtime modes distinct by driver and CLI version", () => {
-    expect(
-      t3ProviderPreconditions["claudeAgent"]?.["2.1.250"]?.runtimeModes,
-    ).toEqual(["auto-accept-edits"]);
-    expect(
-      t3ProviderPreconditions["cursor"]?.["2026.08.11-e8db854"]?.runtimeModes,
-    ).toEqual(["auto"]);
-    expect(
-      t3ProviderPreconditions["cursor"]?.["2026.08.25-3e8eec8"]?.runtimeModes,
-    ).toEqual(["auto", "full-access"]);
-  });
-
-  it.each(["auto", "full-access"])(
-    "allows qualified Cursor mode %s",
+  it.each(["approval-required", "auto-accept-edits", "auto", "full-access"])(
+    "allows exact T3 runtime mode %s for an open driver",
     (runtimeMode) => {
       expect(() =>
         assertT3ProviderDispatchPreconditions(
-          t3ProviderPreconditions,
-          {
-            driver: "cursor",
-            cliVersion: "2026.08.25-3e8eec8",
-            lifecycle: "independent",
-          },
+          context,
           runtimeMode,
+          "provider-alpha",
         ),
       ).not.toThrow();
     },
   );
 
-  it.each<{
-    context:
-      | {
-          cliVersion: string;
-          driver: string;
-          lifecycle: "assistive" | "independent";
-        }
-      | undefined;
-    reason: T3ProviderPreconditionReason;
-    runtimeMode: string;
-  }>([
-    {
-      context: undefined,
-      runtimeMode: "auto",
-      reason: "provider-context-required",
-    },
-    {
-      context: {
-        driver: "unconfigured",
-        cliVersion: "1.0.0",
-        lifecycle: "independent",
-      },
-      runtimeMode: "auto",
-      reason: "provider-not-configured",
-    },
-    {
-      context: {
-        driver: "cursor",
-        cliVersion: "2026.09.01-unknown",
-        lifecycle: "independent",
-      },
-      runtimeMode: "auto",
-      reason: "provider-cli-version-not-configured",
-    },
-    {
-      context: {
-        driver: "claudeAgent",
-        cliVersion: "2.1.250",
-        lifecycle: "independent",
-      },
-      runtimeMode: "auto",
-      reason: "provider-runtime-mode-mismatch",
-    },
-    {
-      context: {
-        driver: "cursor",
-        cliVersion: "2026.08.11-e8db854",
-        lifecycle: "assistive",
-      },
-      runtimeMode: "auto",
-      reason: "provider-question-tool-unavailable",
-    },
-  ])("rejects $reason", ({ context, reason, runtimeMode }) => {
+  it("does not use driver kind or observed CLI version as an allowlist", () => {
+    expect(() =>
+      assertT3ProviderDispatchPreconditions(
+        {
+          cliVersion: "unobserved-version",
+          driver: "catalog-defined-driver",
+          lifecycle: "assistive",
+          providerInstanceId: "provider-beta",
+        },
+        "full-access",
+        "provider-beta",
+      ),
+    ).not.toThrow();
+  });
+
+  it("requires provider context", () => {
+    expectReason(
+      () => assertT3ProviderDispatchPreconditions(undefined, "auto"),
+      "provider-context-required",
+    );
+  });
+
+  it("requires the selected provider instance to match its context", () => {
+    expectReason(
+      () =>
+        assertT3ProviderDispatchPreconditions(context, "auto", "provider-beta"),
+      "provider-instance-mismatch",
+    );
+  });
+
+  it("rejects runtime modes outside T3's exact vocabulary", () => {
     expectReason(
       () =>
         assertT3ProviderDispatchPreconditions(
-          t3ProviderPreconditions,
           context,
-          runtimeMode,
-        ),
-      reason,
-    );
-  });
-
-  it("rejects full access for the earlier Cursor version", () => {
-    expectReason(
-      () =>
-        assertT3ProviderDispatchPreconditions(
-          t3ProviderPreconditions,
-          {
-            driver: "cursor",
-            cliVersion: "2026.08.11-e8db854",
-            lifecycle: "independent",
-          },
-          "full-access",
-        ),
-      "provider-runtime-mode-mismatch",
-    );
-  });
-
-  it("rejects an unsupported mode for the qualified Cursor version", () => {
-    expectReason(
-      () =>
-        assertT3ProviderDispatchPreconditions(
-          t3ProviderPreconditions,
-          {
-            driver: "cursor",
-            cliVersion: "2026.08.25-3e8eec8",
-            lifecycle: "independent",
-          },
-          "approval-required",
+          "unrecognized-mode",
+          "provider-alpha",
         ),
       "provider-runtime-mode-mismatch",
     );

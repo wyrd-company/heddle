@@ -49,11 +49,11 @@ const providerUsageSource = (
     : new ExecutableProviderUsageSource(loaded.providerUsage);
 
 const t3Client = (loaded: LoadedDeploymentConfiguration): ProductionT3Client =>
-  loaded.timeoutApplication === undefined
+  loaded.launchPreparation === undefined
     ? new T3ControlPlaneClient(loaded.configuration.t3)
     : new ConfiguredT3ControlPlaneClient(
         loaded.configuration.t3,
-        loaded.timeoutApplication,
+        loaded.launchPreparation,
       );
 
 const configuredCompositionInputs = async (
@@ -79,19 +79,6 @@ const configuredCompositionInputs = async (
     loaded.configuration,
     providerResolver,
   );
-  const driverKind = configuration.session.defaultSelection.driverKind;
-  const requiresTimeoutApplication =
-    driverKind === "codex" || driverKind === "claudeAgent";
-  if (
-    requiresTimeoutApplication !==
-    (loaded.timeoutApplication !== undefined)
-  ) {
-    throw new TypeError(
-      requiresTimeoutApplication
-        ? `session.timeoutApplication is required for driver '${driverKind}'`
-        : `session.timeoutApplication must be omitted for driver '${driverKind}'`,
-    );
-  }
   return { configuration, t3 };
 };
 

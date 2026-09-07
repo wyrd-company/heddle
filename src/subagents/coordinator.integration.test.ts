@@ -28,6 +28,7 @@ const providerContext = {
   cliVersion: "2026.08.11-e8db854",
   driver: "cursor",
   lifecycle: "independent" as const,
+  providerInstanceId: "cursor",
 };
 
 const waitForServer = async (baseUrl: string): Promise<void> => {

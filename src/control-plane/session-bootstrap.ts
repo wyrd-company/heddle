@@ -36,7 +36,7 @@ import {
   renderStageHandoff,
   resolveEffectiveHandoffDriver,
   resolveHandoffAuthenticationBinding,
-  type MeasuredHandoffDriver,
+  type HandoffDriver,
 } from "./handoff-renderer.js";
 import {
   type PinnedHandoffTemplate,
@@ -313,7 +313,7 @@ const ensureStoredHandoff = async (
   resolveStageContract: WorkflowMcpStageContractResolver,
   instantiate: typeof instantiateTodoList,
   templateAuthority: SessionTemplateAuthority,
-  effectiveDriver: MeasuredHandoffDriver,
+  effectiveDriver: HandoffDriver,
   resolveSystemPrompt: SystemPromptResolver,
 ): Promise<{
   handoff: string;
@@ -578,6 +578,7 @@ export const bootstrapStageSession = async (
   const effectiveDriver = resolveEffectiveHandoffDriver(
     input.modelSelection.instanceId,
     input.providerContext.driver,
+    input.providerContext.providerInstanceId,
   );
   const workflowMcpEndpoint = requireWorkflowMcpEndpoint(
     dependencies.workflowMcpEndpoint,
@@ -626,6 +627,7 @@ export const bootstrapStageSession = async (
   await applyHarnessToolTimeoutBeforeThread({
     consumer: dependencies.t3.applyHarnessToolTimeout,
     driver: effectiveDriver,
+    providerInstanceId: input.modelSelection.instanceId,
     sessionKey: input.sessionKey,
     threadId,
     worktreePath: worktree.path,

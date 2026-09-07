@@ -216,25 +216,29 @@
         },
         "interactionMode": { "type": "string", "minLength": 1 },
         "skillPointer": { "type": "string", "minLength": 1 },
-        "timeoutApplication": {
+        "launchPreparation": {
           "type": "object",
-          "additionalProperties": false,
-          "required": ["executable"],
-          "properties": {
-            "arguments": {
-              "type": "array",
-              "default": [],
-              "items": {
-                "type": "string",
-                "pattern": "^[^\\u0000]*$"
+          "propertyNames": { "minLength": 1, "pattern": "\\S" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["executable"],
+            "properties": {
+              "arguments": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "type": "string",
+                  "pattern": "^[^\\u0000]*$"
+                }
+              },
+              "executable": { "type": "string", "pattern": "^/" },
+              "timeoutMilliseconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60000,
+                "default": 10000
               }
-            },
-            "executable": { "type": "string", "pattern": "^/" },
-            "timeoutMilliseconds": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 60000,
-              "default": 10000
             }
           }
         },

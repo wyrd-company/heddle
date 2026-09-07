@@ -209,6 +209,27 @@ describe("production subagent composition", () => {
   it("uses a delegated provider and model through shared pacing and bootstrap", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
+    fixture.configuration.providerAliases.secondary = {
+      model: "sample-model",
+      providerDisplayName: "Workbench Beta",
+    };
+    fixture.configuration.session.resolvedSelections = [
+      ...fixture.configuration.session.resolvedSelections,
+      {
+        alias: "secondary",
+        driverKind: "cursor",
+        interactionMode: "default",
+        model: {
+          isCustom: false,
+          name: "Sample Model",
+          slug: "sample-model",
+        },
+        observedCliVersion: "catalog-version-secondary",
+        providerDisplayName: "Workbench Beta",
+        providerInstanceId: "provider-beta",
+        runtimeMode: "auto-accept-edits",
+      },
+    ];
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -231,11 +252,11 @@ describe("production subagent composition", () => {
     const spawned = await composition.subagents.spawn(parent, {
       model: "sample-model",
       operationId: "delegated-provider",
-      provider: "cursor",
+      provider: "provider-beta",
       rootItemId: "deliver",
     });
     expect(spawned).toMatchObject({
-      assignment: { model: "sample-model", provider: "cursor" },
+      assignment: { model: "sample-model", provider: "provider-beta" },
       kind: "spawned",
     });
     if (spawned.kind !== "spawned") throw new Error("Child was deferred");
@@ -250,7 +271,7 @@ describe("production subagent composition", () => {
       expect.arrayContaining([
         expect.objectContaining({
           model: "sample-model",
-          provider: "cursor",
+          provider: "provider-beta",
           sessionKey: spawned.assignment.sessionKey,
         }),
       ]),
@@ -259,11 +280,29 @@ describe("production subagent composition", () => {
       expect.arrayContaining([
         expect.objectContaining({
           modelSelection: {
-            instanceId: "cursor",
+            instanceId: "provider-beta",
             model: "sample-model",
           },
           threadId: spawned.assignment.threadId,
           type: "thread.create",
+        }),
+      ]),
+    );
+    expect(t3.timeouts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          driver: "cursor",
+          providerInstanceId: "provider-beta",
+          threadId: spawned.assignment.threadId,
+        }),
+      ]),
+    );
+    expect(t3.providerContexts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cliVersion: "catalog-version-secondary",
+          driver: "cursor",
+          providerInstanceId: "provider-beta",
         }),
       ]),
     );

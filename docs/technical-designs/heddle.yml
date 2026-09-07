@@ -566,7 +566,9 @@ proposed-design:
     `MCP_TOOL_TIMEOUT=100000000` milliseconds. The absence of an adapter never
     makes an otherwise unknown driver unsupported by Heddle. Every driver
     requires successful workflow MCP provider-session registration after
-    launch preparation, when configured, and before thread creation. The
+    launch preparation, when configured, and before thread creation. Launch
+    preparation is selected by driver kind; thread dispatch remains routed by
+    the resolved provider instance ID. The
     workflow MCP handler negotiates no protocol newer than 2025-11-25, advertises
     no Tasks capability, and returns ordinary tool results rather than
     `InputRequiredResult`.

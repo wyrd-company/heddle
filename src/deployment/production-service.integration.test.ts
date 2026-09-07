@@ -148,7 +148,7 @@ const acceptProviderCatalogSocket = (
                 driver: "claudeAgent",
                 enabled: true,
                 installed: true,
-                instanceId: "claudeAgent",
+                instanceId: "provider-alpha",
                 models: [
                   {
                     isCustom: false,
@@ -307,20 +307,26 @@ describe("configured production service entry point", () => {
     await closeServer(portProbe);
     const { defaultProvider: _defaultProvider, ...configuredPacing } =
       fixture.configuration.pacing;
-    const { defaultSelection: _defaultSelection, ...configuredSession } =
-      fixture.configuration.session;
+    const {
+      defaultSelection: _defaultSelection,
+      resolvedSelections: _resolvedSelections,
+      ...configuredSession
+    } = fixture.configuration.session;
     void _defaultProvider;
     void _defaultSelection;
+    void _resolvedSelections;
     const configured = {
       ...fixture.configuration,
       pacing: configuredPacing,
       server: { host: "127.0.0.1", port: servicePort },
       session: {
         ...configuredSession,
-        timeoutApplication: {
-          arguments: [timeoutScript, timeoutRequestPath, orderPath],
-          executable: process.execPath,
-          timeoutMilliseconds: 2_000,
+        launchPreparation: {
+          claudeAgent: {
+            arguments: [timeoutScript, timeoutRequestPath, orderPath],
+            executable: process.execPath,
+            timeoutMilliseconds: 2_000,
+          },
         },
       },
       t3: {
@@ -389,12 +395,19 @@ describe("configured production service entry point", () => {
         environment: { MCP_TOOL_TIMEOUT: "100000000" },
       },
       driver: "claudeAgent",
+      providerInstanceId: "provider-alpha",
       version: 1,
     });
     expect(commands.map((command) => command["type"]).slice(0, 2)).toEqual([
       "thread.create",
       "thread.turn.start",
     ]);
+    expect(commands[1]).toMatchObject({
+      modelSelection: {
+        instanceId: "provider-alpha",
+        model: "sample-model",
+      },
+    });
 
     const database = new Database(
       join(fixture.configuration.stateDirectory, "heddle-state.sqlite"),

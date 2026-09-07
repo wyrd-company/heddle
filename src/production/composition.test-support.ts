@@ -12,6 +12,7 @@ import { promisify } from "node:util";
 import type {
   HarnessToolTimeoutLaunchInput,
   T3DispatchCommand,
+  T3ProviderDispatchContext,
   T3WorkflowMcpProviderSession,
 } from "../control-plane/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
@@ -72,6 +73,7 @@ export class SyntheticT3 implements ProductionT3Client {
     threadId: string;
   }> = [];
   readonly commands: T3DispatchCommand[] = [];
+  readonly providerContexts: T3ProviderDispatchContext[] = [];
   readonly mcpRegistrations: T3WorkflowMcpProviderSession[] = [];
   readonly timeouts: HarnessToolTimeoutLaunchInput[] = [];
   readonly threads = new Set<string>();
@@ -88,8 +90,14 @@ export class SyntheticT3 implements ProductionT3Client {
     this.timeouts.push(input);
   }
 
-  async dispatch(command: T3DispatchCommand): Promise<{ sequence: number }> {
+  async dispatch(
+    command: T3DispatchCommand,
+    providerContext?: T3ProviderDispatchContext,
+  ): Promise<{ sequence: number }> {
     this.commands.push(globalThis.structuredClone(command));
+    if (providerContext !== undefined) {
+      this.providerContexts.push(globalThis.structuredClone(providerContext));
+    }
     if (command.type === "thread.create" && command.threadId !== undefined) {
       this.threads.add(command.threadId);
     }
@@ -556,6 +564,22 @@ next_id: 1
             providerInstanceId: "codex",
             runtimeMode: "auto-accept-edits",
           },
+          resolvedSelections: [
+            {
+              alias: "primary",
+              driverKind: "codex",
+              interactionMode: "default",
+              model: {
+                isCustom: false,
+                name: "Sample Model",
+                slug: "sample-model",
+              },
+              observedCliVersion: "0.91.0",
+              providerDisplayName: "Workbench Alpha",
+              providerInstanceId: "codex",
+              runtimeMode: "auto-accept-edits",
+            },
+          ],
           interactionMode: "default",
           skillPointer: "skill://sample",
           worktreesRoot: join(root, "worktrees"),

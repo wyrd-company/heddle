@@ -35,18 +35,10 @@ export type HandoffRenderInput = {
   template: PinnedHandoffTemplate;
 };
 
-export const measuredMcpDrivers = [
-  "claudeAgent",
-  "codex",
-  "cursor",
-  "grok",
-  "opencode",
-] as const;
-
-export type MeasuredHandoffDriver = (typeof measuredMcpDrivers)[number];
+export type HandoffDriver = string;
 
 export type HandoffAuthenticationBinding = {
-  driver: MeasuredHandoffDriver;
+  driver: HandoffDriver;
   format: "heddle.handoff-authentication-binding";
   policy: "external-provider-session-v1";
   version: 1;
@@ -59,7 +51,8 @@ export const isHandoffAuthenticationBinding = (
   value !== null &&
   !Array.isArray(value) &&
   Object.keys(value).length === 4 &&
-  measuredMcpDrivers.some((driver) => value["driver"] === driver) &&
+  typeof value["driver"] === "string" &&
+  value["driver"].trim() !== "" &&
   value["format"] === "heddle.handoff-authentication-binding" &&
   value["policy"] === "external-provider-session-v1" &&
   value["version"] === 1;
@@ -67,13 +60,11 @@ export const isHandoffAuthenticationBinding = (
 export const resolveHandoffAuthenticationBinding = (
   driver: string,
 ): HandoffAuthenticationBinding => {
-  if (!measuredMcpDrivers.some((measuredDriver) => measuredDriver === driver)) {
-    throw new HandoffRenderError(
-      `Driver '${driver}' has no measured Heddle MCP authentication policy`,
-    );
+  if (driver.trim() === "") {
+    throw new HandoffRenderError("T3 driver kind must not be empty");
   }
   return {
-    driver: driver as HandoffAuthenticationBinding["driver"],
+    driver,
     format: "heddle.handoff-authentication-binding",
     policy: "external-provider-session-v1",
     version: 1,
@@ -83,19 +74,14 @@ export const resolveHandoffAuthenticationBinding = (
 export const resolveEffectiveHandoffDriver = (
   modelSelectionInstanceId: string,
   providerContextDriver: string,
-): MeasuredHandoffDriver => {
-  const selected = resolveHandoffAuthenticationBinding(
-    modelSelectionInstanceId,
-  ).driver;
-  const contextual = resolveHandoffAuthenticationBinding(
-    providerContextDriver,
-  ).driver;
-  if (selected !== contextual) {
+  providerContextInstanceId: string,
+): HandoffDriver => {
+  if (modelSelectionInstanceId !== providerContextInstanceId) {
     throw new HandoffRenderError(
-      "T3 model selection and provider context must name the same measured Heddle MCP authentication driver",
+      "T3 model selection and provider context must name the same provider instance",
     );
   }
-  return selected;
+  return resolveHandoffAuthenticationBinding(providerContextDriver).driver;
 };
 
 export const handoffAuthenticationBindingsAgree = (

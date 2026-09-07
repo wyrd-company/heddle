@@ -412,10 +412,16 @@ describe("renderStageHandoff", () => {
     ).toThrow("Handoff template body contains the correlation token");
   });
 
-  it("fails closed for a driver without a measured authentication policy", () => {
-    expect(() =>
-      renderStageHandoff(input({ driver: "sample-driver" })),
-    ).toThrow("has no measured Heddle MCP authentication policy");
+  it("binds an open driver kind without exposing the registration token", () => {
+    const rendered = renderStageHandoff(input({ driver: "sample-driver" }));
+
+    expect(rendered).not.toContain("opaque-fallback-token");
+  });
+
+  it("rejects an empty driver kind", () => {
+    expect(() => renderStageHandoff(input({ driver: "" }))).toThrow(
+      "T3 driver kind must not be empty",
+    );
   });
 });
 

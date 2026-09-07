@@ -183,6 +183,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
       cliVersion: "2026.08.11-e8db854",
       driver: "cursor",
       lifecycle: "independent" as const,
+      providerInstanceId: "cursor",
     };
     const session = await bootstrapStageSession(
       {

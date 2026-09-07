@@ -32,6 +32,7 @@ const input: SessionBootstrapInput = {
     cliVersion: "2026.08.11-e8db854",
     driver: "cursor",
     lifecycle: "independent",
+    providerInstanceId: "cursor",
   },
   runtimeMode: "auto",
   sessionKey: "prepare-1",
@@ -191,7 +192,7 @@ describe("stage session cold retry guards", () => {
     expect(error).toBeInstanceOf(HandoffRenderError);
     expect(error).toMatchObject({
       message: expect.stringContaining(
-        "model selection and provider context must name the same measured",
+        "model selection and provider context must name the same provider instance",
       ),
     });
     expect(ensureWorktree).not.toHaveBeenCalled();
@@ -833,15 +834,15 @@ describe("stage session cold retry guards", () => {
           {
             ...input,
             modelSelection: { ...input.modelSelection, instanceId: driver },
-            providerContext: { ...input.providerContext, driver },
+            providerContext: {
+              ...input.providerContext,
+              driver,
+              providerInstanceId: driver,
+            },
           },
           dependencies,
         ),
-      ).rejects.toThrow(
-        driver === "sample-driver"
-          ? /no measured Heddle MCP authentication policy/
-          : /authentication binding is incompatible/,
-      );
+      ).rejects.toThrow(/authentication binding is incompatible/);
       expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
       expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
     },

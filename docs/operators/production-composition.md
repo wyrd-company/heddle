@@ -444,7 +444,9 @@ The production catalog configures Codex with
 `tool_timeout_sec = 100000` and Claude Code with
 `MCP_TOOL_TIMEOUT=100000000` milliseconds. A driver without a configured entry
 skips this Heddle-specific preparation; it is not rejected by a Heddle roster.
-T3 owns provider CLI authentication and launch configuration.
+The map key selects preparation only; the resolved provider instance ID still
+routes the T3 thread. T3 owns provider CLI authentication and launch
+configuration.
 
 For example, a production timeout-preparation catalog can contain:
 

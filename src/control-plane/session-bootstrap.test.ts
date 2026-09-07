@@ -29,7 +29,6 @@ import {
   sampleHandoffTemplate,
   sampleTemplateAuthority,
 } from "./session-bootstrap.test-support.js";
-import { measuredMcpDrivers } from "./handoff-renderer.js";
 
 const initialState = (): InstanceState => ({
   correlationTokens: {},
@@ -67,9 +66,7 @@ const instantiateTodoList: NonNullable<
 const scratchDirectories: string[] = [];
 const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
 const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
-const measuredDriversWithoutToolTimeout = measuredMcpDrivers.filter(
-  (driver) => driver !== "claudeAgent" && driver !== "codex",
-);
+const driversWithoutBuiltInToolTimeout = ["cursor", "grok", "opencode"];
 
 afterEach(async () => {
   await Promise.all(
@@ -151,6 +148,7 @@ describe("stage session bootstrap", () => {
             cliVersion: "test-version",
             driver,
             lifecycle: "independent",
+            providerInstanceId: driver,
           },
           runtimeMode: "default",
           sessionKey: "prepare-launch",
@@ -201,6 +199,7 @@ describe("stage session bootstrap", () => {
       expect(applyHarnessToolTimeout).toHaveBeenCalledWith({
         configuration: expected,
         driver,
+        providerInstanceId: driver,
         sessionKey: "prepare-launch",
         threadId: "thread-launch",
         worktreePath: "/workspaces/worktrees/sample-repository/task-prepare",
@@ -214,7 +213,7 @@ describe("stage session bootstrap", () => {
     },
   );
 
-  it.each(measuredDriversWithoutToolTimeout)(
+  it.each(driversWithoutBuiltInToolTimeout)(
     "registers workflow MCP for %s without applying a harness timeout",
     async (driver) => {
       let record: InstanceRecord = {
@@ -250,6 +249,7 @@ describe("stage session bootstrap", () => {
             cliVersion: "test-version",
             driver,
             lifecycle: "independent",
+            providerInstanceId: driver,
           },
           runtimeMode: "default",
           sessionKey: "prepare-registration",
@@ -331,6 +331,7 @@ describe("stage session bootstrap", () => {
             cliVersion: "test-version",
             driver: "cursor",
             lifecycle: "independent",
+            providerInstanceId: "cursor",
           },
           runtimeMode: "default",
           sessionKey: "prepare-registration-failure",
@@ -369,62 +370,6 @@ describe("stage session bootstrap", () => {
       ),
     ).rejects.toThrow("synthetic registration rejection");
     expect(registerWorkflowMcpProviderSession).toHaveBeenCalledTimes(1);
-    expect(dispatch).not.toHaveBeenCalled();
-  });
-
-  it("rejects an unmeasured driver before worktree or T3 effects", async () => {
-    const ensureWorktree = vi.fn();
-    const dispatch = vi.fn();
-    const registerWorkflowMcpProviderSession = vi.fn();
-
-    await expect(
-      bootstrapStageSession(
-        {
-          handoff: {
-            skillPointer: "skill://prepare",
-            stage: {
-              kind: "standard",
-              name: "prepare",
-              priorStageOutputs: [],
-            },
-            taskContract: { title: "Prepare inventory" },
-          },
-          instanceId: "instance-unmeasured",
-          interactionMode: "default",
-          modelSelection: { instanceId: "sample-driver", model: "default" },
-          projectId: "project-unmeasured",
-          providerContext: {
-            cliVersion: "test-version",
-            driver: "sample-driver",
-            lifecycle: "independent",
-          },
-          runtimeMode: "default",
-          sessionKey: "prepare-unmeasured",
-          task: { id: 1, title: "Prepare inventory" },
-          taskId: 1,
-          title: "Prepare inventory",
-          worktree: {
-            baseRef: "main",
-            branch: "task/prepare",
-            repositoryName: "sample-repository",
-            repositoryRoot: "/workspaces/sample-repository",
-            worktreeName: "task-prepare",
-          },
-        },
-        {
-          ensureWorktree,
-          persistence: {
-            compareAndSwapInstance: vi.fn(),
-            getInstance: vi.fn(),
-            listInstances: vi.fn(),
-          },
-          t3: { dispatch, registerWorkflowMcpProviderSession },
-          workflowMcpEndpoint,
-        },
-      ),
-    ).rejects.toThrow("has no measured Heddle MCP authentication policy");
-    expect(ensureWorktree).not.toHaveBeenCalled();
-    expect(registerWorkflowMcpProviderSession).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
   });
 
@@ -472,6 +417,7 @@ describe("stage session bootstrap", () => {
               cliVersion: "test-version",
               driver: "cursor",
               lifecycle: "independent",
+              providerInstanceId: "cursor",
             },
             runtimeMode: "default",
             sessionKey: "prepare-invalid-endpoint",
@@ -504,14 +450,15 @@ describe("stage session bootstrap", () => {
     },
   );
 
-  it("rejects a driver without measured launch preparation", () => {
-    expect(() =>
-      harnessToolTimeoutLaunchConfiguration("sample-driver"),
-    ).toThrow("Provider 'sample-driver' has no measured launch preparation");
+  it("supplies an empty launch configuration for an open driver", () => {
+    expect(harnessToolTimeoutLaunchConfiguration("sample-driver")).toEqual({
+      configuration: {},
+      driver: "sample-driver",
+    });
   });
 
   it.each(["codex", "claudeAgent"])(
-    "rejects $driver before thread creation without a timeout consumer",
+    "does not reject $driver when no launch-preparation entry is configured",
     async (driver) => {
       let record: InstanceRecord = {
         instanceId: "instance-missing-consumer",
@@ -540,6 +487,7 @@ describe("stage session bootstrap", () => {
               cliVersion: "test-version",
               driver,
               lifecycle: "independent",
+              providerInstanceId: driver,
             },
             runtimeMode: "default",
             sessionKey: "prepare-missing-consumer",
@@ -575,8 +523,10 @@ describe("stage session bootstrap", () => {
             t3: { registerWorkflowMcpProviderSession, dispatch },
           },
         ),
-      ).rejects.toThrow(/tool timeout application is required/);
-      expect(dispatch).not.toHaveBeenCalled();
+      ).resolves.toEqual(
+        expect.objectContaining({ threadId: expect.any(String) }),
+      );
+      expect(dispatch).toHaveBeenCalledTimes(2);
     },
   );
 
@@ -648,6 +598,7 @@ describe("stage session bootstrap", () => {
         cliVersion: "2026.08.11-e8db854",
         driver: "cursor",
         lifecycle: "independent" as const,
+        providerInstanceId: "cursor",
       },
       runtimeMode: "auto",
       sessionKey: "prepare-1",
@@ -729,6 +680,7 @@ describe("stage session bootstrap", () => {
         cliVersion: "sample-version",
         driver: "cursor",
         lifecycle: "independent" as const,
+        providerInstanceId: "cursor",
       },
       runtimeMode: "auto",
       sessionKey: "prepare-delegated",
@@ -821,6 +773,7 @@ describe("stage session bootstrap", () => {
         cliVersion: "sample-version",
         driver: "cursor",
         lifecycle: "independent" as const,
+        providerInstanceId: "cursor",
       },
       runtimeMode: "auto",
       sessionKey: "prepare-activation",
@@ -908,6 +861,7 @@ describe("stage session bootstrap", () => {
           cliVersion: "2026.08.11-e8db854",
           driver: "cursor",
           lifecycle: "independent",
+          providerInstanceId: "cursor",
         },
         runtimeMode: "auto",
         threadId: "thread-1",
@@ -979,6 +933,7 @@ describe("stage session bootstrap", () => {
           cliVersion: "2026.08.11-e8db854",
           driver: "cursor",
           lifecycle: "independent",
+          providerInstanceId: "cursor",
         },
         runtimeMode: "auto",
         sessionKey: "prepare-1",

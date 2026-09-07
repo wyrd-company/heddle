@@ -87,6 +87,21 @@ const uniqueTarget = (
   return matches[0]!;
 };
 
+const resolvedSelectionFor = (
+  configuration: ResolvedProductionConfiguration,
+  providerInstanceId: string,
+) => {
+  const selection = configuration.session.resolvedSelections.find(
+    (candidate) => candidate.providerInstanceId === providerInstanceId,
+  );
+  if (selection === undefined) {
+    throw new Error(
+      `Provider instance '${providerInstanceId}' has no resolved startup selection`,
+    );
+  }
+  return selection;
+};
+
 export const productionSessionTargets = (
   persistence: SqlitePersistence,
 ): SessionObservationTarget[] => {
@@ -237,7 +252,7 @@ export const createProductionSubagentCoordinator = (options: {
       const taskId = runtimes[0]!.taskId;
       const task = await board.readTask(taskId);
       const session = configuration.session;
-      const selection = session.defaultSelection;
+      const selection = resolvedSelectionFor(configuration, provider);
       const route = parentSessionRoute(persistence, binding.sessionKey);
       const repository = configuration.products
         .flatMap(({ repos }) => repos)
@@ -250,9 +265,10 @@ export const createProductionSubagentCoordinator = (options: {
         modelSelection: { instanceId: provider, model },
         projectId: route.projectId,
         providerContext: {
-          cliVersion: selection.observedCliVersion ?? "",
-          driver: provider,
+          cliVersion: selection.observedCliVersion,
+          driver: selection.driverKind,
           lifecycle: "independent",
+          providerInstanceId: provider,
         },
         runtimeMode: selection.runtimeMode,
         task: task.frontMatter,
@@ -288,8 +304,10 @@ export const createProductionSubagentCoordinator = (options: {
       if (notice === undefined) {
         throw new Error("Subagent stop has no durable notification intent");
       }
-      const session = configuration.session;
-      const selection = session.defaultSelection;
+      const selection = resolvedSelectionFor(
+        configuration,
+        assignment.provider,
+      );
       await steerStageSession(
         {
           commandId: notice.commandId,
@@ -298,9 +316,10 @@ export const createProductionSubagentCoordinator = (options: {
           message,
           messageId: notice.messageId,
           providerContext: {
-            cliVersion: selection.observedCliVersion ?? "",
-            driver: assignment.provider,
+            cliVersion: selection.observedCliVersion,
+            driver: selection.driverKind,
             lifecycle: "independent",
+            providerInstanceId: assignment.provider,
           },
           runtimeMode: selection.runtimeMode,
           threadId: assignment.parentThreadId,

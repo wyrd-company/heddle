@@ -88,6 +88,22 @@ const configuration: ResolvedProductionConfiguration = {
       providerInstanceId: "codex",
       runtimeMode: "auto-accept-edits",
     },
+    resolvedSelections: [
+      {
+        alias: "primary",
+        driverKind: "codex",
+        interactionMode: "default",
+        model: {
+          isCustom: false,
+          name: "Sample Model",
+          slug: "sample-model",
+        },
+        observedCliVersion: "0.91.0",
+        providerDisplayName: "Workbench Alpha",
+        providerInstanceId: "codex",
+        runtimeMode: "auto-accept-edits",
+      },
+    ],
     interactionMode: "default",
     skillPointer: "skill://sample",
   },

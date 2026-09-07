@@ -137,7 +137,7 @@ describe("T3ControlPlaneClient preconditions", () => {
     ).rejects.toThrow("Dispatch 'thread.approval.respond' requires requestId");
   });
 
-  it("blocks provider dispatch before contacting T3 and names the reason", async () => {
+  it("blocks an invalid runtime mode before contacting T3", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const client = new T3ControlPlaneClient({
       baseUrl: "http://t3.test",
@@ -151,19 +151,20 @@ describe("T3ControlPlaneClient preconditions", () => {
           type: "thread.turn.start",
           commandId: "command-1",
           threadId: "thread-1",
-          runtimeMode: "auto",
+          runtimeMode: "invalid",
         },
         {
-          driver: "cursor",
-          cliVersion: "2026.08.11-e8db854",
+          driver: "catalog-driver",
+          cliVersion: null,
           lifecycle: "assistive",
+          providerInstanceId: "provider-alpha",
         },
       ),
-    ).rejects.toMatchObject({ reason: "provider-question-tool-unavailable" });
+    ).rejects.toMatchObject({ reason: "provider-runtime-mode-mismatch" });
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("dispatches full-access turns for the qualified Cursor version", async () => {
+  it("dispatches full-access turns for a catalog-defined driver and version", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(jsonResponse({ threads: [{ id: "thread-1" }] }))
@@ -180,20 +181,24 @@ describe("T3ControlPlaneClient preconditions", () => {
           type: "thread.turn.start",
           commandId: "command-1",
           threadId: "thread-1",
-          modelSelection: { instanceId: "cursor", model: "sample-model" },
+          modelSelection: {
+            instanceId: "provider-alpha",
+            model: "sample-model",
+          },
           runtimeMode: "full-access",
         },
         {
-          driver: "cursor",
-          cliVersion: "2026.08.25-3e8eec8",
+          driver: "catalog-driver",
+          cliVersion: "unobserved-version",
           lifecycle: "independent",
+          providerInstanceId: "provider-alpha",
         },
       ),
     ).resolves.toEqual({ sequence: 1 });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects cross-driver provider context before contacting T3", async () => {
+  it("rejects mismatched provider instance context before contacting T3", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(jsonResponse({ threads: [{ id: "thread-1" }] }))
@@ -210,16 +215,17 @@ describe("T3ControlPlaneClient preconditions", () => {
           type: "thread.turn.start",
           commandId: "command-1",
           threadId: "thread-1",
-          modelSelection: { instanceId: "cursor", model: "default" },
+          modelSelection: { instanceId: "provider-alpha", model: "default" },
           runtimeMode: "auto-accept-edits",
         },
         {
           driver: "claudeAgent",
           cliVersion: "2.1.250",
           lifecycle: "assistive",
+          providerInstanceId: "provider-beta",
         },
       ),
-    ).rejects.toMatchObject({ reason: "provider-driver-mismatch" });
+    ).rejects.toMatchObject({ reason: "provider-instance-mismatch" });
     expect(fetch).not.toHaveBeenCalled();
   });
 

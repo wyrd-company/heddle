@@ -26,6 +26,7 @@ export type ProductionSessionConfiguration = {
 export type ResolvedProductionSessionConfiguration =
   ProductionSessionConfiguration & {
     defaultSelection: ResolvedProviderSelection;
+    resolvedSelections: readonly ResolvedProviderSelection[];
   };
 
 export type ProductRepositoryConfiguration = {
@@ -301,7 +302,8 @@ export const validateProductionConfiguration = (
 export const validateResolvedProductionConfiguration = (
   configuration: ResolvedProductionConfiguration,
 ): ResolvedProductionConfiguration => {
-  const { defaultSelection, ...session } = configuration.session;
+  const { defaultSelection, resolvedSelections, ...session } =
+    configuration.session;
   const { defaultProvider: _defaultProvider, ...pacing } = configuration.pacing;
   void _defaultProvider;
   validateCommonProductionConfiguration(
@@ -316,6 +318,24 @@ export const validateResolvedProductionConfiguration = (
   ) {
     throw new TypeError(
       "session.defaultSelection must match the configured default alias, runtime, interaction, and pacing provider",
+    );
+  }
+  const resolvedDefault = resolvedSelections.find(
+    ({ alias }) => alias === session.defaultProviderAlias,
+  );
+  if (
+    resolvedDefault === undefined ||
+    resolvedDefault.driverKind !== defaultSelection.driverKind ||
+    resolvedDefault.interactionMode !== defaultSelection.interactionMode ||
+    resolvedDefault.model.slug !== defaultSelection.model.slug ||
+    resolvedDefault.observedCliVersion !==
+      defaultSelection.observedCliVersion ||
+    resolvedDefault.providerInstanceId !==
+      defaultSelection.providerInstanceId ||
+    resolvedDefault.runtimeMode !== defaultSelection.runtimeMode
+  ) {
+    throw new TypeError(
+      "session.defaultSelection must be the default alias entry in session.resolvedSelections",
     );
   }
   return configuration;
@@ -342,6 +362,7 @@ export const resolveProductionConfiguration = async (
     session: {
       ...validated.session,
       defaultSelection: startup.defaultSelection,
+      resolvedSelections: [...startup.aliases.values()],
     },
   };
   return validateResolvedProductionConfiguration(resolved);

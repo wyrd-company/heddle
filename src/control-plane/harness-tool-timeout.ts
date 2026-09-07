@@ -3,11 +3,6 @@
 //   implements: heddle
 // ---
 
-import {
-  measuredMcpDrivers,
-  type MeasuredHandoffDriver,
-} from "./handoff-renderer.js";
-
 export type HarnessToolTimeoutConfiguration = {
   claudeCode: { environment: { MCP_TOOL_TIMEOUT: "100000000" } };
   codex: { mcp_servers: { heddle: { tool_timeout_sec: 100_000 } } };
@@ -21,18 +16,15 @@ export type HarnessToolTimeoutLaunchConfiguration =
   | {
       configuration: HarnessToolTimeoutConfiguration["codex"];
       driver: "codex";
+    }
+  | {
+      configuration: Record<string, never>;
+      driver: string;
     };
-
-const driversWithToolTimeout = new Set<MeasuredHandoffDriver>([
-  "claudeAgent",
-  "codex",
-]);
-const driversWithoutToolTimeout = new Set<string>(
-  measuredMcpDrivers.filter((driver) => !driversWithToolTimeout.has(driver)),
-);
 
 export type HarnessToolTimeoutLaunchInput =
   HarnessToolTimeoutLaunchConfiguration & {
+    providerInstanceId: string;
     sessionKey: string;
     threadId: string;
     worktreePath: string;
@@ -50,7 +42,7 @@ export const harnessToolTimeoutConfiguration =
 
 export const harnessToolTimeoutLaunchConfiguration = (
   driver: string,
-): HarnessToolTimeoutLaunchConfiguration | undefined => {
+): HarnessToolTimeoutLaunchConfiguration => {
   const configured = harnessToolTimeoutConfiguration();
   if (driver === "claudeAgent") {
     return { configuration: configured.claudeCode, driver };
@@ -58,26 +50,22 @@ export const harnessToolTimeoutLaunchConfiguration = (
   if (driver === "codex") {
     return { configuration: configured.codex, driver };
   }
-  if (driversWithoutToolTimeout.has(driver)) return undefined;
-  throw new Error(`Provider '${driver}' has no measured launch preparation`);
+  return { configuration: {}, driver };
 };
 
 export const applyHarnessToolTimeoutBeforeThread = async (input: {
   consumer?: HarnessToolTimeoutConsumer;
   driver: string;
+  providerInstanceId: string;
   sessionKey: string;
   threadId: string;
   worktreePath: string;
 }): Promise<void> => {
   const configured = harnessToolTimeoutLaunchConfiguration(input.driver);
-  if (configured === undefined) return;
-  if (input.consumer === undefined) {
-    throw new Error(
-      `Harness tool timeout application is required for provider '${configured.driver}'`,
-    );
-  }
+  if (input.consumer === undefined) return;
   await input.consumer({
     ...configured,
+    providerInstanceId: input.providerInstanceId,
     sessionKey: input.sessionKey,
     threadId: input.threadId,
     worktreePath: input.worktreePath,

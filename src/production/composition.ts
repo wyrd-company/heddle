@@ -318,11 +318,11 @@ export const createProductionComposition = (
               message: `Child escalation ${pending.attentionId} requires an answer`,
               providerContext: {
                 cliVersion:
-                  configuration.session.defaultSelection.observedCliVersion ??
-                  "",
-                driver:
-                  configuration.session.defaultSelection.providerInstanceId,
+                  configuration.session.defaultSelection.observedCliVersion,
+                driver: configuration.session.defaultSelection.driverKind,
                 lifecycle: "independent",
+                providerInstanceId:
+                  configuration.session.defaultSelection.providerInstanceId,
               },
               runtimeMode: configuration.session.defaultSelection.runtimeMode,
               threadId: parent.threadId,

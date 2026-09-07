@@ -63,13 +63,16 @@ describe("configured T3 timeout application", () => {
     mode: string,
     artifact = join(root, "artifact"),
     timeoutMilliseconds = 1_000,
+    driver = "codex",
   ): ConfiguredT3ControlPlaneClient =>
     new ConfiguredT3ControlPlaneClient(
       { accessToken: "sample-access", baseUrl: "http://127.0.0.1:3999" },
       {
-        arguments: [command, mode, artifact],
-        executable: process.execPath,
-        timeoutMilliseconds,
+        [driver]: {
+          arguments: [command, mode, artifact],
+          executable: process.execPath,
+          timeoutMilliseconds,
+        },
       },
     );
 
@@ -80,17 +83,21 @@ describe("configured T3 timeout application", () => {
       const launch = harnessToolTimeoutLaunchConfiguration(driver)!;
       const input: HarnessToolTimeoutLaunchInput = {
         ...launch,
+        providerInstanceId: `provider-${driver}`,
         sessionKey: "session-one",
         threadId: "thread-one",
         worktreePath: "/tmp/sample-worktree",
       };
 
-      await client("success", artifact).applyHarnessToolTimeout(input);
+      await client("success", artifact, 1_000, driver).applyHarnessToolTimeout(
+        input,
+      );
 
       await expect(readFile(artifact, "utf8")).resolves.toBe(
         `${JSON.stringify({
           configuration: input.configuration,
           driver,
+          providerInstanceId: `provider-${driver}`,
           sessionKey: "session-one",
           threadId: "thread-one",
           version: 1,
@@ -109,6 +116,7 @@ describe("configured T3 timeout application", () => {
     const error = await client(mode)
       .applyHarnessToolTimeout({
         ...launch,
+        providerInstanceId: "provider-alpha",
         sessionKey: "session-one",
         threadId: "thread-one",
         worktreePath: "/tmp/sample-worktree",
@@ -127,6 +135,7 @@ describe("configured T3 timeout application", () => {
     await expect(
       client("timeout", artifact, 100).applyHarnessToolTimeout({
         ...launch,
+        providerInstanceId: "provider-alpha",
         sessionKey: "session-one",
         threadId: "thread-one",
         worktreePath: "/tmp/sample-worktree",
@@ -134,5 +143,33 @@ describe("configured T3 timeout application", () => {
     ).rejects.toThrow("exceeded 100ms");
     const pid = Number(await readFile(artifact, "utf8"));
     expect(() => process.kill(pid, 0)).toThrow();
+  });
+
+  it("prepares a configured open driver and skips a missing map entry", async () => {
+    const configuredArtifact = join(root, "configured.json");
+    const configured = client(
+      "success",
+      configuredArtifact,
+      1_000,
+      "sample-driver",
+    );
+    const input: HarnessToolTimeoutLaunchInput = {
+      ...harnessToolTimeoutLaunchConfiguration("sample-driver"),
+      providerInstanceId: "provider-alpha",
+      sessionKey: "session-one",
+      threadId: "thread-one",
+      worktreePath: "/tmp/sample-worktree",
+    };
+
+    await configured.applyHarnessToolTimeout(input);
+    await expect(readFile(configuredArtifact, "utf8")).resolves.toContain(
+      '"driver":"sample-driver"',
+    );
+
+    const missingArtifact = join(root, "missing.json");
+    await client("success", missingArtifact).applyHarnessToolTimeout(input);
+    await expect(readFile(missingArtifact, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

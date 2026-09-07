@@ -23,6 +23,7 @@ import {
   prepareProductionFixture,
   SyntheticT3,
 } from "../production/composition.test-support.js";
+import { T3ControlPlaneClient } from "../control-plane/index.js";
 import type { ProductionComposition } from "../production/index.js";
 import type {
   ProductionConfiguration,
@@ -71,9 +72,14 @@ const configuredConfiguration = (
   resolved: ResolvedProductionConfiguration,
 ): ProductionConfiguration => {
   const { defaultProvider: _defaultProvider, ...pacing } = resolved.pacing;
-  const { defaultSelection: _defaultSelection, ...session } = resolved.session;
+  const {
+    defaultSelection: _defaultSelection,
+    resolvedSelections: _resolvedSelections,
+    ...session
+  } = resolved.session;
   void _defaultProvider;
   void _defaultSelection;
+  void _resolvedSelections;
   return { ...resolved, pacing, session };
 };
 
@@ -151,17 +157,206 @@ describe("configured production composition", () => {
         configurationDirectory: fixture.root,
         configurationPath: join(fixture.root, "config.yml"),
         server: { host: "127.0.0.1", port: 3774 },
-        timeoutApplication: {
-          arguments: [],
-          executable: process.execPath,
-          timeoutMilliseconds: 1_000,
-        },
       },
       { providerCatalog: { readProviderCatalog }, t3 },
     );
 
     expect(readProviderCatalog).toHaveBeenCalledTimes(1);
     expect(t3.commands).toEqual([]);
+  });
+
+  it.each(["claudeAgent", "codex", "cursor", "grok", "opencode"] as const)(
+    "dispatches a resolved full-access %s selection through the production T3 client",
+    async (driverKind) => {
+      fixture = await prepareProductionFixture();
+      const configuration = configuredConfiguration(fixture.configuration);
+      configuration.session.defaultRuntimeMode = "full-access";
+      const threads = new Set<string>();
+      const commands: Array<Record<string, unknown>> = [];
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/api/mcp/provider-session")) {
+          return new globalThis.Response(null, { status: 204 });
+        }
+        if (url.endsWith("/api/orchestration/shell")) {
+          return new globalThis.Response(
+            JSON.stringify({
+              threads: [...threads].map((id) => ({
+                id,
+                latestTurn: { state: "running" },
+                session: { status: "running" },
+              })),
+            }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith("/api/orchestration/dispatch")) {
+          const command = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+          >;
+          commands.push(command);
+          if (command["type"] === "thread.create") {
+            threads.add(String(command["threadId"]));
+          }
+          return new globalThis.Response(
+            JSON.stringify({ sequence: commands.length }),
+            { status: 200 },
+          );
+        }
+        throw new Error(`Unexpected T3 request: ${url}`);
+      });
+      const t3 = new T3ControlPlaneClient({
+        accessToken: "sample-access",
+        baseUrl: "http://t3.test",
+        fetch,
+      });
+      const onSchedulerError = vi.fn();
+      production = await createConfiguredProductionComposition(
+        {
+          blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+          configuration,
+          configurationDirectory: fixture.root,
+          configurationPath: join(fixture.root, "config.yml"),
+          server: { host: "127.0.0.1", port: 3774 },
+        },
+        {
+          onSchedulerError,
+          providerCatalog: {
+            readProviderCatalog: async () => [
+              {
+                availability: "available",
+                displayName: "Workbench Alpha",
+                driverKind,
+                enabled: true,
+                installed: true,
+                instanceId: "provider-alpha",
+                models: [
+                  {
+                    isCustom: false,
+                    name: "Sample Model",
+                    slug: "sample-model",
+                  },
+                ],
+                observedCliVersion: `catalog-version-${driverKind}`,
+                state: "ready",
+              },
+            ],
+          },
+          t3,
+        },
+      );
+
+      await production.start();
+
+      expect(onSchedulerError).not.toHaveBeenCalled();
+      expect(commands.map((command) => command["type"])).toEqual([
+        "thread.create",
+        "thread.turn.start",
+      ]);
+      expect(commands[1]).toMatchObject({
+        modelSelection: {
+          instanceId: "provider-alpha",
+          model: "sample-model",
+        },
+        runtimeMode: "full-access",
+      });
+    },
+  );
+
+  it("surfaces an actual T3 dispatch rejection through durable attention", async () => {
+    fixture = await prepareProductionFixture();
+    const configuration = configuredConfiguration(fixture.configuration);
+    const threads = new Set<string>();
+    const commands: Array<Record<string, unknown>> = [];
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/mcp/provider-session")) {
+        return new globalThis.Response(null, { status: 204 });
+      }
+      if (url.endsWith("/api/orchestration/shell")) {
+        return new globalThis.Response(
+          JSON.stringify({
+            threads: [...threads].map((id) => ({
+              id,
+              latestTurn: { state: "running" },
+              session: { status: "running" },
+            })),
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith("/api/orchestration/dispatch")) {
+        const command = JSON.parse(String(init?.body)) as Record<
+          string,
+          unknown
+        >;
+        commands.push(command);
+        if (command["type"] === "thread.create") {
+          threads.add(String(command["threadId"]));
+          return new globalThis.Response(JSON.stringify({ sequence: 1 }), {
+            status: 200,
+          });
+        }
+        return new globalThis.Response(
+          JSON.stringify({ error: { code: "driver-rejected" } }),
+          { status: 422 },
+        );
+      }
+      throw new Error(`Unexpected T3 request: ${url}`);
+    });
+    production = await createConfiguredProductionComposition(
+      {
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration,
+        configurationDirectory: fixture.root,
+        configurationPath: join(fixture.root, "config.yml"),
+        server: { host: "127.0.0.1", port: 3774 },
+      },
+      {
+        providerCatalog: {
+          readProviderCatalog: async () => [
+            {
+              availability: "available",
+              displayName: "Workbench Alpha",
+              driverKind: "codex",
+              enabled: true,
+              installed: true,
+              instanceId: "provider-alpha",
+              models: [
+                {
+                  isCustom: false,
+                  name: "Sample Model",
+                  slug: "sample-model",
+                },
+              ],
+              observedCliVersion: "catalog-version-alpha",
+              state: "ready",
+            },
+          ],
+        },
+        t3: new T3ControlPlaneClient({
+          accessToken: "sample-access",
+          baseUrl: "http://t3.test",
+          fetch,
+        }),
+      },
+    );
+
+    await expect(production.start()).resolves.toBeUndefined();
+
+    expect(commands.map((command) => command["type"])).toEqual([
+      "thread.create",
+      "thread.turn.start",
+    ]);
+    expect(production.attention.list()).toEqual([
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining(
+          "T3 POST /api/orchestration/dispatch failed with HTTP 422",
+        ),
+      }),
+    ]);
   });
 
   it("fails catalog startup without creating service state or disclosing transport detail", async () => {
@@ -194,73 +389,6 @@ describe("configured production composition", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("requires the relocated timeout adapter for a resolved codex selection", async () => {
-    fixture = await prepareProductionFixture();
-    const t3 = new SyntheticT3();
-
-    await expect(
-      createConfiguredProductionComposition(
-        {
-          blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-          configuration: configuredConfiguration(fixture.configuration),
-          configurationDirectory: fixture.root,
-          configurationPath: join(fixture.root, "config.yml"),
-          server: { host: "127.0.0.1", port: 3774 },
-        },
-        { t3 },
-      ),
-    ).rejects.toThrow(
-      "session.timeoutApplication is required for driver 'codex'",
-    );
-    expect(t3.commands).toEqual([]);
-  });
-
-  it("rejects the relocated timeout adapter for a resolved other driver", async () => {
-    fixture = await prepareProductionFixture();
-    const t3 = new SyntheticT3();
-    const readProviderCatalog = vi.fn(async () => [
-      {
-        availability: "available" as const,
-        displayName: "Workbench Alpha",
-        driverKind: "cursor",
-        enabled: true,
-        installed: true,
-        instanceId: "cursor",
-        models: [
-          {
-            isCustom: false,
-            name: "Sample Model",
-            slug: "sample-model",
-          },
-        ],
-        observedCliVersion: "2026.08.25-3e8eec8",
-        state: "ready",
-      },
-    ]);
-
-    await expect(
-      createConfiguredProductionComposition(
-        {
-          blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-          configuration: configuredConfiguration(fixture.configuration),
-          configurationDirectory: fixture.root,
-          configurationPath: join(fixture.root, "config.yml"),
-          server: { host: "127.0.0.1", port: 3774 },
-          timeoutApplication: {
-            arguments: [],
-            executable: process.execPath,
-            timeoutMilliseconds: 1_000,
-          },
-        },
-        { providerCatalog: { readProviderCatalog }, t3 },
-      ),
-    ).rejects.toThrow(
-      "session.timeoutApplication must be omitted for driver 'cursor'",
-    );
-    expect(readProviderCatalog).toHaveBeenCalledTimes(1);
-    expect(t3.commands).toEqual([]);
-  });
-
   it("isolates a configured provider-usage error before any T3 dispatch", async () => {
     fixture = await prepareProductionFixture();
     commandDirectory = await mkdtemp(
@@ -290,11 +418,6 @@ describe("configured production composition", () => {
         timeoutMilliseconds: 1_000,
       },
       server: { host: "127.0.0.1", port: 0 },
-      timeoutApplication: {
-        arguments: [],
-        executable: process.execPath,
-        timeoutMilliseconds: 1_000,
-      },
     };
     const t3 = new SyntheticT3();
     const onSchedulerError = vi.fn(async () => undefined);
@@ -337,11 +460,6 @@ describe("configured production composition", () => {
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port },
-      timeoutApplication: {
-        arguments: [],
-        executable: process.execPath,
-        timeoutMilliseconds: 1_000,
-      },
     };
 
     await expect(
@@ -375,11 +493,6 @@ describe("configured production composition", () => {
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port: 0 },
-      timeoutApplication: {
-        arguments: [],
-        executable: process.execPath,
-        timeoutMilliseconds: 1_000,
-      },
     };
     await rm(fixture.configuration.boardDirectory, {
       force: true,
@@ -410,11 +523,6 @@ describe("configured production composition", () => {
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port: 3774 },
-      timeoutApplication: {
-        arguments: [],
-        executable: process.execPath,
-        timeoutMilliseconds: 1_000,
-      },
     };
     production = await createConfiguredProductionComposition(loaded, { t3 });
 
@@ -447,11 +555,6 @@ describe("configured production composition", () => {
       configurationDirectory: fixture.root,
       configurationPath: join(fixture.root, "config.yml"),
       server: { host: "127.0.0.1", port: 3774 },
-      timeoutApplication: {
-        arguments: [],
-        executable: process.execPath,
-        timeoutMilliseconds: 1_000,
-      },
     };
     production = await createConfiguredProductionComposition(loaded, { t3 });
 

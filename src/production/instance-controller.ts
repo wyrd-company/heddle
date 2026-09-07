@@ -593,9 +593,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           },
           projectId,
           providerContext: {
-            cliVersion: selection.observedCliVersion ?? "",
-            driver: selection.providerInstanceId,
+            cliVersion: selection.observedCliVersion,
+            driver: selection.driverKind,
             lifecycle: "independent",
+            providerInstanceId: selection.providerInstanceId,
           },
           runtimeMode: selection.runtimeMode,
           sessionKey,

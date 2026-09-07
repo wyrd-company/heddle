@@ -562,6 +562,7 @@ describe("T3ControlPlaneClient", () => {
           driver: "claudeAgent",
           cliVersion: "2.1.250",
           lifecycle: "independent",
+          providerInstanceId: "claudeAgent",
         },
       ),
     ).rejects.toThrow(

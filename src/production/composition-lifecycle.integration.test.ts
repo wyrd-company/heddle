@@ -402,6 +402,13 @@ kind: standard
           driverKind: "claudeAgent",
           providerInstanceId: "claudeAgent",
         },
+        resolvedSelections: configuration.session.resolvedSelections.map(
+          (selection) => ({
+            ...selection,
+            driverKind: "claudeAgent",
+            providerInstanceId: "claudeAgent",
+          }),
+        ),
       },
     };
     const secondT3 = new SyntheticT3();
@@ -808,9 +815,11 @@ kind: standard
           projectId: configuration.adHocProject.projectId,
           providerContext: {
             cliVersion:
-              configuration.session.defaultSelection.observedCliVersion ?? "",
-            driver: configuration.session.defaultSelection.providerInstanceId,
+              configuration.session.defaultSelection.observedCliVersion,
+            driver: configuration.session.defaultSelection.driverKind,
             lifecycle: "independent",
+            providerInstanceId:
+              configuration.session.defaultSelection.providerInstanceId,
           },
           runtimeMode: configuration.session.defaultSelection.runtimeMode,
           sessionKey: `task-${taskId}:mismatch:1`,

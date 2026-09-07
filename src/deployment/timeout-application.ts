@@ -50,29 +50,39 @@ const assertAcknowledgement = (source: string): void => {
 };
 
 export class ConfiguredT3ControlPlaneClient extends T3ControlPlaneClient {
-  private readonly timeoutApplication: ExecutableTimeoutApplicationConfiguration;
+  private readonly launchPreparation: ReadonlyMap<
+    string,
+    ExecutableTimeoutApplicationConfiguration
+  >;
 
   public constructor(
     options: T3ControlPlaneClientOptions,
-    timeoutApplication: ExecutableTimeoutApplicationConfiguration,
+    launchPreparation: Readonly<
+      Record<string, ExecutableTimeoutApplicationConfiguration>
+    >,
   ) {
     super(options);
-    this.timeoutApplication = {
-      ...timeoutApplication,
-      arguments: [...timeoutApplication.arguments],
-    };
+    this.launchPreparation = new Map(
+      Object.entries(launchPreparation).map(([driverKind, executable]) => [
+        driverKind,
+        { ...executable, arguments: [...executable.arguments] },
+      ]),
+    );
   }
 
   public async applyHarnessToolTimeout(
     input: HarnessToolTimeoutLaunchInput,
   ): Promise<void> {
+    const executable = this.launchPreparation.get(input.driver);
+    if (executable === undefined) return;
     const source = await runExecutableJsonCommand({
-      configuration: this.timeoutApplication,
+      configuration: executable,
       error: (message) => new TimeoutApplicationCommandError(message),
       label: "Timeout application command",
       request: {
         configuration: input.configuration,
         driver: input.driver,
+        providerInstanceId: input.providerInstanceId,
         sessionKey: input.sessionKey,
         threadId: input.threadId,
         version: protocolVersion,

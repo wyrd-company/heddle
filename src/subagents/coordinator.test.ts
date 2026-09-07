@@ -157,6 +157,7 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
         cliVersion: "sample-version",
         driver: "sample-driver",
         lifecycle: "independent",
+        providerInstanceId: "sample-provider",
       },
       runtimeMode: "default",
       title: "Child sample",

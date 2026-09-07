@@ -13,9 +13,7 @@ import {
 } from "./t3-agent-awareness.js";
 import {
   assertT3ProviderDispatchPreconditions,
-  t3ProviderPreconditions,
   type T3ProviderDispatchContext,
-  type T3ProviderPreconditionTable,
 } from "./t3-provider-preconditions.js";
 import type {
   T3ProviderCatalog,
@@ -30,12 +28,9 @@ export {
   type T3ShellThread,
 } from "./t3-agent-awareness.js";
 export {
-  t3ProviderPreconditions,
   T3ProviderPreconditionError,
   type T3ProviderDispatchContext,
   type T3ProviderPreconditionReason,
-  type T3ProviderPreconditionTable,
-  type T3ProviderVersionPreconditions,
   type T3SessionLifecycle,
 } from "./t3-provider-preconditions.js";
 
@@ -131,7 +126,6 @@ export type T3ControlPlaneClientOptions = {
   accessToken?: string;
   catalogTimeoutMilliseconds?: number;
   fetch?: typeof globalThis.fetch;
-  providerPreconditions?: T3ProviderPreconditionTable;
   webSocket?: T3WebSocketConstructor;
 };
 
@@ -234,7 +228,6 @@ export class T3ControlPlaneClient implements T3ProviderCatalogReader {
   readonly #baseUrl: string;
   readonly #catalogTimeoutMilliseconds: number;
   readonly #fetch: typeof globalThis.fetch;
-  readonly #providerPreconditions: T3ProviderPreconditionTable;
   readonly #webSocket: T3WebSocketConstructor;
   #accessToken?: string;
 
@@ -252,8 +245,6 @@ export class T3ControlPlaneClient implements T3ProviderCatalogReader {
       );
     }
     this.#fetch = options.fetch ?? globalThis.fetch;
-    this.#providerPreconditions =
-      options.providerPreconditions ?? t3ProviderPreconditions;
     this.#webSocket = options.webSocket ?? globalThis.WebSocket;
   }
 
@@ -488,10 +479,9 @@ export class T3ControlPlaneClient implements T3ProviderCatalogReader {
           "Dispatch 'thread.turn.start' requires threadId",
         );
       assertT3ProviderDispatchPreconditions(
-        this.#providerPreconditions,
         providerContext,
         command.runtimeMode,
-        this.#selectedDriver(command.modelSelection),
+        this.#selectedProviderInstanceId(command.modelSelection),
       );
     }
     await this.#checkDispatchPreconditions(command);
@@ -513,7 +503,7 @@ export class T3ControlPlaneClient implements T3ProviderCatalogReader {
     });
   }
 
-  #selectedDriver(modelSelection: unknown): unknown {
+  #selectedProviderInstanceId(modelSelection: unknown): unknown {
     if (typeof modelSelection !== "object" || modelSelection === null)
       return undefined;
     if (!("instanceId" in modelSelection)) return undefined;

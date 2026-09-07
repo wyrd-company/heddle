@@ -31,6 +31,7 @@ const input: SessionBootstrapInput = {
     cliVersion: "2026.08.11-e8db854",
     driver: "cursor",
     lifecycle: "independent",
+    providerInstanceId: "cursor",
   },
   runtimeMode: "auto",
   sessionKey: "prepare-1",

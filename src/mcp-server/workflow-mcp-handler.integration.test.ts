@@ -369,6 +369,7 @@ const makeFixture = async () => {
           cliVersion: "1.0.0",
           driver: "codex",
           lifecycle: "independent",
+          providerInstanceId: "codex",
         },
         runtimeMode: "default",
         sessionKey,

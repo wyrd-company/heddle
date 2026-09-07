@@ -35,9 +35,11 @@ export type LoadedDeploymentConfiguration = {
   configuration: ProductionConfiguration;
   configurationDirectory: string;
   configurationPath: string;
+  launchPreparation?: Readonly<
+    Record<string, ExecutableTimeoutApplicationConfiguration>
+  >;
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
-  timeoutApplication?: ExecutableTimeoutApplicationConfiguration;
 };
 
 export type ExecutableProviderUsageConfiguration = {
@@ -61,7 +63,9 @@ type ConfigurationDocument = Omit<ProductionConfiguration, "session"> & {
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
   session: ProductionConfiguration["session"] & {
-    timeoutApplication?: ExecutableTimeoutApplicationConfiguration;
+    launchPreparation?: Readonly<
+      Record<string, ExecutableTimeoutApplicationConfiguration>
+    >;
   };
 };
 
@@ -244,6 +248,20 @@ const preflightBlueprintRepository = async (
   }
 };
 
+export const validateLaunchPreparationConfiguration = (
+  launchPreparation:
+    | Readonly<Record<string, ExecutableTimeoutApplicationConfiguration>>
+    | undefined,
+): void => {
+  for (const driverKind of Object.keys(launchPreparation ?? {})) {
+    if (driverKind.trim() === "") {
+      throw new TypeError(
+        "session.launchPreparation driver kind must not be empty",
+      );
+    }
+  }
+};
+
 export const loadDeploymentConfiguration = async (
   configurationDirectory: string,
 ): Promise<LoadedDeploymentConfiguration> => {
@@ -291,7 +309,7 @@ export const loadDeploymentConfiguration = async (
       throw new TypeError(firstSchemaError(validator.errors?.[0]));
     }
     const document = value as ConfigurationDocument;
-    const { timeoutApplication, ...session } = document.session;
+    const { launchPreparation, ...session } = document.session;
     const { providerUsage, server, ...root } = document;
     const configuration: ProductionConfiguration = { ...root, session };
     if (server.host.trim() === "") {
@@ -299,8 +317,16 @@ export const loadDeploymentConfiguration = async (
     }
     const validated = validateProductionConfiguration(configuration);
     validateProviderUsageConfiguration(validated, providerUsage);
+    validateLaunchPreparationConfiguration(launchPreparation);
     await preflightExecutable("providerUsage", providerUsage);
-    await preflightExecutable("session.timeoutApplication", timeoutApplication);
+    for (const [driverKind, executable] of Object.entries(
+      launchPreparation ?? {},
+    )) {
+      await preflightExecutable(
+        `session.launchPreparation.${driverKind}`,
+        executable,
+      );
+    }
     const blueprintsRepositoryRoot =
       await preflightBlueprintRepository(directory);
     return {
@@ -316,13 +342,17 @@ export const loadDeploymentConfiguration = async (
               arguments: [...providerUsage.arguments],
             },
           }),
-      ...(timeoutApplication === undefined
+      ...(launchPreparation === undefined
         ? {}
         : {
-            timeoutApplication: {
-              ...timeoutApplication,
-              arguments: [...timeoutApplication.arguments],
-            },
+            launchPreparation: Object.fromEntries(
+              Object.entries(launchPreparation).map(
+                ([driverKind, executable]) => [
+                  driverKind,
+                  { ...executable, arguments: [...executable.arguments] },
+                ],
+              ),
+            ),
           }),
       server: { ...server, host: server.host.trim() },
     };

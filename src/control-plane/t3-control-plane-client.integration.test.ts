@@ -260,6 +260,7 @@ describe.skipIf(!t3Binary)(
           driver: "cursor",
           cliVersion: "2026.08.11-e8db854",
           lifecycle: "independent",
+          providerInstanceId: "cursor",
         },
       );
 
