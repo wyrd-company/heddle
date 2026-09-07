@@ -67,10 +67,12 @@ The directory may also contain `heddle.md` and the required organization
 blueprint clone at `blueprints/`. Unknown entries are ignored. Neither entry is
 a `config.yml` field.
 
-The service-user `PATH` must provide `git`, `gitpr`, and `kanban-md`.
+The service-user and agent-session `PATH` must provide `git`, `gh`, `gitpr`,
+and `kanban-md`.
 Mechanical worktree preparation, review snapshots, review landing, and board
-status mirroring invoke these tools without a shell. Startup does not replace
-or infer their locations.
+status mirroring invoke these tools without a shell. Incident finalization uses
+`gh` as the authenticated bot identity for an accepted GitHub issue. Startup
+does not replace or infer their locations.
 
 This complete single-product example uses one provider alias and no provider
 budget, so it omits the provider-usage executable:
@@ -886,6 +888,38 @@ A pending production-error page is replayed before each scheduler pass. A
 retryable page waits for its durable retry deadline, including across restart;
 the durable attention remains active while earlier passes contain the delivery
 failure.
+
+An incident-eligible production error admits one `incident` lifecycle under the
+deterministic incident identity shown on its attention card. A one-minute
+per-code cooldown and a maximum of three concurrent incidents contain an error
+storm. Suppressed errors remain active attention. Floor errors do not create an
+incident.
+
+The incident lifecycle rechecks the condition and records it as `live`,
+`cleared`, or `undetermined`, produces a diagnosis and root-cause analysis, and
+proposes zero or more GitHub issue, operator escalation, or production mutation
+actions. Review accepts or rejects that diagnosis. A rejection returns to
+diagnosis for at most three rounds. Exhaustion raises critical operator
+attention and leaves the source attention unresolved. Finalization runs only
+after acceptance. A production mutation also waits for an accepted approval
+through the existing attention action. Issue creation and escalation do not
+require that approval.
+
+The issue body includes the incident identity. The finalizer inspects existing
+issues for that identity before it creates one. The durable stage occurrence
+prevents another finalizer session after restart. Heddle has no GitHub network
+port; the agent uses `gh`. If `gh` is absent, finalization fails closed and
+raises incident failure attention. A failed incident retains both the source
+attention and its visible failure. An incident execution failure is a floor
+error and cannot create another incident.
+
+The originating attention links to the pinned incident lifecycle in the
+existing Console canvas. Completed finalization resolves the source attention
+with the incident identity as justification. The row remains available for
+audit. Incident handoffs and production-error attention redact known
+correlation tokens, configured secrets, and credential-bearing URLs. The agent
+authors any issue body, so accidental publication outside Heddle remains an
+unmitigated agent-publication risk.
 
 Every production-error card offers **Resolve**. The action records durable
 intent and completion before it resolves the entry. Repeating the action or

@@ -621,6 +621,46 @@ proposed-design:
     history, waiters, replay, and answer authority continue to use the exact
     tuple components rather than the digest.
 
+    Each active incident-eligible, task-scoped production error admits one
+    ordinary `incident` lifecycle instance under the deterministic incident
+    identity. Admission consumes the closed production-error eligibility
+    catalog, limits active incidents to three, and applies a one-minute per-code
+    cooldown. Suppression does not resolve or replace the source attention.
+    Scheduler-pass, durable-catalog, and incident-execution failures remain on
+    the operator-only floor. An incident execution failure therefore cannot
+    recursively admit another incident.
+
+    The incident blueprint has implement, review, and finalize wait stages and
+    no board-status map or board-writing mechanical node. Implement rechecks
+    the recorded condition as `live`, `cleared`, or `undetermined`, records a
+    root-cause analysis, and proposes only GitHub issue, operator escalation,
+    or production mutation actions. The MCP producer boundary rejects a missing
+    condition state and an unknown action kind. Review accepts the diagnosis or
+    returns findings to implement. Three rejected review operations are
+    permitted; another rejection raises floor attention and leaves the source
+    attention unresolved.
+
+    Every incident stage uses the ordinary resolved stage-session binding,
+    durable occurrence identity, bootstrap, and T3 dispatch path. Incident
+    execution adds no provider selector and no GitHub output port. Finalize
+    starts only for an accepted diagnosis. An accepted GitHub issue is authored
+    by the agent through `gh`; the handoff requires the incident identity in the
+    body and inspection for an existing identity before creation. The durable
+    finalizer stage occurrence prevents another issuing session after restart.
+    Missing `gh` fails the stage closed. Agent-authored external text retains an
+    unmitigated accidental-publication risk.
+
+    Finalize records durable intent before resolving the originating attention
+    and records the incident identity as resolution justification. The resolved
+    attention row is retained. Issue creation, operator escalation, and
+    resolution need no additional approval. A production mutation requires an
+    accepted operator approval event for the current finalize session through
+    the existing attention action port. Known correlation tokens, configured
+    secrets, and credential-bearing URLs are redacted before production-error
+    attention persistence and incident handoff assembly. The Console projects
+    the incident identity from the originating attention and reads the pinned
+    incident instance in the existing lifecycle canvas.
+
     Scheduler-pass health is one durable failure episode at a time. A failed
     pass with no unrecovered scheduler episode opens the next positive episode
     and uses `production:scheduler-pass-failed:global:episode:<number>` as its
