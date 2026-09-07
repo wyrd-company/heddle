@@ -1191,6 +1191,59 @@ describe("production composition", () => {
     await composition.close().catch(() => undefined);
   });
 
+  it("leaves scheduler failure attention active after the blueprint upstream recovers", async () => {
+    const fixture = await prepare();
+    const upstream = (
+      await execute("git", ["remote", "get-url", "origin"], {
+        cwd: fixture.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    await execute(
+      "git",
+      [
+        "remote",
+        "set-url",
+        "origin",
+        join(fixture.root, "missing-blueprint-origin.git"),
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+
+    await expect(composition.start()).rejects.toThrow(
+      "The organization blueprint repository could not fetch origin",
+    );
+    const failedPassAttention = composition.attention
+      .list()
+      .filter(({ attentionId }) =>
+        attentionId.startsWith("production:scheduler-pass-failed:"),
+      );
+    expect(failedPassAttention).toHaveLength(1);
+
+    await execute("git", ["remote", "set-url", "origin", upstream], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
+
+    expect(
+      composition.attention
+        .list()
+        .filter(({ attentionId }) =>
+          attentionId.startsWith("production:scheduler-pass-failed:"),
+        ),
+    ).toEqual(failedPassAttention);
+    await composition.close();
+  });
+
   it("attempts the catalog floor page when persistence is closed before start", async () => {
     const fixture = await prepare();
     const pages = vi.fn(async () => undefined);
