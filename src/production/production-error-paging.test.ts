@@ -73,12 +73,12 @@ describe("production error paging", () => {
       {
         level: "informational",
         stableId: eligible.attentionId,
-        url: expect.stringContaining("scope=task%3A17"),
+        url: `https://console.invalid/?view=lifecycle&task=17&scope=all&attention=${encodeURIComponent(eligible.attentionId)}`,
       },
       {
         level: "critical",
         stableId: floor.attentionId,
-        url: expect.stringContaining("scope=all"),
+        url: `https://console.invalid/?view=lifecycle&scope=all&attention=${encodeURIComponent(floor.attentionId)}`,
       },
     ]);
     persistence.close();

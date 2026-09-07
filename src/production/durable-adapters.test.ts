@@ -28,6 +28,99 @@ describe("durable production adapters", () => {
     if (directory) await rm(directory, { force: true, recursive: true });
   });
 
+  it("emits the canonical lifecycle route for explicit task-scoped Pushover attention", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-route-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    const transport = { send: vi.fn(async () => undefined) };
+
+    await new DurablePushoverNotifier(
+      persistence,
+      {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/base",
+        userKey: "operator-key",
+      },
+      transport,
+    ).send({
+      attentionId: "attention-16",
+      message: "A sample needs attention",
+      scope: "task:16",
+    });
+
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stableId: "attention-16",
+        url: "https://console.invalid/base?view=lifecycle&task=16&scope=all&attention=attention-16",
+      }),
+    );
+    persistence.close();
+  });
+
+  it("emits the canonical lifecycle route for runtime-derived task-scoped Pushover attention", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-runtime-route-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "sample-instance",
+      state: "waiting",
+      taskId: 17,
+    });
+    const transport = { send: vi.fn(async () => undefined) };
+
+    await new DurablePushoverNotifier(
+      persistence,
+      {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        userKey: "operator-key",
+      },
+      transport,
+    ).send({
+      attentionId: "attention-17",
+      instanceId: "sample-instance",
+      message: "A sample needs attention",
+    });
+
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stableId: "attention-17",
+        url: "https://console.invalid/?view=lifecycle&task=17&scope=all&attention=attention-17",
+      }),
+    );
+    persistence.close();
+  });
+
+  it("retains the all-work Pushover attention route", async () => {
+    directory = await mkdtemp(join(tmpdir(), "heddle-pushover-all-route-"));
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    const transport = { send: vi.fn(async () => undefined) };
+
+    await new DurablePushoverNotifier(
+      persistence,
+      {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        userKey: "operator-key",
+      },
+      transport,
+    ).send({
+      attentionId: "attention-all",
+      message: "A sample needs attention",
+      scope: "all",
+    });
+
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stableId: "attention-all",
+        url: "https://console.invalid/?view=lifecycle&scope=all&attention=attention-all",
+      }),
+    );
+    persistence.close();
+  });
+
   it.each([
     ["informational", "-1"],
     ["normal", "0"],
@@ -276,7 +369,9 @@ describe("durable production adapters", () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0]?.stableId).toBe(attention.attentionId);
-    expect(sent[0]?.url).toContain("scope=task%3A17");
+    expect(sent[0]?.url).toBe(
+      "https://console.invalid/?view=lifecycle&task=17&scope=all&attention=task-17%3Asession%3Achoice",
+    );
   });
 
   it("persists the five-second retry boundary from a slow failure across restart", async () => {
@@ -747,7 +842,7 @@ describe("durable production adapters", () => {
       message: attention.message,
       stableId: attention.attentionId,
       title: "Heddle needs attention",
-      url: "https://console.invalid/?view=lifecycle&scope=task%3A26&attention=task-26%3Asession%3Achoice",
+      url: "https://console.invalid/?view=lifecycle&task=26&scope=all&attention=task-26%3Asession%3Achoice",
       userKey: configuration.userKey,
     };
     persistence.recordEffectIntent("pushover", attention.attentionId, {
@@ -795,7 +890,7 @@ describe("durable production adapters", () => {
       message: attention.message,
       stableId: attention.attentionId,
       title: "Heddle needs attention",
-      url: "https://console.invalid/?view=lifecycle&scope=task%3A29&attention=task-29%3Asession%3Achoice",
+      url: "https://console.invalid/?view=lifecycle&task=29&scope=all&attention=task-29%3Asession%3Achoice",
       userKey: configuration.userKey,
     };
     const hash = (value: unknown): string =>
@@ -852,7 +947,7 @@ describe("durable production adapters", () => {
         message: attention.message,
         stableId: attention.attentionId,
         title: "Heddle needs attention",
-        url: "https://console.invalid/?view=lifecycle&scope=task%3A30&attention=task-30%3Asession%3Achoice",
+        url: "https://console.invalid/?view=lifecycle&task=30&scope=all&attention=task-30%3Asession%3Achoice",
         userKey: configuration.userKey,
       };
       const hash = (value: unknown): string =>

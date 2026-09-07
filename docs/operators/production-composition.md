@@ -674,8 +674,12 @@ identity or substitute working-tree blueprint content.
 The board and dependency graph URL `scope` accepts `all` or `epic:<id>`. Their
 scope control lists All work and root epics. A lifecycle URL carries its target
 as `task=<id>` and retains the board scope, so BOARD and DEPENDENCIES return to
-the same projection. A positive `scope=task:<id>` URL is normalized to the
-lifecycle for that task with `scope=all`.
+the same projection. New task-scoped attention links use
+`?view=lifecycle&task=<id>&scope=all&attention=<attention-id>`. Production
+Console and Pushover link generators do not emit `scope=task:<id>`. The client
+accepts a positive `scope=task:<id>` URL as compatibility input and normalizes
+it to the lifecycle for that task with `scope=all`. All-work and epic attention
+links retain their scope-shaped routes.
 
 The console attention source projects the current unresolved durable queue
 through the same reconciler runtime records. Those records supply task scope;
@@ -686,8 +690,9 @@ optional header, selection mode, option labels, and descriptions; T3 option
 labels are the submitted answer values. Stale, terminal, and lifecycle
 adjudication entries remain informational. Missing or inconsistent runtime,
 request, question, or durable identity fails closed.
-Pushover deep links use the same runtime-derived task scope; notification
-routing does not parse instance names.
+Pushover task links use the canonical split lifecycle route. Their task target
+comes from an explicit attention scope or the same runtime-derived task scope;
+notification routing does not parse instance names.
 
 Subagent spawn, liveness, and stop steering use the same SQLite instance store,
 global correlation-token catalog, pacing evaluator, stage-session bootstrap,

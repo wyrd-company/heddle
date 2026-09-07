@@ -831,6 +831,12 @@ proposed-design:
     or one root epic with its children. The scope control lists only
     those choices. A lifecycle route identifies its positive task ID in
     a separate URL parameter while retaining the current board scope.
+    New task-scoped attention links use
+    `?view=lifecycle&task=<id>&scope=all&attention=<attention-id>`: the
+    lifecycle target is separate from the all-work board scope and the stable
+    attention identity remains the deep-link focus. All-work and epic attention
+    links retain their scope-shaped routes. Production link generators do not
+    emit a task-shaped scope.
     Its BOARD and DEPENDENCIES links omit the lifecycle target, so either
     projection is identical before and after the lifecycle detour. A URL
     with a positive task-shaped scope is normalized to the lifecycle for
@@ -903,8 +909,10 @@ proposed-design:
     the recorded T3 question to the console prompt, preserve optional headers and
     option metadata, and submit option labels. The action port delegates to the
     existing escalation coordinator and session observer; the viewer owns no
-    disposition or queue state. Pushover deep links use the same runtime-derived
-    task scope instead of parsing instance identity.
+    disposition or queue state. Pushover task links use the canonical split
+    lifecycle route above. Their task target comes from an explicit attention
+    scope or the same runtime-derived task scope instead of parsing instance
+    identity.
   viewer: >
     The canvas is built from the vendored `@flowcraft/tldraw`
     primitives — `EventBus`, `useExecutionBridge`, `FlowcraftSync`,

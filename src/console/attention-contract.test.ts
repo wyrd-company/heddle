@@ -55,10 +55,22 @@ const entryState = () => ({
 const entry = () => createConsoleAttention(entryState());
 
 describe("console attention action contract", () => {
-  it("binds deep links to the stable attention identity and scope", () => {
+  it("emits the canonical lifecycle route for task-scoped attention", () => {
     expect(consoleAttentionDeepLink("https://console.test/base", entry())).toBe(
-      "https://console.test/?scope=task%3A12&attention=attention-12",
+      "https://console.test/?view=lifecycle&task=12&scope=all&attention=attention-12",
     );
+  });
+
+  it.each([
+    ["all", "https://console.test/?scope=all&attention=attention-12"],
+    ["epic:12", "https://console.test/?scope=epic%3A12&attention=attention-12"],
+  ] as const)("retains the %s attention route", (scope, expected) => {
+    expect(
+      consoleAttentionDeepLink("https://console.test/base", {
+        attentionId: "attention-12",
+        scope,
+      }),
+    ).toBe(expected);
   });
 
   it("changes the fingerprint when current state or offered action changes", () => {

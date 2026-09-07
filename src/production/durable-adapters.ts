@@ -474,7 +474,12 @@ export class DurablePushoverNotifier {
     const scopeValue = page.scope ?? this.#scopeForInstance(page);
     const scope = new globalThis.URL(this.configuration.consoleBaseUrl);
     scope.searchParams.set("view", "lifecycle");
-    scope.searchParams.set("scope", scopeValue);
+    if (scopeValue.startsWith("task:")) {
+      scope.searchParams.set("task", scopeValue.slice("task:".length));
+      scope.searchParams.set("scope", "all");
+    } else {
+      scope.searchParams.set("scope", scopeValue);
+    }
     scope.searchParams.set("attention", page.attentionId);
     const message: PushoverMessage = {
       applicationToken: this.configuration.applicationToken,

@@ -228,7 +228,13 @@ export const consoleAttentionDeepLink = (
   attention: Pick<ConsoleAttention, "attentionId" | "scope">,
 ): string => {
   const url = new URL("/", baseUrl);
-  url.searchParams.set("scope", attention.scope);
+  if (attention.scope.startsWith("task:")) {
+    url.searchParams.set("view", "lifecycle");
+    url.searchParams.set("task", attention.scope.slice("task:".length));
+    url.searchParams.set("scope", "all");
+  } else {
+    url.searchParams.set("scope", attention.scope);
+  }
   url.searchParams.set("attention", attention.attentionId);
   return url.href;
 };
