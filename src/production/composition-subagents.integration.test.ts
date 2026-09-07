@@ -575,29 +575,28 @@ describe("production subagent composition", () => {
 
     await restarted.start();
 
-    expect(restartedT3.dispatches).toContainEqual({
-      command: expect.objectContaining({
-        interactionMode: parentBinding.interactionMode,
-        runtimeMode: parentBinding.runtimeMode,
-        threadId: parentBinding.threadId,
-        type: "thread.turn.start",
-      }),
-      providerContext: {
-        cliVersion: parentBinding.observedCliVersion,
-        driver: parentBinding.driverKind,
-        lifecycle: "independent",
-        providerInstanceId: parentBinding.providerInstanceId,
-      },
-    });
-    expect(restartedT3.dispatches).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          providerContext: expect.objectContaining({
-            providerInstanceId: "provider-changed",
-          }),
-        }),
-      ]),
+    const escalationDispatches = restartedT3.dispatches.filter(
+      ({ command }) =>
+        command.type === "thread.turn.start" &&
+        command.message.text ===
+          `Child escalation ${attentionId} requires an answer`,
     );
+    expect(escalationDispatches).toEqual([
+      {
+        command: expect.objectContaining({
+          interactionMode: parentBinding.interactionMode,
+          runtimeMode: parentBinding.runtimeMode,
+          threadId: parentBinding.threadId,
+          type: "thread.turn.start",
+        }),
+        providerContext: {
+          cliVersion: parentBinding.observedCliVersion,
+          driver: parentBinding.driverKind,
+          lifecycle: "independent",
+          providerInstanceId: parentBinding.providerInstanceId,
+        },
+      },
+    ]);
     await restarted.close();
   });
 
