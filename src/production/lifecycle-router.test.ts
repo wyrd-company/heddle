@@ -82,6 +82,72 @@ describe("production lifecycle router", () => {
     expect(router.isTransitionActive("sample-instance")).toBe(false);
   });
 
+  it("plans the reachable initial session stage instead of the first declared wait", async () => {
+    const blueprint: LifecycleBlueprint = {
+      id: "sample-process",
+      nodes: [
+        { id: "later", uses: "wait" },
+        { id: "mix", uses: "mix" },
+        { id: "initial", uses: "wait" },
+        { id: "finish", uses: "finish" },
+      ],
+      edges: [
+        { source: "mix", target: "initial" },
+        {
+          condition: "result.output.dispositions.continue",
+          description: "Continue the sample",
+          disposition: "continue",
+          source: "initial",
+          target: "later",
+        },
+        {
+          condition: "result.output.dispositions.complete",
+          description: "Complete the sample",
+          disposition: "complete",
+          source: "later",
+          target: "finish",
+        },
+      ],
+    };
+    const effects = {
+      finish: async () => ({}),
+      mix: async () => ({}),
+    } satisfies Record<string, LifecycleEffect>;
+    const fixture = await makeFixture(blueprint, effects);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: fixture.repositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add sequential sample",
+      ],
+      { cwd: fixture.repositoryRoot },
+    );
+    const router = new ProductionLifecycleRouter({
+      effects,
+      persistence: fixture.persistence,
+      repositoryRoot: fixture.repositoryRoot,
+      sourceRef: "HEAD",
+    });
+
+    await expect(
+      router.plannedStartStage({
+        blueprintPath: fixture.blueprintPath,
+        instanceId: "sample-instance",
+      }),
+    ).resolves.toBe("initial");
+    expect(fixture.invocations).toEqual([]);
+    expect(fixture.persistence.listInstances()).toEqual([]);
+  });
+
   it("rejects an initial route that cannot bind one session stage before effects", async () => {
     const blueprint: LifecycleBlueprint = {
       id: "sample-process",
