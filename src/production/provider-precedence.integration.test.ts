@@ -19,7 +19,6 @@ import { prepareProductionFixture } from "./composition.test-support.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
   makeQualificationScratch,
-  PREFERRED_MODEL_SLUGS,
   QUALIFICATION_EXECUTION,
   QUALIFICATION_REVIEW,
   readyModelsFor,
@@ -253,8 +252,11 @@ describe.skipIf(!t3Binary)(
         accessToken: isolated.accessToken,
         baseUrl: isolated.baseUrl,
       });
-      await readyModelsFor(client, [QUALIFICATION_EXECUTION, ambiguousReview]);
-      const model = PREFERRED_MODEL_SLUGS[QUALIFICATION_EXECUTION.instanceId];
+      const models = await readyModelsFor(client, [
+        QUALIFICATION_EXECUTION,
+        ambiguousReview,
+      ]);
+      const model = models.get(QUALIFICATION_EXECUTION.instanceId);
       if (model === undefined) throw new Error("No Claude qualification model");
       const providerAliases = {
         execution: {

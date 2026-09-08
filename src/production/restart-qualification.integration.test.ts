@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { KanbanBoardAdapter } from "../board-adapter/index.js";
 import {
   ProviderSelectionResolver,
+  steerStageSession,
   T3ControlPlaneClient,
 } from "../control-plane/index.js";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
@@ -26,6 +27,7 @@ import {
   qualificationAliases,
   QUALIFICATION_EXECUTION,
   QUALIFICATION_INSTANCES,
+  QUALIFICATION_REVIEW,
   QUALIFICATION_SECOND_DRIVER,
   readyProviderModels,
   startIsolatedT3,
@@ -123,6 +125,7 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
         maxConcurrentSessions: 4,
         providerBudgets: {
           execution: { usageLimit: 100 },
+          review: { usageLimit: 100 },
           secondary: { usageLimit: 100 },
         },
         subagents: { maxDepth: 1, maxFanOut: 2 },
@@ -224,16 +227,16 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
     await setTaskProviderAlias(
       fixture.configuration.boardDirectory,
       fixture.taskId,
-      "secondary",
+      "review",
     );
 
     // Positive evidence that the retarget is real and live: the production
     // board reader returns it, and a fresh selection made from it resolves to
-    // the other driver. Without this, the assertions below would hold even if
-    // the front matter had never changed.
+    // a third provider instance. Without this, the assertions below would hold
+    // even if the front matter had never changed.
     const board = new KanbanBoardAdapter(fixture.configuration.boardDirectory);
     const retargeted = await board.readTask(fixture.taskId);
-    expect(retargeted.providerAlias).toBe("secondary");
+    expect(retargeted.providerAlias).toBe("review");
     const freshSelection = await new ProviderSelectionResolver(
       providerAliases,
       client,
@@ -242,24 +245,24 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       runtimeMode: configuration.session.defaultRuntimeMode,
     });
     expect(freshSelection.providerInstanceId).toBe(
-      QUALIFICATION_SECOND_DRIVER.instanceId,
+      QUALIFICATION_REVIEW.instanceId,
     );
-    const secondaryDefault = configuration.session.resolvedSelections.find(
-      ({ alias }) => alias === "secondary",
+    const restartDefault = configuration.session.resolvedSelections.find(
+      ({ alias }) => alias === "review",
     );
-    if (secondaryDefault === undefined) {
-      throw new Error("Secondary restart selection is absent");
+    if (restartDefault === undefined) {
+      throw new Error("Restart default selection is absent");
     }
     const restartedConfiguration = {
       ...configuration,
       pacing: {
         ...configuration.pacing,
-        defaultProvider: secondaryDefault.providerInstanceId,
+        defaultProvider: restartDefault.providerInstanceId,
       },
       session: {
         ...configuration.session,
-        defaultProviderAlias: "secondary",
-        defaultSelection: secondaryDefault,
+        defaultProviderAlias: "review",
+        defaultSelection: restartDefault,
       },
     };
 
@@ -320,11 +323,14 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       QUALIFICATION_EXECUTION.driver,
     );
     expect(parentAfter?.binding.providerInstanceId).not.toBe(
-      QUALIFICATION_SECOND_DRIVER.instanceId,
+      QUALIFICATION_REVIEW.instanceId,
     );
     expect(parentAfter?.activation).toBe(boundRuntime?.activation);
     expect(childAfter.binding.providerInstanceId).toBe(
       QUALIFICATION_SECOND_DRIVER.instanceId,
+    );
+    expect(childAfter.binding.providerInstanceId).not.toBe(
+      QUALIFICATION_REVIEW.instanceId,
     );
     expect(childAfter.binding.runtimeMode).toBe(
       firstChild.assignment.binding.runtimeMode,
@@ -351,6 +357,28 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
         providerContext: providerContextFromBinding(parentAfter.binding),
       },
     ]);
+
+    // A later turn to the child uses the existing child's durable target,
+    // despite both mutable selection sources now naming a third instance.
+    await steerStageSession(
+      {
+        interactionMode: childAfter.binding.interactionMode,
+        message: "Continue the isolated restart qualification.",
+        providerContext: providerContextFromBinding(childAfter.binding),
+        runtimeMode: childAfter.binding.runtimeMode,
+        threadId: childAfter.threadId,
+      },
+      { t3: secondT3.t3 },
+    );
+    expect(secondT3.dispatches.at(-1)).toMatchObject({
+      command: {
+        interactionMode: childAfter.binding.interactionMode,
+        runtimeMode: childAfter.binding.runtimeMode,
+        threadId: childAfter.threadId,
+        type: "thread.turn.start",
+      },
+      providerContext: providerContextFromBinding(childAfter.binding),
+    });
 
     // A later observed child completion uses the production notification path
     // to steer the durable parent target.

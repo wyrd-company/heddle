@@ -104,7 +104,7 @@ describe("qualification isolation", () => {
         await readFile(join(directory, driver, "devcontainer.json"), "utf8"),
       ) as { mounts?: string[] };
       const credentialMounts = (configuration.mounts ?? []).filter((mount) =>
-        mount.includes("target=/run/heddle-credentials/"),
+        mount.startsWith("source=${localEnv:HOME}"),
       );
       expect(
         credentialMounts.map((mount) => mount.match(/^source=([^,]+)/)?.[1]),
