@@ -1357,6 +1357,16 @@ describe("production composition", () => {
       t3: new SyntheticT3(),
     });
     await composition.start();
+    await composition.attention.raise(
+      createProductionErrorAttention({
+        attentionId: `production:incident-execution-failed:task:${fixture.taskId}`,
+        code: "incident-execution-failed",
+        error: new Error("Synthetic neighboring condition"),
+        instanceId: `task-${fixture.taskId}`,
+        message: "Synthetic neighboring condition",
+        taskId: fixture.taskId,
+      }),
+    );
     await execute(
       "kanban-md",
       [
@@ -1369,20 +1379,33 @@ describe("production composition", () => {
       { cwd: fixture.root },
     );
 
+    const disappearanceAttentionId = `production:board-task-absent:task:${fixture.taskId}:task-${fixture.taskId}`;
+    const disappearanceAttention = () =>
+      composition.attention
+        .list()
+        .filter(({ attentionId }) => attentionId === disappearanceAttentionId);
+
     await vi.waitFor(
       () => {
-        expect(composition.attention.list()).toHaveLength(1);
+        expect(disappearanceAttention()).toHaveLength(1);
       },
       { timeout: 3_000 },
     );
 
-    expect(composition.attention.list()).toEqual([
+    expect(disappearanceAttention()).toEqual([
       expect.objectContaining({
+        attentionId: disappearanceAttentionId,
         instanceId: `task-${fixture.taskId}`,
         kind: "production-error",
         taskId: fixture.taskId,
       }),
     ]);
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        attentionId: `production:incident-execution-failed:task:${fixture.taskId}`,
+        taskId: fixture.taskId,
+      }),
+    );
     await composition.close();
   });
 
