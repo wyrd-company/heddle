@@ -13,12 +13,30 @@ const accessToken = "sample-access-token";
 const ticket = "qualification-ticket";
 
 const server = createServer((request, response) => {
+  if (request.headers.authorization !== `Bearer ${accessToken}`) {
+    response.writeHead(401).end();
+    return;
+  }
+  if (request.method === "GET" && request.url === "/api/orchestration/shell") {
+    response.writeHead(200, { "content-type": "application/json" }).end(
+      JSON.stringify({
+        projects: [
+          {
+            id: "shared-project",
+            title: "Shared records",
+            workspaceRoot: "/workspaces/heddle",
+          },
+        ],
+        threads: [],
+      }),
+    );
+    return;
+  }
   if (
     request.method !== "POST" ||
-    request.url !== "/api/auth/websocket-ticket" ||
-    request.headers.authorization !== `Bearer ${accessToken}`
+    request.url !== "/api/auth/websocket-ticket"
   ) {
-    response.writeHead(401).end();
+    response.writeHead(404).end();
     return;
   }
   response.writeHead(200, { "content-type": "application/json" }).end(
