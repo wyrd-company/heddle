@@ -48,6 +48,16 @@ const ANSI_CONTROL_SEQUENCE = new RegExp(
   `${ESCAPE_CONTROL}(?:\\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])`,
   "g",
 );
+const STRUCTURED_CREDENTIAL_KEY =
+  "api[_-]?key|(?:[a-z0-9]+[_-])+(?:secret|token|key)|[a-z][a-z0-9]*(?:secret|token|key)|secret|token";
+const QUOTED_STRUCTURED_CREDENTIAL = new RegExp(
+  `\\b(authorization|${STRUCTURED_CREDENTIAL_KEY})(["']?\\s*[:=]\\s*)("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`,
+  "gi",
+);
+const UNQUOTED_STRUCTURED_CREDENTIAL = new RegExp(
+  `\\b(${STRUCTURED_CREDENTIAL_KEY})(["']?\\s*[:=]\\s*)[^"'\\s,}\\]][^\\s,}\\]]*`,
+  "gi",
+);
 
 export type IsolatedT3 = {
   readonly accessToken: string;
@@ -99,21 +109,15 @@ export const safeT3StartupDiagnostic = (output: string): string => {
     .join("");
   const redacted = withoutTerminalControls
     .replace(
+      QUOTED_STRUCTURED_CREDENTIAL,
+      (_match: string, key: string, separator: string, quotedValue: string) =>
+        `${key}${separator}${quotedValue[0]}[redacted]${quotedValue[0]}`,
+    )
+    .replace(
       /\b(authorization)(["']?\s*[:=]\s*)[^"'\s,}\]][^"'\r\n,}\]]*/gi,
       "$1$2[redacted]",
     )
-    .replace(
-      /\b(authorization)(["']?\s*[:=]\s*)(["'])(.*?)\3/gi,
-      "$1$2$3[redacted]$3",
-    )
-    .replace(
-      /\b(api[_-]?key|(?:[a-z0-9]+[_-])+(?:secret|token|key)|secret|token)(["']?\s*[:=]\s*)[^"'\s,}\]][^\s,}\]]*/gi,
-      "$1$2[redacted]",
-    )
-    .replace(
-      /\b(api[_-]?key|(?:[a-z0-9]+[_-])+(?:secret|token|key)|secret|token)(["']?\s*[:=]\s*)(["'])(.*?)\3/gi,
-      "$1$2$3[redacted]$3",
-    )
+    .replace(UNQUOTED_STRUCTURED_CREDENTIAL, "$1$2[redacted]")
     .replace(/(["']?)\bBearer(\s+)[^"'\s,}\]]+\1/gi, "$1Bearer$2[redacted]$1");
   const lines = redacted
     .split(/\r?\n/)

@@ -333,6 +333,21 @@ if (process.argv.includes("--version")) {
       'Error: {"refresh_token":"refresh-value"}',
       'Error: {"refresh_token":"[redacted]"}',
     ],
+    [
+      "camel-case client secret",
+      'Error: {"clientSecret":"client-value"}',
+      'Error: {"clientSecret":"[redacted]"}',
+    ],
+    [
+      "camel-case refresh token",
+      'Error: {"refreshToken":"refresh-value"}',
+      'Error: {"refreshToken":"[redacted]"}',
+    ],
+    [
+      "escaped quoted client secret",
+      String.raw`Error: {"client_secret":"client-value\"visible-suffix"}`,
+      'Error: {"client_secret":"[redacted]"}',
+    ],
   ])("redacts an exact structured OAuth %s", (_name, output, expected) => {
     expect(safeT3StartupDiagnostic(output)).toBe(expected);
   });
