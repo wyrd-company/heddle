@@ -353,9 +353,8 @@ proposed-design:
     returns the recorded name. A different list allocates independently from
     the selected pinned theme. Allocation rotates through the list and skips
     every name held by a non-done task or incident instance, across all themes.
-    After the pinned catalog read, lock discovery, selection, and persistence
-    execute without an asynchronous boundary in the single production service
-    owner, so concurrent stage activations cannot claim the same name. The recorded
+    Selection and persistence execute within one serialized service boundary,
+    so concurrent stage activations cannot claim the same name. The recorded
     assignment remains in instance state for recovery and history, while the
     lock is released when the owning task or incident reaches done. The
     canonical handoff `stage` object carries the assigned name as `agentName`;

@@ -55,6 +55,8 @@ const themeFor = (
 };
 
 export class AgentNameAllocator {
+  private serialized: Promise<void> = Promise.resolve();
+
   public constructor(
     private readonly catalog: GitAgentNameThemeCatalog,
     private readonly store: AgentNameAllocationStore,
@@ -64,100 +66,104 @@ export class AgentNameAllocator {
     return this.catalog.validateCurrent();
   }
 
-  async prepareTask(
+  prepareTask(
     instanceId: string,
     kind: AgentNameThemeKind,
   ): Promise<AgentNameAssignmentState> {
-    const existing = this.store.getInstance(instanceId);
-    if (existing === undefined) {
-      throw new Error(`Instance does not exist: ${instanceId}`);
-    }
-    if (existing.state.agentNames !== undefined) {
-      if (existing.state.agentNames.kind !== kind) {
-        throw new AgentNameCatalogError(
-          `Instance ${JSON.stringify(instanceId)} already uses a ${existing.state.agentNames.kind} agent-name theme`,
-        );
+    return this.serialize(async () => {
+      const existing = this.store.getInstance(instanceId);
+      if (existing === undefined) {
+        throw new Error(`Instance does not exist: ${instanceId}`);
       }
-      return existing.state.agentNames;
-    }
-
-    const snapshot = await this.catalog.pinCurrent();
-    const eligible = snapshot.themes.filter((theme) => theme.kind === kind);
-    if (eligible.length === 0) {
-      throw new AgentNameCatalogError(
-        `Agent-name catalog ${JSON.stringify(snapshot.commit)} has no ${kind} theme`,
-      );
-    }
-    const used = this.store
-      .listInstances()
-      .filter((record) => record.state.agentNames?.kind === kind).length;
-    const selected = eligible[used % eligible.length]!;
-    const prepared: AgentNameAssignmentState = {
-      assignments: {},
-      catalogCommit: snapshot.commit,
-      kind,
-      themeId: selected.id,
-    };
-    return this.update(instanceId, (state) => ({
-      ...state,
-      agentNames: prepared,
-    })).state.agentNames!;
-  }
-
-  async assign(instanceId: string, list: AgentNameListName): Promise<string> {
-    const record = this.store.getInstance(instanceId);
-    if (record === undefined) {
-      throw new Error(`Instance does not exist: ${instanceId}`);
-    }
-    const state = assignmentState(record);
-    const existing = state.assignments[list];
-    if (existing !== undefined) return existing;
-
-    const themes = await this.catalog.read(state.catalogCommit);
-    const theme = themeFor(themes, state);
-    const names = namesForThemeList(theme, list);
-    if (names === undefined) {
-      throw new AgentNameCatalogError(
-        `Agent-name list ${JSON.stringify(list)} does not exist in ${state.kind} theme ${JSON.stringify(state.themeId)}`,
-      );
-    }
-    const locked = this.lockedNames();
-    const priorAssignments = this.store
-      .listInstances()
-      .filter(
-        (candidate) =>
-          candidate.state.agentNames?.themeId === state.themeId &&
-          candidate.state.agentNames.assignments[list] !== undefined,
-      ).length;
-    const selected = Array.from(
-      { length: names.length },
-      (_, offset) => names[(priorAssignments + offset) % names.length]!,
-    ).find((name) => !locked.has(name));
-    if (selected === undefined) {
-      throw new AgentNameCatalogError(
-        `Every agent name in ${JSON.stringify(state.themeId)} list ${JSON.stringify(list)} is locked by a running task`,
-      );
-    }
-    return assignmentState(
-      this.update(instanceId, (current) => {
-        const currentAgentNames = current.agentNames;
-        if (currentAgentNames === undefined) {
+      if (existing.state.agentNames !== undefined) {
+        if (existing.state.agentNames.kind !== kind) {
           throw new AgentNameCatalogError(
-            `Instance ${JSON.stringify(instanceId)} lost its agent-name theme during allocation`,
+            `Instance ${JSON.stringify(instanceId)} already uses a ${existing.state.agentNames.kind} agent-name theme`,
           );
         }
-        return {
-          ...current,
-          agentNames: {
-            ...currentAgentNames,
-            assignments: {
-              ...currentAgentNames.assignments,
-              [list]: selected,
+        return existing.state.agentNames;
+      }
+
+      const snapshot = await this.catalog.pinCurrent();
+      const eligible = snapshot.themes.filter((theme) => theme.kind === kind);
+      if (eligible.length === 0) {
+        throw new AgentNameCatalogError(
+          `Agent-name catalog ${JSON.stringify(snapshot.commit)} has no ${kind} theme`,
+        );
+      }
+      const used = this.store
+        .listInstances()
+        .filter((record) => record.state.agentNames?.kind === kind).length;
+      const selected = eligible[used % eligible.length]!;
+      const prepared: AgentNameAssignmentState = {
+        assignments: {},
+        catalogCommit: snapshot.commit,
+        kind,
+        themeId: selected.id,
+      };
+      return this.update(instanceId, (state) => ({
+        ...state,
+        agentNames: prepared,
+      })).state.agentNames!;
+    });
+  }
+
+  assign(instanceId: string, list: AgentNameListName): Promise<string> {
+    return this.serialize(async () => {
+      const record = this.store.getInstance(instanceId);
+      if (record === undefined) {
+        throw new Error(`Instance does not exist: ${instanceId}`);
+      }
+      const state = assignmentState(record);
+      const existing = state.assignments[list];
+      if (existing !== undefined) return existing;
+
+      const themes = await this.catalog.read(state.catalogCommit);
+      const theme = themeFor(themes, state);
+      const names = namesForThemeList(theme, list);
+      if (names === undefined) {
+        throw new AgentNameCatalogError(
+          `Agent-name list ${JSON.stringify(list)} does not exist in ${state.kind} theme ${JSON.stringify(state.themeId)}`,
+        );
+      }
+      const locked = this.lockedNames();
+      const priorAssignments = this.store
+        .listInstances()
+        .filter(
+          (candidate) =>
+            candidate.state.agentNames?.themeId === state.themeId &&
+            candidate.state.agentNames.assignments[list] !== undefined,
+        ).length;
+      const selected = Array.from(
+        { length: names.length },
+        (_, offset) => names[(priorAssignments + offset) % names.length]!,
+      ).find((name) => !locked.has(name));
+      if (selected === undefined) {
+        throw new AgentNameCatalogError(
+          `Every agent name in ${JSON.stringify(state.themeId)} list ${JSON.stringify(list)} is locked by a running task`,
+        );
+      }
+      return assignmentState(
+        this.update(instanceId, (current) => {
+          const currentAgentNames = current.agentNames;
+          if (currentAgentNames === undefined) {
+            throw new AgentNameCatalogError(
+              `Instance ${JSON.stringify(instanceId)} lost its agent-name theme during allocation`,
+            );
+          }
+          return {
+            ...current,
+            agentNames: {
+              ...currentAgentNames,
+              assignments: {
+                ...currentAgentNames.assignments,
+                [list]: selected,
+              },
             },
-          },
-        };
-      }),
-    ).assignments[list]!;
+          };
+        }),
+      ).assignments[list]!;
+    });
   }
 
   private lockedNames(): Set<string> {
@@ -197,5 +203,14 @@ export class AgentNameAllocator {
       );
       if (updated !== undefined) return updated;
     }
+  }
+
+  private serialize<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.serialized.then(action, action);
+    this.serialized = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 }

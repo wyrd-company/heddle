@@ -185,6 +185,40 @@ describe("agent-name allocator", () => {
     );
   });
 
+  it("returns one durable name for concurrent same-task list allocations", async () => {
+    const root = await repository();
+    const store = new MemoryStore();
+    store.create("task-one");
+    store.running("task-one");
+    const catalog = new GitAgentNameThemeCatalog(root, "HEAD");
+    const allocator = new AgentNameAllocator(catalog, store);
+    await allocator.prepareTask("task-one", "team");
+
+    const read = catalog.read.bind(catalog);
+    let readers = 0;
+    let releaseReaders!: () => void;
+    const readersMayContinue = new Promise<void>((resolve) => {
+      releaseReaders = resolve;
+    });
+    catalog.read = async (commit) => {
+      readers += 1;
+      await readersMayContinue;
+      return read(commit);
+    };
+
+    const first = allocator.assign("task-one", "allies");
+    const second = allocator.assign("task-one", "allies");
+    await Promise.resolve();
+    expect(readers).toBe(1);
+    releaseReaders();
+    const names = await Promise.all([first, second]);
+
+    expect(new Set(names).size).toBe(1);
+    expect(
+      store.getInstance("task-one")!.state.agentNames?.assignments,
+    ).toEqual({ allies: names[0] });
+  });
+
   it("allocates later lists from the task-pinned catalog after current themes change", async () => {
     const root = await repository();
     const store = new MemoryStore();
@@ -243,20 +277,23 @@ describe("agent-name allocator", () => {
     const read = catalog.read.bind(catalog);
     let readers = 0;
     let releaseReaders!: () => void;
-    const bothReadersReady = new Promise<void>((resolve) => {
+    const readersMayContinue = new Promise<void>((resolve) => {
       releaseReaders = resolve;
     });
     catalog.read = async (commit) => {
-      const themes = await read(commit);
       readers += 1;
-      if (readers === 2) releaseReaders();
-      await bothReadersReady;
-      return themes;
+      await readersMayContinue;
+      return read(commit);
     };
 
+    const firstAssignment = allocator.assign("task-one", "allies");
+    const secondAssignment = allocator.assign("task-three", "allies");
+    await Promise.resolve();
+    expect(readers).toBe(1);
+    releaseReaders();
     const [first, second] = await Promise.all([
-      allocator.assign("task-one", "allies"),
-      allocator.assign("task-three", "allies"),
+      firstAssignment,
+      secondAssignment,
     ]);
     expect(first).not.toBe(second);
     await expect(allocator.assign("task-five", "allies")).rejects.toThrow(
