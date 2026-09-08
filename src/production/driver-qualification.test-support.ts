@@ -7,9 +7,17 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createServer } from "node:net";
-import { cp, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -89,6 +97,88 @@ export const assertQualificationIsolation = (surface: {
     if (resolved !== scratch && !resolved.startsWith(`${scratch}${sep}`)) {
       throw new QualificationIsolationError(
         `Refusing a ${label} outside the scratch root: ${resolved}`,
+      );
+    }
+  }
+};
+
+const errorCode = (error: unknown): unknown =>
+  typeof error === "object" && error !== null && "code" in error
+    ? error.code
+    : undefined;
+
+const filesystemIdentity = async (directory: string): Promise<string> => {
+  const missingSegments: string[] = [];
+  let candidate = resolve(directory);
+  for (;;) {
+    try {
+      return join(await realpath(candidate), ...missingSegments);
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") {
+        throw new QualificationIsolationError(
+          "Unable to resolve qualification path identity: " + candidate,
+        );
+      }
+    }
+
+    let metadata;
+    try {
+      metadata = await lstat(candidate);
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") {
+        throw new QualificationIsolationError(
+          "Unable to inspect qualification path identity: " + candidate,
+        );
+      }
+    }
+    if (metadata?.isSymbolicLink()) {
+      throw new QualificationIsolationError(
+        "Refusing a qualification path through a dangling link: " + candidate,
+      );
+    }
+
+    const parent = dirname(candidate);
+    if (parent === candidate) {
+      throw new QualificationIsolationError(
+        "Unable to resolve qualification path identity: " + directory,
+      );
+    }
+    missingSegments.unshift(basename(candidate));
+    candidate = parent;
+  }
+};
+
+const isWithin = (candidate: string, root: string): boolean =>
+  candidate === root || candidate.startsWith(root + sep);
+
+const assertQualificationFilesystemIsolation = async (
+  scratch: string,
+  derivedPaths: readonly string[],
+): Promise<void> => {
+  const [physicalScratchRoot, physicalLiveBoard, physicalScratch] =
+    await Promise.all([
+      filesystemIdentity(tmpdir()),
+      filesystemIdentity(LIVE_BOARD_DIRECTORY),
+      filesystemIdentity(scratch),
+    ]);
+  if (
+    !isWithin(physicalScratch, physicalScratchRoot) ||
+    isWithin(physicalScratch, physicalLiveBoard)
+  ) {
+    throw new QualificationIsolationError(
+      "Refusing a scratch directory outside the physical scratch root: " +
+        physicalScratch,
+    );
+  }
+  for (const directory of derivedPaths) {
+    const identity = await filesystemIdentity(directory);
+    if (
+      !isWithin(identity, physicalScratch) ||
+      isWithin(identity, physicalLiveBoard)
+    ) {
+      throw new QualificationIsolationError(
+        "Refusing a derived qualification path outside its scratch identity: " +
+          identity,
       );
     }
   }
@@ -232,6 +322,22 @@ export const startIsolatedT3 = async (options: {
     options.scratch,
     "controlled-provider.jsonl",
   );
+  assertQualificationIsolation({
+    boardDirectory: options.scratch,
+    port: 0,
+    stateDirectory: options.scratch,
+    t3BaseDirectory: baseDirectory,
+  });
+  await assertQualificationFilesystemIsolation(options.scratch, [
+    baseDirectory,
+    join(baseDirectory, "userdata"),
+    join(baseDirectory, "userdata", "settings.json"),
+    projectPath,
+    providerHome,
+    join(providerHome, "credential-sentinel"),
+    controlledProviderLog,
+  ]);
+
   const port = await allocatePort();
   assertQualificationIsolation({
     boardDirectory: options.scratch,

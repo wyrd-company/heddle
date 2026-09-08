@@ -8,6 +8,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  readdir,
   readlink,
   readFile,
   rm,
@@ -115,6 +116,30 @@ describe("qualification isolation", () => {
       });
     } finally {
       await rm(parent, { force: true, recursive: true });
+    }
+  });
+
+  it("refuses a scratch symlink before changing its external target", async () => {
+    const linkParent = await mkdtemp(
+      join(tmpdir(), "qualification-scratch-link-"),
+    );
+    const externalTarget = await mkdtemp(
+      join(process.cwd(), "qualification-scratch-target-"),
+    );
+    const scratchLink = join(linkParent, "scratch");
+    await symlink(externalTarget, scratchLink, "dir");
+    try {
+      const before = await readdir(externalTarget);
+      const failure = await startIsolatedT3({
+        binary: join(linkParent, "unused-t3"),
+        scratch: scratchLink,
+      }).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(QualificationIsolationError);
+      expect(await readdir(externalTarget)).toEqual(before);
+    } finally {
+      await rm(linkParent, { force: true, recursive: true });
+      await rm(externalTarget, { force: true, recursive: true });
     }
   });
 
