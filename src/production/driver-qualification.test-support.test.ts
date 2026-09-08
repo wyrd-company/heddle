@@ -307,6 +307,21 @@ if (process.argv.includes("--version")) {
     ).toBe('Error: {"access_token": "[redacted]"}');
   });
 
+  it.each([
+    [
+      "unquoted authorization scheme",
+      "Error: Authorization: Bearer combined-secret",
+      "Error: Authorization: [redacted]",
+    ],
+    [
+      "quoted authorization scheme",
+      'Error: {"authorization": "Basic combined-secret"}',
+      'Error: {"authorization": "[redacted]"}',
+    ],
+  ])("redacts an atomic %s and payload", (_name, output, expected) => {
+    expect(safeT3StartupDiagnostic(output)).toBe(expected);
+  });
+
   it("bounds the startup classification", () => {
     const bounded = safeT3StartupDiagnostic(
       `Fatal: fixture stopped ${"x".repeat(70_000)}`,
