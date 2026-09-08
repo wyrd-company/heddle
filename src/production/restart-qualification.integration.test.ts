@@ -15,18 +15,12 @@ import {
   ProviderSelectionResolver,
   steerStageSession,
   T3ControlPlaneClient,
-  type T3DispatchCommand,
-  type T3ProviderDispatchContext,
 } from "../control-plane/index.js";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
 import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
-import type { JsonValue } from "../persistence/index.js";
 import { isTodoState } from "../todo/index.js";
 import { prepareProductionFixture } from "./composition.test-support.js";
-import {
-  createProductionComposition,
-  type ProductionT3Client,
-} from "./composition.js";
+import { createProductionComposition } from "./composition.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
   makeQualificationScratch,
@@ -37,6 +31,10 @@ import {
   readyProviderModels,
   startIsolatedT3,
 } from "./driver-qualification.test-support.js";
+import {
+  recordingT3,
+  storedCorrelationToken,
+} from "./restart-qualification.test-support.js";
 import { providerContextFromBinding } from "./session-binding.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
@@ -67,54 +65,6 @@ const setTaskProviderAlias = async (
       .replace(/^provider-alias:.*\n/m, "")
       .replace(/^---\n/, `---\nprovider-alias: ${alias}\n`),
   );
-};
-
-const storedCorrelationToken = (handoffs: JsonValue[]): string => {
-  const stored = handoffs.find(
-    (value) =>
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      value["kind"] === "stage-handoff" &&
-      typeof value["correlationToken"] === "string",
-  );
-  if (
-    typeof stored !== "object" ||
-    stored === null ||
-    Array.isArray(stored) ||
-    typeof stored["correlationToken"] !== "string"
-  ) {
-    throw new Error("Activated stage has no correlation token");
-  }
-  return stored["correlationToken"];
-};
-
-const recordingT3 = (client: T3ControlPlaneClient) => {
-  const dispatches: Array<{
-    command: T3DispatchCommand;
-    providerContext?: T3ProviderDispatchContext;
-  }> = [];
-  const t3: ProductionT3Client & {
-    readProviderCatalog: T3ControlPlaneClient["readProviderCatalog"];
-  } = {
-    dispatch: async (command, providerContext) => {
-      dispatches.push({
-        command,
-        ...(providerContext === undefined ? {} : { providerContext }),
-      });
-      return client.dispatch(command, providerContext);
-    },
-    getShell: () => client.getShell(),
-    getThread: (threadId) => client.getThread(threadId),
-    readProviderCatalog: () => client.readProviderCatalog(),
-    registerWorkflowMcpProviderSession: (registration) =>
-      client.registerWorkflowMcpProviderSession(registration),
-    respondToApproval: (threadId, requestId, decision, commandId) =>
-      client.respondToApproval(threadId, requestId, decision, commandId),
-    respondToUserInput: (threadId, requestId, answers, commandId) =>
-      client.respondToUserInput(threadId, requestId, answers, commandId),
-  };
-  return { dispatches, t3 };
 };
 
 describe.skipIf(!t3Binary)("restart with an active session", () => {
