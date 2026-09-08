@@ -935,6 +935,8 @@ describe("production composition", () => {
         node["handoff-template"].commitSha = templateCommitSha;
       }
     }
+    blueprint.nodes.find(({ id }) => id === "implement")!["assign-agent-name"] =
+      "heroes";
     await writeFile(
       absoluteBlueprintPath,
       `${JSON.stringify(blueprint, null, 2)}\n`,
@@ -996,6 +998,11 @@ describe("production composition", () => {
 
     const instanceId = `task-${fixture.taskId}`;
     const record = composition.persistence.getInstance(instanceId)!;
+    expect(record.state.agentNames).toMatchObject({
+      assignments: { heroes: "sample-hero" },
+      kind: "soloist",
+      themeId: "sample-soloist",
+    });
     const stored = record.state.handoffs.find(isStoredHandoff);
     if (
       stored === undefined ||
@@ -1004,6 +1011,9 @@ describe("production composition", () => {
     ) {
       throw new Error("Standard delivery activation has no stored handoff");
     }
+    expect(JSON.parse(stored.handoff)).toMatchObject({
+      stage: { agentName: "sample-hero", name: "implement" },
+    });
     const pinnedTemplate = await execute(
       "git",
       [
