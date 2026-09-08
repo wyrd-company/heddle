@@ -13,7 +13,10 @@ import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
-import { T3ControlPlaneClient } from "../control-plane/index.js";
+import {
+  T3ControlPlaneClient,
+  type T3ProviderCatalogReader,
+} from "../control-plane/index.js";
 
 const execute = promisify(execFile);
 
@@ -287,3 +290,70 @@ export const makeQualificationScratch = async (): Promise<{
   const root = await mkdtemp(join(tmpdir(), "heddle-driver-qualification-"));
   return { cleanup: () => rm(root, { force: true, recursive: true }), root };
 };
+
+export const QUALIFICATION_EXECUTION = {
+  displayName: "Workbench Alpha",
+  driver: "claudeAgent",
+  instanceId: "claude-execution",
+} as const;
+
+export const QUALIFICATION_REVIEW = {
+  displayName: "Workbench Beta",
+  driver: "claudeAgent",
+  instanceId: "claude-review",
+} as const;
+
+export const QUALIFICATION_SECOND_DRIVER = {
+  displayName: "Workbench Gamma",
+  driver: "codex",
+  instanceId: "codex-execution",
+} as const;
+
+export const QUALIFICATION_INSTANCES = [
+  QUALIFICATION_EXECUTION,
+  QUALIFICATION_REVIEW,
+  QUALIFICATION_SECOND_DRIVER,
+] as const;
+
+/**
+ * Wait until every configured instance has finished discovery and reports a
+ * model. T3 answers before discovery completes, and that early answer looks
+ * exactly like an unsupported driver.
+ */
+export const readyProviderModels = async (
+  client: T3ProviderCatalogReader,
+): Promise<Map<string, string>> => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const catalog = await client.readProviderCatalog();
+    const ready = QUALIFICATION_INSTANCES.every((instance) =>
+      catalog.some(
+        (row) =>
+          row.instanceId === instance.instanceId &&
+          row.state === "ready" &&
+          row.models.length > 0,
+      ),
+    );
+    if (ready) {
+      return new Map(
+        catalog.map((row) => [row.instanceId, row.models[0]?.slug ?? ""]),
+      );
+    }
+    await delay(250);
+  }
+  throw new Error("Isolated T3 never finished provider discovery");
+};
+
+export const qualificationAliases = (models: Map<string, string>) => ({
+  execution: {
+    model: models.get(QUALIFICATION_EXECUTION.instanceId) ?? "",
+    providerDisplayName: QUALIFICATION_EXECUTION.displayName,
+  },
+  review: {
+    model: models.get(QUALIFICATION_REVIEW.instanceId) ?? "",
+    providerDisplayName: QUALIFICATION_REVIEW.displayName,
+  },
+  secondary: {
+    model: models.get(QUALIFICATION_SECOND_DRIVER.instanceId) ?? "",
+    providerDisplayName: QUALIFICATION_SECOND_DRIVER.displayName,
+  },
+});
