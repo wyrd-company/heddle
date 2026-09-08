@@ -18,6 +18,7 @@ import {
   type ProductionComposition,
   type ProductionCompositionOptions,
   type ProductionT3Client,
+  type StartupReadinessOptions,
 } from "../production/index.js";
 import type { LoadedDeploymentConfiguration } from "./configuration.js";
 import {
@@ -39,6 +40,11 @@ export type ConfiguredProductionServiceDependencies = Partial<
   >
 > & {
   providerCatalog?: T3ProviderCatalogReader;
+  /**
+   * Bounds how long startup waits for T3 to finish discovering the configured
+   * providers. Startup still fails closed when the wait expires.
+   */
+  startupReadiness?: StartupReadinessOptions;
 };
 
 const providerUsageSource = (
@@ -78,6 +84,7 @@ const configuredCompositionInputs = async (
   const configuration = await resolveProductionConfiguration(
     loaded.configuration,
     providerResolver,
+    dependencies.startupReadiness ?? {},
   );
   return { configuration, providerResolver, t3 };
 };

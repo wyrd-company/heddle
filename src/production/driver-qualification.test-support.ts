@@ -6,7 +6,7 @@
 
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import process from "node:process";
@@ -112,6 +112,12 @@ const readPairingToken = (server: ChildProcess): Promise<string> =>
     );
   });
 
+export type ProviderInstanceFixture = {
+  readonly displayName: string;
+  readonly driver: string;
+  readonly instanceId: string;
+};
+
 /**
  * Start a real T3 whose state is isolated but whose provider identity is the
  * operator's own. `T3CODE_HOME` carries state and is scratch; `HOME` carries
@@ -121,12 +127,30 @@ const readPairingToken = (server: ChildProcess): Promise<string> =>
 export const startIsolatedT3 = async (options: {
   readonly binary: string;
   readonly home: string;
+  readonly providerInstances?: readonly ProviderInstanceFixture[];
   readonly scratch: string;
 }): Promise<IsolatedT3> => {
   const baseDirectory = join(options.scratch, "t3-base");
   const projectPath = join(options.scratch, "t3-project");
-  await mkdir(baseDirectory, { recursive: true });
+  await mkdir(join(baseDirectory, "userdata"), { recursive: true });
   await mkdir(projectPath, { recursive: true });
+  if (options.providerInstances !== undefined) {
+    await writeFile(
+      join(baseDirectory, "userdata", "settings.json"),
+      JSON.stringify({
+        providerInstances: Object.fromEntries(
+          options.providerInstances.map((instance) => [
+            instance.instanceId,
+            {
+              displayName: instance.displayName,
+              driver: instance.driver,
+              enabled: true,
+            },
+          ]),
+        ),
+      }),
+    );
+  }
   await execute("git", ["init", "--quiet", "--initial-branch=main"], {
     cwd: projectPath,
   });

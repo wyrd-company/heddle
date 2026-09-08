@@ -6,8 +6,10 @@
 import { URL } from "node:url";
 
 import {
+  ProviderSelectionError,
   T3_RUNTIME_MODES,
   type ProviderAliasCatalog,
+  type ProviderSelectionReason,
   type ProviderSelectionResolver,
   type ResolvedProviderSelection,
   type T3RuntimeMode,
@@ -340,17 +342,74 @@ export const validateResolvedProductionConfiguration = (
   return configuration;
 };
 
+/**
+ * T3 discovers whether each configured provider's harness is installed after
+ * it starts serving, reporting `state: warning` until that completes. A
+ * service that starts alongside T3 therefore resolves its aliases at the one
+ * moment the answer is guaranteed to be wrong, and reports a provider that is
+ * merely not discovered yet as permanently unavailable.
+ *
+ * Only these two reasons are transient at boot. Every other selection failure
+ * is a configuration error that waiting cannot repair.
+ */
+const STARTUP_TRANSIENT_REASONS: ReadonlySet<ProviderSelectionReason> = new Set(
+  ["provider-catalog-unavailable", "provider-unavailable"],
+);
+
+export type StartupReadinessOptions = {
+  readonly pollMilliseconds?: number;
+  readonly now?: () => number;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
+  readonly timeoutMilliseconds?: number;
+};
+
+const DEFAULT_STARTUP_READINESS_TIMEOUT_MILLISECONDS = 60_000;
+const DEFAULT_STARTUP_READINESS_POLL_MILLISECONDS = 500;
+
 export const resolveProductionConfiguration = async (
   configuration: ProductionConfiguration,
   resolver: ProviderSelectionResolver,
+  readiness: StartupReadinessOptions = {},
 ): Promise<ResolvedProductionConfiguration> => {
   const validated = validateProductionConfiguration(configuration);
-  const startup = await resolver.resolveStartup({
+  const timeoutMilliseconds =
+    readiness.timeoutMilliseconds ??
+    DEFAULT_STARTUP_READINESS_TIMEOUT_MILLISECONDS;
+  const pollMilliseconds =
+    readiness.pollMilliseconds ?? DEFAULT_STARTUP_READINESS_POLL_MILLISECONDS;
+  const now = readiness.now ?? (() => Date.now());
+  const sleep =
+    readiness.sleep ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, milliseconds);
+      }));
+  const startupInputs = {
     defaultAlias: validated.session.defaultProviderAlias,
     interactionMode: validated.session.interactionMode,
     providerBudgets: validated.pacing.providerBudgets,
     runtimeMode: validated.session.defaultRuntimeMode,
-  });
+  };
+  const deadline = now() + timeoutMilliseconds;
+  const resolveStartupWhenReady = async (): Promise<
+    Awaited<ReturnType<ProviderSelectionResolver["resolveStartup"]>>
+  > => {
+    for (;;) {
+      try {
+        return await resolver.resolveStartup(startupInputs);
+      } catch (error) {
+        if (
+          !(error instanceof ProviderSelectionError) ||
+          !STARTUP_TRANSIENT_REASONS.has(error.reason) ||
+          now() >= deadline
+        ) {
+          throw error;
+        }
+        await sleep(pollMilliseconds);
+      }
+    }
+  };
+  const startup = await resolveStartupWhenReady();
   const resolved: ResolvedProductionConfiguration = {
     ...validated,
     pacing: {

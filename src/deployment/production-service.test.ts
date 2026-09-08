@@ -712,6 +712,9 @@ describe("configured production composition", () => {
             throw new Error("transport included sensitive detail");
           },
         },
+        // A catalog that never becomes reachable must still fail closed, so
+        // bound the boot readiness wait rather than waiting it out.
+        startupReadiness: { timeoutMilliseconds: 0 },
         t3: new SyntheticT3(),
       },
     ).catch((candidate: unknown) => candidate);

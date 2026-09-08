@@ -18,6 +18,7 @@ export {
   validateProductionConfiguration,
   validateResolvedProductionConfiguration,
   resolveProductionConfiguration,
+  type StartupReadinessOptions,
 } from "./configuration.js";
 export {
   DurableAttentionQueue,
