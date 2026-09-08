@@ -26,6 +26,10 @@ import {
 const execute = promisify(execFile);
 const T3_STARTUP_CAPTURE_LIMIT = 65_536;
 const T3_STARTUP_DIAGNOSTIC_LIMIT = 2_000;
+const ANSI_CONTROL_SEQUENCE = new RegExp(
+  `${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`,
+  "g",
+);
 
 /**
  * The operator's live control plane. A qualification run that reaches it would
@@ -119,7 +123,7 @@ const appendStartupOutput = (current: string, chunk: Buffer): string =>
 
 export const safeT3StartupDiagnostic = (output: string): string => {
   const redacted = output
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(ANSI_CONTROL_SEQUENCE, "")
     .replace(/\bToken:\s*\S+/gi, "Token: [redacted]")
     .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
     .replace(
