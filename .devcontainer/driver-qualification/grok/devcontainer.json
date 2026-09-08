@@ -2,6 +2,9 @@
   "name": "Heddle Grok qualification row",
   "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
   "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24"
+    },
     "ghcr.io/wyrd-company/devcontainers/grok-cli:1": {}
   },
   "mounts": [

@@ -2,6 +2,9 @@
   "name": "Heddle Claude Code qualification row",
   "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
   "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24"
+    },
     "ghcr.io/wyrd-company/devcontainers/claude-code-cli:1": {}
   },
   "mounts": [
