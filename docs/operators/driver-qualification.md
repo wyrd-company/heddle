@@ -36,20 +36,12 @@ provider policy. The composition receives neither a `t3` client nor a
 - The selected harness installed from its published Dev Container Feature.
   Each native row has its own configuration under
   `.devcontainer/driver-qualification/`.
-- The supported T3 release from `deployment/supported-versions.json`,
-  installed into a scratch prefix. Never the operator's own `t3` on `PATH`.
+- The supported T3 release declared in `deployment/supported-versions.json`.
 - Provider authentication is the operator's own. A native-row configuration
   mounts only that provider's store, read-only, under
   `/run/heddle-credentials`, then copies it into the disposable container home.
   A CLI can update its disposable copy, but cannot write or rotate the
   operator's store. Other providers' stores are not mounted.
-
-Install the pinned control plane:
-
-```bash
-npm install --global --no-audit --no-fund --prefix "${SCRATCH}/t3" \
-  "$(jq -er '.t3PackageSource' deployment/supported-versions.json)"
-```
 
 ## Running it
 
@@ -60,20 +52,21 @@ provider budget.
 
 ```bash
 # Production seams, selection matrix, restart, and isolation guards.
-env -u FORCE_COLOR -u NO_COLOR \
-  HEDDLE_T3_INTEGRATION_BINARY="${SCRATCH}/t3/bin/t3" \
-  task test:pinned-t3
+task test:pinned-t3
 
 # One native driver row. Repeat with claude-code, codex, cursor, grok, and
 # opencode, using the matching devcontainer configuration for each row. Each
 # starts its own control plane and runs a real parent and delegated child, so
 # budget a generous wall clock.
-env -u FORCE_COLOR -u NO_COLOR \
-  HEDDLE_T3_INTEGRATION_BINARY="${SCRATCH}/t3/bin/t3" \
-  HEDDLE_NATIVE_DRIVER_QUALIFICATION=1 \
-  HEDDLE_NATIVE_DRIVER_ALIAS=codex \
-  npx vitest run src/production/native-driver.integration.test.ts
+scripts/deployment/qualify-native-driver.sh codex
 ```
+
+The pinned-T3 target creates a uniquely named scratch prefix, installs the
+declared T3 package into it, validates the installed executable, and removes
+that exact prefix on success, failure, or interruption. It does not use an
+operator T3 from `PATH`. Set `HEDDLE_T3_INTEGRATION_BINARY` only to repeat the
+gate with an already installed pinned executable; the target validates but does
+not remove an operator-supplied path.
 
 Run each row through the cleanup-owning command. It creates the matching
 credential-isolated container, captures the exact container identity returned
