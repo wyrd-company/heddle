@@ -136,10 +136,8 @@ describe("agent-name allocator", () => {
     for (const instanceId of ["task-one", "task-two", "task-three", "ad-hoc"]) {
       store.create(instanceId);
     }
-    const allocator = new AgentNameAllocator(
-      new GitAgentNameThemeCatalog(root, "HEAD"),
-      store,
-    );
+    const catalog = new GitAgentNameThemeCatalog(root, "HEAD");
+    const allocator = new AgentNameAllocator(catalog, store);
 
     await expect(
       allocator.prepareTask("task-one", "team"),
@@ -236,13 +234,25 @@ describe("agent-name allocator", () => {
       store.create(instanceId);
     }
     store.running("task-one", "task-three", "task-five");
-    const allocator = new AgentNameAllocator(
-      new GitAgentNameThemeCatalog(root, "HEAD"),
-      store,
-    );
+    const catalog = new GitAgentNameThemeCatalog(root, "HEAD");
+    const allocator = new AgentNameAllocator(catalog, store);
     for (const instanceId of instanceIds) {
       await allocator.prepareTask(instanceId, "team");
     }
+
+    const read = catalog.read.bind(catalog);
+    let readers = 0;
+    let releaseReaders!: () => void;
+    const bothReadersReady = new Promise<void>((resolve) => {
+      releaseReaders = resolve;
+    });
+    catalog.read = async (commit) => {
+      const themes = await read(commit);
+      readers += 1;
+      if (readers === 2) releaseReaders();
+      await bothReadersReady;
+      return themes;
+    };
 
     const [first, second] = await Promise.all([
       allocator.assign("task-one", "allies"),
