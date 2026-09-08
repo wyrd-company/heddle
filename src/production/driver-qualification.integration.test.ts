@@ -355,7 +355,7 @@ describe.skipIf(!t3Binary)(
           await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
         }
         throw new Error(
-          `Parent session never became active in T3: ${JSON.stringify({ attentions: composition.attention.list(), events: composition.persistence.replayEvents(instanceId), thread: lastObservation })}`,
+          `Parent session never became active in T3: ${JSON.stringify(lastObservation)}`,
         );
       })();
       expect(parentPhase).toBeDefined();
