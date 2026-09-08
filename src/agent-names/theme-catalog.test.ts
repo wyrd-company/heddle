@@ -97,6 +97,24 @@ describe("agent-name theme catalog", () => {
     );
   });
 
+  it.each([
+    [
+      "a team theme missing a required list",
+      team().replace("neutrals: [sample-neutral]\n", ""),
+    ],
+    [
+      "a soloist theme carrying a team list",
+      `${soloist()}allies: [sample-ally]\n`,
+    ],
+  ])("rejects %s", async (_description, source) => {
+    const root = await repository();
+    await writeFile(join(root, "themes", "sample-team.yml"), source);
+
+    await expect(validateAgentNameThemeRepository(root)).rejects.toThrow(
+      'theme "sample-team" violates the theme schema',
+    );
+  });
+
   it("rejects a second soloist theme", async () => {
     const root = await repository();
     await writeFile(join(root, "themes", "sample-soloist.yml"), soloist());
