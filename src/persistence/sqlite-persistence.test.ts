@@ -578,6 +578,13 @@ describe("SqlitePersistence", () => {
       ...record,
       state: "active",
     });
+    const database = new Database(persistence.databasePath);
+    expect(() =>
+      database
+        .prepare("UPDATE heddle_shared_project SET state = 'invalid'")
+        .run(),
+    ).toThrow(/CHECK constraint failed/);
+    database.close();
     persistence.close();
   });
 
