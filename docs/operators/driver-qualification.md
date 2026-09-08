@@ -62,7 +62,7 @@ provider budget.
 # Production seams, selection matrix, restart, and isolation guards.
 env -u FORCE_COLOR -u NO_COLOR \
   HEDDLE_T3_INTEGRATION_BINARY="${SCRATCH}/t3/bin/t3" \
-  npx vitest run src/production/ src/control-plane/
+  task test:pinned-t3
 
 # One native driver row. Repeat with claude-code, codex, cursor, grok, and
 # opencode, using the matching devcontainer configuration for each row. Each
