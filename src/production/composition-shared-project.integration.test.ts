@@ -231,6 +231,28 @@ describe("production shared-project reconciliation", () => {
     expect(t3.commands).toHaveLength(0);
   });
 
+  it("fails closed when the existing control-plane project has a different workspace root", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new SyntheticT3();
+    await t3.dispatch({
+      commandId: "different-project-root-create",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: fixture.configuration.adHocProject.projectId,
+      title: fixture.configuration.adHocProject.name,
+      type: "project.create",
+      workspaceRoot: `${fixture.configuration.adHocProject.workspaceRoot}-other`,
+    });
+    t3.commands.length = 0;
+
+    const started = open(fixture, t3);
+    await expect(started.start()).rejects.toThrow(
+      "Shared project 'Shared tasks' (workspace-project) reconciliation failed: the control-plane identity differs from configuration",
+    );
+    expect(started.persistence.getSharedProject()).toBeUndefined();
+    expect(t3.commands).toHaveLength(0);
+  });
+
   it("fails closed when configuration changes the durable shared-project identity", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
