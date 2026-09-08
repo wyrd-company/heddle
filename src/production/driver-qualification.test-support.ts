@@ -7,17 +7,9 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createServer } from "node:net";
-import {
-  cp,
-  lstat,
-  mkdir,
-  mkdtemp,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -30,6 +22,18 @@ import {
   resolveT3AwarenessPhase,
   type T3ShellThread,
 } from "../control-plane/t3-agent-awareness.js";
+import {
+  assertQualificationFilesystemIsolation,
+  assertQualificationIsolation,
+  QualificationIsolationError,
+} from "./driver-qualification-isolation.js";
+
+export {
+  assertQualificationIsolation,
+  LIVE_BOARD_DIRECTORY,
+  LIVE_T3_PORT,
+  QualificationIsolationError,
+} from "./driver-qualification-isolation.js";
 
 const execute = promisify(execFile);
 const T3_STARTUP_CAPTURE_LIMIT = 65_536;
@@ -44,145 +48,6 @@ const ANSI_CONTROL_SEQUENCE = new RegExp(
   `${ESCAPE_CONTROL}(?:\\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])`,
   "g",
 );
-
-/**
- * The operator's live control plane. A qualification run that reaches it would
- * dispatch against real provider accounts and real threads.
- */
-export const LIVE_T3_PORT = 3773;
-
-/** The operator's live board. Heddle is its single writer of child status. */
-export const LIVE_BOARD_DIRECTORY = "/workspaces/kanban";
-
-export class QualificationIsolationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "QualificationIsolationError";
-  }
-}
-
-/**
- * Refuse any qualification surface that could reach operator state.
- *
- * Each check has a named test in `driver-qualification-isolation.test.ts`; the
- * suite asserts both that a safe surface is accepted and that each unsafe one
- * is refused.
- */
-export const assertQualificationIsolation = (surface: {
-  readonly boardDirectory: string;
-  readonly port: number;
-  readonly stateDirectory: string;
-  readonly t3BaseDirectory: string;
-}): void => {
-  if (surface.port === LIVE_T3_PORT) {
-    throw new QualificationIsolationError(
-      `Refusing the operator's live T3 port ${LIVE_T3_PORT}`,
-    );
-  }
-  const board = resolve(surface.boardDirectory);
-  if (
-    board === LIVE_BOARD_DIRECTORY ||
-    board.startsWith(`${LIVE_BOARD_DIRECTORY}${sep}`)
-  ) {
-    throw new QualificationIsolationError(
-      `Refusing the operator's live board at ${LIVE_BOARD_DIRECTORY}`,
-    );
-  }
-  const scratch = resolve(tmpdir());
-  for (const [label, directory] of [
-    ["T3 base directory", surface.t3BaseDirectory],
-    ["state directory", surface.stateDirectory],
-  ] as const) {
-    const resolved = resolve(directory);
-    if (resolved !== scratch && !resolved.startsWith(`${scratch}${sep}`)) {
-      throw new QualificationIsolationError(
-        `Refusing a ${label} outside the scratch root: ${resolved}`,
-      );
-    }
-  }
-};
-
-const errorCode = (error: unknown): unknown =>
-  typeof error === "object" && error !== null && "code" in error
-    ? error.code
-    : undefined;
-
-const filesystemIdentity = async (directory: string): Promise<string> => {
-  const missingSegments: string[] = [];
-  let candidate = resolve(directory);
-  for (;;) {
-    try {
-      return join(await realpath(candidate), ...missingSegments);
-    } catch (error) {
-      if (errorCode(error) !== "ENOENT") {
-        throw new QualificationIsolationError(
-          "Unable to resolve qualification path identity: " + candidate,
-        );
-      }
-    }
-
-    let metadata;
-    try {
-      metadata = await lstat(candidate);
-    } catch (error) {
-      if (errorCode(error) !== "ENOENT") {
-        throw new QualificationIsolationError(
-          "Unable to inspect qualification path identity: " + candidate,
-        );
-      }
-    }
-    if (metadata?.isSymbolicLink()) {
-      throw new QualificationIsolationError(
-        "Refusing a qualification path through a dangling link: " + candidate,
-      );
-    }
-
-    const parent = dirname(candidate);
-    if (parent === candidate) {
-      throw new QualificationIsolationError(
-        "Unable to resolve qualification path identity: " + directory,
-      );
-    }
-    missingSegments.unshift(basename(candidate));
-    candidate = parent;
-  }
-};
-
-const isWithin = (candidate: string, root: string): boolean =>
-  candidate === root || candidate.startsWith(root + sep);
-
-const assertQualificationFilesystemIsolation = async (
-  scratch: string,
-  derivedPaths: readonly string[],
-): Promise<void> => {
-  const [physicalScratchRoot, physicalLiveBoard, physicalScratch] =
-    await Promise.all([
-      filesystemIdentity(tmpdir()),
-      filesystemIdentity(LIVE_BOARD_DIRECTORY),
-      filesystemIdentity(scratch),
-    ]);
-  if (
-    !isWithin(physicalScratch, physicalScratchRoot) ||
-    isWithin(physicalScratch, physicalLiveBoard)
-  ) {
-    throw new QualificationIsolationError(
-      "Refusing a scratch directory outside the physical scratch root: " +
-        physicalScratch,
-    );
-  }
-  for (const directory of derivedPaths) {
-    const identity = await filesystemIdentity(directory);
-    if (
-      !isWithin(identity, physicalScratch) ||
-      isWithin(identity, physicalLiveBoard)
-    ) {
-      throw new QualificationIsolationError(
-        "Refusing a derived qualification path outside its scratch identity: " +
-          identity,
-      );
-    }
-  }
-};
 
 export type IsolatedT3 = {
   readonly accessToken: string;
