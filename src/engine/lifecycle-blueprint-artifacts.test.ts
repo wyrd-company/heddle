@@ -36,6 +36,16 @@ const sampleTodoTemplate = `${JSON.stringify(
   null,
   2,
 )}\n`;
+const sampleTheme = `$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships:
+  implements: heddle
+kind: team
+leader: sample-lead
+companions: [sample-companion]
+allies: [sample-ally]
+antagonists: [sample-antagonist]
+neutrals: [sample-neutral]
+`;
 const artifact = (commitSha = "a".repeat(40)) => ({
   $schema: "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
   relationships: {
@@ -94,6 +104,8 @@ const repository = async (
   const root = await mkdtemp(join(tmpdir(), "heddle-blueprint-validation-"));
   roots.push(root);
   await mkdir(join(root, "blueprints"));
+  await mkdir(join(root, "themes"));
+  await writeFile(join(root, "themes", "sample-team.yml"), sampleTheme);
   await mkdir(join(root, "handoff-templates"));
   await writeFile(
     join(root, "handoff-templates", "sample-handoff.md"),
@@ -213,6 +225,33 @@ describe("organization lifecycle blueprint artifacts", () => {
     ]);
   });
 
+  it("accepts an agent-name list on an agent wait node", async () => {
+    const root = await repository();
+    const valid = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    const wait = valid.nodes[1] as Record<string, unknown>;
+    wait["assign-agent-name"] = "allies";
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(valid, null, 2)}\n`,
+    );
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+  });
+
+  it("rejects an unknown agent-name list through the lifecycle schema", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["assign-agent-name"] =
+      "unknown-list";
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow("violates the lifecycle schema");
+  });
+
   it.each([
     ["provider-alias", null],
     ["provider-alias", ""],
@@ -243,6 +282,22 @@ describe("organization lifecycle blueprint artifacts", () => {
       ).rejects.toThrow("violates the lifecycle schema");
     },
   );
+
+  it("rejects interpreter-invalid mechanical-node agent-name assignment", () => {
+    const invalid = deliveryBlueprintFixture("trivial");
+    (invalid.nodes[0] as Record<string, unknown>)["assign-agent-name"] =
+      "allies";
+    const blueprint = { ...invalid, id: "trivial" } as LifecycleBlueprint;
+    const effects = Object.fromEntries(
+      blueprint.nodes
+        .filter(({ uses }) => uses !== "wait")
+        .map(({ uses }) => [uses, async () => ({})]),
+    ) as Record<string, LifecycleEffect>;
+
+    expect(() => validateBlueprint(blueprint, effects)).toThrow(
+      "must not assign an agent name",
+    );
+  });
 
   it.each(["provider-alias", "runtime-mode"])(
     "rejects interpreter-invalid mechanical-node %s",

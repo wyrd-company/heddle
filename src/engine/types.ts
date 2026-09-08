@@ -20,6 +20,7 @@ import type {
   ResolvedSessionRuntimeMode,
 } from "../persistence/index.js";
 import type { ErrorDetail } from "../error-details.js";
+import type { AgentNameListName } from "../agent-names/index.js";
 
 export type LifecycleOutputContract =
   "incident-diagnosis" | "optional" | "review-findings";
@@ -31,6 +32,7 @@ export interface LifecycleEdge extends EdgeDefinition {
 }
 
 export interface LifecycleNode extends NodeDefinition {
+  "assign-agent-name"?: AgentNameListName;
   handoff?: "remediation" | "standard";
   "handoff-template"?: {
     commitSha: string;

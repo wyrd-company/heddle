@@ -12,6 +12,7 @@ export type ReviewStageOutput = {
 };
 
 export type StandardHandoffStage = {
+  agentName?: string;
   kind: "standard";
   name: string;
   priorStageOutputs: JsonValue[];
@@ -19,6 +20,7 @@ export type StandardHandoffStage = {
 };
 
 export type RemediationHandoffStage = {
+  agentName?: string;
   cause?: { kind: "review-findings" } | ReviewIntegrationRemediationCause;
   kind: "remediation";
   name: string;
@@ -51,6 +53,9 @@ export const assembleStageHandoff = (input: StageHandoffInput): string => {
   const stage: JsonValue =
     input.stage.kind === "remediation"
       ? {
+          ...(input.stage.agentName === undefined
+            ? {}
+            : { agentName: input.stage.agentName }),
           remediationCause: input.stage.cause ?? null,
           kind: input.stage.kind,
           name: input.stage.name,
@@ -58,6 +63,9 @@ export const assembleStageHandoff = (input: StageHandoffInput): string => {
           skills: input.stage.skills ?? [],
         }
       : {
+          ...(input.stage.agentName === undefined
+            ? {}
+            : { agentName: input.stage.agentName }),
           kind: input.stage.kind,
           name: input.stage.name,
           priorStageOutputs: input.stage.priorStageOutputs,

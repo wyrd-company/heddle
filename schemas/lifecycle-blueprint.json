@@ -132,6 +132,18 @@
             "full-access"
           ]
         },
+        "assign-agent-name": {
+          "enum": [
+            "leader",
+            "companions",
+            "allies",
+            "antagonists",
+            "neutrals",
+            "heroes",
+            "villains",
+            "bystanders"
+          ]
+        },
         "skills": {
           "type": "array",
           "minItems": 1,
@@ -235,6 +247,9 @@
                 },
                 {
                   "required": ["runtime-mode"]
+                },
+                {
+                  "required": ["assign-agent-name"]
                 }
               ]
             }

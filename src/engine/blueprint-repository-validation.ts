@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
 
+import { validateAgentNameThemeRepository } from "../agent-names/index.js";
 import { validateBlueprint } from "./blueprint.js";
 import { isBlueprintArtifactId } from "./blueprint-artifact.js";
 import { BlueprintValidationError } from "./errors.js";
@@ -187,6 +188,7 @@ export const validateBlueprintRepository = async (
   repositoryRoot: string,
 ): Promise<string[]> => {
   const root = resolve(repositoryRoot);
+  await validateAgentNameThemeRepository(root);
   const directory = join(root, "blueprints");
   const filenames = (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && extname(entry.name) === ".json")

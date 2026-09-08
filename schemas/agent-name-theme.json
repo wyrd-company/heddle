@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wyrd.company/heddle/agent-name-theme.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "title": "Heddle agent-name theme",
+  "description": "A repository-resident catalog of names for lifecycle stage agents.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/team"
+    },
+    {
+      "$ref": "#/$defs/soloist"
+    }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["$schema", "relationships", "kind"],
+      "properties": {
+        "$schema": {
+          "const": "https://wyrd.company/heddle/agent-name-theme.schema.json"
+        },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["implements"],
+          "properties": {
+            "implements": {
+              "const": "heddle"
+            }
+          }
+        },
+        "kind": {
+          "enum": ["team", "soloist"]
+        }
+      }
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "names": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/name"
+      }
+    },
+    "team": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "$schema",
+            "relationships",
+            "kind",
+            "leader",
+            "companions",
+            "allies",
+            "antagonists",
+            "neutrals"
+          ],
+          "properties": {
+            "$schema": true,
+            "relationships": true,
+            "kind": {
+              "const": "team"
+            },
+            "leader": {
+              "$ref": "#/$defs/name"
+            },
+            "companions": {
+              "$ref": "#/$defs/names"
+            },
+            "allies": {
+              "$ref": "#/$defs/names"
+            },
+            "antagonists": {
+              "$ref": "#/$defs/names"
+            },
+            "neutrals": {
+              "$ref": "#/$defs/names"
+            }
+          }
+        }
+      ]
+    },
+    "soloist": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "$schema",
+            "relationships",
+            "kind",
+            "heroes",
+            "villains",
+            "bystanders"
+          ],
+          "properties": {
+            "$schema": true,
+            "relationships": true,
+            "kind": {
+              "const": "soloist"
+            },
+            "heroes": {
+              "$ref": "#/$defs/names"
+            },
+            "villains": {
+              "$ref": "#/$defs/names"
+            },
+            "bystanders": {
+              "$ref": "#/$defs/names"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

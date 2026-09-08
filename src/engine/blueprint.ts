@@ -11,6 +11,7 @@ import {
 } from "flowcraft";
 
 import { BlueprintValidationError } from "./errors.js";
+import { agentNameListNames } from "../agent-names/index.js";
 import { RESOLVED_SESSION_RUNTIME_MODES } from "../persistence/index.js";
 import { isProviderAlias } from "../provider-alias.js";
 import {
@@ -31,6 +32,7 @@ export const internalNodeIdParameter = "__heddleNodeId";
 const dispositionPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const placeholderNode: NodeFunction = async () => ({ output: null });
 const mechanicalNodeUseSet = new Set<string>(mechanicalNodeUses);
+const agentNameListNameSet = new Set<string>(agentNameListNames);
 
 export const validateBlueprintBoardStatuses = (
   blueprint: LifecycleBlueprint,
@@ -137,7 +139,18 @@ export const validateBlueprint = (
       (node.tools !== undefined ||
         node["todo-template"] !== undefined ||
         node["handoff-template"] !== undefined ||
+        node["assign-agent-name"] !== undefined ||
         node.skills !== undefined);
+    const agentNameList = node["assign-agent-name"] as unknown;
+    if (
+      agentNameList !== undefined &&
+      (typeof agentNameList !== "string" ||
+        !agentNameListNameSet.has(agentNameList))
+    ) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} assign-agent-name is invalid`,
+      );
+    }
     const providerAlias = node["provider-alias"] as unknown;
     if (providerAlias !== undefined && !isProviderAlias(providerAlias)) {
       throw new BlueprintValidationError(
@@ -161,6 +174,11 @@ export const validateBlueprint = (
     ) {
       throw new BlueprintValidationError(
         `Non-wait node ${JSON.stringify(node.id)} must not declare session selection`,
+      );
+    }
+    if (node.uses !== "wait" && agentNameList !== undefined) {
+      throw new BlueprintValidationError(
+        `Non-wait node ${JSON.stringify(node.id)} must not assign an agent name`,
       );
     }
     if (
