@@ -192,10 +192,16 @@ describe("production stage handoff", () => {
     );
     const blueprint = JSON.parse(
       await readFile(join(repositoryRoot, blueprintPath), "utf8"),
-    ) as { nodes: Array<{ id: string; skills?: string[] }> };
-    blueprint.nodes.find(({ id }) => id === "review")!.skills = [
-      "evidence-review",
-    ];
+    ) as {
+      nodes: Array<{
+        "assign-agent-name"?: string;
+        id: string;
+        skills?: string[];
+      }>;
+    };
+    const reviewNode = blueprint.nodes.find(({ id }) => id === "review")!;
+    reviewNode.skills = ["evidence-review"];
+    reviewNode["assign-agent-name"] = "antagonists";
     await writeFile(
       join(repositoryRoot, blueprintPath),
       `${JSON.stringify(blueprint, null, 2)}\n`,
@@ -241,14 +247,17 @@ describe("production stage handoff", () => {
       stageId: "review",
     });
 
-    expect(review.handoff).toMatchObject({
-      kind: "standard",
-      name: "review",
-      priorStageOutputs: [
-        { result: "ready" },
-        { snapshotId: "snapshot-sample" },
-      ],
-      skills: ["evidence-review"],
+    expect(review).toMatchObject({
+      agentNameList: "antagonists",
+      handoff: {
+        kind: "standard",
+        name: "review",
+        priorStageOutputs: [
+          { result: "ready" },
+          { snapshotId: "snapshot-sample" },
+        ],
+        skills: ["evidence-review"],
+      },
     });
     persistence.close();
   });

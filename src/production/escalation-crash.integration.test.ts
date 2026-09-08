@@ -51,6 +51,32 @@ const runWorker = (
     child.once("exit", (code) => resolve({ code, stderr, stdout }));
   });
 
+const writeAgentNameThemes = async (repositoryRoot: string): Promise<void> => {
+  await mkdir(join(repositoryRoot, "themes"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "themes", "sample-team.yml"),
+    `$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships: { implements: heddle }
+kind: team
+leader: sample-lead
+companions: [sample-companion]
+allies: [sample-ally]
+antagonists: [sample-antagonist]
+neutrals: [sample-neutral]
+`,
+  );
+  await writeFile(
+    join(repositoryRoot, "themes", "sample-soloist.yml"),
+    `$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships: { implements: heddle }
+kind: soloist
+heroes: [sample-hero]
+villains: [sample-villain]
+bystanders: [sample-bystander]
+`,
+  );
+};
+
 describe("production escalation crash recovery", () => {
   let root = "";
 
@@ -107,10 +133,11 @@ next_id: 17
       { cwd: root },
     );
     await writeFile(join(blueprintsRepositoryRoot, "README.md"), "# Fixture\n");
+    await writeAgentNameThemes(blueprintsRepositoryRoot);
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: blueprintsRepositoryRoot,
     });
-    await execute("git", ["add", "README.md"], {
+    await execute("git", ["add", "README.md", "themes"], {
       cwd: blueprintsRepositoryRoot,
     });
     await execute(

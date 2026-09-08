@@ -6,6 +6,7 @@
 export {
   isNotificationFailureCategory,
   isNotificationRetryCategory,
+  type AgentNameAssignmentState,
   type EpicProjectRecord,
   type InstanceRecord,
   type InstanceEventClaim,

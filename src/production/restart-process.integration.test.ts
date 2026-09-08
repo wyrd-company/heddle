@@ -27,6 +27,32 @@ import type { ResolvedProductionConfiguration } from "./configuration.js";
 
 const execute = promisify(execFile);
 
+const writeAgentNameThemes = async (repositoryRoot: string): Promise<void> => {
+  await mkdir(join(repositoryRoot, "themes"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "themes", "sample-team.yml"),
+    `$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships: { implements: heddle }
+kind: team
+leader: sample-lead
+companions: [sample-companion]
+allies: [sample-ally]
+antagonists: [sample-antagonist]
+neutrals: [sample-neutral]
+`,
+  );
+  await writeFile(
+    join(repositoryRoot, "themes", "sample-soloist.yml"),
+    `$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships: { implements: heddle }
+kind: soloist
+heroes: [sample-hero]
+villains: [sample-villain]
+bystanders: [sample-bystander]
+`,
+  );
+};
+
 const run = (
   mode: "crash-after-activation" | "restart",
   configuration: string,
@@ -135,6 +161,24 @@ next_id: 1
         blueprintsRepositoryRoot,
       ],
       { cwd: root },
+    );
+    await writeAgentNameThemes(blueprintsRepositoryRoot);
+    await execute("git", ["add", "themes"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add agent-name themes",
+      ],
+      { cwd: blueprintsRepositoryRoot },
     );
     await execute("git", ["init", "--quiet", "--bare", blueprintsRemote], {
       cwd: root,
@@ -319,12 +363,14 @@ kind: standard
         items: [{ id: "deliver", text: "Deliver the sample" }],
       }),
     );
+    await writeAgentNameThemes(blueprintsRepositoryRoot);
     await execute(
       "git",
       [
         "add",
         "handoff-templates/standard.md",
         "todo-templates/sample-stage.json",
+        "themes",
       ],
       { cwd: blueprintsRepositoryRoot },
     );

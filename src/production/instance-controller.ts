@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 
 import type { BoardTask } from "../board-adapter/index.js";
+import type { AgentNameAllocator } from "../agent-names/index.js";
 import { AttentionVisibleError } from "../attention-visible-error.js";
 import { describeError } from "../error-details.js";
 import {
@@ -107,6 +108,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     ) => Promise<void> = async () => undefined,
     private readonly now: () => number = Date.now,
     private readonly providerSelection?: StageProviderSelectionResolver,
+    private readonly agentNames?: AgentNameAllocator,
   ) {}
 
   private sessionSelectionResolver(): StageProviderSelectionResolver {
@@ -220,6 +222,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             ({ sessionKey }) => sessionKey === starting.sessionKey,
           );
     if (retainedSession !== undefined) {
+      await this.agentNames?.prepareTask(
+        input.instanceId,
+        input.task.parent === undefined ? "soloist" : "team",
+      );
       starting = {
         ...starting,
         provider: retainedSession.binding.providerInstanceId,
@@ -235,6 +241,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           blueprintPath: input.blueprintPath,
           instanceId: input.instanceId,
         }));
+      await this.agentNames?.prepareTask(
+        input.instanceId,
+        input.task.parent === undefined ? "soloist" : "team",
+      );
       if (stageId === undefined) {
         this.persistence.writeReconcilerRuntime(starting);
       } else {
@@ -405,6 +415,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     stageId: string,
     task?: Pick<BoardTask, "id" | "providerAlias">,
   ): Promise<IncidentRuntimeRecord> {
+    await this.agentNames?.prepareTask(runtime.incidentId, "soloist");
     const priorSessions = this.persistence
       .listSessionRuntime()
       .filter(
@@ -758,6 +769,13 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       repositoryRoot: this.templateAuthority.repositoryRoot,
       stageId,
     });
+    const agentName =
+      stage.agentNameList === undefined
+        ? undefined
+        : await this.requireAgentNames().assign(
+            instanceId,
+            stage.agentNameList,
+          );
     const session = this.configuration.session;
     const binding =
       intendedSession?.binding ??
@@ -813,7 +831,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         {
           handoff: {
             skillPointer: session.skillPointer,
-            stage: stage.handoff,
+            stage: {
+              ...stage.handoff,
+              ...(agentName === undefined ? {} : { agentName }),
+            },
             taskContract: taskContract(task),
           },
           instanceId,
@@ -893,5 +914,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     if (mirrorBoardStatus) {
       await this.mirrorBoardStatus(task.id, boardStatus);
     }
+  }
+
+  private requireAgentNames(): AgentNameAllocator {
+    if (this.agentNames === undefined) {
+      throw new Error("Agent-name allocation is not configured");
+    }
+    return this.agentNames;
   }
 }

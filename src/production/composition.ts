@@ -6,6 +6,10 @@
 import { resolve } from "node:path";
 
 import { KanbanBoardAdapter } from "../board-adapter/index.js";
+import {
+  AgentNameAllocator,
+  GitAgentNameThemeCatalog,
+} from "../agent-names/index.js";
 import type {
   ConsoleAttentionActionPort,
   ConsoleBlueprintEditor,
@@ -238,6 +242,13 @@ export const createProductionComposition = (
     const handoffTemplateStore = new GitHandoffTemplateStore(
       blueprintRepository.repositoryRoot,
     );
+    const agentNames = new AgentNameAllocator(
+      new GitAgentNameThemeCatalog(
+        blueprintRepository.repositoryRoot,
+        blueprintRepository.sourceRef,
+      ),
+      persistence,
+    );
     const templateAuthority: SessionTemplateAuthority = {
       readHandoffTemplate: (reference, skillNames) =>
         handoffTemplateStore.read(reference, skillNames),
@@ -300,6 +311,7 @@ export const createProductionComposition = (
       (taskId, status) => board.mirrorTaskStatus(taskId, status),
       undefined,
       providerResolver,
+      agentNames,
     );
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(
       persistence,
@@ -493,6 +505,7 @@ export const createProductionComposition = (
       pass: async () => {
         await attention.replayProductionErrorPages();
         await blueprintRepository.synchronize();
+        await agentNames.validateCurrent();
         await validateBlueprintToolRegistry(
           blueprintRepository.repositoryRoot,
           mcp.toolNames,

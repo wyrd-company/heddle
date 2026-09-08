@@ -242,6 +242,9 @@ export const prepareProductionFixture =
     await mkdir(join(blueprintsRepositoryRoot, "todo-templates"), {
       recursive: true,
     });
+    await mkdir(join(blueprintsRepositoryRoot, "themes"), {
+      recursive: true,
+    });
     await mkdir(repositoryRoot, { recursive: true });
     await writeFile(
       join(blueprintsRepositoryRoot, "handoff-templates", "standard.md"),
@@ -257,12 +260,38 @@ export const prepareProductionFixture =
         items: [{ id: "deliver", text: "Deliver the sample" }],
       }),
     );
+    await writeFile(
+      join(blueprintsRepositoryRoot, "themes", "sample-team.yml"),
+      `$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships:
+  implements: heddle
+kind: team
+leader: sample-lead
+companions: [sample-companion]
+allies: [sample-ally]
+antagonists: [sample-antagonist]
+neutrals: [sample-neutral]
+`,
+    );
+    await writeFile(
+      join(blueprintsRepositoryRoot, "themes", "sample-soloist.yml"),
+      `$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships:
+  implements: heddle
+kind: soloist
+heroes: [sample-hero]
+villains: [sample-villain]
+bystanders: [sample-bystander]
+`,
+    );
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: blueprintsRepositoryRoot,
     });
-    await execute("git", ["add", "handoff-templates", "todo-templates"], {
-      cwd: blueprintsRepositoryRoot,
-    });
+    await execute(
+      "git",
+      ["add", "handoff-templates", "todo-templates", "themes"],
+      { cwd: blueprintsRepositoryRoot },
+    );
     await execute(
       "git",
       [

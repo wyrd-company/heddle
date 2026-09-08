@@ -1,4 +1,8 @@
 export {
+  AgentNameAllocator,
+  type AgentNameAllocationStore,
+} from "./allocator.js";
+export {
   AgentNameCatalogError,
   GitAgentNameThemeCatalog,
   agentNameListNames,

@@ -18,6 +18,7 @@ import {
 import { advanceOperationId } from "../mcp-server/operations.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
 import type { ResolvedSessionRuntimeMode } from "../persistence/index.js";
+import type { AgentNameListName } from "../agent-names/index.js";
 
 export type ProductionHandoffStage = StageHandoffInput["stage"];
 export type ProductionHandoffContractIssue = {
@@ -25,6 +26,7 @@ export type ProductionHandoffContractIssue = {
   priorStageId?: string;
 };
 export type ProductionStageMetadata = {
+  agentNameList?: AgentNameListName;
   contractIssue?: ProductionHandoffContractIssue;
   handoff: ProductionHandoffStage;
   providerAlias?: string;
@@ -205,6 +207,9 @@ export const readProductionHandoffStage = async (input: {
   );
   if (node.handoff === "standard") {
     return {
+      ...(node["assign-agent-name"] === undefined
+        ? {}
+        : { agentNameList: node["assign-agent-name"] }),
       handoff: {
         kind: "standard",
         name: input.stageId,
@@ -244,6 +249,9 @@ export const readProductionHandoffStage = async (input: {
   const findings =
     integrationCause === undefined && hasReviewFindings ? reviewFindings : [];
   return {
+    ...(node["assign-agent-name"] === undefined
+      ? {}
+      : { agentNameList: node["assign-agent-name"] }),
     ...(integrationCause !== undefined || hasReviewFindings
       ? {}
       : {

@@ -22,6 +22,7 @@ import { createProductionComposition } from "./composition.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
 import {
   execute,
+  prepareProductionEpicFixture,
   prepareProductionFixture,
   SyntheticT3,
 } from "./composition.test-support.js";
@@ -1081,6 +1082,103 @@ describe("production composition", () => {
         state: "waiting",
       }),
     );
+    await composition.close();
+  });
+
+  it("assigns an epic child a team name before rendering its stage handoff", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const templatePath = join(
+      fixture.blueprintsRepositoryRoot,
+      "handoff-templates",
+      "standard.md",
+    );
+    await writeFile(
+      templatePath,
+      `${await readFile(templatePath, "utf8")}\nAgent: {{ handoff.stage.agentName }}\n`,
+    );
+    await execute("git", ["add", "handoff-templates/standard.md"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Render assigned name",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    const templateCommitSha = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: fixture.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    const blueprintPath = join(
+      fixture.blueprintsRepositoryRoot,
+      "blueprints",
+      "sample.json",
+    );
+    const blueprint = JSON.parse(
+      await readFile(blueprintPath, "utf8"),
+    ) as LifecycleBlueprint;
+    const implement = blueprint.nodes.find(({ id }) => id === "implement")!;
+    implement["assign-agent-name"] = "allies";
+    implement["handoff-template"]!.commitSha = templateCommitSha;
+    await writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Assign team ally",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet", "origin", "main"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    const record = composition.persistence.getInstance(
+      `task-${fixture.taskId}`,
+    )!;
+    expect(record.state.agentNames).toEqual({
+      assignments: { allies: "sample-ally" },
+      catalogCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
+      kind: "team",
+      themeId: "sample-team",
+    });
+    const stored = record.state.handoffs.find(isStoredHandoff)!;
+    expect(JSON.parse(stored.handoff)).toMatchObject({
+      stage: { agentName: "sample-ally", name: "implement" },
+    });
+    expect(stored.renderedHandoff).toContain("Agent: sample-ally");
     await composition.close();
   });
 

@@ -7,7 +7,15 @@ export type JsonPrimitive = boolean | null | number | string;
 export type JsonValue =
   JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
+export interface AgentNameAssignmentState {
+  assignments: Record<string, string>;
+  catalogCommit: string;
+  kind: "soloist" | "team";
+  themeId: string;
+}
+
 export interface InstanceState {
+  agentNames?: AgentNameAssignmentState;
   correlationTokens: Record<string, string>;
   flowcraftContext: JsonValue;
   handoffs: JsonValue[];
