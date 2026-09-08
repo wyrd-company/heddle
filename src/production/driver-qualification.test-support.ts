@@ -50,14 +50,28 @@ const ANSI_CONTROL_SEQUENCE = new RegExp(
 );
 const STRUCTURED_CREDENTIAL_KEY =
   "api[_-]?key|(?:[a-z0-9]+[_-])+(?:secret|token|key)|[a-z][a-z0-9]*(?:secret|token|key)|secret|token";
-const QUOTED_STRUCTURED_CREDENTIAL = new RegExp(
-  `\\b(authorization|${STRUCTURED_CREDENTIAL_KEY})(["']?\\s*[:=]\\s*)("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`,
+const QUOTED_OR_INCOMPLETE_STRUCTURED_CREDENTIAL = new RegExp(
+  `\\b(authorization|${STRUCTURED_CREDENTIAL_KEY})(["']?\\s*[:=]\\s*)("(?:\\\\(?:.|$)|[^"\\\\])*(?:"|$)|'(?:\\\\(?:.|$)|[^'\\\\])*(?:'|$))`,
   "gi",
 );
 const UNQUOTED_STRUCTURED_CREDENTIAL = new RegExp(
   `\\b(${STRUCTURED_CREDENTIAL_KEY})(["']?\\s*[:=]\\s*)[^"'\\s,}\\]][^\\s,}\\]]*`,
   "gi",
 );
+
+const redactStartupCredentialLine = (line: string): string =>
+  line
+    .replace(
+      QUOTED_OR_INCOMPLETE_STRUCTURED_CREDENTIAL,
+      (_match: string, key: string, separator: string, quotedValue: string) =>
+        `${key}${separator}${quotedValue[0]}[redacted]${quotedValue[0]}`,
+    )
+    .replace(
+      /\b(authorization)(["']?\s*[:=]\s*)[^"'\s,}\]][^"'\r\n,}\]]*/gi,
+      "$1$2[redacted]",
+    )
+    .replace(UNQUOTED_STRUCTURED_CREDENTIAL, "$1$2[redacted]")
+    .replace(/(["']?)\bBearer(\s+)[^"'\s,}\]]+\1/gi, "$1Bearer$2[redacted]$1");
 
 export type IsolatedT3 = {
   readonly accessToken: string;
@@ -107,21 +121,9 @@ export const safeT3StartupDiagnostic = (output: string): string => {
       );
     })
     .join("");
-  const redacted = withoutTerminalControls
-    .replace(
-      QUOTED_STRUCTURED_CREDENTIAL,
-      (_match: string, key: string, separator: string, quotedValue: string) =>
-        `${key}${separator}${quotedValue[0]}[redacted]${quotedValue[0]}`,
-    )
-    .replace(
-      /\b(authorization)(["']?\s*[:=]\s*)[^"'\s,}\]][^"'\r\n,}\]]*/gi,
-      "$1$2[redacted]",
-    )
-    .replace(UNQUOTED_STRUCTURED_CREDENTIAL, "$1$2[redacted]")
-    .replace(/(["']?)\bBearer(\s+)[^"'\s,}\]]+\1/gi, "$1Bearer$2[redacted]$1");
-  const lines = redacted
+  const lines = withoutTerminalControls
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => redactStartupCredentialLine(line).trim())
     .filter((line) => line.length > 0);
   const classified = lines.filter(
     (line) =>

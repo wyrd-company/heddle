@@ -348,6 +348,26 @@ if (process.argv.includes("--version")) {
       String.raw`Error: {"client_secret":"client-value\"visible-suffix"}`,
       'Error: {"client_secret":"[redacted]"}',
     ],
+    [
+      "incomplete snake-case client secret",
+      'Error: {"client_secret":"client-value',
+      'Error: {"client_secret":"[redacted]"',
+    ],
+    [
+      "incomplete camel-case client secret",
+      'Error: {"clientSecret":"client-value',
+      'Error: {"clientSecret":"[redacted]"',
+    ],
+    [
+      "incomplete authorization value",
+      'Error: {"authorization":"Basic authorization-value',
+      'Error: {"authorization":"[redacted]"',
+    ],
+    [
+      "incomplete trailing credential escape",
+      'Error: {"client_secret":"client-value' + "\\",
+      'Error: {"client_secret":"[redacted]"',
+    ],
   ])("redacts an exact structured OAuth %s", (_name, output, expected) => {
     expect(safeT3StartupDiagnostic(output)).toBe(expected);
   });
