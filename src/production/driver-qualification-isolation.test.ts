@@ -4,8 +4,10 @@
 // ---
 
 import {
+  lstat,
   mkdir,
   mkdtemp,
+  readlink,
   readFile,
   rm,
   stat,
@@ -179,12 +181,8 @@ describe("qualification isolation", () => {
       const scratch = join(root, "scratch");
       await mkdir(join(sourceHome, ".codex"), { recursive: true });
       await mkdir(join(sourceHome, ".claude"), { recursive: true });
-      const selectedIdentity = join(sourceHome, "selected-identity.json");
+      const selectedIdentity = join(sourceHome, ".codex", "identity.json");
       await writeFile(selectedIdentity, "selected\n");
-      await symlink(
-        selectedIdentity,
-        join(sourceHome, ".codex", "identity.json"),
-      );
       await writeFile(join(sourceHome, ".claude", "identity.json"), "other\n");
 
       await prepareNativeProviderHome({ driver: "codex", scratch, sourceHome });
@@ -207,6 +205,26 @@ describe("qualification isolation", () => {
         "disposable-change\n",
       );
       expect(await readFile(selectedIdentity, "utf8")).toBe("selected\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("preserves dangling links in a disposable native identity store", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-link-copy-test-"));
+    try {
+      const sourceHome = join(root, "source-home");
+      const scratch = join(root, "scratch");
+      const danglingTarget = join(sourceHome, ".codex", "temporary", "missing");
+      const sourceLink = join(sourceHome, ".codex", "current");
+      await mkdir(join(sourceHome, ".codex"), { recursive: true });
+      await symlink(danglingTarget, sourceLink);
+
+      await prepareNativeProviderHome({ driver: "codex", scratch, sourceHome });
+
+      const copiedLink = join(scratch, "provider-home", ".codex", "current");
+      expect((await lstat(copiedLink)).isSymbolicLink()).toBe(true);
+      expect(await readlink(copiedLink)).toBe(danglingTarget);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

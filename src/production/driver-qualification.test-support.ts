@@ -339,7 +339,7 @@ export const prepareNativeProviderHome = async (options: {
     const target = join(targetHome, relative);
     await mkdir(dirname(target), { recursive: true });
     await cp(join(options.sourceHome, relative), target, {
-      dereference: true,
+      dereference: false,
       recursive: true,
     });
   }
