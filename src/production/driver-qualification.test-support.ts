@@ -115,7 +115,7 @@ const allocatePort = async (): Promise<number> => {
 };
 
 const appendStartupOutput = (current: string, chunk: Buffer): string =>
-  `${current}${chunk.toString()}`.slice(0, T3_STARTUP_CAPTURE_LIMIT);
+  `${current}${chunk.toString()}`.slice(-T3_STARTUP_CAPTURE_LIMIT);
 
 export const safeT3StartupDiagnostic = (output: string): string => {
   const redacted = output

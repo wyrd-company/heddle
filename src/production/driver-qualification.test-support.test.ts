@@ -250,6 +250,7 @@ describe("isolated T3 startup diagnostics", () => {
 if (process.argv.includes("--version")) {
   process.stdout.write("t3 v0.0.0-fixture\\n");
 } else {
+  process.stderr.write("Startup detail " + "x".repeat(70_000) + "\\n");
   process.stderr.write("Authorization: Bearer fixture-secret\\n");
   process.stderr.write("Error: fixture startup refused\\n");
   process.exitCode = 1;
