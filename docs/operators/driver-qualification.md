@@ -73,29 +73,13 @@ env -u FORCE_COLOR -u NO_COLOR \
   npx vitest run src/production/native-driver.integration.test.ts
 ```
 
-Create each row's container with the matching credential-isolated
-configuration. For example:
+Run each row through the cleanup-owning command. It creates the matching
+credential-isolated container, captures the exact container identity returned
+by `devcontainer up`, verifies the row's unique ownership label, and removes
+that exact container on success, failure, or interruption.
 
 ```bash
-export HEDDLE_DRIVER_KANBAN="$(command -v kanban-md)"
-devcontainer up \
-  --workspace-folder . \
-  --config .devcontainer/driver-qualification/codex/devcontainer.json
-devcontainer exec \
-  --workspace-folder . \
-  --config .devcontainer/driver-qualification/codex/devcontainer.json \
-  bash -lc '
-    set -eu
-    SCRATCH=$(mktemp -d)
-    trap '\''rm -rf "$SCRATCH"'\'' EXIT
-    npm install --global --no-audit --no-fund --prefix "$SCRATCH/t3" \
-      "$(node -p '\''require("./deployment/supported-versions.json").t3PackageSource'\'')"
-    env -u FORCE_COLOR -u NO_COLOR \
-      HEDDLE_T3_INTEGRATION_BINARY="$SCRATCH/t3/bin/t3" \
-      HEDDLE_NATIVE_DRIVER_QUALIFICATION=1 \
-      HEDDLE_NATIVE_DRIVER_ALIAS=codex \
-      npx vitest run src/production/native-driver.integration.test.ts
-  '
+scripts/deployment/qualify-native-driver.sh codex
 ```
 
 Do not run a native row in the credential-free common
