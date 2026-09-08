@@ -80,7 +80,7 @@ Perform these steps in order. Do not do other work.
 
 1. Run this benign command without requesting approval: printf 'native-driver-qualified\\n' > '${proofPath}'
 2. Call the Heddle list_providers tool with an empty input.
-3. Call the Heddle spawn tool with operationId native-driver-child, providerAlias execution, and rootItemId deliver.
+3. From that result, use the only selectable alias to call the Heddle spawn tool with operationId native-driver-child and rootItemId deliver. The alias is intentionally absent from these instructions.
 4. If spawn succeeds, call the Heddle advance tool exactly once with disposition complete and an empty output object, then stop.
 5. If spawn reports that deliver is already assigned, you are the delegated child. Stop without calling advance.
 `;
@@ -125,8 +125,12 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           baseUrl: isolated.baseUrl,
         });
         const models = await preferredModelsFor(client, [instance]);
+        const providerAlias = `native-row-${globalThis.crypto
+          .randomUUID()
+          .replaceAll("-", "")
+          .slice(0, 12)}`;
         const providerAliases = {
-          execution: {
+          [providerAlias]: {
             model: models.get(instance.instanceId) ?? "",
             providerDisplayName: instance.displayName,
           },
@@ -170,7 +174,7 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           pacing: {
             ...configuredPacing,
             maxConcurrentSessions: 3,
-            providerBudgets: { execution: { usageLimit: 100 } },
+            providerBudgets: { [providerAlias]: { usageLimit: 100 } },
             subagents: { maxDepth: 1, maxFanOut: 1 },
           },
           providerUsage: {
@@ -185,7 +189,7 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           server: { host: "127.0.0.1", port: servicePort },
           session: {
             ...configuredSession,
-            defaultProviderAlias: "execution",
+            defaultProviderAlias: providerAlias,
             defaultRuntimeMode: "full-access",
           },
           t3: {
@@ -326,8 +330,8 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           expect(assignments).toHaveLength(1);
           expect(assignments[0]).toMatchObject({
             binding: {
-              alias: "execution",
-              modelSlug: providerAliases.execution.model,
+              alias: providerAlias,
+              modelSlug: providerAliases[providerAlias].model,
               providerInstanceId: instance.instanceId,
               runtimeMode: "full-access",
             },
@@ -352,7 +356,7 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
         for (const thread of threads) {
           expect(thread.modelSelection?.instanceId).toBe(instance.instanceId);
           expect(thread.modelSelection?.model).toBe(
-            providerAliases.execution.model,
+            providerAliases[providerAlias].model,
           );
           expect(thread.runtimeMode).toBe("full-access");
         }
