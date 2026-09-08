@@ -26,8 +26,14 @@ import {
 const execute = promisify(execFile);
 const T3_STARTUP_CAPTURE_LIMIT = 65_536;
 const T3_STARTUP_DIAGNOSTIC_LIMIT = 2_000;
+const ESCAPE_CONTROL = String.fromCharCode(27);
+const BELL_CONTROL = String.fromCharCode(7);
+const ANSI_STRING_SEQUENCE = new RegExp(
+  `${ESCAPE_CONTROL}(?:\\][\\s\\S]*?(?:${BELL_CONTROL}|${ESCAPE_CONTROL}\\\\|$)|[PX^_][\\s\\S]*?(?:${ESCAPE_CONTROL}\\\\|$))`,
+  "g",
+);
 const ANSI_CONTROL_SEQUENCE = new RegExp(
-  `${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`,
+  `${ESCAPE_CONTROL}(?:\\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])`,
   "g",
 );
 
@@ -122,14 +128,30 @@ const appendStartupOutput = (current: string, chunk: Buffer): string =>
   `${current}${chunk.toString()}`.slice(-T3_STARTUP_CAPTURE_LIMIT);
 
 export const safeT3StartupDiagnostic = (output: string): string => {
-  const redacted = output
-    .replace(ANSI_CONTROL_SEQUENCE, "")
-    .replace(/\bToken:\s*\S+/gi, "Token: [redacted]")
-    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+  const withoutEscapeSequences = output
+    .replace(ANSI_STRING_SEQUENCE, "")
+    .replace(ANSI_CONTROL_SEQUENCE, "");
+  const withoutTerminalControls = Array.from(withoutEscapeSequences)
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return (
+        code === 9 ||
+        code === 10 ||
+        code === 13 ||
+        (code >= 32 && (code < 127 || code > 159))
+      );
+    })
+    .join("");
+  const redacted = withoutTerminalControls
     .replace(
-      /\b(api[_-]?key|access[_-]?token|authorization|secret)(\s*[:=]\s*)\S+/gi,
+      /\b(api[_-]?key|access[_-]?token|authorization|secret|token)(["']?\s*[:=]\s*)(["'])(.*?)\3/gi,
+      "$1$2$3[redacted]$3",
+    )
+    .replace(
+      /\b(api[_-]?key|access[_-]?token|authorization|secret|token)(["']?\s*[:=]\s*)[^\s,}\]]+/gi,
       "$1$2[redacted]",
-    );
+    )
+    .replace(/(["']?)\bBearer(\s+)[^"'\s,}\]]+\1/gi, "$1Bearer$2[redacted]$1");
   const lines = redacted
     .split(/\r?\n/)
     .map((line) => line.trim())

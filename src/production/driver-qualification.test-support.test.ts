@@ -283,6 +283,16 @@ if (process.argv.includes("--version")) {
     ["access token", "access_token=access-secret", "access-secret"],
     ["authorization", "authorization=auth-secret", "auth-secret"],
     ["generic secret", "secret: generic-secret", "generic-secret"],
+    [
+      "quoted access token",
+      'Error: {"access_token": "quoted credential value"}',
+      "quoted credential value",
+    ],
+    [
+      "single-quoted API key",
+      "Error: api_key='single-quoted-secret'",
+      "single-quoted-secret",
+    ],
   ])("redacts a %s from startup diagnostics", (_name, output, secret) => {
     const diagnostic = safeT3StartupDiagnostic(output);
     expect(diagnostic).not.toContain(secret);
@@ -301,5 +311,21 @@ if (process.argv.includes("--version")) {
     expect(
       safeT3StartupDiagnostic("\u001b[31mError: fixture stopped\u001b[0m"),
     ).toBe("Error: fixture stopped");
+  });
+
+  it.each([
+    [
+      "BEL-terminated OSC",
+      `${String.fromCharCode(27)}]0;private title${String.fromCharCode(7)}Error: fixture stopped`,
+    ],
+    [
+      "ST-terminated OSC",
+      `${String.fromCharCode(27)}]0;private title${String.fromCharCode(27)}\\Error: fixture stopped`,
+    ],
+    ["remaining C0", `Error: fixture${String.fromCharCode(8)} stopped`],
+  ])("removes %s terminal controls", (_name, output) => {
+    const diagnostic = safeT3StartupDiagnostic(output);
+    expect(diagnostic).not.toContain("private title");
+    expect(diagnostic).toBe("Error: fixture stopped");
   });
 });
