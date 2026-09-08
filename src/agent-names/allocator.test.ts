@@ -273,4 +273,40 @@ describe("agent-name allocator", () => {
       'list "allies" does not exist in soloist theme',
     );
   });
+
+  it("revalidates the current catalog before preparing each new task", async () => {
+    const root = await repository();
+    const store = new MemoryStore();
+    store.create("task-one");
+    store.create("task-two");
+    const allocator = new AgentNameAllocator(
+      new GitAgentNameThemeCatalog(root, "HEAD"),
+      store,
+    );
+    await allocator.prepareTask("task-one", "team");
+    await writeFile(
+      join(root, "themes", "alpha.yml"),
+      team("alpha").replace("leader: alpha-lead", "leader: alpha-ally-one"),
+    );
+    await execute("git", ["add", "themes/alpha.yml"], { cwd: root });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Invalidate current catalog",
+      ],
+      { cwd: root },
+    );
+
+    await expect(allocator.prepareTask("task-two", "team")).rejects.toThrow(
+      'Agent name "alpha-ally-one" is repeated',
+    );
+    expect(store.getInstance("task-two")!.state.agentNames).toBeUndefined();
+  });
 });
