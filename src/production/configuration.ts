@@ -353,7 +353,7 @@ export const validateResolvedProductionConfiguration = (
  * is a configuration error that waiting cannot repair.
  */
 const STARTUP_TRANSIENT_REASONS: ReadonlySet<ProviderSelectionReason> = new Set(
-  ["provider-catalog-unavailable", "provider-unavailable"],
+  ["provider-catalog-unavailable", "provider-not-ready"],
 );
 
 export type StartupReadinessOptions = {

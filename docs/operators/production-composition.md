@@ -199,7 +199,7 @@ New stage occurrences, new subagent assignments, and `list_providers` use a
 fresh catalog snapshot. Selection failures use one of these safe reasons:
 `provider-catalog-unavailable`, `provider-alias-not-allowed`,
 `provider-name-not-found`, `provider-name-ambiguous`,
-`provider-unavailable`, or `provider-model-not-found`. No failure tries another
+`provider-not-ready`, `provider-unavailable`, or `provider-model-not-found`. No failure tries another
 alias, provider, or model. A T3 rejection after resolution is reported as that
 T3 failure and also has no fallback.
 

@@ -272,7 +272,7 @@ proposed-design:
     performs no worktree, timeout, registration, thread, or dispatch effect.
     The stable selection reasons are `provider-catalog-unavailable`,
     `provider-alias-not-allowed`, `provider-name-not-found`,
-    `provider-name-ambiguous`, `provider-unavailable`, and
+    `provider-name-ambiguous`, `provider-not-ready`, `provider-unavailable`, and
     `provider-model-not-found`. A provider is selectable only when T3 reports
     it available, enabled, installed, and `ready`, and the selected model slug
     is present. A catalog change between resolution and dispatch can still make

@@ -162,7 +162,7 @@ describe("startup provider readiness", () => {
           },
         ),
       ).rejects.toThrow(
-        `T3 provider '${DISPLAY_NAME}' is not available, enabled, installed, and ready`,
+        `T3 provider '${DISPLAY_NAME}' has not finished discovery`,
       );
     } finally {
       await fixture.cleanup();
@@ -195,6 +195,44 @@ describe("startup provider readiness", () => {
       ).rejects.toThrow(ProviderSelectionError);
       // One read, not a poll loop: the failure is permanent.
       expect(reader.reads[0]).toBe(1);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each([
+    {
+      label: "disabled",
+      provider: { ...readyProvider, enabled: false },
+    },
+    {
+      label: "unavailable",
+      provider: { ...readyProvider, availability: "unavailable" as const },
+    },
+  ])("does not wait for a permanently $label provider", async ({ provider }) => {
+    const fixture = await configurationWith();
+    try {
+      const reader = catalogReader([[provider]]);
+      const resolver = new ProviderSelectionResolver(
+        { primary: { model: MODEL_SLUG, providerDisplayName: DISPLAY_NAME } },
+        reader,
+      );
+      let sleeps = 0;
+
+      await expect(
+        resolveProductionConfiguration(
+          startupConfiguration(fixture),
+          resolver,
+          {
+            pollMilliseconds: 0,
+            sleep: async () => {
+              sleeps += 1;
+            },
+          },
+        ),
+      ).rejects.toMatchObject({ reason: "provider-unavailable" });
+      expect(reader.reads[0]).toBe(1);
+      expect(sleeps).toBe(0);
     } finally {
       await fixture.cleanup();
     }

@@ -47,6 +47,7 @@ export type ProviderSelectionReason =
   | "provider-alias-not-allowed"
   | "provider-name-not-found"
   | "provider-name-ambiguous"
+  | "provider-not-ready"
   | "provider-unavailable"
   | "provider-model-not-found";
 
@@ -237,6 +238,13 @@ export class ProviderSelectionResolver {
       );
     }
     const provider = providers[0]!;
+    if (provider.enabled && provider.state === "warning") {
+      throw selectionError(
+        "provider-not-ready",
+        alias,
+        `T3 provider '${configured.providerDisplayName}' has not finished discovery`,
+      );
+    }
     if (
       provider.availability !== "available" ||
       !provider.enabled ||

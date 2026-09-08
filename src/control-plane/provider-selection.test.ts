@@ -291,7 +291,6 @@ describe("ProviderSelectionResolver", () => {
     { field: "availability", value: "unavailable" },
     { field: "enabled", value: false },
     { field: "installed", value: false },
-    { field: "state", value: "warning" },
   ] as const)(
     "rejects a provider whose $field is not selectable",
     async ({ field, value }) => {
@@ -308,6 +307,21 @@ describe("ProviderSelectionResolver", () => {
       ).rejects.toMatchObject({ reason: "provider-unavailable" });
     },
   );
+
+  it("classifies an enabled warning provider as discovery not ready", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => [
+        { ...catalog()[0]!, installed: false, state: "warning" },
+      ],
+    });
+
+    await expect(
+      resolver.resolve("primary", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-not-ready" });
+  });
 
   it("normalizes transport failure to the safe catalog-unavailable reason", async () => {
     const resolver = new ProviderSelectionResolver(aliases, {
