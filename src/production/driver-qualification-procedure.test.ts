@@ -145,9 +145,11 @@ printf '%s\\n' "$@" >> "$HEDDLE_QUALIFICATION_INVOCATION"
       expect(procedure).toContain(
         "The pinned-T3 target creates a uniquely named scratch prefix",
       );
-      expect(procedure).toContain(
-        "scripts/deployment/qualify-native-driver.sh codex",
-      );
+      expect(
+        procedure.match(
+          /scripts\/deployment\/qualify-native-driver\.sh codex/g,
+        ),
+      ).toHaveLength(1);
       expect(procedure).not.toContain("${SCRATCH}");
     } finally {
       await rm(root, { force: true, recursive: true });

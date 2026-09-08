@@ -53,12 +53,6 @@ provider budget.
 ```bash
 # Production seams, selection matrix, restart, and isolation guards.
 task test:pinned-t3
-
-# One native driver row. Repeat with claude-code, codex, cursor, grok, and
-# opencode, using the matching devcontainer configuration for each row. Each
-# starts its own control plane and runs a real parent and delegated child, so
-# budget a generous wall clock.
-scripts/deployment/qualify-native-driver.sh codex
 ```
 
 The pinned-T3 target creates a uniquely named scratch prefix, installs the
@@ -68,7 +62,10 @@ operator T3 from `PATH`. Set `HEDDLE_T3_INTEGRATION_BINARY` only to repeat the
 gate with an already installed pinned executable; the target validates but does
 not remove an operator-supplied path.
 
-Run each row through the cleanup-owning command. It creates the matching
+Run each native row through the cleanup-owning command. Repeat with
+`claude-code`, `codex`, `cursor`, `grok`, and `opencode`. Each row starts its own
+control plane and runs a real parent and delegated child, so budget a generous
+wall clock. The command creates the matching
 credential-isolated container, captures the exact container identity returned
 by `devcontainer up`, verifies the row's unique ownership label, and removes
 that exact container on success, failure, or interruption.
