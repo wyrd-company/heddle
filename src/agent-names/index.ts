@@ -1,3 +1,8 @@
+// ---
+// relationships:
+//   implements: heddle
+// ---
+
 export {
   AgentNameAllocator,
   type AgentNameAllocationStore,
