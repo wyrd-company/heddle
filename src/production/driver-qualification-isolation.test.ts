@@ -15,6 +15,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -226,6 +227,42 @@ describe("qualification isolation", () => {
       expect((await lstat(copiedLink)).isSymbolicLink()).toBe(true);
       expect(await readlink(copiedLink)).toBe(danglingTarget);
     } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("excludes volatile sockets from a disposable native identity store", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-socket-copy-test-"));
+    const server = createServer();
+    try {
+      const sourceHome = join(root, "source-home");
+      const scratch = join(root, "scratch");
+      const socket = join(sourceHome, ".codex", "ipc.sock");
+      await mkdir(join(sourceHome, ".codex"), { recursive: true });
+      await writeFile(
+        join(sourceHome, ".codex", "identity.json"),
+        "selected\n",
+      );
+      await new Promise<void>((resolveListen, reject) => {
+        server.once("error", reject);
+        server.listen(socket, () => resolveListen());
+      });
+
+      await prepareNativeProviderHome({ driver: "codex", scratch, sourceHome });
+
+      await expect(
+        readFile(
+          join(scratch, "provider-home", ".codex", "identity.json"),
+          "utf8",
+        ),
+      ).resolves.toBe("selected\n");
+      await expect(
+        lstat(join(scratch, "provider-home", ".codex", "ipc.sock")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await new Promise<void>((resolveClose) =>
+        server.close(() => resolveClose()),
+      );
       await rm(root, { force: true, recursive: true });
     }
   });

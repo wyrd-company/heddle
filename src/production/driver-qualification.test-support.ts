@@ -7,7 +7,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createServer } from "node:net";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import process from "node:process";
@@ -340,6 +340,14 @@ export const prepareNativeProviderHome = async (options: {
     await mkdir(dirname(target), { recursive: true });
     await cp(join(options.sourceHome, relative), target, {
       dereference: false,
+      filter: async (source) => {
+        const metadata = await lstat(source);
+        return (
+          metadata.isDirectory() ||
+          metadata.isFile() ||
+          metadata.isSymbolicLink()
+        );
+      },
       recursive: true,
     });
   }
