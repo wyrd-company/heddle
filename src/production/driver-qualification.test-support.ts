@@ -24,6 +24,8 @@ import {
 } from "../control-plane/t3-agent-awareness.js";
 
 const execute = promisify(execFile);
+const T3_STARTUP_CAPTURE_LIMIT = 65_536;
+const T3_STARTUP_DIAGNOSTIC_LIMIT = 2_000;
 
 /**
  * The operator's live control plane. A qualification run that reaches it would
@@ -112,19 +114,63 @@ const allocatePort = async (): Promise<number> => {
   return port;
 };
 
-const readPairingToken = (server: ChildProcess): Promise<string> =>
+const appendStartupOutput = (current: string, chunk: Buffer): string =>
+  `${current}${chunk.toString()}`.slice(0, T3_STARTUP_CAPTURE_LIMIT);
+
+export const safeT3StartupDiagnostic = (output: string): string => {
+  const redacted = output
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\bToken:\s*\S+/gi, "Token: [redacted]")
+    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(
+      /\b(api[_-]?key|access[_-]?token|authorization|secret)(\s*[:=]\s*)\S+/gi,
+      "$1$2[redacted]",
+    );
+  const lines = redacted
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const classified = lines.filter(
+    (line) =>
+      /\b(error|failed|fatal)\b/i.test(line) || /\bE[A-Z]{3,}\b/.test(line),
+  );
+  return (classified.length > 0 ? classified : lines)
+    .join(" | ")
+    .slice(0, T3_STARTUP_DIAGNOSTIC_LIMIT);
+};
+
+const readPairingToken = (
+  server: ChildProcess,
+  startupDiagnostic: () => string,
+): Promise<string> =>
   new Promise((resolvePairing, reject) => {
     let output = "";
+    const cleanup = (): void => {
+      server.stdout?.off("data", inspect);
+      server.stderr?.off("data", inspect);
+      server.off("exit", exited);
+    };
     const inspect = (chunk: Buffer): void => {
-      output += chunk.toString();
+      output = `${output}${chunk.toString()}`.slice(-4_096);
       const token = output.match(/Token:\s+(\S+)/)?.[1];
-      if (token) resolvePairing(token);
+      if (token) {
+        cleanup();
+        resolvePairing(token);
+      }
+    };
+    const exited = (code: number | null): void => {
+      cleanup();
+      const diagnostic = startupDiagnostic();
+      reject(
+        new Error(
+          `Isolated T3 exited before pairing (code ${code})${diagnostic === "" ? "" : `: ${diagnostic}`}`,
+        ),
+      );
     };
     server.stdout?.on("data", inspect);
     server.stderr?.on("data", inspect);
-    server.once("exit", (code) =>
-      reject(new Error(`Isolated T3 exited before pairing (code ${code})`)),
-    );
+    server.once("exit", exited);
+    if (server.exitCode !== null) exited(server.exitCode);
   });
 
 export type ProviderInstanceFixture = {
@@ -246,10 +292,10 @@ export const startIsolatedT3 = async (options: {
 
   let serverOutput = "";
   server.stdout?.on("data", (chunk: Buffer) => {
-    serverOutput += chunk.toString();
+    serverOutput = appendStartupOutput(serverOutput, chunk);
   });
   server.stderr?.on("data", (chunk: Buffer) => {
-    serverOutput += chunk.toString();
+    serverOutput = appendStartupOutput(serverOutput, chunk);
   });
 
   const stop = async (): Promise<void> => {
@@ -274,7 +320,7 @@ export const startIsolatedT3 = async (options: {
   try {
     const baseUrl = `http://127.0.0.1:${port}`;
     const pairingToken = await Promise.race([
-      readPairingToken(server),
+      readPairingToken(server, () => safeT3StartupDiagnostic(serverOutput)),
       delay(20_000).then(() => {
         throw new Error("Isolated T3 emitted no pairing token");
       }),
@@ -304,7 +350,7 @@ export const startIsolatedT3 = async (options: {
       projectPath,
       providerHome,
       controlledProviderLog,
-      serverLog: () => serverOutput,
+      serverLog: () => safeT3StartupDiagnostic(serverOutput),
       stop,
     };
   } catch (error) {

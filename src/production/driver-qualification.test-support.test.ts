@@ -3,6 +3,10 @@
 //   verifies: heddle
 // ---
 
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -17,6 +21,8 @@ import {
   QUALIFICATION_SECOND_DRIVER,
   QualificationModelSelectionError,
   requiredObservedCliVersion,
+  safeT3StartupDiagnostic,
+  startIsolatedT3,
 } from "./driver-qualification.test-support.js";
 
 const failureEvidence = {
@@ -230,5 +236,54 @@ describe("native qualification failure evidence", () => {
         failureEvidence,
       ),
     ).toBeNull();
+  });
+});
+
+describe("isolated T3 startup diagnostics", () => {
+  it("reports a bounded redacted reason when T3 exits before pairing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-t3-early-exit-test-"));
+    try {
+      const binary = join(root, "t3-fixture.mjs");
+      await writeFile(
+        binary,
+        `#!/usr/bin/env node
+if (process.argv.includes("--version")) {
+  process.stdout.write("t3 v0.0.0-fixture\\n");
+} else {
+  process.stderr.write("Authorization: Bearer fixture-secret\\n");
+  process.stderr.write("Error: fixture startup refused\\n");
+  process.exitCode = 1;
+}
+`,
+      );
+      await chmod(binary, 0o755);
+
+      const failure = await startIsolatedT3({
+        binary,
+        scratch: join(root, "scratch"),
+      }).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      const message = (failure as Error).message;
+      expect(message).toContain(
+        "Isolated T3 exited before pairing (code 1): Error: fixture startup refused",
+      );
+      expect(message).not.toContain("fixture-secret");
+      expect(message.length).toBeLessThanOrEqual(2_100);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("redacts a pairing token from a bounded startup classification", () => {
+    const diagnostic = safeT3StartupDiagnostic("Token: pairing-secret");
+    const bounded = safeT3StartupDiagnostic(
+      `Fatal: fixture stopped ${"x".repeat(70_000)}`,
+    );
+
+    expect(diagnostic).not.toContain("pairing-secret");
+    expect(diagnostic).toBe("Token: [redacted]");
+    expect(bounded).toContain("Fatal: fixture stopped");
+    expect(bounded.length).toBe(2_000);
   });
 });
