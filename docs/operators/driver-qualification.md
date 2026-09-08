@@ -147,3 +147,16 @@ compatibility pins.
 Every driver row is required. A skipped harness, an unavailable credential, or
 an unresolved adapter failure leaves the matrix incomplete; a best-effort
 result does not satisfy it.
+
+After asserting the binding and native effects, a row writes one line prefixed
+with `HEDDLE_NATIVE_EVIDENCE`. Its JSON object is safe to retain and contains:
+
+- the driver, generated provider alias, provider instance, approved model,
+  runtime mode, and observed CLI version;
+- the benign file action, `list_providers`, `spawn`, and `advance` results; and
+- `result: passed`, or `result: provider-turn-failed` when the provider rejects
+  the turn after T3 has established and asserted the requested binding.
+
+The failure row does not infer a provider diagnostic. Read the provider's
+isolated event log, record its safe reason separately, and apply any explicit
+operator disposition without changing the structured binding evidence.

@@ -28,6 +28,8 @@ import {
   QUALIFICATION_GROK,
   QUALIFICATION_OPENCODE,
   QUALIFICATION_SECOND_DRIVER,
+  nativeDriverEvidenceLine,
+  observedCliVersions,
   preferredModelsFor,
   startIsolatedT3,
   type IsolatedT3,
@@ -125,13 +127,27 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           baseUrl: isolated.baseUrl,
         });
         const models = await preferredModelsFor(client, [instance]);
+        const model = models.get(instance.instanceId);
+        if (model === undefined) {
+          throw new Error(
+            `Qualification model was not resolved for '${instance.instanceId}'`,
+          );
+        }
+        const cliVersion = (await observedCliVersions(client)).get(
+          instance.instanceId,
+        );
+        if (cliVersion === undefined || cliVersion === null) {
+          throw new Error(
+            `T3 did not report a CLI version for '${instance.instanceId}'`,
+          );
+        }
         const providerAlias = `native-row-${globalThis.crypto
           .randomUUID()
           .replaceAll("-", "")
           .slice(0, 12)}`;
         const providerAliases = {
           [providerAlias]: {
-            model: models.get(instance.instanceId) ?? "",
+            model,
             providerDisplayName: instance.displayName,
           },
         };
@@ -288,7 +304,13 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             (candidate) =>
               typeof candidate["title"] === "string" &&
               (candidate["title"] as string).includes("task-"),
-          );
+          ) as
+            | {
+                activities?: Array<{ kind?: string }>;
+                modelSelection?: { instanceId?: string; model?: string };
+                runtimeMode?: string;
+              }
+            | undefined;
           const snapshot =
             stalled === undefined
               ? "no thread reached the control plane"
@@ -302,6 +324,29 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
                   phase: resolveT3AwarenessPhase(stalled),
                   runtimeMode: stalled["runtimeMode"],
                 });
+          if (stalled !== undefined) {
+            expect(stalled.modelSelection?.instanceId).toBe(
+              instance.instanceId,
+            );
+            expect(stalled.modelSelection?.model).toBe(model);
+            expect(stalled.runtimeMode).toBe("full-access");
+            process.stdout.write(
+              `${nativeDriverEvidenceLine({
+                advanceResult: null,
+                benignFileAction: null,
+                driver: alias,
+                listProvidersResult: null,
+                model,
+                providerAlias,
+                providerCliVersion: cliVersion,
+                providerInstanceId: instance.instanceId,
+                result: "provider-turn-failed",
+                runtimeMode: "full-access",
+                spawnResult: null,
+                version: 1,
+              })}\n`,
+            );
+          }
           throw new Error(
             `Native session never advanced the stage. Thread: ${snapshot} ||| SERVICE: ${serviceOutput
               .replace(/\s+/g, " ")
@@ -363,6 +408,22 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           );
           expect(thread.runtimeMode).toBe("full-access");
         }
+        process.stdout.write(
+          `${nativeDriverEvidenceLine({
+            advanceResult: "review",
+            benignFileAction: "native-driver-qualified",
+            driver: alias,
+            listProvidersResult: "selected-generated-alias",
+            model,
+            providerAlias,
+            providerCliVersion: cliVersion,
+            providerInstanceId: instance.instanceId,
+            result: "passed",
+            runtimeMode: "full-access",
+            spawnResult: "persisted-child-assignment",
+            version: 1,
+          })}\n`,
+        );
       },
       1_500_000,
     );

@@ -10,6 +10,7 @@ import type {
   T3ProviderCatalogReader,
 } from "../control-plane/index.js";
 import {
+  nativeDriverEvidenceLine,
   PREFERRED_MODEL_SLUGS,
   preferredModelsFor,
   QUALIFICATION_SECOND_DRIVER,
@@ -64,6 +65,27 @@ describe("native qualification model approval", () => {
       preferredModelsFor(reader, [QUALIFICATION_SECOND_DRIVER], 1),
     ).resolves.toEqual(
       new Map([[QUALIFICATION_SECOND_DRIVER.instanceId, approved]]),
+    );
+  });
+
+  it("formats one complete non-secret native evidence row", () => {
+    expect(
+      nativeDriverEvidenceLine({
+        advanceResult: "review",
+        benignFileAction: "native-driver-qualified",
+        driver: "sample-driver",
+        listProvidersResult: "selected-generated-alias",
+        model: "sample-model",
+        providerAlias: "sample-alias",
+        providerCliVersion: "1.2.3",
+        providerInstanceId: "sample-instance",
+        result: "passed",
+        runtimeMode: "full-access",
+        spawnResult: "persisted-child-assignment",
+        version: 1,
+      }),
+    ).toBe(
+      'HEDDLE_NATIVE_EVIDENCE {"advanceResult":"review","benignFileAction":"native-driver-qualified","driver":"sample-driver","listProvidersResult":"selected-generated-alias","model":"sample-model","providerAlias":"sample-alias","providerCliVersion":"1.2.3","providerInstanceId":"sample-instance","result":"passed","runtimeMode":"full-access","spawnResult":"persisted-child-assignment","version":1}',
     );
   });
 });

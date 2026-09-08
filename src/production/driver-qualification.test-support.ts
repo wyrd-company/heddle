@@ -458,6 +458,26 @@ export const observedCliVersions = async (
   );
 };
 
+export type NativeDriverEvidence = {
+  readonly advanceResult: "review" | null;
+  readonly benignFileAction: "native-driver-qualified" | null;
+  readonly driver: string;
+  readonly listProvidersResult: "selected-generated-alias" | null;
+  readonly model: string;
+  readonly providerAlias: string;
+  readonly providerCliVersion: string;
+  readonly providerInstanceId: string;
+  readonly result: "passed" | "provider-turn-failed";
+  readonly runtimeMode: "full-access";
+  readonly spawnResult: "persisted-child-assignment" | null;
+  readonly version: 1;
+};
+
+/** One non-secret, machine-readable row for the task evidence record. */
+export const nativeDriverEvidenceLine = (
+  evidence: NativeDriverEvidence,
+): string => `HEDDLE_NATIVE_EVIDENCE ${JSON.stringify(evidence)}`;
+
 /**
  * Wait until every configured instance has finished discovery and reports a
  * model. T3 answers before discovery completes, and that early answer looks
