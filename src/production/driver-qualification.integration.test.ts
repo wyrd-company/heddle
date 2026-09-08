@@ -141,28 +141,41 @@ describe.skipIf(!t3Binary)("driver qualification against production Heddle", () 
       "secondary",
     ]);
 
-    // Two differently named T3 instances of one driver stay distinct.
+    // Two differently named T3 instances of one driver stay distinct, and
+    // every alias is selectable through the real catalog.
     expect(byAlias.get("execution")?.providerDisplayName).toBe(
       EXECUTION.displayName,
     );
     expect(byAlias.get("review")?.providerDisplayName).toBe(REVIEW.displayName);
-    expect(byAlias.get("execution")?.providerInstanceId).toBe(
-      EXECUTION.instanceId,
-    );
-    expect(byAlias.get("review")?.providerInstanceId).toBe(REVIEW.instanceId);
     expect(byAlias.get("execution")?.driverKind).toBe(EXECUTION.driver);
     expect(byAlias.get("review")?.driverKind).toBe(REVIEW.driver);
-
-    // A second driver resolves alongside them.
     expect(byAlias.get("secondary")?.driverKind).toBe(SECOND_DRIVER.driver);
-    expect(byAlias.get("secondary")?.providerInstanceId).toBe(
+    for (const alias of ["execution", "review", "secondary"]) {
+      expect(byAlias.get(alias)?.selectable).toBe(true);
+      expect(byAlias.get(alias)?.reason).toBeNull();
+      expect(byAlias.get(alias)?.model.slug).toBe(
+        providerAliases[alias as keyof typeof providerAliases].model,
+      );
+    }
+
+    // `list_providers` exposes the operator-visible display name, not T3's
+    // routing identity. The binding carries the instance and the observed CLI
+    // version, which is where qualification provenance is recorded.
+    const bindings = new Map(
+      configuration.session.resolvedSelections.map((selection) => [
+        selection.alias,
+        selection,
+      ]),
+    );
+    expect(bindings.get("execution")?.providerInstanceId).toBe(
+      EXECUTION.instanceId,
+    );
+    expect(bindings.get("review")?.providerInstanceId).toBe(REVIEW.instanceId);
+    expect(bindings.get("secondary")?.providerInstanceId).toBe(
       SECOND_DRIVER.instanceId,
     );
-
-    // Observed CLI versions are qualification provenance, read from the live
-    // catalog rather than configured.
     for (const alias of ["execution", "review", "secondary"]) {
-      expect(byAlias.get(alias)?.observedCliVersion).toMatch(/^\d+\.\d+\.\d+/);
+      expect(bindings.get(alias)?.observedCliVersion).toMatch(/^\d+\.\d+\.\d+/);
     }
   }, 180_000);
 });
