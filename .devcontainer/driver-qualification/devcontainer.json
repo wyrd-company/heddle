@@ -4,7 +4,8 @@
   "features": {
     "ghcr.io/wyrd-company/devcontainers/claude-code-cli:1": {},
     "ghcr.io/wyrd-company/devcontainers/codex-cli:1": {},
-    "ghcr.io/wyrd-company/devcontainers/cursor-agent-cli:1": {}
+    "ghcr.io/wyrd-company/devcontainers/cursor-agent-cli:1": {},
+    "ghcr.io/wyrd-company/devcontainers/opencode-cli:1": {}
   },
   "mounts": [
     {
@@ -40,6 +41,16 @@
     {
       "source": "${localEnv:HEDDLE_DRIVER_CURSOR_STATE}",
       "target": "/home/vscode/.cursor",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_DRIVER_OPENCODE_CONFIG}",
+      "target": "/home/vscode/.config/opencode",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_DRIVER_OPENCODE_STATE}",
+      "target": "/home/vscode/.local/share/opencode",
       "type": "bind"
     }
   ],

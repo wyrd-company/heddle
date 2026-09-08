@@ -53,11 +53,13 @@ describe("qualification isolation", () => {
     ).toThrow(QualificationIsolationError);
   });
 
-  it("refuses a live board reached through a relative path", () => {
+  it("refuses a live board reached by a path that only normalizes to it", () => {
+    // Shares no prefix with the live board until it is resolved, so only
+    // normalization can catch it.
     expect(() =>
       assertQualificationIsolation({
         ...safeSurface,
-        boardDirectory: `${LIVE_BOARD_DIRECTORY}/tasks/..`,
+        boardDirectory: "/workspaces/tools/../kanban",
       }),
     ).toThrow(QualificationIsolationError);
   });
