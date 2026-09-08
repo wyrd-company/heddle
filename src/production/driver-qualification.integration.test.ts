@@ -423,6 +423,36 @@ describe.skipIf(!t3Binary)(
         EXECUTION.instanceId,
       );
       expect(parentRuntime?.binding.driverKind).toBe(EXECUTION.driver);
+
+      // Each thread carries its own binding at the control plane. A later turn
+      // or a parent notification targets an existing bound thread and does not
+      // select again, so the recipient's provider and runtime are whatever its
+      // thread was bound with -- never the other party's.
+      const shell = await catalogClient.getShell();
+      const parentThread = shell.threads.find(
+        ({ id }) => id === parentRuntime?.threadId,
+      ) as { modelSelection?: { instanceId?: string; model?: string } } | undefined;
+      const childThread = shell.threads.find(
+        ({ id }) => id === child.assignment?.binding?.["threadId"],
+      ) as { modelSelection?: { instanceId?: string; model?: string } } | undefined;
+
+      expect(parentThread).toBeDefined();
+      expect(childThread).toBeDefined();
+      expect(parentThread?.modelSelection?.instanceId).toBe(
+        EXECUTION.instanceId,
+      );
+      expect(childThread?.modelSelection?.instanceId).toBe(
+        SECOND_DRIVER.instanceId,
+      );
+      expect(parentThread?.modelSelection?.model).toBe(
+        providerAliases.execution.model,
+      );
+      expect(childThread?.modelSelection?.model).toBe(
+        providerAliases.secondary.model,
+      );
+      expect(parentThread?.modelSelection?.instanceId).not.toBe(
+        childThread?.modelSelection?.instanceId,
+      );
     }, 300_000);
   },
 );
