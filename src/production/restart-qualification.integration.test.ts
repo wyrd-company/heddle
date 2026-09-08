@@ -10,6 +10,7 @@ import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { KanbanBoardAdapter } from "../board-adapter/index.js";
 import {
   ProviderSelectionResolver,
   T3ControlPlaneClient,
@@ -144,6 +145,24 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       fixture.configuration.boardDirectory,
       fixture.taskId,
       "secondary",
+    );
+
+    // Positive evidence that the retarget is real and live: the production
+    // board reader returns it, and a fresh selection made from it resolves to
+    // the other driver. Without this, the assertions below would hold even if
+    // the front matter had never changed.
+    const board = new KanbanBoardAdapter(fixture.configuration.boardDirectory);
+    const retargeted = await board.readTask(fixture.taskId);
+    expect(retargeted.providerAlias).toBe("secondary");
+    const freshSelection = await new ProviderSelectionResolver(
+      providerAliases,
+      client,
+    ).resolve(retargeted.providerAlias as string, {
+      interactionMode: configuration.session.interactionMode,
+      runtimeMode: configuration.session.defaultRuntimeMode,
+    });
+    expect(freshSelection.providerInstanceId).toBe(
+      QUALIFICATION_SECOND_DRIVER.instanceId,
     );
 
     const second = createProductionComposition({
