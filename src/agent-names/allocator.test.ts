@@ -313,7 +313,8 @@ describe("agent-name allocator", () => {
     const store = new MemoryStore();
     store.create("incident-one");
     store.create("ad-hoc");
-    store.running("ad-hoc");
+    store.create("ad-hoc-two");
+    store.running("ad-hoc", "ad-hoc-two");
     store.incidentRuntime = [
       {
         accepted: false,
@@ -332,10 +333,22 @@ describe("agent-name allocator", () => {
     );
     await allocator.prepareTask("incident-one", "soloist");
     await allocator.prepareTask("ad-hoc", "soloist");
+    await allocator.prepareTask("ad-hoc-two", "soloist");
 
     const incidentName = await allocator.assign("incident-one", "heroes");
 
     await expect(allocator.assign("ad-hoc", "heroes")).resolves.not.toBe(
+      incidentName,
+    );
+    await expect(allocator.assign("ad-hoc-two", "heroes")).rejects.toThrow(
+      "locked by a running task",
+    );
+
+    store.incidentRuntime = store.incidentRuntime.map((runtime) => ({
+      ...runtime,
+      state: "done",
+    }));
+    await expect(allocator.assign("ad-hoc-two", "heroes")).resolves.toBe(
       incidentName,
     );
   });
