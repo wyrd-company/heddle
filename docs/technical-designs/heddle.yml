@@ -325,6 +325,40 @@ proposed-design:
     instance are invalid. An alias cannot create capacity by renaming an
     instance. Provider usage executables receive the provider instance ID, not
     an alias, display name, or driver kind.
+  agent-names: >
+    Agent names are organization blueprint data. YAML artifacts under the
+    organization repository's `themes/` directory use their filename stem as
+    the theme identity and declare either `kind: team` or `kind: soloist`. A
+    team theme contains one `leader` name and non-empty `companions`, `allies`,
+    `antagonists`, and `neutrals` lists. A soloist theme contains non-empty
+    `heroes`, `villains`, and `bystanders` lists. Names and theme identities are
+    canonical lower-kebab values. The complete catalog contains at least one
+    theme, no more than one soloist theme, and no name repeated in any field,
+    list, theme, or shape. Heddle validates the complete catalog after the
+    organization repository is synchronized during startup and every
+    reconciliation pass. A task's first start validates it again and records
+    the exact fetched commit used for selection before any session dispatch.
+
+    Each wait node can declare `assign-agent-name` with one theme list name.
+    Mechanical nodes cannot declare it. A task that is a direct child of an
+    epic receives a team theme; team selection rotates through themes in
+    canonical theme-ID order. An ad-hoc task and an incident receive the sole
+    soloist theme. The task keeps that theme and catalog commit for its whole
+    lifecycle. A stage list absent from the selected theme fails before
+    dispatch. A missing soloist theme therefore does not invalidate a catalog
+    that serves only epic work, but it prevents an ad-hoc task from starting.
+
+    An allocation is keyed by lifecycle instance and list name. Re-entering a
+    stage or entering another stage with the same `assign-agent-name` value
+    returns the recorded name. A different list allocates independently from
+    the selected pinned theme. Allocation rotates through the list and skips
+    every name held by a non-done task or incident instance, across all themes.
+    Selection and persistence execute within one serialized service boundary,
+    so concurrent stage activations cannot claim the same name. The recorded
+    assignment remains in instance state for recovery and history, while the
+    lock is released when the owning task or incident reaches done. The
+    canonical handoff `stage` object carries the assigned name as `agentName`;
+    the standard, remediation, and incident templates render it.
   agent-sessions: >
     Sessions run on T3 Code, driven headlessly over plain HTTP:
     `POST /api/orchestration/dispatch` carries every command, and
@@ -998,7 +1032,7 @@ proposed-design:
     the interpreter runs.
   persistence-and-recovery: >
     Instance state (serialized flowcraft context, handoffs, todo
-    state, correlation tokens) and the append-only event history live
+    state, correlation tokens, pinned agent-name theme, and name assignments) and the append-only event history live
     in SQLite on a workspace bind mount. Advancing an instance loads
     its context, resumes, asserts the post-state, and persists — each
     step is an ordinary process invocation, so the service holds no
