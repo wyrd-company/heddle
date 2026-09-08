@@ -16,6 +16,7 @@ import { prepareProductionFixture } from "./composition.test-support.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
   makeQualificationScratch,
+  PREFERRED_MODEL_SLUGS,
   startIsolatedT3,
   type IsolatedT3,
 } from "./driver-qualification.test-support.js";
@@ -65,32 +66,38 @@ describe.skipIf(!t3Binary)(
         baseUrl: isolated.baseUrl,
       });
 
-      // The provider is genuinely undiscovered at this instant.
-      const atBoot = await client.readProviderCatalog();
-      const booting = atBoot.find((entry) => entry.instanceId === INSTANCE_ID);
-      expect(booting).toBeDefined();
-      expect(booting?.state).toBe("warning");
-      expect(booting?.installed).toBe(false);
-
-      const models = await (async () => {
-        for (let attempt = 0; attempt < 40; attempt += 1) {
+      let catalogReads = 0;
+      const observedStates: Array<{
+        installed: boolean | undefined;
+        state: string | undefined;
+      }> = [];
+      const catalogReader = {
+        readProviderCatalog: async () => {
+          catalogReads += 1;
           const catalog = await client.readProviderCatalog();
           const entry = catalog.find((row) => row.instanceId === INSTANCE_ID);
-          if (entry?.state === "ready" && entry.models.length > 0)
-            return entry.models;
-          await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
-        }
-        throw new Error("Isolated T3 never finished provider discovery");
-      })();
+          observedStates.push({
+            installed: entry?.installed,
+            state: entry?.state,
+          });
+          return catalog;
+        },
+      };
+      const model = PREFERRED_MODEL_SLUGS[INSTANCE_ID];
+      if (model === undefined) {
+        throw new Error(
+          `No qualification model is configured for ${INSTANCE_ID}`,
+        );
+      }
 
       const resolver = new ProviderSelectionResolver(
         {
           primary: {
-            model: models[0]?.slug ?? "",
+            model,
             providerDisplayName: DISPLAY_NAME,
           },
         },
-        client,
+        catalogReader,
       );
 
       const resolved = await resolveProductionConfiguration(
@@ -98,7 +105,7 @@ describe.skipIf(!t3Binary)(
           ...fixture.configuration,
           providerAliases: {
             primary: {
-              model: models[0]?.slug ?? "",
+              model,
               providerDisplayName: DISPLAY_NAME,
             },
           },
@@ -115,6 +122,12 @@ describe.skipIf(!t3Binary)(
       expect(resolved.session.defaultSelection.observedCliVersion).toMatch(
         /^\d+\.\d+\.\d+/,
       );
+      expect(observedStates[0]).toEqual({ installed: false, state: "warning" });
+      expect(observedStates.at(-1)).toEqual({
+        installed: true,
+        state: "ready",
+      });
+      expect(catalogReads).toBeGreaterThan(1);
     }, 120_000);
   },
 );

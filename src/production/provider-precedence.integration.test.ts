@@ -19,6 +19,10 @@ import { prepareProductionFixture } from "./composition.test-support.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
   makeQualificationScratch,
+  PREFERRED_MODEL_SLUGS,
+  QUALIFICATION_EXECUTION,
+  QUALIFICATION_REVIEW,
+  readyModelsFor,
   startIsolatedT3,
 } from "./driver-qualification.test-support.js";
 import { resolveStageSessionSelection } from "./stage-session-selection.js";
@@ -227,6 +231,57 @@ describe.skipIf(!t3Binary)(
       // No fallback: the stage alias and the configured default are not tried.
       expect(String(failure)).not.toContain(REVIEW.displayName);
       expect(String(failure)).not.toContain(EXECUTION.displayName);
+    }, 180_000);
+
+    it("refuses an ambiguous real T3 display name before creating a thread", async () => {
+      const scratch = await makeQualificationScratch();
+      teardown.push(scratch.cleanup);
+      const fixture = await prepareProductionFixture();
+      teardown.push(fixture.cleanup);
+      const ambiguousReview = {
+        ...QUALIFICATION_REVIEW,
+        displayName: QUALIFICATION_EXECUTION.displayName,
+      };
+      const isolated = await startIsolatedT3({
+        binary: t3Binary as string,
+        home: operatorHome,
+        providerInstances: [QUALIFICATION_EXECUTION, ambiguousReview],
+        scratch: scratch.root,
+      });
+      teardown.push(isolated.stop);
+      const client = new T3ControlPlaneClient({
+        accessToken: isolated.accessToken,
+        baseUrl: isolated.baseUrl,
+      });
+      await readyModelsFor(client, [QUALIFICATION_EXECUTION, ambiguousReview]);
+      const model = PREFERRED_MODEL_SLUGS[QUALIFICATION_EXECUTION.instanceId];
+      if (model === undefined) throw new Error("No Claude qualification model");
+      const providerAliases = {
+        execution: {
+          model,
+          providerDisplayName: QUALIFICATION_EXECUTION.displayName,
+        },
+      };
+      const threadsBefore = (await client.getShell()).threads.length;
+
+      const failure = await resolveProductionConfiguration(
+        {
+          ...fixture.configuration,
+          providerAliases,
+          session: {
+            ...fixture.configuration.session,
+            defaultProviderAlias: "execution",
+          },
+          t3: { accessToken: isolated.accessToken, baseUrl: isolated.baseUrl },
+        },
+        new ProviderSelectionResolver(providerAliases, client),
+      ).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as { reason?: string }).reason).toBe(
+        "provider-name-ambiguous",
+      );
+      expect((await client.getShell()).threads).toHaveLength(threadsBefore);
     }, 180_000);
   },
 );
