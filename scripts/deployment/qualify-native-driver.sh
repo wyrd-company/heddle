@@ -31,7 +31,8 @@ fi
 lookup_owned_container() {
     local -a candidates
     mapfile -t candidates < <(
-        docker ps --all --quiet --filter "label=${label_name}=${label_value}"
+        docker ps --all --quiet --no-trunc \
+            --filter "label=${label_name}=${label_value}"
     )
     if [ "${#candidates[@]}" -eq 1 ]; then
         container_id="${candidates[0]}"
@@ -83,7 +84,7 @@ set -e
 
 container_id="$(
     printf '%s\n' "${up_output}" \
-        | jq -Rr 'fromjson? | select(.outcome == "success") | .containerId // empty' \
+        | jq -Rr 'fromjson? | select(type == "object" and .outcome == "success") | .containerId // empty' \
         | tail -n 1
 )"
 if [[ ! "${container_id}" =~ ^[0-9a-f]{64}$ ]]; then

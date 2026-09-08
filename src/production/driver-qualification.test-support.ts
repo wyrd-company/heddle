@@ -395,8 +395,8 @@ export const readyModelsFor = async (
 /**
  * The least expensive adequate model for each driver, chosen by the operator.
  * Qualification proves the seam, not the model, so a run must not spend on a
- * frontier model to do it. Falls back to the catalog's first slug only when a
- * preferred slug is absent, which is itself worth noticing.
+ * frontier model to do it. A missing preferred slug stops qualification before
+ * dispatch rather than spending provider budget on a catalog fallback.
  */
 export const PREFERRED_MODEL_SLUGS: Readonly<Record<string, string>> = {
   "claude-execution": "claude-haiku-4-5",

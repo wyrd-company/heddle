@@ -31,7 +31,9 @@ afterEach(async () => {
   );
 });
 
-const harness = async (wrongLabel = false) => {
+const harness = async (
+  options: { omitContainerId?: boolean; wrongLabel?: boolean } = {},
+) => {
   const root = await mkdtemp(join(tmpdir(), "native-driver-script-"));
   roots.push(root);
   const binaryDirectory = join(root, "bin");
@@ -51,7 +53,11 @@ if [ "$1" = up ]; then
     fi
     shift
   done
-  printf '{"outcome":"success","containerId":"${containerId}"}\\n'
+  if [ "\${STUB_OMIT_CONTAINER_ID:-0}" = 1 ]; then
+    printf '{"outcome":"success"}\\n'
+  else
+    printf '{"outcome":"success","containerId":"${containerId}"}\\n'
+  fi
   exit 0
 fi
 exit "\${STUB_EXEC_STATUS:-0}"
@@ -64,7 +70,7 @@ exit "\${STUB_EXEC_STATUS:-0}"
 printf 'docker %s\\n' "$*" >>"$STUB_COMMAND_LOG"
 case "$1" in
   inspect)
-    if [ "${wrongLabel ? "1" : "0"}" = 1 ]; then
+    if [ "${options.wrongLabel ? "1" : "0"}" = 1 ]; then
       printf 'another-owner\\n'
     else
       sed 's/^[^=]*=//' "$STUB_LABEL_FILE"
@@ -88,6 +94,7 @@ esac
       STUB_COMMAND_LOG: log,
       STUB_EXEC_STATUS: "17",
       STUB_LABEL_FILE: label,
+      STUB_OMIT_CONTAINER_ID: options.omitContainerId ? "1" : "0",
     },
     log,
   };
@@ -112,7 +119,7 @@ describe("native driver qualification command", () => {
   });
 
   it("refuses cleanup when the exact container lacks the ownership label", async () => {
-    const fixture = await harness(true);
+    const fixture = await harness({ wrongLabel: true });
 
     await expect(
       execute("scripts/deployment/qualify-native-driver.sh", ["codex"], {
@@ -122,6 +129,21 @@ describe("native driver qualification command", () => {
     ).rejects.toMatchObject({ code: 1 });
 
     expect(await readFile(fixture.log, "utf8")).not.toContain("docker rm");
+  });
+
+  it("recovers the full owned identity when startup omits its result ID", async () => {
+    const fixture = await harness({ omitContainerId: true });
+
+    await expect(
+      execute("scripts/deployment/qualify-native-driver.sh", ["codex"], {
+        cwd: process.cwd(),
+        env: fixture.env,
+      }),
+    ).rejects.toMatchObject({ code: 17 });
+
+    const commands = await readFile(fixture.log, "utf8");
+    expect(commands).toContain("docker ps --all --quiet --no-trunc --filter");
+    expect(commands).toContain(`docker rm --force ${containerId}`);
   });
 
   it("keeps the operator command executable", async () => {
