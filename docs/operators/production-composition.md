@@ -135,8 +135,11 @@ Configuration conforms to `schemas/production-configuration.json`. The
 product declares a unique name and one or more globally unique repository names
 with absolute roots. Its optional `epicProject` records the one active epic's
 ID and existing T3 project ID when composition starts with that project already
-provisioned. `adHocProject` declares the existing shared project name, ID, and
-absolute workspace root. Board tasks may declare `product` and `repos` in front
+provisioned. `adHocProject` declares the shared project name, ID, and absolute
+workspace root for tasks outside an epic. Heddle reconciles that project at
+startup, creating it in the control plane when it is absent and recording it
+durably, so an operator does not provision it by hand. A shared project that
+cannot be reconciled fails startup and names the project. Board tasks may declare `product` and `repos` in front
 matter. Child tasks inherit omitted declarations from their epic. Heddle raises
 attention when a task, epic, or lifecycle stage refers to authority outside
 these declarations; it does not inspect diffs or branches to guess.

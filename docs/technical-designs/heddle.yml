@@ -145,7 +145,14 @@ proposed-design:
     Production configuration declares a complete product inventory. Each
     product owns one or more named repositories and may carry the durable T3
     identity of its active epic project. One separately named ad-hoc project
-    supplies its existing project ID and workspace root. A task or epic may
+    supplies the shared project ID and workspace root for tasks outside an
+    epic. Heddle owns that project's existence exactly as it owns an epic
+    project's: at startup it reconciles the configured shared project against
+    the control plane, creating it under a deterministic command identifier
+    when absent and recording it durably, so a replay neither duplicates the
+    project nor dispatches a second creation. A shared project that cannot be
+    reconciled fails startup closed and names the project, rather than
+    surfacing as a dispatch rejection at the first session. A task or epic may
     narrow its repository set in board front matter. Child tasks inherit their
     epic's product and repository declarations. Heddle never infers repository
     authority from a diff, branch, session, or filesystem scan. An unknown
