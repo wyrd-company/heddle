@@ -400,7 +400,10 @@ describe("production composition", () => {
       composition.escalation.pendingEscalations(runtime.instanceId),
     ).toMatchObject([{ attentionId, escalationId }]);
     await composition.close();
-  });
+    // Real subprocess work under a virtual clock: the assertions are on
+    // cadence, not wall time, so the default budget is incidental and this
+    // test sits marginally inside it under a full parallel suite.
+  }, 20_000);
 
   it("requires an exact recovery action before adopting an unverifiable legacy notification route", async () => {
     const fixture = await prepare();
