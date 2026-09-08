@@ -16,8 +16,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -32,13 +33,18 @@ afterEach(async () => {
 });
 
 const harness = async (
-  options: { omitContainerId?: boolean; wrongLabel?: boolean } = {},
+  options: {
+    blockExec?: boolean;
+    omitContainerId?: boolean;
+    wrongLabel?: boolean;
+  } = {},
 ) => {
   const root = await mkdtemp(join(tmpdir(), "native-driver-script-"));
   roots.push(root);
   const binaryDirectory = join(root, "bin");
   const log = join(root, "commands.log");
   const label = join(root, "label");
+  const ready = join(root, "ready");
   await mkdir(binaryDirectory, { recursive: true });
   const devcontainer = join(binaryDirectory, "devcontainer");
   await writeFile(
@@ -60,6 +66,11 @@ if [ "$1" = up ]; then
     printf '{"outcome":"success","containerId":"${containerId}"}\\n'
   fi
   exit 0
+fi
+if [ "\${STUB_BLOCK_EXEC:-0}" = 1 ]; then
+  touch "$STUB_READY_FILE"
+  trap 'exit 143' TERM
+  while :; do sleep 1; done
 fi
 exit "\${STUB_EXEC_STATUS:-0}"
 `,
@@ -92,12 +103,15 @@ esac
       ...process.env,
       HEDDLE_DRIVER_KANBAN: kanban,
       PATH: `${binaryDirectory}:${process.env.PATH ?? ""}`,
+      STUB_BLOCK_EXEC: options.blockExec ? "1" : "0",
       STUB_COMMAND_LOG: log,
       STUB_EXEC_STATUS: "17",
       STUB_LABEL_FILE: label,
       STUB_OMIT_CONTAINER_ID: options.omitContainerId ? "1" : "0",
+      STUB_READY_FILE: ready,
     },
     log,
+    ready,
   };
 };
 
@@ -145,6 +159,42 @@ describe("native driver qualification command", () => {
     const commands = await readFile(fixture.log, "utf8");
     expect(commands).toContain("docker ps --all --quiet --no-trunc --filter");
     expect(commands).toContain(`docker rm --force ${containerId}`);
+  });
+
+  it("removes the exact owned container when the command is interrupted", async () => {
+    const fixture = await harness({ blockExec: true });
+    const child = spawn(
+      "scripts/deployment/qualify-native-driver.sh",
+      ["codex"],
+      {
+        cwd: process.cwd(),
+        detached: true,
+        env: fixture.env,
+        stdio: "ignore",
+      },
+    );
+    const exited = new Promise<{ code: number | null; signal: string | null }>(
+      (resolveExit) => {
+        child.once("exit", (code, signal) => resolveExit({ code, signal }));
+      },
+    );
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try {
+        await access(fixture.ready);
+        break;
+      } catch {
+        if (attempt === 99) throw new Error("Stub command did not start");
+        await delay(10);
+      }
+    }
+
+    if (child.pid === undefined) throw new Error("Script did not start");
+    process.kill(-child.pid, "SIGTERM");
+
+    await expect(exited).resolves.toEqual({ code: 143, signal: null });
+    expect(await readFile(fixture.log, "utf8")).toContain(
+      `docker rm --force ${containerId}`,
+    );
   });
 
   it("keeps the operator command executable", async () => {
