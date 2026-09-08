@@ -244,12 +244,30 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
     expect(freshSelection.providerInstanceId).toBe(
       QUALIFICATION_SECOND_DRIVER.instanceId,
     );
+    const secondaryDefault = configuration.session.resolvedSelections.find(
+      ({ alias }) => alias === "secondary",
+    );
+    if (secondaryDefault === undefined) {
+      throw new Error("Secondary restart selection is absent");
+    }
+    const restartedConfiguration = {
+      ...configuration,
+      pacing: {
+        ...configuration.pacing,
+        defaultProvider: secondaryDefault.providerInstanceId,
+      },
+      session: {
+        ...configuration.session,
+        defaultProviderAlias: "secondary",
+        defaultSelection: secondaryDefault,
+      },
+    };
 
     const pacedProviders: string[] = [];
     const secondT3 = recordingT3(client);
     const second = createProductionComposition({
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration,
+      configuration: restartedConfiguration,
       providerUsage: {
         readFiveHourWindow: async (provider) => {
           pacedProviders.push(provider);
