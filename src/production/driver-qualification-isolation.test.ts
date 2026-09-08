@@ -3,7 +3,14 @@
 //   verifies: heddle
 // ---
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -129,9 +136,11 @@ describe("qualification isolation", () => {
       const scratch = join(root, "scratch");
       await mkdir(join(sourceHome, ".codex"), { recursive: true });
       await mkdir(join(sourceHome, ".claude"), { recursive: true });
-      await writeFile(
+      const selectedIdentity = join(sourceHome, "selected-identity.json");
+      await writeFile(selectedIdentity, "selected\n");
+      await symlink(
+        selectedIdentity,
         join(sourceHome, ".codex", "identity.json"),
-        "selected\n",
       );
       await writeFile(join(sourceHome, ".claude", "identity.json"), "other\n");
 
@@ -154,9 +163,7 @@ describe("qualification isolation", () => {
         join(scratch, "provider-home", ".codex", "identity.json"),
         "disposable-change\n",
       );
-      expect(
-        await readFile(join(sourceHome, ".codex", "identity.json"), "utf8"),
-      ).toBe("selected\n");
+      expect(await readFile(selectedIdentity, "utf8")).toBe("selected\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
