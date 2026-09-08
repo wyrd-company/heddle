@@ -22,6 +22,18 @@ import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
 
+const killFixtureProcessGroup = (processGroupId: number): void => {
+  try {
+    process.kill(-processGroupId, "SIGKILL");
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? error.code
+        : undefined;
+    if (code !== "ESRCH") throw error;
+  }
+};
+
 const prepareScratchOwnedGate = async () => {
   const root = await mkdtemp(join(tmpdir(), "heddle-owned-t3-command-"));
   const installInvocation = join(root, "install-invocation");
@@ -236,7 +248,7 @@ printf '%s\\n' "$@" >> "$HEDDLE_QUALIFICATION_INVOCATION"
       });
     } finally {
       if (child.exitCode === null && child.pid !== undefined) {
-        process.kill(-child.pid, "SIGKILL");
+        killFixtureProcessGroup(child.pid);
         await exited;
       }
       await rm(fixture.root, { force: true, recursive: true });
