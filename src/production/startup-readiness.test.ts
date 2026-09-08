@@ -134,6 +134,10 @@ describe("startup provider readiness", () => {
         reader,
       );
       let clock = 0;
+      // Bound the wait in the test itself. Without this, removing the deadline
+      // guard spins a tight await loop that starves the runner's timer, and the
+      // mutation hangs instead of failing a named test.
+      let sleeps = 0;
 
       await expect(
         resolveProductionConfiguration(startupConfiguration(fixture), resolver, {
@@ -142,7 +146,12 @@ describe("startup provider readiness", () => {
             return clock;
           },
           pollMilliseconds: 0,
-          sleep: async () => undefined,
+          sleep: async () => {
+            sleeps += 1;
+            if (sleeps > 20) {
+              throw new Error("startup waited past its deadline");
+            }
+          },
           timeoutMilliseconds: 5_000,
         }),
       ).rejects.toThrow(
