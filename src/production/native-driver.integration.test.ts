@@ -7,7 +7,7 @@
 import type { Buffer } from "node:buffer";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -16,6 +16,8 @@ import { stringify } from "yaml";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { T3ControlPlaneClient } from "../control-plane/index.js";
+import { SqlitePersistence } from "../persistence/index.js";
+import { isTodoState } from "../todo/index.js";
 import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
 import { prepareProductionFixture } from "./composition.test-support.js";
 import {
@@ -43,6 +45,7 @@ const DRIVER_ROWS = [
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
 const nativeDrivers = process.env["HEDDLE_NATIVE_DRIVER_QUALIFICATION"] === "1";
+const selectedDriver = process.env["HEDDLE_NATIVE_DRIVER_ALIAS"];
 const operatorHome = process.env["HOME"] ?? "";
 
 const teardown: Array<() => Promise<void>> = [];
@@ -69,26 +72,17 @@ const allocatePort = async (): Promise<number> => {
   return port;
 };
 
-/**
- * A handoff that asks the agent for exactly one Heddle tool call. The stage's
- * own tool contract is what makes the call possible; the prose only names it.
- */
-const advanceHandoffTemplate = `---
-$schema: https://wyrd.company/heddle/handoff-template.schema.json
-relationships:
-  implements: heddle
-format: heddle.handoff-template
-version: 1
-kind: standard
----
-# {{ task.title }}
+const qualificationSystemPrompt = (
+  proofPath: string,
+): string => `# Native driver qualification
 
-Stage: {{ handoff.stage.name }}
+Perform these steps in order. Do not do other work.
 
-Do not edit any files and do not run any commands.
-
-Call the \`advance\` tool exactly once with disposition \`complete\` and an
-empty output object. Then stop.
+1. Run this benign command without requesting approval: printf 'native-driver-qualified\\n' > '${proofPath}'
+2. Call the Heddle list_providers tool with an empty input.
+3. Call the Heddle spawn tool with operationId native-driver-child, providerAlias execution, and rootItemId deliver.
+4. If spawn succeeds, call the Heddle advance tool exactly once with disposition complete and an empty output object, then stop.
+5. If spawn reports that deliver is already assigned, you are the delegated child. Stop without calling advance.
 `;
 
 const stopService = async (service: ChildProcess): Promise<void> => {
@@ -104,23 +98,19 @@ const stopService = async (service: ChildProcess): Promise<void> => {
 describe.skipIf(!t3Binary || !nativeDrivers)(
   "native driver through the packaged production service",
   () => {
-    it.each(DRIVER_ROWS)(
+    const selectedRows = DRIVER_ROWS.filter(
+      ({ alias }) => selectedDriver === undefined || alias === selectedDriver,
+    );
+    if (selectedDriver !== undefined && selectedRows.length === 0) {
+      throw new Error(`Unknown native driver alias: ${selectedDriver}`);
+    }
+    it.each(selectedRows)(
       "runs a real $alias session that calls a Heddle MCP tool",
-      async ({ instance }) => {
+      async ({ alias, instance }) => {
         const scratch = await makeQualificationScratch();
         teardown.push(scratch.cleanup);
         const fixture = await prepareProductionFixture();
         teardown.push(fixture.cleanup);
-
-        // Replace the fixture handoff with one that names the tool to call.
-        await writeFile(
-          join(
-            fixture.blueprintsRepositoryRoot,
-            "handoff-templates",
-            "standard.md",
-          ),
-          advanceHandoffTemplate,
-        );
 
         const isolated: IsolatedT3 = await startIsolatedT3({
           binary: t3Binary as string,
@@ -146,6 +136,11 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
         // qualification no longer provisions it.
         const configurationDirectory = join(scratch.root, "configuration");
         await mkdir(configurationDirectory, { recursive: true });
+        const proofPath = join(scratch.root, `${alias}-full-access.txt`);
+        await writeFile(
+          join(configurationDirectory, "heddle.md"),
+          qualificationSystemPrompt(proofPath),
+        );
         // The service resolves blueprints from `<config>/blueprints`, not from
         // a configuration key.
         const { symlink } = await import("node:fs/promises");
@@ -172,9 +167,12 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             ...fixture.configuration.adHocProject,
             workspaceRoot: fixture.repositoryRoot,
           },
-          // An empty budget catalog forbids `providerUsage`; this row advances a
-          // stage rather than spawning a child, so it needs neither.
-          pacing: { ...configuredPacing, providerBudgets: {} },
+          pacing: {
+            ...configuredPacing,
+            maxConcurrentSessions: 3,
+            providerBudgets: { execution: { usageLimit: 100 } },
+            subagents: { maxDepth: 1, maxFanOut: 1 },
+          },
           providerAliases,
           server: { host: "127.0.0.1", port: servicePort },
           session: {
@@ -299,25 +297,57 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           );
         })();
         expect(advanced).toBe("review");
+        expect(await readFile(proofPath, "utf8")).toBe(
+          "native-driver-qualified\n",
+        );
+
+        await stopService(service);
+        const persistence = new SqlitePersistence({
+          stateDirectory: configured.stateDirectory,
+        });
+        try {
+          const record = persistence.getInstance(`task-${fixture.taskId}`);
+          expect(record).toBeDefined();
+          expect(isTodoState(record?.state.todoState)).toBe(true);
+          if (!isTodoState(record?.state.todoState)) {
+            throw new Error("Native driver row has no todo state");
+          }
+          const assignments = record.state.todoState.lists.flatMap(
+            ({ assignments = [] }) => assignments,
+          );
+          expect(assignments).toHaveLength(1);
+          expect(assignments[0]).toMatchObject({
+            binding: {
+              alias: "execution",
+              modelSlug: providerAliases.execution.model,
+              providerInstanceId: instance.instanceId,
+              runtimeMode: "full-access",
+            },
+            operationId: "native-driver-child",
+            parentSessionKey: expect.any(String),
+            rootItemId: "deliver",
+            status: "active",
+          });
+        } finally {
+          persistence.close();
+        }
 
         // The advance was the agent's own MCP call: this test never calls the
         // MCP boundary, so the only caller was the native session.
-        const thread = (await client.getShell()).threads.find(
+        const threads = (await client.getShell()).threads.filter(
           ({ title }) => typeof title === "string" && title.includes("task-"),
-        ) as
-          | {
-              modelSelection?: { instanceId?: string; model?: string };
-              runtimeMode?: string;
-            }
-          | undefined;
-        expect(thread).toBeDefined();
-        expect(thread?.modelSelection?.instanceId).toBe(instance.instanceId);
-        expect(thread?.modelSelection?.model).toBe(
-          providerAliases.execution.model,
-        );
-        // Full access was forwarded unchanged, so the session ran without an
-        // approval prompt.
-        expect(thread?.runtimeMode).toBe("full-access");
+        ) as Array<{
+          modelSelection?: { instanceId?: string; model?: string };
+          runtimeMode?: string;
+        }>;
+        expect(threads.length).toBeGreaterThanOrEqual(2);
+        for (const thread of threads) {
+          expect(thread.modelSelection?.instanceId).toBe(instance.instanceId);
+          expect(thread.modelSelection?.model).toBe(
+            providerAliases.execution.model,
+          );
+          expect(thread.runtimeMode).toBe("full-access");
+        }
       },
       1_500_000,
     );

@@ -1,0 +1,16 @@
+{
+  "name": "Heddle OpenCode qualification",
+  "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/wyrd-company/devcontainers/opencode-cli:1": {}
+  },
+  "mounts": [
+    "source=${localEnv:HEDDLE_DRIVER_KANBAN},target=/usr/local/bin/kanban-md,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/opencode,target=/run/heddle-credentials/config,type=bind,readonly",
+    "source=${localEnv:HOME}/.local/share/opencode,target=/run/heddle-credentials/state,type=bind,readonly"
+  ],
+  "postCreateCommand": "install -d -m 700 /home/vscode/.config/opencode /home/vscode/.local/share/opencode && cp -a /run/heddle-credentials/config/. /home/vscode/.config/opencode/ && cp -a /run/heddle-credentials/state/. /home/vscode/.local/share/opencode/",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/heddle",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind"
+}

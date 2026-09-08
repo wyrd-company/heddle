@@ -1,0 +1,15 @@
+{
+  "name": "Heddle Codex qualification",
+  "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/wyrd-company/devcontainers/codex-cli:1": {}
+  },
+  "mounts": [
+    "source=${localEnv:HEDDLE_DRIVER_KANBAN},target=/usr/local/bin/kanban-md,type=bind,readonly",
+    "source=${localEnv:HOME}/.codex,target=/run/heddle-credentials/.codex,type=bind,readonly"
+  ],
+  "postCreateCommand": "install -d -m 700 /home/vscode/.codex && cp -a /run/heddle-credentials/.codex/. /home/vscode/.codex/",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/heddle",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind"
+}

@@ -3,8 +3,9 @@
 //   verifies: heddle
 // ---
 
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -80,5 +81,43 @@ describe("qualification isolation", () => {
         stateDirectory: "/var/lib/heddle",
       }),
     ).toThrow(QualificationIsolationError);
+  });
+
+  it("gives each native row only its selected provider credential store", async () => {
+    const directory = resolve(".devcontainer/driver-qualification");
+    const expected = {
+      "claude-code": [
+        "${localEnv:HOME}/.claude",
+        "${localEnv:HOME}/.claude.json",
+      ],
+      codex: ["${localEnv:HOME}/.codex"],
+      cursor: ["${localEnv:HOME}/.cursor"],
+      grok: ["${localEnv:HOME}/.grok"],
+      opencode: [
+        "${localEnv:HOME}/.config/opencode",
+        "${localEnv:HOME}/.local/share/opencode",
+      ],
+    } as const;
+
+    for (const [driver, sources] of Object.entries(expected)) {
+      const configuration = JSON.parse(
+        await readFile(join(directory, `${driver}.json`), "utf8"),
+      ) as { mounts?: string[] };
+      const credentialMounts = (configuration.mounts ?? []).filter((mount) =>
+        mount.includes("target=/run/heddle-credentials/"),
+      );
+      expect(
+        credentialMounts.map((mount) => mount.match(/^source=([^,]+)/)?.[1]),
+        driver,
+      ).toEqual(sources);
+      expect(
+        credentialMounts.every((mount) => mount.endsWith(",readonly")),
+        driver,
+      ).toBe(true);
+    }
+
+    const common = await readFile(join(directory, "devcontainer.json"), "utf8");
+    expect(common).not.toContain("heddle-credentials");
+    expect(common).not.toContain("localEnv:HOME");
   });
 });

@@ -1,0 +1,16 @@
+{
+  "name": "Heddle Claude Code qualification",
+  "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/wyrd-company/devcontainers/claude-code-cli:1": {}
+  },
+  "mounts": [
+    "source=${localEnv:HEDDLE_DRIVER_KANBAN},target=/usr/local/bin/kanban-md,type=bind,readonly",
+    "source=${localEnv:HOME}/.claude,target=/run/heddle-credentials/.claude,type=bind,readonly",
+    "source=${localEnv:HOME}/.claude.json,target=/run/heddle-credentials/.claude.json,type=bind,readonly"
+  ],
+  "postCreateCommand": "install -d -m 700 /home/vscode/.claude && cp -a /run/heddle-credentials/.claude/. /home/vscode/.claude/ && cp /run/heddle-credentials/.claude.json /home/vscode/.claude.json",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/heddle",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind"
+}

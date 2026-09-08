@@ -21,11 +21,11 @@ A qualification run establishes, for each driver, that:
   `T3ControlPlaneClient`.
 - A stage session activates and binds to the intended provider instance and
   model, resolved from the live catalog rather than from configuration alone.
-- A real agent session reaches Heddle's MCP boundary and calls a tool. The
-  qualification never calls that boundary itself, so a disposition that moves
-  the lifecycle is the agent's own invocation.
-- The session runs under `full-access`, forwarded unchanged, and so performs
-  its work without an approval prompt.
+- A real agent session calls `list_providers`, creates a delegated child with
+  `spawn`, and advances the stage through Heddle's MCP boundary. The
+  qualification never calls that boundary itself.
+- The session runs under `full-access`, forwarded unchanged, and performs a
+  benign scratch-file command without an approval prompt.
 
 Nothing in the harness injects a dispatch implementation or an alternative
 provider policy. The composition receives neither a `t3` client nor a
@@ -33,13 +33,16 @@ provider policy. The composition receives neither a `t3` client nor a
 
 ## Prerequisites
 
-- The five harnesses installed from their published Dev Container Features:
-  `claude-code-cli`, `codex-cli`, `cursor-agent-cli`, `grok-cli`, and
-  `opencode-cli`.
+- The selected harness installed from its published Dev Container Feature.
+  Each native row has its own configuration under
+  `.devcontainer/driver-qualification/`.
 - The supported T3 release from `deployment/supported-versions.json`,
   installed into a scratch prefix. Never the operator's own `t3` on `PATH`.
-- Provider authentication is the operator's own. The harness uses the existing
-  CLI sessions through `HOME` and never writes, rotates, or logs them.
+- Provider authentication is the operator's own. A native-row configuration
+  mounts only that provider's store, read-only, under
+  `/run/heddle-credentials`, then copies it into the disposable container home.
+  A CLI can update its disposable copy, but cannot write or rotate the
+  operator's store. Other providers' stores are not mounted.
 
 Install the pinned control plane:
 
@@ -59,13 +62,45 @@ env -u FORCE_COLOR -u NO_COLOR \
   HEDDLE_T3_INTEGRATION_BINARY="${SCRATCH}/t3/bin/t3" \
   npx vitest run src/production/ src/control-plane/
 
-# The five native driver rows. Each starts its own control plane and runs a
-# real agent, so budget a generous wall clock.
+# One native driver row. Repeat with claude-code, codex, cursor, grok, and
+# opencode, using the matching devcontainer configuration for each row. Each
+# starts its own control plane and runs a real parent and delegated child, so
+# budget a generous wall clock.
 env -u FORCE_COLOR -u NO_COLOR \
   HEDDLE_T3_INTEGRATION_BINARY="${SCRATCH}/t3/bin/t3" \
   HEDDLE_NATIVE_DRIVER_QUALIFICATION=1 \
+  HEDDLE_NATIVE_DRIVER_ALIAS=codex \
   npx vitest run src/production/native-driver.integration.test.ts
 ```
+
+Create each row's container with the matching credential-isolated
+configuration. For example:
+
+```bash
+export HEDDLE_DRIVER_KANBAN="$(command -v kanban-md)"
+devcontainer up \
+  --workspace-folder . \
+  --config .devcontainer/driver-qualification/codex.json
+devcontainer exec \
+  --workspace-folder . \
+  --config .devcontainer/driver-qualification/codex.json \
+  bash -lc '
+    set -eu
+    SCRATCH=$(mktemp -d)
+    trap '\''rm -rf "$SCRATCH"'\'' EXIT
+    npm install --global --no-audit --no-fund --prefix "$SCRATCH/t3" \
+      "$(node -p '\''require("./deployment/supported-versions.json").t3PackageSource'\'')"
+    env -u FORCE_COLOR -u NO_COLOR \
+      HEDDLE_T3_INTEGRATION_BINARY="$SCRATCH/t3/bin/t3" \
+      HEDDLE_NATIVE_DRIVER_QUALIFICATION=1 \
+      HEDDLE_NATIVE_DRIVER_ALIAS=codex \
+      npx vitest run src/production/native-driver.integration.test.ts
+  '
+```
+
+Do not run a native row in the credential-free common
+`devcontainer.json`. It installs all five binaries for catalog and production
+seam tests, but supplies no provider authentication.
 
 Set `HEDDLE_QUALIFICATION_KEEP_SCRATCH=1` to retain the isolated control
 plane's state directory when diagnosing a failure; a driver's provider event
@@ -88,6 +123,11 @@ refuses, before any effect:
 
 Each refusal has a named test in
 `src/production/driver-qualification-isolation.test.ts`.
+
+The same suite verifies that each native-row configuration mounts only its
+selected provider credential source and mounts every such source read-only.
+The copied credential state and all provider sessions are removed with the
+row's container and isolated scratch directory.
 
 ## Reading a failure
 

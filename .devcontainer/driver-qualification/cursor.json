@@ -1,0 +1,15 @@
+{
+  "name": "Heddle Cursor qualification",
+  "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/wyrd-company/devcontainers/cursor-agent-cli:1": {}
+  },
+  "mounts": [
+    "source=${localEnv:HEDDLE_DRIVER_KANBAN},target=/usr/local/bin/kanban-md,type=bind,readonly",
+    "source=${localEnv:HOME}/.cursor,target=/run/heddle-credentials/.cursor,type=bind,readonly"
+  ],
+  "postCreateCommand": "install -d -m 700 /home/vscode/.cursor && cp -a /run/heddle-credentials/.cursor/. /home/vscode/.cursor/",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/heddle",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind"
+}
