@@ -8,6 +8,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -127,6 +128,48 @@ describe("qualification isolation", () => {
     const common = await readFile(join(directory, "devcontainer.json"), "utf8");
     expect(common).not.toContain("heddle-credentials");
     expect(common).not.toContain("localEnv:HOME");
+
+    const root = await mkdtemp(join(tmpdir(), "heddle-identity-map-test-"));
+    try {
+      const sourceHome = join(root, "source-home");
+      const relativePaths = Object.fromEntries(
+        Object.entries(expected).map(([driver, sources]) => [
+          driver,
+          sources.map((source) => source.replace("${localEnv:HOME}/", "")),
+        ]),
+      ) as Record<string, string[]>;
+      for (const relative of Object.values(relativePaths).flat()) {
+        const source = join(sourceHome, relative);
+        if (relative === ".claude.json") {
+          await mkdir(sourceHome, { recursive: true });
+          await writeFile(source, "selected-file\n");
+        } else {
+          await mkdir(source, { recursive: true });
+          await writeFile(join(source, "identity"), "selected-directory\n");
+        }
+      }
+
+      for (const [driver, selected] of Object.entries(relativePaths)) {
+        const rowScratch = join(root, driver);
+        await prepareNativeProviderHome({
+          driver,
+          scratch: rowScratch,
+          sourceHome,
+        });
+        for (const relative of Object.values(relativePaths).flat()) {
+          const target = join(rowScratch, "provider-home", relative);
+          if (selected.includes(relative)) {
+            await expect(stat(target)).resolves.toBeDefined();
+          } else {
+            await expect(stat(target)).rejects.toMatchObject({
+              code: "ENOENT",
+            });
+          }
+        }
+      }
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
   it("copies only the selected native identity into disposable provider HOME", async () => {
