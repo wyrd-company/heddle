@@ -1,5 +1,5 @@
 {
-  "name": "Heddle OpenCode qualification",
+  "name": "Heddle OpenCode qualification row",
   "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
   "features": {
     "ghcr.io/wyrd-company/devcontainers/opencode-cli:1": {}

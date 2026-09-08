@@ -101,7 +101,7 @@ describe("qualification isolation", () => {
 
     for (const [driver, sources] of Object.entries(expected)) {
       const configuration = JSON.parse(
-        await readFile(join(directory, `${driver}.json`), "utf8"),
+        await readFile(join(directory, driver, "devcontainer.json"), "utf8"),
       ) as { mounts?: string[] };
       const credentialMounts = (configuration.mounts ?? []).filter((mount) =>
         mount.includes("target=/run/heddle-credentials/"),

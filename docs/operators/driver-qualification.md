@@ -80,10 +80,10 @@ configuration. For example:
 export HEDDLE_DRIVER_KANBAN="$(command -v kanban-md)"
 devcontainer up \
   --workspace-folder . \
-  --config .devcontainer/driver-qualification/codex.json
+  --config .devcontainer/driver-qualification/codex/devcontainer.json
 devcontainer exec \
   --workspace-folder . \
-  --config .devcontainer/driver-qualification/codex.json \
+  --config .devcontainer/driver-qualification/codex/devcontainer.json \
   bash -lc '
     set -eu
     SCRATCH=$(mktemp -d)

@@ -1,14 +1,14 @@
 {
-  "name": "Heddle Codex qualification",
+  "name": "Heddle Grok qualification row",
   "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
   "features": {
-    "ghcr.io/wyrd-company/devcontainers/codex-cli:1": {}
+    "ghcr.io/wyrd-company/devcontainers/grok-cli:1": {}
   },
   "mounts": [
     "source=${localEnv:HEDDLE_DRIVER_KANBAN},target=/usr/local/bin/kanban-md,type=bind,readonly",
-    "source=${localEnv:HOME}/.codex,target=/run/heddle-credentials/.codex,type=bind,readonly"
+    "source=${localEnv:HOME}/.grok,target=/run/heddle-credentials/.grok,type=bind,readonly"
   ],
-  "postCreateCommand": "install -d -m 700 /home/vscode/.codex && cp -a /run/heddle-credentials/.codex/. /home/vscode/.codex/",
+  "postCreateCommand": "install -d -m 700 /home/vscode/.grok && cp -a /run/heddle-credentials/.grok/. /home/vscode/.grok/",
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/heddle",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind"

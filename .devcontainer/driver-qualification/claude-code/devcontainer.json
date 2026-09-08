@@ -1,5 +1,5 @@
 {
-  "name": "Heddle Claude Code qualification",
+  "name": "Heddle Claude Code qualification row",
   "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
   "features": {
     "ghcr.io/wyrd-company/devcontainers/claude-code-cli:1": {}
