@@ -536,7 +536,9 @@ describe("production mechanical worktree preparation", () => {
       sessionKey: `task-${fixture.taskId}:implement:1`,
       threadId: expect.any(String),
     });
-    expect(firstT3.commands).toHaveLength(0);
+    expect(
+      firstT3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(0);
     expect(first.attention.list()).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({

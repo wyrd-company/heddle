@@ -174,6 +174,7 @@ class MemoryT3 implements SessionObservationT3Client {
   beforeDispatch?: (command: T3DispatchCommand) => void;
   beforeUserInputResponse?: () => void;
   shell: T3ShellSnapshot = {
+    projects: [],
     threads: [
       {
         id: target.threadId,

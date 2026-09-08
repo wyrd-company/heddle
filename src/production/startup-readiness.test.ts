@@ -38,7 +38,10 @@ const undiscoveredProvider = {
 
 const catalogReader = (
   responses: readonly (T3ProviderCatalog | Error)[],
-): { readProviderCatalog: () => Promise<T3ProviderCatalog>; reads: number[] } => {
+): {
+  readProviderCatalog: () => Promise<T3ProviderCatalog>;
+  reads: number[];
+} => {
   const state = { reads: [0] };
   let call = 0;
   return {
@@ -140,20 +143,24 @@ describe("startup provider readiness", () => {
       let sleeps = 0;
 
       await expect(
-        resolveProductionConfiguration(startupConfiguration(fixture), resolver, {
-          now: () => {
-            clock += 1_000;
-            return clock;
+        resolveProductionConfiguration(
+          startupConfiguration(fixture),
+          resolver,
+          {
+            now: () => {
+              clock += 1_000;
+              return clock;
+            },
+            pollMilliseconds: 0,
+            sleep: async () => {
+              sleeps += 1;
+              if (sleeps > 20) {
+                throw new Error("startup waited past its deadline");
+              }
+            },
+            timeoutMilliseconds: 5_000,
           },
-          pollMilliseconds: 0,
-          sleep: async () => {
-            sleeps += 1;
-            if (sleeps > 20) {
-              throw new Error("startup waited past its deadline");
-            }
-          },
-          timeoutMilliseconds: 5_000,
-        }),
+        ),
       ).rejects.toThrow(
         `T3 provider '${DISPLAY_NAME}' is not available, enabled, installed, and ready`,
       );
@@ -177,10 +184,14 @@ describe("startup provider readiness", () => {
       );
 
       await expect(
-        resolveProductionConfiguration(startupConfiguration(fixture), resolver, {
-          pollMilliseconds: 0,
-          sleep: async () => undefined,
-        }),
+        resolveProductionConfiguration(
+          startupConfiguration(fixture),
+          resolver,
+          {
+            pollMilliseconds: 0,
+            sleep: async () => undefined,
+          },
+        ),
       ).rejects.toThrow(ProviderSelectionError);
       // One read, not a poll loop: the failure is permanent.
       expect(reader.reads[0]).toBe(1);

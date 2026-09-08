@@ -162,6 +162,16 @@ export const initializePersistenceSchema = (
       delete_command_id TEXT NOT NULL UNIQUE
     );
 
+    CREATE TABLE IF NOT EXISTS heddle_shared_project (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      project_name TEXT NOT NULL,
+      project_id TEXT NOT NULL UNIQUE,
+      workspace_root TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('creating', 'active')),
+      create_command_id TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS heddle_dynamic_task_intents (
       operation_digest TEXT PRIMARY KEY CHECK (length(operation_digest) = 64),
       record_digest TEXT NOT NULL CHECK (length(record_digest) = 64),

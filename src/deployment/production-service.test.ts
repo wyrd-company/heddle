@@ -468,7 +468,9 @@ describe("configured production composition", () => {
 
       await production.start();
 
-      expect(t3.commands).toEqual([]);
+      expect(
+        t3.commands.filter(({ type }) => type !== "project.create"),
+      ).toEqual([]);
       expect(production.attention.list()).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -488,6 +490,10 @@ describe("configured production composition", () => {
       fixture = await prepareProductionFixture();
       const configuration = configuredConfiguration(fixture.configuration);
       configuration.session.defaultRuntimeMode = "full-access";
+      const projects = new Map<
+        string,
+        { id: string; title: string; workspaceRoot: string }
+      >();
       const threads = new Set<string>();
       const commands: Array<Record<string, unknown>> = [];
       const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
@@ -498,6 +504,7 @@ describe("configured production composition", () => {
         if (url.endsWith("/api/orchestration/shell")) {
           return new globalThis.Response(
             JSON.stringify({
+              projects: [...projects.values()],
               threads: [...threads].map((id) => ({
                 id,
                 latestTurn: { state: "running" },
@@ -513,6 +520,13 @@ describe("configured production composition", () => {
             unknown
           >;
           commands.push(command);
+          if (command["type"] === "project.create") {
+            projects.set(String(command["projectId"]), {
+              id: String(command["projectId"]),
+              title: String(command["title"]),
+              workspaceRoot: String(command["workspaceRoot"]),
+            });
+          }
           if (command["type"] === "thread.create") {
             threads.add(String(command["threadId"]));
           }
@@ -568,6 +582,7 @@ describe("configured production composition", () => {
 
       expect(onSchedulerError).not.toHaveBeenCalled();
       expect(commands.map((command) => command["type"])).toEqual([
+        "project.create",
         "thread.create",
         "thread.turn.start",
       ]);
@@ -578,11 +593,11 @@ describe("configured production composition", () => {
         },
         runtimeMode: "full-access",
       };
-      expect(commands[0]).toMatchObject({
+      expect(commands[1]).toMatchObject({
         ...expectedSelection,
         type: "thread.create",
       });
-      expect(commands[1]).toMatchObject({
+      expect(commands[2]).toMatchObject({
         ...expectedSelection,
         type: "thread.turn.start",
       });
@@ -592,6 +607,10 @@ describe("configured production composition", () => {
   it("surfaces an actual T3 dispatch rejection through durable attention", async () => {
     fixture = await prepareProductionFixture();
     const configuration = configuredConfiguration(fixture.configuration);
+    const projects = new Map<
+      string,
+      { id: string; title: string; workspaceRoot: string }
+    >();
     const threads = new Set<string>();
     const commands: Array<Record<string, unknown>> = [];
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
@@ -602,6 +621,7 @@ describe("configured production composition", () => {
       if (url.endsWith("/api/orchestration/shell")) {
         return new globalThis.Response(
           JSON.stringify({
+            projects: [...projects.values()],
             threads: [...threads].map((id) => ({
               id,
               latestTurn: { state: "running" },
@@ -617,6 +637,16 @@ describe("configured production composition", () => {
           unknown
         >;
         commands.push(command);
+        if (command["type"] === "project.create") {
+          projects.set(String(command["projectId"]), {
+            id: String(command["projectId"]),
+            title: String(command["title"]),
+            workspaceRoot: String(command["workspaceRoot"]),
+          });
+          return new globalThis.Response(JSON.stringify({ sequence: 1 }), {
+            status: 200,
+          });
+        }
         if (command["type"] === "thread.create") {
           threads.add(String(command["threadId"]));
           return new globalThis.Response(JSON.stringify({ sequence: 1 }), {
@@ -676,6 +706,7 @@ describe("configured production composition", () => {
     await expect(production.start()).resolves.toBeUndefined();
 
     expect(commands.map((command) => command["type"])).toEqual([
+      "project.create",
       "thread.create",
       "thread.turn.start",
     ]);
@@ -767,7 +798,9 @@ describe("configured production composition", () => {
     });
 
     await expect(production.start()).resolves.toBeUndefined();
-    expect(t3.commands).toEqual([]);
+    expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
+      [],
+    );
     expect(t3.timeouts).toEqual([]);
     expect(onSchedulerError).not.toHaveBeenCalled();
     expect(
@@ -826,7 +859,9 @@ describe("configured production composition", () => {
     await expect(
       access(fixture.configuration.stateDirectory),
     ).rejects.toMatchObject({ code: "ENOENT" });
-    expect(t3.commands).toEqual([]);
+    expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
+      [],
+    );
     expect(readProviderCatalog).toHaveBeenCalledTimes(1);
     expect(t3.timeouts).toEqual([]);
     expect(notifications).toEqual([]);
@@ -907,7 +942,9 @@ describe("configured production composition", () => {
 
     await expect(production.start()).resolves.toBeUndefined();
 
-    expect(t3.commands).toEqual([]);
+    expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
+      [],
+    );
     expect(t3.timeouts).toEqual([]);
     expect(production.attention.list()).toEqual([
       expect.objectContaining({

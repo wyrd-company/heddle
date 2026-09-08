@@ -89,6 +89,7 @@ import { pageSessionAttentions } from "./session-attention-paging.js";
 import { DynamicTaskAuthority } from "./dynamic-task-authority.js";
 import { EpicOperationCoordinator } from "./epic-operation-coordinator.js";
 import { ProductionIncidentCoordinator } from "./incident-coordinator.js";
+import { SharedProjectCoordinator } from "./shared-project.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -269,6 +270,11 @@ export const createProductionComposition = (
       undefined,
       undefined,
       attention,
+    );
+    const sharedProject = new SharedProjectCoordinator(
+      configuration,
+      persistence,
+      t3,
     );
     const instances = new ProductionInstanceController(
       configuration,
@@ -589,6 +595,7 @@ export const createProductionComposition = (
       subagents: coordinator,
       start: async () => {
         await dynamicTasks.recoverPending();
+        await sharedProject.reconcile();
         await scheduler.start();
       },
       close: async () => {

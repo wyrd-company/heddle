@@ -5,6 +5,7 @@
 // ---
 
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { Buffer } from "node:buffer";
 import { createServer } from "node:net";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -55,7 +56,10 @@ export const assertQualificationIsolation = (surface: {
     );
   }
   const board = resolve(surface.boardDirectory);
-  if (board === LIVE_BOARD_DIRECTORY || board.startsWith(`${LIVE_BOARD_DIRECTORY}${sep}`)) {
+  if (
+    board === LIVE_BOARD_DIRECTORY ||
+    board.startsWith(`${LIVE_BOARD_DIRECTORY}${sep}`)
+  ) {
     throw new QualificationIsolationError(
       `Refusing the operator's live board at ${LIVE_BOARD_DIRECTORY}`,
     );
@@ -229,16 +233,18 @@ export const startIsolatedT3 = async (options: {
 
   const stop = async (): Promise<void> => {
     if (server.pid === undefined || server.exitCode !== null) return;
-    const signal = (value: NodeJS.Signals): void => {
+    const signal = (value: "SIGKILL" | "SIGTERM"): void => {
       try {
         process.kill(-(server.pid as number), value);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        if ((error as { code?: string }).code !== "ESRCH") throw error;
       }
     };
     signal("SIGTERM");
     await Promise.race([
-      new Promise<void>((resolveExit) => server.once("exit", () => resolveExit())),
+      new Promise<void>((resolveExit) =>
+        server.once("exit", () => resolveExit()),
+      ),
       delay(3_000),
     ]);
     if (server.exitCode === null) signal("SIGKILL");
@@ -259,7 +265,8 @@ export const startIsolatedT3 = async (options: {
         });
         break;
       } catch {
-        if (attempt === 199) throw new Error("Isolated T3 did not become ready");
+        if (attempt === 199)
+          throw new Error("Isolated T3 did not become ready");
         await delay(100);
       }
     }

@@ -81,6 +81,10 @@ export class SyntheticT3 implements ProductionT3Client {
   }> = [];
   readonly providerContexts: T3ProviderDispatchContext[] = [];
   readonly mcpRegistrations: T3WorkflowMcpProviderSession[] = [];
+  readonly projects = new Map<
+    string,
+    { createdAt: string; id: string; title: string; workspaceRoot: string }
+  >();
   readonly providerCatalog: Array<
     Omit<T3ProviderCatalogEntry, "models"> & {
       models: T3ProviderCatalogModel[];
@@ -134,6 +138,20 @@ export class SyntheticT3 implements ProductionT3Client {
     if (providerContext !== undefined) {
       this.providerContexts.push(globalThis.structuredClone(providerContext));
     }
+    if (
+      command.type === "project.create" &&
+      typeof command.projectId === "string" &&
+      typeof command.title === "string" &&
+      typeof command.workspaceRoot === "string" &&
+      typeof command.createdAt === "string"
+    ) {
+      this.projects.set(command.projectId, {
+        createdAt: command.createdAt,
+        id: command.projectId,
+        title: command.title,
+        workspaceRoot: command.workspaceRoot,
+      });
+    }
     if (command.type === "thread.create" && command.threadId !== undefined) {
       this.threads.add(command.threadId);
     }
@@ -142,6 +160,7 @@ export class SyntheticT3 implements ProductionT3Client {
 
   async getShell() {
     return {
+      projects: [...this.projects.values()].map((project) => ({ ...project })),
       threads: [...this.threads].map((id) => ({
         id,
         latestTurn: { state: "running" },

@@ -203,6 +203,15 @@ export interface EpicProjectRecord {
   state: "active" | "creating" | "deleted" | "deleting";
 }
 
+export interface SharedProjectRecord {
+  createCommandId: string;
+  createdAt: string;
+  projectId: string;
+  projectName: string;
+  state: "active" | "creating";
+  workspaceRoot: string;
+}
+
 export type DynamicTaskKind = "finding" | "follow-up";
 
 export interface DynamicTaskIntentRecord {

@@ -289,7 +289,9 @@ kind: standard
     });
     close = composition.close;
     await composition.start();
-    expect(t3.commands).toEqual([]);
+    expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
+      [],
+    );
     await composition.attention.raise(
       productionErrorAttention({
         code: "task-reconciliation-failed",
@@ -396,7 +398,9 @@ kind: standard
   ])("does not fall back from an unknown incident $label", async (input) => {
     const { composition, fixture, t3 } = await prepare(input);
 
-    expect(t3.commands).toEqual([]);
+    expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
+      [],
+    );
     expect(composition.persistence.listSessionRuntime()).toEqual([]);
     expect(composition.persistence.listIncidentRuntime()[0]).toMatchObject({
       state: "failed",

@@ -115,7 +115,16 @@ const configuration: ResolvedProductionConfiguration = {
 
 const t3 = {
   dispatch: async () => ({ sequence: 1 }),
-  getShell: async () => ({ threads: [] }),
+  getShell: async () => ({
+    projects: [
+      {
+        id: configuration.adHocProject.projectId,
+        title: configuration.adHocProject.name,
+        workspaceRoot: configuration.adHocProject.workspaceRoot,
+      },
+    ],
+    threads: [],
+  }),
   getThread: async () => ({ thread: { activities: [] } }),
   respondToApproval: async () => ({ sequence: 1 }),
   respondToUserInput: async () => ({ sequence: 1 }),

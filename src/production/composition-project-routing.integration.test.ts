@@ -21,6 +21,7 @@ class TerminalT3 extends SyntheticT3 {
 
   override async getShell() {
     return {
+      projects: [...this.projects.values()],
       threads: [...this.threads].map((id) =>
         this.terminal
           ? {
@@ -60,7 +61,11 @@ describe("production project routing", () => {
 
     await composition.start();
 
-    const project = t3.commands.find(({ type }) => type === "project.create");
+    const project = t3.commands.find(
+      (command) =>
+        command.type === "project.create" &&
+        command.projectId !== fixture.configuration.adHocProject.projectId,
+    );
     const thread = t3.commands.find(
       (command) =>
         command.type === "thread.create" &&
@@ -108,7 +113,11 @@ describe("production project routing", () => {
     const first = compose();
 
     await first.start();
-    const project = t3.commands.find(({ type }) => type === "project.create");
+    const project = t3.commands.find(
+      (command) =>
+        command.type === "project.create" &&
+        command.projectId !== fixture.configuration.adHocProject.projectId,
+    );
     if (project?.type !== "project.create") {
       throw new Error("Expected the epic project creation command");
     }
@@ -237,7 +246,11 @@ describe("production project routing", () => {
       }),
     );
     expect(
-      t3.commands.filter(({ type }) => type === "project.create"),
+      t3.commands.filter(
+        (command) =>
+          command.type === "project.create" &&
+          command.projectId !== fixture.configuration.adHocProject.projectId,
+      ),
     ).toHaveLength(0);
     await composition.close();
   });

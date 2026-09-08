@@ -61,6 +61,7 @@ import type {
   SchedulerPassFailureRecord,
   SchedulerPassHistoryRecord,
   SessionRuntimeRecord,
+  SharedProjectRecord,
 } from "./types.js";
 
 const databaseFilename = "heddle-state.sqlite";
@@ -1185,6 +1186,57 @@ export class SqlitePersistence {
         record.createCommandId,
         record.createdAt,
         record.deleteCommandId,
+      );
+  }
+
+  getSharedProject(): SharedProjectRecord | undefined {
+    return this.database
+      .prepare(
+        `SELECT project_name AS projectName, project_id AS projectId,
+                workspace_root AS workspaceRoot, state,
+                create_command_id AS createCommandId, created_at AS createdAt
+         FROM heddle_shared_project
+         WHERE singleton = 1`,
+      )
+      .get() as SharedProjectRecord | undefined;
+  }
+
+  writeSharedProject(record: SharedProjectRecord): void {
+    for (const name of [
+      "projectName",
+      "projectId",
+      "workspaceRoot",
+      "createCommandId",
+      "createdAt",
+    ] as const) {
+      this.assertStableId(name, record[name]);
+    }
+    const prior = this.getSharedProject();
+    if (
+      prior !== undefined &&
+      (prior.projectName !== record.projectName ||
+        prior.projectId !== record.projectId ||
+        prior.workspaceRoot !== record.workspaceRoot ||
+        prior.createCommandId !== record.createCommandId ||
+        prior.createdAt !== record.createdAt)
+    ) {
+      throw new Error("The shared project changed durable identity");
+    }
+    this.database
+      .prepare(
+        `INSERT INTO heddle_shared_project
+           (singleton, project_name, project_id, workspace_root, state,
+            create_command_id, created_at)
+         VALUES (1, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(singleton) DO UPDATE SET state = excluded.state`,
+      )
+      .run(
+        record.projectName,
+        record.projectId,
+        record.workspaceRoot,
+        record.state,
+        record.createCommandId,
+        record.createdAt,
       );
   }
 

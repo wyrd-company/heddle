@@ -51,6 +51,21 @@ const t3: ProductionT3Client & T3ProviderCatalogReader = {
     return { sequence: recorded.length };
   },
   getShell: async () => ({
+    projects: recorded
+      .filter(({ type }) => type === "project.create")
+      .flatMap((command) =>
+        typeof command.projectId === "string" &&
+        typeof command.title === "string" &&
+        typeof command.workspaceRoot === "string"
+          ? [
+              {
+                id: command.projectId,
+                title: command.title,
+                workspaceRoot: command.workspaceRoot,
+              },
+            ]
+          : [],
+      ),
     threads: recorded
       .filter(({ type }) => type === "thread.create")
       .flatMap(({ threadId }) =>

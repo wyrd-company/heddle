@@ -66,7 +66,7 @@ const readyModels = async (
         catalog.map((row) => [row.instanceId, row.models[0]?.slug ?? ""]),
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
   }
   throw new Error("Isolated T3 never finished provider discovery");
 };
@@ -147,273 +147,282 @@ afterEach(async () => {
   for (const release of pending) await release();
 });
 
-describe.skipIf(!t3Binary)("driver qualification against production Heddle", () => {
-  it("lists aliases through the composition's own resolver and real T3 client", async () => {
-    const scratch = await makeQualificationScratch();
-    teardown.push(scratch.cleanup);
-    const fixture = await prepareProductionFixture();
-    teardown.push(fixture.cleanup);
+describe.skipIf(!t3Binary)(
+  "driver qualification against production Heddle",
+  () => {
+    it("lists aliases through the composition's own resolver and real T3 client", async () => {
+      const scratch = await makeQualificationScratch();
+      teardown.push(scratch.cleanup);
+      const fixture = await prepareProductionFixture();
+      teardown.push(fixture.cleanup);
 
-    const isolated = await startIsolatedT3({
-      binary: t3Binary as string,
-      home: operatorHome,
-      providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
-      scratch: scratch.root,
-    });
-    teardown.push(isolated.stop);
+      const isolated = await startIsolatedT3({
+        binary: t3Binary as string,
+        home: operatorHome,
+        providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
+        scratch: scratch.root,
+      });
+      teardown.push(isolated.stop);
 
-    const catalogClient = new T3ControlPlaneClient({
-      accessToken: isolated.accessToken,
-      baseUrl: isolated.baseUrl,
-    });
-    const models = await readyModels(catalogClient);
-    const providerAliases = aliasesFor(models);
-    const t3Configuration = {
-      accessToken: isolated.accessToken,
-      baseUrl: isolated.baseUrl,
-    };
-    const configuration = await resolveProductionConfiguration(
-      {
-        ...fixture.configuration,
-        providerAliases,
-        session: {
-          ...fixture.configuration.session,
-          defaultProviderAlias: "execution",
-        },
-        t3: t3Configuration,
-      },
-      new ProviderSelectionResolver(providerAliases, catalogClient),
-    );
-
-    // Neither `t3` nor `providerResolver` is supplied, so the composition
-    // constructs the real control-plane client and the real resolver itself.
-    const composition = createProductionComposition({
-      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration,
-      providerUsage: { readProviderUsage: async () => [] },
-      workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
-    });
-    teardown.push(() => composition.close());
-
-    const listing = await composition.subagents.listProviders();
-    const byAlias = new Map(
-      listing.aliases.map((entry) => [entry.alias, entry]),
-    );
-
-    expect([...byAlias.keys()].sort()).toEqual([
-      "execution",
-      "review",
-      "secondary",
-    ]);
-
-    // Two differently named T3 instances of one driver stay distinct, and
-    // every alias is selectable through the real catalog.
-    expect(byAlias.get("execution")?.providerDisplayName).toBe(
-      EXECUTION.displayName,
-    );
-    expect(byAlias.get("review")?.providerDisplayName).toBe(REVIEW.displayName);
-    expect(byAlias.get("execution")?.driverKind).toBe(EXECUTION.driver);
-    expect(byAlias.get("review")?.driverKind).toBe(REVIEW.driver);
-    expect(byAlias.get("secondary")?.driverKind).toBe(SECOND_DRIVER.driver);
-    for (const alias of ["execution", "review", "secondary"]) {
-      expect(byAlias.get(alias)?.selectable).toBe(true);
-      expect(byAlias.get(alias)?.reason).toBeNull();
-      expect(byAlias.get(alias)?.model.slug).toBe(
-        providerAliases[alias as keyof typeof providerAliases].model,
-      );
-    }
-
-    // `list_providers` exposes the operator-visible display name, not T3's
-    // routing identity. The binding carries the instance and the observed CLI
-    // version, which is where qualification provenance is recorded.
-    const bindings = new Map(
-      configuration.session.resolvedSelections.map((selection) => [
-        selection.alias,
-        selection,
-      ]),
-    );
-    expect(bindings.get("execution")?.providerInstanceId).toBe(
-      EXECUTION.instanceId,
-    );
-    expect(bindings.get("review")?.providerInstanceId).toBe(REVIEW.instanceId);
-    expect(bindings.get("secondary")?.providerInstanceId).toBe(
-      SECOND_DRIVER.instanceId,
-    );
-    for (const alias of ["execution", "review", "secondary"]) {
-      expect(bindings.get(alias)?.observedCliVersion).toMatch(/^\d+\.\d+\.\d+/);
-    }
-  }, 180_000);
-
-  it("activates a stage session and spawns a delegated child on the real control plane", async () => {
-    const scratch = await makeQualificationScratch();
-    teardown.push(scratch.cleanup);
-    const fixture = await prepareProductionFixture();
-    teardown.push(fixture.cleanup);
-
-    const isolated = await startIsolatedT3({
-      binary: t3Binary as string,
-      home: operatorHome,
-      providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
-      scratch: scratch.root,
-    });
-    teardown.push(isolated.stop);
-
-    const catalogClient = new T3ControlPlaneClient({
-      accessToken: isolated.accessToken,
-      baseUrl: isolated.baseUrl,
-    });
-    const models = await readyModels(catalogClient);
-    const providerAliases = aliasesFor(models);
-
-    // Heddle dispatches `project.create` only for epic projects. The ad hoc
-    // project is operator-provisioned state that Heddle assumes exists, so an
-    // isolated T3 must be given it the way the operator's own T3 already has.
-    await catalogClient.dispatch({
-      commandId: globalThis.crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      projectId: fixture.configuration.adHocProject.projectId,
-      title: fixture.configuration.adHocProject.name,
-      type: "project.create",
-      workspaceRoot: fixture.repositoryRoot,
-    });
-
-    const configuration = await resolveProductionConfiguration(
-      {
-        ...fixture.configuration,
-        adHocProject: {
-          ...fixture.configuration.adHocProject,
-          workspaceRoot: fixture.repositoryRoot,
-        },
-        pacing: {
-          ...fixture.configuration.pacing,
-          providerBudgets: {
-            execution: { usageLimit: 100 },
-            secondary: { usageLimit: 100 },
-          },
-        },
-        providerAliases,
-        session: {
-          ...fixture.configuration.session,
-          defaultProviderAlias: "execution",
-        },
-        t3: { accessToken: isolated.accessToken, baseUrl: isolated.baseUrl },
-      },
-      new ProviderSelectionResolver(providerAliases, catalogClient),
-    );
-
-    const composition = createProductionComposition({
-      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration,
-      providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
-      },
-      workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
-    });
-    teardown.push(() => composition.close());
-
-    await composition.start();
-
-    const instanceId = `task-${fixture.taskId}`;
-    const activated = composition.persistence.getInstance(instanceId);
-    expect(activated).toBeDefined();
-
-    const resolver = new WorkflowMcpSessionResolver(composition.persistence);
-    const parent = await resolver.resolve(
-      storedCorrelationToken(activated!.state.handoffs),
-    );
-
-    const parentRuntime = composition.persistence
-      .listSessionRuntime()
-      .find(({ sessionKey }) => sessionKey === parent.sessionKey);
-    expect(parentRuntime).toBeDefined();
-
-
-    // In production an agent calls `spawn` from inside its own running
-    // session, so the parent is live in T3's shell by then. Wait for that
-    // rather than spawning from a session T3 has not started.
-    const parentPhase = await (async () => {
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        const shell = await catalogClient.getShell();
-        const thread = shell.threads.find(
-          ({ id }) => id === parentRuntime?.threadId,
-        );
-        const phase =
-          thread === undefined ? undefined : resolveT3AwarenessPhase(thread);
-
-        if (
-          phase === "running" ||
-          phase === "waiting_for_input" ||
-          phase === "waiting_for_approval"
-        ) {
-          return phase;
-        }
-        if (phase === "failed" || phase === "ended") {
-          throw new Error(
-            `Parent session reached '${phase}' before it could spawn`,
-          );
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-      throw new Error("Parent session never became active in T3");
-    })();
-    expect(parentPhase).toBeDefined();
-
-    // The agent's own tool surface, over the real MCP boundary.
-    const listed = await callMcpTool(
-      composition,
-      parent.token,
-      "list_providers",
-      {},
-    );
-    expect(listed.result?.isError).not.toBe(true);
-    expect(JSON.stringify(listed)).not.toContain("providerInstanceId");
-
-    // A delegated child through the real spawn tool, selecting a different
-    // provider instance than the parent's.
-    // `spawn` assigns a todo subtree rather than a prose brief: the child is
-    // delegated the stage's own todo item.
-    const spawned = await callMcpTool(composition, parent.token, "spawn", {
-      operationId: "qualification-child",
-      providerAlias: "secondary",
-      rootItemId: "deliver",
-    });
-    expect(spawned.result?.isError).not.toBe(true);
-    const child = spawned.result?.structuredContent as {
-      assignment?: {
-        binding?: Record<string, unknown>;
-        depth?: number;
-        parentSessionKey?: string;
-        rootItemId?: string;
-        status?: string;
+      const catalogClient = new T3ControlPlaneClient({
+        accessToken: isolated.accessToken,
+        baseUrl: isolated.baseUrl,
+      });
+      const models = await readyModels(catalogClient);
+      const providerAliases = aliasesFor(models);
+      const t3Configuration = {
+        accessToken: isolated.accessToken,
+        baseUrl: isolated.baseUrl,
       };
-      kind?: string;
-    };
-    expect(child.kind).toBe("spawned");
+      const configuration = await resolveProductionConfiguration(
+        {
+          ...fixture.configuration,
+          providerAliases,
+          session: {
+            ...fixture.configuration.session,
+            defaultProviderAlias: "execution",
+          },
+          t3: t3Configuration,
+        },
+        new ProviderSelectionResolver(providerAliases, catalogClient),
+      );
 
-    // Cross-provider delivery: the child is bound to a different driver and a
-    // different T3 instance than its parent, both resolved from the live
-    // catalog.
-    expect(child.assignment?.binding).toMatchObject({
-      alias: "secondary",
-      driverKind: SECOND_DRIVER.driver,
-      providerDisplayName: SECOND_DRIVER.displayName,
-      providerInstanceId: SECOND_DRIVER.instanceId,
-    });
-    expect(child.assignment?.binding?.["modelSlug"]).toBe(
-      providerAliases.secondary.model,
-    );
-    expect(child.assignment?.binding?.["observedCliVersion"]).toMatch(
-      /^\d+\.\d+\.\d+/,
-    );
-    expect(child.assignment?.parentSessionKey).toBe(parent.sessionKey);
-    expect(child.assignment?.depth).toBe(1);
-    expect(child.assignment?.rootItemId).toBe("deliver");
-    expect(child.assignment?.status).toBe("active");
+      // Neither `t3` nor `providerResolver` is supplied, so the composition
+      // constructs the real control-plane client and the real resolver itself.
+      const composition = createProductionComposition({
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration,
+        providerUsage: { readProviderUsage: async () => [] },
+        workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
+      });
+      teardown.push(() => composition.close());
 
-    // The parent stayed on its own binding rather than inheriting the child's.
-    expect(parentRuntime?.binding.providerInstanceId).toBe(
-      EXECUTION.instanceId,
-    );
-    expect(parentRuntime?.binding.driverKind).toBe(EXECUTION.driver);
-  }, 300_000);
-});
+      const listing = await composition.subagents.listProviders();
+      const byAlias = new Map(
+        listing.aliases.map((entry) => [entry.alias, entry]),
+      );
+
+      expect([...byAlias.keys()].sort()).toEqual([
+        "execution",
+        "review",
+        "secondary",
+      ]);
+
+      // Two differently named T3 instances of one driver stay distinct, and
+      // every alias is selectable through the real catalog.
+      expect(byAlias.get("execution")?.providerDisplayName).toBe(
+        EXECUTION.displayName,
+      );
+      expect(byAlias.get("review")?.providerDisplayName).toBe(
+        REVIEW.displayName,
+      );
+      expect(byAlias.get("execution")?.driverKind).toBe(EXECUTION.driver);
+      expect(byAlias.get("review")?.driverKind).toBe(REVIEW.driver);
+      expect(byAlias.get("secondary")?.driverKind).toBe(SECOND_DRIVER.driver);
+      for (const alias of ["execution", "review", "secondary"]) {
+        expect(byAlias.get(alias)?.selectable).toBe(true);
+        expect(byAlias.get(alias)?.reason).toBeNull();
+        expect(byAlias.get(alias)?.model.slug).toBe(
+          providerAliases[alias as keyof typeof providerAliases].model,
+        );
+      }
+
+      // `list_providers` exposes the operator-visible display name, not T3's
+      // routing identity. The binding carries the instance and the observed CLI
+      // version, which is where qualification provenance is recorded.
+      const bindings = new Map(
+        configuration.session.resolvedSelections.map((selection) => [
+          selection.alias,
+          selection,
+        ]),
+      );
+      expect(bindings.get("execution")?.providerInstanceId).toBe(
+        EXECUTION.instanceId,
+      );
+      expect(bindings.get("review")?.providerInstanceId).toBe(
+        REVIEW.instanceId,
+      );
+      expect(bindings.get("secondary")?.providerInstanceId).toBe(
+        SECOND_DRIVER.instanceId,
+      );
+      for (const alias of ["execution", "review", "secondary"]) {
+        expect(bindings.get(alias)?.observedCliVersion).toMatch(
+          /^\d+\.\d+\.\d+/,
+        );
+      }
+    }, 180_000);
+
+    it("activates a stage session and spawns a delegated child on the real control plane", async () => {
+      const scratch = await makeQualificationScratch();
+      teardown.push(scratch.cleanup);
+      const fixture = await prepareProductionFixture();
+      teardown.push(fixture.cleanup);
+
+      const isolated = await startIsolatedT3({
+        binary: t3Binary as string,
+        home: operatorHome,
+        providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
+        scratch: scratch.root,
+      });
+      teardown.push(isolated.stop);
+
+      const catalogClient = new T3ControlPlaneClient({
+        accessToken: isolated.accessToken,
+        baseUrl: isolated.baseUrl,
+      });
+      const models = await readyModels(catalogClient);
+      const providerAliases = aliasesFor(models);
+
+      const configuration = await resolveProductionConfiguration(
+        {
+          ...fixture.configuration,
+          adHocProject: {
+            ...fixture.configuration.adHocProject,
+            workspaceRoot: fixture.repositoryRoot,
+          },
+          pacing: {
+            ...fixture.configuration.pacing,
+            providerBudgets: {
+              execution: { usageLimit: 100 },
+              secondary: { usageLimit: 100 },
+            },
+          },
+          providerAliases,
+          session: {
+            ...fixture.configuration.session,
+            defaultProviderAlias: "execution",
+          },
+          t3: { accessToken: isolated.accessToken, baseUrl: isolated.baseUrl },
+        },
+        new ProviderSelectionResolver(providerAliases, catalogClient),
+      );
+
+      const composition = createProductionComposition({
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration,
+        providerUsage: {
+          readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        },
+        workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
+      });
+      teardown.push(() => composition.close());
+
+      await composition.start();
+
+      const sharedProject = (await catalogClient.getShell()).projects.find(
+        ({ id }) => id === configuration.adHocProject.projectId,
+      );
+      expect(sharedProject).toMatchObject({
+        id: configuration.adHocProject.projectId,
+        title: configuration.adHocProject.name,
+        workspaceRoot: configuration.adHocProject.workspaceRoot,
+      });
+      expect(composition.persistence.getSharedProject()).toMatchObject({
+        projectId: configuration.adHocProject.projectId,
+        state: "active",
+      });
+
+      const instanceId = `task-${fixture.taskId}`;
+      const activated = composition.persistence.getInstance(instanceId);
+      expect(activated).toBeDefined();
+
+      const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+      const parent = await resolver.resolve(
+        storedCorrelationToken(activated!.state.handoffs),
+      );
+
+      const parentRuntime = composition.persistence
+        .listSessionRuntime()
+        .find(({ sessionKey }) => sessionKey === parent.sessionKey);
+      expect(parentRuntime).toBeDefined();
+
+      // In production an agent calls `spawn` from inside its own running
+      // session, so the parent is live in T3's shell by then. Wait for that
+      // rather than spawning from a session T3 has not started.
+      const parentPhase = await (async () => {
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+          const shell = await catalogClient.getShell();
+          const thread = shell.threads.find(
+            ({ id }) => id === parentRuntime?.threadId,
+          );
+          const phase =
+            thread === undefined ? undefined : resolveT3AwarenessPhase(thread);
+
+          if (
+            phase === "running" ||
+            phase === "waiting_for_input" ||
+            phase === "waiting_for_approval"
+          ) {
+            return phase;
+          }
+          if (phase === "failed" || phase === "ended") {
+            throw new Error(
+              `Parent session reached '${phase}' before it could spawn`,
+            );
+          }
+          await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
+        }
+        throw new Error("Parent session never became active in T3");
+      })();
+      expect(parentPhase).toBeDefined();
+
+      // The agent's own tool surface, over the real MCP boundary.
+      const listed = await callMcpTool(
+        composition,
+        parent.token,
+        "list_providers",
+        {},
+      );
+      expect(listed.result?.isError).not.toBe(true);
+      expect(JSON.stringify(listed)).not.toContain("providerInstanceId");
+
+      // A delegated child through the real spawn tool, selecting a different
+      // provider instance than the parent's.
+      // `spawn` assigns a todo subtree rather than a prose brief: the child is
+      // delegated the stage's own todo item.
+      const spawned = await callMcpTool(composition, parent.token, "spawn", {
+        operationId: "qualification-child",
+        providerAlias: "secondary",
+        rootItemId: "deliver",
+      });
+      expect(spawned.result?.isError).not.toBe(true);
+      const child = spawned.result?.structuredContent as {
+        assignment?: {
+          binding?: Record<string, unknown>;
+          depth?: number;
+          parentSessionKey?: string;
+          rootItemId?: string;
+          status?: string;
+        };
+        kind?: string;
+      };
+      expect(child.kind).toBe("spawned");
+
+      // Cross-provider delivery: the child is bound to a different driver and a
+      // different T3 instance than its parent, both resolved from the live
+      // catalog.
+      expect(child.assignment?.binding).toMatchObject({
+        alias: "secondary",
+        driverKind: SECOND_DRIVER.driver,
+        providerDisplayName: SECOND_DRIVER.displayName,
+        providerInstanceId: SECOND_DRIVER.instanceId,
+      });
+      expect(child.assignment?.binding?.["modelSlug"]).toBe(
+        providerAliases.secondary.model,
+      );
+      expect(child.assignment?.binding?.["observedCliVersion"]).toMatch(
+        /^\d+\.\d+\.\d+/,
+      );
+      expect(child.assignment?.parentSessionKey).toBe(parent.sessionKey);
+      expect(child.assignment?.depth).toBe(1);
+      expect(child.assignment?.rootItemId).toBe("deliver");
+      expect(child.assignment?.status).toBe("active");
+
+      // The parent stayed on its own binding rather than inheriting the child's.
+      expect(parentRuntime?.binding.providerInstanceId).toBe(
+        EXECUTION.instanceId,
+      );
+      expect(parentRuntime?.binding.driverKind).toBe(EXECUTION.driver);
+    }, 300_000);
+  },
+);

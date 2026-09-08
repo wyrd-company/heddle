@@ -34,6 +34,7 @@ export {
   type SchedulerPassFailureRecord,
   type SchedulerPassHistoryRecord,
   type SessionRuntimeRecord,
+  type SharedProjectRecord,
 } from "./types.js";
 export {
   assertResolvedSessionBinding,

@@ -509,7 +509,10 @@ describe("production composition", () => {
     const fixture = await prepare();
     fixture.configuration.stopTimeoutMilliseconds = 1;
     class HangingDispatchT3 extends SyntheticT3 {
-      override async dispatch(): Promise<{ sequence: number }> {
+      override async dispatch(
+        command: Parameters<SyntheticT3["dispatch"]>[0],
+      ): Promise<{ sequence: number }> {
+        if (command.type === "project.create") return super.dispatch(command);
         return new Promise(() => undefined);
       }
     }
@@ -546,7 +549,11 @@ describe("production composition", () => {
   it("reports a session-observation rejection without a page-delivery failure", async () => {
     const fixture = await prepare();
     class ObservationFailureT3 extends SyntheticT3 {
+      reads = 0;
+
       override async getShell() {
+        this.reads += 1;
+        if (this.reads === 1) return super.getShell();
         throw new Error("synthetic observation rejection");
       }
     }
@@ -592,7 +599,7 @@ describe("production composition", () => {
     };
     class AbsentSessionT3 extends SyntheticT3 {
       override async getShell() {
-        return { threads: [] };
+        return { projects: [...this.projects.values()], threads: [] };
       }
     }
     let now = 10_000;
@@ -1104,7 +1111,9 @@ describe("production composition", () => {
       deferral: { reason: "work-in-progress-limit" },
       state: "deferred",
     });
-    expect(t3.commands).toHaveLength(0);
+    expect(
+      t3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(0);
     expect(
       composition.attention
         .list()
@@ -1188,7 +1197,9 @@ describe("production composition", () => {
     await expect(composition.start()).rejects.toThrow();
 
     expect(onSchedulerError).toHaveBeenCalledOnce();
-    expect(t3.commands).toEqual([]);
+    expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
+      [],
+    );
     expect(pages).toHaveBeenCalledOnce();
     expect(pages.mock.calls[0]?.[0]).toMatchObject({
       level: "critical",

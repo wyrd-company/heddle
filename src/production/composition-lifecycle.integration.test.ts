@@ -102,7 +102,9 @@ describe("production lifecycle composition", () => {
     });
     await second.start();
     expect(second.persistence.listInstances()).toHaveLength(1);
-    expect(secondT3.commands).toHaveLength(0);
+    expect(
+      secondT3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(0);
     expect(
       second.persistence
         .replayEvents(`task-${taskId}`)
@@ -198,7 +200,9 @@ kind: standard
     await expect(composition.start()).resolves.toBeUndefined();
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
 
-    expect(t3.commands).toHaveLength(0);
+    expect(
+      t3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(0);
     expect(t3.timeouts).toHaveLength(0);
     expect(composition.attention.list()).toEqual([
       expect.objectContaining({
@@ -349,7 +353,9 @@ kind: standard
 
       expect(t3.timeouts).toHaveLength(0);
       expect(t3.mcpRegistrations).toHaveLength(0);
-      expect(t3.commands).toHaveLength(0);
+      expect(
+        t3.commands.filter(({ type }) => type !== "project.create"),
+      ).toHaveLength(0);
       expect(composition.attention.list()).toEqual([
         expect.objectContaining({
           attentionId: expect.stringContaining(":handoff-render"),
@@ -391,8 +397,11 @@ kind: standard
     );
     class InterruptedT3 extends SyntheticT3 {
       override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
-        await super.dispatch(command);
-        throw new Error("synthetic dispatch interruption");
+        const result = await super.dispatch(command);
+        if (command.type !== "project.create") {
+          throw new Error("synthetic dispatch interruption");
+        }
+        return result;
       }
     }
     const firstT3 = new InterruptedT3();
@@ -424,7 +433,9 @@ kind: standard
       t3: firstT3,
     });
     await expect(first.start()).resolves.toBeUndefined();
-    expect(firstT3.commands).toHaveLength(1);
+    expect(
+      firstT3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(1);
     const storedBinding = first.persistence.listSessionRuntime()[0]!.binding;
     expect(storedBinding).toMatchObject({
       alias: "specialist",
@@ -497,7 +508,9 @@ kind: standard
     expect(second.persistence.listSessionRuntime()[0]!.binding).toEqual(
       storedBinding,
     );
-    expect(secondT3.commands).toHaveLength(2);
+    expect(
+      secondT3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(2);
     expect(secondT3.providerContexts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

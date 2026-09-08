@@ -410,7 +410,9 @@ describe("production MCP board tools", () => {
     await expect(composition.start()).rejects.toThrow(
       "Blueprint 'sample' node 'implement' declares MCP tool 'missing_tool' that is not registered",
     );
-    expect(t3.commands).toHaveLength(0);
+    expect(
+      t3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(0);
     await composition.close();
   });
 });

@@ -35,7 +35,16 @@ export {
 } from "./t3-provider-preconditions.js";
 
 export type T3ShellSnapshot = {
+  projects: T3ShellProject[];
   threads: T3ShellThread[];
+  [key: string]: unknown;
+};
+
+export type T3ShellProject = {
+  createdAt?: string;
+  id: string;
+  title: string;
+  workspaceRoot: string;
   [key: string]: unknown;
 };
 

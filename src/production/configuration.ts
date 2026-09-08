@@ -382,7 +382,7 @@ export const resolveProductionConfiguration = async (
     readiness.sleep ??
     ((milliseconds: number) =>
       new Promise<void>((resolve) => {
-        setTimeout(resolve, milliseconds);
+        globalThis.setTimeout(resolve, milliseconds);
       }));
   const startupInputs = {
     defaultAlias: validated.session.defaultProviderAlias,

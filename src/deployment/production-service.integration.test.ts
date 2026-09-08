@@ -217,6 +217,10 @@ describe("configured production service entry point", () => {
     await writeFile(orderPath, "");
 
     const threads = new Set<string>();
+    const projects = new Map<
+      string,
+      { id: string; title: string; workspaceRoot: string }
+    >();
     const commands: Array<Record<string, unknown>> = [];
     const registrations: Array<Record<string, unknown>> = [];
     const catalogRequests: Array<Record<string, unknown>> = [];
@@ -241,6 +245,7 @@ describe("configured production service entry point", () => {
       ) {
         response.end(
           JSON.stringify({
+            projects: [...projects.values()],
             threads: [...threads].map((id) => ({
               id,
               latestTurn: { state: "running" },
@@ -279,6 +284,13 @@ describe("configured production service entry point", () => {
         for await (const chunk of request) source += chunk;
         const command = JSON.parse(source) as Record<string, unknown>;
         commands.push(command);
+        if (command["type"] === "project.create") {
+          projects.set(String(command["projectId"]), {
+            id: String(command["projectId"]),
+            title: String(command["title"]),
+            workspaceRoot: String(command["workspaceRoot"]),
+          });
+        }
         if (command["type"] === "thread.create") {
           threads.add(String(command["threadId"]));
           await appendFile(orderPath, "thread-created\n");
@@ -403,7 +415,8 @@ describe("configured production service entry point", () => {
       providerInstanceId: "provider-alpha",
       version: 1,
     });
-    expect(commands.map((command) => command["type"]).slice(0, 2)).toEqual([
+    expect(commands.map((command) => command["type"]).slice(0, 3)).toEqual([
+      "project.create",
       "thread.create",
       "thread.turn.start",
     ]);

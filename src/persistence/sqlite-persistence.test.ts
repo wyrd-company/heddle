@@ -550,6 +550,37 @@ describe("SqlitePersistence", () => {
     persistence.close();
   });
 
+  it("persists one immutable shared-project identity while its state advances", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const record = {
+      createCommandId: "create-shared-records",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: "shared-records",
+      projectName: "Shared records",
+      state: "creating" as const,
+      workspaceRoot: "/workspaces/sample-records",
+    };
+
+    persistence.writeSharedProject(record);
+    persistence.writeSharedProject({ ...record, state: "active" });
+    expect(persistence.getSharedProject()).toEqual({
+      ...record,
+      state: "active",
+    });
+    expect(() =>
+      persistence.writeSharedProject({
+        ...record,
+        projectId: "changed-shared-records",
+      }),
+    ).toThrow("The shared project changed durable identity");
+    expect(persistence.getSharedProject()).toEqual({
+      ...record,
+      state: "active",
+    });
+    persistence.close();
+  });
+
   it("migrates legacy page admissions as already attempted", async () => {
     const stateDirectory = await makeStateDirectory();
     const databasePath = join(stateDirectory, "heddle-state.sqlite");
