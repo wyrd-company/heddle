@@ -347,7 +347,11 @@ export class T3ControlPlaneClient implements T3ProviderCatalogReader {
         const onOpen = (): void => {
           socket.send(
             JSON.stringify({
+              // T3 decodes `headers` as a required array. Omitting it fails
+              // the server-side decode, which closes the socket with no
+              // reason rather than returning an error.
               _tag: "Request",
+              headers: [],
               id: requestId,
               payload: {},
               tag: "server.getConfig",

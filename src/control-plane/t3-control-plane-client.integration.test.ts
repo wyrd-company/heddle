@@ -294,5 +294,18 @@ describe.skipIf(!t3Binary)(
         false,
       );
     }, 20_000);
+
+    it("reads the provider catalog over the real server.getConfig RPC", async () => {
+      const catalog = await client.readProviderCatalog();
+
+      expect(Array.isArray(catalog)).toBe(true);
+      expect(
+        catalog.every(
+          (entry) =>
+            typeof entry.displayName === "string" &&
+            typeof entry.driverKind === "string",
+        ),
+      ).toBe(true);
+    }, 20_000);
   },
 );
