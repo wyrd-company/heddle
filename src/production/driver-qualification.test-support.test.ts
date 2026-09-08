@@ -179,6 +179,42 @@ describe("native qualification failure evidence", () => {
     ).toBeNull();
   });
 
+  it("emits no provider failure row without a failed latest turn", () => {
+    expect(
+      nativeProviderTurnFailureEvidenceLine(
+        {
+          id: "thread-1",
+          session: {
+            lastError:
+              "Provider adapter request failed (sample-provider) for session/prompt: sample limit reached",
+            status: "error",
+          },
+        },
+        "sample-provider",
+        failureEvidence,
+      ),
+    ).toBeNull();
+  });
+
+  it("emits no provider failure row unless the observed phase is failed", () => {
+    expect(
+      nativeProviderTurnFailureEvidenceLine(
+        {
+          hasPendingUserInput: true,
+          id: "thread-1",
+          latestTurn: { state: "error" },
+          session: {
+            lastError:
+              "Provider adapter request failed (sample-provider) for session/prompt: sample limit reached",
+            status: "error",
+          },
+        },
+        "sample-provider",
+        failureEvidence,
+      ),
+    ).toBeNull();
+  });
+
   it("emits no provider failure row for a non-provider session failure", () => {
     expect(
       nativeProviderTurnFailureEvidenceLine(
