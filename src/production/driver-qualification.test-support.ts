@@ -288,6 +288,17 @@ export const makeQualificationScratch = async (): Promise<{
   root: string;
 }> => {
   const root = await mkdtemp(join(tmpdir(), "heddle-driver-qualification-"));
+  // Retaining scratch state is the only way to read a driver's provider event
+  // log after a failure, since the isolated T3 keeps it under its base
+  // directory. Opt-in, so ordinary runs still clean up after themselves.
+  if (process.env["HEDDLE_QUALIFICATION_KEEP_SCRATCH"] === "1") {
+    return {
+      cleanup: async () => {
+        process.stdout.write(`QUALIFICATION scratch retained at ${root}\n`);
+      },
+      root,
+    };
+  }
   return { cleanup: () => rm(root, { force: true, recursive: true }), root };
 };
 
@@ -309,11 +320,80 @@ export const QUALIFICATION_SECOND_DRIVER = {
   instanceId: "codex-execution",
 } as const;
 
+export const QUALIFICATION_CURSOR = {
+  displayName: "Workbench Delta",
+  driver: "cursor",
+  instanceId: "cursor-execution",
+} as const;
+
+export const QUALIFICATION_GROK = {
+  displayName: "Workbench Epsilon",
+  driver: "grok",
+  instanceId: "grok-execution",
+} as const;
+
+export const QUALIFICATION_OPENCODE = {
+  displayName: "Workbench Zeta",
+  driver: "opencode",
+  instanceId: "opencode-execution",
+} as const;
+
 export const QUALIFICATION_INSTANCES = [
   QUALIFICATION_EXECUTION,
   QUALIFICATION_REVIEW,
   QUALIFICATION_SECOND_DRIVER,
 ] as const;
+
+/** One configured instance per supported driver, plus a second Claude Code
+ * instance so a same-driver, differently-named pair is always present. */
+export const QUALIFICATION_ALL_DRIVERS = [
+  QUALIFICATION_EXECUTION,
+  QUALIFICATION_REVIEW,
+  QUALIFICATION_SECOND_DRIVER,
+  QUALIFICATION_CURSOR,
+  QUALIFICATION_GROK,
+  QUALIFICATION_OPENCODE,
+] as const;
+
+/**
+ * Wait until the named instances have finished discovery. Cursor is
+ * consistently the slowest, so a window sized to the others reports it
+ * unsupported when it is merely late.
+ */
+export const readyModelsFor = async (
+  client: T3ProviderCatalogReader,
+  instances: readonly { readonly instanceId: string }[],
+  attempts = 240,
+): Promise<Map<string, string>> => {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const catalog = await client.readProviderCatalog();
+    const ready = instances.every((instance) =>
+      catalog.some(
+        (row) =>
+          row.instanceId === instance.instanceId &&
+          row.state === "ready" &&
+          row.models.length > 0,
+      ),
+    );
+    if (ready) {
+      return new Map(
+        catalog.map((row) => [row.instanceId, row.models[0]?.slug ?? ""]),
+      );
+    }
+    await delay(250);
+  }
+  throw new Error("Isolated T3 never finished provider discovery");
+};
+
+/** Observed CLI versions, keyed by instance, as qualification provenance. */
+export const observedCliVersions = async (
+  client: T3ProviderCatalogReader,
+): Promise<Map<string, string | null>> => {
+  const catalog = await client.readProviderCatalog();
+  return new Map(
+    catalog.map((row) => [row.instanceId, row.observedCliVersion]),
+  );
+};
 
 /**
  * Wait until every configured instance has finished discovery and reports a
