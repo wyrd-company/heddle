@@ -337,7 +337,11 @@ proposed-design:
     list, theme, or shape. Heddle validates the complete catalog after the
     organization repository is synchronized during startup and every
     reconciliation pass. A task's first start validates it again and records
-    the exact fetched commit used for selection before any session dispatch.
+    the exact fetched commit used for selection. Before Heddle persists that
+    task selection or dispatches a session, it retains the validated selected
+    commit under `refs/heddle/agent-name-themes/<sha>`. The commit identity in
+    task state identifies the selected catalog snapshot; the Git ref preserves
+    that object's reachability for every later lifecycle stage.
 
     Each wait node can declare `assign-agent-name` with one theme list name.
     Mechanical nodes cannot declare it. A task that is a direct child of an
