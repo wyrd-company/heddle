@@ -72,6 +72,24 @@ describe("native qualification model approval", () => {
     );
   });
 
+  it("fails closed when an instance has no approved model mapping", async () => {
+    const instance = { instanceId: "unmapped-instance" };
+    const reader: T3ProviderCatalogReader = {
+      readProviderCatalog: vi.fn(async () => [
+        {
+          ...catalogWithModel("unapproved-model")[0],
+          instanceId: instance.instanceId,
+        },
+      ]),
+    };
+
+    await expect(preferredModelsFor(reader, [instance], 1)).rejects.toThrow(
+      new QualificationModelSelectionError(
+        "Provider instance 'unmapped-instance' has no operator-approved qualification model",
+      ),
+    );
+  });
+
   it("formats one complete non-secret native evidence row", () => {
     expect(
       nativeDriverEvidenceLine({
