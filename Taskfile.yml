@@ -35,11 +35,8 @@ tasks:
 
   test:pinned-t3:
     desc: Run the complete pinned-T3 integration gate with bounded parallelism
-    preconditions:
-      - sh: test -n "$HEDDLE_T3_INTEGRATION_BINARY"
-        msg: HEDDLE_T3_INTEGRATION_BINARY must name the pinned T3 binary
     cmds:
-      - env -u FORCE_COLOR -u NO_COLOR npx vitest run src/production/ src/control-plane/ --maxWorkers=1
+      - scripts/deployment/qualify-pinned-t3.sh
 
   lint:
     desc: Check source and artifact formatting
