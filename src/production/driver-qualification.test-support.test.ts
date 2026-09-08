@@ -295,4 +295,10 @@ if (process.argv.includes("--version")) {
     expect(bounded).toContain("Fatal: fixture stopped");
     expect(bounded.length).toBe(2_000);
   });
+
+  it("removes terminal control sequences from the startup classification", () => {
+    expect(
+      safeT3StartupDiagnostic("\u001b[31mError: fixture stopped\u001b[0m"),
+    ).toBe("Error: fixture stopped");
+  });
 });
