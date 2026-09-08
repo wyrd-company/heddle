@@ -242,10 +242,11 @@ printf '%s\\n' "$@" >> "$HEDDLE_QUALIFICATION_INVOCATION"
       if (child.pid === undefined) throw new Error("Pinned-T3 gate has no PID");
       process.kill(-child.pid, "SIGTERM");
 
-      await expect(exited).resolves.toEqual({ code: 143, signal: null });
+      const outcome = await exited;
       await expect(access(join(prefix!, ".."))).rejects.toMatchObject({
         code: "ENOENT",
       });
+      expect(outcome).toEqual({ code: 143, signal: null });
     } finally {
       if (child.exitCode === null && child.pid !== undefined) {
         killFixtureProcessGroup(child.pid);
