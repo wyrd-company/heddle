@@ -392,6 +392,45 @@ export const readyModelsFor = async (
   throw new Error("Isolated T3 never finished provider discovery");
 };
 
+/**
+ * The least expensive adequate model for each driver, chosen by the operator.
+ * Qualification proves the seam, not the model, so a run must not spend on a
+ * frontier model to do it. Falls back to the catalog's first slug only when a
+ * preferred slug is absent, which is itself worth noticing.
+ */
+export const PREFERRED_MODEL_SLUGS: Readonly<Record<string, string>> = {
+  "claude-execution": "claude-haiku-4-5",
+  "claude-review": "claude-haiku-4-5",
+  "codex-execution": "gpt-5.6-luna",
+  "cursor-execution": "composer-2.5",
+  "grok-execution": "grok-4.6",
+  "opencode-execution": "opencode-go/deepseek-v4-flash",
+};
+
+/**
+ * Resolve the model each instance should run, preferring the operator's
+ * least-expensive choice when the live catalog offers it.
+ */
+export const preferredModelsFor = async (
+  client: T3ProviderCatalogReader,
+  instances: readonly { readonly instanceId: string }[],
+  attempts = 240,
+): Promise<Map<string, string>> => {
+  const ready = await readyModelsFor(client, instances, attempts);
+  const catalog = await client.readProviderCatalog();
+  const resolved = new Map(ready);
+  for (const row of catalog) {
+    const preferred = PREFERRED_MODEL_SLUGS[row.instanceId];
+    if (
+      preferred !== undefined &&
+      row.models.some(({ slug }) => slug === preferred)
+    ) {
+      resolved.set(row.instanceId, preferred);
+    }
+  }
+  return resolved;
+};
+
 /** Observed CLI versions, keyed by instance, as qualification provenance. */
 export const observedCliVersions = async (
   client: T3ProviderCatalogReader,

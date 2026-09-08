@@ -26,7 +26,7 @@ import {
   QUALIFICATION_GROK,
   QUALIFICATION_OPENCODE,
   QUALIFICATION_SECOND_DRIVER,
-  readyModelsFor,
+  preferredModelsFor,
   startIsolatedT3,
   type IsolatedT3,
 } from "./driver-qualification.test-support.js";
@@ -134,7 +134,7 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           accessToken: isolated.accessToken,
           baseUrl: isolated.baseUrl,
         });
-        const models = await readyModelsFor(client, [instance]);
+        const models = await preferredModelsFor(client, [instance]);
         const providerAliases = {
           execution: {
             model: models.get(instance.instanceId) ?? "",
@@ -142,15 +142,8 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           },
         };
 
-        await client.dispatch({
-          commandId: globalThis.crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
-          projectId: fixture.configuration.adHocProject.projectId,
-          title: fixture.configuration.adHocProject.name,
-          type: "project.create",
-          workspaceRoot: fixture.repositoryRoot,
-        });
-
+        // Heddle reconciles the shared project itself at startup, so the
+        // qualification no longer provisions it.
         const configurationDirectory = join(scratch.root, "configuration");
         await mkdir(configurationDirectory, { recursive: true });
         // The service resolves blueprints from `<config>/blueprints`, not from
@@ -261,6 +254,22 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           for (let attempt = 0; attempt < 900; attempt += 1) {
             const stage = await instanceStage();
             if (stage !== undefined && stage !== "implement") return stage;
+            // A thread the control plane has already failed will never
+            // advance. Waiting out the window on it wastes the run and hides
+            // the reason behind a timeout.
+            if (attempt % 5 === 4) {
+              const current = (await client.getShell()).threads.find(
+                (candidate) =>
+                  typeof candidate["title"] === "string" &&
+                  (candidate["title"] as string).includes("task-"),
+              );
+              if (
+                current !== undefined &&
+                resolveT3AwarenessPhase(current) === "failed"
+              ) {
+                break;
+              }
+            }
             await delay(1_000);
           }
           // What the session actually did is the evidence that matters. The
