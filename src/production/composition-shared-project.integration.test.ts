@@ -103,6 +103,34 @@ describe("production shared-project reconciliation", () => {
     });
   });
 
+  it("accepts the control plane's normalized form of the configured workspace root", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const configuredRoot = `${fixture.configuration.adHocProject.workspaceRoot}/`;
+    fixture.configuration.adHocProject.workspaceRoot = configuredRoot;
+    const t3 = new SyntheticT3();
+    await t3.dispatch({
+      commandId: "existing-normalized-project-create",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: fixture.configuration.adHocProject.projectId,
+      title: fixture.configuration.adHocProject.name,
+      type: "project.create",
+      workspaceRoot: configuredRoot.slice(0, -1),
+    });
+    t3.commands.length = 0;
+
+    const started = open(fixture, t3);
+    await started.start();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "project.create"),
+    ).toHaveLength(0);
+    expect(started.persistence.getSharedProject()).toMatchObject({
+      state: "active",
+      workspaceRoot: configuredRoot,
+    });
+  });
+
   it("does not dispatch a second creation after an ambiguous successful effect", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
@@ -136,6 +164,31 @@ describe("production shared-project reconciliation", () => {
       t3.commands.filter(({ type }) => type === "project.create"),
     ).toHaveLength(1);
     expect(restarted.persistence.getSharedProject()?.state).toBe("active");
+  });
+
+  it("recreates an active durable project that is absent from a replacement control plane", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const firstT3 = new SyntheticT3();
+    const first = open(fixture, firstT3);
+    await first.start();
+    const originalCreate = firstT3.commands.find(
+      ({ type }) => type === "project.create",
+    );
+    await first.close();
+    composition = undefined;
+
+    const replacementT3 = new SyntheticT3();
+    const restarted = open(fixture, replacementT3);
+    await restarted.start();
+
+    expect(
+      replacementT3.commands.filter(({ type }) => type === "project.create"),
+    ).toEqual([originalCreate]);
+    expect(restarted.persistence.getSharedProject()).toMatchObject({
+      createCommandId: originalCreate?.commandId,
+      state: "active",
+    });
   });
 
   it("fails startup closed and names the shared project when reconciliation fails", async () => {
