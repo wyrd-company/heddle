@@ -338,8 +338,11 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             operationId: "native-driver-child",
             parentSessionKey: expect.any(String),
             rootItemId: "deliver",
-            status: "active",
           });
+          // The child can obey the handoff and stop before the parent advances.
+          // Either durable state proves that spawn created the assignment; the
+          // exact binding and the control-plane thread prove where it ran.
+          expect(["active", "stopped"]).toContain(assignments[0]?.status);
         } finally {
           persistence.close();
         }
