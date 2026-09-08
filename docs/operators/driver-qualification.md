@@ -78,9 +78,11 @@ Do not run a native row in the credential-free common
 `devcontainer.json`. It installs all five binaries for catalog and production
 seam tests, but supplies no provider authentication.
 
-Set `HEDDLE_QUALIFICATION_KEEP_SCRATCH=1` to retain the isolated control
-plane's state directory when diagnosing a failure; a driver's provider event
-log lives under it and is otherwise removed with the scratch root.
+For `task test:pinned-t3` failures only, set
+`HEDDLE_QUALIFICATION_KEEP_SCRATCH=1` to retain the isolated control plane's
+state directory; the provider event log lives under it. This variable does not
+retain native-row state. A native row's credential-bearing container is always
+removed; use its bounded terminal diagnostic and evidence row.
 
 `FORCE_COLOR` must be unset. When it is set, Node emits a `NO_COLOR` warning
 into stderr, and two deployment tests assert that stderr is empty. That

@@ -151,6 +151,8 @@ printf '%s\\n' "$@" >> "$HEDDLE_QUALIFICATION_INVOCATION"
         ),
       ).toHaveLength(1);
       expect(procedure).not.toContain("${SCRATCH}");
+      expect(procedure).toContain("For `task test:pinned-t3` failures only");
+      expect(procedure).toMatch(/does not\s+retain native-row state/);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
