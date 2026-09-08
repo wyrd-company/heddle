@@ -88,6 +88,61 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("fails startup before dispatch when the full theme catalog is invalid", async () => {
+    const fixture = await prepare();
+    const soloistPath = join(
+      fixture.blueprintsRepositoryRoot,
+      "themes",
+      "sample-soloist.yml",
+    );
+    await writeFile(
+      soloistPath,
+      (await readFile(soloistPath, "utf8")).replace(
+        "sample-hero",
+        "sample-ally",
+      ),
+    );
+    await execute("git", ["add", "themes/sample-soloist.yml"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Invalidate theme catalog",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet", "origin", "main"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await expect(composition.start()).rejects.toThrow(
+      'Agent name "sample-ally" is repeated',
+    );
+    expect(
+      t3.commands.filter(({ type }) => type.startsWith("thread.")),
+    ).toEqual([]);
+    await composition.close();
+  });
+
   it("contains a permanent escalation notification until exact operator retry after credential repair", async () => {
     const fixture = await prepare();
     let accepted = false;
