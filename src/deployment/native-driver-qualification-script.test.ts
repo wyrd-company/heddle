@@ -53,6 +53,7 @@ if [ "$1" = up ]; then
     fi
     shift
   done
+  printf '"progress"\\n'
   if [ "\${STUB_OMIT_CONTAINER_ID:-0}" = 1 ]; then
     printf '{"outcome":"success"}\\n'
   else

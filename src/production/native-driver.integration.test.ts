@@ -33,6 +33,7 @@ import {
   preferredModelsFor,
   startIsolatedT3,
   type IsolatedT3,
+  type NativeDriverEvidence,
 } from "./driver-qualification.test-support.js";
 
 /** One row per supported driver. Every row is required; a skipped harness
@@ -113,6 +114,12 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
         teardown.push(scratch.cleanup);
         const fixture = await prepareProductionFixture();
         teardown.push(fixture.cleanup);
+        const emittedEvidence: string[] = [];
+        const emitEvidence = (evidence: NativeDriverEvidence): void => {
+          const line = nativeDriverEvidenceLine(evidence);
+          process.stdout.write(`${line}\n`);
+          emittedEvidence.push(line);
+        };
 
         const isolated: IsolatedT3 = await startIsolatedT3({
           binary: t3Binary as string,
@@ -330,22 +337,20 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             );
             expect(stalled.modelSelection?.model).toBe(model);
             expect(stalled.runtimeMode).toBe("full-access");
-            process.stdout.write(
-              `${nativeDriverEvidenceLine({
-                advanceResult: null,
-                benignFileAction: null,
-                driver: alias,
-                listProvidersResult: null,
-                model,
-                providerAlias,
-                providerCliVersion: cliVersion,
-                providerInstanceId: instance.instanceId,
-                result: "provider-turn-failed",
-                runtimeMode: "full-access",
-                spawnResult: null,
-                version: 1,
-              })}\n`,
-            );
+            emitEvidence({
+              advanceResult: null,
+              benignFileAction: null,
+              driver: alias,
+              listProvidersResult: null,
+              model,
+              providerAlias,
+              providerCliVersion: cliVersion,
+              providerInstanceId: instance.instanceId,
+              result: "provider-turn-failed",
+              runtimeMode: "full-access",
+              spawnResult: null,
+              version: 1,
+            });
           }
           throw new Error(
             `Native session never advanced the stage. Thread: ${snapshot} ||| SERVICE: ${serviceOutput
@@ -408,22 +413,21 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           );
           expect(thread.runtimeMode).toBe("full-access");
         }
-        process.stdout.write(
-          `${nativeDriverEvidenceLine({
-            advanceResult: "review",
-            benignFileAction: "native-driver-qualified",
-            driver: alias,
-            listProvidersResult: "selected-generated-alias",
-            model,
-            providerAlias,
-            providerCliVersion: cliVersion,
-            providerInstanceId: instance.instanceId,
-            result: "passed",
-            runtimeMode: "full-access",
-            spawnResult: "persisted-child-assignment",
-            version: 1,
-          })}\n`,
-        );
+        emitEvidence({
+          advanceResult: "review",
+          benignFileAction: "native-driver-qualified",
+          driver: alias,
+          listProvidersResult: "selected-generated-alias",
+          model,
+          providerAlias,
+          providerCliVersion: cliVersion,
+          providerInstanceId: instance.instanceId,
+          result: "passed",
+          runtimeMode: "full-access",
+          spawnResult: "persisted-child-assignment",
+          version: 1,
+        });
+        expect(emittedEvidence).toHaveLength(1);
       },
       1_500_000,
     );
