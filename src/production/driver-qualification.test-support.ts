@@ -77,6 +77,8 @@ export type IsolatedT3 = {
   readonly observedVersion: string;
   readonly port: number;
   readonly projectPath: string;
+  /** Everything the isolated server has written, for diagnosing a rejection. */
+  serverLog(): string;
   stop(): Promise<void>;
 };
 
@@ -214,6 +216,14 @@ export const startIsolatedT3 = async (options: {
     },
   );
 
+  let serverOutput = "";
+  server.stdout?.on("data", (chunk: Buffer) => {
+    serverOutput += chunk.toString();
+  });
+  server.stderr?.on("data", (chunk: Buffer) => {
+    serverOutput += chunk.toString();
+  });
+
   const stop = async (): Promise<void> => {
     if (server.pid === undefined || server.exitCode !== null) return;
     const signal = (value: NodeJS.Signals): void => {
@@ -261,6 +271,7 @@ export const startIsolatedT3 = async (options: {
       observedVersion,
       port,
       projectPath,
+      serverLog: () => serverOutput,
       stop,
     };
   } catch (error) {

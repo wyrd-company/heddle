@@ -8,10 +8,14 @@ import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
+import type { JsonValue } from "../persistence/index.js";
+
 import {
   ProviderSelectionResolver,
   T3ControlPlaneClient,
 } from "../control-plane/index.js";
+import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
 import { prepareProductionFixture } from "./composition.test-support.js";
 import { createProductionComposition } from "./composition.js";
 import { resolveProductionConfiguration } from "./configuration.js";
@@ -38,6 +42,101 @@ const SECOND_DRIVER = {
   driver: "codex",
   instanceId: "codex-execution",
 } as const;
+
+/**
+ * T3 discovers installed harnesses after it begins serving, so a single early
+ * read reports every provider undiscovered. Poll until the configured
+ * instances are ready rather than assuming the first answer is the truth.
+ */
+const readyModels = async (
+  client: T3ControlPlaneClient,
+): Promise<Map<string, string>> => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const catalog = await client.readProviderCatalog();
+    const ready = [EXECUTION, REVIEW, SECOND_DRIVER].every((instance) =>
+      catalog.some(
+        (row) =>
+          row.instanceId === instance.instanceId &&
+          row.state === "ready" &&
+          row.models.length > 0,
+      ),
+    );
+    if (ready) {
+      return new Map(
+        catalog.map((row) => [row.instanceId, row.models[0]?.slug ?? ""]),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("Isolated T3 never finished provider discovery");
+};
+
+const aliasesFor = (models: Map<string, string>) => ({
+  execution: {
+    model: models.get(EXECUTION.instanceId) ?? "",
+    providerDisplayName: EXECUTION.displayName,
+  },
+  review: {
+    model: models.get(REVIEW.instanceId) ?? "",
+    providerDisplayName: REVIEW.displayName,
+  },
+  secondary: {
+    model: models.get(SECOND_DRIVER.instanceId) ?? "",
+    providerDisplayName: SECOND_DRIVER.displayName,
+  },
+});
+
+const storedCorrelationToken = (handoffs: JsonValue[]): string => {
+  const stored = handoffs.find(
+    (value) =>
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      value["kind"] === "stage-handoff" &&
+      typeof value["correlationToken"] === "string",
+  );
+  if (
+    typeof stored !== "object" ||
+    stored === null ||
+    Array.isArray(stored) ||
+    typeof stored["correlationToken"] !== "string"
+  ) {
+    throw new Error("Activated stage has no correlation token");
+  }
+  return stored["correlationToken"];
+};
+
+const callMcpTool = async (
+  composition: ReturnType<typeof createProductionComposition>,
+  token: string,
+  name: string,
+  arguments_: Record<string, unknown>,
+) => {
+  const response = await composition.mcp.fetch(
+    new globalThis.Request("http://production.invalid/mcp", {
+      body: JSON.stringify({
+        id: globalThis.crypto.randomUUID(),
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { arguments: arguments_, name },
+      }),
+      headers: {
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    }),
+  );
+  expect(response.status).toBe(200);
+  return (await response.json()) as {
+    result?: {
+      content?: Array<{ text?: string }>;
+      isError?: boolean;
+      structuredContent?: unknown;
+    };
+  };
+};
 
 const teardown: Array<() => Promise<void>> = [];
 
@@ -67,42 +166,8 @@ describe.skipIf(!t3Binary)("driver qualification against production Heddle", () 
       accessToken: isolated.accessToken,
       baseUrl: isolated.baseUrl,
     });
-    const models = await (async () => {
-      for (let attempt = 0; attempt < 60; attempt += 1) {
-        const catalog = await catalogClient.readProviderCatalog();
-        const ready = [EXECUTION, REVIEW, SECOND_DRIVER].every((instance) =>
-          catalog.some(
-            (row) =>
-              row.instanceId === instance.instanceId &&
-              row.state === "ready" &&
-              row.models.length > 0,
-          ),
-        );
-        if (ready) {
-          return new Map(
-            catalog.map((row) => [row.instanceId, row.models[0]?.slug ?? ""]),
-          );
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      throw new Error("Isolated T3 never finished provider discovery");
-    })();
-
-    const providerAliases = {
-      execution: {
-        model: models.get(EXECUTION.instanceId) ?? "",
-        providerDisplayName: EXECUTION.displayName,
-      },
-      review: {
-        model: models.get(REVIEW.instanceId) ?? "",
-        providerDisplayName: REVIEW.displayName,
-      },
-      secondary: {
-        model: models.get(SECOND_DRIVER.instanceId) ?? "",
-        providerDisplayName: SECOND_DRIVER.displayName,
-      },
-    };
-
+    const models = await readyModels(catalogClient);
+    const providerAliases = aliasesFor(models);
     const t3Configuration = {
       accessToken: isolated.accessToken,
       baseUrl: isolated.baseUrl,
@@ -178,4 +243,177 @@ describe.skipIf(!t3Binary)("driver qualification against production Heddle", () 
       expect(bindings.get(alias)?.observedCliVersion).toMatch(/^\d+\.\d+\.\d+/);
     }
   }, 180_000);
+
+  it("activates a stage session and spawns a delegated child on the real control plane", async () => {
+    const scratch = await makeQualificationScratch();
+    teardown.push(scratch.cleanup);
+    const fixture = await prepareProductionFixture();
+    teardown.push(fixture.cleanup);
+
+    const isolated = await startIsolatedT3({
+      binary: t3Binary as string,
+      home: operatorHome,
+      providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
+      scratch: scratch.root,
+    });
+    teardown.push(isolated.stop);
+
+    const catalogClient = new T3ControlPlaneClient({
+      accessToken: isolated.accessToken,
+      baseUrl: isolated.baseUrl,
+    });
+    const models = await readyModels(catalogClient);
+    const providerAliases = aliasesFor(models);
+
+    // Heddle dispatches `project.create` only for epic projects. The ad hoc
+    // project is operator-provisioned state that Heddle assumes exists, so an
+    // isolated T3 must be given it the way the operator's own T3 already has.
+    await catalogClient.dispatch({
+      commandId: globalThis.crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      projectId: fixture.configuration.adHocProject.projectId,
+      title: fixture.configuration.adHocProject.name,
+      type: "project.create",
+      workspaceRoot: fixture.repositoryRoot,
+    });
+
+    const configuration = await resolveProductionConfiguration(
+      {
+        ...fixture.configuration,
+        adHocProject: {
+          ...fixture.configuration.adHocProject,
+          workspaceRoot: fixture.repositoryRoot,
+        },
+        pacing: {
+          ...fixture.configuration.pacing,
+          providerBudgets: {
+            execution: { usageLimit: 100 },
+            secondary: { usageLimit: 100 },
+          },
+        },
+        providerAliases,
+        session: {
+          ...fixture.configuration.session,
+          defaultProviderAlias: "execution",
+        },
+        t3: { accessToken: isolated.accessToken, baseUrl: isolated.baseUrl },
+      },
+      new ProviderSelectionResolver(providerAliases, catalogClient),
+    );
+
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
+    });
+    teardown.push(() => composition.close());
+
+    await composition.start();
+
+    const instanceId = `task-${fixture.taskId}`;
+    const activated = composition.persistence.getInstance(instanceId);
+    expect(activated).toBeDefined();
+
+    const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+    const parent = await resolver.resolve(
+      storedCorrelationToken(activated!.state.handoffs),
+    );
+
+    const parentRuntime = composition.persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === parent.sessionKey);
+    expect(parentRuntime).toBeDefined();
+
+
+    // In production an agent calls `spawn` from inside its own running
+    // session, so the parent is live in T3's shell by then. Wait for that
+    // rather than spawning from a session T3 has not started.
+    const parentPhase = await (async () => {
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        const shell = await catalogClient.getShell();
+        const thread = shell.threads.find(
+          ({ id }) => id === parentRuntime?.threadId,
+        );
+        const phase =
+          thread === undefined ? undefined : resolveT3AwarenessPhase(thread);
+
+        if (
+          phase === "running" ||
+          phase === "waiting_for_input" ||
+          phase === "waiting_for_approval"
+        ) {
+          return phase;
+        }
+        if (phase === "failed" || phase === "ended") {
+          throw new Error(
+            `Parent session reached '${phase}' before it could spawn`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error("Parent session never became active in T3");
+    })();
+    expect(parentPhase).toBeDefined();
+
+    // The agent's own tool surface, over the real MCP boundary.
+    const listed = await callMcpTool(
+      composition,
+      parent.token,
+      "list_providers",
+      {},
+    );
+    expect(listed.result?.isError).not.toBe(true);
+    expect(JSON.stringify(listed)).not.toContain("providerInstanceId");
+
+    // A delegated child through the real spawn tool, selecting a different
+    // provider instance than the parent's.
+    // `spawn` assigns a todo subtree rather than a prose brief: the child is
+    // delegated the stage's own todo item.
+    const spawned = await callMcpTool(composition, parent.token, "spawn", {
+      operationId: "qualification-child",
+      providerAlias: "secondary",
+      rootItemId: "deliver",
+    });
+    expect(spawned.result?.isError).not.toBe(true);
+    const child = spawned.result?.structuredContent as {
+      assignment?: {
+        binding?: Record<string, unknown>;
+        depth?: number;
+        parentSessionKey?: string;
+        rootItemId?: string;
+        status?: string;
+      };
+      kind?: string;
+    };
+    expect(child.kind).toBe("spawned");
+
+    // Cross-provider delivery: the child is bound to a different driver and a
+    // different T3 instance than its parent, both resolved from the live
+    // catalog.
+    expect(child.assignment?.binding).toMatchObject({
+      alias: "secondary",
+      driverKind: SECOND_DRIVER.driver,
+      providerDisplayName: SECOND_DRIVER.displayName,
+      providerInstanceId: SECOND_DRIVER.instanceId,
+    });
+    expect(child.assignment?.binding?.["modelSlug"]).toBe(
+      providerAliases.secondary.model,
+    );
+    expect(child.assignment?.binding?.["observedCliVersion"]).toMatch(
+      /^\d+\.\d+\.\d+/,
+    );
+    expect(child.assignment?.parentSessionKey).toBe(parent.sessionKey);
+    expect(child.assignment?.depth).toBe(1);
+    expect(child.assignment?.rootItemId).toBe("deliver");
+    expect(child.assignment?.status).toBe("active");
+
+    // The parent stayed on its own binding rather than inheriting the child's.
+    expect(parentRuntime?.binding.providerInstanceId).toBe(
+      EXECUTION.instanceId,
+    );
+    expect(parentRuntime?.binding.driverKind).toBe(EXECUTION.driver);
+  }, 300_000);
 });
