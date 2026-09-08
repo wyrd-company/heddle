@@ -16,6 +16,7 @@ import { stringify } from "yaml";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { T3ControlPlaneClient } from "../control-plane/index.js";
+import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
 import { prepareProductionFixture } from "./composition.test-support.js";
 import {
   makeQualificationScratch,
@@ -262,12 +263,30 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             if (stage !== undefined && stage !== "implement") return stage;
             await delay(1_000);
           }
-          const oneLine = (value: string): string =>
-            value.replace(/\s+/g, " ").slice(-2500);
+          // What the session actually did is the evidence that matters. The
+          // server log shows only startup unless something failed inside T3.
+          const stalled = (await client.getShell()).threads.find(
+            (candidate) =>
+              typeof candidate["title"] === "string" &&
+              (candidate["title"] as string).includes("task-"),
+          );
+          const snapshot =
+            stalled === undefined
+              ? "no thread reached the control plane"
+              : JSON.stringify({
+                  activities: (
+                    (stalled["activities"] as
+                      Array<{ kind?: string }> | undefined) ?? []
+                  )
+                    .slice(-12)
+                    .map(({ kind }) => kind),
+                  phase: resolveT3AwarenessPhase(stalled),
+                  runtimeMode: stalled["runtimeMode"],
+                });
           throw new Error(
-            `Native session never advanced the stage. T3: ${oneLine(
-              isolated.serverLog(),
-            )} ||| SERVICE: ${oneLine(serviceOutput)}`,
+            `Native session never advanced the stage. Thread: ${snapshot} ||| SERVICE: ${serviceOutput
+              .replace(/\s+/g, " ")
+              .slice(-1500)}`,
           );
         })();
         expect(advanced).toBe("review");
