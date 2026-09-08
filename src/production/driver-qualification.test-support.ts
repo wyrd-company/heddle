@@ -58,9 +58,18 @@ const UNQUOTED_STRUCTURED_CREDENTIAL = new RegExp(
   `\\b(${STRUCTURED_CREDENTIAL_KEY})(["']?\\s*[:=]\\s*)[^"'\\s,}\\]][^\\s,}\\]]*`,
   "gi",
 );
+const SERIALIZED_QUOTED_STRUCTURED_CREDENTIAL = new RegExp(
+  `\\b(?:authorization|${STRUCTURED_CREDENTIAL_KEY})(?:\\\\["'])?\\s*[:=]\\s*\\\\["']`,
+  "i",
+);
+
+const normalizeSerializedCredentialQuotes = (line: string): string =>
+  SERIALIZED_QUOTED_STRUCTURED_CREDENTIAL.test(line)
+    ? line.replace(/(?<!\\)\\(["'])/g, "$1")
+    : line;
 
 const redactStartupCredentialLine = (line: string): string =>
-  line
+  normalizeSerializedCredentialQuotes(line)
     .replace(
       QUOTED_OR_INCOMPLETE_STRUCTURED_CREDENTIAL,
       (_match: string, key: string, separator: string, quotedValue: string) =>
