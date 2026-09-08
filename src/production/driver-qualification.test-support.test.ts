@@ -275,14 +275,23 @@ if (process.argv.includes("--version")) {
     }
   });
 
-  it("redacts a pairing token from a bounded startup classification", () => {
-    const diagnostic = safeT3StartupDiagnostic("Token: pairing-secret");
+  it.each([
+    ["pairing token", "Token: pairing-secret", "pairing-secret"],
+    ["bearer token", "Bearer bearer-secret", "bearer-secret"],
+    ["API key", "api_key=api-secret", "api-secret"],
+    ["access token", "access-token: access-secret", "access-secret"],
+    ["authorization", "authorization=auth-secret", "auth-secret"],
+    ["generic secret", "secret: generic-secret", "generic-secret"],
+  ])("redacts a %s from startup diagnostics", (_name, output, secret) => {
+    const diagnostic = safeT3StartupDiagnostic(output);
+    expect(diagnostic).not.toContain(secret);
+    expect(diagnostic).toContain("[redacted]");
+  });
+
+  it("bounds the startup classification", () => {
     const bounded = safeT3StartupDiagnostic(
       `Fatal: fixture stopped ${"x".repeat(70_000)}`,
     );
-
-    expect(diagnostic).not.toContain("pairing-secret");
-    expect(diagnostic).toBe("Token: [redacted]");
     expect(bounded).toContain("Fatal: fixture stopped");
     expect(bounded.length).toBe(2_000);
   });
