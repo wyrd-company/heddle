@@ -13,7 +13,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { KanbanBoardAdapter } from "../board-adapter/index.js";
 import {
   ProviderSelectionResolver,
-  steerStageSession,
   T3ControlPlaneClient,
 } from "../control-plane/index.js";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
@@ -335,25 +334,27 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       },
     ]);
 
-    // A later explicit steer also uses the existing child's durable target.
-    await steerStageSession(
+    // A later observed child completion uses the production notification path
+    // to steer the durable parent target.
+    await second.subagents.onObserved(
       {
-        interactionMode: childAfter.binding.interactionMode,
-        message: "Continue the isolated restart qualification.",
-        providerContext: providerContextFromBinding(childAfter.binding),
-        runtimeMode: childAfter.binding.runtimeMode,
+        instanceId,
+        sessionKey: childAfter.sessionKey,
         threadId: childAfter.threadId,
       },
-      { t3: secondT3.t3 },
+      { archiveDispatched: false, attentions: [], phase: "completed" },
     );
     expect(secondT3.dispatches.at(-1)).toMatchObject({
       command: {
-        interactionMode: childAfter.binding.interactionMode,
-        runtimeMode: childAfter.binding.runtimeMode,
-        threadId: childAfter.threadId,
+        interactionMode: parentAfter.binding.interactionMode,
+        message: {
+          text: `Subagent ${childAfter.sessionKey} stopped with phase completed; assigned todo subtree ${childAfter.rootItemId}.`,
+        },
+        runtimeMode: parentAfter.binding.runtimeMode,
+        threadId: parentAfter.threadId,
         type: "thread.turn.start",
       },
-      providerContext: providerContextFromBinding(childAfter.binding),
+      providerContext: providerContextFromBinding(parentAfter.binding),
     });
 
     const replayedParent = await new WorkflowMcpSessionResolver(
