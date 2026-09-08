@@ -173,6 +173,14 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             providerBudgets: { execution: { usageLimit: 100 } },
             subagents: { maxDepth: 1, maxFanOut: 1 },
           },
+          providerUsage: {
+            arguments: [
+              "-e",
+              'process.stdin.resume(); process.stdin.on("end", () => process.stdout.write(JSON.stringify({ version: 1, used: 0, windowStartedAt: 0 }) + "\\n"));',
+            ],
+            executable: process.execPath,
+            timeoutMilliseconds: 10_000,
+          },
           providerAliases,
           server: { host: "127.0.0.1", port: servicePort },
           session: {
