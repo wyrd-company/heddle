@@ -3,7 +3,6 @@
 //   implements: heddle
 // ---
 
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import type { BoardTask } from "../board-adapter/index.js";
@@ -21,6 +20,7 @@ import type { ReconcilerAttentionQueue } from "../reconciler/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
 import type { ProductRoutingCatalog } from "./product-routing.js";
+import { stableUuid } from "./stable-uuid.js";
 
 export interface EpicProjectT3Client {
   dispatch(command: T3DispatchCommand): Promise<{ sequence: number }>;
@@ -30,11 +30,6 @@ export type EpicProjectAction = {
   epicId: number;
   kind: "created";
   projectId: string;
-};
-
-const stableUuid = (seed: string): string => {
-  const hex = createHash("sha256").update(seed).digest("hex").slice(0, 32);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
 };
 
 export class EpicProjectCoordinator {
