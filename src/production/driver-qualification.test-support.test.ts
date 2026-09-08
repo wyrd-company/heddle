@@ -299,6 +299,14 @@ if (process.argv.includes("--version")) {
     expect(diagnostic).toContain("[redacted]");
   });
 
+  it("redacts the complete quoted structured credential value", () => {
+    expect(
+      safeT3StartupDiagnostic(
+        'Error: {"access_token": "quoted credential value"}',
+      ),
+    ).toBe('Error: {"access_token": "[redacted]"}');
+  });
+
   it("bounds the startup classification", () => {
     const bounded = safeT3StartupDiagnostic(
       `Fatal: fixture stopped ${"x".repeat(70_000)}`,

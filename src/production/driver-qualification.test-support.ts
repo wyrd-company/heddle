@@ -144,12 +144,12 @@ export const safeT3StartupDiagnostic = (output: string): string => {
     .join("");
   const redacted = withoutTerminalControls
     .replace(
-      /\b(api[_-]?key|access[_-]?token|authorization|secret|token)(["']?\s*[:=]\s*)(["'])(.*?)\3/gi,
-      "$1$2$3[redacted]$3",
+      /\b(api[_-]?key|access[_-]?token|authorization|secret|token)(["']?\s*[:=]\s*)[^"'\s,}\]][^\s,}\]]*/gi,
+      "$1$2[redacted]",
     )
     .replace(
-      /\b(api[_-]?key|access[_-]?token|authorization|secret|token)(["']?\s*[:=]\s*)[^\s,}\]]+/gi,
-      "$1$2[redacted]",
+      /\b(api[_-]?key|access[_-]?token|authorization|secret|token)(["']?\s*[:=]\s*)(["'])(.*?)\3/gi,
+      "$1$2$3[redacted]$3",
     )
     .replace(/(["']?)\bBearer(\s+)[^"'\s,}\]]+\1/gi, "$1Bearer$2[redacted]$1");
   const lines = redacted
