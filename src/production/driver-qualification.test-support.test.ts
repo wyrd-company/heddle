@@ -279,7 +279,7 @@ if (process.argv.includes("--version")) {
     ["pairing token", "Token: pairing-secret", "pairing-secret"],
     ["bearer token", "Bearer bearer-secret", "bearer-secret"],
     ["API key", "api_key=api-secret", "api-secret"],
-    ["access token", "access-token: access-secret", "access-secret"],
+    ["access token", "access_token=access-secret", "access-secret"],
     ["authorization", "authorization=auth-secret", "auth-secret"],
     ["generic secret", "secret: generic-secret", "generic-secret"],
   ])("redacts a %s from startup diagnostics", (_name, output, secret) => {
