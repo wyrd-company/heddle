@@ -90,6 +90,19 @@ describe("production composition", () => {
 
   it("fails startup before dispatch when the full theme catalog is invalid", async () => {
     const fixture = await prepare();
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--status",
+        "done",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
     const soloistPath = join(
       fixture.blueprintsRepositoryRoot,
       "themes",
