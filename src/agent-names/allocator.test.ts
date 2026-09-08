@@ -187,6 +187,41 @@ describe("agent-name allocator", () => {
     );
   });
 
+  it("allocates later lists from the task-pinned catalog after current themes change", async () => {
+    const root = await repository();
+    const store = new MemoryStore();
+    store.create("task-one");
+    store.running("task-one");
+    const allocator = new AgentNameAllocator(
+      new GitAgentNameThemeCatalog(root, "HEAD"),
+      store,
+    );
+    await allocator.prepareTask("task-one", "team");
+    await writeFile(
+      join(root, "themes", "alpha.yml"),
+      team("alpha").replaceAll("alpha-ally", "changed-ally"),
+    );
+    await execute("git", ["add", "themes/alpha.yml"], { cwd: root });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Change current names",
+      ],
+      { cwd: root },
+    );
+
+    await expect(allocator.assign("task-one", "allies")).resolves.toBe(
+      "alpha-ally-one",
+    );
+  });
+
   it("locks names across running tasks and releases them only at done", async () => {
     const root = await repository();
     const store = new MemoryStore();
