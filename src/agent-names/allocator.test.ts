@@ -153,6 +153,19 @@ describe("agent-name allocator", () => {
     await expect(
       allocator.prepareTask("ad-hoc", "soloist"),
     ).resolves.toMatchObject({ themeId: "solo" });
+    const pinnedCommit =
+      store.getInstance("task-one")!.state.agentNames!.catalogCommit;
+    await expect(
+      execute(
+        "git",
+        [
+          "rev-parse",
+          "--verify",
+          `refs/heddle/agent-name-themes/${pinnedCommit}`,
+        ],
+        { cwd: root },
+      ),
+    ).resolves.toMatchObject({ stdout: `${pinnedCommit}\n` });
   });
 
   it("keeps one task and list stable while assigning different lists uniquely", async () => {

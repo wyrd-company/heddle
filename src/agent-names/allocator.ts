@@ -84,7 +84,7 @@ export class AgentNameAllocator {
         return existing.state.agentNames;
       }
 
-      const snapshot = await this.catalog.validateCurrent();
+      const snapshot = await this.catalog.pinCurrent();
       const eligible = snapshot.themes.filter((theme) => theme.kind === kind);
       if (eligible.length === 0) {
         throw new AgentNameCatalogError(

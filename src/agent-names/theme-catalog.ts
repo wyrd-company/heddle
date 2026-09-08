@@ -206,6 +206,26 @@ export class GitAgentNameThemeCatalog {
     return { commit, themes: await this.read(commit) };
   }
 
+  async pinCurrent(): Promise<AgentNameThemeCatalogSnapshot> {
+    const snapshot = await this.validateCurrent();
+    try {
+      await execute(
+        "git",
+        [
+          "update-ref",
+          `refs/heddle/agent-name-themes/${snapshot.commit}`,
+          snapshot.commit,
+        ],
+        { cwd: this.repositoryRoot },
+      );
+    } catch {
+      throw new AgentNameCatalogError(
+        `Agent-name catalog commit could not be retained: ${snapshot.commit}`,
+      );
+    }
+    return snapshot;
+  }
+
   async read(commit: string): Promise<readonly AgentNameTheme[]> {
     if (!/^[0-9a-f]{40,64}$/.test(commit)) {
       throw new AgentNameCatalogError(
