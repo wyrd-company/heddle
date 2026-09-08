@@ -135,8 +135,8 @@ describe("qualification isolation", () => {
         scratch: scratchLink,
       }).catch((error: unknown) => error);
 
-      expect(failure).toBeInstanceOf(QualificationIsolationError);
       expect(await readdir(externalTarget)).toEqual(before);
+      expect(failure).toBeInstanceOf(QualificationIsolationError);
     } finally {
       await rm(linkParent, { force: true, recursive: true });
       await rm(externalTarget, { force: true, recursive: true });
