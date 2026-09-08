@@ -88,4 +88,20 @@ printf '%s\\n' "$@" >> "$HEDDLE_QUALIFICATION_INVOCATION"
       ),
     });
   });
+
+  it("refuses a non-executable pinned-T3 path", async () => {
+    await expect(
+      execute("scripts/deployment/qualify-pinned-t3.sh", [], {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          HEDDLE_T3_INTEGRATION_BINARY: "/tmp/missing-fixture-t3",
+        },
+      }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "HEDDLE_T3_INTEGRATION_BINARY must name an executable pinned T3 binary",
+      ),
+    });
+  });
 });
