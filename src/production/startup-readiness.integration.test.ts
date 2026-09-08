@@ -4,6 +4,8 @@
 //   references: t3-headless
 // ---
 
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,17 +17,15 @@ import {
 import { prepareProductionFixture } from "./composition.test-support.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
+  CONTROLLED_QUALIFICATION_EXECUTION,
   makeQualificationScratch,
-  PREFERRED_MODEL_SLUGS,
   startIsolatedT3,
   type IsolatedT3,
 } from "./driver-qualification.test-support.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
-const operatorHome = process.env["HOME"] ?? "";
-
-const DISPLAY_NAME = "Workbench Alpha";
-const INSTANCE_ID = "codex-execution";
+const DISPLAY_NAME = CONTROLLED_QUALIFICATION_EXECUTION.displayName;
+const INSTANCE_ID = CONTROLLED_QUALIFICATION_EXECUTION.instanceId;
 
 const teardown: Array<() => Promise<void>> = [];
 
@@ -42,22 +42,26 @@ describe.skipIf(!t3Binary)(
     it("resolves aliases against a T3 whose discovery has not settled", async () => {
       const scratch = await makeQualificationScratch();
       teardown.push(scratch.cleanup);
+      const callerScratch = await makeQualificationScratch();
+      teardown.push(callerScratch.cleanup);
       const fixture = await prepareProductionFixture();
       teardown.push(fixture.cleanup);
+      const callerHome = join(callerScratch.root, "caller-home");
+      const sentinel = join(callerHome, "credential-sentinel");
+      await mkdir(callerHome, { recursive: true });
+      await writeFile(sentinel, "operator-state-must-not-change\n");
 
       // No wait between starting T3 and resolving, which is what a service
       // started alongside T3 by the deployment feature actually does.
+      const originalHome = process.env["HOME"];
+      process.env["HOME"] = callerHome;
       const isolated: IsolatedT3 = await startIsolatedT3({
         binary: t3Binary as string,
-        home: operatorHome,
-        providerInstances: [
-          {
-            displayName: DISPLAY_NAME,
-            driver: "codex",
-            instanceId: INSTANCE_ID,
-          },
-        ],
+        providerInstances: [CONTROLLED_QUALIFICATION_EXECUTION],
         scratch: scratch.root,
+      }).finally(() => {
+        if (originalHome === undefined) delete process.env["HOME"];
+        else process.env["HOME"] = originalHome;
       });
       teardown.push(isolated.stop);
 
@@ -83,12 +87,7 @@ describe.skipIf(!t3Binary)(
           return catalog;
         },
       };
-      const model = PREFERRED_MODEL_SLUGS[INSTANCE_ID];
-      if (model === undefined) {
-        throw new Error(
-          `No qualification model is configured for ${INSTANCE_ID}`,
-        );
-      }
+      const model = "default";
 
       const resolver = new ProviderSelectionResolver(
         {
@@ -122,12 +121,45 @@ describe.skipIf(!t3Binary)(
       expect(resolved.session.defaultSelection.observedCliVersion).toMatch(
         /^\d+\.\d+\.\d+/,
       );
-      expect(observedStates[0]).toEqual({ installed: false, state: "warning" });
+      expect(observedStates[0]?.state).toBe("warning");
       expect(observedStates.at(-1)).toEqual({
         installed: true,
         state: "ready",
       });
       expect(catalogReads).toBeGreaterThan(1);
+      const providerProcesses = (
+        await readFile(isolated.controlledProviderLog, "utf8")
+      )
+        .trim()
+        .split("\n")
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              home?: string;
+              homeSentinelBefore?: string | null;
+            },
+        );
+      expect(providerProcesses.length).toBeGreaterThan(0);
+      expect(
+        providerProcesses.every(({ home }) => home === isolated.providerHome),
+      ).toBe(true);
+      expect(
+        providerProcesses.every(
+          ({ homeSentinelBefore }) =>
+            homeSentinelBefore === null ||
+            homeSentinelBefore.startsWith("provider-state\n"),
+        ),
+      ).toBe(true);
+      expect(isolated.providerHome).not.toBe(callerHome);
+      expect(
+        await readFile(
+          join(isolated.providerHome, "credential-sentinel"),
+          "utf8",
+        ),
+      ).toContain("controlled-provider-touch\n");
+      expect(await readFile(sentinel, "utf8")).toBe(
+        "operator-state-must-not-change\n",
+      );
     }, 120_000);
   },
 );

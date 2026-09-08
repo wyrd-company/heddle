@@ -5,12 +5,39 @@
 //   references: cursor-headless
 // ---
 
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import process from "node:process";
 import { setTimeout } from "node:timers";
 
 const arguments_ = process.argv.slice(2);
+if (process.env.HEDDLE_CONTROLLED_PROVIDER === "1") {
+  const log = process.env.HEDDLE_CONTROLLED_PROVIDER_LOG;
+  const homeSentinel = join(process.env.HOME ?? "", "credential-sentinel");
+  let homeSentinelBefore = null;
+  try {
+    homeSentinelBefore = readFileSync(homeSentinel, "utf8");
+    appendFileSync(homeSentinel, "controlled-provider-touch\n");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  if (log)
+    appendFileSync(
+      log,
+      `${JSON.stringify({ arguments: arguments_, home: process.env.HOME, homeSentinelBefore })}\n`,
+    );
+}
+if (arguments_[0] === "--version") {
+  process.stdout.write("1.0.13\n");
+  process.exit(0);
+}
 if (arguments_[0] === "about") {
+  const probeDelay = Number.parseInt(
+    process.env.HEDDLE_CONTROLLED_PROVIDER_PROBE_DELAY_MS ?? "0",
+    10,
+  );
+  if (Number.isFinite(probeDelay) && probeDelay > 0)
+    await new Promise((resolve) => setTimeout(resolve, probeDelay));
   process.stdout.write(
     `${JSON.stringify({ cliVersion: "2026.08.11-e8db854", model: "Auto" })}\n`,
   );
@@ -18,7 +45,10 @@ if (arguments_[0] === "about") {
 }
 
 const expectedApiKey = process.env.HEDDLE_CURSOR_EXPECTED_API_KEY;
-if (!expectedApiKey || process.env.CURSOR_API_KEY !== expectedApiKey)
+if (
+  process.env.HEDDLE_CONTROLLED_PROVIDER !== "1" &&
+  (!expectedApiKey || process.env.CURSOR_API_KEY !== expectedApiKey)
+)
   process.exit(77);
 
 const requestLog = process.env.HEDDLE_CURSOR_TEST_REQUEST_LOG;

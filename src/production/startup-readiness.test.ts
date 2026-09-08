@@ -209,32 +209,42 @@ describe("startup provider readiness", () => {
       label: "unavailable",
       provider: { ...readyProvider, availability: "unavailable" as const },
     },
-  ])("does not wait for a permanently $label provider", async ({ provider }) => {
-    const fixture = await configurationWith();
-    try {
-      const reader = catalogReader([[provider]]);
-      const resolver = new ProviderSelectionResolver(
-        { primary: { model: MODEL_SLUG, providerDisplayName: DISPLAY_NAME } },
-        reader,
-      );
-      let sleeps = 0;
+  ])(
+    "does not wait for a permanently $label provider",
+    async ({ provider }) => {
+      const fixture = await configurationWith();
+      try {
+        const reader = catalogReader([[provider]]);
+        const resolver = new ProviderSelectionResolver(
+          { primary: { model: MODEL_SLUG, providerDisplayName: DISPLAY_NAME } },
+          reader,
+        );
+        let clock = 0;
+        let sleeps = 0;
 
-      await expect(
-        resolveProductionConfiguration(
-          startupConfiguration(fixture),
-          resolver,
-          {
-            pollMilliseconds: 0,
-            sleep: async () => {
-              sleeps += 1;
+        await expect(
+          resolveProductionConfiguration(
+            startupConfiguration(fixture),
+            resolver,
+            {
+              now: () => clock,
+              pollMilliseconds: 100,
+              sleep: async (milliseconds) => {
+                sleeps += 1;
+                clock += milliseconds;
+                if (sleeps > 20) {
+                  throw new Error("startup retried a permanent provider state");
+                }
+              },
+              timeoutMilliseconds: 500,
             },
-          },
-        ),
-      ).rejects.toMatchObject({ reason: "provider-unavailable" });
-      expect(reader.reads[0]).toBe(1);
-      expect(sleeps).toBe(0);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
+          ),
+        ).rejects.toMatchObject({ reason: "provider-unavailable" });
+        expect(reader.reads[0]).toBe(1);
+        expect(sleeps).toBe(0);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 });

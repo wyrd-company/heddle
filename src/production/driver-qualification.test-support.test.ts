@@ -11,12 +11,27 @@ import type {
 } from "../control-plane/index.js";
 import {
   nativeDriverEvidenceLine,
+  nativeProviderTurnFailureEvidenceLine,
   PREFERRED_MODEL_SLUGS,
   preferredModelsFor,
   QUALIFICATION_SECOND_DRIVER,
   QualificationModelSelectionError,
   requiredObservedCliVersion,
 } from "./driver-qualification.test-support.js";
+
+const failureEvidence = {
+  advanceResult: null,
+  benignFileAction: null,
+  driver: "sample-driver",
+  listProvidersResult: null,
+  model: "sample-model",
+  providerAlias: "sample-alias",
+  providerCliVersion: "1.2.3",
+  providerInstanceId: "sample-instance",
+  runtimeMode: "full-access",
+  spawnResult: null,
+  version: 1,
+} as const;
 
 const catalogWithModel = (
   model: string,
@@ -126,5 +141,58 @@ describe("native qualification model approval", () => {
     ).rejects.toThrow(
       `T3 did not report a CLI version for '${QUALIFICATION_SECOND_DRIVER.instanceId}'`,
     );
+  });
+});
+
+describe("native qualification failure evidence", () => {
+  it("emits a row for an explicitly failed provider prompt", () => {
+    expect(
+      nativeProviderTurnFailureEvidenceLine(
+        {
+          id: "thread-1",
+          latestTurn: { state: "error" },
+          session: {
+            lastError:
+              "Provider adapter request failed (sample-provider) for session/prompt: sample limit reached",
+            status: "error",
+          },
+        },
+        "sample-provider",
+        failureEvidence,
+      ),
+    ).toBe(
+      'HEDDLE_NATIVE_EVIDENCE {"advanceResult":null,"benignFileAction":null,"driver":"sample-driver","listProvidersResult":null,"model":"sample-model","providerAlias":"sample-alias","providerCliVersion":"1.2.3","providerInstanceId":"sample-instance","result":"provider-turn-failed","runtimeMode":"full-access","spawnResult":null,"version":1}',
+    );
+  });
+
+  it("emits no provider failure row for an unfinished turn", () => {
+    expect(
+      nativeProviderTurnFailureEvidenceLine(
+        {
+          id: "thread-1",
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        "sample-provider",
+        failureEvidence,
+      ),
+    ).toBeNull();
+  });
+
+  it("emits no provider failure row for a non-provider session failure", () => {
+    expect(
+      nativeProviderTurnFailureEvidenceLine(
+        {
+          id: "thread-1",
+          latestTurn: { state: "error" },
+          session: {
+            lastError: "Session setup failed",
+            status: "error",
+          },
+        },
+        "sample-provider",
+        failureEvidence,
+      ),
+    ).toBeNull();
   });
 });

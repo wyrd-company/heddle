@@ -29,7 +29,9 @@ import {
   QUALIFICATION_OPENCODE,
   QUALIFICATION_SECOND_DRIVER,
   nativeDriverEvidenceLine,
+  nativeProviderTurnFailureEvidenceLine,
   preferredModelsFor,
+  prepareNativeProviderHome,
   requiredObservedCliVersion,
   startIsolatedT3,
   type IsolatedT3,
@@ -115,15 +117,21 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
         const fixture = await prepareProductionFixture();
         teardown.push(fixture.cleanup);
         const emittedEvidence: string[] = [];
-        const emitEvidence = (evidence: NativeDriverEvidence): void => {
-          const line = nativeDriverEvidenceLine(evidence);
+        const emitEvidenceLine = (line: string): void => {
           process.stdout.write(`${line}\n`);
           emittedEvidence.push(line);
         };
+        const emitEvidence = (evidence: NativeDriverEvidence): void => {
+          emitEvidenceLine(nativeDriverEvidenceLine(evidence));
+        };
+        await prepareNativeProviderHome({
+          driver: alias,
+          scratch: scratch.root,
+          sourceHome: operatorHome,
+        });
 
         const isolated: IsolatedT3 = await startIsolatedT3({
           binary: t3Binary as string,
-          home: operatorHome,
           providerInstances: [...QUALIFICATION_ALL_DRIVERS],
           scratch: scratch.root,
         });
@@ -310,7 +318,12 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
           ) as
             | {
                 activities?: Array<{ kind?: string }>;
+                latestTurn?: { state?: string } | null;
                 modelSelection?: { instanceId?: string; model?: string };
+                session?: {
+                  lastError?: string | null;
+                  status?: string;
+                } | null;
                 runtimeMode?: string;
               }
             | undefined;
@@ -327,13 +340,10 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
                   phase: resolveT3AwarenessPhase(stalled),
                   runtimeMode: stalled["runtimeMode"],
                 });
-          if (stalled !== undefined) {
-            expect(stalled.modelSelection?.instanceId).toBe(
-              instance.instanceId,
-            );
-            expect(stalled.modelSelection?.model).toBe(model);
-            expect(stalled.runtimeMode).toBe("full-access");
-            emitEvidence({
+          const failureEvidence = nativeProviderTurnFailureEvidenceLine(
+            stalled,
+            instance.driver,
+            {
               advanceResult: null,
               benignFileAction: null,
               driver: alias,
@@ -342,11 +352,18 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
               providerAlias,
               providerCliVersion: cliVersion,
               providerInstanceId: instance.instanceId,
-              result: "provider-turn-failed",
               runtimeMode: "full-access",
               spawnResult: null,
               version: 1,
-            });
+            },
+          );
+          if (failureEvidence !== null && stalled !== undefined) {
+            expect(stalled.modelSelection?.instanceId).toBe(
+              instance.instanceId,
+            );
+            expect(stalled.modelSelection?.model).toBe(model);
+            expect(stalled.runtimeMode).toBe("full-access");
+            emitEvidenceLine(failureEvidence);
           }
           throw new Error(
             `Native session never advanced the stage. Thread: ${snapshot} ||| SERVICE: ${serviceOutput

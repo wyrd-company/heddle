@@ -16,6 +16,7 @@ import {
   steerStageSession,
   T3ControlPlaneClient,
 } from "../control-plane/index.js";
+import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
 import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import { isTodoState } from "../todo/index.js";
@@ -23,12 +24,12 @@ import { prepareProductionFixture } from "./composition.test-support.js";
 import { createProductionComposition } from "./composition.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
+  CONTROLLED_QUALIFICATION_EXECUTION,
+  CONTROLLED_QUALIFICATION_INSTANCES,
+  CONTROLLED_QUALIFICATION_REVIEW,
+  CONTROLLED_QUALIFICATION_SECOND_DRIVER,
   makeQualificationScratch,
   qualificationAliases,
-  QUALIFICATION_EXECUTION,
-  QUALIFICATION_INSTANCES,
-  QUALIFICATION_REVIEW,
-  QUALIFICATION_SECOND_DRIVER,
   readyProviderModels,
   startIsolatedT3,
 } from "./driver-qualification.test-support.js";
@@ -39,9 +40,27 @@ import {
 import { providerContextFromBinding } from "./session-binding.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
-const operatorHome = process.env["HOME"] ?? "";
-
 const teardown: Array<() => Promise<void>> = [];
+
+const waitForRunningThread = async (
+  client: T3ControlPlaneClient,
+  threadId: string,
+): Promise<"running"> => {
+  let lastPhase: string | undefined;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const thread = (await client.getShell()).threads.find(
+      ({ id }) => id === threadId,
+    );
+    lastPhase =
+      thread === undefined ? "absent" : resolveT3AwarenessPhase(thread);
+    if (lastPhase === "running") return "running";
+    if (lastPhase === "failed" || lastPhase === "completed") break;
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
+  }
+  throw new Error(
+    `Thread '${threadId}' did not remain active for restart pacing; last phase '${lastPhase ?? "unknown"}'`,
+  );
+};
 
 afterEach(async () => {
   const pending = teardown.splice(0, teardown.length).reverse();
@@ -77,8 +96,7 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
 
     const isolated = await startIsolatedT3({
       binary: t3Binary as string,
-      home: operatorHome,
-      providerInstances: [...QUALIFICATION_INSTANCES],
+      providerInstances: [...CONTROLLED_QUALIFICATION_INSTANCES],
       scratch: scratch.root,
     });
     teardown.push(isolated.stop);
@@ -169,10 +187,11 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       .find((entry) => entry.instanceId === instanceId);
     expect(boundRuntime).toBeDefined();
     expect(boundRuntime?.binding.providerInstanceId).toBe(
-      QUALIFICATION_EXECUTION.instanceId,
+      CONTROLLED_QUALIFICATION_EXECUTION.instanceId,
     );
     const boundThreadId = boundRuntime?.threadId;
     if (boundThreadId === undefined) throw new Error("Parent thread is absent");
+    expect(await waitForRunningThread(client, boundThreadId)).toBe("running");
     const firstChild = await first.subagents.spawn(parent, {
       operationId: "restart-existing-child",
       providerAlias: "secondary",
@@ -182,7 +201,7 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       throw new Error("Existing child was deferred");
     }
     expect(firstChild.assignment.binding.providerInstanceId).toBe(
-      QUALIFICATION_SECOND_DRIVER.instanceId,
+      CONTROLLED_QUALIFICATION_SECOND_DRIVER.instanceId,
     );
     const child = await firstResolver.resolve(
       firstChild.assignment.correlationToken,
@@ -245,7 +264,7 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       runtimeMode: configuration.session.defaultRuntimeMode,
     });
     expect(freshSelection.providerInstanceId).toBe(
-      QUALIFICATION_REVIEW.instanceId,
+      CONTROLLED_QUALIFICATION_REVIEW.instanceId,
     );
     const restartDefault = configuration.session.resolvedSelections.find(
       ({ alias }) => alias === "review",
@@ -317,20 +336,20 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       throw new Error("Restart did not recover the mixed-provider sessions");
     }
     expect(parentAfter?.binding.providerInstanceId).toBe(
-      QUALIFICATION_EXECUTION.instanceId,
+      CONTROLLED_QUALIFICATION_EXECUTION.instanceId,
     );
     expect(parentAfter?.binding.driverKind).toBe(
-      QUALIFICATION_EXECUTION.driver,
+      CONTROLLED_QUALIFICATION_EXECUTION.driver,
     );
     expect(parentAfter?.binding.providerInstanceId).not.toBe(
-      QUALIFICATION_REVIEW.instanceId,
+      CONTROLLED_QUALIFICATION_REVIEW.instanceId,
     );
     expect(parentAfter?.activation).toBe(boundRuntime?.activation);
     expect(childAfter.binding.providerInstanceId).toBe(
-      QUALIFICATION_SECOND_DRIVER.instanceId,
+      CONTROLLED_QUALIFICATION_SECOND_DRIVER.instanceId,
     );
     expect(childAfter.binding.providerInstanceId).not.toBe(
-      QUALIFICATION_REVIEW.instanceId,
+      CONTROLLED_QUALIFICATION_REVIEW.instanceId,
     );
     expect(childAfter.binding.runtimeMode).toBe(
       firstChild.assignment.binding.runtimeMode,
@@ -406,6 +425,9 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
     const replayedParent = await new WorkflowMcpSessionResolver(
       second.persistence,
     ).resolve(parent.token);
+    expect(await waitForRunningThread(client, parentAfter.threadId)).toBe(
+      "running",
+    );
     const laterChild = await second.subagents.spawn(replayedParent, {
       operationId: "restart-paced-child",
       providerAlias: "secondary",
@@ -415,12 +437,14 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       throw new Error("Later child was deferred");
     }
     expect(laterChild.assignment.binding.providerInstanceId).toBe(
-      QUALIFICATION_SECOND_DRIVER.instanceId,
+      CONTROLLED_QUALIFICATION_SECOND_DRIVER.instanceId,
     );
     expect(laterChild.assignment.binding.runtimeMode).toBe(
       firstChild.assignment.binding.runtimeMode,
     );
-    expect(pacedProviders).toEqual([QUALIFICATION_SECOND_DRIVER.instanceId]);
+    expect(pacedProviders).toEqual([
+      CONTROLLED_QUALIFICATION_SECOND_DRIVER.instanceId,
+    ]);
 
     const replayed = second.persistence.getInstance(instanceId);
     expect(replayed).toBeDefined();

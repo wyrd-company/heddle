@@ -20,7 +20,10 @@ export type T3ShellThread = {
   hasPendingApprovals?: boolean;
   hasPendingUserInput?: boolean;
   latestUserMessageAt?: string | null;
-  session?: { status?: string } | null;
+  session?: {
+    lastError?: string | null;
+    status?: string;
+  } | null;
   latestTurn?: {
     state?: string;
     requestedAt?: string | null;

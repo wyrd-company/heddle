@@ -53,8 +53,10 @@ npm install --global --no-audit --no-fund --prefix "${SCRATCH}/t3" \
 
 ## Running it
 
-Every suite is opt-in, because a run consumes real provider budget on the
-operator's own accounts.
+Every suite that starts T3 is opt-in. Production-seam, selection, and restart
+fixtures use a credential-free controllable provider binary. Only the five
+native rows use the operator's authenticated provider sessions and consume
+provider budget.
 
 ```bash
 # Production seams, selection matrix, restart, and isolation guards.
@@ -96,9 +98,11 @@ failure is environmental and not a defect.
 
 ## Isolation
 
-Qualification runs against the operator's own provider accounts, so state
-isolation carries the safety that identity isolation cannot. The harness
-refuses, before any effect:
+The production-seam, selection, and restart fixtures give T3 a scratch-owned
+`HOME` and a credential-free controllable provider binary. An adversarial
+sentinel proves provider processes can mutate only that scratch home and cannot
+read or change the caller's populated home. The harness refuses, before any
+effect:
 
 - the live control-plane port `3773`;
 - the live board at `/workspaces/kanban`, including nested paths and paths
@@ -108,10 +112,11 @@ refuses, before any effect:
 Each refusal has a named test in
 `src/production/driver-qualification-isolation.test.ts`.
 
-The same suite verifies that each native-row configuration mounts only its
-selected provider credential source and mounts every such source read-only.
-The copied credential state and all provider sessions are removed with the
-row's container and isolated scratch directory.
+Each native-row configuration mounts only its selected provider credential
+source and mounts every such source read-only. The row then copies only that
+selected identity into T3's scratch-owned provider home. The copied credential
+state and all provider sessions are removed with the row's container and
+isolated scratch directory.
 
 ## Reading a failure
 
@@ -154,9 +159,12 @@ with `HEDDLE_NATIVE_EVIDENCE`. Its JSON object is safe to retain and contains:
 - the driver, generated provider alias, provider instance, approved model,
   runtime mode, and observed CLI version;
 - the benign file action, `list_providers`, `spawn`, and `advance` results; and
-- `result: passed`, or `result: provider-turn-failed` when the provider rejects
-  the turn after T3 has established and asserted the requested binding.
+- `result: passed`, or `result: provider-turn-failed` only when T3 reports a
+  failed latest turn and classifies its error as the selected provider's
+  `session/prompt` request failure after establishing the requested binding.
 
-The failure row does not infer a provider diagnostic. Read the provider's
-isolated event log, record its safe reason separately, and apply any explicit
-operator disposition without changing the structured binding evidence.
+An unfinished turn, timeout, session-start failure, or Heddle/MCP failure emits
+no provider-failure row. The failure row does not retain the provider diagnostic.
+Read the provider's isolated event log, record its safe reason separately, and
+apply any explicit operator disposition without changing the structured binding
+evidence.

@@ -18,33 +18,16 @@ import {
 import { prepareProductionFixture } from "./composition.test-support.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
+  CONTROLLED_QUALIFICATION_EXECUTION as EXECUTION,
+  CONTROLLED_QUALIFICATION_REVIEW as REVIEW,
+  CONTROLLED_QUALIFICATION_SECOND_DRIVER as SECOND_DRIVER,
   makeQualificationScratch,
-  QUALIFICATION_EXECUTION,
-  QUALIFICATION_REVIEW,
   readyModelsFor,
   startIsolatedT3,
 } from "./driver-qualification.test-support.js";
 import { resolveStageSessionSelection } from "./stage-session-selection.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
-const operatorHome = process.env["HOME"] ?? "";
-
-const EXECUTION = {
-  displayName: "Workbench Alpha",
-  driver: "claudeAgent",
-  instanceId: "claude-execution",
-} as const;
-const REVIEW = {
-  displayName: "Workbench Beta",
-  driver: "claudeAgent",
-  instanceId: "claude-review",
-} as const;
-const SECOND_DRIVER = {
-  displayName: "Workbench Gamma",
-  driver: "codex",
-  instanceId: "codex-execution",
-} as const;
-
 const teardown: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
@@ -91,7 +74,6 @@ describe.skipIf(!t3Binary)(
 
       const isolated = await startIsolatedT3({
         binary: t3Binary as string,
-        home: operatorHome,
         providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
         scratch: scratch.root,
       });
@@ -238,13 +220,12 @@ describe.skipIf(!t3Binary)(
       const fixture = await prepareProductionFixture();
       teardown.push(fixture.cleanup);
       const ambiguousReview = {
-        ...QUALIFICATION_REVIEW,
-        displayName: QUALIFICATION_EXECUTION.displayName,
+        ...REVIEW,
+        displayName: EXECUTION.displayName,
       };
       const isolated = await startIsolatedT3({
         binary: t3Binary as string,
-        home: operatorHome,
-        providerInstances: [QUALIFICATION_EXECUTION, ambiguousReview],
+        providerInstances: [EXECUTION, ambiguousReview],
         scratch: scratch.root,
       });
       teardown.push(isolated.stop);
@@ -252,16 +233,13 @@ describe.skipIf(!t3Binary)(
         accessToken: isolated.accessToken,
         baseUrl: isolated.baseUrl,
       });
-      const models = await readyModelsFor(client, [
-        QUALIFICATION_EXECUTION,
-        ambiguousReview,
-      ]);
-      const model = models.get(QUALIFICATION_EXECUTION.instanceId);
-      if (model === undefined) throw new Error("No Claude qualification model");
+      const models = await readyModelsFor(client, [EXECUTION, ambiguousReview]);
+      const model = models.get(EXECUTION.instanceId);
+      if (model === undefined) throw new Error("No qualification model");
       const providerAliases = {
         execution: {
           model,
-          providerDisplayName: QUALIFICATION_EXECUTION.displayName,
+          providerDisplayName: EXECUTION.displayName,
         },
       };
       const threadsBefore = (await client.getShell()).threads.length;

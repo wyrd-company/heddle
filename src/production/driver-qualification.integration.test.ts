@@ -20,29 +20,14 @@ import { prepareProductionFixture } from "./composition.test-support.js";
 import { createProductionComposition } from "./composition.js";
 import { resolveProductionConfiguration } from "./configuration.js";
 import {
+  CONTROLLED_QUALIFICATION_EXECUTION as EXECUTION,
+  CONTROLLED_QUALIFICATION_REVIEW as REVIEW,
+  CONTROLLED_QUALIFICATION_SECOND_DRIVER as SECOND_DRIVER,
   makeQualificationScratch,
   startIsolatedT3,
 } from "./driver-qualification.test-support.js";
 
 const t3Binary = process.env["HEDDLE_T3_INTEGRATION_BINARY"];
-const operatorHome = process.env["HOME"] ?? "";
-
-const EXECUTION = {
-  displayName: "Workbench Alpha",
-  driver: "claudeAgent",
-  instanceId: "claude-execution",
-} as const;
-const REVIEW = {
-  displayName: "Workbench Beta",
-  driver: "claudeAgent",
-  instanceId: "claude-review",
-} as const;
-const SECOND_DRIVER = {
-  displayName: "Workbench Gamma",
-  driver: "codex",
-  instanceId: "codex-execution",
-} as const;
-
 /**
  * T3 discovers installed harnesses after it begins serving, so a single early
  * read reports every provider undiscovered. Poll until the configured
@@ -158,7 +143,6 @@ describe.skipIf(!t3Binary)(
 
       const isolated = await startIsolatedT3({
         binary: t3Binary as string,
-        home: operatorHome,
         providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
         scratch: scratch.root,
       });
@@ -260,7 +244,6 @@ describe.skipIf(!t3Binary)(
 
       const isolated = await startIsolatedT3({
         binary: t3Binary as string,
-        home: operatorHome,
         providerInstances: [EXECUTION, REVIEW, SECOND_DRIVER],
         scratch: scratch.root,
       });
@@ -340,6 +323,7 @@ describe.skipIf(!t3Binary)(
       // session, so the parent is live in T3's shell by then. Wait for that
       // rather than spawning from a session T3 has not started.
       const parentPhase = await (async () => {
+        let lastObservation: unknown = "thread absent";
         for (let attempt = 0; attempt < 120; attempt += 1) {
           const shell = await catalogClient.getShell();
           const thread = shell.threads.find(
@@ -347,6 +331,14 @@ describe.skipIf(!t3Binary)(
           );
           const phase =
             thread === undefined ? undefined : resolveT3AwarenessPhase(thread);
+          lastObservation =
+            thread === undefined
+              ? "thread absent"
+              : {
+                  latestTurn: thread.latestTurn,
+                  phase,
+                  session: thread.session,
+                };
 
           if (
             phase === "running" ||
@@ -362,7 +354,9 @@ describe.skipIf(!t3Binary)(
           }
           await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
         }
-        throw new Error("Parent session never became active in T3");
+        throw new Error(
+          `Parent session never became active in T3: ${JSON.stringify({ attentions: composition.attention.list(), events: composition.persistence.replayEvents(instanceId), thread: lastObservation })}`,
+        );
       })();
       expect(parentPhase).toBeDefined();
 

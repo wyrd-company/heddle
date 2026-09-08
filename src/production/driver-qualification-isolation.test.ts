@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -13,6 +13,7 @@ import {
   assertQualificationIsolation,
   LIVE_BOARD_DIRECTORY,
   LIVE_T3_PORT,
+  prepareNativeProviderHome,
   QualificationIsolationError,
 } from "./driver-qualification.test-support.js";
 
@@ -119,5 +120,45 @@ describe("qualification isolation", () => {
     const common = await readFile(join(directory, "devcontainer.json"), "utf8");
     expect(common).not.toContain("heddle-credentials");
     expect(common).not.toContain("localEnv:HOME");
+  });
+
+  it("copies only the selected native identity into disposable provider HOME", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-isolation-test-"));
+    try {
+      const sourceHome = join(root, "source-home");
+      const scratch = join(root, "scratch");
+      await mkdir(join(sourceHome, ".codex"), { recursive: true });
+      await mkdir(join(sourceHome, ".claude"), { recursive: true });
+      await writeFile(
+        join(sourceHome, ".codex", "identity.json"),
+        "selected\n",
+      );
+      await writeFile(join(sourceHome, ".claude", "identity.json"), "other\n");
+
+      await prepareNativeProviderHome({ driver: "codex", scratch, sourceHome });
+
+      expect(
+        await readFile(
+          join(scratch, "provider-home", ".codex", "identity.json"),
+          "utf8",
+        ),
+      ).toBe("selected\n");
+      await expect(
+        readFile(
+          join(scratch, "provider-home", ".claude", "identity.json"),
+          "utf8",
+        ),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+
+      await writeFile(
+        join(scratch, "provider-home", ".codex", "identity.json"),
+        "disposable-change\n",
+      );
+      expect(
+        await readFile(join(sourceHome, ".codex", "identity.json"), "utf8"),
+      ).toBe("selected\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });

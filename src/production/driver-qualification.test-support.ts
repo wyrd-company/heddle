@@ -7,7 +7,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createServer } from "node:net";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import process from "node:process";
@@ -18,6 +18,10 @@ import {
   T3ControlPlaneClient,
   type T3ProviderCatalogReader,
 } from "../control-plane/index.js";
+import {
+  resolveT3AwarenessPhase,
+  type T3ShellThread,
+} from "../control-plane/t3-agent-awareness.js";
 
 const execute = promisify(execFile);
 
@@ -84,6 +88,8 @@ export type IsolatedT3 = {
   readonly observedVersion: string;
   readonly port: number;
   readonly projectPath: string;
+  readonly providerHome: string;
+  readonly controlledProviderLog: string;
   /** Everything the isolated server has written, for diagnosing a rejection. */
   serverLog(): string;
   stop(): Promise<void>;
@@ -122,27 +128,37 @@ const readPairingToken = (server: ChildProcess): Promise<string> =>
   });
 
 export type ProviderInstanceFixture = {
+  readonly config?: Readonly<Record<string, unknown>>;
   readonly displayName: string;
   readonly driver: string;
   readonly instanceId: string;
 };
 
 /**
- * Start a real T3 whose state is isolated but whose provider identity is the
- * operator's own. `T3CODE_HOME` carries state and is scratch; `HOME` carries
- * identity and is the caller's, because separate test-only provider accounts
- * do not exist.
+ * Start a real T3 whose state and provider HOME are both scratch-owned.
+ * Non-native fixtures use the controllable credential-free provider binary.
+ * Native rows copy only their selected provider identity into this HOME from
+ * an already provider-isolated container.
  */
 export const startIsolatedT3 = async (options: {
   readonly binary: string;
-  readonly home: string;
   readonly providerInstances?: readonly ProviderInstanceFixture[];
   readonly scratch: string;
 }): Promise<IsolatedT3> => {
   const baseDirectory = join(options.scratch, "t3-base");
   const projectPath = join(options.scratch, "t3-project");
+  const providerHome = join(options.scratch, "provider-home");
+  const controlledProviderLog = join(
+    options.scratch,
+    "controlled-provider.jsonl",
+  );
   await mkdir(join(baseDirectory, "userdata"), { recursive: true });
   await mkdir(projectPath, { recursive: true });
+  await mkdir(providerHome, { recursive: true });
+  await writeFile(
+    join(providerHome, "credential-sentinel"),
+    "provider-state\n",
+  );
   if (options.providerInstances !== undefined) {
     await writeFile(
       join(baseDirectory, "userdata", "settings.json"),
@@ -154,6 +170,7 @@ export const startIsolatedT3 = async (options: {
               displayName: instance.displayName,
               driver: instance.driver,
               enabled: true,
+              config: instance.config ?? {},
             },
           ]),
         ),
@@ -212,7 +229,11 @@ export const startIsolatedT3 = async (options: {
     {
       detached: true,
       env: {
-        HOME: options.home,
+        HEDDLE_CONTROLLED_PROVIDER: "1",
+        HEDDLE_CONTROLLED_PROVIDER_LOG: controlledProviderLog,
+        HEDDLE_CONTROLLED_PROVIDER_PROBE_DELAY_MS: "1500",
+        HEDDLE_CURSOR_TEST_PROMPT_DELAY_MS: "600000",
+        HOME: providerHome,
         LANG: "C.UTF-8",
         NO_COLOR: "1",
         PATH: `${dirname(process.execPath)}:${dirname(options.binary)}:${process.env["PATH"] ?? ""}`,
@@ -281,12 +302,46 @@ export const startIsolatedT3 = async (options: {
       observedVersion,
       port,
       projectPath,
+      providerHome,
+      controlledProviderLog,
       serverLog: () => serverOutput,
       stop,
     };
   } catch (error) {
     await stop();
     throw error;
+  }
+};
+
+const NATIVE_CREDENTIAL_PATHS: Readonly<Record<string, readonly string[]>> = {
+  "claude-code": [".claude", ".claude.json"],
+  codex: [".codex"],
+  cursor: [".cursor", ".config/cursor"],
+  grok: [".grok"],
+  opencode: [".config/opencode", ".local/share/opencode"],
+};
+
+/** Copy only one provider identity from the disposable row container. */
+export const prepareNativeProviderHome = async (options: {
+  readonly driver: string;
+  readonly scratch: string;
+  readonly sourceHome: string;
+}): Promise<void> => {
+  const paths = NATIVE_CREDENTIAL_PATHS[options.driver];
+  if (paths === undefined) {
+    throw new QualificationIsolationError(
+      `No isolated credential map exists for '${options.driver}'`,
+    );
+  }
+  const targetHome = join(options.scratch, "provider-home");
+  await mkdir(targetHome, { recursive: true });
+  for (const relative of paths) {
+    const target = join(targetHome, relative);
+    await mkdir(dirname(target), { recursive: true });
+    await cp(join(options.sourceHome, relative), target, {
+      dereference: true,
+      recursive: true,
+    });
   }
 };
 
@@ -344,6 +399,40 @@ export const QUALIFICATION_OPENCODE = {
   driver: "opencode",
   instanceId: "opencode-execution",
 } as const;
+
+const CONTROLLED_PROVIDER_BINARY = resolve(
+  "src/control-plane/fixtures/cursor-agent.mjs",
+);
+
+export const CONTROLLED_QUALIFICATION_EXECUTION = {
+  config: { binaryPath: CONTROLLED_PROVIDER_BINARY },
+  displayName: "Workbench Alpha",
+  driver: "cursor",
+  instanceId: "claude-execution",
+} as const;
+
+export const CONTROLLED_QUALIFICATION_REVIEW = {
+  config: { binaryPath: CONTROLLED_PROVIDER_BINARY },
+  displayName: "Workbench Beta",
+  driver: "cursor",
+  instanceId: "claude-review",
+} as const;
+
+export const CONTROLLED_QUALIFICATION_SECOND_DRIVER = {
+  config: {
+    binaryPath: CONTROLLED_PROVIDER_BINARY,
+    customModels: ["default"],
+  },
+  displayName: "Workbench Gamma",
+  driver: "grok",
+  instanceId: "codex-execution",
+} as const;
+
+export const CONTROLLED_QUALIFICATION_INSTANCES = [
+  CONTROLLED_QUALIFICATION_EXECUTION,
+  CONTROLLED_QUALIFICATION_REVIEW,
+  CONTROLLED_QUALIFICATION_SECOND_DRIVER,
+] as const;
 
 export const QUALIFICATION_INSTANCES = [
   QUALIFICATION_EXECUTION,
@@ -488,6 +577,40 @@ export type NativeDriverEvidence = {
 export const nativeDriverEvidenceLine = (
   evidence: NativeDriverEvidence,
 ): string => `HEDDLE_NATIVE_EVIDENCE ${JSON.stringify(evidence)}`;
+
+/**
+ * Return a failure row only for T3's explicit provider session/prompt error.
+ * A terminal session error or an unfinished turn is not provider evidence.
+ */
+export const nativeProviderTurnFailureEvidenceLine = (
+  thread: T3ShellThread | undefined,
+  expectedProvider: string,
+  evidence: Omit<NativeDriverEvidence, "result">,
+): string | null => {
+  const providerFailurePrefix = `Provider adapter request failed (${expectedProvider}) for session/prompt:`;
+  if (
+    thread === undefined ||
+    resolveT3AwarenessPhase(thread) !== "failed" ||
+    thread.latestTurn?.state !== "error" ||
+    !thread.session?.lastError?.startsWith(providerFailurePrefix)
+  ) {
+    return null;
+  }
+  return nativeDriverEvidenceLine({
+    advanceResult: evidence.advanceResult,
+    benignFileAction: evidence.benignFileAction,
+    driver: evidence.driver,
+    listProvidersResult: evidence.listProvidersResult,
+    model: evidence.model,
+    providerAlias: evidence.providerAlias,
+    providerCliVersion: evidence.providerCliVersion,
+    providerInstanceId: evidence.providerInstanceId,
+    result: "provider-turn-failed",
+    runtimeMode: evidence.runtimeMode,
+    spawnResult: evidence.spawnResult,
+    version: evidence.version,
+  });
+};
 
 /**
  * Wait until every configured instance has finished discovery and reports a
