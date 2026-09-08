@@ -90,18 +90,30 @@ printf '%s\\n' "$@" >> "$HEDDLE_QUALIFICATION_INVOCATION"
   });
 
   it("refuses a non-executable pinned-T3 path", async () => {
-    await expect(
-      execute("scripts/deployment/qualify-pinned-t3.sh", [], {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          HEDDLE_T3_INTEGRATION_BINARY: "/tmp/missing-fixture-t3",
-        },
-      }),
-    ).rejects.toMatchObject({
-      stderr: expect.stringContaining(
-        "HEDDLE_T3_INTEGRATION_BINARY must name an executable pinned T3 binary",
-      ),
-    });
+    const root = await mkdtemp(join(tmpdir(), "heddle-unusable-t3-command-"));
+    try {
+      const npx = join(root, "npx");
+      const t3 = join(root, "t3");
+      await writeFile(npx, "#!/usr/bin/env bash\nexit 0\n");
+      await writeFile(t3, "not executable\n");
+      await chmod(npx, 0o755);
+
+      await expect(
+        execute("scripts/deployment/qualify-pinned-t3.sh", [], {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            HEDDLE_T3_INTEGRATION_BINARY: t3,
+            PATH: `${root}:${process.env["PATH"] ?? ""}`,
+          },
+        }),
+      ).rejects.toMatchObject({
+        stderr: expect.stringContaining(
+          "HEDDLE_T3_INTEGRATION_BINARY must name an executable pinned T3 binary",
+        ),
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });
