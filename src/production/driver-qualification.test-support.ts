@@ -407,9 +407,18 @@ export const PREFERRED_MODEL_SLUGS: Readonly<Record<string, string>> = {
   "opencode-execution": "opencode-go/deepseek-v4-flash",
 };
 
+export class QualificationModelSelectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QualificationModelSelectionError";
+  }
+}
+
 /**
- * Resolve the model each instance should run, preferring the operator's
- * least-expensive choice when the live catalog offers it.
+ * Resolve the operator-approved least-expensive model for every instance.
+ * Qualification must stop before dispatch when the live catalog does not
+ * offer that exact slug; selecting another model would spend provider budget
+ * without operator approval.
  */
 export const preferredModelsFor = async (
   client: T3ProviderCatalogReader,
@@ -419,14 +428,22 @@ export const preferredModelsFor = async (
   const ready = await readyModelsFor(client, instances, attempts);
   const catalog = await client.readProviderCatalog();
   const resolved = new Map(ready);
-  for (const row of catalog) {
-    const preferred = PREFERRED_MODEL_SLUGS[row.instanceId];
-    if (
-      preferred !== undefined &&
-      row.models.some(({ slug }) => slug === preferred)
-    ) {
-      resolved.set(row.instanceId, preferred);
+  for (const instance of instances) {
+    const preferred = PREFERRED_MODEL_SLUGS[instance.instanceId];
+    if (preferred === undefined) {
+      throw new QualificationModelSelectionError(
+        `Provider instance '${instance.instanceId}' has no operator-approved qualification model`,
+      );
     }
+    const row = catalog.find(
+      ({ instanceId }) => instanceId === instance.instanceId,
+    );
+    if (!row?.models.some(({ slug }) => slug === preferred)) {
+      throw new QualificationModelSelectionError(
+        `Provider instance '${instance.instanceId}' does not expose operator-approved qualification model '${preferred}'`,
+      );
+    }
+    resolved.set(instance.instanceId, preferred);
   }
   return resolved;
 };
