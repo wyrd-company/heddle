@@ -322,6 +322,21 @@ if (process.argv.includes("--version")) {
     expect(safeT3StartupDiagnostic(output)).toBe(expected);
   });
 
+  it.each([
+    [
+      "client secret",
+      'Error: {"client_secret":"client-value"}',
+      'Error: {"client_secret":"[redacted]"}',
+    ],
+    [
+      "refresh token",
+      'Error: {"refresh_token":"refresh-value"}',
+      'Error: {"refresh_token":"[redacted]"}',
+    ],
+  ])("redacts an exact structured OAuth %s", (_name, output, expected) => {
+    expect(safeT3StartupDiagnostic(output)).toBe(expected);
+  });
+
   it("bounds the startup classification", () => {
     const bounded = safeT3StartupDiagnostic(
       `Fatal: fixture stopped ${"x".repeat(70_000)}`,

@@ -152,11 +152,11 @@ export const safeT3StartupDiagnostic = (output: string): string => {
       "$1$2$3[redacted]$3",
     )
     .replace(
-      /\b(api[_-]?key|access[_-]?token|secret|token)(["']?\s*[:=]\s*)[^"'\s,}\]][^\s,}\]]*/gi,
+      /\b(api[_-]?key|(?:[a-z0-9]+[_-])+(?:secret|token|key)|secret|token)(["']?\s*[:=]\s*)[^"'\s,}\]][^\s,}\]]*/gi,
       "$1$2[redacted]",
     )
     .replace(
-      /\b(api[_-]?key|access[_-]?token|secret|token)(["']?\s*[:=]\s*)(["'])(.*?)\3/gi,
+      /\b(api[_-]?key|(?:[a-z0-9]+[_-])+(?:secret|token|key)|secret|token)(["']?\s*[:=]\s*)(["'])(.*?)\3/gi,
       "$1$2$3[redacted]$3",
     )
     .replace(/(["']?)\bBearer(\s+)[^"'\s,}\]]+\1/gi, "$1Bearer$2[redacted]$1");
