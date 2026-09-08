@@ -4,6 +4,7 @@
 // ---
 
 import {
+  access,
   lstat,
   mkdir,
   mkdtemp,
@@ -17,6 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
+import process from "node:process";
 
 import { describe, expect, it } from "vitest";
 
@@ -26,6 +28,7 @@ import {
   LIVE_T3_PORT,
   prepareNativeProviderHome,
   QualificationIsolationError,
+  startIsolatedT3,
 } from "./driver-qualification.test-support.js";
 
 const scratch = tmpdir();
@@ -93,6 +96,26 @@ describe("qualification isolation", () => {
         stateDirectory: "/var/lib/heddle",
       }),
     ).toThrow(QualificationIsolationError);
+  });
+
+  it("refuses an external scratch path before creating fixture state", async () => {
+    const parent = await mkdtemp(
+      join(process.cwd(), "qualification-forbidden-scratch-"),
+    );
+    const forbiddenScratch = join(parent, "surface");
+    try {
+      const failure = await startIsolatedT3({
+        binary: join(parent, "unused-t3"),
+        scratch: forbiddenScratch,
+      }).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(QualificationIsolationError);
+      await expect(access(forbiddenScratch)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await rm(parent, { force: true, recursive: true });
+    }
   });
 
   it("gives each native row only its selected provider credential store", async () => {

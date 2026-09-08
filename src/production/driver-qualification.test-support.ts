@@ -232,6 +232,14 @@ export const startIsolatedT3 = async (options: {
     options.scratch,
     "controlled-provider.jsonl",
   );
+  const port = await allocatePort();
+  assertQualificationIsolation({
+    boardDirectory: options.scratch,
+    port,
+    stateDirectory: options.scratch,
+    t3BaseDirectory: baseDirectory,
+  });
+
   await mkdir(join(baseDirectory, "userdata"), { recursive: true });
   await mkdir(projectPath, { recursive: true });
   await mkdir(providerHome, { recursive: true });
@@ -275,14 +283,6 @@ export const startIsolatedT3 = async (options: {
     ],
     { cwd: projectPath },
   );
-
-  const port = await allocatePort();
-  assertQualificationIsolation({
-    boardDirectory: options.scratch,
-    port,
-    stateDirectory: options.scratch,
-    t3BaseDirectory: baseDirectory,
-  });
 
   const { stdout: versionOutput } = await execute(
     options.binary,
