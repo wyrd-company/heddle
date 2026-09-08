@@ -6,7 +6,7 @@
 
 import { lstat, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 /** The operator's live control plane. */
 export const LIVE_T3_PORT = 3773;
@@ -109,12 +109,24 @@ export const assertQualificationFilesystemIsolation = async (
   scratch: string,
   derivedPaths: readonly string[],
 ): Promise<void> => {
+  const lexicalScratchRoot = resolve(tmpdir());
+  const lexicalScratch = resolve(scratch);
   const [physicalScratchRoot, physicalLiveBoard, physicalScratch] =
     await Promise.all([
       filesystemIdentity(tmpdir()),
       filesystemIdentity(LIVE_BOARD_DIRECTORY),
       filesystemIdentity(scratch),
     ]);
+  const expectedPhysicalScratch = join(
+    physicalScratchRoot,
+    relative(lexicalScratchRoot, lexicalScratch),
+  );
+  if (physicalScratch !== expectedPhysicalScratch) {
+    throw new QualificationIsolationError(
+      "Refusing a scratch directory redirected from its expected physical location: " +
+        physicalScratch,
+    );
+  }
   if (
     !isWithin(physicalScratch, physicalScratchRoot) ||
     isWithin(physicalScratch, physicalLiveBoard)

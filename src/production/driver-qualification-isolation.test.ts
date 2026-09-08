@@ -119,12 +119,12 @@ describe("qualification isolation", () => {
     }
   });
 
-  it("refuses a scratch symlink before changing its external target", async () => {
+  it("refuses a scratch symlink to an unrelated temporary target before effects", async () => {
     const linkParent = await mkdtemp(
       join(tmpdir(), "qualification-scratch-link-"),
     );
     const externalTarget = await mkdtemp(
-      join(process.cwd(), "qualification-scratch-target-"),
+      join(tmpdir(), "qualification-unrelated-target-"),
     );
     const scratchLink = join(linkParent, "scratch");
     await symlink(externalTarget, scratchLink, "dir");
