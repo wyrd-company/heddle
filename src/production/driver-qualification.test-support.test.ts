@@ -15,9 +15,13 @@ import {
   preferredModelsFor,
   QUALIFICATION_SECOND_DRIVER,
   QualificationModelSelectionError,
+  requiredObservedCliVersion,
 } from "./driver-qualification.test-support.js";
 
-const catalogWithModel = (model: string): T3ProviderCatalog => [
+const catalogWithModel = (
+  model: string,
+  observedCliVersion: string | null = "1.2.3",
+): T3ProviderCatalog => [
   {
     availability: "available",
     displayName: QUALIFICATION_SECOND_DRIVER.displayName,
@@ -32,7 +36,7 @@ const catalogWithModel = (model: string): T3ProviderCatalog => [
         slug: model,
       },
     ],
-    observedCliVersion: "1.2.3",
+    observedCliVersion,
     state: "ready",
   },
 ];
@@ -86,6 +90,23 @@ describe("native qualification model approval", () => {
       }),
     ).toBe(
       'HEDDLE_NATIVE_EVIDENCE {"advanceResult":"review","benignFileAction":"native-driver-qualified","driver":"sample-driver","listProvidersResult":"selected-generated-alias","model":"sample-model","providerAlias":"sample-alias","providerCliVersion":"1.2.3","providerInstanceId":"sample-instance","result":"passed","runtimeMode":"full-access","spawnResult":"persisted-child-assignment","version":1}',
+    );
+  });
+
+  it("fails closed when T3 omits the native CLI version", async () => {
+    const reader: T3ProviderCatalogReader = {
+      readProviderCatalog: vi.fn(async () =>
+        catalogWithModel("approved-model", null),
+      ),
+    };
+
+    await expect(
+      requiredObservedCliVersion(
+        reader,
+        QUALIFICATION_SECOND_DRIVER.instanceId,
+      ),
+    ).rejects.toThrow(
+      `T3 did not report a CLI version for '${QUALIFICATION_SECOND_DRIVER.instanceId}'`,
     );
   });
 });

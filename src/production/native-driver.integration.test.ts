@@ -29,8 +29,8 @@ import {
   QUALIFICATION_OPENCODE,
   QUALIFICATION_SECOND_DRIVER,
   nativeDriverEvidenceLine,
-  observedCliVersions,
   preferredModelsFor,
+  requiredObservedCliVersion,
   startIsolatedT3,
   type IsolatedT3,
   type NativeDriverEvidence,
@@ -140,14 +140,10 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             `Qualification model was not resolved for '${instance.instanceId}'`,
           );
         }
-        const cliVersion = (await observedCliVersions(client)).get(
+        const cliVersion = await requiredObservedCliVersion(
+          client,
           instance.instanceId,
         );
-        if (cliVersion === undefined || cliVersion === null) {
-          throw new Error(
-            `T3 did not report a CLI version for '${instance.instanceId}'`,
-          );
-        }
         const providerAlias = `native-row-${globalThis.crypto
           .randomUUID()
           .replaceAll("-", "")

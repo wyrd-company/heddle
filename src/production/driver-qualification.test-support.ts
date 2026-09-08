@@ -458,6 +458,17 @@ export const observedCliVersions = async (
   );
 };
 
+export const requiredObservedCliVersion = async (
+  client: T3ProviderCatalogReader,
+  instanceId: string,
+): Promise<string> => {
+  const version = (await observedCliVersions(client)).get(instanceId);
+  if (version === undefined || version === null) {
+    throw new Error(`T3 did not report a CLI version for '${instanceId}'`);
+  }
+  return version;
+};
+
 export type NativeDriverEvidence = {
   readonly advanceResult: "review" | null;
   readonly benignFileAction: "native-driver-qualified" | null;
