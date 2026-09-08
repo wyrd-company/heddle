@@ -431,10 +431,14 @@ describe.skipIf(!t3Binary)(
       const shell = await catalogClient.getShell();
       const parentThread = shell.threads.find(
         ({ id }) => id === parentRuntime?.threadId,
-      ) as { modelSelection?: { instanceId?: string; model?: string } } | undefined;
+      ) as
+        | { modelSelection?: { instanceId?: string; model?: string } }
+        | undefined;
       const childThread = shell.threads.find(
         ({ id }) => id === child.assignment?.binding?.["threadId"],
-      ) as { modelSelection?: { instanceId?: string; model?: string } } | undefined;
+      ) as
+        | { modelSelection?: { instanceId?: string; model?: string } }
+        | undefined;
 
       expect(parentThread).toBeDefined();
       expect(childThread).toBeDefined();

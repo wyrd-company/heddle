@@ -4,6 +4,7 @@
 //   references: t3-headless
 // ---
 
+import type { Buffer } from "node:buffer";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -104,7 +105,7 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
   () => {
     it.each(DRIVER_ROWS)(
       "runs a real $alias session that calls a Heddle MCP tool",
-      async ({ alias, instance }) => {
+      async ({ instance }) => {
         const scratch = await makeQualificationScratch();
         teardown.push(scratch.cleanup);
         const fixture = await prepareProductionFixture();
