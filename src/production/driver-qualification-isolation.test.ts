@@ -91,7 +91,7 @@ describe("qualification isolation", () => {
         "${localEnv:HOME}/.claude.json",
       ],
       codex: ["${localEnv:HOME}/.codex"],
-      cursor: ["${localEnv:HOME}/.cursor"],
+      cursor: ["${localEnv:HOME}/.cursor", "${localEnv:HOME}/.config/cursor"],
       grok: ["${localEnv:HOME}/.grok"],
       opencode: [
         "${localEnv:HOME}/.config/opencode",

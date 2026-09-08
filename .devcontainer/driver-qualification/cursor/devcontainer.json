@@ -9,9 +9,10 @@
   },
   "mounts": [
     "source=${localEnv:HEDDLE_DRIVER_KANBAN},target=/usr/local/bin/kanban-md,type=bind,readonly",
-    "source=${localEnv:HOME}/.cursor,target=/run/heddle-credentials/.cursor,type=bind,readonly"
+    "source=${localEnv:HOME}/.cursor,target=/run/heddle-credentials/.cursor,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/cursor,target=/run/heddle-credentials/config,type=bind,readonly"
   ],
-  "postCreateCommand": "install -d -m 700 /home/vscode/.cursor && cp -a /run/heddle-credentials/.cursor/. /home/vscode/.cursor/",
+  "postCreateCommand": "install -d -m 700 /home/vscode/.cursor /home/vscode/.config/cursor && cp -a /run/heddle-credentials/.cursor/. /home/vscode/.cursor/ && cp -a /run/heddle-credentials/config/. /home/vscode/.config/cursor/",
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/heddle",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind"
