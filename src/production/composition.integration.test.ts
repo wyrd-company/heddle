@@ -1004,7 +1004,7 @@ describe("production composition", () => {
       }
     }
     blueprint.nodes.find(({ id }) => id === "implement")!["assign-agent-name"] =
-      "heroes";
+      "allies";
     await writeFile(
       absoluteBlueprintPath,
       `${JSON.stringify(blueprint, null, 2)}\n`,
@@ -1067,9 +1067,9 @@ describe("production composition", () => {
     const instanceId = `task-${fixture.taskId}`;
     const record = composition.persistence.getInstance(instanceId)!;
     expect(record.state.agentNames).toMatchObject({
-      assignments: { heroes: "sample-hero" },
-      kind: "soloist",
-      themeId: "sample-soloist",
+      assignments: { allies: "sample-ally" },
+      kind: "team",
+      themeId: "sample-team",
     });
     const stored = record.state.handoffs.find(isStoredHandoff);
     if (
@@ -1080,7 +1080,7 @@ describe("production composition", () => {
       throw new Error("Standard delivery activation has no stored handoff");
     }
     expect(JSON.parse(stored.handoff)).toMatchObject({
-      stage: { agentName: "sample-hero", name: "implement" },
+      stage: { agentName: "sample-ally", name: "implement" },
     });
     const pinnedTemplate = await execute(
       "git",
@@ -1163,7 +1163,7 @@ describe("production composition", () => {
     await composition.close();
   });
 
-  it("assigns an epic child a team name before rendering its stage handoff", async () => {
+  it("assigns an epic child the soloist name required by its blueprint", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     const templatePath = join(
@@ -1206,7 +1206,7 @@ describe("production composition", () => {
       await readFile(blueprintPath, "utf8"),
     ) as LifecycleBlueprint;
     const implement = blueprint.nodes.find(({ id }) => id === "implement")!;
-    implement["assign-agent-name"] = "allies";
+    implement["assign-agent-name"] = "heroes";
     implement["handoff-template"]!.commitSha = templateCommitSha;
     await writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`);
     await execute("git", ["add", "blueprints/sample.json"], {
@@ -1247,16 +1247,16 @@ describe("production composition", () => {
       `task-${fixture.taskId}`,
     )!;
     expect(record.state.agentNames).toEqual({
-      assignments: { allies: "sample-ally" },
+      assignments: { heroes: "sample-hero" },
       catalogCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
-      kind: "team",
-      themeId: "sample-team",
+      kind: "soloist",
+      themeId: "sample-soloist",
     });
     const stored = record.state.handoffs.find(isStoredHandoff)!;
     expect(JSON.parse(stored.handoff)).toMatchObject({
-      stage: { agentName: "sample-ally", name: "implement" },
+      stage: { agentName: "sample-hero", name: "implement" },
     });
-    expect(stored.renderedHandoff).toContain("Agent: sample-ally");
+    expect(stored.renderedHandoff).toContain("Agent: sample-hero");
     await composition.close();
   });
 

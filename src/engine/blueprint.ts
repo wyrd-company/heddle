@@ -11,7 +11,11 @@ import {
 } from "flowcraft";
 
 import { BlueprintValidationError } from "./errors.js";
-import { agentNameListNames } from "../agent-names/index.js";
+import {
+  agentNameListNames,
+  agentNameThemeKindForList,
+  type AgentNameThemeKind,
+} from "../agent-names/index.js";
 import { RESOLVED_SESSION_RUNTIME_MODES } from "../persistence/index.js";
 import {
   isProviderAlias,
@@ -37,6 +41,25 @@ const dispositionPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const placeholderNode: NodeFunction = async () => ({ output: null });
 const mechanicalNodeUseSet = new Set<string>(mechanicalNodeUses);
 const agentNameListNameSet = new Set<string>(agentNameListNames);
+export const agentNameThemeKindForBlueprint = (
+  blueprint: LifecycleBlueprint,
+): AgentNameThemeKind | undefined => {
+  const lists = new Set(
+    blueprint.nodes.flatMap((node) =>
+      node["assign-agent-name"] === undefined
+        ? []
+        : [node["assign-agent-name"]],
+    ),
+  );
+  if (lists.size === 0) return undefined;
+  const kinds = new Set([...lists].map(agentNameThemeKindForList));
+  if (kinds.size !== 1) {
+    throw new BlueprintValidationError(
+      `Blueprint agent-name lists require more than one theme kind: ${JSON.stringify([...lists].sort())}`,
+    );
+  }
+  return kinds.values().next().value;
+};
 
 export const validateTaskProviderAliases = (
   blueprint: LifecycleBlueprint,
@@ -116,6 +139,7 @@ export const validateBlueprint = (
   effects: Record<string, LifecycleEffect>,
 ): void => {
   validateBlueprintBoardStatuses(blueprint);
+  agentNameThemeKindForBlueprint(blueprint);
   const nodeIds = new Set<string>();
   for (const node of blueprint.nodes) {
     if (nodeIds.has(node.id)) {

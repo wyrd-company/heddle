@@ -242,6 +242,34 @@ describe("organization lifecycle blueprint artifacts", () => {
     ]);
   });
 
+  it("rejects a blueprint whose agent-name lists span theme kinds", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["assign-agent-name"] =
+      "allies";
+    invalid.nodes.push({
+      ...(invalid.nodes[1] as Record<string, unknown>),
+      "assign-agent-name": "heroes",
+      id: "judge",
+    });
+    invalid.edges.push({ source: "judge", target: "finish" });
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow("require more than one theme kind");
+  });
+
+  it("rejects a blueprint when no theme provides its required kind", async () => {
+    const invalid = artifact();
+    (invalid.nodes[1] as Record<string, unknown>)["assign-agent-name"] =
+      "heroes";
+
+    await expect(
+      validateBlueprintRepository(await repository(invalid)),
+    ).rejects.toThrow(
+      'requires soloist agent-name lists ["heroes"], but no theme provides them',
+    );
+  });
+
   it("rejects an unknown agent-name list through the lifecycle schema", async () => {
     const invalid = artifact();
     (invalid.nodes[1] as Record<string, unknown>)["assign-agent-name"] =

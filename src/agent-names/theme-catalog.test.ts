@@ -12,6 +12,7 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  agentNameThemeKindForList,
   GitAgentNameThemeCatalog,
   validateAgentNameThemeRepository,
 } from "./theme-catalog.js";
@@ -68,6 +69,19 @@ afterEach(async () => {
 });
 
 describe("agent-name theme catalog", () => {
+  it.each([
+    ["leader", "team"],
+    ["companions", "team"],
+    ["allies", "team"],
+    ["antagonists", "team"],
+    ["neutrals", "team"],
+    ["heroes", "soloist"],
+    ["villains", "soloist"],
+    ["bystanders", "soloist"],
+  ] as const)("maps the %s list to the %s theme kind", (list, kind) => {
+    expect(agentNameThemeKindForList(list)).toBe(kind);
+  });
+
   it("loads an exact Git commit instead of mutable working-tree content", async () => {
     const root = await repository();
     const commit = (

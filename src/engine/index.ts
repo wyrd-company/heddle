@@ -30,6 +30,7 @@ export type {
 } from "./git-blueprint-store.js";
 export { LifecycleEngine } from "./lifecycle-engine.js";
 export {
+  agentNameThemeKindForBlueprint,
   boardStatusForMechanicalNode,
   validateBlueprintBoardStatuses,
   validateTaskProviderAliases,

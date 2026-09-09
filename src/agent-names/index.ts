@@ -11,6 +11,7 @@ export {
   AgentNameCatalogError,
   GitAgentNameThemeCatalog,
   agentNameListNames,
+  agentNameThemeKindForList,
   namesForThemeList,
   validateAgentNameThemeRepository,
   type AgentNameListName,

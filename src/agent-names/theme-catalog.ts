@@ -33,6 +33,17 @@ export const agentNameListNames = [
 export type AgentNameListName = (typeof agentNameListNames)[number];
 export type AgentNameThemeKind = "soloist" | "team";
 
+export const agentNameThemeKindForList = (
+  list: AgentNameListName,
+): AgentNameThemeKind =>
+  list === "leader" ||
+  list === "companions" ||
+  list === "allies" ||
+  list === "antagonists" ||
+  list === "neutrals"
+    ? "team"
+    : "soloist";
+
 type ThemeArtifact = {
   $schema: string;
   kind: AgentNameThemeKind;

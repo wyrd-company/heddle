@@ -126,6 +126,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     );
   }
 
+  private async prepareAgentNames(instanceId: string): Promise<void> {
+    if (this.agentNames === undefined) return;
+    const kind = await this.lifecycle.agentNameThemeKind(instanceId);
+    if (kind !== undefined) await this.agentNames.prepareTask(instanceId, kind);
+  }
+
   async listInstances(): Promise<ReconcilerInstance[]> {
     const runtimes = this.persistence.listReconcilerRuntime();
     const runtimeByInstanceId = new Map(
@@ -228,10 +234,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             ({ sessionKey }) => sessionKey === starting.sessionKey,
           );
     if (retainedSession !== undefined) {
-      await this.agentNames?.prepareTask(
-        input.instanceId,
-        input.task.parent === undefined ? "soloist" : "team",
-      );
+      await this.prepareAgentNames(input.instanceId);
       starting = {
         ...starting,
         provider: retainedSession.binding.providerInstanceId,
@@ -252,10 +255,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         input.task.id,
         input.task.providerAlias,
       );
-      await this.agentNames?.prepareTask(
-        input.instanceId,
-        input.task.parent === undefined ? "soloist" : "team",
-      );
+      await this.prepareAgentNames(input.instanceId);
       if (stageId === undefined) {
         this.persistence.writeReconcilerRuntime(starting);
       } else {
@@ -445,7 +445,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         );
       }
     }
-    await this.agentNames?.prepareTask(runtime.incidentId, "soloist");
+    await this.prepareAgentNames(runtime.incidentId);
     const priorSessions = this.persistence
       .listSessionRuntime()
       .filter(

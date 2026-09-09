@@ -31,6 +31,51 @@ afterEach(async () => {
 });
 
 describe("LifecycleEngine", () => {
+  it("reads the agent-name theme kind from the pinned blueprint", async () => {
+    const blueprint = sampleBlueprint();
+    Object.assign(
+      blueprint.nodes.find(({ id }) => id === "taste")!,
+      {
+        "assign-agent-name": "heroes",
+        handoff: "standard",
+        "handoff-template": {
+          commitSha: "a".repeat(40),
+          path: "handoff-templates/sample.md",
+        },
+        tools: ["advance"],
+        "todo-template": "sample",
+      },
+    );
+    const fixture = await makeFixture(blueprint);
+    await fixture.engine.plannedStartStage({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    const changed = sampleBlueprint();
+    Object.assign(
+      changed.nodes.find(({ id }) => id === "taste")!,
+      {
+        "assign-agent-name": "allies",
+        handoff: "standard",
+        "handoff-template": {
+          commitSha: "a".repeat(40),
+          path: "handoff-templates/sample.md",
+        },
+        tools: ["advance"],
+        "todo-template": "sample",
+      },
+    );
+    await writeFile(
+      join(fixture.repositoryRoot, fixture.blueprintPath),
+      JSON.stringify(changed),
+    );
+
+    await expect(fixture.engine.agentNameThemeKind("sample-a")).resolves.toBe(
+      "soloist",
+    );
+    fixture.persistence.close();
+  });
+
   it("starts at a wait node and records the blueprint git blob", async () => {
     const fixture = await makeFixture();
 

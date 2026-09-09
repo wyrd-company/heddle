@@ -14,6 +14,7 @@ import {
 } from "../engine/index.js";
 import type { SqlitePersistence } from "../persistence/index.js";
 import type { TaskProviderAliasMap } from "../provider-alias.js";
+import type { AgentNameThemeKind } from "../agent-names/index.js";
 
 export class ProductionLifecycleRouter {
   private readonly activeTransitions = new Map<string, number>();
@@ -47,6 +48,12 @@ export class ProductionLifecycleRouter {
     aliases: TaskProviderAliasMap | undefined,
   ): Promise<void> {
     return this.engine.validateTaskProviderAliases(instanceId, taskId, aliases);
+  }
+
+  agentNameThemeKind(
+    instanceId: string,
+  ): Promise<AgentNameThemeKind | undefined> {
+    return this.engine.agentNameThemeKind(instanceId);
   }
 
   resume(input: ResumeLifecycleInput): Promise<LifecycleSnapshot> {

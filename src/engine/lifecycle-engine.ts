@@ -8,6 +8,7 @@ import type { WorkflowResult } from "flowcraft";
 import type { InstanceRecord } from "../persistence/index.js";
 import { attentionFor, flushPendingAttentions } from "./attention-outbox.js";
 import {
+  agentNameThemeKindForBlueprint,
   dispositionsForNode,
   edgeForDisposition,
   expectedLanding,
@@ -15,6 +16,7 @@ import {
   validateBlueprint,
   validateTaskProviderAliases,
 } from "./blueprint.js";
+import type { AgentNameThemeKind } from "../agent-names/index.js";
 import {
   BlueprintValidationError,
   InvalidDispositionError,
@@ -132,6 +134,22 @@ export class LifecycleEngine {
     );
     validateBlueprint(blueprint, this.effects);
     validateTaskProviderAliases(blueprint, taskId, aliases);
+  }
+
+  async agentNameThemeKind(
+    instanceId: string,
+  ): Promise<AgentNameThemeKind | undefined> {
+    const record = this.persistence.getInstance(instanceId);
+    if (record === undefined) {
+      throw new Error(`Instance does not exist: ${instanceId}`);
+    }
+    const context = readLifecycleContext(record);
+    const blueprint = await this.blueprintStore.read(
+      context.blueprintBlobHash,
+      context.blueprintPath,
+    );
+    validateBlueprint(blueprint, this.effects);
+    return agentNameThemeKindForBlueprint(blueprint);
   }
 
   async start(input: StartLifecycleInput): Promise<LifecycleSnapshot> {

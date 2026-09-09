@@ -10,8 +10,15 @@ import { promisify } from "node:util";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
 
-import { validateAgentNameThemeRepository } from "../agent-names/index.js";
-import { validateBlueprint } from "./blueprint.js";
+import {
+  namesForThemeList,
+  validateAgentNameThemeRepository,
+  type AgentNameTheme,
+} from "../agent-names/index.js";
+import {
+  agentNameThemeKindForBlueprint,
+  validateBlueprint,
+} from "./blueprint.js";
 import { isBlueprintArtifactId } from "./blueprint-artifact.js";
 import { BlueprintValidationError } from "./errors.js";
 import type {
@@ -184,11 +191,40 @@ const assertDeliveryHandoffs = (
   }
 };
 
+const assertAgentNameThemeAvailability = (
+  artifactId: string,
+  blueprint: LifecycleBlueprint,
+  themes: readonly AgentNameTheme[],
+): void => {
+  const kind = agentNameThemeKindForBlueprint(blueprint);
+  if (kind === undefined) return;
+  const lists = [
+    ...new Set(
+      blueprint.nodes.flatMap((node) =>
+        node["assign-agent-name"] === undefined
+          ? []
+          : [node["assign-agent-name"]],
+      ),
+    ),
+  ];
+  if (
+    !themes.some(
+      (theme) =>
+        theme.kind === kind &&
+        lists.every((list) => namesForThemeList(theme, list) !== undefined),
+    )
+  ) {
+    throw new BlueprintValidationError(
+      `Blueprint '${artifactId}' requires ${kind} agent-name lists ${JSON.stringify(lists.sort())}, but no theme provides them`,
+    );
+  }
+};
+
 export const validateBlueprintRepository = async (
   repositoryRoot: string,
 ): Promise<string[]> => {
   const root = resolve(repositoryRoot);
-  await validateAgentNameThemeRepository(root);
+  const themes = await validateAgentNameThemeRepository(root);
   const directory = join(root, "blueprints");
   const filenames = (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && extname(entry.name) === ".json")
@@ -221,6 +257,7 @@ export const validateBlueprintRepository = async (
       id: artifactId,
     } as LifecycleBlueprint;
     validateBlueprint(blueprint, effectCatalog(blueprint));
+    assertAgentNameThemeAvailability(artifactId, blueprint, themes);
     assertTemplateRelationships(
       artifactId,
       artifact as Record<string, unknown>,
