@@ -94,11 +94,11 @@ describe("SqlitePersistence", () => {
     });
     first.close();
     const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
-    const {
-      candidatePosition: _position,
-      skippedCandidates: _skipped,
-      ...legacy
-    } = current;
+    const legacy = Object.fromEntries(
+      Object.entries(current).filter(
+        ([key]) => key !== "candidatePosition" && key !== "skippedCandidates",
+      ),
+    );
     database
       .prepare(
         "UPDATE heddle_session_runtime SET binding_json = ? WHERE session_key = ?",

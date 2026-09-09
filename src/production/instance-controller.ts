@@ -1427,8 +1427,8 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const sessionRuntime: SessionRuntimeRecord = {
       activation,
       binding,
-      ...(intendedSession === undefined ||
-      intendedSession.bindingState === "provisional"
+      ...((replacementBinding === undefined && intendedSession === undefined) ||
+      intendedSession?.bindingState === "provisional"
         ? { bindingState: "provisional" as const }
         : {}),
       instanceId,
