@@ -266,13 +266,18 @@ describe("organization lifecycle blueprint artifacts", () => {
   });
 
   it("rejects a blueprint when no theme provides its required kind", async () => {
-    const invalid = artifact();
+    const root = await repository();
+    const invalid = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
     (invalid.nodes[1] as Record<string, unknown>)["assign-agent-name"] =
       "heroes";
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(invalid, null, 2)}\n`,
+    );
 
-    await expect(
-      validateBlueprintRepository(await repository(invalid)),
-    ).rejects.toThrow(
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
       'requires soloist agent-name lists ["heroes"], but no theme provides them',
     );
   });
