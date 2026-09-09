@@ -358,6 +358,55 @@ describe("workflow MCP escalation tools", () => {
     ).not.toThrow();
   });
 
+  it("validates and carries a value answer with prose into its delivered turn", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-value", [
+      { sessionKey: "top", token: "token-value", tools: ["escalate"] },
+    ]);
+    const client = await connectEscalationClient(
+      subject.url,
+      "token-value",
+      "value-client",
+    );
+    await client.callTool({
+      arguments: {
+        escalationId: "reference-value",
+        questions: [
+          {
+            id: "reference",
+            kind: "value",
+            prompt: "Which sample reference should be used?",
+            validation: { maxLength: 8, minLength: 4 },
+          },
+        ],
+      },
+      name: "escalate",
+    });
+
+    const answer = {
+      escalationId: "reference-value",
+      instanceId: "instance-value",
+      ownerSessionKey: "top",
+    };
+    await expect(
+      subject.coordinator.answerAsOperator({
+        ...answer,
+        answers: { reference: "A12" },
+      }),
+    ).rejects.toThrow(/value validation/);
+    await subject.coordinator.answerAsOperator({
+      ...answer,
+      answers: { reference: "AB12" },
+      prose: "Use this reference for the current sample.",
+    });
+
+    expect(subject.deliveredAnswers).toHaveLength(1);
+    expect(subject.deliveredAnswers[0]?.message).toContain("Answer: AB12");
+    expect(subject.deliveredAnswers[0]?.message).toContain(
+      "Additional context: Use this reference for the current sample.",
+    );
+  });
+
   it("allows only a parent correlation token to answer its child", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-family", [
