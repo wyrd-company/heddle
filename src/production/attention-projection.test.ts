@@ -297,12 +297,12 @@ describe("production attention projection", () => {
     expect(stale.actions).toMatchObject([{ actionId: "attention.resolve" }]);
   });
 
-  it("fails closed on identity, task, and catalog disagreement", () => {
-    expect(() =>
+  it("accepts unclassified errors and fails closed on identity and task disagreement", () => {
+    expect(
       projectProductionAttention(
         record("attention-production", {
           code: "unregistered-production-failure",
-          incidentId: null,
+          incidentId: productionErrorIncidentId("attention-production"),
           instanceId: null,
           kind: "production-error",
           message: "Production failed",
@@ -310,7 +310,7 @@ describe("production attention projection", () => {
         }),
         [],
       ),
-    ).toThrow("has undeclared production error code");
+    ).toMatchObject({ incidentId: expect.stringMatching(/^incident:/) });
     expect(() =>
       projectProductionAttention(
         record("attention-production", {

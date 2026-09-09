@@ -36,8 +36,8 @@ export {
 export {
   createProductionErrorAttention,
   notificationDeliveryErrorAttention,
+  operatorOnlyProductionErrorCodes,
   productionErrorAttention,
-  productionErrorCodeDeclarations,
   productionErrorIncidentEligible,
   productionErrorIncidentId,
   type NotificationDeliveryAttention,

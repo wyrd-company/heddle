@@ -75,6 +75,15 @@ export const initializePersistenceSchema = (
     CREATE INDEX IF NOT EXISTS heddle_incident_runtime_code_time
       ON heddle_incident_runtime(code, created_at);
 
+    CREATE TABLE IF NOT EXISTS heddle_incident_admission (
+      attention_id TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      failure_count INTEGER NOT NULL CHECK (failure_count > 0),
+      last_failure_at INTEGER NOT NULL CHECK (last_failure_at >= 0),
+      next_attempt_at INTEGER NOT NULL CHECK (next_attempt_at >= 0),
+      state TEXT NOT NULL CHECK (state IN ('closed', 'open'))
+    );
+
     CREATE TABLE IF NOT EXISTS heddle_session_runtime (
       session_key TEXT PRIMARY KEY,
       activation INTEGER NOT NULL CHECK (activation > 0),

@@ -70,7 +70,11 @@ class FixtureInstances implements ReconcilerInstanceController {
   readonly instances: ReconcilerInstance[] = [];
   readonly starts: StartReconcilerInstanceInput[] = [];
 
-  constructor(private readonly failingStartTaskId?: number) {}
+  constructor(private failingStartTaskId?: number) {}
+
+  clearStartFailure(): void {
+    this.failingStartTaskId = undefined;
+  }
 
   async listInstances(): Promise<ReconcilerInstance[]> {
     return this.instances.map((instance) => ({ ...instance }));

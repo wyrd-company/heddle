@@ -22,7 +22,6 @@ import type {
 import type { DurableAttentionQueue } from "./durable-adapters.js";
 import {
   createProductionErrorAttention,
-  productionErrorCodeDeclarations,
   productionErrorIncidentEligible,
   productionErrorIncidentId,
   type ProductionErrorAttention,
@@ -41,9 +40,13 @@ export { sanitizeIncidentValue } from "./incident-redaction.js";
 
 export const incidentAdmissionPolicy = {
   cooldownMilliseconds: 60_000,
+  failureThreshold: 3,
   maximumConcurrent: 3,
   maximumReviewRejections: 3,
+  retryDelayMilliseconds: 1_000,
 } as const;
+
+type IncidentAdmissionPolicy = typeof incidentAdmissionPolicy;
 
 const incidentBlueprintPath = "blueprints/incident.json";
 const finalizeEffect = "incident-finalize";
@@ -64,11 +67,50 @@ const productionError = (
   if (
     payload?.["kind"] !== "production-error" ||
     typeof code !== "string" ||
-    !Object.hasOwn(productionErrorCodeDeclarations, code)
+    code.trim() === ""
   ) {
     return undefined;
   }
   return payload as ProductionErrorAttention;
+};
+
+const incidentSource = (
+  persistence: SqlitePersistence,
+  value: JsonValue,
+): ProductionErrorAttention | undefined => {
+  const declared = productionError(value);
+  if (declared !== undefined) return declared;
+  const payload = asRecord(value);
+  const attentionId = payload?.["attentionId"];
+  const instanceId = payload?.["instanceId"];
+  const kind = payload?.["kind"];
+  const message = payload?.["message"];
+  if (
+    typeof attentionId !== "string" ||
+    typeof instanceId !== "string" ||
+    typeof kind !== "string" ||
+    typeof message !== "string" ||
+    !new Set(["ended", "failed", "stalled"]).has(kind)
+  ) {
+    return undefined;
+  }
+  const runtime = persistence
+    .listReconcilerRuntime()
+    .find((candidate) => candidate.instanceId === instanceId);
+  const incident = persistence
+    .listIncidentRuntime()
+    .find((candidate) => candidate.incidentId === instanceId);
+  const taskId = runtime?.taskId ?? incident?.taskId;
+  if (taskId === undefined) return undefined;
+  return createProductionErrorAttention({
+    attentionId,
+    code:
+      incident === undefined ? `session-${kind}` : "incident-execution-failed",
+    error: new Error(message),
+    instanceId,
+    message,
+    taskId,
+  });
 };
 
 const executableOnPath = async (name: string): Promise<boolean> => {
@@ -144,7 +186,9 @@ export class ProductionIncidentCoordinator {
     private readonly lifecycle: ProductionLifecycleRouter,
     private readonly instances: ProductionInstanceController,
     private readonly options: {
+      admissionPolicy?: IncidentAdmissionPolicy;
       commandAvailable?: (name: string) => Promise<boolean>;
+      immediateEscalationCodes?: ReadonlySet<string>;
       now?: () => number;
       secrets?: readonly string[];
     } = {},
@@ -153,7 +197,7 @@ export class ProductionIncidentCoordinator {
   async reconcile(tasks: readonly BoardTask[]): Promise<void> {
     const taskIds = new Set(tasks.map(({ id }) => id));
     for (const record of this.persistence.listAttention()) {
-      const source = productionError(record.payload);
+      const source = incidentSource(this.persistence, record.payload);
       if (source === undefined) continue;
       if (!productionErrorIncidentEligible(source.code)) continue;
       if (source.taskId === null) continue;
@@ -165,14 +209,24 @@ export class ProductionIncidentCoordinator {
       ) {
         continue;
       }
+      const policy = this.options.admissionPolicy ?? incidentAdmissionPolicy;
+      const observation = this.persistence.observeIncidentFailure({
+        attentionId: source.attentionId,
+        code: source.code,
+        failureThreshold: policy.failureThreshold,
+        observedAt: this.options.now?.() ?? Date.now(),
+        retryDelayMilliseconds: policy.retryDelayMilliseconds,
+        shortCircuit: this.options.immediateEscalationCodes?.has(source.code),
+      });
+      if (observation.kind !== "breaker-open") continue;
       const incidentId = productionErrorIncidentId(source.attentionId);
       const admission = this.persistence.admitIncident({
         attentionId: source.attentionId,
         code: source.code,
-        cooldownMilliseconds: incidentAdmissionPolicy.cooldownMilliseconds,
+        cooldownMilliseconds: policy.cooldownMilliseconds,
         createdAt: this.options.now?.() ?? Date.now(),
         incidentId,
-        maximumConcurrent: incidentAdmissionPolicy.maximumConcurrent,
+        maximumConcurrent: policy.maximumConcurrent,
         ...(source.instanceId === null
           ? {}
           : { sourceInstanceId: source.instanceId }),
@@ -423,7 +477,9 @@ export class ProductionIncidentCoordinator {
   #sourceAttention(runtime: IncidentRuntimeRecord): ProductionErrorAttention {
     const record = this.persistence.getAttention(runtime.attentionId);
     const source =
-      record === undefined ? undefined : productionError(record.payload);
+      record === undefined
+        ? undefined
+        : incidentSource(this.persistence, record.payload);
     if (source === undefined) {
       throw new Error(
         `Incident source attention is unavailable: ${runtime.attentionId}`,

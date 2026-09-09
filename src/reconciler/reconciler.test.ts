@@ -1183,5 +1183,18 @@ describe("Reconciler", () => {
     await subject.reconciler.reconcile();
 
     expect(subject.attention.entries).toHaveLength(1);
+    expect(subject.instances.starts).toHaveLength(1);
+
+    subject.instances.clearStartFailure();
+    await subject.reconciler.reconcile();
+
+    expect(subject.instances.starts.map(({ task }) => task.id)).toEqual([
+      later.id,
+      failing.id,
+    ]);
+    expect(subject.attention.entries).toHaveLength(0);
+    expect(subject.attention.resolutions).toContain(
+      `production:task-reconciliation-failed:task:${failing.id}`,
+    );
   });
 });

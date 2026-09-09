@@ -26,7 +26,7 @@ import {
 } from "./incident-approval.js";
 import {
   productionErrorAttention,
-  productionErrorCodeDeclarations,
+  operatorOnlyProductionErrorCodes,
   productionErrorIncidentId,
   type ProductionErrorCode,
 } from "./error-visibility.js";
@@ -186,7 +186,9 @@ describe("production incident coordinator", () => {
 
   const createSubject = async (
     options: {
+      admissionPolicy?: typeof incidentAdmissionPolicy;
       commandAvailable?: (name: string) => Promise<boolean>;
+      immediateEscalationCodes?: ReadonlySet<string>;
       now?: () => number;
     } = {},
   ) => {
@@ -201,7 +203,14 @@ describe("production incident coordinator", () => {
       attention,
       harness.lifecycle,
       harness.instances,
-      options,
+      {
+        admissionPolicy: {
+          ...incidentAdmissionPolicy,
+          failureThreshold: 1,
+          retryDelayMilliseconds: 0,
+        },
+        ...options,
+      },
     );
     return { attention, coordinator, harness };
   };
@@ -249,15 +258,88 @@ describe("production incident coordinator", () => {
     expect(harness.boardWrites).toEqual([]);
   });
 
-  it("enumerates the centralized floor declarations and dispatches neither floor error", async () => {
+  it("opens the breaker only after later-pass retries reach the configured threshold", async () => {
+    let observedAt = 1_000;
+    const { attention, coordinator, harness } = await createSubject({
+      admissionPolicy: {
+        ...incidentAdmissionPolicy,
+        failureThreshold: 3,
+        retryDelayMilliseconds: 100,
+      },
+      now: () => observedAt,
+    });
+    await raise(attention, "unanticipated-provider-failure");
+
+    await coordinator.reconcile([task()]);
+    await coordinator.reconcile([task()]);
+    expect(persistence!.listIncidentRuntime()).toEqual([]);
+
+    observedAt += 100;
+    await coordinator.reconcile([task()]);
+    expect(persistence!.listIncidentRuntime()).toEqual([]);
+
+    observedAt += 100;
+    await coordinator.reconcile([task()]);
+    expect(harness.activations).toEqual(["implement"]);
+  });
+
+  it("allows a known failure shape to short-circuit the default retry policy", async () => {
+    const { attention, coordinator, harness } = await createSubject({
+      admissionPolicy: {
+        ...incidentAdmissionPolicy,
+        failureThreshold: 5,
+        retryDelayMilliseconds: 100,
+      },
+      immediateEscalationCodes: new Set(["known-fatal-shape"]),
+    });
+    await raise(attention, "known-fatal-shape");
+
+    await coordinator.reconcile([task()]);
+
+    expect(harness.activations).toEqual(["implement"]);
+  });
+
+  it("admits a repeated dead-session attention without a production-error declaration", async () => {
+    const { attention, coordinator, harness } = await createSubject();
+    persistence!.writeReconcilerRuntime({
+      boardStatus: "review",
+      instanceId: "sample-instance-17",
+      sessionKey: "sample-instance-17:review:1",
+      stageId: "review",
+      state: "waiting",
+      taskId: 17,
+      threadId: "sample-thread",
+    });
+    await attention.raise({
+      attentionId: "dead-session-attention",
+      instanceId: "sample-instance-17",
+      kind: "failed",
+      message: "Session failed before lifecycle advance",
+      sessionKey: "sample-instance-17:review:1",
+      threadId: "sample-thread",
+    });
+
+    await coordinator.reconcile([task()]);
+
+    expect(harness.activations).toEqual(["implement"]);
+    expect(persistence!.listIncidentRuntime()).toEqual([
+      expect.objectContaining({
+        attentionId: "dead-session-attention",
+        code: "session-failed",
+        taskId: 17,
+      }),
+    ]);
+  });
+
+  it("dispatches unclassified failures and keeps only the explicit floor out", async () => {
     const { attention, coordinator } = await createSubject();
     const floorCodes = [
       "scheduler-pass-failed",
       "dynamic-task-authority-failed",
     ] as const;
     expect(
-      floorCodes.map((code) => productionErrorCodeDeclarations[code]),
-    ).toEqual([{ incidentEligible: false }, { incidentEligible: false }]);
+      floorCodes.every((code) => operatorOnlyProductionErrorCodes.has(code)),
+    ).toBe(true);
     for (const [index, code] of floorCodes.entries()) {
       await raise(
         attention,
@@ -270,6 +352,17 @@ describe("production incident coordinator", () => {
     await coordinator.reconcile([task(1), task(2)]);
 
     expect(persistence!.listIncidentRuntime()).toEqual([]);
+
+    const source = await raise(
+      attention,
+      "unanticipated-provider-failure",
+      new Error("Synthetic unanticipated failure"),
+      3,
+    );
+    await coordinator.reconcile([task(1), task(2), task(3)]);
+    expect(persistence!.listIncidentRuntime()).toEqual([
+      expect.objectContaining({ attentionId: source.attentionId, taskId: 3 }),
+    ]);
   });
 
   it("contains a varying-text storm and retains every suppressed attention", async () => {
@@ -775,6 +868,8 @@ describe("incident admission policy", () => {
   it("declares positive storm and review bounds", () => {
     expect(incidentAdmissionPolicy.maximumConcurrent).toBeGreaterThan(0);
     expect(incidentAdmissionPolicy.cooldownMilliseconds).toBeGreaterThan(0);
+    expect(incidentAdmissionPolicy.failureThreshold).toBeGreaterThan(1);
     expect(incidentAdmissionPolicy.maximumReviewRejections).toBeGreaterThan(0);
+    expect(incidentAdmissionPolicy.retryDelayMilliseconds).toBeGreaterThan(0);
   });
 });

@@ -22,7 +22,6 @@ import {
   type AttentionPayload as Payload,
 } from "./attention-question-projection.js";
 import {
-  productionErrorCodeDeclarations,
   productionErrorIncidentEligible,
   productionErrorIncidentId,
   schedulerPassFailureCode,
@@ -280,11 +279,6 @@ export const projectProductionAttention = (
   }
   if (kind === "production-error") {
     const code = requiredIdentifier(payload, "code", attentionId);
-    if (!Object.hasOwn(productionErrorCodeDeclarations, code)) {
-      throw new Error(
-        `Attention '${attentionId}' has undeclared production error code '${code}'`,
-      );
-    }
     const productionErrorCode = code as ProductionErrorCode;
     const incidentIdValue = payload["incidentId"];
     const expectedIncidentId = productionErrorIncidentEligible(

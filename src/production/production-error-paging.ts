@@ -11,7 +11,6 @@ import {
   type ProductionErrorPagePort,
 } from "./durable-adapters.js";
 import {
-  productionErrorCodeDeclarations,
   productionErrorIncidentEligible,
   type ProductionErrorAttention,
 } from "./error-visibility.js";
@@ -194,7 +193,7 @@ export class ProductionErrorPager implements ProductionErrorPagePort {
       payload["kind"] !== "production-error" ||
       payload["attentionId"] !== record.attentionId ||
       typeof payload["code"] !== "string" ||
-      !Object.hasOwn(productionErrorCodeDeclarations, payload["code"]) ||
+      payload["code"].trim() === "" ||
       typeof payload["message"] !== "string" ||
       (payload["taskId"] !== null &&
         (!Number.isSafeInteger(payload["taskId"]) ||

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { errorDetail } from "../error-details.js";
 import {
   productionErrorAttention,
-  productionErrorCodeDeclarations,
+  operatorOnlyProductionErrorCodes,
   productionErrorIncidentEligible,
   productionErrorIncidentId,
   schedulerPassFailureAttention,
@@ -16,36 +16,20 @@ import {
 } from "./error-visibility.js";
 
 describe("production error visibility", () => {
-  it("declares incident eligibility for every production error code", () => {
-    expect(productionErrorCodeDeclarations).toEqual({
-      "board-task-absent": { incidentEligible: true },
-      "child-promotion-failed": { incidentEligible: true },
-      "dynamic-task-authority-ambiguous": { incidentEligible: true },
-      "dynamic-task-authority-conflicting": { incidentEligible: true },
-      "dynamic-task-authority-failed": { incidentEligible: false },
-      "dynamic-task-authority-malformed": { incidentEligible: true },
-      "epic-project-reconciliation-failed": { incidentEligible: true },
-      "epic-status-transition-failed": { incidentEligible: true },
-      "incident-execution-failed": { incidentEligible: false },
-      "instance-synchronization-failed": { incidentEligible: true },
-      "lifecycle-attention-bridge-failed": { incidentEligible: true },
-      "lifecycle-execution-failed": { incidentEligible: true },
-      "lifecycle-instance-absent": { incidentEligible: true },
-      "notification-delivery-recovery-required": { incidentEligible: true },
-      "notification-delivery-rejected": { incidentEligible: true },
-      "notification-delivery-retryable": { incidentEligible: true },
-      "scheduler-pass-failed": { incidentEligible: false },
-      "session-observation-failed": { incidentEligible: true },
-      "session-page-delivery-failed": { incidentEligible: true },
-      "stale-attention-failed": { incidentEligible: true },
-      "task-reconciliation-failed": { incidentEligible: true },
-      "task-status-mirror-failed": { incidentEligible: true },
-    });
-    expect(() =>
-      productionErrorIncidentEligible(
-        "unclassified-production-error" as ProductionErrorCode,
-      ),
-    ).toThrow("has no incident eligibility");
+  it("admits an unclassified production error unless it is on the operator-only floor", () => {
+    expect(operatorOnlyProductionErrorCodes).toEqual(
+      new Set([
+        "dynamic-task-authority-failed",
+        "incident-execution-failed",
+        "scheduler-pass-failed",
+      ]),
+    );
+    expect(
+      productionErrorIncidentEligible("unclassified-production-error"),
+    ).toBe(true);
+    expect(productionErrorIncidentEligible("incident-execution-failed")).toBe(
+      false,
+    );
   });
 
   it("derives one deterministic incident identity from an eligible attention identity", () => {

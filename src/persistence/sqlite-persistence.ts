@@ -43,6 +43,7 @@ import type {
   EventRow,
   InstanceEventClaim,
   IncidentAdmission,
+  IncidentFailureObservation,
   IncidentRuntimeRecord,
   InstanceRecord,
   InstanceRow,
@@ -527,6 +528,89 @@ export class SqlitePersistence {
       };
       this.writeIncidentRuntime(runtime);
       return { kind: "admitted", runtime };
+    })();
+  }
+
+  observeIncidentFailure(input: {
+    attentionId: string;
+    code: string;
+    failureThreshold: number;
+    observedAt: number;
+    retryDelayMilliseconds: number;
+    shortCircuit?: boolean;
+  }): IncidentFailureObservation {
+    this.assertStableId("attentionId", input.attentionId);
+    this.assertStableId("code", input.code);
+    if (
+      !Number.isSafeInteger(input.failureThreshold) ||
+      input.failureThreshold <= 0 ||
+      !Number.isSafeInteger(input.observedAt) ||
+      input.observedAt < 0 ||
+      !Number.isSafeInteger(input.retryDelayMilliseconds) ||
+      input.retryDelayMilliseconds < 0
+    ) {
+      throw new TypeError("Incident failure policy bounds are invalid");
+    }
+    return this.database.transaction((): IncidentFailureObservation => {
+      const prior = this.database
+        .prepare(
+          `SELECT code, failure_count AS failureCount,
+                  next_attempt_at AS nextAttemptAt, state
+           FROM heddle_incident_admission
+           WHERE attention_id = ?`,
+        )
+        .get(input.attentionId) as
+        | {
+            code: string;
+            failureCount: number;
+            nextAttemptAt: number;
+            state: "closed" | "open";
+          }
+        | undefined;
+      if (prior !== undefined && prior.code !== input.code) {
+        throw new Error("Incident failure changed durable identity");
+      }
+      if (prior?.state === "open") {
+        return { failureCount: prior.failureCount, kind: "breaker-open" };
+      }
+      if (
+        prior !== undefined &&
+        input.shortCircuit !== true &&
+        input.observedAt < prior.nextAttemptAt
+      ) {
+        return {
+          failureCount: prior.failureCount,
+          kind: "retry-waiting",
+          nextAttemptAt: prior.nextAttemptAt,
+        };
+      }
+      const failureCount = (prior?.failureCount ?? 0) + 1;
+      const open =
+        input.shortCircuit === true || failureCount >= input.failureThreshold;
+      const nextAttemptAt = input.observedAt + input.retryDelayMilliseconds;
+      this.database
+        .prepare(
+          `INSERT INTO heddle_incident_admission
+             (attention_id, code, failure_count, last_failure_at,
+              next_attempt_at, state)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(attention_id) DO UPDATE SET
+             failure_count = excluded.failure_count,
+             last_failure_at = excluded.last_failure_at,
+             next_attempt_at = excluded.next_attempt_at,
+             state = excluded.state`,
+        )
+        .run(
+          input.attentionId,
+          input.code,
+          failureCount,
+          input.observedAt,
+          nextAttemptAt,
+          open ? "open" : "closed",
+        );
+      return open
+        ? { failureCount, kind: "breaker-open" }
+        : { failureCount, kind: "retry-scheduled", nextAttemptAt };
     })();
   }
 

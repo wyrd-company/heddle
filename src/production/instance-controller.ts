@@ -550,13 +550,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   async synchronize(tasks: readonly BoardTask[]): Promise<void> {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
     for (const runtime of this.persistence.listReconcilerRuntime()) {
-      if (
-        await this.attention.has(
-          `production:task-reconciliation-failed:task:${runtime.taskId}`,
-        )
-      ) {
-        continue;
-      }
       try {
         const record = this.persistence.getInstance(runtime.instanceId);
         if (record === undefined) {
@@ -600,6 +593,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             throw error;
           });
           await this.#synchronizeSnapshot(task, runtime, snapshot);
+          await this.#resolveTaskReconciliationError(runtime);
           await this.#resolveSynchronizationError(
             runtime,
             "instance-synchronization-failed",
@@ -607,6 +601,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           continue;
         }
         await this.#synchronizeSnapshot(task, runtime, context);
+        await this.#resolveTaskReconciliationError(runtime);
         await this.#resolveSynchronizationError(
           runtime,
           "instance-synchronization-failed",
@@ -738,6 +733,15 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     code: ProductionErrorCode,
   ): Promise<void> {
     const attentionId = synchronizationAttentionId(runtime, code);
+    if (await this.attention.has(attentionId)) {
+      this.attention.resolve(attentionId);
+    }
+  }
+
+  async #resolveTaskReconciliationError(
+    runtime: ReconcilerRuntimeRecord,
+  ): Promise<void> {
+    const attentionId = `production:task-reconciliation-failed:task:${runtime.taskId}`;
     if (await this.attention.has(attentionId)) {
       this.attention.resolve(attentionId);
     }

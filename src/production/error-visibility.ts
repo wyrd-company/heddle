@@ -16,32 +16,17 @@ import type { NotificationDeliveryError } from "./durable-adapters.js";
 
 export const schedulerPassFailureCode = "scheduler-pass-failed" as const;
 
-export const productionErrorCodeDeclarations = {
-  "board-task-absent": { incidentEligible: true },
-  "child-promotion-failed": { incidentEligible: true },
-  "dynamic-task-authority-ambiguous": { incidentEligible: true },
-  "dynamic-task-authority-conflicting": { incidentEligible: true },
-  "dynamic-task-authority-failed": { incidentEligible: false },
-  "dynamic-task-authority-malformed": { incidentEligible: true },
-  "epic-project-reconciliation-failed": { incidentEligible: true },
-  "epic-status-transition-failed": { incidentEligible: true },
-  "instance-synchronization-failed": { incidentEligible: true },
-  "incident-execution-failed": { incidentEligible: false },
-  "lifecycle-attention-bridge-failed": { incidentEligible: true },
-  "lifecycle-execution-failed": { incidentEligible: true },
-  "lifecycle-instance-absent": { incidentEligible: true },
-  "notification-delivery-recovery-required": { incidentEligible: true },
-  "notification-delivery-rejected": { incidentEligible: true },
-  "notification-delivery-retryable": { incidentEligible: true },
-  [schedulerPassFailureCode]: { incidentEligible: false },
-  "session-observation-failed": { incidentEligible: true },
-  "session-page-delivery-failed": { incidentEligible: true },
-  "stale-attention-failed": { incidentEligible: true },
-  "task-reconciliation-failed": { incidentEligible: true },
-  "task-status-mirror-failed": { incidentEligible: true },
-} as const;
+/**
+ * These failures cannot safely invoke incident response. Every other production
+ * failure is admitted by retry policy without first being added to a catalog.
+ */
+export const operatorOnlyProductionErrorCodes = new Set<string>([
+  "dynamic-task-authority-failed",
+  "incident-execution-failed",
+  schedulerPassFailureCode,
+]);
 
-export type ProductionErrorCode = keyof typeof productionErrorCodeDeclarations;
+export type ProductionErrorCode = string;
 
 const floorMessage =
   "An incident cannot be raised for this error. Operator action is required.";
@@ -51,14 +36,7 @@ export const productionErrorIncidentId = (attentionId: string): string =>
 
 export const productionErrorIncidentEligible = (
   code: ProductionErrorCode,
-): boolean => {
-  if (!Object.hasOwn(productionErrorCodeDeclarations, code)) {
-    throw new Error(
-      `Production error code '${code}' has no incident eligibility`,
-    );
-  }
-  return productionErrorCodeDeclarations[code].incidentEligible;
-};
+): boolean => !operatorOnlyProductionErrorCodes.has(code);
 
 export interface ProductionErrorAttention extends Record<string, JsonValue> {
   attentionId: string;
@@ -85,6 +63,9 @@ type ProductionErrorAttentionInput = {
 export const createProductionErrorAttention = (
   input: ProductionErrorAttentionInput,
 ): ProductionErrorAttention => {
+  if (input.code.trim() === "") {
+    throw new TypeError("Production error code must not be empty");
+  }
   const incidentEligible = productionErrorIncidentEligible(input.code);
   return {
     attentionId: input.attentionId,

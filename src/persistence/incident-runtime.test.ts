@@ -28,6 +28,40 @@ afterEach(async () => {
 });
 
 describe("incident runtime persistence", () => {
+  it("persists retry attempts and opens the breaker only at the failure threshold", async () => {
+    const { stateDirectory, store } = await persistence();
+    const input = {
+      attentionId: "production:unanticipated:task:17",
+      code: "unanticipated",
+      failureThreshold: 3,
+      observedAt: 1_000,
+      retryDelayMilliseconds: 100,
+    };
+
+    expect(store.observeIncidentFailure(input)).toEqual({
+      failureCount: 1,
+      kind: "retry-scheduled",
+      nextAttemptAt: 1_100,
+    });
+    expect(
+      store.observeIncidentFailure({ ...input, observedAt: 1_050 }),
+    ).toEqual({
+      failureCount: 1,
+      kind: "retry-waiting",
+      nextAttemptAt: 1_100,
+    });
+    store.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    expect(
+      restarted.observeIncidentFailure({ ...input, observedAt: 1_100 }),
+    ).toMatchObject({ failureCount: 2, kind: "retry-scheduled" });
+    expect(
+      restarted.observeIncidentFailure({ ...input, observedAt: 1_200 }),
+    ).toEqual({ failureCount: 3, kind: "breaker-open" });
+    restarted.close();
+  });
+
   it("converges repeated admission and restart on one incident identity", async () => {
     const { stateDirectory, store } = await persistence();
     const input = {

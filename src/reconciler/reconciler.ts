@@ -606,6 +606,9 @@ export class Reconciler {
             : { repositoryName: resolution.repositoryName }),
           task: { ...task },
         });
+        await this.resolveAttention(
+          `production:task-reconciliation-failed:task:${task.id}`,
+        );
         if (dispatch !== undefined) {
           activeSessions.push({
             depth: dispatch.depth,
@@ -757,7 +760,7 @@ export class Reconciler {
     actions: ReconciliationAction[],
     instanceId?: string,
   ): Promise<void> {
-    await this.raiseAttention(
+    await this.ensureConditionAttention(
       createProductionErrorAttention({
         attentionId: `production:${code}:task:${taskId}${instanceId === undefined ? "" : `:${instanceId}`}`,
         code,

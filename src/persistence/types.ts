@@ -76,6 +76,19 @@ export type IncidentAdmission =
   | { kind: "existing"; runtime: IncidentRuntimeRecord }
   | { kind: "suppressed"; reason: "concurrency-cap" | "per-code-cooldown" };
 
+export type IncidentFailureObservation =
+  | { failureCount: number; kind: "breaker-open" }
+  | {
+      failureCount: number;
+      kind: "retry-scheduled";
+      nextAttemptAt: number;
+    }
+  | {
+      failureCount: number;
+      kind: "retry-waiting";
+      nextAttemptAt: number;
+    };
+
 export interface SchedulerPassHistoryRecord {
   episode: number;
   error: JsonValue | null;
