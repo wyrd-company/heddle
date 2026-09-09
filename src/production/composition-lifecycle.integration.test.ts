@@ -462,7 +462,7 @@ kind: standard
       taskPath,
       (await readFile(taskPath, "utf8")).replace(
         "implement: specialist",
-        "implement: unknown",
+        "absent-stage: specialist",
       ),
     );
 

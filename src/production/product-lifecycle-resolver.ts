@@ -8,8 +8,10 @@ import { mechanicalNodeUses } from "../control-plane/index.js";
 import {
   GitBlueprintStore,
   LifecycleResolver,
+  validateTaskProviderAliases as validateProviderAliases,
   type LifecycleResolution,
 } from "../engine/index.js";
+import type { TaskProviderAliasMap } from "../provider-alias.js";
 import {
   ProductRoutingCatalog,
   TaskRoutingAttentionError,
@@ -29,10 +31,20 @@ const routingAttention = (
 });
 
 export class ProductLifecycleResolver {
+  private readonly blueprintStore: GitBlueprintStore;
+  private readonly lifecycleResolver: LifecycleResolver;
+
   constructor(
     private readonly routing: ProductRoutingCatalog,
-    private readonly repository: OrganizationBlueprintRepository,
-  ) {}
+    repository: OrganizationBlueprintRepository,
+  ) {
+    this.blueprintStore = new GitBlueprintStore(repository.repositoryRoot, {
+      sourceRef: repository.sourceRef,
+    });
+    this.lifecycleResolver = new LifecycleResolver(repository.repositoryRoot, {
+      sourceRef: repository.sourceRef,
+    });
+  }
 
   async resolve(task: BoardTask): Promise<LifecycleResolution> {
     try {
@@ -43,14 +55,9 @@ export class ProductLifecycleResolver {
       }
       throw error;
     }
-    const resolution = await new LifecycleResolver(
-      this.repository.repositoryRoot,
-      { sourceRef: this.repository.sourceRef },
-    ).resolve(task);
+    const resolution = await this.lifecycleResolver.resolve(task);
     if (resolution.kind === "attention-required") return resolution;
-    const pinned = await new GitBlueprintStore(this.repository.repositoryRoot, {
-      sourceRef: this.repository.sourceRef,
-    }).pin(resolution.blueprintPath);
+    const pinned = await this.blueprintStore.pin(resolution.blueprintPath);
     const repositoryBoundUses = new Set<string>([
       "wait",
       ...mechanicalNodeUses,
@@ -68,5 +75,18 @@ export class ProductLifecycleResolver {
       throw error;
     }
     return resolution;
+  }
+
+  async validateTaskProviderAliases(
+    task: BoardTask,
+    aliases: TaskProviderAliasMap | undefined,
+  ): Promise<void> {
+    if (aliases === undefined) return;
+    const resolution = await this.lifecycleResolver.resolve(task);
+    if (resolution.kind === "attention-required") {
+      throw new Error(resolution.attention.message);
+    }
+    const pinned = await this.blueprintStore.pin(resolution.blueprintPath);
+    validateProviderAliases(pinned.blueprint, task.id, aliases);
   }
 }

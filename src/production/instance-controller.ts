@@ -32,13 +32,15 @@ import type {
   ReconcilerRuntimeRecord,
   SqlitePersistence,
 } from "../persistence/index.js";
-import type {
-  DeferReconcilerInstanceInput,
-  ReconcilerInstance,
-  ReconcilerAttentionQueue,
-  ReconcilerInstanceController,
-  StartReconcilerInstanceInput,
+import {
+  instanceIdForTask,
+  type DeferReconcilerInstanceInput,
+  type ReconcilerInstance,
+  type ReconcilerAttentionQueue,
+  type ReconcilerInstanceController,
+  type StartReconcilerInstanceInput,
 } from "../reconciler/index.js";
+import type { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { isTodoState } from "../todo/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import {
@@ -109,6 +111,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly now: () => number = Date.now,
     private readonly providerSelection?: StageProviderSelectionResolver,
     private readonly agentNames?: AgentNameAllocator,
+    private readonly taskLifecycleResolver?: Pick<
+      ProductLifecycleResolver,
+      "validateTaskProviderAliases"
+    >,
   ) {}
 
   private sessionSelectionResolver(): StageProviderSelectionResolver {
@@ -222,11 +228,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             ({ sessionKey }) => sessionKey === starting.sessionKey,
           );
     if (retainedSession !== undefined) {
-      await this.lifecycle.validateTaskProviderAliases(
-        input.instanceId,
-        input.task.id,
-        input.task.providerAlias,
-      );
       await this.agentNames?.prepareTask(
         input.instanceId,
         input.task.parent === undefined ? "soloist" : "team",
@@ -423,8 +424,27 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   async prepareIncidentStart(
     runtime: IncidentRuntimeRecord,
     stageId: string,
-    task?: Pick<BoardTask, "id" | "providerAlias">,
+    task?: BoardTask,
   ): Promise<IncidentRuntimeRecord> {
+    if (task?.providerAlias !== undefined) {
+      const taskInstanceId = instanceIdForTask(task.id);
+      if (this.persistence.getInstance(taskInstanceId) !== undefined) {
+        await this.lifecycle.validateTaskProviderAliases(
+          taskInstanceId,
+          task.id,
+          task.providerAlias,
+        );
+      } else if (this.taskLifecycleResolver !== undefined) {
+        await this.taskLifecycleResolver.validateTaskProviderAliases(
+          task,
+          task.providerAlias,
+        );
+      } else {
+        throw new Error(
+          `Task ${task.id} provider-alias has no normal lifecycle authority`,
+        );
+      }
+    }
     await this.agentNames?.prepareTask(runtime.incidentId, "soloist");
     const priorSessions = this.persistence
       .listSessionRuntime()

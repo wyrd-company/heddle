@@ -30,7 +30,10 @@ describe("production incident provider selection", () => {
     cleanup = undefined;
   });
 
-  const prepare = async (input: { stageAlias: string; taskAlias?: string }) => {
+  const prepare = async (input: {
+    stageAlias: string;
+    taskAliases?: Readonly<Record<string, string>>;
+  }) => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     fixture.configuration.providerAliases["incident-stage"] = {
@@ -210,7 +213,7 @@ kind: standard
     await execute("git", ["push", "--quiet"], {
       cwd: fixture.blueprintsRepositoryRoot,
     });
-    if (input.taskAlias !== undefined) {
+    if (input.taskAliases !== undefined) {
       const [taskFilename] = await readdir(
         join(fixture.configuration.boardDirectory, "tasks"),
       );
@@ -223,7 +226,9 @@ kind: standard
         taskPath,
         (await readFile(taskPath, "utf8")).replace(
           "class: standard\n---",
-          `class: standard\nprovider-alias:\n  implement: ${input.taskAlias}\n---`,
+          `class: standard\nprovider-alias:\n${Object.entries(input.taskAliases)
+            .map(([stageId, alias]) => `  ${stageId}: ${alias}`)
+            .join("\n")}\n---`,
         ),
       );
     }
@@ -362,7 +367,7 @@ kind: standard
   it("uses a task alias over the pinned incident stage alias", async () => {
     const { composition, fixture, t3 } = await prepare({
       stageAlias: "incident-stage",
-      taskAlias: "incident-task",
+      taskAliases: { implement: "incident-task" },
     });
 
     const session = incidentSession(fixture, composition);
@@ -390,11 +395,62 @@ kind: standard
 
   it.each([
     {
+      cause: 'key "absent-stage" names no node in the resolved blueprint',
+      label: "unknown stage key",
+      taskAliases: {
+        implement: "incident-task",
+        "absent-stage": "incident-task",
+      },
+    },
+    {
+      cause:
+        'key "finalize" names a mechanical node; only wait nodes can select providers',
+      label: "mechanical stage key",
+      taskAliases: {
+        implement: "incident-task",
+        finalize: "incident-task",
+      },
+    },
+  ])(
+    "rejects an incident task map with a $label before session effects",
+    async ({ cause, taskAliases }) => {
+      const { composition, fixture, t3 } = await prepare({
+        stageAlias: "incident-stage",
+        taskAliases,
+      });
+
+      expect(
+        t3.commands.filter(({ type }) => type !== "project.create"),
+      ).toEqual([]);
+      expect(composition.persistence.listSessionRuntime()).toEqual([]);
+      expect(composition.persistence.listIncidentRuntime()[0]).toMatchObject({
+        state: "failed",
+        taskId: fixture.taskId,
+      });
+      expect(composition.persistence.listAttention()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              error: expect.objectContaining({
+                message: `provider-alias-not-allowed: task ${fixture.taskId} provider-alias ${cause}`,
+                name: "TaskProviderAliasError",
+              }),
+              instanceId: expect.stringMatching(/^incident:/),
+              kind: "production-error",
+            }),
+          }),
+        ]),
+      );
+    },
+  );
+
+  it.each([
+    {
       label: "task override",
       stageAlias: "incident-stage",
-      taskAlias: "unknown",
+      taskAliases: { implement: "unknown" },
     },
-    { label: "stage alias", stageAlias: "unknown", taskAlias: undefined },
+    { label: "stage alias", stageAlias: "unknown", taskAliases: undefined },
   ])("does not fall back from an unknown incident $label", async (input) => {
     const { composition, fixture, t3 } = await prepare(input);
 

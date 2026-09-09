@@ -268,6 +268,10 @@ export const createProductionComposition = (
       repositoryRoot: blueprintRepository.repositoryRoot,
       sourceRef: blueprintRepository.sourceRef,
     });
+    const lifecycleResolver = new ProductLifecycleResolver(
+      routing,
+      blueprintRepository,
+    );
     const consoleLifecycleActions: ConsoleLifecycleActionPort = {
       rebase: async (input) => {
         await lifecycle.rebase(input);
@@ -312,6 +316,7 @@ export const createProductionComposition = (
       undefined,
       providerResolver,
       agentNames,
+      lifecycleResolver,
     );
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(
       persistence,
@@ -439,10 +444,7 @@ export const createProductionComposition = (
       dynamicTasks,
       epicOperations,
       instances,
-      lifecycleResolver: new ProductLifecycleResolver(
-        routing,
-        blueprintRepository,
-      ),
+      lifecycleResolver,
       pacing: {
         evaluator: pacing,
       },
