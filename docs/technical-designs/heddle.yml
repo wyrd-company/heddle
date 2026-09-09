@@ -684,7 +684,7 @@ proposed-design:
     with no activation, and a session observed dead without lifecycle advance
     all enter this policy. A successful retry resolves the condition attention
     and atomically removes its admission record. The retained attention row is
-    audit history; recurrence reopens it as a fresh admission episode instead
+    audit history; recurrence reopens it as a fresh retry episode instead
     of inheriting the prior failure count or open breaker.
 
     While SQLite is available, production-error pages retain their durable
