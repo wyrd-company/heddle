@@ -350,13 +350,16 @@ proposed-design:
     that object's reachability for every later lifecycle stage.
 
     Each wait node can declare `assign-agent-name` with one theme list name.
-    Mechanical nodes cannot declare it. A task that is a direct child of an
-    epic receives a team theme; team selection rotates through themes in
-    canonical theme-ID order. An ad-hoc task and an incident receive the sole
-    soloist theme. The task keeps that theme and catalog commit for its whole
-    lifecycle. A stage list absent from the selected theme fails before
-    dispatch. A missing soloist theme therefore does not invalidate a catalog
-    that serves only epic work, but it prevents an ad-hoc task from starting.
+    Mechanical nodes cannot declare it. The lists requested by the complete
+    blueprint determine its required theme kind: `leader`, `companions`,
+    `allies`, `antagonists`, and `neutrals` require a team theme; `heroes`,
+    `villains`, and `bystanders` require a soloist theme. One blueprint cannot
+    request lists from both kinds. Repository validation rejects a blueprint
+    when no catalog theme of its required kind provides every requested list.
+    Allocation considers only themes that satisfy the blueprint and rotates
+    through those themes in canonical theme-ID order. The task keeps the
+    selected theme and catalog commit for its whole lifecycle. A stage list
+    absent from the selected theme fails before dispatch.
 
     An allocation is keyed by lifecycle instance and list name. Re-entering a
     stage or entering another stage with the same `assign-agent-name` value
