@@ -482,6 +482,28 @@ describe("organization lifecycle blueprint artifacts", () => {
     ).rejects.toThrow("violates the lifecycle schema");
   });
 
+  it("documents agent-only entry and terminal board-status boundaries", async () => {
+    const operatorGuide = await readFile(
+      join(
+        import.meta.dirname,
+        "../../docs/operators/production-composition.md",
+      ),
+      "utf8",
+    );
+
+    const normalizedOperatorGuide = operatorGuide.replace(/\s+/gu, " ");
+
+    expect(normalizedOperatorGuide).toContain(
+      "An agent-only lifecycle can declare the known `prepare-worktree` and `finalize`",
+    );
+    expect(normalizedOperatorGuide).toContain(
+      "boundaries without executing either mechanical effect",
+    );
+    expect(normalizedOperatorGuide).not.toContain(
+      "Each lifecycle blueprint must declare a `board-statuses` object",
+    );
+  });
+
   it("names the blueprint, node, and unresolved tool in registry failures", async () => {
     const invalid = artifact();
     (invalid.nodes[1] as { tools: string[] }).tools.push("missing_tool");
