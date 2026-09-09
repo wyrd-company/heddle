@@ -146,6 +146,16 @@ describe("incident runtime persistence", () => {
         occurrence: 3,
       }),
     ).toThrow("changed durable identity");
+    const second = replayed.listIncidentRuntime()[1]!;
+    replayed.writeIncidentRuntime({ ...second, state: "done" });
+    expect(() =>
+      replayed.admitIncident({
+        ...recurrence,
+        createdAt: 3_000,
+        incidentId: `incident:${"d".repeat(64)}`,
+        occurrence: 4,
+      }),
+    ).toThrow("occurrence is not next");
     replayed.close();
   });
 
