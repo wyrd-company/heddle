@@ -10,7 +10,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import type {
-  HarnessToolTimeoutLaunchInput,
   T3DispatchCommand,
   T3ProviderDispatchContext,
   T3WorkflowMcpProviderSession,
@@ -108,7 +107,6 @@ export class SyntheticT3 implements ProductionT3Client {
       state: "ready",
     },
   ];
-  readonly timeouts: HarnessToolTimeoutLaunchInput[] = [];
   readonly threads = new Set<string>();
   readonly userInputResponses: Array<{
     answers: Record<string, string | string[]>;
@@ -116,12 +114,6 @@ export class SyntheticT3 implements ProductionT3Client {
     requestId: string;
     threadId: string;
   }> = [];
-
-  async applyHarnessToolTimeout(
-    input: HarnessToolTimeoutLaunchInput,
-  ): Promise<void> {
-    this.timeouts.push(input);
-  }
 
   async dispatch(
     command: T3DispatchCommand,

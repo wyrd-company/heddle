@@ -716,6 +716,14 @@ enableKeyboardScroll(graphViewportElement);
 const selectedAnswers = (questions, controls) => {
   const answers = {};
   for (const question of questions) {
+    if (question.kind === "value") {
+      const control = controls.find(({ questionId }) => questionId === question.id);
+      if (!control || control.input.value.length === 0) {
+        throw new Error("Enter an answer for " + question.prompt);
+      }
+      answers[question.id] = control.input.value;
+      continue;
+    }
     const selected = controls
       .filter(({ questionId, input }) => questionId === question.id && input.checked)
       .map(({ input }) => input.value);
@@ -725,7 +733,7 @@ const selectedAnswers = (questions, controls) => {
   return answers;
 };
 
-const performAttentionAction = async (entry, action, controls, button) => {
+const performAttentionAction = async (entry, action, controls, prose, button) => {
   button.disabled = true;
   attentionStatusElement.dataset.error = "false";
   attentionStatusElement.textContent = "Applying " + action.label + "…";
@@ -733,6 +741,7 @@ const performAttentionAction = async (entry, action, controls, button) => {
     const body = { fingerprint: entry.fingerprint };
     if (action.input.kind === "questions") {
       body.answers = selectedAnswers(action.input.questions, controls);
+      if (prose && prose.value.trim().length > 0) body.prose = prose.value;
     }
     await fetchJson(
       "/api/attention/" + encodeURIComponent(entry.attentionId) + "/actions/" + encodeURIComponent(action.actionId),
@@ -754,6 +763,7 @@ const performAttentionAction = async (entry, action, controls, button) => {
 const createAttentionAction = (entry, action) => {
   const container = document.createElement("section");
   const controls = [];
+  let prose;
   if (action.input.kind === "questions") {
     for (const question of action.input.questions) {
       const fieldset = document.createElement("fieldset");
@@ -766,7 +776,16 @@ const createAttentionAction = (entry, action) => {
             : question.prompt,
         ),
       );
-      for (const option of question.options) {
+      if (question.kind === "value") {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.name = entry.attentionId + ":" + action.actionId + ":" + question.id;
+        input.minLength = question.validation.minLength;
+        input.maxLength = question.validation.maxLength;
+        if (question.validation.pattern) input.pattern = question.validation.pattern;
+        fieldset.append(input);
+        controls.push({ input, questionId: question.id });
+      } else for (const option of question.options) {
         const label = document.createElement("label");
         label.className = "attention-option";
         const input = document.createElement("input");
@@ -782,10 +801,17 @@ const createAttentionAction = (entry, action) => {
       }
       container.append(fieldset);
     }
+    if (action.input.prose) {
+      const label = text("label", action.input.prose.label, "attention-question");
+      prose = document.createElement("textarea");
+      prose.maxLength = action.input.prose.maxLength;
+      label.append(prose);
+      container.append(label);
+    }
   }
   const button = text("button", action.label + " →", "attention-action");
   button.type = "button";
-  button.addEventListener("click", () => performAttentionAction(entry, action, controls, button));
+  button.addEventListener("click", () => performAttentionAction(entry, action, controls, prose, button));
   container.append(button);
   return container;
 };

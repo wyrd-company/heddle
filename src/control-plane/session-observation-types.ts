@@ -60,6 +60,7 @@ export interface SessionObservationPersistence {
 }
 
 export interface SessionObservationEscalations {
+  isAwaitingAnswer(instanceId: string, sessionKey: string): boolean;
   pendingEscalations(instanceId: string): PendingEscalation[];
   requireNoPendingForSession(instanceId: string, sessionKey: string): void;
 }
@@ -87,6 +88,7 @@ export type SessionObservationResult = {
   attentions: SessionObservationAttention[];
   phase:
     | "absent"
+    | "awaiting_answer"
     | "completed"
     | "failed"
     | "none"

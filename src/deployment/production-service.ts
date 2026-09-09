@@ -26,7 +26,6 @@ import {
   createUnconfiguredProviderUsageSource,
 } from "./provider-usage.js";
 import { startHeddleServer, type HeddleDeploymentServer } from "./server.js";
-import { ConfiguredT3ControlPlaneClient } from "./timeout-application.js";
 import { configurationDirectorySystemPromptResolver } from "./system-prompt.js";
 
 export type ConfiguredProductionServiceDependencies = Partial<
@@ -55,12 +54,7 @@ const providerUsageSource = (
     : new ExecutableProviderUsageSource(loaded.providerUsage);
 
 const t3Client = (loaded: LoadedDeploymentConfiguration): ProductionT3Client =>
-  loaded.launchPreparation === undefined
-    ? new T3ControlPlaneClient(loaded.configuration.t3)
-    : new ConfiguredT3ControlPlaneClient(
-        loaded.configuration.t3,
-        loaded.launchPreparation,
-      );
+  new T3ControlPlaneClient(loaded.configuration.t3);
 
 const configuredCompositionInputs = async (
   loaded: LoadedDeploymentConfiguration,

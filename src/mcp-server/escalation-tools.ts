@@ -26,16 +26,13 @@ const registerEscalate = (
   server.registerTool(
     "escalate",
     {
-      description: "Ask blocking structured questions and wait for answers",
+      description:
+        "Record structured questions for asynchronous answer delivery. Do not act on the question's subject until its answer arrives in a later turn. Continue unrelated work when available; otherwise end this turn. Never create a watcher or poll for the answer.",
       inputSchema: escalationInputSchema,
     },
-    async (input, request) =>
+    async (input) =>
       result(
-        await context.escalationCoordinator.escalate(
-          context.binding,
-          input,
-          request.mcpReq.signal,
-        ),
+        await context.escalationCoordinator.escalate(context.binding, input),
       ),
   );
 };
@@ -47,15 +44,16 @@ const registerAnswer = (
   server.registerTool(
     "answer",
     {
-      description: "Answer a blocking escalation from one of your children",
+      description:
+        "Answer an escalation only when this session holds its current answering authority",
       inputSchema: escalationAnswerSchema,
     },
-    (input) =>
+    async (input) =>
       result({
-        ...context.escalationCoordinator.answerAsSession(
+        ...(await context.escalationCoordinator.answerAsSession(
           context.binding,
           input,
-        ),
+        )),
         answered: true,
       }),
   );

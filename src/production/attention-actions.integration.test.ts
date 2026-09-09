@@ -18,6 +18,7 @@ import {
 } from "./error-visibility.js";
 import {
   prepareProductionFixture,
+  prepareProductionEpicFixture,
   SyntheticT3,
 } from "./composition.test-support.js";
 
@@ -155,7 +156,7 @@ describe("production attention actions", () => {
   });
 
   it("answers a maximum-length escalation through durable attention", async () => {
-    const fixture = await prepareProductionFixture();
+    const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -177,7 +178,7 @@ describe("production attention actions", () => {
       token: "correlation-token",
     };
     const escalationId = "e".repeat(128);
-    const pending = composition.escalation.escalate(binding, {
+    const pending = await composition.escalation.escalate(binding, {
       escalationId,
       questions: [
         {
@@ -190,7 +191,7 @@ describe("production attention actions", () => {
         },
       ],
     });
-    void pending.catch(() => undefined);
+    expect(pending).toEqual({ awaitingAnswer: true, escalationId });
     await vi.waitFor(() =>
       expect(composition.attention.list()).toHaveLength(1),
     );
@@ -219,10 +220,6 @@ describe("production attention actions", () => {
       attention,
     });
 
-    await expect(pending).resolves.toEqual({
-      answers: { decision: "b" },
-      escalationId,
-    });
     expect(composition.attention.list()).toEqual([]);
     expect(
       composition.persistence.effectCompleted(

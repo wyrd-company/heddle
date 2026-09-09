@@ -176,6 +176,23 @@ const questionAnswers = (
   const result: ConsoleAttentionActionAnswers = {};
   for (const question of action.input.questions) {
     const answer = answers[question.id];
+    if (question.kind === "value") {
+      if (typeof answer !== "string") {
+        throw new TypeError(`Answer for '${question.id}' must be one value`);
+      }
+      const { maxLength, minLength, pattern } = question.validation;
+      if (
+        answer.length < minLength ||
+        answer.length > maxLength ||
+        (pattern !== undefined && !new RegExp(pattern, "u").test(answer))
+      ) {
+        throw new TypeError(
+          `Answer for '${question.id}' does not satisfy its value validation`,
+        );
+      }
+      result[question.id] = answer;
+      continue;
+    }
     const selected = Array.isArray(answer) ? answer : [answer];
     if (
       selected.length === 0 ||
@@ -209,7 +226,11 @@ export const parseConsoleAttentionActionRequest = (
   const body = requireRecord(value, "request body");
   const allowed = new Set(
     action.input.kind === "questions"
-      ? ["answers", "fingerprint"]
+      ? [
+          "answers",
+          "fingerprint",
+          ...(action.input.prose === undefined ? [] : ["prose"]),
+        ]
       : ["fingerprint"],
   );
   if (Object.keys(body).some((key) => !allowed.has(key))) {
@@ -217,9 +238,19 @@ export const parseConsoleAttentionActionRequest = (
   }
   const fingerprint = identifier(body["fingerprint"], "fingerprint");
   if (action.input.kind === "questions") {
+    const prose = body["prose"];
+    if (
+      prose !== undefined &&
+      (typeof prose !== "string" ||
+        prose.trim() === "" ||
+        prose.length > (action.input.prose?.maxLength ?? 0))
+    ) {
+      throw new TypeError("prose does not satisfy its input contract");
+    }
     return {
       answers: questionAnswers(body["answers"], action),
       fingerprint,
+      ...(prose === undefined ? {} : { prose }),
     };
   }
   return { fingerprint };

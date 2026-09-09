@@ -86,7 +86,6 @@ describe("production lifecycle composition", () => {
         }),
       }),
     ]);
-    expect(firstT3.timeouts).toHaveLength(1);
     await first.close();
 
     const secondT3 = new SyntheticT3();
@@ -203,7 +202,6 @@ kind: standard
     expect(
       t3.commands.filter(({ type }) => type !== "project.create"),
     ).toHaveLength(0);
-    expect(t3.timeouts).toHaveLength(0);
     expect(composition.attention.list()).toEqual([
       expect.objectContaining({
         kind: "lifecycle-resolution",
@@ -350,8 +348,6 @@ kind: standard
 
       await expect(composition.start()).resolves.toBeUndefined();
       await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
-
-      expect(t3.timeouts).toHaveLength(0);
       expect(t3.mcpRegistrations).toHaveLength(0);
       expect(
         t3.commands.filter(({ type }) => type !== "project.create"),

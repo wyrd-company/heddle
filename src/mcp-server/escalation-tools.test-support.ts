@@ -23,7 +23,7 @@ import {
   type EscalationAnswers,
   type EscalationAttention,
   type EscalationQuestion,
-  type ParentEscalation,
+  type SessionEscalation,
 } from "./escalation-coordinator.js";
 import { createWorkflowMcpHttpHandler } from "./workflow-mcp-handler.js";
 
@@ -158,8 +158,18 @@ export const createEscalationFixture = async (
   const persistence = new SqlitePersistence({ stateDirectory });
   const attentions: EscalationAttention[] = [];
   const notifications: EscalationAttention[] = [];
-  const parentEscalations: ParentEscalation[] = [];
+  const parentEscalations: SessionEscalation[] = [];
   const lifecycleResumes: Parameters<WorkflowMcpLifecycle["resume"]>[0][] = [];
+  const deliveredAnswers: Parameters<
+    NonNullable<
+      ConstructorParameters<typeof EscalationCoordinator>[0]["delivery"]
+    >["deliver"]
+  >[0][] = [];
+  const decisionRecords: Parameters<
+    NonNullable<
+      ConstructorParameters<typeof EscalationCoordinator>[0]["decisionLog"]
+    >["record"]
+  >[0][] = [];
   const coordinator = new EscalationCoordinator({
     attention: {
       raise: async (value) => {
@@ -167,7 +177,13 @@ export const createEscalationFixture = async (
         await options.attention?.(value);
       },
     },
-    parent: { steer: async (value) => void parentEscalations.push(value) },
+    decisionLog: {
+      record: async (value) => void decisionRecords.push(value),
+    },
+    delivery: {
+      deliver: async (value) => void deliveredAnswers.push(value),
+    },
+    session: { steer: async (value) => void parentEscalations.push(value) },
     persistence,
     pushover: { send: async (value) => void notifications.push(value) },
     now: () => "2026-01-01T00:00:00.000Z",
@@ -190,6 +206,8 @@ export const createEscalationFixture = async (
   return {
     attentions,
     coordinator,
+    decisionRecords,
+    deliveredAnswers,
     handler,
     lifecycleResumes,
     notifications,

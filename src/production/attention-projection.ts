@@ -102,7 +102,11 @@ const projectEscalation = (
         attentionId,
       ),
     },
-    input: { kind: "questions", questions },
+    input: {
+      kind: "questions",
+      prose: { label: "Additional context", maxLength: 4_000 },
+      questions,
+    },
     label: "Answer escalation",
   };
   return createConsoleAttention({

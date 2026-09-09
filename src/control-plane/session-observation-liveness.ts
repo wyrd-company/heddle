@@ -29,6 +29,7 @@ type AttentionLivenessKind = Exclude<LivenessKind, "blocked">;
 const livenessKindFor = (
   phase: SessionObservationResult["phase"],
 ): LivenessKind => {
+  if (phase === "awaiting_answer") return "blocked";
   if (phase === "waiting_for_approval" || phase === "waiting_for_input") {
     return "blocked";
   }
@@ -159,6 +160,10 @@ export const observeSessionLiveness = async (
   now: () => number,
 ): Promise<SessionObservationAttention | undefined> => {
   if (isStageSessionTerminal(record, target.sessionKey)) {
+    await resolveCompletedSessionLiveness(options, target);
+    return undefined;
+  }
+  if (phase === "awaiting_answer") {
     await resolveCompletedSessionLiveness(options, target);
     return undefined;
   }

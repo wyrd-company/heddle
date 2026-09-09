@@ -576,6 +576,37 @@ next_id: 1
     ).toHaveLength(1);
   });
 
+  it("appends one task activity for a replayed operation key", async () => {
+    const taskId = await createTask("Record a sample decision");
+
+    const results = await Promise.all([
+      adapter.appendTaskActivity(
+        taskId,
+        "sample-escalation:task",
+        "**SAMPLE DECISION**\n\n- Choice: Route B\n---",
+      ),
+      adapter.appendTaskActivity(
+        taskId,
+        "sample-escalation:task",
+        "**SAMPLE DECISION**\n\n- Choice: Route B\n---",
+      ),
+    ]);
+
+    expect(results.sort()).toEqual([false, true]);
+    const task = JSON.parse(
+      await runKanban([
+        "--dir",
+        boardDirectory,
+        "show",
+        String(taskId),
+        "--json",
+      ]),
+    ) as { file: string };
+    const source = await readFile(task.file, "utf8");
+    expect(source.match(/\*\*SAMPLE DECISION\*\*/g)).toHaveLength(1);
+    expect(source.match(/<!-- heddle-activity:/g)).toHaveLength(1);
+  });
+
   it("rejects changed input for an existing board-write occurrence", async () => {
     const collectionId = await createTask(
       "Seasonal collection",

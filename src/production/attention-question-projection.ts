@@ -63,9 +63,41 @@ export const escalationQuestions = (
       throw new Error(`Attention '${attentionId}' repeats question '${id}'`);
     }
     questionIds.add(id);
+    if (question["kind"] === "value") {
+      const validation = record(
+        question["validation"],
+        attentionId,
+        "value validation",
+      );
+      const minLength = validation["minLength"];
+      const maxLength = validation["maxLength"];
+      const pattern = validation["pattern"];
+      if (
+        !Number.isSafeInteger(minLength) ||
+        (minLength as number) < 0 ||
+        !Number.isSafeInteger(maxLength) ||
+        (maxLength as number) < (minLength as number) ||
+        (pattern !== undefined && typeof pattern !== "string")
+      ) {
+        throw new Error(
+          `Attention '${attentionId}' has malformed value validation`,
+        );
+      }
+      return {
+        id,
+        kind: "value",
+        prompt: requiredAttentionString(question, "prompt", attentionId),
+        validation: {
+          maxLength: maxLength as number,
+          minLength: minLength as number,
+          ...(pattern === undefined ? {} : { pattern }),
+        },
+      };
+    }
     const optionIds = new Set<string>();
     return {
       id,
+      kind: "choice" as const,
       multiSelect: false,
       options: options(question["options"], attentionId).map((option) => {
         const optionId = requiredAttentionIdentifier(option, "id", attentionId);

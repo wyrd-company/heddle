@@ -89,7 +89,7 @@ describe("escalation coordinator disposition concurrency", () => {
     const coordinator = new EscalationCoordinator({
       attention: { raise: vi.fn() },
       containPushoverFailure: (error) => error === failure,
-      parent: { steer: vi.fn() },
+      session: { steer: vi.fn() },
       persistence,
       pushover: { send: sends },
     });
@@ -171,7 +171,7 @@ describe("escalation coordinator disposition concurrency", () => {
     };
     const coordinator = new EscalationCoordinator({
       attention: { raise: vi.fn() },
-      parent: { steer: vi.fn() },
+      session: { steer: vi.fn() },
       persistence,
       pushover: { send: vi.fn() },
     });

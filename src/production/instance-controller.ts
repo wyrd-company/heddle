@@ -30,6 +30,7 @@ import type {
   JsonValue,
   IncidentRuntimeRecord,
   ReconcilerRuntimeRecord,
+  ResolvedSessionBinding,
   SqlitePersistence,
 } from "../persistence/index.js";
 import {
@@ -402,6 +403,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     task: BoardTask,
     runtime: IncidentRuntimeRecord,
     stageId: string,
+    replacementBinding?: ResolvedSessionBinding,
   ): Promise<void> {
     const starting: ReconcilerRuntimeRecord = {
       boardStatus: "incident",
@@ -439,7 +441,133 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           state: next.state === "waiting" ? "waiting" : "starting",
           ...(next.threadId === undefined ? {} : { threadId: next.threadId }),
         }),
+      replacementBinding,
     );
+  }
+
+  async reactivateStageForEscalation(input: {
+    instanceId: string;
+    stageId: string;
+    task: BoardTask;
+  }): Promise<ResolvedSessionBinding> {
+    const record = this.persistence.getInstance(input.instanceId);
+    if (record === undefined) {
+      throw new Error(`Instance does not exist: ${input.instanceId}`);
+    }
+    const context = readLifecycleContext(record);
+    if (
+      context.status !== "awaiting" ||
+      context.awaitingNodeIds.length !== 1 ||
+      context.awaitingNodeIds[0] !== input.stageId
+    ) {
+      throw new Error(
+        "Escalation delivery no longer matches the awaiting stage",
+      );
+    }
+    const runtimes = this.persistence
+      .listReconcilerRuntime()
+      .filter(({ instanceId }) => instanceId === input.instanceId);
+    const incidents = this.persistence
+      .listIncidentRuntime()
+      .filter(({ incidentId }) => incidentId === input.instanceId);
+    if (runtimes.length + incidents.length !== 1) {
+      throw new Error(
+        "Escalation delivery has no canonical production runtime",
+      );
+    }
+    if (runtimes.length === 1) {
+      const current = runtimes[0]!;
+      if (current.taskId !== input.task.id || current.state === "deferred") {
+        throw new Error("Escalation delivery disagrees with its task runtime");
+      }
+      const retainedBinding = this.#escalatingBinding(current, input.stageId);
+      const {
+        sessionKey: _sessionKey,
+        threadId: _threadId,
+        ...retained
+      } = current;
+      void _sessionKey;
+      void _threadId;
+      const starting: ReconcilerRuntimeRecord = {
+        ...retained,
+        state: "starting",
+      };
+      this.persistence.writeReconcilerRuntime(starting);
+      await this.#activate(
+        input.task,
+        input.instanceId,
+        input.stageId,
+        starting,
+        starting.boardStatus,
+        false,
+        (runtime) => this.persistence.writeReconcilerRuntime(runtime),
+        retainedBinding,
+      );
+    } else {
+      const current = incidents[0]!;
+      if (
+        current.taskId !== input.task.id ||
+        current.state === "done" ||
+        current.state === "failed"
+      ) {
+        throw new Error(
+          "Escalation delivery disagrees with its incident runtime",
+        );
+      }
+      const retainedBinding = this.#escalatingBinding(
+        {
+          instanceId: current.incidentId,
+          sessionKey: current.sessionKey,
+          stageId: current.stageId,
+        },
+        input.stageId,
+      );
+      const {
+        sessionKey: _sessionKey,
+        threadId: _threadId,
+        ...retained
+      } = current;
+      void _sessionKey;
+      void _threadId;
+      await this.activateIncident(
+        input.task,
+        { ...retained, state: "starting" },
+        input.stageId,
+        retainedBinding,
+      );
+    }
+    const sessions = this.persistence
+      .listSessionRuntime()
+      .filter(
+        ({ instanceId, stageId }) =>
+          instanceId === input.instanceId && stageId === input.stageId,
+      )
+      .sort((left, right) => right.activation - left.activation);
+    if (sessions.length === 0) {
+      throw new Error("Escalation stage reactivation created no session");
+    }
+    return sessions[0]!.binding;
+  }
+
+  #escalatingBinding(
+    runtime: Pick<
+      ReconcilerRuntimeRecord,
+      "instanceId" | "sessionKey" | "stageId"
+    >,
+    stageId: string,
+  ): ResolvedSessionBinding {
+    const matches = this.persistence
+      .listSessionRuntime()
+      .filter(
+        (session) =>
+          session.instanceId === runtime.instanceId &&
+          session.stageId === stageId &&
+          session.sessionKey === runtime.sessionKey,
+      );
+    if (matches.length !== 1) {
+      throw new Error("Escalation delivery has no canonical session binding");
+    }
+    return matches[0]!.binding;
   }
 
   async prepareIncidentStart(
@@ -862,6 +990,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     mirrorBoardStatus: boolean = false,
     writeRuntime: (runtime: ReconcilerRuntimeRecord) => void = (runtime) =>
       this.persistence.writeReconcilerRuntime(runtime),
+    replacementBinding?: ResolvedSessionBinding,
   ): Promise<void> {
     const retryingIntent =
       starting.state === "starting" &&
@@ -924,21 +1053,23 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const session = this.configuration.session;
     const binding =
       intendedSession?.binding ??
-      bindResolvedSession(
-        await resolveStageSessionSelection(
-          {
-            session,
-            stageId,
-            stageProviderAlias: stage.providerAlias,
-            stageRuntimeMode: stage.runtimeMode,
-            taskId: task.id,
-            taskProviderAliases: task.providerAlias,
-          },
-          this.sessionSelectionResolver(),
-        ),
-        sessionKey,
-        threadId,
-      );
+      (replacementBinding === undefined
+        ? bindResolvedSession(
+            await resolveStageSessionSelection(
+              {
+                session,
+                stageId,
+                stageProviderAlias: stage.providerAlias,
+                stageRuntimeMode: stage.runtimeMode,
+                taskId: task.id,
+                taskProviderAliases: task.providerAlias,
+              },
+              this.sessionSelectionResolver(),
+            ),
+            sessionKey,
+            threadId,
+          )
+        : { ...replacementBinding, sessionKey, threadId });
     if (stage.contractIssue !== undefined) {
       const attentionId = `${sessionKey}:advance-output:${stage.contractIssue.field}`;
       if (!(await this.attention.has(attentionId))) {
@@ -1010,12 +1141,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           resolveSystemPrompt: this.resolveSystemPrompt,
           templateAuthority: this.templateAuthority,
           t3: {
-            ...(this.t3.applyHarnessToolTimeout === undefined
-              ? {}
-              : {
-                  applyHarnessToolTimeout: (value) =>
-                    this.t3.applyHarnessToolTimeout!(value),
-                }),
             dispatch: (command, providerContext) =>
               this.t3.dispatch(command, providerContext),
             registerWorkflowMcpProviderSession: (registration) =>

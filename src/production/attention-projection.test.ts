@@ -55,6 +55,16 @@ describe("production attention projection", () => {
             ],
             prompt: "Select a path",
           },
+          {
+            id: "sample-reference",
+            kind: "value",
+            prompt: "Enter the sample reference",
+            validation: {
+              maxLength: 12,
+              minLength: 4,
+              pattern: "^[a-z]+-[0-9]+$",
+            },
+          },
         ],
         stage: "implement",
       }),
@@ -73,6 +83,7 @@ describe("production attention projection", () => {
           },
           input: {
             kind: "questions",
+            prose: { label: "Additional context", maxLength: 4_000 },
             questions: [
               {
                 id: "question-one",
@@ -82,6 +93,16 @@ describe("production attention projection", () => {
                   { label: "Second", value: "second" },
                 ],
                 prompt: "Select a path",
+              },
+              {
+                id: "sample-reference",
+                kind: "value",
+                prompt: "Enter the sample reference",
+                validation: {
+                  maxLength: 12,
+                  minLength: 4,
+                  pattern: "^[a-z]+-[0-9]+$",
+                },
               },
             ],
           },

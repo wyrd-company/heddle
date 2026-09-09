@@ -47,10 +47,6 @@ import {
   type SystemPromptResolver,
 } from "./system-prompt.js";
 import {
-  applyHarnessToolTimeoutBeforeThread,
-  type HarnessToolTimeoutConsumer,
-} from "./harness-tool-timeout.js";
-import {
   assertParentSession,
   isStoredHandoff,
   type StoredStageHandoffCandidate,
@@ -72,7 +68,6 @@ import {
 } from "./worktree-creator.js";
 
 export interface SessionT3Client {
-  applyHarnessToolTimeout?: HarnessToolTimeoutConsumer;
   dispatch(
     command: T3DispatchCommand,
     providerContext?: T3ProviderDispatchContext,
@@ -626,14 +621,6 @@ export const bootstrapStageSession = async (
     dependencies.resolveSystemPrompt ?? resolveBuiltInSystemPrompt,
   );
   const threadId = input.threadId ?? nextId();
-  await applyHarnessToolTimeoutBeforeThread({
-    consumer: dependencies.t3.applyHarnessToolTimeout,
-    driver: effectiveDriver,
-    providerInstanceId: input.modelSelection.instanceId,
-    sessionKey: input.sessionKey,
-    threadId,
-    worktreePath: worktree.path,
-  });
   await dependencies.t3.registerWorkflowMcpProviderSession({
     authorizationHeader: `Bearer ${correlationToken}`,
     endpoint: workflowMcpEndpoint,

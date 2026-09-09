@@ -32,8 +32,13 @@ import {
 
 const phaseFor = (
   thread: T3ShellThread | undefined,
+  awaitingAnswer: boolean,
 ): SessionObservationResult["phase"] =>
-  thread === undefined ? "absent" : resolveT3AwarenessPhase(thread);
+  thread === undefined
+    ? "absent"
+    : awaitingAnswer && resolveT3AwarenessPhase(thread) !== "failed"
+      ? "awaiting_answer"
+      : resolveT3AwarenessPhase(thread);
 
 export class SessionObserver {
   readonly #nextId: () => string;
@@ -56,7 +61,13 @@ export class SessionObserver {
     this.#recordThread(target);
     const shell = await this.options.t3.getShell();
     const thread = shell.threads.find(({ id }) => id === target.threadId);
-    const phase = phaseFor(thread);
+    const phase = phaseFor(
+      thread,
+      this.options.escalations.isAwaitingAnswer(
+        target.instanceId,
+        target.sessionKey,
+      ),
+    );
     const attentions = await this.#requestAttentions(target, thread);
     const liveness = await observeSessionLiveness(
       this.options,

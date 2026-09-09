@@ -229,12 +229,6 @@ export const createProductionSubagentCoordinator = (options: {
       resolveSystemPrompt,
       templateAuthority,
       t3: {
-        ...(t3.applyHarnessToolTimeout === undefined
-          ? {}
-          : {
-              applyHarnessToolTimeout: (input) =>
-                t3.applyHarnessToolTimeout!(input),
-            }),
         dispatch: (command, providerContext) =>
           t3.dispatch(command, providerContext),
         registerWorkflowMcpProviderSession: (registration) =>

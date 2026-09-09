@@ -878,7 +878,6 @@ describe("configured production composition", () => {
     expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
       [],
     );
-    expect(t3.timeouts).toEqual([]);
     expect(onSchedulerError).not.toHaveBeenCalled();
     expect(
       production.attention
@@ -940,7 +939,6 @@ describe("configured production composition", () => {
       [],
     );
     expect(readProviderCatalog).toHaveBeenCalledTimes(1);
-    expect(t3.timeouts).toEqual([]);
     expect(notifications).toEqual([]);
   });
 
@@ -1022,7 +1020,6 @@ describe("configured production composition", () => {
     expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
       [],
     );
-    expect(t3.timeouts).toEqual([]);
     expect(production.attention.list()).toEqual([
       expect.objectContaining({
         kind: "lifecycle-resolution",

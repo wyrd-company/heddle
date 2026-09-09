@@ -3,10 +3,9 @@
 //   verifies: heddle
 // ---
 
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cwd } from "node:process";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -20,10 +19,6 @@ import {
   steerStageSession,
   type SessionBootstrapDependencies,
 } from "./session-bootstrap.js";
-import {
-  harnessToolTimeoutConfiguration,
-  harnessToolTimeoutLaunchConfiguration,
-} from "./harness-tool-timeout.js";
 import { builtInSystemPrompt } from "./system-prompt.js";
 import {
   sampleHandoffTemplate,
@@ -66,7 +61,7 @@ const instantiateTodoList: NonNullable<
 const scratchDirectories: string[] = [];
 const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
 const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
-const driversWithoutBuiltInToolTimeout = ["cursor", "grok", "opencode"];
+const externalDrivers = ["cursor", "grok", "opencode"];
 
 afterEach(async () => {
   await Promise.all(
@@ -77,144 +72,8 @@ afterEach(async () => {
 });
 
 describe("stage session bootstrap", () => {
-  it("keeps the documented harness timeout configuration executable", async () => {
-    const documentedDesign = await readFile(
-      join(cwd(), "docs/technical-designs/heddle.yml"),
-      "utf8",
-    );
-    const configured = harnessToolTimeoutConfiguration();
-
-    expect(documentedDesign).toContain(
-      `tool_timeout_sec = ${configured.codex.mcp_servers.heddle.tool_timeout_sec}`,
-    );
-    expect(documentedDesign).toContain(
-      `MCP_TOOL_TIMEOUT=${configured.claudeCode.environment.MCP_TOOL_TIMEOUT}`,
-    );
-  });
-
-  it.each([
-    {
-      driver: "codex",
-      expected: {
-        mcp_servers: { heddle: { tool_timeout_sec: 100_000 } },
-      },
-    },
-    {
-      driver: "claudeAgent",
-      expected: { environment: { MCP_TOOL_TIMEOUT: "100000000" } },
-    },
-  ])(
-    "applies the $driver tool timeout before creating its T3 thread",
-    async ({ driver, expected }) => {
-      let record: InstanceRecord = {
-        instanceId: "instance-launch",
-        state: initialState(),
-        version: 1,
-      };
-      const operations: string[] = [];
-      const applyHarnessToolTimeout = vi.fn(async () => {
-        operations.push("apply-tool-timeout");
-      });
-      const registerWorkflowMcpProviderSession = vi.fn(async () => {
-        operations.push("register-workflow-mcp");
-      });
-      const dispatch = vi.fn(async ({ type }: { type: string }) => {
-        operations.push(type);
-        return { sequence: operations.length };
-      });
-      const ids = [
-        "thread-launch",
-        "create-launch",
-        "turn-launch",
-        "message-launch",
-      ];
-
-      const result = await bootstrapStageSession(
-        {
-          handoff: {
-            skillPointer: "skill://prepare",
-            stage: {
-              kind: "standard",
-              name: "prepare",
-              priorStageOutputs: [],
-            },
-            taskContract: { title: "Prepare inventory" },
-          },
-          instanceId: "instance-launch",
-          interactionMode: "default",
-          modelSelection: { instanceId: driver, model: "default" },
-          projectId: "project-launch",
-          providerContext: {
-            cliVersion: "test-version",
-            driver,
-            lifecycle: "independent",
-            providerInstanceId: driver,
-          },
-          runtimeMode: "default",
-          sessionKey: "prepare-launch",
-          task: { id: 1, title: "Prepare inventory" },
-          taskId: 1,
-          title: "Prepare inventory",
-          worktree: {
-            baseRef: "main",
-            branch: "task/prepare",
-            repositoryName: "sample-repository",
-            repositoryRoot: "/workspaces/sample-repository",
-            worktreeName: "task-prepare",
-          },
-        },
-        {
-          ensureWorktree: async ({ branch }) => ({
-            branch,
-            created: true,
-            path: "/workspaces/worktrees/sample-repository/task-prepare",
-          }),
-          instantiateTodoList,
-          nextId: () => ids.shift()!,
-          persistence: {
-            getInstance: () => record,
-            compareAndSwapInstance: (_id, version, state) => {
-              if (version !== record.version) return undefined;
-              record = { ...record, state, version: record.version + 1 };
-              return record;
-            },
-          },
-          templateAuthority: sampleTemplateAuthority,
-          resolveWorkflowMcpStageContract,
-          workflowMcpEndpoint,
-          t3: {
-            registerWorkflowMcpProviderSession,
-            applyHarnessToolTimeout,
-            dispatch,
-          },
-        },
-      );
-
-      expect(operations).toEqual([
-        "apply-tool-timeout",
-        "register-workflow-mcp",
-        "thread.create",
-        "thread.turn.start",
-      ]);
-      expect(applyHarnessToolTimeout).toHaveBeenCalledWith({
-        configuration: expected,
-        driver,
-        providerInstanceId: driver,
-        sessionKey: "prepare-launch",
-        threadId: "thread-launch",
-        worktreePath: "/workspaces/worktrees/sample-repository/task-prepare",
-      });
-      expect(result).not.toHaveProperty("toolTimeoutConfiguration");
-      expect(registerWorkflowMcpProviderSession).toHaveBeenCalledWith({
-        authorizationHeader: expect.stringMatching(/^Bearer \S+$/),
-        endpoint: workflowMcpEndpoint,
-        threadId: "thread-launch",
-      });
-    },
-  );
-
-  it.each(driversWithoutBuiltInToolTimeout)(
-    "registers workflow MCP for %s without applying a harness timeout",
+  it.each(externalDrivers)(
+    "registers workflow MCP for the %s driver",
     async (driver) => {
       let record: InstanceRecord = {
         instanceId: "instance-registration",
@@ -450,15 +309,8 @@ describe("stage session bootstrap", () => {
     },
   );
 
-  it("supplies an empty launch configuration for an open driver", () => {
-    expect(harnessToolTimeoutLaunchConfiguration("sample-driver")).toEqual({
-      configuration: {},
-      driver: "sample-driver",
-    });
-  });
-
   it.each(["codex", "claudeAgent"])(
-    "does not reject $driver when no launch-preparation entry is configured",
+    "bootstraps the $driver without a launch-preparation port",
     async (driver) => {
       let record: InstanceRecord = {
         instanceId: "instance-missing-consumer",

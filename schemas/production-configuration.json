@@ -245,36 +245,6 @@
         },
         "interactionMode": { "type": "string", "minLength": 1 },
         "skillPointer": { "type": "string", "minLength": 1 },
-        "launchPreparation": {
-          "type": "object",
-          "propertyNames": {
-            "minLength": 1,
-            "maxLength": 64,
-            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
-          },
-          "additionalProperties": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["executable"],
-            "properties": {
-              "arguments": {
-                "type": "array",
-                "default": [],
-                "items": {
-                  "type": "string",
-                  "pattern": "^[^\\u0000]*$"
-                }
-              },
-              "executable": { "type": "string", "pattern": "^/" },
-              "timeoutMilliseconds": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 60000,
-                "default": 10000
-              }
-            }
-          }
-        },
         "worktreesRoot": { "type": "string", "pattern": "^/" }
       }
     },

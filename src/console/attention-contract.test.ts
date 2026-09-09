@@ -166,6 +166,52 @@ describe("console attention action contract", () => {
     ).toThrow("does not name an offered option");
   });
 
+  it("validates a value answer and optional prose against the projected contract", () => {
+    const valueAction: ConsoleAttentionAction = {
+      ...action,
+      input: {
+        kind: "questions",
+        prose: { label: "Additional context", maxLength: 80 },
+        questions: [
+          {
+            id: "reference",
+            kind: "value",
+            prompt: "Enter the sample reference",
+            validation: {
+              maxLength: 12,
+              minLength: 4,
+              pattern: "^[a-z]+-[0-9]+$",
+            },
+          },
+        ],
+      },
+    };
+
+    expect(
+      parseConsoleAttentionActionRequest(
+        {
+          answers: { reference: "alpha-12" },
+          fingerprint: entry().fingerprint,
+          prose: "Apply this reference to the current sample.",
+        },
+        valueAction,
+      ),
+    ).toEqual({
+      answers: { reference: "alpha-12" },
+      fingerprint: entry().fingerprint,
+      prose: "Apply this reference to the current sample.",
+    });
+    expect(() =>
+      parseConsoleAttentionActionRequest(
+        {
+          answers: { reference: "not valid" },
+          fingerprint: entry().fingerprint,
+        },
+        valueAction,
+      ),
+    ).toThrow("does not satisfy its value validation");
+  });
+
   it("carries an identity of exactly the bound and refuses one past it", () => {
     const sized = (length: number) =>
       createConsoleAttention({

@@ -33,9 +33,6 @@ const recorded = (await readFile(commandLog, "utf8").catch(() => ""))
   .map((line) => JSON.parse(line) as T3DispatchCommand);
 const seen = new Set(recorded.map(({ commandId }) => commandId));
 const t3: ProductionT3Client & T3ProviderCatalogReader = {
-  applyHarnessToolTimeout: async () => {
-    await Promise.resolve();
-  },
   dispatch: async (command: T3DispatchCommand) => {
     if (!seen.has(command.commandId)) {
       seen.add(command.commandId);

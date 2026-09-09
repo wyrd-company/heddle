@@ -11,7 +11,7 @@ Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path;
 
 Use \`advance\` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
 
-Use \`escalate\` for a blocking question that requires attention outside this session.
+Use \`escalate\` for a question that requires attention outside this session. It returns after Heddle records the wait. Do not act on the question's subject until Heddle dispatches the answer as a later turn. Continue unrelated work when possible; otherwise end the turn. Never create a watcher or poll for the answer.
 `;
 
 export type SystemPromptResolver = () => Promise<string>;

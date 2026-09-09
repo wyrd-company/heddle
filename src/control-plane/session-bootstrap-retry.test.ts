@@ -167,7 +167,6 @@ describe("stage session cold retry guards", () => {
     }));
     const mintCorrelationToken = vi.fn(() => "correlation-token");
     const nextId = vi.fn(() => "stable-id");
-    const applyHarnessToolTimeout = vi.fn(async () => undefined);
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
 
     const error = await bootstrapStageSession(
@@ -183,7 +182,6 @@ describe("stage session cold retry guards", () => {
         workflowMcpEndpoint,
         t3: {
           registerWorkflowMcpProviderSession,
-          applyHarnessToolTimeout,
           dispatch,
         },
       },
@@ -198,7 +196,6 @@ describe("stage session cold retry guards", () => {
     expect(ensureWorktree).not.toHaveBeenCalled();
     expect(mintCorrelationToken).not.toHaveBeenCalled();
     expect(nextId).not.toHaveBeenCalled();
-    expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
     expect(memory.record).toMatchObject({ state: initialState(), version: 1 });
   });
@@ -230,10 +227,9 @@ describe("stage session cold retry guards", () => {
       },
     },
   ])(
-    "rejects $case before timeout, registration, or T3 dispatch",
+    "rejects $case before registration or T3 dispatch",
     async ({ body, diagnostic, includes }) => {
       const memory = memoryStore();
-      const applyHarnessToolTimeout = vi.fn(async () => undefined);
       const dispatch = vi.fn(async () => ({ sequence: 1 }));
       const register = vi.fn(async () => undefined);
 
@@ -253,7 +249,6 @@ describe("stage session cold retry guards", () => {
         },
         workflowMcpEndpoint,
         t3: {
-          applyHarnessToolTimeout,
           dispatch,
           registerWorkflowMcpProviderSession: register,
         },
@@ -265,8 +260,6 @@ describe("stage session cold retry guards", () => {
         mintCorrelationToken: () => "correlation-token",
         nextId: () => "stable-id",
       }).catch((caught: unknown) => caught);
-
-      expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
       expect(register).not.toHaveBeenCalled();
       expect(dispatch).not.toHaveBeenCalled();
       expect(error).toBeInstanceOf(HandoffRenderError);
@@ -278,7 +271,6 @@ describe("stage session cold retry guards", () => {
 
   it("rejects a correlation token in pinned skill source before any T3 effect", async () => {
     const memory = memoryStore();
-    const applyHarnessToolTimeout = vi.fn(async () => undefined);
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
     const register = vi.fn(async () => undefined);
     const skilledInput: SessionBootstrapInput = {
@@ -319,7 +311,6 @@ describe("stage session cold retry guards", () => {
         },
         workflowMcpEndpoint,
         t3: {
-          applyHarnessToolTimeout,
           dispatch,
           registerWorkflowMcpProviderSession: register,
         },
@@ -331,7 +322,6 @@ describe("stage session cold retry guards", () => {
         mintCorrelationToken: () => "correlation-token",
       }),
     ).rejects.toThrow("Pinned skill source contains the correlation token");
-    expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
     expect(register).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -689,7 +679,6 @@ describe("stage session cold retry guards", () => {
     }));
     const mintCorrelationToken = vi.fn(() => "correlation-token");
     const nextId = vi.fn(() => "stable-id");
-    const applyHarnessToolTimeout = vi.fn(async () => undefined);
     const dispatch = vi.fn(async () => {
       throw new Error("stop after durable render");
     });
@@ -704,7 +693,6 @@ describe("stage session cold retry guards", () => {
       workflowMcpEndpoint,
       t3: {
         registerWorkflowMcpProviderSession,
-        applyHarnessToolTimeout,
         dispatch,
       },
     };
@@ -719,7 +707,6 @@ describe("stage session cold retry guards", () => {
     const worktreeCount = ensureWorktree.mock.calls.length;
     const mintCount = mintCorrelationToken.mock.calls.length;
     const nextIdCount = nextId.mock.calls.length;
-    const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
     const dispatchCount = dispatch.mock.calls.length;
 
     const error = await bootstrapStageSession(
@@ -735,7 +722,6 @@ describe("stage session cold retry guards", () => {
     expect(ensureWorktree).toHaveBeenCalledTimes(worktreeCount);
     expect(mintCorrelationToken).toHaveBeenCalledTimes(mintCount);
     expect(nextId).toHaveBeenCalledTimes(nextIdCount);
-    expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
     expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
     expect(memory.record.version).toBe(persistedVersion);
     expect(memory.record.state.handoffs).toHaveLength(1);
@@ -743,7 +729,6 @@ describe("stage session cold retry guards", () => {
 
   it("rejects a cold retry when the stored prompt and rendered document disagree", async () => {
     const memory = memoryStore();
-    const applyHarnessToolTimeout = vi.fn(async () => undefined);
     const dispatch = vi.fn(async () => {
       throw new Error("stop after durable render");
     });
@@ -762,7 +747,6 @@ describe("stage session cold retry guards", () => {
       workflowMcpEndpoint,
       t3: {
         registerWorkflowMcpProviderSession,
-        applyHarnessToolTimeout,
         dispatch,
       },
     };
@@ -782,21 +766,18 @@ describe("stage session cold retry guards", () => {
         })),
       },
     );
-    const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
     const dispatchCount = dispatch.mock.calls.length;
 
     await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
       "Stored rendered handoff does not match its system prompt",
     );
-    expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
     expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
   });
 
   it.each(["claudeAgent", "sample-driver"])(
-    "rejects a cold retry under changed driver %s before timeout or T3 dispatch",
+    "rejects a cold retry under changed driver %s before T3 dispatch",
     async (driver) => {
       const memory = memoryStore();
-      const applyHarnessToolTimeout = vi.fn(async () => undefined);
       const dispatch = vi.fn(async () => {
         throw new Error("stop after durable render");
       });
@@ -808,7 +789,6 @@ describe("stage session cold retry guards", () => {
         workflowMcpEndpoint,
         t3: {
           registerWorkflowMcpProviderSession,
-          applyHarnessToolTimeout,
           dispatch,
         },
         ensureWorktree: async ({ branch }) => ({
@@ -826,7 +806,6 @@ describe("stage session cold retry guards", () => {
       expect(memory.record.state.handoffs[0]).toMatchObject({
         renderedHandoffAuthentication: { driver: "cursor" },
       });
-      const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
       const dispatchCount = dispatch.mock.calls.length;
 
       await expect(
@@ -843,14 +822,12 @@ describe("stage session cold retry guards", () => {
           dependencies,
         ),
       ).rejects.toThrow(/authentication binding is incompatible/);
-      expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
       expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
     },
   );
 
-  it("rejects a cold retry when the stored authentication policy differs before timeout or T3 dispatch", async () => {
+  it("rejects a cold retry when the stored authentication policy differs before T3 dispatch", async () => {
     const memory = memoryStore();
-    const applyHarnessToolTimeout = vi.fn(async () => undefined);
     const dispatch = vi.fn(async () => {
       throw new Error("stop after durable render");
     });
@@ -862,7 +839,6 @@ describe("stage session cold retry guards", () => {
       workflowMcpEndpoint,
       t3: {
         registerWorkflowMcpProviderSession,
-        applyHarnessToolTimeout,
         dispatch,
       },
       ensureWorktree: async ({ branch }) => ({
@@ -894,13 +870,11 @@ describe("stage session cold retry guards", () => {
         })),
       },
     );
-    const timeoutCount = applyHarnessToolTimeout.mock.calls.length;
     const dispatchCount = dispatch.mock.calls.length;
 
     await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
       /no valid authentication binding/,
     );
-    expect(applyHarnessToolTimeout).toHaveBeenCalledTimes(timeoutCount);
     expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
   });
 
@@ -1126,7 +1100,6 @@ describe("stage session cold retry guards", () => {
         },
       ],
     });
-    const applyHarnessToolTimeout = vi.fn(async () => undefined);
     const dispatch = vi.fn(async () => ({ sequence: 1 }));
 
     await expect(
@@ -1137,7 +1110,6 @@ describe("stage session cold retry guards", () => {
         resolveWorkflowMcpStageContract,
         workflowMcpEndpoint,
         t3: {
-          applyHarnessToolTimeout,
           registerWorkflowMcpProviderSession,
           dispatch,
         },
@@ -1148,7 +1120,6 @@ describe("stage session cold retry guards", () => {
         }),
       }),
     ).rejects.toThrow("Stored handoff and workflow MCP skills disagree");
-    expect(applyHarnessToolTimeout).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
   });
 

@@ -436,136 +436,6 @@ describe("deployed configuration directory", () => {
     ).toThrow("providerUsage must be omitted");
   });
 
-  it("loads and preflights optional launch preparation by open driver kind", async () => {
-    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
-    await prepareBlueprintRepository(root);
-    const path = join(root, "config.yml");
-    const executable = join(root, "timeout-application-command");
-    await writeFile(executable, "#!/bin/sh\nexit 0\n");
-    await chmod(executable, 0o755);
-    const configuration = fixture(root);
-
-    await writeFile(
-      path,
-      stringify({
-        ...configuration,
-        session: {
-          ...configuration.session,
-          launchPreparation: {
-            "sample-driver": { executable },
-          },
-        },
-      }),
-    );
-    const loaded = await loadDeploymentConfiguration(root);
-    expect(loaded.launchPreparation).toEqual({
-      "sample-driver": {
-        arguments: [],
-        executable,
-        timeoutMilliseconds: 10_000,
-      },
-    });
-    expect(loaded.configuration.session).not.toHaveProperty(
-      "launchPreparation",
-    );
-  });
-
-  it("loads an inclusive 64-character launch-preparation driver kind with the full T3 alphabet", async () => {
-    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
-    await prepareBlueprintRepository(root);
-    const path = join(root, "config.yml");
-    const executable = join(root, "timeout-application-command");
-    await writeFile(executable, "#!/bin/sh\nexit 0\n");
-    await chmod(executable, 0o755);
-    const configuration = fixture(root);
-    const driverKind =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    expect(driverKind).toHaveLength(64);
-
-    await writeFile(
-      path,
-      stringify({
-        ...configuration,
-        session: {
-          ...configuration.session,
-          launchPreparation: {
-            [driverKind]: { executable },
-          },
-        },
-      }),
-    );
-
-    await expect(loadDeploymentConfiguration(root)).resolves.toMatchObject({
-      launchPreparation: {
-        [driverKind]: {
-          arguments: [],
-          executable,
-          timeoutMilliseconds: 10_000,
-        },
-      },
-    });
-  });
-
-  it.each([
-    ["whitespace-padded", " sample-driver"],
-    ["embedded-whitespace", "sample driver"],
-    ["digit-prefixed", "1sample-driver"],
-    ["overlong", "s".repeat(65)],
-  ])(
-    "rejects a %s launch-preparation driver kind before startup dispatch",
-    async (_case, driverKind) => {
-      root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
-      await prepareBlueprintRepository(root);
-      const path = join(root, "config.yml");
-      const executable = join(root, "timeout-application-command");
-      await writeFile(executable, "#!/bin/sh\nexit 0\n");
-      await chmod(executable, 0o755);
-      const configuration = fixture(root);
-      await writeFile(
-        path,
-        stringify({
-          ...configuration,
-          session: {
-            ...configuration.session,
-            launchPreparation: {
-              [driverKind]: { executable },
-            },
-          },
-        }),
-      );
-
-      await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-        `Configuration file '${path}' is invalid`,
-      );
-      await expect(
-        access(configuration.stateDirectory, constants.F_OK),
-      ).rejects.toThrow();
-    },
-  );
-
-  it("fails startup preflight when launch preparation is unavailable", async () => {
-    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
-    const path = join(root, "config.yml");
-    const configuration = fixture(root);
-    const executable = join(root, "missing-timeout-application-command");
-    await writeFile(
-      path,
-      stringify({
-        ...configuration,
-        session: {
-          ...configuration.session,
-          launchPreparation: {
-            "sample-driver": { executable },
-          },
-        },
-      }),
-    );
-
-    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `Configuration file '${path}' is invalid: session.launchPreparation.sample-driver.executable '${executable}' must be an available executable file`,
-    );
-  });
-
   it("fails startup preflight before composition when the configured executable is unavailable", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const path = join(root, "config.yml");
@@ -643,7 +513,7 @@ describe("deployed configuration directory", () => {
       expect(guide).toContain("503 Service Unavailable");
     }
     expect(operatorGuide).toContain("providerUsage");
-    expect(operatorGuide).toContain("session.launchPreparation");
+    expect(operatorGuide).not.toContain("session.launchPreparation");
     expect(operatorGuide).toContain(
       "Configuration changes require service restart",
     );

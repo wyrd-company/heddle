@@ -5,13 +5,15 @@
 
 import type { JsonValue, PersistedEvent } from "../persistence/index.js";
 import {
-  escalationAnswerSchema,
+  answeredEscalationSchema,
+  escalationAnsweringAuthoritySchema,
   escalationAttentionId,
   escalationInputSchema,
   escalationKey,
   sameAnswers,
   sameQuestions,
   type AnsweredEscalation,
+  type EscalationAnsweringAuthority,
   type EscalationAnswers,
   type EscalationInput,
   type PendingEscalation,
@@ -26,16 +28,21 @@ import { dispositionClaimFor } from "./session-disposition-claim.js";
 
 export const escalationEventTypes = {
   answered: "mcp:escalation-answered",
+  authorityMoved: "mcp:escalation-authority-moved",
   attentionRaised: "mcp:escalation-attention-raised",
+  decisionRecorded: "mcp:escalation-decision-recorded",
+  deliveryCompleted: "mcp:escalation-delivery-completed",
   notified: "mcp:escalation-notified",
   opened: "mcp:escalation-opened",
   parentSteered: "mcp:escalation-parent-steered",
+  sessionSteered: "mcp:escalation-session-steered",
 } as const;
 
 export type EscalationRouteEventType =
   | typeof escalationEventTypes.attentionRaised
   | typeof escalationEventTypes.notified
-  | typeof escalationEventTypes.parentSteered;
+  | typeof escalationEventTypes.parentSteered
+  | typeof escalationEventTypes.sessionSteered;
 
 const eventPayload = (event: PersistedEvent): Record<string, JsonValue> => {
   if (
@@ -70,6 +77,12 @@ const openedFrom = (event: PersistedEvent): PendingEscalation => {
     );
   }
   return {
+    answeringAuthority:
+      value["answeringAuthority"] === undefined
+        ? value["parentSessionKey"] === undefined
+          ? { kind: "operator" }
+          : { kind: "session", sessionKey: value["parentSessionKey"] as string }
+        : escalationAnsweringAuthoritySchema.parse(value["answeringAuthority"]),
     attentionId: value["attentionId"],
     escalationId: parsed.escalationId,
     instanceId: event.instanceId,
@@ -83,12 +96,17 @@ const openedFrom = (event: PersistedEvent): PendingEscalation => {
   };
 };
 
-const answeredFrom = (event: PersistedEvent): AnsweredEscalation => {
+const answeredFrom = (
+  event: PersistedEvent,
+  fallbackAuthority: EscalationAnsweringAuthority,
+): AnsweredEscalation => {
   const value = eventPayload(event);
-  return escalationAnswerSchema.parse({
+  return answeredEscalationSchema.parse({
     answers: value["answers"],
+    answeredBy: value["answeredBy"] ?? fallbackAuthority,
     escalationId: value["escalationId"],
     ownerSessionKey: value["ownerSessionKey"],
+    prose: value["prose"],
   });
 };
 
@@ -125,6 +143,10 @@ export class EscalationHistory {
         : { parentSessionKey: binding.parentSessionKey }),
       questions: parsed.questions,
       stage: binding.stage.id,
+      answeringAuthority:
+        binding.parentSessionKey === undefined
+          ? { kind: "operator" }
+          : { kind: "session", sessionKey: binding.parentSessionKey },
     };
     while (true) {
       const prior = this.find(
@@ -174,32 +196,95 @@ export class EscalationHistory {
   answer(
     opened: PendingEscalation,
     answers: EscalationAnswers,
+    answeredBy: EscalationAnsweringAuthority,
+    prose?: string,
   ): AnsweredEscalation {
     validateAnswers(opened, answers);
-    const prior = this.find(
-      opened.instanceId,
-      opened.ownerSessionKey,
-      opened.escalationId,
-    ).answered;
-    if (prior !== undefined) {
-      if (!sameAnswers(opened, prior.answers, answers)) {
-        throw new Error(
-          `Escalation '${opened.escalationId}' is already answered differently`,
-        );
-      }
-      return prior;
-    }
-    const answered = {
+    const answered: AnsweredEscalation = {
       answers,
+      answeredBy,
       escalationId: opened.escalationId,
       ownerSessionKey: opened.ownerSessionKey,
+      ...(prose === undefined ? {} : { prose }),
     };
-    this.persistence.appendEvent(
-      opened.instanceId,
-      escalationEventTypes.answered,
-      answered,
-    );
-    return answered;
+    while (true) {
+      const prior = this.find(
+        opened.instanceId,
+        opened.ownerSessionKey,
+        opened.escalationId,
+      ).answered;
+      if (prior !== undefined) {
+        if (!sameAnswers(opened, prior, answered)) {
+          throw new Error(
+            `Escalation '${opened.escalationId}' is already answered differently`,
+          );
+        }
+        return prior;
+      }
+      const current = this.persistence.getInstance(opened.instanceId);
+      if (current === undefined) {
+        throw new Error(`Instance does not exist: ${opened.instanceId}`);
+      }
+      const claimed = this.persistence.compareAndSwapInstanceWithEvent(
+        opened.instanceId,
+        current.version,
+        current.state,
+        escalationEventTypes.answered,
+        answered,
+      );
+      if (claimed !== undefined) return answered;
+    }
+  }
+
+  moveAuthority(
+    opened: PendingEscalation,
+    to: EscalationAnsweringAuthority,
+    reason: string,
+  ): PendingEscalation {
+    if (reason.trim() === "") {
+      throw new TypeError("Answering-authority move reason must not be empty");
+    }
+    while (true) {
+      const currentEscalation = this.find(
+        opened.instanceId,
+        opened.ownerSessionKey,
+        opened.escalationId,
+      );
+      if (currentEscalation.opened === undefined) {
+        throw new Error(`Escalation '${opened.escalationId}' is not pending`);
+      }
+      if (currentEscalation.answered !== undefined) {
+        throw new Error(
+          `Escalation '${opened.escalationId}' is already answered`,
+        );
+      }
+      if (
+        JSON.stringify(currentEscalation.opened.answeringAuthority) ===
+        JSON.stringify(to)
+      ) {
+        return currentEscalation.opened;
+      }
+      const current = this.persistence.getInstance(opened.instanceId);
+      if (current === undefined) {
+        throw new Error(`Instance does not exist: ${opened.instanceId}`);
+      }
+      const claimed = this.persistence.compareAndSwapInstanceWithEvent(
+        opened.instanceId,
+        current.version,
+        current.state,
+        escalationEventTypes.authorityMoved,
+        {
+          escalationId: opened.escalationId,
+          from: currentEscalation.opened.answeringAuthority,
+          ownerSessionKey: opened.ownerSessionKey,
+          reason,
+          to,
+        },
+      );
+      if (claimed !== undefined) {
+        return { ...currentEscalation.opened, answeringAuthority: to };
+      }
+    }
   }
 
   find(
@@ -220,6 +305,36 @@ export class EscalationHistory {
       .map(({ opened }) => opened);
   }
 
+  answered(instanceId: string): Array<{
+    answered: AnsweredEscalation;
+    opened: PendingEscalation;
+  }> {
+    return [...this.#replay(instanceId).values()].flatMap((entry) =>
+      entry.answered === undefined
+        ? []
+        : [{ answered: entry.answered, opened: entry.opened }],
+    );
+  }
+
+  effectRecorded(opened: PendingEscalation, type: string): boolean {
+    return this.persistence.replayEvents(opened.instanceId).some((event) => {
+      if (event.type !== type) return false;
+      const value = eventPayload(event);
+      return (
+        value["ownerSessionKey"] === opened.ownerSessionKey &&
+        value["escalationId"] === opened.escalationId
+      );
+    });
+  }
+
+  recordEffect(opened: PendingEscalation, type: string): void {
+    if (this.effectRecorded(opened, type)) return;
+    this.persistence.appendEvent(opened.instanceId, type, {
+      escalationId: opened.escalationId,
+      ownerSessionKey: opened.ownerSessionKey,
+    });
+  }
+
   #replay(instanceId: string): Map<string, ReplayedEscalation> {
     const replayed = new Map<string, ReplayedEscalation>();
     for (const event of this.persistence.replayEvents(instanceId)) {
@@ -236,23 +351,72 @@ export class EscalationHistory {
           );
         }
         replayed.set(key, { opened });
-      } else if (event.type === escalationEventTypes.answered) {
-        const answered = answeredFrom(event);
+      } else if (event.type === escalationEventTypes.authorityMoved) {
+        const value = eventPayload(event);
+        if (
+          typeof value["ownerSessionKey"] !== "string" ||
+          typeof value["escalationId"] !== "string" ||
+          typeof value["reason"] !== "string" ||
+          value["reason"].trim() === ""
+        ) {
+          throw new Error(
+            `Escalation authority event ${event.sequence} has an invalid payload`,
+          );
+        }
         const key = escalationKey(
           instanceId,
-          answered.ownerSessionKey,
-          answered.escalationId,
+          value["ownerSessionKey"],
+          value["escalationId"],
+        );
+        const prior = replayed.get(key);
+        if (prior === undefined || prior.answered !== undefined) {
+          throw new Error(
+            `Escalation '${value["escalationId"]}' authority move has no pending open event`,
+          );
+        }
+        const from = escalationAnsweringAuthoritySchema.parse(value["from"]);
+        if (
+          JSON.stringify(from) !==
+          JSON.stringify(prior.opened.answeringAuthority)
+        ) {
+          throw new Error(
+            `Escalation '${value["escalationId"]}' authority move disagrees with current authority`,
+          );
+        }
+        replayed.set(key, {
+          opened: {
+            ...prior.opened,
+            answeringAuthority: escalationAnsweringAuthoritySchema.parse(
+              value["to"],
+            ),
+          },
+        });
+      } else if (event.type === escalationEventTypes.answered) {
+        const value = eventPayload(event);
+        if (
+          typeof value["ownerSessionKey"] !== "string" ||
+          typeof value["escalationId"] !== "string"
+        ) {
+          throw new Error(
+            `Escalation event ${event.sequence} has an invalid payload`,
+          );
+        }
+        const key = escalationKey(
+          instanceId,
+          value["ownerSessionKey"],
+          value["escalationId"],
         );
         const prior = replayed.get(key);
         if (prior === undefined) {
           throw new Error(
-            `Escalation '${answered.escalationId}' answer precedes its open event`,
+            `Escalation '${value["escalationId"]}' answer precedes its open event`,
           );
         }
+        const answered = answeredFrom(event, prior.opened.answeringAuthority);
         validateAnswers(prior.opened, answered.answers);
         if (
           prior.answered !== undefined &&
-          !sameAnswers(prior.opened, prior.answered.answers, answered.answers)
+          !sameAnswers(prior.opened, prior.answered, answered)
         ) {
           throw new Error(
             `Escalation '${answered.escalationId}' has conflicting answer events`,
@@ -278,6 +442,24 @@ export class EscalationHistory {
         })
         .map(({ type }) => type),
     );
+  }
+
+  sessionRouteRecorded(opened: PendingEscalation, sessionKey: string): boolean {
+    return this.persistence.replayEvents(opened.instanceId).some((event) => {
+      if (
+        event.type !== escalationEventTypes.sessionSteered &&
+        event.type !== escalationEventTypes.parentSteered
+      ) {
+        return false;
+      }
+      const value = eventPayload(event);
+      return (
+        value["ownerSessionKey"] === opened.ownerSessionKey &&
+        value["escalationId"] === opened.escalationId &&
+        (value["answeringSessionKey"] === sessionKey ||
+          value["parentSessionKey"] === sessionKey)
+      );
+    });
   }
 
   recordRoute(

@@ -51,9 +51,14 @@ const canonicalAnswers = (
 const actionIntent = (
   action: ConsoleAttentionAction,
   answers: ConsoleAttentionActionAnswers | undefined,
+  prose: string | undefined,
 ): JsonValue =>
   JSON.parse(
-    JSON.stringify({ action, answers: canonicalAnswers(answers) ?? null }),
+    JSON.stringify({
+      action,
+      answers: canonicalAnswers(answers) ?? null,
+      prose: prose ?? null,
+    }),
   ) as JsonValue;
 
 const escalationAnswers = (
@@ -99,8 +104,9 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     const validated = {
       ...input,
       ...(request.answers === undefined ? {} : { answers: request.answers }),
+      ...(request.prose === undefined ? {} : { prose: request.prose }),
     };
-    const intent = actionIntent(input.action, request.answers);
+    const intent = actionIntent(input.action, request.answers, request.prose);
     if (!this.#schedulerResolutionIsCurrent(validated)) return;
     const stableId = actionStableId(input.attention.attentionId, input.action);
     this.persistence.recordEffectIntent(effectKind, stableId, intent);
@@ -268,11 +274,12 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
       return;
     }
     if (contract.kind === "escalation.answer") {
-      this.escalation.answerAsOperator({
+      await this.escalation.answerAsOperator({
         answers: escalationAnswers(input.answers),
         escalationId: contract.escalationId,
         instanceId: contract.instanceId,
         ownerSessionKey: contract.ownerSessionKey,
+        ...(input.prose === undefined ? {} : { prose: input.prose }),
       });
       return;
     }

@@ -39,7 +39,7 @@ import {
 import {
   createWorkflowMcpHttpHandler,
   EscalationCoordinator,
-  type ParentEscalation,
+  type SessionEscalation,
   type WorkflowMcpHttpHandler,
 } from "../mcp-server/index.js";
 import {
@@ -97,6 +97,7 @@ import {
   ProductionIncidentCoordinator,
 } from "./incident-coordinator.js";
 import { SharedProjectCoordinator } from "./shared-project.js";
+import { ProductionEscalationAnswerEffects } from "./escalation-answer-effects.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -342,6 +343,12 @@ export const createProductionComposition = (
       });
       await attention.raiseCurrentNotificationFailure(failure);
     };
+    const escalationAnswerEffects = new ProductionEscalationAnswerEffects(
+      persistence,
+      board,
+      instances,
+      t3,
+    );
     const escalation = new EscalationCoordinator({
       attention: {
         raise: async (value) => {
@@ -358,11 +365,13 @@ export const createProductionComposition = (
         });
         return true;
       },
-      parent: {
-        steer: async (pending: ParentEscalation) => {
+      decisionLog: escalationAnswerEffects,
+      delivery: escalationAnswerEffects,
+      session: {
+        steer: async (pending: SessionEscalation) => {
           const binding = productionSessionBindingFor(
             persistence!,
-            pending.parentSessionKey,
+            pending.answeringAuthority.sessionKey,
           );
           await steerStageSession(
             {
@@ -534,6 +543,7 @@ export const createProductionComposition = (
           mcp.toolNames,
         );
         await escalation.replayPendingRoutes();
+        await escalation.replayPendingDeliveries();
         const before = await board.readBoard();
         await projects.reconcile(before);
         routing.update(before);

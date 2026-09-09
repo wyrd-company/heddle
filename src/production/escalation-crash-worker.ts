@@ -193,27 +193,22 @@ const binding: WorkflowMcpSessionBinding = {
   taskContext: { id: 17, title: "Example Item" },
   token: "correlation-token",
 };
-const controller = new globalThis.AbortController();
 if (mode === "resume") {
   await composition.start();
 } else {
-  await composition.escalation.escalate(
-    binding,
-    {
-      escalationId: "delivery-choice",
-      questions: [
-        {
-          id: "decision",
-          options: [
-            { description: "Use route A", id: "a", label: "Route A" },
-            { description: "Use route B", id: "b", label: "Route B" },
-          ],
-          prompt: "Choose a route",
-        },
-      ],
-    },
-    controller.signal,
-  );
+  await composition.escalation.escalate(binding, {
+    escalationId: "delivery-choice",
+    questions: [
+      {
+        id: "decision",
+        options: [
+          { description: "Use route A", id: "a", label: "Route A" },
+          { description: "Use route B", id: "b", label: "Route B" },
+        ],
+        prompt: "Choose a route",
+      },
+    ],
+  });
 }
 
 const deliveries = (await readFile(deliveriesPath, "utf8").catch(() => ""))

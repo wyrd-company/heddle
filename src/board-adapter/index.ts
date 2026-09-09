@@ -303,6 +303,7 @@ export const boardTaskMatchesRecord = (
   recordDigest(record) === identity.recordDigest;
 
 export class KanbanBoardAdapter {
+  private activityWriteQueue: Promise<void> = Promise.resolve();
   private recordWriteQueue: Promise<void> = Promise.resolve();
 
   public constructor(
@@ -338,6 +339,28 @@ export class KanbanBoardAdapter {
       throw new Error(`task ${taskId} is an epic task`);
     }
     await this.command("edit", String(taskId), "--status", status, "--json");
+  }
+
+  public appendTaskActivity(
+    taskId: number,
+    operationKey: string,
+    activity: string,
+  ): Promise<boolean> {
+    if (operationKey.trim() === "") {
+      return Promise.reject(new Error("board activity operation key is empty"));
+    }
+    if (activity.trim() === "") {
+      return Promise.reject(new Error("board activity is empty"));
+    }
+    const write = this.activityWriteQueue.then(
+      () => this.writeTaskActivity(taskId, operationKey, activity),
+      () => this.writeTaskActivity(taskId, operationKey, activity),
+    );
+    this.activityWriteQueue = write.then(
+      () => undefined,
+      () => undefined,
+    );
+    return write;
   }
 
   public async transitionEpicStatus(
@@ -452,6 +475,27 @@ export class KanbanBoardAdapter {
 
     const created = requireTask(parseJson(await this.command(...arguments_)));
     return { replayed: false, task: await this.normalizeTask(created) };
+  }
+
+  private async writeTaskActivity(
+    taskId: number,
+    operationKey: string,
+    activity: string,
+  ): Promise<boolean> {
+    const marker = `<!-- heddle-activity:${sha256(operationKey)} -->`;
+    const task = requireTask(
+      parseJson(await this.command("show", String(taskId), "--json")),
+    );
+    const source = await readFile(task.file, "utf8");
+    if (source.includes(marker)) return false;
+    await this.command(
+      "edit",
+      String(taskId),
+      "--append-body",
+      `${activity.trim()}\n${marker}`,
+      "--json",
+    );
+    return true;
   }
 
   private async normalizeTask(task: KanbanTaskJson): Promise<BoardTask> {

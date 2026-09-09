@@ -9,9 +9,10 @@ import { z } from "zod";
 
 const identifier = z.string().trim().min(1).max(128);
 
-export const escalationQuestionSchema = z
+const choiceEscalationQuestionSchema = z
   .object({
     id: identifier,
+    kind: z.literal("choice").optional(),
     options: z
       .array(
         z
@@ -28,6 +29,43 @@ export const escalationQuestionSchema = z
   })
   .strict();
 
+const valueValidationSchema = z
+  .object({
+    maxLength: z.number().int().min(1).max(4_000),
+    minLength: z.number().int().min(0).max(4_000).default(1),
+    pattern: z
+      .string()
+      .max(1_000)
+      .refine((pattern) => {
+        try {
+          new RegExp(pattern, "u");
+          return true;
+        } catch {
+          return false;
+        }
+      }, "Value validation pattern must be a valid regular expression")
+      .optional(),
+  })
+  .strict()
+  .refine(
+    ({ maxLength, minLength }) => minLength <= maxLength,
+    "Value validation minimum length must not exceed its maximum length",
+  );
+
+const valueEscalationQuestionSchema = z
+  .object({
+    id: identifier,
+    kind: z.literal("value"),
+    prompt: z.string().trim().min(1).max(4_000),
+    validation: valueValidationSchema,
+  })
+  .strict();
+
+export const escalationQuestionSchema = z.union([
+  choiceEscalationQuestionSchema,
+  valueEscalationQuestionSchema,
+]);
+
 export const escalationInputSchema = z
   .object({
     escalationId: identifier,
@@ -40,17 +78,31 @@ export const escalationAnswerSchema = z
     answers: z.record(identifier, identifier),
     escalationId: identifier,
     ownerSessionKey: identifier,
+    prose: z.string().trim().min(1).max(4_000).optional(),
   })
   .strict();
+
+export const escalationAnsweringAuthoritySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("operator") }).strict(),
+  z.object({ kind: z.literal("session"), sessionKey: identifier }).strict(),
+]);
+
+export const answeredEscalationSchema = escalationAnswerSchema.extend({
+  answeredBy: escalationAnsweringAuthoritySchema,
+});
 
 export type EscalationQuestion = z.infer<typeof escalationQuestionSchema>;
 export type EscalationInput = z.infer<typeof escalationInputSchema>;
 export type EscalationAnswerInput = z.infer<typeof escalationAnswerSchema>;
 export type EscalationAnswers = Record<string, string>;
 export type EscalationResult = {
-  answers: EscalationAnswers;
+  awaitingAnswer: boolean;
   escalationId: string;
 };
+
+export type EscalationAnsweringAuthority = z.infer<
+  typeof escalationAnsweringAuthoritySchema
+>;
 
 export type EscalationAttention = {
   attentionId: string;
@@ -63,6 +115,7 @@ export type EscalationAttention = {
 };
 
 export type PendingEscalation = EscalationAttention & {
+  answeringAuthority: EscalationAnsweringAuthority;
   parentSessionKey?: string;
 };
 
@@ -70,10 +123,19 @@ export type ParentEscalation = EscalationAttention & {
   parentSessionKey: string;
 };
 
+export type SessionEscalation = PendingEscalation & {
+  answeringAuthority: Extract<
+    EscalationAnsweringAuthority,
+    { kind: "session" }
+  >;
+};
+
 export type AnsweredEscalation = {
   answers: EscalationAnswers;
+  answeredBy: EscalationAnsweringAuthority;
   escalationId: string;
   ownerSessionKey: string;
+  prose?: string;
 };
 
 export const escalationKey = (
@@ -98,6 +160,7 @@ export const validateQuestions = (questions: EscalationQuestion[]): void => {
       throw new TypeError(`Escalation repeats question ID '${question.id}'`);
     }
     questionIds.add(question.id);
+    if (question.kind === "value") continue;
     const optionIds = new Set<string>();
     for (const option of question.options) {
       if (optionIds.has(option.id)) {
@@ -126,6 +189,20 @@ export const validateAnswers = (
   }
   for (const question of opened.questions) {
     const selected = answers[question.id];
+    if (question.kind === "value") {
+      const { maxLength, minLength, pattern } = question.validation;
+      if (
+        selected === undefined ||
+        selected.length < minLength ||
+        selected.length > maxLength ||
+        (pattern !== undefined && !new RegExp(pattern, "u").test(selected))
+      ) {
+        throw new TypeError(
+          `Escalation answer for '${question.id}' does not satisfy its value validation`,
+        );
+      }
+      continue;
+    }
     if (!question.options.some(({ id }) => id === selected)) {
       throw new TypeError(
         `Escalation answer for '${question.id}' does not name an offered option`,
@@ -141,8 +218,10 @@ export const sameQuestions = (
 
 export const sameAnswers = (
   opened: PendingEscalation,
-  left: EscalationAnswers,
-  right: EscalationAnswers,
+  left: AnsweredEscalation,
+  right: AnsweredEscalation,
 ): boolean =>
-  opened.questions.every(({ id }) => left[id] === right[id]) &&
-  Object.keys(left).length === Object.keys(right).length;
+  opened.questions.every(({ id }) => left.answers[id] === right.answers[id]) &&
+  Object.keys(left.answers).length === Object.keys(right.answers).length &&
+  left.prose === right.prose &&
+  JSON.stringify(left.answeredBy) === JSON.stringify(right.answeredBy);

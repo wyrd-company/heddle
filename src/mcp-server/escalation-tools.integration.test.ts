@@ -34,7 +34,7 @@ describe("workflow MCP escalation tools", () => {
       "token-advance",
       "advance-client",
     );
-    const escalation = client.callTool({
+    const escalation = await client.callTool({
       arguments: {
         escalationId: "advance-choice",
         questions: sampleEscalationQuestions,
@@ -51,14 +51,17 @@ describe("workflow MCP escalation tools", () => {
     ).resolves.toMatchObject({ isError: true });
     expect(subject.lifecycleResumes).toHaveLength(0);
 
-    subject.coordinator.answerAsOperator({
+    await subject.coordinator.answerAsOperator({
       answers: sampleEscalationAnswer,
       escalationId: "advance-choice",
       instanceId: "instance-advance",
       ownerSessionKey: "top",
     });
-    await expect(escalation).resolves.toMatchObject({
-      structuredContent: { answers: sampleEscalationAnswer },
+    expect(escalation).toMatchObject({
+      structuredContent: {
+        awaitingAnswer: true,
+        escalationId: "advance-choice",
+      },
     });
     await expect(
       client.callTool({
@@ -99,7 +102,7 @@ describe("workflow MCP escalation tools", () => {
       "token-child-advance",
       "child-advance-client",
     );
-    const childCall = child.callTool({
+    const childCall = await child.callTool({
       arguments: {
         escalationId: "child-advance-choice",
         questions: sampleEscalationQuestions,
@@ -131,8 +134,11 @@ describe("workflow MCP escalation tools", () => {
         escalationId: "child-advance-choice",
       },
     });
-    await expect(childCall).resolves.toMatchObject({
-      structuredContent: { answers: sampleEscalationAnswer },
+    expect(childCall).toMatchObject({
+      structuredContent: {
+        awaitingAnswer: true,
+        escalationId: "child-advance-choice",
+      },
     });
     await expect(
       parent.callTool({
@@ -207,7 +213,7 @@ describe("workflow MCP escalation tools", () => {
       opened.then(() => ({ kind: "opened" as const })),
     ]);
     if (outcome.kind === "opened") {
-      subject.coordinator.answerAsOperator({
+      await subject.coordinator.answerAsOperator({
         answers: sampleEscalationAnswer,
         escalationId: "race-choice",
         instanceId: "instance-race",
@@ -232,7 +238,7 @@ describe("workflow MCP escalation tools", () => {
     ).toHaveLength(0);
   });
 
-  it("holds a top-level escalation until its attention entry is answered", async () => {
+  it("returns a durable receipt immediately and delivers the later top-level answer", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-top", [
       { sessionKey: "top", token: "token-top", tools: ["escalate"] },
@@ -243,21 +249,21 @@ describe("workflow MCP escalation tools", () => {
       "top-client",
     );
 
-    let settled = false;
-    const call = client
-      .callTool({
-        arguments: {
-          escalationId: "window-choice",
-          questions: sampleEscalationQuestions,
-        },
-        name: "escalate",
-      })
-      .finally(() => {
-        settled = true;
-      });
+    const call = await client.callTool({
+      arguments: {
+        escalationId: "window-choice",
+        questions: sampleEscalationQuestions,
+      },
+      name: "escalate",
+    });
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
 
-    expect(settled).toBe(false);
+    expect(call).toMatchObject({
+      structuredContent: {
+        awaitingAnswer: true,
+        escalationId: "window-choice",
+      },
+    });
     expect(subject.attentions[0]).toMatchObject({
       escalationId: "window-choice",
       instanceId: "instance-top",
@@ -289,23 +295,33 @@ describe("workflow MCP escalation tools", () => {
       instanceId: "instance-top",
       ownerSessionKey: "top",
     };
-    subject.coordinator.answerAsOperator(operatorAnswer);
-
-    await expect(call).resolves.toMatchObject({
-      structuredContent: {
-        answers: sampleEscalationAnswer,
-        escalationId: "window-choice",
-      },
+    await subject.coordinator.answerAsOperator({
+      ...operatorAnswer,
+      prose: "Use the ordinary delivery window.",
     });
-    expect(() =>
+
+    expect(subject.deliveredAnswers).toHaveLength(1);
+    expect(subject.deliveredAnswers[0]).toMatchObject({
+      answered: {
+        answers: sampleEscalationAnswer,
+        answeredBy: { kind: "operator" },
+        prose: "Use the ordinary delivery window.",
+      },
+      opened: { escalationId: "window-choice" },
+    });
+    await expect(
       subject.coordinator.answerAsOperator({
         ...operatorAnswer,
         answers: { "delivery-window": "wait" },
       }),
-    ).toThrow(/already answered differently/);
-    expect(subject.coordinator.answerAsOperator(operatorAnswer)).toMatchObject({
-      answers: sampleEscalationAnswer,
-    });
+    ).rejects.toThrow(/already answered differently/);
+    await expect(
+      subject.coordinator.answerAsOperator({
+        ...operatorAnswer,
+        prose: "Use the ordinary delivery window.",
+      }),
+    ).resolves.toMatchObject({ answers: sampleEscalationAnswer });
+    expect(subject.deliveredAnswers).toHaveLength(1);
     expect(
       subject.persistence
         .replayEvents("instance-top")
@@ -358,14 +374,14 @@ describe("workflow MCP escalation tools", () => {
       parentSessionKey: "parent",
     });
     expect(subject.attentions).toHaveLength(0);
-    expect(() =>
+    await expect(
       subject.coordinator.answerAsOperator({
         answers: sampleEscalationAnswer,
         escalationId: "child-choice",
         instanceId: "instance-family",
         ownerSessionKey: "child",
       }),
-    ).toThrow(/parent session/);
+    ).rejects.toThrow(/answering authority/);
 
     const answerArguments = {
       answers: sampleEscalationAnswer,
@@ -381,11 +397,126 @@ describe("workflow MCP escalation tools", () => {
       structuredContent: { answered: true, escalationId: "child-choice" },
     });
     await expect(childCall).resolves.toMatchObject({
-      structuredContent: { answers: sampleEscalationAnswer },
+      structuredContent: {
+        awaitingAnswer: true,
+        escalationId: "child-choice",
+      },
     });
   });
 
-  it("replays a pending call and its answer after persistence restart", async () => {
+  it("moves answer authority to another session through the same answer predicate", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-delegated", [
+      {
+        sessionKey: "parent",
+        token: "token-parent-delegated",
+        tools: ["answer"],
+      },
+      {
+        parentSessionKey: "parent",
+        sessionKey: "child",
+        token: "token-child-delegated",
+        tools: ["escalate"],
+      },
+      {
+        sessionKey: "adjudicator",
+        token: "token-adjudicator",
+        tools: ["answer"],
+      },
+    ]);
+    const child = await connectEscalationClient(
+      subject.url,
+      "token-child-delegated",
+      "child-delegated-client",
+    );
+    const adjudicator = await connectEscalationClient(
+      subject.url,
+      "token-adjudicator",
+      "adjudicator-client",
+    );
+    await child.callTool({
+      arguments: {
+        escalationId: "delegated-choice",
+        questions: sampleEscalationQuestions,
+      },
+      name: "escalate",
+    });
+    await vi.waitFor(() => expect(subject.parentEscalations).toHaveLength(1));
+
+    await subject.coordinator.moveAnswerAuthority({
+      escalationId: "delegated-choice",
+      instanceId: "instance-delegated",
+      ownerSessionKey: "child",
+      reason: "The parent requested independent adjudication.",
+      to: { kind: "session", sessionKey: "adjudicator" },
+    });
+
+    expect(subject.parentEscalations).toHaveLength(2);
+    expect(subject.parentEscalations[1]?.answeringAuthority).toEqual({
+      kind: "session",
+      sessionKey: "adjudicator",
+    });
+    await expect(
+      adjudicator.callTool({
+        arguments: {
+          answers: sampleEscalationAnswer,
+          escalationId: "delegated-choice",
+          ownerSessionKey: "child",
+        },
+        name: "answer",
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: { answered: true, escalationId: "delegated-choice" },
+    });
+  });
+
+  it("lets the operator answer after delegated authority is handed back", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-handback", [
+      {
+        sessionKey: "parent",
+        token: "token-parent-handback",
+        tools: ["answer"],
+      },
+      {
+        parentSessionKey: "parent",
+        sessionKey: "child",
+        token: "token-child-handback",
+        tools: ["escalate"],
+      },
+    ]);
+    const child = await connectEscalationClient(
+      subject.url,
+      "token-child-handback",
+      "child-handback-client",
+    );
+    await child.callTool({
+      arguments: {
+        escalationId: "handback-choice",
+        questions: sampleEscalationQuestions,
+      },
+      name: "escalate",
+    });
+    await vi.waitFor(() => expect(subject.parentEscalations).toHaveLength(1));
+
+    await subject.coordinator.moveAnswerAuthority({
+      escalationId: "handback-choice",
+      instanceId: "instance-handback",
+      ownerSessionKey: "child",
+      reason: "The parent declined to decide.",
+      to: { kind: "operator" },
+    });
+    await expect(
+      subject.coordinator.answerAsOperator({
+        answers: sampleEscalationAnswer,
+        escalationId: "handback-choice",
+        instanceId: "instance-handback",
+        ownerSessionKey: "child",
+      }),
+    ).resolves.toMatchObject({ answeredBy: { kind: "operator" } });
+  });
+
+  it("delivers a durably answered escalation exactly once after restart", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-replay", [
       { sessionKey: "top", token: "token-replay", tools: ["escalate"] },
@@ -393,38 +524,52 @@ describe("workflow MCP escalation tools", () => {
     const binding = await new WorkflowMcpSessionResolver(
       subject.persistence,
     ).resolve("token-replay");
-    const abort = new globalThis.AbortController();
     const escalationId = "e".repeat(128);
-    const abandoned = subject.coordinator.escalate(
-      binding,
-      {
+    await expect(
+      subject.coordinator.escalate(binding, {
         escalationId,
         questions: sampleEscalationQuestions,
-      },
-      abort.signal,
-    );
+      }),
+    ).resolves.toEqual({ awaitingAnswer: true, escalationId });
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
     const attentionId = subject.attentions[0]!.attentionId;
     expect(attentionId).toHaveLength(75);
-    abort.abort(new Error("simulated process stop"));
-    await expect(abandoned).rejects.toThrow(/simulated process stop/);
+    subject.persistence.appendEvent(
+      "instance-replay",
+      "mcp:escalation-answered",
+      {
+        answeredBy: { kind: "operator" },
+        answers: sampleEscalationAnswer,
+        escalationId,
+        ownerSessionKey: "top",
+        prose: "Recorded before the process stopped.",
+      },
+    );
     subject.persistence.close();
 
     const recoveredPersistence = new SqlitePersistence({
       stateDirectory: subject.stateDirectory,
     });
+    const delivered: unknown[] = [];
+    const recorded: unknown[] = [];
     const recovered = new EscalationCoordinator({
       attention: {
         raise: async () => {
           throw new Error("replayed escalation must not raise twice");
         },
       },
+      decisionLog: {
+        record: async (value) => void recorded.push(value),
+      },
+      delivery: {
+        deliver: async (value) => void delivered.push(value),
+      },
       pushover: {
         send: async () => {
           throw new Error("replayed escalation must not notify twice");
         },
       },
-      parent: {
+      session: {
         steer: async () => {
           throw new Error("top-level escalation must not steer a parent");
         },
@@ -432,38 +577,14 @@ describe("workflow MCP escalation tools", () => {
       persistence: recoveredPersistence,
     });
 
-    expect(recovered.pendingEscalations("instance-replay")).toMatchObject([
-      {
-        attentionId,
-        escalationId,
-        ownerSessionKey: "top",
-      },
-    ]);
-    const recoveredBinding = await new WorkflowMcpSessionResolver(
-      recoveredPersistence,
-    ).resolve("token-replay");
-    const reattached = recovered.escalate(recoveredBinding, {
-      escalationId,
-      questions: sampleEscalationQuestions,
-    });
-    recovered.answerAsOperator({
-      answers: sampleEscalationAnswer,
-      escalationId,
-      instanceId: "instance-replay",
-      ownerSessionKey: "top",
-    });
-    await expect(reattached).resolves.toEqual({
-      answers: sampleEscalationAnswer,
-      escalationId,
-    });
-    await expect(
-      recovered.escalate(recoveredBinding, {
-        escalationId,
-        questions: sampleEscalationQuestions,
-      }),
-    ).resolves.toEqual({
-      answers: sampleEscalationAnswer,
-      escalationId,
+    expect(recovered.pendingEscalations("instance-replay")).toEqual([]);
+    await recovered.replayPendingDeliveries();
+    await recovered.replayPendingDeliveries();
+    expect(recorded).toHaveLength(1);
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({
+      answered: { answeredBy: { kind: "operator" } },
+      opened: { attentionId, escalationId, ownerSessionKey: "top" },
     });
     expect(
       recoveredPersistence
@@ -475,8 +596,46 @@ describe("workflow MCP escalation tools", () => {
       "mcp:escalation-attention-raised",
       "mcp:escalation-notified",
       "mcp:escalation-answered",
+      "mcp:escalation-decision-recorded",
+      "mcp:escalation-delivery-completed",
     ]);
     recoveredPersistence.close();
+  });
+
+  it("replays a retained answer that predates explicit answering authority", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-legacy-answer", [
+      { sessionKey: "top", token: "token-legacy", tools: ["escalate"] },
+    ]);
+    subject.persistence.appendEvent(
+      "instance-legacy-answer",
+      "mcp:escalation-opened",
+      {
+        attentionId: "attention-legacy-answer",
+        escalationId: "legacy-choice",
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: "top",
+        questions: sampleEscalationQuestions,
+        stage: "assess",
+      },
+    );
+    subject.persistence.appendEvent(
+      "instance-legacy-answer",
+      "mcp:escalation-answered",
+      {
+        answers: sampleEscalationAnswer,
+        escalationId: "legacy-choice",
+        ownerSessionKey: "top",
+      },
+    );
+
+    expect(
+      subject.coordinator.pendingEscalations("instance-legacy-answer"),
+    ).toEqual([]);
+    await subject.coordinator.replayPendingDeliveries();
+    expect(subject.deliveredAnswers).toMatchObject([
+      { answered: { answeredBy: { kind: "operator" } } },
+    ]);
   });
 
   it("rejects a malformed persisted answer before clearing pending state", async () => {
@@ -487,23 +646,17 @@ describe("workflow MCP escalation tools", () => {
     const binding = await new WorkflowMcpSessionResolver(
       subject.persistence,
     ).resolve("token-invalid");
-    const abort = new globalThis.AbortController();
-    const abandoned = subject.coordinator.escalate(
-      binding,
-      {
-        escalationId: "invalid-choice",
-        questions: sampleEscalationQuestions,
-      },
-      abort.signal,
-    );
+    await subject.coordinator.escalate(binding, {
+      escalationId: "invalid-choice",
+      questions: sampleEscalationQuestions,
+    });
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
-    abort.abort(new Error("simulated caller stop"));
-    await expect(abandoned).rejects.toThrow(/simulated caller stop/);
 
     subject.persistence.appendEvent(
       "instance-invalid-answer",
       "mcp:escalation-answered",
       {
+        answeredBy: { kind: "operator" },
         answers: { "delivery-window": "unoffered" },
         escalationId: "invalid-choice",
         ownerSessionKey: "top",
@@ -524,6 +677,7 @@ describe("workflow MCP escalation tools", () => {
       "instance-answer-first",
       "mcp:escalation-answered",
       {
+        answeredBy: { kind: "operator" },
         answers: sampleEscalationAnswer,
         escalationId: "answer-first-choice",
         ownerSessionKey: "top",
@@ -576,6 +730,7 @@ describe("workflow MCP escalation tools", () => {
         "instance-answer-conflict",
         "mcp:escalation-answered",
         {
+          answeredBy: { kind: "operator" },
           answers,
           escalationId: "answer-conflict-choice",
           ownerSessionKey: "top",

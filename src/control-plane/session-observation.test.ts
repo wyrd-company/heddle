@@ -150,6 +150,14 @@ class MemoryAttention implements SessionObservationAttentionQueue {
 class MemoryEscalations implements SessionObservationEscalations {
   pending: PendingEscalation[] = [];
 
+  isAwaitingAnswer(instanceId: string, sessionKey: string) {
+    return this.pending.some(
+      (escalation) =>
+        escalation.instanceId === instanceId &&
+        escalation.ownerSessionKey === sessionKey,
+    );
+  }
+
   pendingEscalations() {
     return this.pending;
   }
@@ -347,6 +355,95 @@ describe("SessionObserver liveness", () => {
         attentions: [{ kind: expected }],
       });
       expect(test.attention.entries).toHaveLength(1);
+    },
+  );
+
+  it("keeps a completed thread awaiting an escalation answer out of liveness attention", async () => {
+    const test = fixture();
+    test.escalations.pending.push({
+      answeringAuthority: { kind: "operator" },
+      attentionId: "escalation-attention",
+      escalationId: "sample-choice",
+      instanceId: target.instanceId,
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: target.sessionKey,
+      questions: [
+        {
+          id: "sample-option",
+          options: [
+            { description: "Use option A", id: "a", label: "Option A" },
+            { description: "Use option B", id: "b", label: "Option B" },
+          ],
+          prompt: "Which option should be used?",
+        },
+      ],
+      stage: "assess",
+    });
+    test.t3.shell.threads[0] = {
+      id: target.threadId,
+      latestTurn: { state: "completed" },
+      session: { status: "ready" },
+    };
+
+    await expect(test.observer.observe(target)).resolves.toMatchObject({
+      attentions: [],
+      phase: "awaiting_answer",
+    });
+    test.setNow(2_000);
+    await expect(test.observer.observe(target)).resolves.toMatchObject({
+      attentions: [],
+      phase: "awaiting_answer",
+    });
+    expect(test.attention.entries).toEqual([]);
+  });
+
+  it.each([
+    {
+      expected: "failed",
+      shell: {
+        threads: [
+          {
+            id: target.threadId,
+            latestTurn: { state: "error" },
+            session: { status: "error" },
+          },
+        ],
+      },
+      threshold: 20,
+    },
+    { expected: "ended", shell: { threads: [] }, threshold: 30 },
+  ])(
+    "still reports a genuinely $expected session while an escalation is pending",
+    async ({ expected, shell, threshold }) => {
+      const test = fixture();
+      test.escalations.pending.push({
+        answeringAuthority: { kind: "operator" },
+        attentionId: "escalation-attention",
+        escalationId: "sample-choice",
+        instanceId: target.instanceId,
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: target.sessionKey,
+        questions: [
+          {
+            id: "sample-option",
+            options: [
+              { description: "Use option A", id: "a", label: "Option A" },
+              { description: "Use option B", id: "b", label: "Option B" },
+            ],
+            prompt: "Which option should be used?",
+          },
+        ],
+        stage: "assess",
+      });
+      test.t3.shell = shell;
+
+      await test.observer.observe(target);
+      test.setNow(1_000 + threshold);
+
+      await expect(test.observer.observe(target)).resolves.toMatchObject({
+        attentions: [{ kind: expected }],
+        phase: expected === "ended" ? "absent" : "failed",
+      });
     },
   );
 

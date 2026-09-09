@@ -22,7 +22,6 @@ const defaultConfigurationDirectory = "/home/vscode/.heddle";
 const configurationFileName = "config.yml";
 const blueprintsDirectoryName = "blueprints";
 const execute = promisify(execFile);
-const providerDriverKindPattern = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 type DeploymentEnvironment = Record<string, string | undefined>;
 
@@ -36,20 +35,11 @@ export type LoadedDeploymentConfiguration = {
   configuration: ProductionConfiguration;
   configurationDirectory: string;
   configurationPath: string;
-  launchPreparation?: Readonly<
-    Record<string, ExecutableTimeoutApplicationConfiguration>
-  >;
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
 };
 
 export type ExecutableProviderUsageConfiguration = {
-  arguments: string[];
-  executable: string;
-  timeoutMilliseconds: number;
-};
-
-export type ExecutableTimeoutApplicationConfiguration = {
   arguments: string[];
   executable: string;
   timeoutMilliseconds: number;
@@ -63,11 +53,7 @@ export type HeddleServerArguments = {
 type ConfigurationDocument = Omit<ProductionConfiguration, "session"> & {
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
-  session: ProductionConfiguration["session"] & {
-    launchPreparation?: Readonly<
-      Record<string, ExecutableTimeoutApplicationConfiguration>
-    >;
-  };
+  session: ProductionConfiguration["session"];
 };
 
 export class HeddleConfigurationError extends Error {
@@ -201,10 +187,7 @@ export const validateProviderUsageConfiguration = (
 
 const preflightExecutable = async (
   field: string,
-  configuration:
-    | ExecutableProviderUsageConfiguration
-    | ExecutableTimeoutApplicationConfiguration
-    | undefined,
+  configuration: ExecutableProviderUsageConfiguration | undefined,
 ): Promise<void> => {
   if (configuration === undefined) return;
   try {
@@ -246,20 +229,6 @@ const preflightBlueprintRepository = async (
     throw new TypeError(
       `Blueprint repository '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
     );
-  }
-};
-
-export const validateLaunchPreparationConfiguration = (
-  launchPreparation:
-    | Readonly<Record<string, ExecutableTimeoutApplicationConfiguration>>
-    | undefined,
-): void => {
-  for (const driverKind of Object.keys(launchPreparation ?? {})) {
-    if (!providerDriverKindPattern.test(driverKind)) {
-      throw new TypeError(
-        "session.launchPreparation driver kind must be a 1-64 character T3 ProviderDriverKind slug",
-      );
-    }
   }
 };
 
@@ -310,24 +279,17 @@ export const loadDeploymentConfiguration = async (
       throw new TypeError(firstSchemaError(validator.errors?.[0]));
     }
     const document = value as ConfigurationDocument;
-    const { launchPreparation, ...session } = document.session;
     const { providerUsage, server, ...root } = document;
-    const configuration: ProductionConfiguration = { ...root, session };
+    const configuration: ProductionConfiguration = {
+      ...root,
+      session: document.session,
+    };
     if (server.host.trim() === "") {
       throw new TypeError("/server/host must not be empty");
     }
     const validated = validateProductionConfiguration(configuration);
     validateProviderUsageConfiguration(validated, providerUsage);
-    validateLaunchPreparationConfiguration(launchPreparation);
     await preflightExecutable("providerUsage", providerUsage);
-    for (const [driverKind, executable] of Object.entries(
-      launchPreparation ?? {},
-    )) {
-      await preflightExecutable(
-        `session.launchPreparation.${driverKind}`,
-        executable,
-      );
-    }
     const blueprintsRepositoryRoot =
       await preflightBlueprintRepository(directory);
     return {
@@ -342,18 +304,6 @@ export const loadDeploymentConfiguration = async (
               ...providerUsage,
               arguments: [...providerUsage.arguments],
             },
-          }),
-      ...(launchPreparation === undefined
-        ? {}
-        : {
-            launchPreparation: Object.fromEntries(
-              Object.entries(launchPreparation).map(
-                ([driverKind, executable]) => [
-                  driverKind,
-                  { ...executable, arguments: [...executable.arguments] },
-                ],
-              ),
-            ),
           }),
       server: { ...server, host: server.host.trim() },
     };

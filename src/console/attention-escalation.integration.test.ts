@@ -58,20 +58,20 @@ describe("console escalation disposition", () => {
       "sample-token",
       "sample-client",
     );
-    let settled = false;
-    const blocked = client
-      .callTool({
-        arguments: {
-          escalationId: "sample-choice",
-          questions: sampleEscalationQuestions,
-        },
-        name: "escalate",
-      })
-      .finally(() => {
-        settled = true;
-      });
+    const receipt = await client.callTool({
+      arguments: {
+        escalationId: "sample-choice",
+        questions: sampleEscalationQuestions,
+      },
+      name: "escalate",
+    });
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
-    expect(settled).toBe(false);
+    expect(receipt).toMatchObject({
+      structuredContent: {
+        awaitingAnswer: true,
+        escalationId: "sample-choice",
+      },
+    });
 
     const raised = subject.attentions[0]!;
     const entry = createConsoleAttention({
@@ -123,7 +123,7 @@ describe("console escalation disposition", () => {
           if (action.contract.kind !== "escalation.answer") {
             throw new Error("unexpected console action authority");
           }
-          subject.coordinator.answerAsOperator({
+          await subject.coordinator.answerAsOperator({
             answers: answers as Record<string, string>,
             escalationId: action.contract.escalationId,
             instanceId: action.contract.instanceId,
@@ -153,12 +153,7 @@ describe("console escalation disposition", () => {
     );
 
     expect(response.status).toBe(204);
-    await expect(blocked).resolves.toMatchObject({
-      structuredContent: {
-        answers: sampleEscalationAnswer,
-        escalationId: "sample-choice",
-      },
-    });
+    expect(subject.deliveredAnswers).toHaveLength(1);
     expect(current).toEqual([]);
     expect(subject.coordinator.pendingEscalations("instance-sample")).toEqual(
       [],

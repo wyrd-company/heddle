@@ -401,7 +401,6 @@ const makeFixture = async () => {
         workflowMcpEndpoint,
         t3: {
           registerWorkflowMcpProviderSession,
-          applyHarnessToolTimeout: async () => undefined,
           dispatch: async () => ({ sequence: 1 }),
         },
       },

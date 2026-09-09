@@ -6,6 +6,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  escalationAnswerSchema,
+  escalationQuestionSchema,
   escalationAttentionId,
   escalationKey,
   type PendingEscalation,
@@ -18,6 +20,7 @@ import {
 } from "./escalation-tools.test-support.js";
 
 const pending = (): PendingEscalation => ({
+  answeringAuthority: { kind: "operator" },
   attentionId: "attention-1",
   escalationId: "choice-1",
   instanceId: "instance-1",
@@ -88,5 +91,38 @@ describe("escalation contract", () => {
     expect(() =>
       validateAnswers(pending(), sampleEscalationAnswer),
     ).not.toThrow();
+  });
+
+  it("validates a value answer against its declared length and pattern", () => {
+    const valueQuestion = escalationQuestionSchema.parse({
+      id: "release-code",
+      kind: "value",
+      prompt: "Which release code should be used?",
+      validation: { maxLength: 8, minLength: 4, pattern: "^[A-Z0-9]+$" },
+    });
+    const opened = { ...pending(), questions: [valueQuestion] };
+
+    expect(() =>
+      validateAnswers(opened, { "release-code": "AB12" }),
+    ).not.toThrow();
+    expect(() => validateAnswers(opened, { "release-code": "A12" })).toThrow(
+      /value validation/,
+    );
+    expect(() => validateAnswers(opened, { "release-code": "ab12" })).toThrow(
+      /value validation/,
+    );
+  });
+
+  it("accepts bounded prose in addition to the authoritative answer", () => {
+    expect(
+      escalationAnswerSchema.parse({
+        answers: sampleEscalationAnswer,
+        escalationId: "choice-1",
+        ownerSessionKey: "session-1",
+        prose: "Use the ordinary window after the current operation.",
+      }),
+    ).toMatchObject({
+      prose: "Use the ordinary window after the current operation.",
+    });
   });
 });

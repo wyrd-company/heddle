@@ -13,18 +13,23 @@ export {
   escalationQuestionSchema,
   type AnsweredEscalation,
   type EscalationAnswerInput,
+  type EscalationAnswerDelivery,
+  type EscalationAnsweringAuthority,
   type EscalationAnswers,
   type EscalationAttention,
   type EscalationAttentionQueue,
   type EscalationCoordinatorOptions,
+  type EscalationDecisionLog,
   type EscalationInput,
   type EscalationQuestion,
   type EscalationResult,
   type ParentEscalation,
-  type ParentEscalationRouter,
   type PendingEscalation,
   type PushoverEscalationNotifier,
+  type SessionEscalation,
+  type SessionEscalationRouter,
 } from "./escalation-coordinator.js";
+export { escalationKey } from "./escalation-contract.js";
 export { workflowMcpEscalationTools } from "./escalation-tools.js";
 export { isWorkflowMcpStageContract } from "./stage-contract.js";
 export {

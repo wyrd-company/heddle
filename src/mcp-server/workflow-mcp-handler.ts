@@ -85,12 +85,22 @@ export const createWorkflowMcpHttpHandler = (
           throw new Error("Escalation attention routing is not configured");
         },
       },
+      decisionLog: {
+        record: async () => {
+          throw new Error("Escalation decision logging is not configured");
+        },
+      },
+      delivery: {
+        deliver: async () => {
+          throw new Error("Escalation answer delivery is not configured");
+        },
+      },
       pushover: {
         send: async () => {
           throw new Error("Escalation Pushover routing is not configured");
         },
       },
-      parent: {
+      session: {
         steer: async () => {
           throw new Error("Parent escalation routing is not configured");
         },

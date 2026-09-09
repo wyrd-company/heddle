@@ -11,7 +11,7 @@ import {
 import { Buffer } from "node:buffer";
 import { createServer, type Server as HttpServer } from "node:http";
 import { createHash } from "node:crypto";
-import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { URL } from "node:url";
@@ -29,21 +29,6 @@ import { stringify } from "yaml";
 import { prepareProductionFixture } from "../production/composition.test-support.js";
 
 const execute = promisify(execFile);
-
-const timeoutCommand = `
-import { appendFileSync, writeFileSync } from "node:fs";
-
-const [requestPath, orderPath] = process.argv.slice(2);
-let input = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => { input += chunk; });
-process.stdin.on("end", () => {
-  JSON.parse(input);
-  writeFileSync(requestPath, input);
-  appendFileSync(orderPath, "timeout-applied\\n");
-  process.stdout.write(JSON.stringify({ version: 1, applied: true }) + "\\n");
-});
-`;
 
 const waitFor = async (
   assertion: () => Promise<void>,
@@ -186,13 +171,10 @@ describe("configured production service entry point", () => {
     await fixture?.cleanup();
   });
 
-  it("runs scheduler, timeout-before-thread, lifecycle resume, and token-authenticated MCP from config.yml only", async () => {
+  it("runs scheduler, lifecycle resume, and token-authenticated MCP from config.yml only", async () => {
     fixture = await prepareProductionFixture();
     const configurationDirectory = join(fixture.root, "configuration");
     const configurationPath = join(configurationDirectory, "config.yml");
-    const timeoutScript = join(fixture.root, "timeout-command.mjs");
-    const timeoutRequestPath = join(fixture.root, "timeout-request.json");
-    const orderPath = join(fixture.root, "dispatch-order.txt");
     await import("node:fs/promises").then(({ mkdir }) =>
       mkdir(configurationDirectory, { recursive: true }),
     );
@@ -213,9 +195,6 @@ describe("configured production service entry point", () => {
       ],
       { cwd: configurationDirectory },
     );
-    await writeFile(timeoutScript, timeoutCommand);
-    await writeFile(orderPath, "");
-
     const threads = new Set<string>();
     const projects = new Map<
       string,
@@ -270,7 +249,6 @@ describe("configured production service entry point", () => {
         request.setEncoding("utf8");
         for await (const chunk of request) source += chunk;
         registrations.push(JSON.parse(source) as Record<string, unknown>);
-        await appendFile(orderPath, "mcp-registered\n");
         response.statusCode = 204;
         response.end();
         return;
@@ -293,7 +271,6 @@ describe("configured production service entry point", () => {
         }
         if (command["type"] === "thread.create") {
           threads.add(String(command["threadId"]));
-          await appendFile(orderPath, "thread-created\n");
         }
         response.end(JSON.stringify({ sequence: commands.length }));
         return;
@@ -331,16 +308,7 @@ describe("configured production service entry point", () => {
       ...fixture.configuration,
       pacing: configuredPacing,
       server: { host: "127.0.0.1", port: servicePort },
-      session: {
-        ...configuredSession,
-        launchPreparation: {
-          claudeAgent: {
-            arguments: [timeoutScript, timeoutRequestPath, orderPath],
-            executable: process.execPath,
-            timeoutMilliseconds: 2_000,
-          },
-        },
-      },
+      session: configuredSession,
       t3: {
         accessToken: "t3-secret-value",
         baseUrl: `http://127.0.0.1:${t3Port}`,
@@ -389,9 +357,6 @@ describe("configured production service entry point", () => {
       ]);
     });
 
-    expect((await readFile(orderPath, "utf8")).split("\n").slice(0, 3)).toEqual(
-      ["timeout-applied", "mcp-registered", "thread-created"],
-    );
     expect(catalogRequests).toEqual([
       expect.objectContaining({
         _tag: "Request",
@@ -404,17 +369,6 @@ describe("configured production service entry point", () => {
         tag: "server.getConfig",
       }),
     ]);
-    const timeoutRequest = JSON.parse(
-      await readFile(timeoutRequestPath, "utf8"),
-    ) as Record<string, unknown>;
-    expect(timeoutRequest).toMatchObject({
-      configuration: {
-        environment: { MCP_TOOL_TIMEOUT: "100000000" },
-      },
-      driver: "claudeAgent",
-      providerInstanceId: "provider-alpha",
-      version: 1,
-    });
     expect(commands.map((command) => command["type"]).slice(0, 3)).toEqual([
       "project.create",
       "thread.create",

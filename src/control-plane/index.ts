@@ -30,15 +30,6 @@ export {
   type SessionActivationPayload,
 } from "./session-activation.js";
 export {
-  applyHarnessToolTimeoutBeforeThread,
-  harnessToolTimeoutConfiguration,
-  harnessToolTimeoutLaunchConfiguration,
-  type HarnessToolTimeoutConsumer,
-  type HarnessToolTimeoutConfiguration,
-  type HarnessToolTimeoutLaunchConfiguration,
-  type HarnessToolTimeoutLaunchInput,
-} from "./harness-tool-timeout.js";
-export {
   assertComposedSystemPrompt,
   composeSystemPrompt,
   HandoffRenderError,

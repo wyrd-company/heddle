@@ -487,15 +487,6 @@ describe("production subagent composition", () => {
         }),
       ]),
     );
-    expect(t3.timeouts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          driver: "codex",
-          providerInstanceId: "provider-beta",
-          threadId: spawned.assignment.threadId,
-        }),
-      ]),
-    );
     expect(t3.providerContexts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -641,7 +632,6 @@ describe("production subagent composition", () => {
     const effectsBefore = {
       commands: t3.commands.length,
       mcpRegistrations: t3.mcpRegistrations.length,
-      timeouts: t3.timeouts.length,
       usageReads: readProviderUsage.mock.calls.length,
     };
     t3.providerCatalog.find(
@@ -721,7 +711,6 @@ describe("production subagent composition", () => {
     expect({
       commands: t3.commands.length,
       mcpRegistrations: t3.mcpRegistrations.length,
-      timeouts: t3.timeouts.length,
       usageReads: readProviderUsage.mock.calls.length,
     }).toEqual(effectsBefore);
     await composition.close();
