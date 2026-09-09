@@ -21,6 +21,18 @@ import {
 
 class TerminalSyntheticT3 extends SyntheticT3 {
   readonly completedThreads = new Set<string>();
+  failNextThreadCreate = false;
+
+  override async dispatch(
+    command: Parameters<SyntheticT3["dispatch"]>[0],
+    providerContext?: Parameters<SyntheticT3["dispatch"]>[1],
+  ) {
+    if (this.failNextThreadCreate && command.type === "thread.create") {
+      this.failNextThreadCreate = false;
+      throw new Error("Synthetic replacement thread failed");
+    }
+    return super.dispatch(command, providerContext);
+  }
 
   override async getShell() {
     const shell = await super.getShell();
@@ -246,6 +258,112 @@ describe("production escalation answer delivery", () => {
         status: "awaiting",
       }),
     });
+  });
+
+  it("recovers an interrupted retained-binding reactivation before replaying its answer", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new TerminalSyntheticT3();
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    cleanup = async () => {
+      await composition.close();
+      await fixture.cleanup();
+    };
+    await composition.start();
+    const original = composition.persistence.listReconcilerRuntime()[0]!;
+    const originalSession = composition.persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === original.sessionKey)!;
+    const instance = composition.persistence.getInstance(original.instanceId)!;
+    const binding: WorkflowMcpSessionBinding = {
+      dispositions: [{ description: "Finish the sample", name: "complete" }],
+      instance,
+      sessionKey: original.sessionKey!,
+      stage: { id: original.stageId!, tools: ["advance", "escalate"] },
+      taskContext: { id: fixture.taskId, title: "Arrange sample items" },
+      token: storedCorrelationToken(
+        instance.state.handoffs,
+        original.sessionKey!,
+      ),
+    };
+
+    await composition.escalation.escalate(binding, {
+      escalationId: "interrupted-route",
+      questions: [
+        {
+          id: "route",
+          options: [
+            { description: "Use route A", id: "a", label: "Route A" },
+            { description: "Use route B", id: "b", label: "Route B" },
+          ],
+          prompt: "Which route should be used?",
+        },
+      ],
+    });
+    await vi.waitFor(() =>
+      expect(composition.attention.list()).toHaveLength(1),
+    );
+    t3.completedThreads.add(original.threadId!);
+    t3.failNextThreadCreate = true;
+
+    await expect(
+      composition.escalation.answerAsOperator({
+        answers: { route: "a" },
+        escalationId: "interrupted-route",
+        instanceId: original.instanceId,
+        ownerSessionKey: original.sessionKey!,
+        prose: "Resume the retained route.",
+      }),
+    ).rejects.toThrow("Synthetic replacement thread failed");
+
+    const interrupted = composition.persistence.listReconcilerRuntime()[0]!;
+    expect(interrupted).toMatchObject({
+      instanceId: original.instanceId,
+      stageId: original.stageId,
+      state: "starting",
+    });
+    expect(interrupted.sessionKey).not.toBe(original.sessionKey);
+    const interruptedSession = composition.persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === interrupted.sessionKey)!;
+    expect(withoutOccurrenceIdentity(interruptedSession.binding)).toEqual(
+      withoutOccurrenceIdentity(originalSession.binding),
+    );
+
+    await composition.scheduler.trigger();
+
+    const recovered = composition.persistence.listReconcilerRuntime()[0]!;
+    expect(recovered).toMatchObject({
+      sessionKey: interrupted.sessionKey,
+      state: "waiting",
+      threadId: interrupted.threadId,
+    });
+    expect(
+      t3.commands.filter(
+        (command) =>
+          command.type === "thread.turn.start" &&
+          command.threadId === recovered.threadId &&
+          typeof command["message"] === "object" &&
+          command["message"] !== null &&
+          typeof (command["message"] as Record<string, unknown>)["text"] ===
+            "string" &&
+          (
+            (command["message"] as Record<string, unknown>)["text"] as string
+          ).includes("Escalation interrupted-route was answered"),
+      ),
+    ).toHaveLength(1);
+    const commandCount = t3.commands.length;
+    await composition.scheduler.trigger();
+    expect(t3.commands).toHaveLength(commandCount);
   });
 
   it("suppresses liveness attention and incident admission only while an awaiting session remains reachable", async () => {

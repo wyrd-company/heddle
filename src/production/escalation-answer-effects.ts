@@ -97,10 +97,7 @@ export class ProductionEscalationAnswerEffects
     messageId: string;
     opened: PendingEscalation;
   }): Promise<void> {
-    const existing = productionSessionBindingFor(
-      this.persistence,
-      input.opened.ownerSessionKey,
-    );
+    const existing = this.#currentDeliveryBinding(input.opened);
     const shell = await this.t3.getShell();
     const thread = shell.threads.find(({ id }) => id === existing.threadId);
     const phase =
@@ -125,6 +122,32 @@ export class ProductionEscalationAnswerEffects
       },
       { t3: this.t3 },
     );
+  }
+
+  #currentDeliveryBinding(opened: PendingEscalation) {
+    const sessions = this.persistence.listSessionRuntime();
+    if (
+      !sessions.some(({ sessionKey }) => sessionKey === opened.ownerSessionKey)
+    ) {
+      return productionSessionBindingFor(
+        this.persistence,
+        opened.ownerSessionKey,
+      );
+    }
+    const runtime = this.persistence
+      .listReconcilerRuntime()
+      .find(({ instanceId }) => instanceId === opened.instanceId);
+    const incident = this.persistence
+      .listIncidentRuntime()
+      .find(({ incidentId }) => incidentId === opened.instanceId);
+    const current = runtime ?? incident;
+    if (current?.stageId !== opened.stage || current.sessionKey === undefined) {
+      return productionSessionBindingFor(
+        this.persistence,
+        opened.ownerSessionKey,
+      );
+    }
+    return productionSessionBindingFor(this.persistence, current.sessionKey);
   }
 
   async #taskFor(instanceId: string) {
