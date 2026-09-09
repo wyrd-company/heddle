@@ -13,7 +13,11 @@ import {
 import { BlueprintValidationError } from "./errors.js";
 import { agentNameListNames } from "../agent-names/index.js";
 import { RESOLVED_SESSION_RUNTIME_MODES } from "../persistence/index.js";
-import { isProviderAlias } from "../provider-alias.js";
+import {
+  isProviderAlias,
+  TaskProviderAliasError,
+  type TaskProviderAliasMap,
+} from "../provider-alias.js";
 import {
   combineExclusiveLandings,
   combineLandings,
@@ -33,6 +37,33 @@ const dispositionPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const placeholderNode: NodeFunction = async () => ({ output: null });
 const mechanicalNodeUseSet = new Set<string>(mechanicalNodeUses);
 const agentNameListNameSet = new Set<string>(agentNameListNames);
+
+export const validateTaskProviderAliases = (
+  blueprint: LifecycleBlueprint,
+  taskId: number,
+  aliases: TaskProviderAliasMap | undefined,
+): void => {
+  if (aliases === undefined) return;
+  const nodesById = new Map(blueprint.nodes.map((node) => [node.id, node]));
+  for (const stageId of Object.keys(aliases)) {
+    const node = nodesById.get(stageId);
+    if (node === undefined) {
+      throw new TaskProviderAliasError(
+        taskId,
+        `key ${JSON.stringify(stageId)} names no node in the resolved blueprint`,
+      );
+    }
+    if (node.uses !== "wait") {
+      const kind = mechanicalNodeUseSet.has(node.uses)
+        ? "a mechanical node"
+        : "a non-wait node";
+      throw new TaskProviderAliasError(
+        taskId,
+        `key ${JSON.stringify(stageId)} names ${kind}; only wait nodes can select providers`,
+      );
+    }
+  }
+};
 
 export const validateBlueprintBoardStatuses = (
   blueprint: LifecycleBlueprint,

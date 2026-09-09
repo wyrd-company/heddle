@@ -13,6 +13,7 @@ import {
   type StartLifecycleInput,
 } from "../engine/index.js";
 import type { SqlitePersistence } from "../persistence/index.js";
+import type { TaskProviderAliasMap } from "../provider-alias.js";
 
 export class ProductionLifecycleRouter {
   private readonly activeTransitions = new Map<string, number>();
@@ -38,6 +39,14 @@ export class ProductionLifecycleRouter {
 
   plannedStartStage(input: StartLifecycleInput): Promise<string | undefined> {
     return this.engine.plannedStartStage(input);
+  }
+
+  validateTaskProviderAliases(
+    instanceId: string,
+    taskId: number,
+    aliases: TaskProviderAliasMap | undefined,
+  ): Promise<void> {
+    return this.engine.validateTaskProviderAliases(instanceId, taskId, aliases);
   }
 
   resume(input: ResumeLifecycleInput): Promise<LifecycleSnapshot> {

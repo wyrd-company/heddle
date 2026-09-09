@@ -13,6 +13,7 @@ import {
   expectedLanding,
   startLanding,
   validateBlueprint,
+  validateTaskProviderAliases,
 } from "./blueprint.js";
 import {
   BlueprintValidationError,
@@ -51,6 +52,7 @@ import type {
   ResumeLifecycleInput,
   StartLifecycleInput,
 } from "./types.js";
+import type { TaskProviderAliasMap } from "../provider-alias.js";
 
 export class LifecycleEngine {
   private readonly blueprintStore: GitBlueprintStore;
@@ -112,6 +114,24 @@ export class LifecycleEngine {
       this.createStartRecord(input, pinned.blobHash, pinned.path);
     }
     return stageIds.values().next().value;
+  }
+
+  async validateTaskProviderAliases(
+    instanceId: string,
+    taskId: number,
+    aliases: TaskProviderAliasMap | undefined,
+  ): Promise<void> {
+    const record = this.persistence.getInstance(instanceId);
+    if (record === undefined) {
+      throw new Error(`Instance does not exist: ${instanceId}`);
+    }
+    const context = readLifecycleContext(record);
+    const blueprint = await this.blueprintStore.read(
+      context.blueprintBlobHash,
+      context.blueprintPath,
+    );
+    validateBlueprint(blueprint, this.effects);
+    validateTaskProviderAliases(blueprint, taskId, aliases);
   }
 
   async start(input: StartLifecycleInput): Promise<LifecycleSnapshot> {

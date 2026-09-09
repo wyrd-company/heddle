@@ -32,6 +32,7 @@ export { LifecycleEngine } from "./lifecycle-engine.js";
 export {
   boardStatusForMechanicalNode,
   validateBlueprintBoardStatuses,
+  validateTaskProviderAliases,
 } from "./blueprint.js";
 export { LifecycleResolver } from "./lifecycle-resolver.js";
 export { readLifecycleContext } from "./lifecycle-state.js";

@@ -222,6 +222,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             ({ sessionKey }) => sessionKey === starting.sessionKey,
           );
     if (retainedSession !== undefined) {
+      await this.lifecycle.validateTaskProviderAliases(
+        input.instanceId,
+        input.task.id,
+        input.task.providerAlias,
+      );
       await this.agentNames?.prepareTask(
         input.instanceId,
         input.task.parent === undefined ? "soloist" : "team",
@@ -241,6 +246,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           blueprintPath: input.blueprintPath,
           instanceId: input.instanceId,
         }));
+      await this.lifecycle.validateTaskProviderAliases(
+        input.instanceId,
+        input.task.id,
+        input.task.providerAlias,
+      );
       await this.agentNames?.prepareTask(
         input.instanceId,
         input.task.parent === undefined ? "soloist" : "team",
@@ -273,7 +283,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
               stageProviderAlias: stage.providerAlias,
               stageRuntimeMode: stage.runtimeMode,
               taskId: input.task.id,
-              taskProviderAlias: input.task.providerAlias,
+              taskProviderAliases: input.task.providerAlias,
             },
             this.sessionSelectionResolver(),
           ),
@@ -444,7 +454,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           stageProviderAlias: stage.providerAlias,
           stageRuntimeMode: stage.runtimeMode,
           taskId: task?.id ?? runtime.taskId,
-          taskProviderAlias: task?.providerAlias,
+          taskProviderAliases: task?.providerAlias,
         },
         this.sessionSelectionResolver(),
       ),
@@ -654,6 +664,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     }
     const restoreInitialBoardStatus =
       runtime.state === "starting" && runtime.boardStatus === "todo";
+    await this.lifecycle.validateTaskProviderAliases(
+      runtime.instanceId,
+      task.id,
+      task.providerAlias,
+    );
     const starting: ReconcilerRuntimeRecord = {
       ...runtime,
       boardStatus: sameStage ? runtime.boardStatus : task.status,
@@ -787,7 +802,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             stageProviderAlias: stage.providerAlias,
             stageRuntimeMode: stage.runtimeMode,
             taskId: task.id,
-            taskProviderAlias: task.providerAlias,
+            taskProviderAliases: task.providerAlias,
           },
           this.sessionSelectionResolver(),
         ),

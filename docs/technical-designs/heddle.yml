@@ -279,17 +279,23 @@ proposed-design:
     T3 reject the request; Heddle reports that rejection and never substitutes
     another provider or model.
 
-    A task's optional `provider-alias` front-matter scalar overrides its current
+    A task's optional `provider-alias` front-matter value is a map from stage ID
+    to provider alias. For the current stage, that map's own entry overrides the
     wait node's optional `provider-alias`, which overrides
-    `session.defaultProviderAlias`. Absence alone falls through. A present
-    empty, null, non-string, malformed, or unknown value fails closed without
-    fallback. Mechanical nodes cannot declare provider selection. Runtime mode
-    is a separate T3 concept with the exact vocabulary `approval-required`,
-    `auto-accept-edits`, `auto`, and `full-access`. A wait node's optional
-    `runtime-mode` overrides `session.defaultRuntimeMode`; tasks have no runtime
-    override. `full-access` is valid for every provider and is forwarded
-    unchanged, but the operator chooses the default. Provider selection never
-    infers a runtime mode from the driver or model.
+    `session.defaultProviderAlias`. Only absence of the current stage's map
+    entry falls through. A present scalar or a present empty, null, non-string,
+    malformed, or unknown alias value fails closed without fallback. After
+    Heddle pins the resolved blueprint, it validates every map key against that
+    exact snapshot before any provider dispatch or session effect. An unknown
+    key or a key for a non-wait node fails with
+    `provider-alias-not-allowed`; task maps cannot grant provider selection to
+    mechanical nodes. Runtime mode is a separate T3 concept with the exact
+    vocabulary `approval-required`, `auto-accept-edits`, `auto`, and
+    `full-access`. A wait node's optional `runtime-mode` overrides
+    `session.defaultRuntimeMode`; tasks have no runtime override. `full-access`
+    is valid for every provider and is forwarded unchanged, but the operator
+    chooses the default. Provider selection never infers a runtime mode from
+    the driver or model.
 
     Before session binding resolution, Heddle pins the lifecycle blueprint
     source ref and durably stores a pending start with the blueprint path and

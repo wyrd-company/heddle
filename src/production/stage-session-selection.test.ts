@@ -45,19 +45,19 @@ describe("stage session selection", () => {
       expected: "task",
       label: "task override over stage alias",
       stageProviderAlias: "stage",
-      taskProviderAlias: "task",
+      taskProviderAliases: { review: "task" },
     },
     {
       expected: "stage",
       label: "stage alias when task override is absent",
       stageProviderAlias: "stage",
-      taskProviderAlias: undefined,
+      taskProviderAliases: { implement: "task" },
     },
     {
       expected: "default",
       label: "configured default when both overrides are absent",
       stageProviderAlias: undefined,
-      taskProviderAlias: undefined,
+      taskProviderAliases: { implement: "task" },
     },
   ])("selects $label", async (testCase) => {
     const resolve = vi.fn(
@@ -72,7 +72,7 @@ describe("stage session selection", () => {
         stageProviderAlias: testCase.stageProviderAlias,
         stageRuntimeMode: "full-access",
         taskId: 17,
-        taskProviderAlias: testCase.taskProviderAlias,
+        taskProviderAliases: testCase.taskProviderAliases,
       },
       { resolve },
     );
@@ -104,12 +104,12 @@ describe("stage session selection", () => {
     {
       label: "task override",
       stageProviderAlias: "stage",
-      taskProviderAlias: "unknown",
+      taskProviderAliases: { review: "unknown" },
     },
     {
       label: "stage alias",
       stageProviderAlias: "unknown",
-      taskProviderAlias: undefined,
+      taskProviderAliases: undefined,
     },
   ])(
     "names the task and stage when a present $label is unknown",
@@ -127,7 +127,7 @@ describe("stage session selection", () => {
           stageId: "review",
           stageProviderAlias: testCase.stageProviderAlias,
           taskId: 17,
-          taskProviderAlias: testCase.taskProviderAlias,
+          taskProviderAliases: testCase.taskProviderAliases,
         },
         { resolve },
       ).catch((candidate: unknown) => candidate);

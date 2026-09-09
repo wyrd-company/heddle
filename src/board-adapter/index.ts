@@ -11,7 +11,10 @@ import { promisify } from "node:util";
 import { parse } from "yaml";
 
 import type { JsonValue } from "../persistence/index.js";
-import { isProviderAlias } from "../provider-alias.js";
+import {
+  parseTaskProviderAliasMap,
+  type TaskProviderAliasMap,
+} from "../provider-alias.js";
 import { epicControlForStatus } from "./epic-control.js";
 
 const executeFile = promisify(execFile);
@@ -30,7 +33,7 @@ export interface BoardTask {
   dependencies: number[];
   parent?: number;
   lifecycle?: string;
-  providerAlias?: string;
+  providerAlias?: TaskProviderAliasMap;
   product?: string;
   repos?: string[];
 }
@@ -459,14 +462,10 @@ export class KanbanBoardAdapter {
       lifecycleFromFrontMatter(source) ?? lifecycleFromTag(tags),
     );
     const parsedFrontMatter = rawFrontMatter(frontMatter);
-    const providerAlias = (parsedFrontMatter as Record<string, JsonValue>)[
-      "provider-alias"
-    ];
-    if (providerAlias !== undefined && !isProviderAlias(providerAlias)) {
-      throw new Error(
-        `task ${task.id} provider-alias must be a lower-kebab scalar of at most 64 characters`,
-      );
-    }
+    const providerAlias = parseTaskProviderAliasMap(
+      (parsedFrontMatter as Record<string, JsonValue>)["provider-alias"],
+      task.id,
+    );
     const product = scalarFromFrontMatter(frontMatter, "product");
     if (product !== undefined && product.trim() === "") {
       throw new Error("task product declaration must not be empty");

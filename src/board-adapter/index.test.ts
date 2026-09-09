@@ -16,6 +16,7 @@ import {
   KanbanBoardAdapter,
   type KanbanCommandRunner,
 } from "./index.js";
+import { TaskProviderAliasError } from "../provider-alias.js";
 
 const execute = promisify(execFile);
 
@@ -198,7 +199,7 @@ next_id: 1
     });
   });
 
-  it("normalizes and preserves a provider alias through supported board mutations", async () => {
+  it("normalizes and preserves a stage provider-alias map through supported board mutations", async () => {
     const taskId = await createTask("Arrange sample items");
     const task = JSON.parse(
       await runKanban([
@@ -214,7 +215,7 @@ next_id: 1
       task.file,
       source.replace(
         "class: standard\n---",
-        "class: standard\nprovider-alias: specialist\n---",
+        "class: standard\nprovider-alias:\n  implement: specialist\n---",
       ),
     );
 
@@ -231,22 +232,20 @@ next_id: 1
 
     await expect(adapter.readTask(taskId)).resolves.toMatchObject({
       blocked: true,
-      frontMatter: { "provider-alias": "specialist" },
-      providerAlias: "specialist",
+      frontMatter: { "provider-alias": { implement: "specialist" } },
+      providerAlias: { implement: "specialist" },
       status: "in-progress",
     });
   });
 
   it.each([
-    "provider-alias:",
+    "provider-alias: specialist",
     "provider-alias: ''",
     "provider-alias: 17",
     "provider-alias: [sample]",
-    "provider-alias: { sample: value }",
-    "provider-alias: Not-Valid",
-    `provider-alias: ${"a".repeat(65)}`,
+    "provider-alias:",
   ])(
-    "rejects a present invalid task provider alias: %s",
+    "rejects a non-map task provider-alias shape with a named cause: %s",
     async (declaration) => {
       const taskId = await createTask("Arrange sample items");
       const task = JSON.parse(
@@ -267,9 +266,57 @@ next_id: 1
         ),
       );
 
-      await expect(adapter.readTask(taskId)).rejects.toThrow(
-        `task ${taskId} provider-alias must be a lower-kebab scalar of at most 64 characters`,
+      await expect(adapter.readTask(taskId)).rejects.toMatchObject({
+        message: expect.stringMatching(
+          new RegExp(
+            `provider-alias-not-allowed: task ${taskId} provider-alias must be a stage-to-alias mapping`,
+          ),
+        ),
+        name: "TaskProviderAliasError",
+        reason: "provider-alias-not-allowed",
+        taskId,
+      } satisfies Partial<TaskProviderAliasError>);
+    },
+  );
+
+  it.each([
+    ["empty", "provider-alias:\n  implement: ''"],
+    ["null", "provider-alias:\n  implement:"],
+    ["non-string", "provider-alias:\n  implement: 17"],
+    ["sequence", "provider-alias:\n  implement: [sample]"],
+    ["mapping", "provider-alias:\n  implement: { sample: value }"],
+    ["malformed", "provider-alias:\n  implement: Not-Valid"],
+    ["overlong", `provider-alias:\n  implement: ${"a".repeat(65)}`],
+  ])(
+    "rejects a present %s alias map value without fallback",
+    async (_, declaration) => {
+      const taskId = await createTask("Arrange sample items");
+      const task = JSON.parse(
+        await runKanban([
+          "--dir",
+          boardDirectory,
+          "show",
+          String(taskId),
+          "--json",
+        ]),
+      ) as { file: string };
+      const source = await readFile(task.file, "utf8");
+      await writeFile(
+        task.file,
+        source.replace(
+          "class: standard\n---",
+          `class: standard\n${declaration}\n---`,
+        ),
       );
+
+      await expect(adapter.readTask(taskId)).rejects.toMatchObject({
+        message: expect.stringContaining(
+          `provider-alias-not-allowed: task ${taskId} provider-alias key "implement"`,
+        ),
+        name: "TaskProviderAliasError",
+        reason: "provider-alias-not-allowed",
+        taskId,
+      } satisfies Partial<TaskProviderAliasError>);
     },
   );
 

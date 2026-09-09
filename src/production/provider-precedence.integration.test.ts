@@ -36,14 +36,14 @@ afterEach(async () => {
 });
 
 /**
- * Write the optional `provider-alias` scalar into the real task file, so the
- * override is read back through the production board reader rather than
+ * Write the optional `provider-alias` declaration into the real task file, so
+ * the override is read back through the production board reader rather than
  * injected as an already-normalized task.
  */
 const setTaskFrontMatter = async (
   boardDirectory: string,
   taskId: number,
-  line: string | undefined,
+  declaration: string | undefined,
 ): Promise<void> => {
   const { join } = await import("node:path");
   const { readdir } = await import("node:fs/promises");
@@ -55,11 +55,14 @@ const setTaskFrontMatter = async (
   if (file === undefined) throw new Error(`No task file for ${taskId}`);
   const path = join(directory, file);
   const source = await readFile(path, "utf8");
-  const stripped = source.replace(/^provider-alias:.*\n/m, "");
+  const stripped = source.replace(
+    /^provider-alias:(?:[^\n]*\n(?:[ \t]+[^\n]*\n)*)/m,
+    "",
+  );
   const updated =
-    line === undefined
+    declaration === undefined
       ? stripped
-      : stripped.replace(/^---\n/, `---\n${line}\n`);
+      : stripped.replace(/^---\n/, `---\n${declaration}\n`);
   await writeFile(path, updated);
 };
 
@@ -150,7 +153,7 @@ describe.skipIf(!t3Binary)(
           ...(stageProviderAlias === undefined ? {} : { stageProviderAlias }),
           ...(task.providerAlias === undefined
             ? {}
-            : { taskProviderAlias: task.providerAlias }),
+            : { taskProviderAliases: task.providerAlias }),
         },
         context.resolver,
       );
@@ -175,7 +178,7 @@ describe.skipIf(!t3Binary)(
       await setTaskFrontMatter(
         context.fixture.configuration.boardDirectory,
         context.fixture.taskId,
-        "provider-alias: secondary",
+        "provider-alias:\n  implement: secondary",
       );
       const selection = await select(context, "review");
       expect(selection.alias).toBe("secondary");
@@ -192,7 +195,12 @@ describe.skipIf(!t3Binary)(
       );
       await expect(
         context.board.readTask(context.fixture.taskId),
-      ).rejects.toThrow(/provider-alias must be a lower-kebab scalar/);
+      ).rejects.toMatchObject({
+        message: expect.stringContaining(
+          `provider-alias-not-allowed: task ${context.fixture.taskId} provider-alias must be a stage-to-alias mapping`,
+        ),
+        reason: "provider-alias-not-allowed",
+      });
     }, 180_000);
 
     it("refuses an unknown task alias without falling back", async () => {
@@ -200,7 +208,7 @@ describe.skipIf(!t3Binary)(
       await setTaskFrontMatter(
         context.fixture.configuration.boardDirectory,
         context.fixture.taskId,
-        "provider-alias: no-such-alias",
+        "provider-alias:\n  implement: no-such-alias",
       );
       const failure = await select(context, "review").catch(
         (error: unknown) => error,

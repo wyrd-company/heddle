@@ -392,7 +392,7 @@ kind: standard
       taskPath,
       (await readFile(taskPath, "utf8")).replace(
         "class: standard\n---",
-        "class: standard\nprovider-alias: specialist\n---",
+        "class: standard\nprovider-alias:\n  implement: specialist\n---",
       ),
     );
     class InterruptedT3 extends SyntheticT3 {
@@ -461,8 +461,8 @@ kind: standard
     await writeFile(
       taskPath,
       (await readFile(taskPath, "utf8")).replace(
-        "provider-alias: specialist",
-        "provider-alias: unknown",
+        "implement: specialist",
+        "implement: unknown",
       ),
     );
 

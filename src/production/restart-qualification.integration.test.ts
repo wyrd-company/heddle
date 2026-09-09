@@ -70,6 +70,7 @@ afterEach(async () => {
 const setTaskProviderAlias = async (
   boardDirectory: string,
   taskId: number,
+  stageId: string,
   alias: string,
 ): Promise<void> => {
   const directory = join(boardDirectory, "tasks");
@@ -82,8 +83,8 @@ const setTaskProviderAlias = async (
   await writeFile(
     path,
     source
-      .replace(/^provider-alias:.*\n/m, "")
-      .replace(/^---\n/, `---\nprovider-alias: ${alias}\n`),
+      .replace(/^provider-alias:(?:[^\n]*\n(?:[ \t]+[^\n]*\n)*)/m, "")
+      .replace(/^---\n/, `---\nprovider-alias:\n  ${stageId}: ${alias}\n`),
   );
 };
 
@@ -246,6 +247,7 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
     await setTaskProviderAlias(
       fixture.configuration.boardDirectory,
       fixture.taskId,
+      "implement",
       "review",
     );
 
@@ -255,11 +257,15 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
     // even if the front matter had never changed.
     const board = new KanbanBoardAdapter(fixture.configuration.boardDirectory);
     const retargeted = await board.readTask(fixture.taskId);
-    expect(retargeted.providerAlias).toBe("review");
+    expect(retargeted.providerAlias).toEqual({ implement: "review" });
+    const retargetedImplementAlias = retargeted.providerAlias?.["implement"];
+    if (retargetedImplementAlias === undefined) {
+      throw new Error("Retargeted implement alias is absent");
+    }
     const freshSelection = await new ProviderSelectionResolver(
       providerAliases,
       client,
-    ).resolve(retargeted.providerAlias as string, {
+    ).resolve(retargetedImplementAlias, {
       interactionMode: configuration.session.interactionMode,
       runtimeMode: configuration.session.defaultRuntimeMode,
     });

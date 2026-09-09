@@ -57,6 +57,41 @@ describe("LifecycleEngine", () => {
     fixture.persistence.close();
   });
 
+  it("validates task provider-alias keys against the planned blueprint snapshot", async () => {
+    const fixture = await makeFixture();
+    await fixture.engine.plannedStartStage({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "sample-a",
+    });
+    const moved = sampleBlueprint();
+    moved.nodes.find(({ id }) => id === "taste")!.id = "later-taste";
+    for (const edge of moved.edges) {
+      if (edge.source === "taste") edge.source = "later-taste";
+      if (edge.target === "taste") edge.target = "later-taste";
+    }
+    await writeFile(
+      join(fixture.repositoryRoot, fixture.blueprintPath),
+      JSON.stringify(moved),
+    );
+
+    await expect(
+      fixture.engine.validateTaskProviderAliases("sample-a", 17, {
+        taste: "specialist",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      fixture.engine.validateTaskProviderAliases("sample-a", 17, {
+        "later-taste": "specialist",
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'task 17 provider-alias key "later-taste" names no node in the resolved blueprint',
+      ),
+      reason: "provider-alias-not-allowed",
+    });
+    fixture.persistence.close();
+  });
+
   it("loops through a condition edge more than three times", async () => {
     const fixture = await makeFixture();
     await fixture.engine.start({

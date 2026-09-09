@@ -10,6 +10,10 @@ import {
   type ResolvedProviderSelection,
 } from "../control-plane/index.js";
 import type { ResolvedSessionRuntimeMode } from "../persistence/index.js";
+import {
+  taskProviderAliasForStage,
+  type TaskProviderAliasMap,
+} from "../provider-alias.js";
 import type { ResolvedProductionSessionConfiguration } from "./configuration.js";
 
 export interface StageProviderSelectionResolver {
@@ -44,12 +48,12 @@ export const resolveStageSessionSelection = async (
     stageProviderAlias?: string;
     stageRuntimeMode?: ResolvedSessionRuntimeMode;
     taskId: number;
-    taskProviderAlias?: string;
+    taskProviderAliases?: TaskProviderAliasMap;
   },
   resolver: StageProviderSelectionResolver,
 ): Promise<ResolvedProviderSelection> => {
   const alias =
-    input.taskProviderAlias ??
+    taskProviderAliasForStage(input.taskProviderAliases, input.stageId) ??
     input.stageProviderAlias ??
     input.session.defaultProviderAlias;
   try {

@@ -223,7 +223,7 @@ kind: standard
         taskPath,
         (await readFile(taskPath, "utf8")).replace(
           "class: standard\n---",
-          `class: standard\nprovider-alias: ${input.taskAlias}\n---`,
+          `class: standard\nprovider-alias:\n  implement: ${input.taskAlias}\n---`,
         ),
       );
     }

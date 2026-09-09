@@ -203,11 +203,12 @@ fresh catalog snapshot. Selection failures use one of these safe reasons:
 alias, provider, or model. A T3 rejection after resolution is reported as that
 T3 failure and also has no fallback.
 
-Task front matter can override provider selection with this exact optional
-scalar field:
+Task front matter can override provider selection for specific stages with
+this exact optional map field:
 
 ```yaml
-provider-alias: specialist
+provider-alias:
+  implement: specialist
 ```
 
 A wait node in a lifecycle blueprint can declare these exact optional fields:
@@ -217,11 +218,15 @@ provider-alias: reviewer
 runtime-mode: full-access
 ```
 
-Effective provider selection is task `provider-alias`, then wait-node
-`provider-alias`, then `session.defaultProviderAlias`. Only absence falls
-through. A present null, empty, non-string, malformed, or unknown alias is an
-error with no fallback. Mechanical nodes cannot declare these fields. Tasks
-cannot override runtime mode. Effective runtime mode is wait-node
+Effective provider selection for a stage is that stage ID's own entry in the
+task `provider-alias` map, then wait-node `provider-alias`, then
+`session.defaultProviderAlias`. Only absence of the stage entry falls through.
+A scalar `provider-alias` value, or a present null, empty, non-string,
+malformed, or unknown alias value, is an error with no fallback. Every map key
+must name a wait node in the task's pinned resolved blueprint. An unknown key
+or a key for a mechanical node fails with `provider-alias-not-allowed` before
+any provider dispatch or session effect. Mechanical nodes cannot declare these
+fields. Tasks cannot override runtime mode. Effective runtime mode is wait-node
 `runtime-mode`, then `session.defaultRuntimeMode`.
 
 Runtime mode is independent from provider selection. Heddle uses T3's exact

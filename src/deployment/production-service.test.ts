@@ -225,7 +225,7 @@ describe("configured production composition", () => {
       taskPath,
       authoredTask.replace(
         "class: standard\n---",
-        "class: standard\nprovider-alias: specialist\n---",
+        "class: standard\nprovider-alias:\n  implement: specialist\n---",
       ),
     );
     const readProviderCatalog = vi.fn(async () => [
@@ -288,7 +288,7 @@ describe("configured production composition", () => {
         .serializedContext!,
     ) as Record<string, unknown>;
     expect(initialContext).toMatchObject({
-      taskContract: { providerAlias: "specialist" },
+      taskContract: { providerAlias: { implement: "specialist" } },
     });
     const implementKey = `${instanceId}:implement:1`;
     await production.lifecycle.resume({
@@ -296,13 +296,6 @@ describe("configured production composition", () => {
       instanceId,
       operationId: advanceOperationId(implementKey),
     });
-    await writeFile(
-      taskPath,
-      (await readFile(taskPath, "utf8")).replace(
-        "provider-alias: specialist\n",
-        "",
-      ),
-    );
     await production.scheduler.trigger();
     await production.lifecycle.resume({
       disposition: "reject",
@@ -392,7 +385,7 @@ describe("configured production composition", () => {
           taskPath,
           (await readFile(taskPath, "utf8")).replace(
             "class: standard\n---",
-            "class: standard\nprovider-alias: unknown\n---",
+            "class: standard\nprovider-alias:\n  implement: unknown\n---",
           ),
         );
       } else {
@@ -481,6 +474,90 @@ describe("configured production composition", () => {
           }),
         ]),
       );
+    },
+  );
+
+  it.each([
+    {
+      declaration: "provider-alias: specialist",
+      diagnostic: "must be a stage-to-alias mapping; received string",
+      label: "scalar shape",
+      rejectsStartup: true,
+    },
+    {
+      declaration: "provider-alias:\n  absent-stage: primary",
+      diagnostic: 'key "absent-stage" names no node in the resolved blueprint',
+      label: "unknown stage key",
+      rejectsStartup: false,
+    },
+    {
+      declaration: "provider-alias:\n  finalize: primary",
+      diagnostic:
+        'key "finalize" names a mechanical node; only wait nodes can select providers',
+      label: "mechanical stage key",
+      rejectsStartup: false,
+    },
+  ])(
+    "rejects a task provider-alias $label before any session effect",
+    async ({ declaration, diagnostic, rejectsStartup }) => {
+      fixture = await prepareProductionFixture();
+      const configuration = configuredConfiguration(fixture.configuration);
+      const [taskFilename] = await readdir(
+        join(configuration.boardDirectory, "tasks"),
+      );
+      const taskPath = join(
+        configuration.boardDirectory,
+        "tasks",
+        taskFilename!,
+      );
+      await writeFile(
+        taskPath,
+        (await readFile(taskPath, "utf8")).replace(
+          "class: standard\n---",
+          `class: standard\n${declaration}\n---`,
+        ),
+      );
+      const t3 = new SyntheticT3();
+      production = await createConfiguredProductionComposition(
+        {
+          blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+          configuration,
+          configurationDirectory: fixture.root,
+          configurationPath: join(fixture.root, "config.yml"),
+          server: { host: "127.0.0.1", port: 3774 },
+        },
+        { t3 },
+      );
+
+      const startError = await production
+        .start()
+        .catch((error: unknown) => error);
+
+      if (rejectsStartup) {
+        expect(startError).toMatchObject({
+          message: expect.stringContaining(
+            `provider-alias-not-allowed: task ${fixture.taskId} provider-alias ${diagnostic}`,
+          ),
+          reason: "provider-alias-not-allowed",
+        });
+      } else {
+        expect(startError).toBeUndefined();
+        expect(production.attention.list()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              kind: "production-error",
+              message: expect.stringContaining(
+                `provider-alias-not-allowed: task ${fixture.taskId} provider-alias ${diagnostic}`,
+              ),
+            }),
+          ]),
+        );
+      }
+
+      expect(production.persistence.listSessionRuntime()).toEqual([]);
+      expect(
+        t3.commands.filter(({ type }) => type !== "project.create"),
+      ).toEqual([]);
     },
   );
 
