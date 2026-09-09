@@ -51,6 +51,149 @@ describe("production composition", () => {
     return fixture;
   };
 
+  it("runs a production stage on the second candidate and records visible degradation", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    t3.providerCatalog.push({
+      availability: "available",
+      displayName: "Workbench Beta",
+      driverKind: "sample-driver-two",
+      enabled: true,
+      installed: true,
+      instanceId: "provider-two",
+      models: [
+        {
+          isCustom: false,
+          name: "Sample Model Two",
+          slug: "sample-model-two",
+        },
+      ],
+      observedCliVersion: "2.0.0",
+      state: "ready",
+    });
+    fixture.configuration.providerAliases = {
+      primary: [
+        {
+          model: "sample-model",
+          providerDisplayName: "Workbench Alpha",
+        },
+        {
+          model: "sample-model-two",
+          providerDisplayName: "Workbench Beta",
+        },
+      ],
+    };
+    const secondSelection = {
+      ...fixture.configuration.session.defaultSelection,
+      driverKind: "sample-driver-two",
+      model: {
+        isCustom: false,
+        name: "Sample Model Two",
+        slug: "sample-model-two",
+      },
+      observedCliVersion: "2.0.0",
+      providerDisplayName: "Workbench Beta",
+      providerInstanceId: "provider-two",
+    };
+    fixture.configuration.session.resolvedSelections = [
+      fixture.configuration.session.defaultSelection,
+      secondSelection,
+    ];
+    const getShell = vi.spyOn(t3, "getShell").mockImplementation(async () => {
+      const providersByThread = new Map(
+        t3.commands
+          .filter(
+            (command) =>
+              command.type === "thread.create" &&
+              typeof command.threadId === "string",
+          )
+          .map((command) => [
+            command.threadId!,
+            (command.modelSelection as { instanceId: string }).instanceId,
+          ]),
+      );
+      return {
+        projects: [...t3.projects.values()],
+        threads: [...t3.threads].map((id) =>
+          providersByThread.get(id) === "codex"
+            ? {
+                id,
+                latestTurn: {
+                  requestedAt: "2026-01-01T00:00:00.000Z",
+                  startedAt: null,
+                  state: "error",
+                },
+                session: {
+                  lastError: "Sample harness could not start",
+                  status: "error",
+                },
+              }
+            : {
+                id,
+                latestTurn: {
+                  requestedAt: "2026-01-01T00:00:00.000Z",
+                  startedAt: "2026-01-01T00:00:01.000Z",
+                  state: "running",
+                },
+                session: { status: "running" },
+              },
+        ),
+      };
+    });
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    const creates = t3.commands.filter(({ type }) => type === "thread.create");
+    const attemptedProviders = creates.map(
+      (command) =>
+        (command.modelSelection as { instanceId: string }).instanceId,
+    );
+    expect(attemptedProviders[0]).toBe("codex");
+    expect(attemptedProviders.slice(1)).not.toHaveLength(0);
+    expect(new Set(attemptedProviders.slice(1))).toEqual(
+      new Set(["provider-two"]),
+    );
+    expect(new Set(creates.map(({ threadId }) => threadId)).size).toBe(2);
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(session).not.toHaveProperty("bindingState");
+    expect(session.binding).toMatchObject({
+      alias: "primary",
+      candidatePosition: 2,
+      modelSlug: "sample-model-two",
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: "Sample harness could not start",
+          }),
+          providerDisplayName: "Workbench Alpha",
+        }),
+      ],
+    });
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-fallback-active",
+        message: expect.stringContaining("Workbench Beta"),
+      }),
+    );
+    expect(getShell).toHaveBeenCalled();
+    await composition.close();
+  });
+
   it("pages one stalled-session attention through the durable production route", async () => {
     const fixture = await prepare();
     fixture.configuration.observationThresholds = {

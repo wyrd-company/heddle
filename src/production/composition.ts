@@ -611,6 +611,30 @@ export const createProductionComposition = (
           }
           let observation: Awaited<ReturnType<SessionObserver["observe"]>>;
           try {
+            const ownerTaskId =
+              persistence!
+                .listReconcilerRuntime()
+                .find(({ instanceId }) => instanceId === session.instanceId)
+                ?.taskId ??
+              persistence!
+                .listIncidentRuntime()
+                .find(({ incidentId }) => incidentId === session.instanceId)
+                ?.taskId;
+            const ownerTask = after.find(({ id }) => id === ownerTaskId);
+            if (ownerTask !== undefined) {
+              const thread = (await t3.getShell()).threads.find(
+                ({ id }) => id === session.threadId,
+              );
+              if (
+                await instances.recoverProviderStartFailure(
+                  ownerTask,
+                  session,
+                  thread,
+                )
+              ) {
+                continue;
+              }
+            }
             observation = await observer.observe({
               instanceId: session.instanceId,
               sessionKey: session.sessionKey,

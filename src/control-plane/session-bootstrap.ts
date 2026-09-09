@@ -86,6 +86,7 @@ export type SessionBootstrapInput = {
   parentSessionKey?: string;
   projectId: string;
   providerContext: T3ProviderDispatchContext;
+  replaceStoredHandoffAuthentication?: boolean;
   runtimeMode: string;
   sessionKey: string;
   task: JsonValue;
@@ -120,6 +121,25 @@ export type HarnessConfiguration = {
     tools: { update_plan: { enabled: false } };
   };
 };
+
+export type SessionStartFailurePhase =
+  | "harness-preparation"
+  | "workflow-mcp-registration"
+  | "thread-create"
+  | "turn-start";
+
+export class SessionStartFailure extends Error {
+  public constructor(
+    readonly phase: SessionStartFailurePhase,
+    cause: unknown,
+  ) {
+    super(
+      `Session start failed during ${phase}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = "SessionStartFailure";
+  }
+}
 
 export const harnessConfiguration = (): HarnessConfiguration => ({
   claudeCode: { permissions: { deny: ["TodoWrite"] } },
@@ -408,6 +428,20 @@ const ensureStoredHandoff = async (
           currentAuthentication,
         )
       ) {
+        if (input.replaceStoredHandoffAuthentication === true) {
+          const replaced = store.compareAndSwapInstance(
+            input.instanceId,
+            current.version,
+            {
+              ...current.state,
+              handoffs: current.state.handoffs.filter(
+                (candidate) => candidate !== existing,
+              ),
+            },
+          );
+          if (replaced !== undefined) continue;
+          continue;
+        }
         throw new HandoffRenderError(
           `Stored handoff authentication binding is incompatible for '${input.sessionKey}'`,
         );
@@ -621,43 +655,55 @@ export const bootstrapStageSession = async (
     dependencies.resolveSystemPrompt ?? resolveBuiltInSystemPrompt,
   );
   const threadId = input.threadId ?? nextId();
-  await dependencies.t3.registerWorkflowMcpProviderSession({
-    authorizationHeader: `Bearer ${correlationToken}`,
-    endpoint: workflowMcpEndpoint,
-    threadId,
-  });
-
-  await dependencies.t3.dispatch({
-    type: "thread.create",
-    commandId: input.threadCreateCommandId ?? nextId(),
-    threadId,
-    projectId: input.projectId,
-    title: input.title,
-    modelSelection: input.modelSelection,
-    runtimeMode: input.runtimeMode,
-    interactionMode: input.interactionMode,
-    branch: worktree.branch,
-    worktreePath: worktree.path,
-    createdAt: input.createdAt ?? now(),
-  });
-  await dependencies.t3.dispatch(
-    {
-      type: "thread.turn.start",
-      commandId: input.turnCommandId ?? nextId(),
+  try {
+    await dependencies.t3.registerWorkflowMcpProviderSession({
+      authorizationHeader: `Bearer ${correlationToken}`,
+      endpoint: workflowMcpEndpoint,
       threadId,
-      message: {
-        messageId: input.turnMessageId ?? nextId(),
-        role: "user",
-        text: renderedHandoff,
-        attachments: [],
-      },
+    });
+  } catch (error) {
+    throw new SessionStartFailure("workflow-mcp-registration", error);
+  }
+
+  try {
+    await dependencies.t3.dispatch({
+      type: "thread.create",
+      commandId: input.threadCreateCommandId ?? nextId(),
+      threadId,
+      projectId: input.projectId,
+      title: input.title,
       modelSelection: input.modelSelection,
       runtimeMode: input.runtimeMode,
       interactionMode: input.interactionMode,
+      branch: worktree.branch,
+      worktreePath: worktree.path,
       createdAt: input.createdAt ?? now(),
-    },
-    input.providerContext,
-  );
+    });
+  } catch (error) {
+    throw new SessionStartFailure("thread-create", error);
+  }
+  try {
+    await dependencies.t3.dispatch(
+      {
+        type: "thread.turn.start",
+        commandId: input.turnCommandId ?? nextId(),
+        threadId,
+        message: {
+          messageId: input.turnMessageId ?? nextId(),
+          role: "user",
+          text: renderedHandoff,
+          attachments: [],
+        },
+        modelSelection: input.modelSelection,
+        runtimeMode: input.runtimeMode,
+        interactionMode: input.interactionMode,
+        createdAt: input.createdAt ?? now(),
+      },
+      input.providerContext,
+    );
+  } catch (error) {
+    throw new SessionStartFailure("turn-start", error);
+  }
   if (dependencies.activationEvents !== undefined) {
     recordSessionActivation(dependencies.activationEvents, {
       format: "heddle.session-activation",

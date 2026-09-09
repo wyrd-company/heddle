@@ -23,6 +23,8 @@ export const schedulerPassFailureCode = "scheduler-pass-failed" as const;
 export const operatorOnlyProductionErrorCodes = new Set<string>([
   "dynamic-task-authority-failed",
   "incident-execution-failed",
+  "provider-alias-exhausted",
+  "provider-fallback-active",
   schedulerPassFailureCode,
 ]);
 

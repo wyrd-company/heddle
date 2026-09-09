@@ -20,6 +20,8 @@ describe("production error visibility", () => {
       new Set([
         "dynamic-task-authority-failed",
         "incident-execution-failed",
+        "provider-alias-exhausted",
+        "provider-fallback-active",
         "scheduler-pass-failed",
       ]),
     );

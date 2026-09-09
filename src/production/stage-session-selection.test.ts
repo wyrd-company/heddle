@@ -12,6 +12,8 @@ import {
 import type { ResolvedProductionSessionConfiguration } from "./configuration.js";
 import {
   resolveStageSessionSelection,
+  resolveStageSessionCandidates,
+  StartupProviderSelectionResolver,
   StageSessionSelectionError,
 } from "./stage-session-selection.js";
 
@@ -40,6 +42,42 @@ const selection = (
 });
 
 describe("stage session selection", () => {
+  it("keeps the task stage override scoped while returning its ordered candidates", async () => {
+    const resolver = new StartupProviderSelectionResolver([
+      selection("default", "auto"),
+      { ...selection("reviewer", "auto"), providerInstanceId: "reviewer-one" },
+      { ...selection("reviewer", "auto"), providerInstanceId: "reviewer-two" },
+    ]);
+
+    await expect(
+      resolveStageSessionCandidates(
+        {
+          session: session(),
+          stageId: "review",
+          stageProviderAlias: "default",
+          taskId: 17,
+          taskProviderAliases: { review: "reviewer" },
+        },
+        resolver,
+      ),
+    ).resolves.toMatchObject([
+      { alias: "reviewer", providerInstanceId: "reviewer-one" },
+      { alias: "reviewer", providerInstanceId: "reviewer-two" },
+    ]);
+    await expect(
+      resolveStageSessionSelection(
+        {
+          session: session(),
+          stageId: "implement",
+          stageProviderAlias: "default",
+          taskId: 17,
+          taskProviderAliases: { review: "reviewer" },
+        },
+        resolver,
+      ),
+    ).resolves.toMatchObject({ alias: "default" });
+  });
+
   it.each([
     {
       expected: "task",

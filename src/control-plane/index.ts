@@ -18,6 +18,8 @@ export {
   type HarnessConfiguration,
   type SessionBootstrapInput,
   type SessionBootstrapResult,
+  SessionStartFailure,
+  type SessionStartFailurePhase,
   type SessionSteeringDependencies,
   type SessionSteeringInput,
   type SessionTemplateAuthority,
@@ -97,6 +99,7 @@ export {
   T3ControlPlaneClient,
   T3ProviderCatalogReadError,
   type T3ControlPlaneClientOptions,
+  type T3ShellThread,
   type T3WebSocketConstructor,
   type T3WorkflowMcpProviderSession,
 } from "./t3-control-plane-client.js";

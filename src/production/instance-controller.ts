@@ -8,15 +8,17 @@ import { createHash } from "node:crypto";
 import type { BoardTask } from "../board-adapter/index.js";
 import type { AgentNameAllocator } from "../agent-names/index.js";
 import { AttentionVisibleError } from "../attention-visible-error.js";
-import { describeError } from "../error-details.js";
+import { describeError, errorDetail } from "../error-details.js";
 import {
   bootstrapStageSession,
   HandoffRenderError,
   HandoffTemplateError,
   mechanicalChangeContextKey,
+  SessionStartFailure,
   type SessionT3Client,
   type SessionTemplateAuthority,
   type SystemPromptResolver,
+  type T3ShellThread,
 } from "../control-plane/index.js";
 import {
   readLifecycleContext,
@@ -31,6 +33,8 @@ import type {
   IncidentRuntimeRecord,
   ReconcilerRuntimeRecord,
   ResolvedSessionBinding,
+  SessionRuntimeRecord,
+  SkippedProviderCandidate,
   SqlitePersistence,
 } from "../persistence/index.js";
 import {
@@ -110,6 +114,38 @@ const synchronizationAttentionId = (
   code: ProductionErrorCode,
 ): string => `production:${code}:task:${runtime.taskId}:${runtime.instanceId}`;
 
+const providerFallbackAttentionId = (
+  code: "provider-alias-exhausted" | "provider-fallback-active",
+  sessionKey: string,
+  candidatePosition?: number,
+): string =>
+  `production:${code}:session:${createHash("sha256")
+    .update(
+      `${sessionKey}${candidatePosition === undefined ? "" : `:${candidatePosition}`}`,
+    )
+    .digest("hex")
+    .slice(0, 16)}`;
+
+const skippedProviderCandidate = (
+  binding: ResolvedSessionBinding,
+  failure: unknown,
+): SkippedProviderCandidate => ({
+  candidatePosition: binding.candidatePosition,
+  failure: errorDetail(failure),
+  modelSlug: binding.modelSlug,
+  providerDisplayName: binding.providerDisplayName,
+});
+
+const describeSkippedCandidates = (
+  candidates: readonly SkippedProviderCandidate[],
+): string =>
+  candidates
+    .map(
+      ({ candidatePosition, failure, modelSlug, providerDisplayName }) =>
+        `candidate ${candidatePosition} '${providerDisplayName}' model '${modelSlug}': ${failure.message}`,
+    )
+    .join("; ");
+
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(
     private readonly configuration: ResolvedProductionConfiguration,
@@ -146,6 +182,243 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         this.configuration.session.resolvedSelections,
       )
     );
+  }
+
+  async recoverProviderStartFailure(
+    task: BoardTask,
+    target: { instanceId: string; sessionKey: string; threadId: string },
+    thread: T3ShellThread | undefined,
+  ): Promise<boolean> {
+    const session = this.persistence
+      .listSessionRuntime()
+      .find(
+        (candidate) =>
+          candidate.instanceId === target.instanceId &&
+          candidate.sessionKey === target.sessionKey &&
+          candidate.threadId === target.threadId,
+      );
+    if (session?.bindingState !== "provisional") return false;
+    if (
+      thread?.latestTurn?.startedAt != null ||
+      thread?.session?.status === "running" ||
+      thread?.session?.status === "ready" ||
+      thread?.session?.status === "idle" ||
+      thread?.latestTurn?.state === "running" ||
+      thread?.latestTurn?.state === "completed"
+    ) {
+      this.persistence.confirmSessionBindingStarted(
+        session.sessionKey,
+        session.threadId,
+      );
+      return false;
+    }
+    if (
+      thread === undefined ||
+      (thread.session?.status !== "error" &&
+        thread.latestTurn?.state !== "error")
+    ) {
+      return false;
+    }
+    const cause = new Error(
+      thread.session?.lastError?.trim() ||
+        "T3 reported a session-start failure before the turn started",
+    );
+    await this.#fallbackProviderCandidate(task, session, cause);
+    return true;
+  }
+
+  #providerRoleCollision(
+    session: SessionRuntimeRecord,
+    candidateProviderInstanceId: string,
+  ): Error | undefined {
+    const collision = this.persistence
+      .listSessionRuntime()
+      .find(
+        (other) =>
+          other.bindingState !== "provisional" &&
+          other.instanceId === session.instanceId &&
+          other.sessionKey !== session.sessionKey &&
+          other.binding.alias !== session.binding.alias &&
+          other.binding.providerInstanceId === candidateProviderInstanceId,
+      );
+    return collision === undefined
+      ? undefined
+      : new Error(
+          `Provider alias '${session.binding.alias}' cannot bind provider '${candidateProviderInstanceId}' because started alias '${collision.binding.alias}' already holds it in instance '${session.instanceId}'`,
+        );
+  }
+
+  async #fallbackProviderCandidate(
+    task: BoardTask,
+    session: SessionRuntimeRecord,
+    cause: unknown,
+  ): Promise<void> {
+    const resolver = this.sessionSelectionResolver();
+    const selectionInputs = {
+      interactionMode: session.binding.interactionMode,
+      runtimeMode: session.binding.runtimeMode,
+    };
+    const candidates =
+      resolver.resolveCandidates === undefined
+        ? [await resolver.resolve(session.binding.alias, selectionInputs)]
+        : await resolver.resolveCandidates(
+            session.binding.alias,
+            selectionInputs,
+          );
+    const configuredCurrent = candidates[session.binding.candidatePosition - 1];
+    if (
+      configuredCurrent === undefined ||
+      configuredCurrent.providerInstanceId !==
+        session.binding.providerInstanceId ||
+      configuredCurrent.model.slug !== session.binding.modelSlug
+    ) {
+      throw new Error(
+        `Provider alias '${session.binding.alias}' changed while session '${session.sessionKey}' was starting`,
+      );
+    }
+    const skipped = [
+      ...session.binding.skippedCandidates,
+      skippedProviderCandidate(session.binding, cause),
+    ];
+    for (
+      let index = session.binding.candidatePosition;
+      index < candidates.length;
+      index += 1
+    ) {
+      const candidate = candidates[index]!;
+      const candidatePosition = index + 1;
+      const candidateThreadId = stableUuid(
+        `${session.sessionKey}:candidate:${candidatePosition}:thread`,
+      );
+      const candidateBinding = bindResolvedSession(
+        candidate,
+        session.sessionKey,
+        candidateThreadId,
+        candidatePosition,
+        skipped,
+      );
+      const candidateSession: SessionRuntimeRecord = {
+        ...session,
+        binding: candidateBinding,
+        bindingState: "provisional",
+        threadId: candidateThreadId,
+      };
+      const collision = this.#providerRoleCollision(
+        candidateSession,
+        candidate.providerInstanceId,
+      );
+      if (collision !== undefined) {
+        skipped.push(skippedProviderCandidate(candidateBinding, collision));
+        continue;
+      }
+      const fallback = createProductionErrorAttention({
+        attentionId: providerFallbackAttentionId(
+          "provider-fallback-active",
+          session.sessionKey,
+          candidatePosition,
+        ),
+        code: "provider-fallback-active",
+        error: cause,
+        instanceId: session.instanceId,
+        message: `Provider alias '${session.binding.alias}' is starting candidate ${candidatePosition} '${candidate.providerDisplayName}' model '${candidate.model.slug}' after ${describeSkippedCandidates(skipped)}`,
+        taskId: task.id,
+      });
+      if (!(await this.attention.has(fallback.attentionId))) {
+        await this.attention.raise(fallback);
+      } else {
+        this.attention.reopen(fallback.attentionId);
+      }
+      const reconcilerRuntime = this.persistence
+        .listReconcilerRuntime()
+        .find(({ instanceId }) => instanceId === session.instanceId);
+      if (reconcilerRuntime !== undefined) {
+        const starting: ReconcilerRuntimeRecord = {
+          ...reconcilerRuntime,
+          provider: candidate.providerInstanceId,
+          sessionKey: session.sessionKey,
+          stageId: session.stageId,
+          state: "starting",
+          threadId: candidateThreadId,
+        };
+        this.persistence.writeStartingSessionRuntime(
+          starting,
+          candidateSession,
+        );
+        await this.#activate(
+          task,
+          session.instanceId,
+          session.stageId,
+          starting,
+          reconcilerRuntime.boardStatus,
+        );
+        return;
+      }
+      const incidentRuntime = this.persistence
+        .listIncidentRuntime()
+        .find(({ incidentId }) => incidentId === session.instanceId);
+      if (incidentRuntime !== undefined) {
+        const starting: IncidentRuntimeRecord = {
+          ...incidentRuntime,
+          provider: candidate.providerInstanceId,
+          sessionKey: session.sessionKey,
+          stageId: session.stageId,
+          state: "starting",
+          threadId: candidateThreadId,
+        };
+        this.persistence.writeStartingIncidentSessionRuntime(
+          starting,
+          candidateSession,
+        );
+        await this.activateIncident(task, starting, session.stageId);
+        return;
+      }
+      throw new Error(
+        `Session '${session.sessionKey}' has no owning production runtime`,
+      );
+    }
+    const exhaustedBinding: ResolvedSessionBinding = {
+      ...session.binding,
+      skippedCandidates: skipped,
+    };
+    this.persistence.writeSessionRuntime({
+      ...session,
+      binding: exhaustedBinding,
+      bindingState: "provisional",
+    });
+    const exhausted = createProductionErrorAttention({
+      attentionId: providerFallbackAttentionId(
+        "provider-alias-exhausted",
+        session.sessionKey,
+      ),
+      code: "provider-alias-exhausted",
+      error: cause,
+      instanceId: session.instanceId,
+      message: `Provider alias '${session.binding.alias}' exhausted every candidate without starting the stage: ${describeSkippedCandidates(skipped)}`,
+      taskId: task.id,
+    });
+    if (!(await this.attention.has(exhausted.attentionId))) {
+      await this.attention.raise(exhausted);
+    } else {
+      this.attention.reopen(exhausted.attentionId);
+    }
+    const reconcilerRuntime = this.persistence
+      .listReconcilerRuntime()
+      .find(({ instanceId }) => instanceId === session.instanceId);
+    if (reconcilerRuntime !== undefined) {
+      this.persistence.writeReconcilerRuntime({
+        ...reconcilerRuntime,
+        state: "waiting",
+      });
+    }
+    const incidentRuntime = this.persistence
+      .listIncidentRuntime()
+      .find(({ incidentId }) => incidentId === session.instanceId);
+    if (incidentRuntime !== undefined) {
+      this.persistence.writeIncidentRuntime({
+        ...incidentRuntime,
+        state: "waiting",
+      });
+    }
   }
 
   private async prepareAgentNames(instanceId: string): Promise<void> {
@@ -323,6 +596,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         this.persistence.writeStartingSessionRuntime(starting, {
           activation,
           binding,
+          bindingState: "provisional",
           instanceId: input.instanceId,
           sessionKey,
           stageId,
@@ -644,6 +918,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     this.persistence.writeStartingIncidentSessionRuntime(prepared, {
       activation,
       binding,
+      bindingState: "provisional",
       instanceId: runtime.incidentId,
       sessionKey,
       stageId,
@@ -1095,16 +1370,31 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       stage.repositoryName,
     );
     const projectId = this.projects.projectForTask(task);
-    this.persistence.writeSessionRuntime({
+    const sessionRuntime: SessionRuntimeRecord = {
       activation,
       binding,
+      ...(intendedSession === undefined ||
+      intendedSession.bindingState === "provisional"
+        ? { bindingState: "provisional" as const }
+        : {}),
       instanceId,
       projectId,
       repositoryName: repository.name,
       sessionKey,
       stageId,
       threadId,
-    });
+    };
+    this.persistence.writeSessionRuntime(sessionRuntime);
+    if (sessionRuntime.bindingState === "provisional") {
+      const collision = this.#providerRoleCollision(
+        sessionRuntime,
+        binding.providerInstanceId,
+      );
+      if (collision !== undefined) {
+        await this.#fallbackProviderCandidate(task, sessionRuntime, collision);
+        return;
+      }
+    }
     try {
       await bootstrapStageSession(
         {
@@ -1121,6 +1411,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           modelSelection: modelSelectionFromBinding(binding),
           projectId,
           providerContext: providerContextFromBinding(binding),
+          replaceStoredHandoffAuthentication: binding.candidatePosition > 1,
           runtimeMode: binding.runtimeMode,
           sessionKey,
           task: task.frontMatter,
@@ -1156,6 +1447,13 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       await this.mirrorBoardStatus(task.id, starting.boardStatus).catch(
         () => undefined,
       );
+      if (
+        error instanceof SessionStartFailure &&
+        sessionRuntime.bindingState === "provisional"
+      ) {
+        await this.#fallbackProviderCandidate(task, sessionRuntime, error);
+        return;
+      }
       if (
         !(error instanceof HandoffRenderError) &&
         !(error instanceof HandoffTemplateError)

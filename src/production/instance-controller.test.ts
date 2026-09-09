@@ -18,6 +18,7 @@ import type {
   LifecycleSnapshot,
 } from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
@@ -92,6 +93,198 @@ describe("production instance controller", () => {
     ).rejects.toThrow(
       "Escalation delivery no longer matches the awaiting stage",
     );
+    persistence.close();
+  });
+
+  it("fails closed when an overlapping fallback list would collide with another role", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-provider-collision-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const task: BoardTask = {
+      blocked: false,
+      dependencies: [],
+      frontMatter: {},
+      id: 11,
+      priority: "medium",
+      status: "in-progress",
+      tags: [],
+      title: "Arrange inventory",
+    };
+    persistence.writeSessionRuntime({
+      activation: 1,
+      binding: resolvedSessionBindingFixture({
+        alias: "primary",
+        modelSlug: "model-two",
+        providerDisplayName: "Workbench Beta",
+        providerInstanceId: "provider-two",
+        sessionKey: "sample-11:implement:1",
+        threadId: "thread-primary",
+      }),
+      instanceId: "sample-11",
+      sessionKey: "sample-11:implement:1",
+      stageId: "implement",
+      threadId: "thread-primary",
+    });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "sample-11",
+      provider: "provider-one",
+      sessionKey: "sample-11:review:1",
+      stageId: "review",
+      state: "waiting",
+      taskId: task.id,
+      threadId: "thread-reviewer",
+    });
+    persistence.writeSessionRuntime({
+      activation: 1,
+      binding: resolvedSessionBindingFixture({
+        alias: "reviewer",
+        modelSlug: "model-one",
+        providerDisplayName: "Workbench Alpha",
+        providerInstanceId: "provider-one",
+        sessionKey: "sample-11:review:1",
+        threadId: "thread-reviewer",
+      }),
+      bindingState: "provisional",
+      instanceId: "sample-11",
+      sessionKey: "sample-11:review:1",
+      stageId: "review",
+      threadId: "thread-reviewer",
+    });
+    const attention = new DurableAttentionQueue(persistence);
+    const selections = [
+      {
+        alias: "reviewer",
+        driverKind: "sample-driver",
+        interactionMode: "default",
+        model: { isCustom: false, name: "Model One", slug: "model-one" },
+        observedCliVersion: "1.0.0",
+        providerDisplayName: "Workbench Alpha",
+        providerInstanceId: "provider-one",
+        runtimeMode: "auto" as const,
+      },
+      {
+        alias: "reviewer",
+        driverKind: "sample-driver",
+        interactionMode: "default",
+        model: { isCustom: false, name: "Model Two", slug: "model-two" },
+        observedCliVersion: "1.0.0",
+        providerDisplayName: "Workbench Beta",
+        providerInstanceId: "provider-two",
+        runtimeMode: "auto" as const,
+      },
+    ];
+    const controller = new ProductionInstanceController(
+      {
+        session: {
+          baseRef: "main",
+          defaultProviderAlias: "reviewer",
+          defaultRuntimeMode: "auto",
+          defaultSelection: selections[0],
+          interactionMode: "default",
+          resolvedSelections: selections,
+          skillPointer: "skill://sample",
+        },
+      } as never,
+      persistence,
+      {} as ProductionLifecycleRouter,
+      {} as ProductRoutingCatalog,
+      {} as EpicProjectCoordinator,
+      attention,
+      {} as never,
+      "http://127.0.0.1:4774/mcp",
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+    );
+
+    await expect(
+      controller.recoverProviderStartFailure(
+        task,
+        {
+          instanceId: "sample-11",
+          sessionKey: "sample-11:review:1",
+          threadId: "thread-reviewer",
+        },
+        {
+          id: "thread-reviewer",
+          latestTurn: { startedAt: null, state: "error" },
+          session: { lastError: "Sample start failed", status: "error" },
+        },
+      ),
+    ).resolves.toBe(true);
+
+    const binding = persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === "sample-11:review:1")!.binding;
+    expect(binding.skippedCandidates).toHaveLength(2);
+    expect(binding.skippedCandidates[1]?.failure.message).toContain(
+      "started alias 'primary' already holds it",
+    );
+    expect(persistence.listAttention()).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "provider-alias-exhausted",
+          message: expect.stringContaining("started alias 'primary'"),
+        }),
+      }),
+    );
+    persistence.close();
+  });
+
+  it("locks a provisional binding instead of falling back after a turn starts", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-provider-started-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const binding = resolvedSessionBindingFixture({
+      sessionKey: "sample-11:implement:1",
+      threadId: "thread-primary",
+    });
+    persistence.writeSessionRuntime({
+      activation: 1,
+      binding,
+      bindingState: "provisional",
+      instanceId: "sample-11",
+      sessionKey: binding.sessionKey,
+      stageId: "implement",
+      threadId: binding.threadId,
+    });
+    const controller = new ProductionInstanceController(
+      {} as never,
+      persistence,
+      {} as ProductionLifecycleRouter,
+      {} as ProductRoutingCatalog,
+      {} as EpicProjectCoordinator,
+      new DurableAttentionQueue(persistence),
+      {} as never,
+      "http://127.0.0.1:4774/mcp",
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+    );
+
+    await expect(
+      controller.recoverProviderStartFailure(
+        { id: 11 } as BoardTask,
+        {
+          instanceId: "sample-11",
+          sessionKey: binding.sessionKey,
+          threadId: binding.threadId,
+        },
+        {
+          id: binding.threadId,
+          latestTurn: {
+            startedAt: "2026-01-01T00:00:00.000Z",
+            state: "error",
+          },
+          session: { lastError: "Turn failed", status: "error" },
+        },
+      ),
+    ).resolves.toBe(false);
+    expect(persistence.listSessionRuntime()[0]).not.toHaveProperty(
+      "bindingState",
+    );
+    expect(persistence.listAttention()).toEqual([]);
     persistence.close();
   });
 
