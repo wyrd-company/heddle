@@ -28,6 +28,7 @@ import {
   modelSelectionFromBinding,
   providerContextFromBinding,
 } from "./session-binding.js";
+import { StartupProviderSelectionResolver } from "./stage-session-selection.js";
 import { stableUuid } from "./stable-uuid.js";
 import { productionActiveSessions } from "./subagent-composition.js";
 import {
@@ -140,18 +141,12 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       opened.instanceId,
       opened.answeringAuthority.sessionKey,
     );
-    const configuredCandidates =
-      this.options.configuration.session.resolvedSelections
-        .filter(({ alias }) => alias === configuration.providerAlias)
-        .map((selection) => ({
-          ...selection,
-          runtimeMode: "approval-required" as const,
-        }));
-    if (configuredCandidates.length === 0) {
-      throw new Error(
-        `Adjudication provider alias '${configuration.providerAlias}' has no resolved candidates`,
-      );
-    }
+    const configuredCandidates = await new StartupProviderSelectionResolver(
+      this.options.configuration.session.resolvedSelections,
+    ).resolveCandidates(configuration.providerAlias, {
+      interactionMode: this.options.configuration.session.interactionMode,
+      runtimeMode: "approval-required",
+    });
     const skipped: SkippedProviderCandidate[] = [
       ...(existing?.binding.skippedCandidates ?? []),
     ];

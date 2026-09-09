@@ -223,6 +223,12 @@ describe("workflow MCP escalation tools", () => {
     });
     createEscalationInstance(subject.persistence, "instance-boundary", [
       { sessionKey: "top", token: "token-boundary", tools: ["escalate"] },
+      {
+        parentSessionKey: "top",
+        sessionKey: "child",
+        token: "token-child-boundary",
+        tools: ["escalate"],
+      },
     ]);
     const stageBinding = await new WorkflowMcpSessionResolver(
       subject.persistence,
@@ -231,8 +237,18 @@ describe("workflow MCP escalation tools", () => {
       escalationId: "bound-choice",
       questions: sampleEscalationQuestions,
     });
-    const pending =
-      subject.coordinator.pendingEscalations("instance-boundary")[0]!;
+    await subject.coordinator.escalate(
+      await new WorkflowMcpSessionResolver(subject.persistence).resolve(
+        "token-child-boundary",
+      ),
+      {
+        escalationId: "child-choice",
+        questions: sampleEscalationQuestions,
+      },
+    );
+    const pending = subject.coordinator
+      .pendingEscalations("instance-boundary")
+      .find(({ escalationId }) => escalationId === "bound-choice")!;
     await vi.waitFor(() =>
       expect(
         subject.persistence
@@ -256,9 +272,9 @@ describe("workflow MCP escalation tools", () => {
     await expect(
       subject.coordinator.answerAsSession(adjudicationBinding, {
         answers: sampleEscalationAnswer,
-        escalationId: "another-choice",
-        ownerSessionKey: "child-session",
-        prose: "This attempts to answer another occurrence.",
+        escalationId: "child-choice",
+        ownerSessionKey: "child",
+        prose: "This attempts to answer the child occurrence.",
       }),
     ).rejects.toThrow(/bound escalation occurrence/);
     await vi.waitFor(() => expect(subject.notifications).toHaveLength(1));
@@ -268,6 +284,78 @@ describe("workflow MCP escalation tools", () => {
         modelSlug: "sample-capable-model",
       },
       escalationId: "bound-choice",
+    });
+    expect(subject.parentEscalations).toHaveLength(1);
+    expect(
+      subject.coordinator
+        .pendingEscalations("instance-boundary")
+        .find(({ escalationId }) => escalationId === "child-choice")
+        ?.answeringAuthority,
+    ).toEqual({ kind: "session", sessionKey: "top" });
+  });
+
+  it("fails an adjudication answer naming no offered option closed to operator", async () => {
+    const subject = await createEscalationFixture({
+      adjudication: {
+        start: async () => ({ modelSlug: "sample-capable-model" }),
+        stop: async () => undefined,
+      },
+    });
+    createEscalationInstance(subject.persistence, "instance-invalid-choice", [
+      {
+        sessionKey: "top",
+        token: "token-invalid-choice",
+        tools: ["escalate"],
+      },
+    ]);
+    const stageBinding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-invalid-choice");
+    await subject.coordinator.escalate(stageBinding, {
+      escalationId: "invalid-choice",
+      questions: sampleEscalationQuestions,
+    });
+    const pending = subject.coordinator.pendingEscalations(
+      "instance-invalid-choice",
+    )[0]!;
+    await vi.waitFor(() =>
+      expect(
+        subject.persistence
+          .replayEvents("instance-invalid-choice")
+          .some(({ type }) => type === "mcp:escalation-adjudication-started"),
+      ).toBe(true),
+    );
+
+    await expect(
+      subject.coordinator.answerAsSession(
+        {
+          ...stageBinding,
+          adjudication: {
+            escalationId: pending.escalationId,
+            modelSlug: "sample-capable-model",
+            ownerSessionKey: pending.ownerSessionKey,
+          },
+          sessionKey:
+            pending.answeringAuthority.kind === "adjudication"
+              ? pending.answeringAuthority.sessionKey
+              : "unreachable",
+        },
+        {
+          answers: { "delivery-window": "unoffered" },
+          escalationId: pending.escalationId,
+          ownerSessionKey: pending.ownerSessionKey,
+          prose: "The answer does not name an offered option.",
+        },
+      ),
+    ).rejects.toThrow(/does not name an offered option/);
+    await vi.waitFor(() => expect(subject.notifications).toHaveLength(1));
+    expect(subject.attentions[0]).toMatchObject({
+      adjudication: {
+        cause: expect.stringMatching(/does not name an offered option/),
+        modelSlug: "sample-capable-model",
+      },
+      escalationId: "invalid-choice",
+      questions: sampleEscalationQuestions,
     });
   });
 
