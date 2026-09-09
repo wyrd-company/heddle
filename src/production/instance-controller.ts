@@ -31,6 +31,7 @@ import type { PacingDeferral } from "../pacing/index.js";
 import type {
   JsonValue,
   IncidentRuntimeRecord,
+  ProviderCandidateFailureDetail,
   ReconcilerRuntimeRecord,
   ResolvedSessionBinding,
   SessionRuntimeRecord,
@@ -48,6 +49,7 @@ import {
 import type { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
 import { isTodoState } from "../todo/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
+import { sanitizeIncidentValue } from "./incident-redaction.js";
 import {
   createProductionErrorAttention,
   type ProductionErrorCode,
@@ -128,10 +130,10 @@ const providerFallbackAttentionId = (
 
 const skippedProviderCandidate = (
   binding: ResolvedSessionBinding,
-  failure: unknown,
+  failure: ProviderCandidateFailureDetail,
 ): SkippedProviderCandidate => ({
   candidatePosition: binding.candidatePosition,
-  failure: errorDetail(failure),
+  failure,
   modelSlug: binding.modelSlug,
   providerDisplayName: binding.providerDisplayName,
 });
@@ -182,6 +184,21 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         this.configuration.session.resolvedSelections,
       )
     );
+  }
+
+  #providerFailureDetail(
+    instanceId: string,
+    failure: unknown,
+  ): ProviderCandidateFailureDetail {
+    const correlationTokens = Object.values(
+      this.persistence.getInstance(instanceId)?.state.correlationTokens ?? {},
+    );
+    return sanitizeIncidentValue(errorDetail(failure), [
+      this.configuration.pushover?.applicationToken ?? "",
+      this.configuration.pushover?.userKey ?? "",
+      this.configuration.t3?.accessToken ?? "",
+      ...correlationTokens,
+    ]) as ProviderCandidateFailureDetail;
   }
 
   async recoverProviderStartFailure(
@@ -300,7 +317,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     }
     const skipped = [
       ...session.binding.skippedCandidates,
-      skippedProviderCandidate(session.binding, cause),
+      skippedProviderCandidate(
+        session.binding,
+        this.#providerFailureDetail(session.instanceId, cause),
+      ),
     ];
     for (
       let index = session.binding.candidatePosition;
@@ -330,7 +350,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         candidate.providerInstanceId,
       );
       if (collision !== undefined) {
-        skipped.push(skippedProviderCandidate(candidateBinding, collision));
+        skipped.push(
+          skippedProviderCandidate(
+            candidateBinding,
+            this.#providerFailureDetail(session.instanceId, collision),
+          ),
+        );
         continue;
       }
       const reconcilerRuntime = this.persistence

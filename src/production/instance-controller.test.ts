@@ -177,6 +177,10 @@ describe("production instance controller", () => {
     ];
     const controller = new ProductionInstanceController(
       {
+        pushover: {
+          applicationToken: "sample-application-token",
+          userKey: "sample-user-key",
+        },
         session: {
           baseRef: "main",
           defaultProviderAlias: "reviewer",
@@ -186,6 +190,7 @@ describe("production instance controller", () => {
           resolvedSelections: selections,
           skillPointer: "skill://sample",
         },
+        t3: { accessToken: "sample-access-token" },
       } as never,
       persistence,
       {} as ProductionLifecycleRouter,
@@ -209,7 +214,11 @@ describe("production instance controller", () => {
         {
           id: "thread-reviewer",
           latestTurn: { startedAt: null, state: "error" },
-          session: { lastError: "Sample start failed", status: "error" },
+          session: {
+            lastError:
+              "Sample start failed with sample-access-token at https://actor:password@host.invalid/path",
+            status: "error",
+          },
         },
       ),
     ).resolves.toBe(true);
@@ -218,6 +227,13 @@ describe("production instance controller", () => {
       .listSessionRuntime()
       .find(({ sessionKey }) => sessionKey === "sample-11:review:1")!.binding;
     expect(binding.skippedCandidates).toHaveLength(2);
+    expect(JSON.stringify(binding.skippedCandidates)).not.toContain(
+      "sample-access-token",
+    );
+    expect(JSON.stringify(binding.skippedCandidates)).not.toContain(
+      "actor:password",
+    );
+    expect(JSON.stringify(binding.skippedCandidates)).toContain("[redacted]");
     expect(binding.skippedCandidates[1]?.failure.message).toContain(
       "started alias 'primary' already holds it",
     );
