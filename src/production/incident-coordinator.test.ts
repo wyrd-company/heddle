@@ -325,6 +325,25 @@ describe("production incident coordinator", () => {
           },
         },
       });
+
+      persistence!.writeIncidentRuntime({
+        ...incidents[1]!,
+        state: terminalState,
+      });
+      attention.resolve(source.attentionId);
+      attention.reopen(source.attentionId);
+      await coordinator.reconcile([task()]);
+
+      expect(persistence!.listIncidentRuntime()[2]).toMatchObject({
+        incidentId: productionErrorIncidentId(source.attentionId, 3),
+        occurrence: 3,
+        state: "waiting",
+      });
+      expect(harness.activations).toEqual([
+        "implement",
+        "implement",
+        "implement",
+      ]);
     },
   );
 
