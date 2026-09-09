@@ -3,6 +3,9 @@
 //   verifies: heddle
 // ---
 
+import process from "node:process";
+import { setImmediate } from "node:timers";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SqlitePersistence } from "../persistence/index.js";
