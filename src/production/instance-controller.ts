@@ -367,12 +367,19 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         candidate.providerInstanceId,
       );
       if (collision !== undefined) {
-        skipped.push(
-          skippedProviderCandidate(
-            candidateBinding,
-            this.#providerFailureDetail(session.instanceId, collision),
-          ),
-        );
+        if (
+          !skipped.some(
+            ({ candidatePosition: skippedPosition }) =>
+              skippedPosition === candidatePosition,
+          )
+        ) {
+          skipped.push(
+            skippedProviderCandidate(
+              candidateBinding,
+              this.#providerFailureDetail(session.instanceId, collision),
+            ),
+          );
+        }
         continue;
       }
       const reconcilerRuntime = this.persistence

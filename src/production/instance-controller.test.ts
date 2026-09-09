@@ -222,6 +222,24 @@ describe("production instance controller", () => {
         },
       ),
     ).resolves.toBe(true);
+    await expect(
+      controller.recoverProviderStartFailure(
+        task,
+        {
+          instanceId: "sample-11",
+          sessionKey: "sample-11:review:1",
+          threadId: "thread-reviewer",
+        },
+        {
+          id: "thread-reviewer",
+          latestTurn: { startedAt: null, state: "error" },
+          session: {
+            lastError: "Sample start failed",
+            status: "error",
+          },
+        },
+      ),
+    ).resolves.toBe(true);
 
     const binding = persistence
       .listSessionRuntime()
