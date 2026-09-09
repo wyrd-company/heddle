@@ -51,9 +51,22 @@ describe("production composition", () => {
     return fixture;
   };
 
-  it("runs a production stage on the second candidate and records visible degradation", async () => {
-    const fixture = await prepare();
-    const t3 = new SyntheticT3();
+  const configureProviderCandidates = (
+    fixture: Awaited<ReturnType<typeof prepare>>,
+    t3: SyntheticT3,
+  ) => {
+    const secondSelection = {
+      ...fixture.configuration.session.defaultSelection,
+      driverKind: "sample-driver-two",
+      model: {
+        isCustom: false,
+        name: "Sample Model Two",
+        slug: "sample-model-two",
+      },
+      observedCliVersion: "2.0.0",
+      providerDisplayName: "Workbench Beta",
+      providerInstanceId: "provider-two",
+    };
     t3.providerCatalog.push({
       availability: "available",
       displayName: "Workbench Beta",
@@ -61,13 +74,7 @@ describe("production composition", () => {
       enabled: true,
       installed: true,
       instanceId: "provider-two",
-      models: [
-        {
-          isCustom: false,
-          name: "Sample Model Two",
-          slug: "sample-model-two",
-        },
-      ],
+      models: [secondSelection.model],
       observedCliVersion: "2.0.0",
       state: "ready",
     });
@@ -83,22 +90,16 @@ describe("production composition", () => {
         },
       ],
     };
-    const secondSelection = {
-      ...fixture.configuration.session.defaultSelection,
-      driverKind: "sample-driver-two",
-      model: {
-        isCustom: false,
-        name: "Sample Model Two",
-        slug: "sample-model-two",
-      },
-      observedCliVersion: "2.0.0",
-      providerDisplayName: "Workbench Beta",
-      providerInstanceId: "provider-two",
-    };
     fixture.configuration.session.resolvedSelections = [
       fixture.configuration.session.defaultSelection,
       secondSelection,
     ];
+  };
+
+  it("runs a production stage on the second candidate and records visible degradation", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
     const getShell = vi.spyOn(t3, "getShell").mockImplementation(async () => {
       const providersByThread = new Map(
         t3.commands
@@ -191,6 +192,127 @@ describe("production composition", () => {
       }),
     );
     expect(getShell).toHaveBeenCalled();
+    await composition.close();
+  });
+
+  it("exhausts every candidate after each candidate fails before starting", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [...t3.threads].map((id) => ({
+        id,
+        latestTurn: {
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: null,
+          state: "error",
+        },
+        session: {
+          lastError: `Candidate ${id} could not start`,
+          status: "error",
+        },
+      })),
+    }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    const creates = t3.commands.filter(({ type }) => type === "thread.create");
+    expect(
+      new Set(
+        creates.map(
+          ({ modelSelection }) =>
+            (modelSelection as { instanceId: string }).instanceId,
+        ),
+      ),
+    ).toEqual(new Set(["codex", "provider-two"]));
+    expect(new Set(creates.map(({ threadId }) => threadId))).toHaveLength(2);
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(session.binding.skippedCandidates).toHaveLength(2);
+    expect(
+      session.binding.skippedCandidates.map(
+        ({ candidatePosition }) => candidatePosition,
+      ),
+    ).toEqual([1, 2]);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-alias-exhausted",
+        message: expect.stringContaining("exhausted every candidate"),
+      }),
+    );
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === fixture.taskId),
+    ).toMatchObject({ state: "waiting" });
+    await composition.close();
+  });
+
+  it("keeps a started-turn failure on the normal observation path", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [...t3.threads].map((id) => ({
+        id,
+        latestTurn: {
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: "2026-01-01T00:00:01.000Z",
+          state: "error",
+        },
+        session: { lastError: "Turn failed", status: "error" },
+      })),
+    }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(1);
+    expect(composition.persistence.listSessionRuntime()[0]).not.toHaveProperty(
+      "bindingState",
+    );
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({ kind: "failed" }),
+    );
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).not.toContainEqual(
+      expect.objectContaining({
+        code: expect.stringMatching(/^provider-(fallback|alias)/),
+      }),
+    );
     await composition.close();
   });
 

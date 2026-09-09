@@ -206,6 +206,28 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       thread?.latestTurn?.state === "running" ||
       thread?.latestTurn?.state === "completed"
     ) {
+      if (session.binding.candidatePosition > 1) {
+        const fallback = createProductionErrorAttention({
+          attentionId: providerFallbackAttentionId(
+            "provider-fallback-active",
+            session.sessionKey,
+            session.binding.candidatePosition,
+          ),
+          code: "provider-fallback-active",
+          error: new Error(
+            session.binding.skippedCandidates.at(-1)?.failure.message ??
+              "An earlier provider candidate could not start",
+          ),
+          instanceId: session.instanceId,
+          message: `Provider alias '${session.binding.alias}' started candidate ${session.binding.candidatePosition} '${session.binding.providerDisplayName}' model '${session.binding.modelSlug}' after ${describeSkippedCandidates(session.binding.skippedCandidates)}`,
+          taskId: task.id,
+        });
+        if (!(await this.attention.has(fallback.attentionId))) {
+          await this.attention.raise(fallback);
+        } else {
+          this.attention.reopen(fallback.attentionId);
+        }
+      }
       this.persistence.confirmSessionBindingStarted(
         session.sessionKey,
         session.threadId,
@@ -310,23 +332,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       if (collision !== undefined) {
         skipped.push(skippedProviderCandidate(candidateBinding, collision));
         continue;
-      }
-      const fallback = createProductionErrorAttention({
-        attentionId: providerFallbackAttentionId(
-          "provider-fallback-active",
-          session.sessionKey,
-          candidatePosition,
-        ),
-        code: "provider-fallback-active",
-        error: cause,
-        instanceId: session.instanceId,
-        message: `Provider alias '${session.binding.alias}' is starting candidate ${candidatePosition} '${candidate.providerDisplayName}' model '${candidate.model.slug}' after ${describeSkippedCandidates(skipped)}`,
-        taskId: task.id,
-      });
-      if (!(await this.attention.has(fallback.attentionId))) {
-        await this.attention.raise(fallback);
-      } else {
-        this.attention.reopen(fallback.attentionId);
       }
       const reconcilerRuntime = this.persistence
         .listReconcilerRuntime()
