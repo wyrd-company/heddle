@@ -12,6 +12,7 @@ export {
   escalationInputSchema,
   escalationQuestionSchema,
   type AnsweredEscalation,
+  type AdjudicationEscalationRouter,
   type EscalationAnswerInput,
   type EscalationAnswerDelivery,
   type EscalationAnsweringAuthority,

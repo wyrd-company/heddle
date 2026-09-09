@@ -6,6 +6,7 @@
 import type { JsonValue, PersistedEvent } from "../persistence/index.js";
 import {
   answeredEscalationSchema,
+  adjudicationEvidenceSchema,
   escalationAnsweringAuthoritySchema,
   escalationAttentionId,
   escalationInputSchema,
@@ -415,9 +416,9 @@ export class EscalationHistory {
             ...(value["adjudication"] === undefined
               ? {}
               : {
-                  adjudication: value["adjudication"] as NonNullable<
-                    PendingEscalation["adjudication"]
-                  >,
+                  adjudication: adjudicationEvidenceSchema.parse(
+                    value["adjudication"],
+                  ),
                 }),
           },
         });

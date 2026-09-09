@@ -214,6 +214,63 @@ describe("workflow MCP escalation tools", () => {
     });
   });
 
+  it("fails an adjudicator that attempts another escalation occurrence closed to operator", async () => {
+    const subject = await createEscalationFixture({
+      adjudication: {
+        start: async () => ({ modelSlug: "sample-capable-model" }),
+        stop: async () => undefined,
+      },
+    });
+    createEscalationInstance(subject.persistence, "instance-boundary", [
+      { sessionKey: "top", token: "token-boundary", tools: ["escalate"] },
+    ]);
+    const stageBinding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-boundary");
+    await subject.coordinator.escalate(stageBinding, {
+      escalationId: "bound-choice",
+      questions: sampleEscalationQuestions,
+    });
+    const pending =
+      subject.coordinator.pendingEscalations("instance-boundary")[0]!;
+    await vi.waitFor(() =>
+      expect(
+        subject.persistence
+          .replayEvents("instance-boundary")
+          .some(({ type }) => type === "mcp:escalation-adjudication-started"),
+      ).toBe(true),
+    );
+    const adjudicationBinding = {
+      ...stageBinding,
+      adjudication: {
+        escalationId: pending.escalationId,
+        modelSlug: "sample-capable-model",
+        ownerSessionKey: pending.ownerSessionKey,
+      },
+      sessionKey:
+        pending.answeringAuthority.kind === "adjudication"
+          ? pending.answeringAuthority.sessionKey
+          : "unreachable",
+    };
+
+    await expect(
+      subject.coordinator.answerAsSession(adjudicationBinding, {
+        answers: sampleEscalationAnswer,
+        escalationId: "another-choice",
+        ownerSessionKey: "child-session",
+        prose: "This attempts to answer another occurrence.",
+      }),
+    ).rejects.toThrow(/bound escalation occurrence/);
+    await vi.waitFor(() => expect(subject.notifications).toHaveLength(1));
+    expect(subject.attentions[0]).toMatchObject({
+      adjudication: {
+        cause: "Adjudication may answer only its bound escalation occurrence",
+        modelSlug: "sample-capable-model",
+      },
+      escalationId: "bound-choice",
+    });
+  });
+
   it("publishes the immediate-return behavior contract with the escalate tool", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-description", [

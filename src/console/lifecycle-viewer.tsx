@@ -35,6 +35,7 @@ import {
 } from "./lifecycle-tail.js";
 import { lifecycleCanvasPositions } from "./lifecycle-canvas-layout.js";
 import { LifecycleCanvasSurface } from "./lifecycle-canvas-surface.js";
+import { lifecycleEventSummary } from "./lifecycle-event-summary.js";
 
 interface LifecycleViewerPort {
   append(snapshot: ConsoleLifecycleSnapshot): void;
@@ -540,16 +541,11 @@ function LifecycleViewer() {
         )}
         <ol aria-live="polite">
           {snapshot?.events.map((event) => {
-            const payload = event.payload as Record<string, unknown>;
-            const node =
-              typeof payload?.["nodeId"] === "string"
-                ? payload["nodeId"]
-                : undefined;
             return (
               <li key={event.sequence} data-event-sequence={event.sequence}>
                 <span>{String(event.sequence).padStart(3, "0")}</span>
                 <strong>{event.type}</strong>
-                <small>{node ?? event.executionId}</small>
+                <small>{lifecycleEventSummary(event)}</small>
               </li>
             );
           })}

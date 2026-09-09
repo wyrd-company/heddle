@@ -97,10 +97,10 @@ When this file does not settle a question, decide with these.
 2. **Automate everything algorithmic; never automate judgment.** Agent context
    is the scarce resource. Spending it on a deterministic transition is a
    defect. Resolving an ambiguous one without an agent is a worse one.
-3. **The workflow is data.** Lifecycles, handoff templates, todo templates, and
-   the tools each stage may use live in the organization blueprint repository
-   and are pinned by content. Adding a stage or changing a transition is a
-   blueprint edit, not a code change.
+3. **The workflow is data.** Lifecycles, adjudication policy, handoff templates,
+   todo templates, and the tools each session may use live in the organization
+   blueprint repository and are pinned by content. Adding a stage, changing a
+   transition, or changing the adjudication boundary is a blueprint edit.
 4. **One authority per fact.** The board owns task existence and operator
    intent. Heddle owns child task status. The blueprint owns the lifecycle. The
    runtime owns its own state. Writing another owner's fact makes a legitimate
@@ -120,11 +120,14 @@ When this file does not settle a question, decide with these.
 
 - **attention** is a durable record that the operator must see or act on. It
   survives restart and carries the actions that dispose it.
+- **adjudication** is a one-turn agent session bound to one top-level escalation
+  occurrence. It can answer that escalation or decline it to the operator and
+  has no task, lifecycle instance, or board status.
 - **blueprint** is the lifecycle definition a task follows, resolved from the
   organization blueprint repository and pinned by content hash at activation.
 - **escalation** is a durable question from a session. Answer authority begins
-  with its parent when it has one and with the operator when it does not. The
-  answer returns through a dispatched session turn.
+  with its parent when it has one and with a fresh adjudication when it does
+  not. The answer returns through a dispatched session turn.
 - **instance** is one running lifecycle bound to one task.
 - **lifecycle** is the prescribed stages and transitions through which a task
   moves to completion.

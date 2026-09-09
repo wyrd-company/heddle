@@ -98,6 +98,7 @@ import {
 } from "./incident-coordinator.js";
 import { SharedProjectCoordinator } from "./shared-project.js";
 import { ProductionEscalationAnswerEffects } from "./escalation-answer-effects.js";
+import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
@@ -349,9 +350,28 @@ export const createProductionComposition = (
       instances,
       t3,
     );
+    const pacing = new DispatchPacingGate(
+      configuration.pacing,
+      options.providerUsage,
+    );
+    const scopedAdjudication =
+      configuration.adjudication === undefined
+        ? undefined
+        : new ProductionScopedAdjudication({
+            board,
+            blueprintRepository,
+            configuration,
+            pacing,
+            persistence,
+            t3,
+            workflowMcpEndpoint: options.workflowMcpEndpoint,
+          });
     const escalationSettlementAttentionId = (attentionId: string): string =>
       `production:escalation-settlement-failed:${attentionId}`;
     const escalation = new EscalationCoordinator({
+      ...(scopedAdjudication === undefined
+        ? {}
+        : { adjudication: scopedAdjudication }),
       attention: {
         raise: async (value) => {
           await attention.raise(value);
@@ -417,19 +437,25 @@ export const createProductionComposition = (
       persistence,
       pushover: {
         send: async (value) => {
+          const message =
+            value.adjudication === undefined
+              ? `Heddle escalation in ${value.stage}`
+              : [
+                  `Heddle escalation in ${value.stage}: ${value.questions[0]!.prompt}`,
+                  `Adjudication${value.adjudication.modelSlug === undefined ? "" : ` by ${value.adjudication.modelSlug}`} did not decide: ${value.adjudication.cause}`,
+                  ...(value.adjudication.reasoning === undefined
+                    ? []
+                    : [`Reasoning: ${value.adjudication.reasoning}`]),
+                ].join("\n\n");
           await sendNotification({
             attentionId: value.attentionId,
             instanceId: value.instanceId,
-            message: `Heddle escalation in ${value.stage}`,
+            message,
           });
           await options.afterEscalationEffect?.("pushover", value.attentionId);
         },
       },
     });
-    const pacing = new DispatchPacingGate(
-      configuration.pacing,
-      options.providerUsage,
-    );
     let subagents: SubagentCoordinator | undefined;
     const observer = new SessionObserver({
       attention,
@@ -596,17 +622,38 @@ export const createProductionComposition = (
         await incidents.reconcile(after);
         for (const session of productionSessionTargets(persistence!)) {
           const record = persistence!.getInstance(session.instanceId);
+          const adjudicationSession =
+            scopedAdjudication?.isAdjudicationSession(session.sessionKey) ===
+            true;
           if (
             record === undefined ||
-            !isTodoState(record.state.todoState) ||
-            !record.state.todoState.lists.some(
-              (list) =>
-                list.sessionKey === session.sessionKey ||
-                (list.assignments ?? []).some(
-                  ({ sessionKey }) => sessionKey === session.sessionKey,
-                ),
-            )
+            (!adjudicationSession &&
+              (!isTodoState(record.state.todoState) ||
+                !record.state.todoState.lists.some(
+                  (list) =>
+                    list.sessionKey === session.sessionKey ||
+                    (list.assignments ?? []).some(
+                      ({ sessionKey }) => sessionKey === session.sessionKey,
+                    ),
+                )))
           ) {
+            continue;
+          }
+          if (adjudicationSession) {
+            const failure = await scopedAdjudication!.observationFailure(
+              session.sessionKey,
+            );
+            if (failure !== undefined) {
+              const runtime = persistence!
+                .listSessionRuntime()
+                .find(({ sessionKey }) => sessionKey === session.sessionKey)!;
+              await escalation.failAdjudicationForSession({
+                cause: failure,
+                instanceId: session.instanceId,
+                modelSlug: runtime.binding.modelSlug,
+                sessionKey: session.sessionKey,
+              });
+            }
             continue;
           }
           let observation: Awaited<ReturnType<SessionObserver["observe"]>>;

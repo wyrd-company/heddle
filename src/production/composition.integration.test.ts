@@ -16,7 +16,10 @@ import {
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
 import type { LifecycleBlueprint } from "../engine/index.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
-import { isWorkflowMcpStageContract } from "../mcp-server/index.js";
+import {
+  isWorkflowMcpStageContract,
+  WorkflowMcpSessionResolver,
+} from "../mcp-server/index.js";
 import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import { createProductionComposition } from "./composition.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
@@ -95,6 +98,404 @@ describe("production composition", () => {
       secondSelection,
     ];
   };
+
+  const configureAdjudication = (
+    fixture: Awaited<ReturnType<typeof prepare>>,
+  ) => {
+    fixture.configuration.adjudication = {
+      policyPath: "adjudication/policy.json",
+      providerAlias: "primary",
+    };
+  };
+
+  const openProductionEscalation = async (
+    composition: ReturnType<typeof createProductionComposition>,
+  ) => {
+    const runtime = composition.persistence
+      .listReconcilerRuntime()
+      .find(({ state }) => state === "waiting")!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(token);
+    await composition.escalation.escalate(binding, {
+      escalationId: "production-choice",
+      questions: [
+        {
+          id: "selection",
+          options: [
+            {
+              description: "Use the first generic option",
+              id: "first",
+              label: "First",
+            },
+            {
+              description: "Use the second generic option",
+              id: "second",
+              label: "Second",
+            },
+          ],
+          prompt: "Which generic option should be selected?",
+        },
+      ],
+    });
+    await vi.waitFor(() =>
+      expect(
+        composition.persistence
+          .listSessionRuntime()
+          .filter(({ stageId }) => stageId === "adjudication"),
+      ).toHaveLength(1),
+    );
+    return {
+      adjudication: composition.persistence
+        .listSessionRuntime()
+        .find(({ stageId }) => stageId === "adjudication")!,
+      runtime,
+    };
+  };
+
+  it("starts a fresh production adjudication and delivers its scoped answer", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    const handoff = composition.persistence
+      .getInstance(runtime.instanceId)!
+      .state.handoffs.find(
+        (candidate) =>
+          typeof candidate === "object" &&
+          candidate !== null &&
+          !Array.isArray(candidate) &&
+          candidate["kind"] === "adjudication-handoff",
+      ) as Record<string, unknown>;
+    const prompt = t3.commands.find(
+      ({ threadId, type }) =>
+        type === "thread.turn.start" && threadId === adjudication.threadId,
+    )?.message as { text: string };
+    expect(adjudication.binding).toMatchObject({
+      alias: "primary",
+      modelSlug: "sample-model",
+      runtimeMode: "approval-required",
+    });
+    expect(JSON.parse(handoff["handoff"] as string)).toMatchObject({
+      format: "heddle.adjudication-handoff",
+      policy: {
+        blobHash: expect.stringMatching(/^[0-9a-f]{40}$/),
+        path: "adjudication/policy.json",
+      },
+    });
+    expect(prompt.text).toContain("Which generic option should be selected?");
+    expect(prompt.text).toContain(`"id": ${fixture.taskId}`);
+    expect(prompt.text).not.toContain(
+      composition.persistence.getInstance(runtime.instanceId)!.state
+        .correlationTokens[adjudication.sessionKey]!,
+    );
+    expect(prompt.text).not.toContain(fixture.configuration.t3.accessToken);
+    expect(prompt.text).not.toContain(
+      fixture.configuration.pushover.applicationToken,
+    );
+    const createsBeforeReplay = t3.commands.filter(
+      ({ threadId, type }) =>
+        type === "thread.create" && threadId === adjudication.threadId,
+    );
+    await composition.escalation.replayPendingRoutes();
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.create" && threadId === adjudication.threadId,
+      ),
+    ).toEqual(createsBeforeReplay);
+
+    const adjudicationToken = composition.persistence.getInstance(
+      runtime.instanceId,
+    )!.state.correlationTokens[adjudication.sessionKey]!;
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(adjudicationToken);
+    expect(binding.stage.tools).toEqual(["answer", "decline"]);
+    await composition.escalation.answerAsSession(binding, {
+      answers: { selection: "first" },
+      escalationId: "production-choice",
+      ownerSessionKey: runtime.sessionKey!,
+      prose: "The first option is reversible within the current epic.",
+    });
+
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toEqual([]);
+    expect(
+      composition.persistence
+        .replayEvents(runtime.instanceId)
+        .find(({ type }) => type === "mcp:escalation-answered"),
+    ).toMatchObject({
+      payload: {
+        answeredBy: {
+          kind: "adjudication",
+          sessionKey: adjudication.sessionKey,
+        },
+        modelSlug: "sample-model",
+        prose: "The first option is reversible within the current epic.",
+      },
+    });
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.session.stop" && threadId === adjudication.threadId,
+      ),
+    ).toHaveLength(1);
+    await composition.close();
+  });
+
+  it("routes a production adjudication decline to operator attention", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[adjudication.sessionKey]!;
+    await composition.escalation.declineAdjudication(
+      await new WorkflowMcpSessionResolver(composition.persistence).resolve(
+        token,
+      ),
+      {
+        reason: "The choice changes committed product intent.",
+        reasoning: "The options have materially different outward behavior.",
+      },
+    );
+
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: {
+          cause: "The choice changes committed product intent.",
+          modelSlug: "sample-model",
+          reasoning: "The options have materially different outward behavior.",
+        },
+        kind: "escalation",
+      }),
+    );
+    expect(
+      t3.commands.filter(
+        ({ title, type }) =>
+          type === "thread.create" &&
+          title === `task-${fixture.taskId} · adjudication`,
+      ),
+    ).toHaveLength(1);
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "Which generic option should be selected?",
+    );
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "The choice changes committed product intent.",
+    );
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "The options have materially different outward behavior.",
+    );
+    await composition.close();
+  });
+
+  it("fails terminal, over-budget, and out-of-authority adjudications closed", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    fixture.configuration.pacing.maxConcurrentSessions = 8;
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(token);
+    for (const escalationId of ["failed", "over-budget", "out-of-authority"]) {
+      await composition.escalation.escalate(binding, {
+        escalationId,
+        questions: [
+          {
+            id: "selection",
+            options: [
+              { description: "Use first", id: "first", label: "First" },
+              { description: "Use second", id: "second", label: "Second" },
+            ],
+            prompt: `Which option applies to ${escalationId}?`,
+          },
+        ],
+      });
+    }
+    await vi.waitFor(() =>
+      expect(
+        composition.persistence
+          .listSessionRuntime()
+          .filter(({ stageId }) => stageId === "adjudication"),
+      ).toHaveLength(3),
+    );
+    const adjudications = composition.persistence
+      .listSessionRuntime()
+      .filter(({ stageId }) => stageId === "adjudication");
+    expect(
+      new Set(adjudications.map(({ sessionKey }) => sessionKey)),
+    ).toHaveLength(3);
+    expect(new Set(adjudications.map(({ threadId }) => threadId))).toHaveLength(
+      3,
+    );
+    const adjudicationFor = (escalationId: string) => {
+      const pending = composition.escalation
+        .pendingEscalations(runtime.instanceId)
+        .find((candidate) => candidate.escalationId === escalationId)!;
+      if (pending.answeringAuthority.kind !== "adjudication") {
+        throw new Error("Escalation has no adjudication authority");
+      }
+      return adjudications.find(
+        ({ sessionKey }) =>
+          sessionKey === pending.answeringAuthority.sessionKey,
+      )!;
+    };
+    const failed = adjudicationFor("failed");
+    const overBudget = adjudicationFor("over-budget");
+    const outOfAuthority = adjudicationFor("out-of-authority");
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          id: failed!.threadId,
+          latestTurn: { state: "error" },
+          session: { status: "error" },
+        },
+        {
+          id: overBudget!.threadId,
+          latestTurn: {
+            requestedAt: "2020-01-01T00:00:00.000Z",
+            state: "running",
+          },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: outOfAuthority!.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(3));
+    const evidence = composition.attention
+      .list()
+      .filter(({ kind }) => kind === "escalation")
+      .map(({ adjudication }) => adjudication?.cause);
+    expect(evidence).toEqual(
+      expect.arrayContaining([
+        "Adjudication session failed without deciding",
+        "Adjudication exceeded its time budget",
+        "Adjudication attempted operator interaction outside its authority",
+      ]),
+    );
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "approval"),
+    ).toEqual([]);
+    await composition.close();
+  });
+
+  it("fails an exhausted production adjudication start closed to operator", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const dispatch = t3.dispatch.bind(t3);
+    vi.spyOn(t3, "dispatch").mockImplementation(async (command, context) => {
+      if (
+        command.type === "thread.create" &&
+        String(command.title).endsWith("· adjudication")
+      ) {
+        throw new Error("Sample adjudication harness did not start");
+      }
+      return dispatch(command, context);
+    });
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+    await composition.escalation.escalate(
+      await new WorkflowMcpSessionResolver(composition.persistence).resolve(
+        token,
+      ),
+      {
+        escalationId: "production-choice",
+        questions: [
+          {
+            id: "selection",
+            options: [
+              { description: "Use first", id: "first", label: "First" },
+              { description: "Use second", id: "second", label: "Second" },
+            ],
+            prompt: "Which generic option should be selected?",
+          },
+        ],
+      },
+    );
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause: expect.stringContaining("exhausted every candidate"),
+        }),
+        kind: "escalation",
+      }),
+    );
+    await composition.close();
+  });
 
   it("runs a production stage on the second candidate and records visible degradation", async () => {
     const fixture = await prepare();

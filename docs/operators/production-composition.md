@@ -84,6 +84,9 @@ adHocProject:
   workspaceRoot: /workspaces/sample-workspace
 boardDirectory: /workspaces/sample-board
 cadenceMilliseconds: 60000
+adjudication:
+  policyPath: adjudication/policy.json
+  providerAlias: adjudicator
 observationThresholds:
   endedMilliseconds: 60000
   failedMilliseconds: 60000
@@ -103,6 +106,9 @@ pacing:
     maxFanOut: 2
   usageWindowHours: 5
 providerAliases:
+  adjudicator:
+    - providerDisplayName: Workbench Alpha
+      model: model-capable
   primary:
     - providerDisplayName: Workbench Alpha
       model: model-alpha
@@ -136,6 +142,16 @@ t3:
   accessToken: replace-with-operator-secret
   baseUrl: http://127.0.0.1:3773
 ```
+
+The optional `adjudication` block enables the top-level escalation tier.
+`providerAlias` must name an entry in `providerAliases` and can select a model
+independently of lifecycle stages. `policyPath` names the decision-boundary
+artifact in the organization blueprint repository. Heddle pins that artifact's
+Git blob for each escalation occurrence. Adjudication uses approval-required
+runtime mode and the session interaction mode. It counts against
+`pacing.maxConcurrentSessions` and the selected provider's usage budget. A
+pacing denial routes the original question to the operator instead of parking
+it.
 
 Configuration conforms to `schemas/production-configuration.json`. The
 `products` inventory is the authority for product and repository routing. Each
@@ -844,14 +860,31 @@ Do not delete or rewrite the event or attention row by hand; the pending event
 still blocks its session from stopping.
 
 An escalation records an answering authority. A child begins with its parent
-session as authority; a top-level session begins with the operator. Heddle can
-move authority to another named session or return it to the operator. The
-current authority answers through the same guarded answer contract. A question
-can require one offered option or a value with declared minimum and maximum
-lengths. Optional prose adds context but never replaces the authoritative
-option or validated value. If a named authority session completes without an
-answer, fails, or becomes absent, the observation pass returns authority to the
-operator and routes the escalation attention.
+session as authority. A top-level escalation begins with a new adjudication
+session scoped to that occurrence. The adjudicator receives the current epic
+and child statuses, escalating stage, prior outputs, and original questions,
+but receives no correlation token or configured secret in that context. Its
+pinned policy permits only an answer with reasoning or a decline with cause and
+reasoning. A decline does not try another provider candidate. It moves authority
+to the operator and includes the original questions, model, cause, and reasoning
+in console attention and Pushover notification.
+
+Provider candidates apply only to session start. If every candidate fails, or
+if the session errors, times out, requests another turn or operator action,
+answers outside the offered values, or attempts another escalation occurrence,
+Heddle moves authority to the operator. One occurrence has one stable
+adjudication session identity, with one stable thread identity per startup
+candidate; replay cannot create a second adjudication after start. The
+lifecycle event history shows every adjudicated answer's selected values,
+model, and reasoning. The session stops after answer, decline, or failure.
+
+Heddle can move authority to another named session or return it to the operator.
+The current authority answers through the same guarded answer contract. A
+question can require one offered option or a value with declared minimum and
+maximum lengths. Optional prose adds context but never replaces the
+authoritative option or validated value. If a named parent authority session
+completes without an answer, fails, or becomes absent, the observation pass
+returns authority to the operator and routes the escalation attention.
 
 Heddle records an accepted answer before effects. It dispatches one answer turn
 to the escalating session with command and message identities derived from the

@@ -649,18 +649,44 @@ proposed-design:
     continue unrelated work when possible, and never to create a watcher or
     poll.
 
-    Answering authority begins with the parent session for a child escalation
-    and with the operator for a top-level escalation. Heddle can move that
-    authority to another named session or back to the operator. The same answer
-    predicate accepts an answer only from the current authority. Session
-    authority receives the question by a steered turn; operator authority raises
-    durable attention and Pushover notification. Observation returns authority
-    to the operator when its named session completes without answering, fails,
-    or becomes absent.
+    Answering authority begins with the parent session for a child escalation.
+    A top-level escalation creates a fresh adjudication session bound to that
+    one escalation occurrence. It is not a task or lifecycle instance and owns
+    no board status. Its provider comes from the operator's adjudication alias;
+    its decide-versus-escalate boundary and one-turn time budget come from an
+    organization blueprint repository policy pinned by Git blob at activation.
+    The session receives a constructed, token-free view of the current epic and
+    child statuses, escalating instance and stage, prior stage outputs, and
+    offered questions. It counts against both the session concurrency limit and
+    its selected provider's usage budget.
+
+    Adjudication authority can only answer its bound escalation or decline it.
+    Its MCP binding exposes only those two actions, and its approval-required
+    runtime prevents repository or configuration writes. An accepted answer
+    records the selected model and required reasoning and follows the same
+    durable delivery and decision-log path as an operator answer. A decline
+    moves authority to the operator without trying another model and carries
+    its cause and reasoning into attention and notification. Candidate fallback
+    applies only while starting the configured alias. Alias exhaustion, invalid
+    answers, another-escalation attempts, approval or input requests, model
+    failure, terminal exit without a decision, and the pinned time-budget limit
+    all fail closed to operator authority. Stable occurrence-derived session,
+    thread, command, and message identities make start, restart, and replay
+    idempotent. The session stops after answer, decline, or failure.
+
+    Heddle can otherwise move answering authority to another named session or
+    back to the operator. The same answer predicate accepts an answer only from
+    the current authority. Parent session authority receives the question by a
+    steered turn; operator authority raises durable attention and Pushover
+    notification. Observation returns authority to the operator when its named
+    session completes without answering, fails, or becomes absent.
 
     An accepted answer is durable before effects. Heddle first dispatches one
     answer turn to the escalating session, then appends the question, answer,
-    optional prose, and named authority to the task and, when present, its epic.
+    optional prose, answering model when adjudicated, and named authority to the
+    task and, when present, its epic. The lifecycle console renders adjudicated
+    answers with their model, selected values, and reasoning even though no
+    operator attention was raised.
     Stable command and message identities bind delivery to the escalation
     occurrence. Replay can retry either unfinished effect without creating a
     second delivered turn. A completed delegated child keeps its parentage and

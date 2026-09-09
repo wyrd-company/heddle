@@ -78,6 +78,14 @@ export const escalationAnsweringAuthoritySchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
+export const adjudicationEvidenceSchema = z
+  .object({
+    cause: z.string().trim().min(1).max(4_000),
+    modelSlug: identifier.optional(),
+    reasoning: z.string().trim().min(1).max(4_000).optional(),
+  })
+  .strict();
+
 export const answeredEscalationSchema = escalationAnswerSchema.extend({
   answeredBy: escalationAnsweringAuthoritySchema,
   modelSlug: identifier.optional(),
@@ -104,11 +112,7 @@ export type EscalationAttention = {
   ownerSessionKey: string;
   questions: EscalationQuestion[];
   stage: string;
-  adjudication?: {
-    cause: string;
-    modelSlug?: string;
-    reasoning?: string;
-  };
+  adjudication?: z.infer<typeof adjudicationEvidenceSchema>;
 };
 
 export type PendingEscalation = EscalationAttention & {

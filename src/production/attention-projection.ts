@@ -109,12 +109,55 @@ const projectEscalation = (
     },
     label: "Answer escalation",
   };
+  const adjudicationValue = payload["adjudication"];
+  let adjudication: ConsoleAttention["adjudication"];
+  if (adjudicationValue !== undefined) {
+    if (
+      typeof adjudicationValue !== "object" ||
+      adjudicationValue === null ||
+      Array.isArray(adjudicationValue)
+    ) {
+      throw new Error(
+        `Attention '${attentionId}' has invalid adjudication evidence`,
+      );
+    }
+    const evidence = adjudicationValue as Record<string, unknown>;
+    const cause = evidence["cause"];
+    const modelSlug = evidence["modelSlug"];
+    const reasoning = evidence["reasoning"];
+    if (
+      typeof cause !== "string" ||
+      cause.trim() === "" ||
+      (modelSlug !== undefined && typeof modelSlug !== "string") ||
+      (reasoning !== undefined && typeof reasoning !== "string")
+    ) {
+      throw new Error(
+        `Attention '${attentionId}' has invalid adjudication evidence`,
+      );
+    }
+    adjudication = {
+      cause,
+      ...(modelSlug === undefined ? {} : { modelSlug }),
+      ...(reasoning === undefined ? {} : { reasoning }),
+    };
+  }
   return createConsoleAttention({
     actions: [action],
+    ...(adjudication === undefined ? {} : { adjudication }),
     attentionId,
     instanceId,
     kind: "escalation",
-    message: questions[0]!.prompt,
+    message: [
+      questions[0]!.prompt,
+      ...(adjudication === undefined
+        ? []
+        : [
+            `Adjudication${adjudication.modelSlug === undefined ? "" : ` by ${adjudication.modelSlug}`} did not decide: ${adjudication.cause}`,
+            ...(adjudication.reasoning === undefined
+              ? []
+              : [`Reasoning: ${adjudication.reasoning}`]),
+          ]),
+    ].join("\n\n"),
     scope: `task:${taskId}`,
     taskId,
   });

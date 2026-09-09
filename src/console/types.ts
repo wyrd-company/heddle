@@ -34,6 +34,11 @@ export interface ConsoleEvent {
 }
 
 export interface ConsoleAttention {
+  adjudication?: {
+    cause: string;
+    modelSlug?: string;
+    reasoning?: string;
+  };
   actions: ConsoleAttentionAction[];
   attentionId: string;
   fingerprint: string;

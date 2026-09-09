@@ -304,6 +304,36 @@ export class EscalationCoordinator {
     });
   }
 
+  async failAdjudicationForSession(input: {
+    cause: unknown;
+    instanceId: string;
+    modelSlug: string;
+    sessionKey: string;
+  }): Promise<void> {
+    const opened = this.#history
+      .pending(input.instanceId)
+      .find(
+        ({ answeringAuthority }) =>
+          answeringAuthority.kind === "adjudication" &&
+          answeringAuthority.sessionKey === input.sessionKey,
+      );
+    if (opened === undefined) return;
+    const message =
+      input.cause instanceof Error ? input.cause.message : String(input.cause);
+    await this.moveAnswerAuthority({
+      adjudication: { cause: message, modelSlug: input.modelSlug },
+      escalationId: opened.escalationId,
+      instanceId: opened.instanceId,
+      ownerSessionKey: opened.ownerSessionKey,
+      reason: `Adjudication failed: ${message}`,
+      to: { kind: "operator" },
+    });
+    await this.#adjudication?.stop({
+      reason: "failed",
+      sessionKey: input.sessionKey,
+    });
+  }
+
   async moveAnswerAuthority(input: {
     adjudication?: PendingEscalation["adjudication"];
     escalationId: string;

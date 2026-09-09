@@ -162,13 +162,14 @@ export type StoredAdjudicationHandoff = {
   modelSlug: string;
   ownerSessionKey: string;
   sessionKey: string;
+  timeoutMilliseconds: number;
 };
 
 export type AdjudicationHandoffDocument = {
   context: JsonValue;
   decisionBoundary: string;
   format: "heddle.adjudication-handoff";
-  policy: { blobHash: string; path: string };
+  policy: { blobHash: string; path: string; timeoutMilliseconds: number };
   version: 1;
 };
 

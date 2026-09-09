@@ -86,6 +86,7 @@ const isStoredAdjudicationHandoff = (
   typeof value["escalationId"] === "string" &&
   typeof value["ownerSessionKey"] === "string" &&
   typeof value["modelSlug"] === "string" &&
+  typeof value["timeoutMilliseconds"] === "number" &&
   typeof value["handoff"] === "string";
 
 const parseAdjudicationHandoff = (
@@ -113,7 +114,9 @@ const parseAdjudicationHandoff = (
     (value as Partial<AdjudicationHandoffDocument>).policy === null ||
     typeof (value as AdjudicationHandoffDocument).policy.blobHash !==
       "string" ||
-    typeof (value as AdjudicationHandoffDocument).policy.path !== "string"
+    typeof (value as AdjudicationHandoffDocument).policy.path !== "string" ||
+    typeof (value as AdjudicationHandoffDocument).policy.timeoutMilliseconds !==
+      "number"
   ) {
     throw new CorrelationTokenError();
   }

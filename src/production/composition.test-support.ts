@@ -237,6 +237,9 @@ export const prepareProductionFixture =
     await mkdir(join(blueprintsRepositoryRoot, "themes"), {
       recursive: true,
     });
+    await mkdir(join(blueprintsRepositoryRoot, "adjudication"), {
+      recursive: true,
+    });
     await mkdir(repositoryRoot, { recursive: true });
     await writeFile(
       join(blueprintsRepositoryRoot, "handoff-templates", "standard.md"),
@@ -276,12 +279,25 @@ villains: [sample-villain]
 bystanders: [sample-bystander]
 `,
     );
+    await writeFile(
+      join(blueprintsRepositoryRoot, "adjudication", "policy.json"),
+      JSON.stringify({
+        $schema: "https://wyrd.company/heddle/adjudication-policy.schema.json",
+        relationships: { implements: "heddle" },
+        "decision-boundary": {
+          decide: ["Decide reversible implementation details."],
+          escalate: ["Escalate material product decisions."],
+          test: "Who outside this sample would break?",
+        },
+        limits: { maximumTurns: 1, timeoutMilliseconds: 60_000 },
+      }),
+    );
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
       cwd: blueprintsRepositoryRoot,
     });
     await execute(
       "git",
-      ["add", "handoff-templates", "todo-templates", "themes"],
+      ["add", "adjudication", "handoff-templates", "todo-templates", "themes"],
       { cwd: blueprintsRepositoryRoot },
     );
     await execute(
