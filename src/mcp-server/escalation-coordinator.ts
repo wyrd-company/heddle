@@ -134,7 +134,6 @@ export class EscalationCoordinator {
   }): Promise<AnsweredEscalation> {
     const opened = this.#requireOpened(input);
     const authority = { kind: "operator" } as const;
-    this.#requireAnswerAuthority(opened, authority);
     return this.#answer(opened, input.answers, authority, input.prose);
   }
 
@@ -151,7 +150,6 @@ export class EscalationCoordinator {
       kind: "session",
       sessionKey: binding.sessionKey,
     } as const;
-    this.#requireAnswerAuthority(opened, authority);
     return this.#answer(opened, parsed.answers, authority, parsed.prose);
   }
 
@@ -263,15 +261,6 @@ export class EscalationCoordinator {
     const answered = this.#history.answer(opened, answers, answeredBy, prose);
     await this.#settle(opened, answered);
     return answered;
-  }
-
-  #requireAnswerAuthority(
-    opened: PendingEscalation,
-    caller: EscalationAnsweringAuthority,
-  ): void {
-    if (JSON.stringify(opened.answeringAuthority) !== JSON.stringify(caller)) {
-      throw new Error("The caller does not hold answering authority");
-    }
   }
 
   #settle(
