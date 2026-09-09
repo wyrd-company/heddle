@@ -251,7 +251,14 @@ describe("organization lifecycle blueprint artifacts", () => {
       "assign-agent-name": "heroes",
       id: "judge",
     });
-    invalid.edges.push({ source: "judge", target: "finish" });
+    invalid.edges[1]!.target = "judge";
+    invalid.edges.push({
+      condition: "result.output.dispositions.complete",
+      description: "Complete the sample judgment",
+      disposition: "complete",
+      source: "judge",
+      target: "finish",
+    });
 
     await expect(
       validateBlueprintRepository(await repository(invalid)),
