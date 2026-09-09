@@ -861,6 +861,43 @@ describe("production incident coordinator", () => {
     );
   });
 
+  it("keeps an incident open until finalization observes a cleared condition", async () => {
+    const { attention, coordinator } = await createSubject();
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    await coordinator.resume({
+      disposition: "diagnosed",
+      instanceId: source.incidentId!,
+      operationId: "diagnose-live-condition",
+      output: {
+        conditionState: "live",
+        proposedActions: [{ kind: "operator-escalation", summary: "Escalate" }],
+        rootCauseAnalysis: "Synthetic analysis",
+      },
+    });
+    await coordinator.resume({
+      disposition: "approve",
+      instanceId: source.incidentId!,
+      operationId: "approve-live-condition",
+    });
+
+    await expect(
+      coordinator.resume({
+        disposition: "complete",
+        instanceId: source.incidentId!,
+        operationId: "complete-live-condition",
+        output: { conditionState: "live" },
+      }),
+    ).rejects.toThrow("conditionState 'cleared'");
+
+    expect(persistence!.listIncidentRuntime()[0]?.state).not.toBe("done");
+    expect(
+      persistence!
+        .listAttention()
+        .some(({ attentionId }) => attentionId === source.attentionId),
+    ).toBe(true);
+  });
+
   it("starts a below-threshold production mutation without operator approval", async () => {
     const { attention, coordinator, harness } = await createSubject({
       approvalSeverityThreshold: "high",
