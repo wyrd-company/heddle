@@ -113,7 +113,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly agentNames?: AgentNameAllocator,
     private readonly taskLifecycleResolver?: Pick<
       ProductLifecycleResolver,
-      "validateTaskProviderAliases"
+      "resolve" | "validateTaskProviderAliases"
     >,
   ) {}
 
@@ -549,23 +549,24 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
 
   async synchronize(tasks: readonly BoardTask[]): Promise<void> {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
+    const activeAttentionIds = new Set(
+      this.persistence.listAttention().map(({ attentionId }) => attentionId),
+    );
     for (const runtime of this.persistence.listReconcilerRuntime()) {
       const retryAttentionIds = [
         `production:task-reconciliation-failed:task:${runtime.taskId}`,
         `production:instance-synchronization-failed:task:${runtime.taskId}:${runtime.instanceId}`,
+        `production:instance-start-incomplete:task:${runtime.taskId}:${runtime.instanceId}`,
       ];
-      const activeRetryAttentionIds = [];
-      for (const attentionId of retryAttentionIds) {
-        if (await this.attention.has(attentionId)) {
-          activeRetryAttentionIds.push(attentionId);
-        }
-      }
+      const activeRetryAttentionIds = retryAttentionIds.filter((attentionId) =>
+        activeAttentionIds.has(attentionId),
+      );
       if (
         activeRetryAttentionIds.some(
           (attentionId) =>
             !this.persistence.incidentFailureRetryReady(
               attentionId,
-              Date.now(),
+              this.now(),
             ),
         )
       ) {
@@ -574,7 +575,61 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       try {
         const record = this.persistence.getInstance(runtime.instanceId);
         if (record === undefined) {
-          if (runtime.state === "deferred" || runtime.state === "starting") {
+          if (runtime.state === "deferred") {
+            continue;
+          }
+          if (runtime.state === "starting") {
+            const attentionId = synchronizationAttentionId(
+              runtime,
+              "instance-start-incomplete",
+            );
+            if (!activeAttentionIds.has(attentionId)) {
+              await this.#raiseSynchronizationError(
+                runtime,
+                "instance-start-incomplete",
+                new Error(
+                  `Instance ${runtime.instanceId} retained starting state without lifecycle activation`,
+                ),
+              );
+              continue;
+            }
+            const task = tasksById.get(runtime.taskId);
+            if (task === undefined) {
+              await this.#raiseSynchronizationError(
+                runtime,
+                "board-task-absent",
+                new Error(
+                  `Task ${runtime.taskId} is absent during lifecycle synchronization`,
+                ),
+              );
+              continue;
+            }
+            if (this.taskLifecycleResolver === undefined) {
+              throw new Error(
+                `Instance ${runtime.instanceId} has no lifecycle resolution authority for start recovery`,
+              );
+            }
+            const resolution = await this.taskLifecycleResolver.resolve(task);
+            if (resolution.kind === "attention-required") {
+              throw new Error(resolution.attention.message);
+            }
+            await this.start({
+              blueprintPath: resolution.blueprintPath,
+              instanceId: runtime.instanceId,
+              ...(resolution.repositoryName === undefined
+                ? {}
+                : { repositoryName: resolution.repositoryName }),
+              task,
+            });
+            await this.#resolveSynchronizationError(
+              runtime,
+              "instance-start-incomplete",
+            );
+            await this.#resolveTaskReconciliationError(runtime);
+            await this.#resolveSynchronizationError(
+              runtime,
+              "instance-synchronization-failed",
+            );
             continue;
           }
           await this.#raiseSynchronizationError(
@@ -732,9 +787,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   ): Promise<void> {
     const attentionId = synchronizationAttentionId(runtime, code);
     if (await this.attention.has(attentionId)) {
-      if (code === "lifecycle-instance-absent") {
-        this.attention.reopen(attentionId);
-      }
+      this.attention.reopen(attentionId);
       return;
     }
     await this.attention.raise(

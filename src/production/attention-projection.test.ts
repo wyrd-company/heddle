@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   DurableAttentionRecord,
+  IncidentRuntimeRecord,
   JsonValue,
   ReconcilerRuntimeRecord,
 } from "../persistence/index.js";
@@ -166,7 +167,7 @@ describe("production attention projection", () => {
     });
   });
 
-  it("keeps informational and pre-instance reconciler attention actionless", () => {
+  it("offers a resolve action for dead-session attention", () => {
     expect(
       projectProductionAttention(
         record("attention-stalled", {
@@ -178,7 +179,49 @@ describe("production attention projection", () => {
         }),
         [runtime],
       ),
-    ).toMatchObject({ actions: [], scope: "task:41" });
+    ).toMatchObject({
+      actions: [
+        {
+          actionId: "attention.resolve",
+          contract: { kind: "attention.resolve" },
+        },
+      ],
+      scope: "task:41",
+    });
+  });
+
+  it("links a newly admitted incident to its dead-session attention", () => {
+    const attentionId = "attention-failed";
+    const incident: IncidentRuntimeRecord = {
+      accepted: false,
+      attentionId,
+      code: "session-failed",
+      createdAt: 1_000,
+      incidentId: productionErrorIncidentId(attentionId),
+      rejectionOperationIds: [],
+      sourceInstanceId: "task-41",
+      state: "starting",
+      taskId: 41,
+    };
+
+    expect(
+      projectProductionAttention(
+        record(attentionId, {
+          instanceId: "task-41",
+          kind: "failed",
+          message: "Session failed",
+          sessionKey: "session-one",
+          threadId: "thread-one",
+        }),
+        [runtime],
+        undefined,
+        undefined,
+        [incident],
+      ),
+    ).toMatchObject({ incidentId: incident.incidentId, scope: "task:41" });
+  });
+
+  it("keeps pre-instance reconciler attention actionless", () => {
     expect(
       projectProductionAttention(
         record("attention-lifecycle", {

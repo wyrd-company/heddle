@@ -190,11 +190,14 @@ proposed-design:
     applicable limit, observed usage or occupancy, and the next provider
     window time when one applies. An unchanged deferral converges without
     another write. Each reconciliation pass evaluates deferred work
-    again, so released capacity starts it on a later pass. A deferred or
-    starting runtime may intentionally precede lifecycle-state creation and
-    does not raise missing-instance attention. Synchronization resolves the
-    matching stale entry after lifecycle state appears; other runtime records
-    with no lifecycle state remain operator-visible failures.
+    again, so released capacity starts it on a later pass. A deferred runtime
+    and an in-flight start reservation may intentionally precede
+    lifecycle-state creation and do not raise missing-instance attention. A
+    retained `starting` runtime with no lifecycle activation raises
+    `instance-start-incomplete` and enters the ordinary later-pass retry policy.
+    Synchronization resolves the matching stale entry after lifecycle state
+    appears; other runtime records with no lifecycle state remain
+    operator-visible failures.
 
     One production composition owns reconciliation for a workspace. A shared
     per-epic operation coordinator orders dynamic-task creation and recovery,
@@ -670,12 +673,19 @@ proposed-design:
     deadline; no retry holds a request open, sleeps a pass, polls, or replays a
     recorded occurrence. The failure count changes only at this later-pass
     boundary. The breaker opens at the configured threshold and its opening,
-    not a permanent-or-transient classification, admits incident judgment.
+    not a permanent-or-transient classification, admits incident judgment. An
+    open breaker retains a durable next-probe deadline. Synchronization may
+    retry at that deadline and a still-live condition rearms the deadline, so
+    an admission suppressed by cooldown or concurrency and an incident that
+    ends failed cannot strand later condition resolution.
     Operator configuration may short-circuit a known failure code or change its
     threshold as an optimization. Absence from that configuration never
     prevents admission. A task start that throws, a retained `starting` runtime
     with no activation, and a session observed dead without lifecycle advance
-    all enter this policy. A successful retry resolves the condition attention.
+    all enter this policy. A successful retry resolves the condition attention
+    and atomically removes its admission record. The retained attention row is
+    audit history; recurrence reopens it as a fresh admission episode instead
+    of inheriting the prior failure count or open breaker.
 
     While SQLite is available, production-error pages retain their durable
     one-minute per-code cooldown and cap of three attempts in five minutes, so
@@ -692,9 +702,10 @@ proposed-design:
     An open task-scoped breaker admits one ordinary `incident` lifecycle under
     the deterministic digest of its source attention identity. At most three
     incidents are active and the per-code cooldown contains correlated storms;
-    suppression never resolves or replaces source attention. An incident
-    execution failure stays on the operator-only floor and cannot recursively
-    admit another incident.
+    suppression never resolves or replaces source attention. Dead and stalled
+    session cards offer an operator Resolve fallback and link to the incident
+    after admission. An incident execution failure stays on the operator-only
+    floor and cannot recursively admit another incident.
 
     The incident blueprint has implement, review, and finalize wait stages and
     no board-status map or board-writing mechanical node. Its handoff carries

@@ -28,7 +28,7 @@ afterEach(async () => {
 });
 
 describe("incident runtime persistence", () => {
-  it("persists retry attempts and opens the breaker only at the failure threshold", async () => {
+  it("probes an open breaker and resets admission when its attention resolves", async () => {
     const { stateDirectory, store } = await persistence();
     const input = {
       attentionId: "production:unanticipated:task:17",
@@ -37,6 +37,10 @@ describe("incident runtime persistence", () => {
       observedAt: 1_000,
       retryDelayMilliseconds: 100,
     };
+    store.raiseAttention(input.attentionId, {
+      attentionId: input.attentionId,
+      kind: "production-error",
+    });
 
     expect(store.observeIncidentFailure(input)).toEqual({
       failureCount: 1,
@@ -65,9 +69,31 @@ describe("incident runtime persistence", () => {
     expect(
       restarted.observeIncidentFailure({ ...input, observedAt: 1_200 }),
     ).toEqual({ failureCount: 3, kind: "breaker-open" });
-    expect(restarted.incidentFailureRetryReady(input.attentionId, 1_300)).toBe(
+    expect(restarted.incidentFailureRetryReady(input.attentionId, 1_299)).toBe(
       false,
     );
+    expect(restarted.incidentFailureRetryReady(input.attentionId, 1_300)).toBe(
+      true,
+    );
+    expect(
+      restarted.observeIncidentFailure({ ...input, observedAt: 1_300 }),
+    ).toEqual({ failureCount: 3, kind: "breaker-open" });
+    expect(restarted.incidentFailureRetryReady(input.attentionId, 1_399)).toBe(
+      false,
+    );
+    expect(restarted.incidentFailureRetryReady(input.attentionId, 1_400)).toBe(
+      true,
+    );
+
+    expect(restarted.resolveAttention(input.attentionId)).toBe(true);
+    expect(restarted.reopenAttention(input.attentionId)).toBe(true);
+    expect(
+      restarted.observeIncidentFailure({ ...input, observedAt: 1_400 }),
+    ).toEqual({
+      failureCount: 1,
+      kind: "retry-scheduled",
+      nextAttemptAt: 1_500,
+    });
     restarted.close();
   });
 

@@ -109,6 +109,7 @@ const projectSessionAttention = (
   taskId: number,
   attentionId: string,
   kind: string,
+  incidentId?: string,
 ): ConsoleAttention => {
   const sessionKey = requiredIdentifier(payload, "sessionKey", attentionId);
   const threadId = requiredIdentifier(payload, "threadId", attentionId);
@@ -149,10 +150,20 @@ const projectSessionAttention = (
               label: "Answer questions",
             },
           ]
-        : [];
+        : ["ended", "failed", "stalled"].includes(kind)
+          ? [
+              {
+                actionId: "attention.resolve",
+                contract: { kind: "attention.resolve" as const },
+                input: { kind: "none" as const },
+                label: "Resolve",
+              },
+            ]
+          : [];
   return createConsoleAttention({
     actions,
     attentionId,
+    ...(incidentId === undefined ? {} : { incidentId }),
     instanceId,
     kind,
     message: requiredString(payload, "message", attentionId),
@@ -246,6 +257,8 @@ export const projectProductionAttention = (
       taskForInstance(instanceId, instanceRuntimes, attentionId),
       attentionId,
       kind,
+      incidents.find((runtime) => runtime.attentionId === attentionId)
+        ?.incidentId,
     );
   }
   if (

@@ -424,15 +424,25 @@ export class SqlitePersistence {
     if (justification !== undefined) {
       this.assertStableId("resolutionJustification", justification);
     }
-    const resolved =
-      this.database
-        .prepare(
-          `UPDATE heddle_attention
+    const resolved = this.database.transaction(() => {
+      const changed =
+        this.database
+          .prepare(
+            `UPDATE heddle_attention
            SET resolved_at = ?, resolution_justification = ?
            WHERE attention_id = ? AND resolved_at IS NULL`,
-        )
-        .run(new Date().toISOString(), justification ?? null, attentionId)
-        .changes > 0;
+          )
+          .run(new Date().toISOString(), justification ?? null, attentionId)
+          .changes > 0;
+      if (changed) {
+        this.database
+          .prepare(
+            `DELETE FROM heddle_incident_admission WHERE attention_id = ?`,
+          )
+          .run(attentionId);
+      }
+      return changed;
+    })();
     if (resolved) return true;
     if (this.hasAttention(attentionId)) return false;
     throw new Error(`Attention ${JSON.stringify(attentionId)} does not exist`);
@@ -571,6 +581,19 @@ export class SqlitePersistence {
         throw new Error("Incident failure changed durable identity");
       }
       if (prior?.state === "open") {
+        if (input.observedAt >= prior.nextAttemptAt) {
+          this.database
+            .prepare(
+              `UPDATE heddle_incident_admission
+               SET last_failure_at = ?, next_attempt_at = ?
+               WHERE attention_id = ?`,
+            )
+            .run(
+              input.observedAt,
+              input.observedAt + input.retryDelayMilliseconds,
+              input.attentionId,
+            );
+        }
         return { failureCount: prior.failureCount, kind: "breaker-open" };
       }
       if (
@@ -627,11 +650,7 @@ export class SqlitePersistence {
       )
       .get(attentionId) as
       { nextAttemptAt: number; state: "closed" | "open" } | undefined;
-    return (
-      admission !== undefined &&
-      admission.state === "closed" &&
-      observedAt >= admission.nextAttemptAt
-    );
+    return admission !== undefined && observedAt >= admission.nextAttemptAt;
   }
 
   listIncidentRuntime(): IncidentRuntimeRecord[] {

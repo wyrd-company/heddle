@@ -333,6 +333,45 @@ describe("production incident coordinator", () => {
     ]);
   });
 
+  it("indexes runtime sources once for all attention in an admission pass", async () => {
+    const { attention, coordinator } = await createSubject({
+      admissionPolicy: {
+        ...incidentAdmissionPolicy,
+        failureThreshold: 3,
+      },
+    });
+    for (const taskId of [17, 18]) {
+      const instanceId = `sample-instance-${taskId}`;
+      persistence!.writeReconcilerRuntime({
+        boardStatus: "review",
+        instanceId,
+        sessionKey: `${instanceId}:review:1`,
+        stageId: "review",
+        state: "waiting",
+        taskId,
+        threadId: `sample-thread-${taskId}`,
+      });
+      await attention.raise({
+        attentionId: `dead-session-attention-${taskId}`,
+        instanceId,
+        kind: "failed",
+        message: "Session failed before lifecycle advance",
+        sessionKey: `${instanceId}:review:1`,
+        threadId: `sample-thread-${taskId}`,
+      });
+    }
+    const listReconcilerRuntime = vi.spyOn(
+      persistence!,
+      "listReconcilerRuntime",
+    );
+    const listIncidentRuntime = vi.spyOn(persistence!, "listIncidentRuntime");
+
+    await coordinator.reconcile([task(17), task(18)]);
+
+    expect(listReconcilerRuntime).toHaveBeenCalledOnce();
+    expect(listIncidentRuntime).toHaveBeenCalledTimes(2);
+  });
+
   it("supplies observable authority and prohibitions to the incident handoff", async () => {
     const { attention, coordinator, harness } = await createSubject({
       approvalSeverityThreshold: "high",

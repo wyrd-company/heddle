@@ -79,8 +79,13 @@ const productionError = (
   return payload as ProductionErrorAttention;
 };
 
+type IncidentSourceIndex = {
+  readonly incidentById: ReadonlyMap<string, IncidentRuntimeRecord>;
+  readonly taskIdByInstanceId: ReadonlyMap<string, number>;
+};
+
 const incidentSource = (
-  persistence: SqlitePersistence,
+  index: IncidentSourceIndex,
   value: JsonValue,
 ): ProductionErrorAttention | undefined => {
   const declared = productionError(value);
@@ -99,13 +104,8 @@ const incidentSource = (
   ) {
     return undefined;
   }
-  const runtime = persistence
-    .listReconcilerRuntime()
-    .find((candidate) => candidate.instanceId === instanceId);
-  const incident = persistence
-    .listIncidentRuntime()
-    .find((candidate) => candidate.incidentId === instanceId);
-  const taskId = runtime?.taskId ?? incident?.taskId;
+  const incident = index.incidentById.get(instanceId);
+  const taskId = index.taskIdByInstanceId.get(instanceId) ?? incident?.taskId;
   if (taskId === undefined) return undefined;
   return createProductionErrorAttention({
     attentionId,
@@ -189,16 +189,19 @@ export class ProductionIncidentCoordinator {
 
   async reconcile(tasks: readonly BoardTask[]): Promise<void> {
     const taskIds = new Set(tasks.map(({ id }) => id));
-    for (const record of this.persistence.listAttention()) {
-      const source = incidentSource(this.persistence, record.payload);
+    const sourceIndex = this.#sourceIndex();
+    const activeAttention = this.persistence.listAttention();
+    const activeAttentionById = new Map(
+      activeAttention.map((record) => [record.attentionId, record]),
+    );
+    for (const record of activeAttention) {
+      const source = incidentSource(sourceIndex, record.payload);
       if (source === undefined) continue;
       if (!productionErrorIncidentEligible(source.code)) continue;
       if (source.taskId === null) continue;
       if (
         source.instanceId !== null &&
-        this.persistence
-          .listIncidentRuntime()
-          .some(({ incidentId }) => incidentId === source.instanceId)
+        sourceIndex.incidentById.has(source.instanceId)
       ) {
         continue;
       }
@@ -236,12 +239,23 @@ export class ProductionIncidentCoordinator {
         admission.runtime,
         tasks,
         taskIds.has(source.taskId),
+        source,
       );
     }
     for (const runtime of this.persistence.listIncidentRuntime()) {
       if (runtime.state === "done" || runtime.state === "failed") continue;
-      if (await this.attention.has(runtime.attentionId)) {
-        await this.#synchronize(runtime, tasks, taskIds.has(runtime.taskId));
+      if (activeAttentionById.has(runtime.attentionId)) {
+        const record = activeAttentionById.get(runtime.attentionId);
+        const source =
+          record === undefined
+            ? undefined
+            : incidentSource(sourceIndex, record.payload);
+        await this.#synchronize(
+          runtime,
+          tasks,
+          taskIds.has(runtime.taskId),
+          source,
+        );
       }
     }
   }
@@ -301,6 +315,7 @@ export class ProductionIncidentCoordinator {
     runtime: IncidentRuntimeRecord,
     tasks: readonly BoardTask[],
     taskOnBoard: boolean,
+    knownSource?: ProductionErrorAttention,
   ): Promise<void> {
     try {
       const record = this.persistence.getInstance(runtime.incidentId);
@@ -312,7 +327,7 @@ export class ProductionIncidentCoordinator {
         if (stageId === undefined) {
           throw new Error("Incident lifecycle has no initial agent stage");
         }
-        const source = this.#sourceAttention(runtime);
+        const source = knownSource ?? this.#sourceAttention(runtime);
         const incident = this.#incidentContext(source, taskOnBoard);
         const task = taskForIncident(this.persistence, tasks, source, incident);
         runtime = await this.instances.prepareIncidentStart(
@@ -325,7 +340,7 @@ export class ProductionIncidentCoordinator {
           initialContext: { incident },
           instanceId: runtime.incidentId,
         });
-        await this.#synchronizeSnapshot(runtime, snapshot, tasks);
+        await this.#synchronizeSnapshot(runtime, snapshot, tasks, source);
         return;
       }
       const context = readLifecycleContext(record);
@@ -346,7 +361,7 @@ export class ProductionIncidentCoordinator {
                 ...(pending.output === null ? {} : { output: pending.output }),
               });
       }
-      await this.#synchronizeSnapshot(runtime, snapshot, tasks);
+      await this.#synchronizeSnapshot(runtime, snapshot, tasks, knownSource);
     } catch (error) {
       await this.#fail(runtime, error);
     }
@@ -356,6 +371,7 @@ export class ProductionIncidentCoordinator {
     runtime: IncidentRuntimeRecord,
     snapshot: Pick<LifecycleContextRecord, "awaitingNodeIds" | "status">,
     tasks: readonly BoardTask[],
+    knownSource?: ProductionErrorAttention,
   ): Promise<void> {
     const stageId = snapshot.awaitingNodeIds[0];
     if (stageId === undefined) {
@@ -397,7 +413,7 @@ export class ProductionIncidentCoordinator {
         return;
       }
     }
-    const source = this.#sourceAttention(runtime);
+    const source = knownSource ?? this.#sourceAttention(runtime);
     const incident = this.#incidentContext(
       source,
       tasks.some(({ id }) => id === runtime.taskId),
@@ -515,13 +531,28 @@ export class ProductionIncidentCoordinator {
     const source =
       record === undefined
         ? undefined
-        : incidentSource(this.persistence, record.payload);
+        : incidentSource(this.#sourceIndex(), record.payload);
     if (source === undefined) {
       throw new Error(
         `Incident source attention is unavailable: ${runtime.attentionId}`,
       );
     }
     return source;
+  }
+
+  #sourceIndex(): IncidentSourceIndex {
+    return {
+      incidentById: new Map(
+        this.persistence
+          .listIncidentRuntime()
+          .map((runtime) => [runtime.incidentId, runtime]),
+      ),
+      taskIdByInstanceId: new Map(
+        this.persistence
+          .listReconcilerRuntime()
+          .map((runtime) => [runtime.instanceId, runtime.taskId]),
+      ),
+    };
   }
 
   #incidentContext(

@@ -785,11 +785,14 @@ The bridge keys the entry by task, instance, and lifecycle transition; replay or
 another cadence pass does not create another entry. The entry remains open while
 that exact transition is pending and resolves after its successful retry.
 
-A deferred or starting reconciler runtime can intentionally exist before its
-lifecycle state. Synchronization does not report that interval as
-`lifecycle-instance-absent`. If a matching stale entry exists, synchronization
-resolves it when the lifecycle state appears. A running, waiting, or completed
-runtime with no lifecycle state remains a production error.
+A deferred reconciler runtime and an in-flight start reservation can
+intentionally exist before lifecycle state. Synchronization does not report
+that interval as `lifecycle-instance-absent`. A retained `starting` runtime
+without lifecycle activation raises `instance-start-incomplete`; its resolved
+task lifecycle is retried on the ordinary incident retry deadline. If lifecycle
+state appears, synchronization resolves the matching stale entry. A running,
+waiting, or completed runtime with no lifecycle state remains a production
+error.
 
 A failure that cannot be attributed to one item aborts that pass. The scheduler
 raises global durable attention and `heddle-server` writes one
@@ -928,7 +931,10 @@ deterministic identity. `incident.immediateEscalationCodes` can open a known
 shape immediately; it is not an eligibility list. A successful later-pass
 start or activation clears its stale condition attention. A `starting` runtime
 with no activation is retried rather than excluded because its earlier
-attention still exists.
+attention still exists. An open breaker has another durable probe deadline.
+Synchronization can clear the condition at that deadline even when incident
+admission was suppressed, remains cooldown-limited, or the admitted incident
+failed. A failed probe rearms the deadline instead of running on every pass.
 
 Page rate limits remain separate from admission. While SQLite is available,
 Heddle limits one production-error code to one page per minute and three page
@@ -937,6 +943,8 @@ bound uses an in-memory window for the process lifetime; restart resets it. A
 pending page replays before each
 scheduler pass and obeys its durable delivery deadline across restart. At most
 three incidents run concurrently; suppressed failures remain active attention.
+Dead and stalled session attention offers **Resolve** as an operator fallback.
+After admission, its console card links to the incident lifecycle.
 
 The incident handoff identifies `incident.workspaceRoot`, the blueprint clone,
 board and state paths, T3 endpoint, configured GitHub sink, source condition,
@@ -965,14 +973,15 @@ incident.
 
 Finalization accepts only a fresh `conditionState: cleared` observation. It then
 resolves the source attention with the incident identity as justification and
-retains the row for audit. With no observable workaround, the agent reports and
-escalates instead; the task stays blocked. Incident-execution failure remains a
-floor error and cannot create another incident. Known tokens, configured
-secrets, and credential-bearing URLs are redacted before attention persistence
-and handoff assembly.
+retains the row for audit. Resolution atomically removes the source admission
+record, so recurrence starts a fresh failure-count and breaker episode. With no
+observable workaround, the agent reports and escalates instead; the task stays
+blocked. Incident-execution failure remains a floor error and cannot create
+another incident. Known tokens, configured secrets, and credential-bearing URLs
+are redacted before attention persistence and handoff assembly.
 
-Every production-error card offers **Resolve**. The action records durable
-intent and completion before it resolves the entry. Repeating the action or
+Every production-error and dead or stalled session card offers **Resolve**. The
+action records durable intent and completion before it resolves the entry. Repeating the action or
 replaying it after a crash is safe. The resolved row remains in SQLite for
 audit, while the active attention list and count no longer include it. Agents do
 not use this action; incident-owned resolution has its own recorded authority.

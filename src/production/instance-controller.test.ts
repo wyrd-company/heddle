@@ -21,6 +21,11 @@ import { SqlitePersistence } from "../persistence/index.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
+import {
+  incidentAdmissionPolicy,
+  ProductionIncidentCoordinator,
+} from "./incident-coordinator.js";
+import { productionErrorIncidentId } from "./error-visibility.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import type { ProductionConfiguration } from "./configuration.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
@@ -34,14 +39,13 @@ describe("production instance controller", () => {
     if (root !== "") await rm(root, { force: true, recursive: true });
   });
 
-  it("suppresses intentional lifecycle absence and preserves a genuine missing-instance alarm", async () => {
+  it("suppresses deferred lifecycle absence and preserves a genuine missing-instance alarm", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-instance-absence-"));
     const persistence = new SqlitePersistence({
       stateDirectory: join(root, "state"),
     });
     for (const [taskId, state] of [
       [10, "deferred"],
-      [11, "starting"],
       [12, "running"],
     ] as const) {
       persistence.writeReconcilerRuntime({
@@ -136,6 +140,217 @@ describe("production instance controller", () => {
         attentionId: "production:task-reconciliation-failed:task:12:sample-12",
       }),
     ]);
+    persistence.close();
+  });
+
+  it("retries a retained start through the default incident retry policy", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-incomplete-start-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const task: BoardTask = {
+      blocked: false,
+      dependencies: [],
+      frontMatter: {},
+      id: 11,
+      priority: "medium",
+      status: "in-progress",
+      tags: [],
+      title: "Arrange inventory",
+    };
+    persistence.writeReconcilerRuntime({
+      boardStatus: task.status,
+      instanceId: "sample-11",
+      state: "starting",
+      taskId: task.id,
+    });
+    const attention = new DurableAttentionQueue(persistence);
+    const start = vi.fn(async () => ({
+      awaitingNodeIds: [],
+      status: "completed" as const,
+    }));
+    const lifecycle = {
+      plannedStartStage: vi.fn(async () => undefined),
+      start,
+      validateTaskProviderAliases: vi.fn(async () => undefined),
+    } as unknown as ProductionLifecycleRouter;
+    let now = 1_000;
+    const controller = new ProductionInstanceController(
+      { session: {} } as ProductionConfiguration,
+      persistence,
+      lifecycle,
+      {
+        repositoryForStage: () => ({
+          name: "sample-repository",
+          repositoryRoot: root,
+        }),
+      } as unknown as ProductRoutingCatalog,
+      {
+        baseBranchForTask: () => "main",
+      } as unknown as EpicProjectCoordinator,
+      attention,
+      {} as never,
+      "http://127.0.0.1:4774/mcp",
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+      undefined,
+      undefined,
+      () => now,
+      undefined,
+      undefined,
+      {
+        resolve: vi.fn(async () => ({
+          artifactId: "lifecycle:sample",
+          blueprintPath: "blueprints/sample.json",
+          kind: "resolved" as const,
+        })),
+        validateTaskProviderAliases: vi.fn(async () => undefined),
+      },
+    );
+    const incidents = new ProductionIncidentCoordinator(
+      persistence,
+      attention,
+      lifecycle,
+      controller,
+      { now: () => now },
+    );
+
+    await controller.synchronize([task]);
+
+    const attentionId =
+      "production:instance-start-incomplete:task:11:sample-11";
+    expect(attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId,
+        kind: "production-error",
+      }),
+    ]);
+    expect(persistence.getAttention(attentionId)?.payload).toMatchObject({
+      code: "instance-start-incomplete",
+    });
+    await incidents.reconcile([task]);
+    expect(
+      persistence.incidentFailureRetryReady(
+        attentionId,
+        now + incidentAdmissionPolicy.retryDelayMilliseconds - 1,
+      ),
+    ).toBe(false);
+
+    now += incidentAdmissionPolicy.retryDelayMilliseconds - 1;
+    await controller.synchronize([task]);
+    expect(start).not.toHaveBeenCalled();
+
+    now += 1;
+    expect(persistence.incidentFailureRetryReady(attentionId, now)).toBe(true);
+    await controller.synchronize([task]);
+
+    expect(start).toHaveBeenCalledOnce();
+    expect(persistence.listReconcilerRuntime()).toMatchObject([
+      { instanceId: "sample-11", state: "done" },
+    ]);
+    expect(attention.list()).toEqual([]);
+    expect(persistence.incidentFailureRetryReady(attentionId, now)).toBe(false);
+    persistence.close();
+  });
+
+  it("resumes synchronization after an open breaker and a failed incident", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-open-breaker-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const task: BoardTask = {
+      blocked: false,
+      dependencies: [],
+      frontMatter: {},
+      id: 12,
+      priority: "medium",
+      status: "in-progress",
+      tags: [],
+      title: "Arrange inventory",
+    };
+    persistence.createInstance("sample-12", {
+      correlationTokens: {},
+      flowcraftContext: {
+        awaitingNodeIds: [],
+        blueprintBlobHash: "0123456789012345678901234567890123456789",
+        blueprintPath: "blueprints/sample.json",
+        completedOperations: {},
+        executionIds: ["sample-execution"],
+        nextTransitionNumber: 2,
+        pendingAttentions: [],
+        pendingTransition: null,
+        serializedContext: "{}",
+        status: "completed",
+      },
+      handoffs: [],
+      todoState: null,
+    });
+    persistence.writeReconcilerRuntime({
+      boardStatus: task.status,
+      instanceId: "sample-12",
+      state: "running",
+      taskId: task.id,
+    });
+    const attention = new DurableAttentionQueue(persistence);
+    const attentionId =
+      "production:instance-synchronization-failed:task:12:sample-12";
+    await attention.raise({
+      attentionId,
+      code: "instance-synchronization-failed",
+      error: { cause: null, message: "Synthetic failure", name: "Error" },
+      instanceId: "sample-12",
+      kind: "production-error",
+      message: "Synthetic failure",
+      taskId: task.id,
+    });
+    const failure = {
+      attentionId,
+      code: "instance-synchronization-failed",
+      failureThreshold: 3,
+      retryDelayMilliseconds: 100,
+    };
+    persistence.observeIncidentFailure({ ...failure, observedAt: 1_000 });
+    persistence.observeIncidentFailure({ ...failure, observedAt: 1_100 });
+    persistence.observeIncidentFailure({ ...failure, observedAt: 1_200 });
+    persistence.writeIncidentRuntime({
+      accepted: false,
+      attentionId,
+      code: failure.code,
+      createdAt: 1_200,
+      incidentId: productionErrorIncidentId(attentionId),
+      rejectionOperationIds: [],
+      state: "failed",
+      taskId: task.id,
+    });
+    let now = 1_299;
+    const controller = new ProductionInstanceController(
+      {} as ProductionConfiguration,
+      persistence,
+      {} as ProductionLifecycleRouter,
+      {} as ProductRoutingCatalog,
+      {} as EpicProjectCoordinator,
+      attention,
+      {} as never,
+      "http://127.0.0.1:4774/mcp",
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+      undefined,
+      undefined,
+      () => now,
+    );
+
+    await controller.synchronize([task]);
+    expect(attention.list()).toHaveLength(1);
+
+    now = 1_300;
+    await controller.synchronize([task]);
+
+    expect(attention.list()).toEqual([]);
+    expect(persistence.incidentFailureRetryReady(attentionId, now)).toBe(false);
+    expect(attention.reopen(attentionId)).toBe(true);
+    expect(
+      persistence.observeIncidentFailure({ ...failure, observedAt: now }),
+    ).toMatchObject({ failureCount: 1, kind: "retry-scheduled" });
     persistence.close();
   });
 
