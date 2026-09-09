@@ -20,29 +20,37 @@ import { productionSessionTargets } from "./subagent-composition.js";
 import type { SpawnSubagentResult } from "../subagents/index.js";
 
 class PhaseSyntheticT3 extends SyntheticT3 {
-  readonly terminalPhases = new Map<string, "completed" | "failed">();
+  readonly terminalPhases = new Map<
+    string,
+    "absent" | "completed" | "failed"
+  >();
 
   override async getShell() {
     const shell = await super.getShell();
     return {
       ...shell,
-      threads: shell.threads.map((thread) => {
+      threads: shell.threads.flatMap((thread) => {
         const phase = this.terminalPhases.get(thread.id);
+        if (phase === "absent") return [];
         if (phase === "completed") {
-          return {
-            ...thread,
-            latestTurn: { state: "completed" },
-            session: { status: "idle" },
-          };
+          return [
+            {
+              ...thread,
+              latestTurn: { state: "completed" },
+              session: { status: "idle" },
+            },
+          ];
         }
         if (phase === "failed") {
-          return {
-            ...thread,
-            latestTurn: { state: "error" },
-            session: { status: "error" },
-          };
+          return [
+            {
+              ...thread,
+              latestTurn: { state: "error" },
+              session: { status: "error" },
+            },
+          ];
         }
-        return thread;
+        return [thread];
       }),
     };
   }
@@ -200,7 +208,7 @@ describe("production subagent composition", () => {
     ).toMatchObject({ sessionKey: parent.sessionKey });
   });
 
-  it.each(["completed", "failed"] as const)(
+  it.each(["absent", "completed", "failed"] as const)(
     "returns answer authority to the operator when its session is %s",
     async (phase) => {
       const fixture = await prepareProductionEpicFixture();

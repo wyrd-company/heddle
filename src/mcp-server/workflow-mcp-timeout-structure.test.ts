@@ -20,6 +20,9 @@ describe("workflow MCP timeout structure", () => {
           !name.endsWith(".test-support.ts"),
       )
       .sort();
+    expect(productionSources).toEqual(
+      expect.arrayContaining(["workflow-mcp-handler.ts"]),
+    );
     const forbidden = /\b(?:AbortSignal|mcpReq\.signal)\b/;
     const violations: string[] = [];
     for (const name of productionSources) {
