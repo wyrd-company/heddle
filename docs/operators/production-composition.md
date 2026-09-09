@@ -926,15 +926,19 @@ also outside incident response.
 The first failure records a durable attempt and retry deadline. Each pass before
 the deadline leaves the condition visible and performs no retry. A later pass
 raises a new idempotent effect. When `incident.failureThreshold` is reached,
-the breaker opens and admits one incident under the source attention's
-deterministic identity. `incident.immediateEscalationCodes` can open a known
-shape immediately; it is not an eligibility list. A successful later-pass
-start or activation clears its stale condition attention. A `starting` runtime
-with no activation is retried rather than excluded because its earlier
-attention still exists. An open breaker has another durable probe deadline.
-Synchronization can clear the condition at that deadline even when incident
-admission was suppressed, remains cooldown-limited, or the admitted incident
-failed. A failed probe rearms the deadline instead of running on every pass.
+the breaker opens and admits one incident occurrence for the source condition.
+The first occurrence uses the condition's deterministic incident identity;
+each later occurrence has its own deterministic identity and positive number.
+Repeated passes and restart reuse one active occurrence. A terminal occurrence
+remains audit history and cannot suppress a later recurrence from opening a
+fresh lifecycle. `incident.immediateEscalationCodes` can open a known shape
+immediately; it is not an eligibility list. A successful later-pass start or
+activation clears its stale condition attention. A `starting` runtime with no
+activation is retried rather than excluded because its earlier attention still
+exists. An open breaker has another durable probe deadline. Synchronization can
+clear the condition at that deadline even when incident admission was
+suppressed, remains cooldown-limited, or the admitted incident failed. A failed
+probe rearms the deadline instead of running on every pass.
 
 Page rate limits remain separate from admission. While SQLite is available,
 Heddle limits one production-error code to one page per minute and three page
@@ -944,7 +948,8 @@ pending page replays before each
 scheduler pass and obeys its durable delivery deadline across restart. At most
 three incidents run concurrently; suppressed failures remain active attention.
 Dead and stalled session attention offers **Resolve** as an operator fallback.
-After admission, its console card links to the incident lifecycle.
+After admission, its console card links to the most recently admitted incident
+occurrence.
 
 The incident handoff identifies `incident.workspaceRoot`, the blueprint clone,
 board and state paths, T3 endpoint, configured GitHub sink, source condition,
@@ -973,12 +978,15 @@ incident.
 
 Finalization accepts only a fresh `conditionState: cleared` observation. It then
 resolves the source attention with the incident identity as justification and
-retains the row for audit. Resolution atomically removes the source admission
-record, so recurrence starts a fresh failure-count and breaker episode. With no
-observable workaround, the agent reports and escalates instead; the task stays
-blocked. Incident-execution failure remains a floor error and cannot create
-another incident. Known tokens, configured secrets, and credential-bearing URLs
-are redacted before attention persistence and handoff assembly.
+retains the attention row and terminal incident occurrence for audit. Resolution
+atomically removes the source admission record, so recurrence starts a fresh
+failure-count and breaker episode. If that breaker opens, Heddle allocates the
+next occurrence and new lifecycle identity; prior sessions, actions, effects,
+and report completion cannot authorize it. With no observable workaround, the
+agent reports and escalates instead; the task stays blocked. Incident-execution
+failure remains a floor error and cannot create another incident. Known tokens,
+configured secrets, and credential-bearing URLs are redacted before attention
+persistence and handoff assembly.
 
 Every production-error and dead or stalled session card offers **Resolve**. The
 action records durable intent and completion before it resolves the entry. Repeating the action or

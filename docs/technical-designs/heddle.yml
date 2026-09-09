@@ -685,7 +685,9 @@ proposed-design:
     all enter this policy. A successful retry resolves the condition attention
     and atomically removes its admission record. The retained attention row is
     audit history; recurrence reopens it as a fresh retry episode instead
-    of inheriting the prior failure count or open breaker.
+    of inheriting the prior failure count or open breaker. If that episode
+    opens the breaker, it receives a fresh incident occurrence rather than a
+    terminal incident runtime from an earlier episode.
 
     While SQLite is available, production-error pages retain their durable
     one-minute per-code cooldown and cap of three attempts in five minutes, so
@@ -699,13 +701,20 @@ proposed-design:
     derives its external attention ID as `escalation:` plus the SHA-256 digest
     of the lossless instance, owner-session, and escalation tuple.
 
-    An open task-scoped breaker admits one ordinary `incident` lifecycle under
-    the deterministic digest of its source attention identity. At most three
-    incidents are active and the per-code cooldown contains correlated storms;
-    suppression never resolves or replaces source attention. Dead and stalled
-    session cards offer an operator Resolve fallback and link to the incident
-    after admission. An incident execution failure stays on the operator-only
-    floor and cannot recursively admit another incident.
+    Each stable condition owns a positive sequence of incident occurrences. The
+    first occurrence uses the deterministic digest of the source attention
+    identity. Each later occurrence uses a deterministic digest of that
+    identity and its occurrence number. The incident runtime persists the
+    number and admits at most one nonterminal occurrence for a condition.
+    Reconciliation and restart reuse that nonterminal occurrence. A `done` or
+    `failed` runtime remains immutable audit history; a later breaker allocates
+    the next number and a distinct lifecycle, session, action, effect, and
+    report identity. At most three incidents are active and the per-code
+    cooldown contains correlated storms; suppression never resolves or
+    replaces source attention. Dead and stalled session cards offer an operator
+    Resolve fallback and link to the most recently admitted incident
+    occurrence. An incident execution failure stays on the operator-only floor
+    and cannot recursively admit another incident.
 
     The incident blueprint has implement, review, and finalize wait stages and
     no board-status map or board-writing mechanical node. Its handoff carries
@@ -750,13 +759,14 @@ proposed-design:
 
     Finalization requires a fresh observed `conditionState: cleared` result
     before it resolves the source attention with the incident identity as
-    justification. The resolved row remains durable. A configuration workaround
-    alongside a code fix is applied and verified before the code finding is
-    reported. With no observable workaround, the incident reports and
-    escalates, and the task remains blocked. Known correlation tokens,
-    configured secrets, and credential-bearing URLs are redacted before
-    persistence and handoff assembly. The Console links the source condition to
-    its pinned incident lifecycle.
+    justification. The resolved row and terminal incident occurrence remain
+    durable. A configuration workaround alongside a code fix is applied and
+    verified before the code finding is reported. With no observable
+    workaround, the incident reports and escalates, and the task remains
+    blocked. Known correlation tokens, configured secrets, and
+    credential-bearing URLs are redacted before persistence and handoff
+    assembly. The Console links the source condition to its most recently
+    admitted incident occurrence.
 
     Scheduler-pass health is one durable failure episode at a time. A failed
     pass with no unrecovered scheduler episode opens the next positive episode
