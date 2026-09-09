@@ -810,15 +810,25 @@ move authority to another named session or return it to the operator. The
 current authority answers through the same guarded answer contract. A question
 can require one offered option or a value with declared minimum and maximum
 lengths. Optional prose adds context but never replaces the authoritative
-option or validated value.
+option or validated value. If a named authority session completes without an
+answer, fails, or becomes absent, the observation pass returns authority to the
+operator and routes the escalation attention.
 
-Heddle records an accepted answer before delivery. It appends the question,
-answer, optional prose, and named answering authority to the task and its epic.
-It then dispatches one answer turn to the escalating session with command and
-message identities derived from the escalation occurrence. Restart replays an
-unfinished delivery with those identities. If the original thread is absent,
-completed, or failed, Heddle reactivates the same stage occurrence with its
-stored session binding and delivers the answer to the replacement thread.
+Heddle records an accepted answer before effects. It dispatches one answer turn
+to the escalating session with command and message identities derived from the
+escalation occurrence, then appends the question, answer, optional prose, and
+named answering authority to the task and, for an epic child, its epic. Restart
+replays either unfinished effect with the same identity and never redelivers a
+completed turn. A completed delegated child receives the answer on its own
+thread. An absent or failed delegated child fails closed without replacing its
+parent's stage. If a top-level thread is absent, completed, or failed, Heddle
+reactivates the same stage occurrence with its stored session binding and
+delivers the answer to the replacement thread.
+
+One failed answer settlement raises
+`production:escalation-settlement-failed:<escalation-attention-id>` and does not
+stop settlement for other escalations, incident reconciliation, or session
+observation. A later successful replay resolves the production-error attention.
 
 A present, nonfailed session thread with a pending escalation has the
 `awaiting_answer` phase. It raises no ended or stalled attention and admits no

@@ -64,10 +64,15 @@ export type EscalationCoordinatorOptions = {
     error: unknown,
     escalation: PendingEscalation,
   ) => Promise<boolean> | boolean;
+  containSettlementFailure?: (
+    error: unknown,
+    escalation: PendingEscalation,
+  ) => Promise<boolean> | boolean;
   decisionLog: EscalationDecisionLog;
   delivery: EscalationAnswerDelivery;
   now?: () => string;
   session: SessionEscalationRouter;
+  settlementRecovered?: (escalation: PendingEscalation) => Promise<void> | void;
   persistence: WorkflowMcpPersistence;
   pushover: PushoverEscalationNotifier;
 };
@@ -85,11 +90,13 @@ const attentionFrom = (opened: PendingEscalation): EscalationAttention => ({
 export class EscalationCoordinator {
   readonly #attention: EscalationAttentionQueue;
   readonly #containPushoverFailure?: EscalationCoordinatorOptions["containPushoverFailure"];
+  readonly #containSettlementFailure?: EscalationCoordinatorOptions["containSettlementFailure"];
   readonly #history: EscalationHistory;
   readonly #decisionLog: EscalationDecisionLog;
   readonly #delivery: EscalationAnswerDelivery;
   readonly #now: () => string;
   readonly #session: SessionEscalationRouter;
+  readonly #settlementRecovered?: EscalationCoordinatorOptions["settlementRecovered"];
   readonly #persistence: WorkflowMcpPersistence;
   readonly #pushover: PushoverEscalationNotifier;
   readonly #routes = new Map<string, Promise<void>>();
@@ -98,11 +105,13 @@ export class EscalationCoordinator {
   constructor(options: EscalationCoordinatorOptions) {
     this.#attention = options.attention;
     this.#containPushoverFailure = options.containPushoverFailure;
+    this.#containSettlementFailure = options.containSettlementFailure;
     this.#history = new EscalationHistory(options.persistence);
     this.#decisionLog = options.decisionLog;
     this.#delivery = options.delivery;
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#session = options.session;
+    this.#settlementRecovered = options.settlementRecovered;
     this.#persistence = options.persistence;
     this.#pushover = options.pushover;
   }
@@ -166,6 +175,28 @@ export class EscalationCoordinator {
     return moved;
   }
 
+  async returnAnswerAuthorityToOperatorForSession(input: {
+    instanceId: string;
+    reason: string;
+    sessionKey: string;
+  }): Promise<void> {
+    for (const opened of this.#history.pending(input.instanceId)) {
+      if (
+        opened.answeringAuthority.kind !== "session" ||
+        opened.answeringAuthority.sessionKey !== input.sessionKey
+      ) {
+        continue;
+      }
+      await this.moveAnswerAuthority({
+        escalationId: opened.escalationId,
+        instanceId: opened.instanceId,
+        ownerSessionKey: opened.ownerSessionKey,
+        reason: input.reason,
+        to: { kind: "operator" },
+      });
+    }
+  }
+
   pendingEscalations(instanceId: string): PendingEscalation[] {
     return this.#history.pending(instanceId);
   }
@@ -187,7 +218,13 @@ export class EscalationCoordinator {
   async replayPendingDeliveries(): Promise<void> {
     for (const { instanceId } of this.#persistence.listInstances()) {
       for (const { answered, opened } of this.#history.answered(instanceId)) {
-        await this.#settle(opened, answered);
+        try {
+          await this.#settle(opened, answered);
+          await this.#settlementRecovered?.(opened);
+        } catch (error) {
+          if (await this.#containSettlementFailure?.(error, opened)) continue;
+          throw error;
+        }
       }
     }
   }
@@ -336,31 +373,33 @@ export class EscalationCoordinator {
     if (
       !this.#history.effectRecorded(
         opened,
+        escalationEventTypes.deliveryCompleted,
+      )
+    ) {
+      const id = opened.attentionId.slice("escalation:".length);
+      const stableUuid = (offset: number): string =>
+        `${id.slice(offset, offset + 8)}-${id.slice(offset + 8, offset + 12)}-4${id.slice(offset + 13, offset + 16)}-a${id.slice(offset + 17, offset + 20)}-${id.slice(offset + 20, offset + 32)}`;
+      await this.#delivery.deliver({
+        answered,
+        commandId: stableUuid(0),
+        message: this.#deliveryMessage(opened, answered),
+        messageId: stableUuid(32),
+        opened,
+      });
+      this.#history.recordEffect(
+        opened,
+        escalationEventTypes.deliveryCompleted,
+      );
+    }
+    if (
+      !this.#history.effectRecorded(
+        opened,
         escalationEventTypes.decisionRecorded,
       )
     ) {
       await this.#decisionLog.record({ answered, opened });
       this.#history.recordEffect(opened, escalationEventTypes.decisionRecorded);
     }
-    if (
-      this.#history.effectRecorded(
-        opened,
-        escalationEventTypes.deliveryCompleted,
-      )
-    ) {
-      return;
-    }
-    const id = opened.attentionId.slice("escalation:".length);
-    const stableUuid = (offset: number): string =>
-      `${id.slice(offset, offset + 8)}-${id.slice(offset + 8, offset + 12)}-4${id.slice(offset + 13, offset + 16)}-a${id.slice(offset + 17, offset + 20)}-${id.slice(offset + 20, offset + 32)}`;
-    await this.#delivery.deliver({
-      answered,
-      commandId: stableUuid(0),
-      message: this.#deliveryMessage(opened, answered),
-      messageId: stableUuid(32),
-      opened,
-    });
-    this.#history.recordEffect(opened, escalationEventTypes.deliveryCompleted);
   }
 
   #deliveryMessage(

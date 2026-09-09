@@ -69,9 +69,6 @@ export class ProductionEscalationAnswerEffects
     opened: PendingEscalation;
   }): Promise<void> {
     const task = await this.#taskFor(input.opened.instanceId);
-    if (task.parent === undefined) {
-      throw new Error("Answered escalation task has no epic record");
-    }
     const activity = decisionActivity(input.opened, input.answered);
     const operation = escalationKey(
       input.opened.instanceId,
@@ -83,11 +80,13 @@ export class ProductionEscalationAnswerEffects
       `${operation}:task:${task.id}`,
       activity,
     );
-    await this.board.appendTaskActivity(
-      task.parent,
-      `${operation}:epic:${task.parent}`,
-      activity,
-    );
+    if (task.parent !== undefined) {
+      await this.board.appendTaskActivity(
+        task.parent,
+        `${operation}:epic:${task.parent}`,
+        activity,
+      );
+    }
   }
 
   async deliver(input: {
@@ -98,12 +97,22 @@ export class ProductionEscalationAnswerEffects
     opened: PendingEscalation;
   }): Promise<void> {
     const existing = this.#currentDeliveryBinding(input.opened);
+    const delegated = !this.persistence
+      .listSessionRuntime()
+      .some(({ sessionKey }) => sessionKey === input.opened.ownerSessionKey);
     const shell = await this.t3.getShell();
     const thread = shell.threads.find(({ id }) => id === existing.threadId);
     const phase =
       thread === undefined ? undefined : resolveT3AwarenessPhase(thread);
+    if (delegated && (phase === undefined || phase === "failed")) {
+      throw new Error(
+        `Escalation owner session '${input.opened.ownerSessionKey}' is unavailable`,
+      );
+    }
+    const dispatchable =
+      phase !== undefined && phase !== "completed" && phase !== "failed";
     const binding =
-      phase !== undefined && phase !== "completed" && phase !== "failed"
+      delegated || dispatchable
         ? existing
         : await this.instances.reactivateStageForEscalation({
             instanceId: input.opened.instanceId,

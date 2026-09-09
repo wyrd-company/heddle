@@ -349,6 +349,8 @@ export const createProductionComposition = (
       instances,
       t3,
     );
+    const escalationSettlementAttentionId = (attentionId: string): string =>
+      `production:escalation-settlement-failed:${attentionId}`;
     const escalation = new EscalationCoordinator({
       attention: {
         raise: async (value) => {
@@ -363,6 +365,30 @@ export const createProductionComposition = (
           instanceId: opened.instanceId,
           message: `Heddle escalation in ${opened.stage}`,
         });
+        return true;
+      },
+      containSettlementFailure: async (error, opened) => {
+        const runtime = persistence!
+          .listReconcilerRuntime()
+          .find(({ instanceId }) => instanceId === opened.instanceId);
+        const incident = persistence!
+          .listIncidentRuntime()
+          .find(({ incidentId }) => incidentId === opened.instanceId);
+        if (runtime === undefined && incident === undefined) return false;
+        const taskId = runtime?.taskId ?? incident!.taskId;
+        const failure = createProductionErrorAttention({
+          attentionId: escalationSettlementAttentionId(opened.attentionId),
+          code: "escalation-settlement-failed",
+          error,
+          instanceId: opened.instanceId,
+          message: `Escalation ${opened.escalationId} answer settlement failed`,
+          taskId,
+        });
+        if (!(await attention.has(failure.attentionId))) {
+          await attention.raise(failure);
+        } else {
+          attention.reopen(failure.attentionId);
+        }
         return true;
       },
       decisionLog: escalationAnswerEffects,
@@ -385,6 +411,9 @@ export const createProductionComposition = (
           );
         },
       },
+      settlementRecovered: (opened) => {
+        attention.resolve(escalationSettlementAttentionId(opened.attentionId));
+      },
       persistence,
       pushover: {
         send: async (value) => {
@@ -406,6 +435,17 @@ export const createProductionComposition = (
       attention,
       childStops: {
         onObserved: async (target, result) => {
+          if (
+            result.phase === "absent" ||
+            result.phase === "completed" ||
+            result.phase === "failed"
+          ) {
+            await escalation.returnAnswerAuthorityToOperatorForSession({
+              instanceId: target.instanceId,
+              reason: `Session '${target.sessionKey}' ${result.phase} without answering`,
+              sessionKey: target.sessionKey,
+            });
+          }
           if (subagents === undefined) {
             throw new Error("Production subagent composition is not active");
           }

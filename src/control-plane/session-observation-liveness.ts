@@ -29,7 +29,6 @@ type AttentionLivenessKind = Exclude<LivenessKind, "blocked">;
 const livenessKindFor = (
   phase: SessionObservationResult["phase"],
 ): LivenessKind => {
-  if (phase === "awaiting_answer") return "blocked";
   if (phase === "waiting_for_approval" || phase === "waiting_for_input") {
     return "blocked";
   }

@@ -629,16 +629,23 @@ proposed-design:
     authority to another named session or back to the operator. The same answer
     predicate accepts an answer only from the current authority. Session
     authority receives the question by a steered turn; operator authority raises
-    durable attention and Pushover notification.
+    durable attention and Pushover notification. Observation returns authority
+    to the operator when its named session completes without answering, fails,
+    or becomes absent.
 
-    An accepted answer is durable before effects. Heddle appends the question,
-    answer, optional prose, and named authority to the task and its epic, then
-    dispatches one answer turn to the escalating session. Stable command and
-    message identities bind delivery to the escalation occurrence. Replay can
-    retry an unfinished effect without creating a second delivered turn. When
-    the original thread is unavailable, Heddle reactivates the same stage
-    occurrence with its stored session binding and dispatches the answer to the
-    replacement thread. Every driver requires successful workflow MCP
+    An accepted answer is durable before effects. Heddle first dispatches one
+    answer turn to the escalating session, then appends the question, answer,
+    optional prose, and named authority to the task and, when present, its epic.
+    Stable command and message identities bind delivery to the escalation
+    occurrence. Replay can retry either unfinished effect without creating a
+    second delivered turn. A completed delegated child keeps its parentage and
+    receives the answer on its own thread. An absent or failed delegated child
+    fails closed. When a top-level thread is unavailable, Heddle reactivates the
+    same stage occurrence with its stored session binding and dispatches the
+    answer to the replacement thread. Replay contains each settlement failure
+    as durable production-error attention so other escalations, incident
+    reconciliation, and session observation continue. A successful retry
+    resolves that attention. Every driver requires successful workflow MCP
     provider-session registration before thread creation. The
     workflow MCP handler negotiates no protocol newer than 2025-11-25, advertises
     no Tasks capability, and returns ordinary tool results rather than

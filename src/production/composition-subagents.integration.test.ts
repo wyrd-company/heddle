@@ -19,6 +19,35 @@ import {
 import { productionSessionTargets } from "./subagent-composition.js";
 import type { SpawnSubagentResult } from "../subagents/index.js";
 
+class PhaseSyntheticT3 extends SyntheticT3 {
+  readonly terminalPhases = new Map<string, "completed" | "failed">();
+
+  override async getShell() {
+    const shell = await super.getShell();
+    return {
+      ...shell,
+      threads: shell.threads.map((thread) => {
+        const phase = this.terminalPhases.get(thread.id);
+        if (phase === "completed") {
+          return {
+            ...thread,
+            latestTurn: { state: "completed" },
+            session: { status: "idle" },
+          };
+        }
+        if (phase === "failed") {
+          return {
+            ...thread,
+            latestTurn: { state: "error" },
+            session: { status: "error" },
+          };
+        }
+        return thread;
+      }),
+    };
+  }
+}
+
 const storedCorrelationToken = (handoffs: JsonValue[]): string => {
   const stored = handoffs.find(
     (value) =>
@@ -76,6 +105,271 @@ describe("production subagent composition", () => {
 
   afterEach(async () => {
     await cleanup?.();
+  });
+
+  it("delivers a parent answer to the completed child thread without replacing the parent stage", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new PhaseSyntheticT3();
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    cleanup = async () => {
+      await composition.close();
+      await fixture.cleanup();
+    };
+    await composition.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const instance = composition.persistence.getInstance(instanceId)!;
+    const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+    const parent = await resolver.resolve(
+      storedCorrelationToken(instance.state.handoffs),
+    );
+    const spawned = await composition.subagents.spawn(parent, {
+      operationId: "spawn-answer-child",
+      providerAlias: "primary",
+      rootItemId: "deliver",
+    });
+    if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    const child = await resolver.resolve(spawned.assignment.correlationToken);
+
+    const opened = await composition.escalation.escalate(child, {
+      escalationId: "child-choice",
+      questions: [
+        {
+          id: "route",
+          options: [
+            { description: "Use route A", id: "a", label: "Route A" },
+            { description: "Use route B", id: "b", label: "Route B" },
+          ],
+          prompt: "Which route should be used?",
+        },
+      ],
+    });
+    expect(opened).toEqual({
+      awaitingAnswer: true,
+      escalationId: "child-choice",
+    });
+    await vi.waitFor(() =>
+      expect(
+        t3.commands.some(
+          (command) =>
+            command.type === "thread.turn.start" &&
+            command.threadId === spawned.assignment.parentThreadId &&
+            JSON.stringify(command).includes("Child escalation"),
+        ),
+      ).toBe(true),
+    );
+    t3.terminalPhases.set(spawned.assignment.threadId, "completed");
+    const createsBeforeAnswer = t3.commands.filter(
+      ({ type }) => type === "thread.create",
+    );
+
+    const answered = await callMcpTool(composition, parent.token, "answer", {
+      answers: { route: "b" },
+      escalationId: "child-choice",
+      ownerSessionKey: child.sessionKey,
+      prose: "Use route B for this sample.",
+    });
+
+    expect(answered.result?.isError).not.toBe(true);
+    expect(t3.commands.filter(({ type }) => type === "thread.create")).toEqual(
+      createsBeforeAnswer,
+    );
+    expect(
+      t3.commands.filter(
+        (command) =>
+          command.type === "thread.turn.start" &&
+          command.threadId === spawned.assignment.threadId &&
+          JSON.stringify(command).includes(
+            "Escalation child-choice was answered",
+          ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ instanceId: candidate }) => candidate === instanceId),
+    ).toMatchObject({ sessionKey: parent.sessionKey });
+  });
+
+  it.each(["completed", "failed"] as const)(
+    "returns answer authority to the operator when its session is %s",
+    async (phase) => {
+      const fixture = await prepareProductionEpicFixture();
+      cleanup = fixture.cleanup;
+      const t3 = new PhaseSyntheticT3();
+      const composition = createProductionComposition({
+        blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+        configuration: fixture.configuration,
+        providerUsage: {
+          readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        },
+        pushoverTransport: { send: vi.fn(async () => undefined) },
+        t3,
+        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      });
+      cleanup = async () => {
+        await composition.close();
+        await fixture.cleanup();
+      };
+      await composition.start();
+      const instanceId = `task-${fixture.taskId}`;
+      const instance = composition.persistence.getInstance(instanceId)!;
+      const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+      const parent = await resolver.resolve(
+        storedCorrelationToken(instance.state.handoffs),
+      );
+      const parentRuntime = composition.persistence
+        .listSessionRuntime()
+        .find(({ sessionKey }) => sessionKey === parent.sessionKey)!;
+      const spawned = await composition.subagents.spawn(parent, {
+        operationId: `spawn-authority-${phase}`,
+        providerAlias: "primary",
+        rootItemId: "deliver",
+      });
+      if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+      const child = await resolver.resolve(spawned.assignment.correlationToken);
+      await composition.escalation.escalate(child, {
+        escalationId: `authority-${phase}`,
+        questions: [
+          {
+            id: "route",
+            options: [
+              { description: "Use route A", id: "a", label: "Route A" },
+              { description: "Use route B", id: "b", label: "Route B" },
+            ],
+            prompt: "Which route should be used?",
+          },
+        ],
+      });
+      await vi.waitFor(() =>
+        expect(
+          composition.escalation.pendingEscalations(instanceId),
+        ).toHaveLength(1),
+      );
+      t3.terminalPhases.set(parentRuntime.threadId, phase);
+
+      await composition.scheduler.trigger();
+
+      expect(
+        composition.escalation.pendingEscalations(instanceId),
+      ).toMatchObject([
+        {
+          answeringAuthority: { kind: "operator" },
+          escalationId: `authority-${phase}`,
+          ownerSessionKey: child.sessionKey,
+        },
+      ]);
+      expect(composition.attention.list()).toContainEqual(
+        expect.objectContaining({
+          actions: [
+            expect.objectContaining({
+              contract: expect.objectContaining({
+                escalationId: `authority-${phase}`,
+              }),
+            }),
+          ],
+          kind: "escalation",
+        }),
+      );
+      await expect(
+        composition.escalation.answerAsOperator({
+          answers: { route: "a" },
+          escalationId: `authority-${phase}`,
+          instanceId,
+          ownerSessionKey: child.sessionKey,
+        }),
+      ).resolves.toMatchObject({ answeredBy: { kind: "operator" } });
+    },
+  );
+
+  it("contains an unavailable child answer during replay and continues session observation", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const schedulerErrors = vi.fn();
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      onSchedulerError: schedulerErrors,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    cleanup = async () => {
+      await composition.close();
+      await fixture.cleanup();
+    };
+    await composition.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const instance = composition.persistence.getInstance(instanceId)!;
+    const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+    const parent = await resolver.resolve(
+      storedCorrelationToken(instance.state.handoffs),
+    );
+    const spawned = await composition.subagents.spawn(parent, {
+      operationId: "spawn-unavailable-child",
+      providerAlias: "primary",
+      rootItemId: "deliver",
+    });
+    if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    const child = await resolver.resolve(spawned.assignment.correlationToken);
+    await composition.escalation.escalate(child, {
+      escalationId: "unavailable-child-answer",
+      questions: [
+        {
+          id: "route",
+          options: [
+            { description: "Use route A", id: "a", label: "Route A" },
+            { description: "Use route B", id: "b", label: "Route B" },
+          ],
+          prompt: "Which route should be used?",
+        },
+      ],
+    });
+    composition.persistence.appendEvent(instanceId, "mcp:escalation-answered", {
+      answeredBy: { kind: "session", sessionKey: parent.sessionKey },
+      answers: { route: "a" },
+      escalationId: "unavailable-child-answer",
+      ownerSessionKey: child.sessionKey,
+    });
+    t3.threads.delete(spawned.assignment.threadId);
+
+    await composition.scheduler.trigger();
+
+    expect(schedulerErrors).not.toHaveBeenCalled();
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        attentionId: expect.stringContaining(
+          "production:escalation-settlement-failed:escalation:",
+        ),
+        kind: "production-error",
+      }),
+    );
+    const current = composition.persistence.getInstance(instanceId)!;
+    expect(isTodoState(current.state.todoState)).toBe(true);
+    if (!isTodoState(current.state.todoState)) {
+      throw new Error("Todo state is absent");
+    }
+    expect(
+      current.state.todoState.lists.flatMap((list) => list.assignments ?? []),
+    ).toContainEqual(
+      expect.objectContaining({
+        sessionKey: child.sessionKey,
+        status: "stopped",
+      }),
+    );
   });
 
   it("shares organization template authority, persistence, pacing, observation, and tokens", async () => {

@@ -100,4 +100,75 @@ describe("production escalation answer effects", () => {
     }
     persistence.close();
   });
+
+  it("records a standalone task decision without requiring an epic parent", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-escalation-effects-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "standalone-instance",
+      state: "waiting",
+      taskId: 31,
+    });
+    const appendTaskActivity = vi.fn(async () => true);
+    const effects = new ProductionEscalationAnswerEffects(
+      persistence,
+      {
+        appendTaskActivity,
+        readTask: async () => ({
+          blocked: false,
+          dependencies: [],
+          frontMatter: {},
+          id: 31,
+          priority: "medium",
+          status: "in-progress",
+          tags: [],
+          title: "Inspect sample output",
+        }),
+      },
+      {} as never,
+      {} as never,
+    );
+    const opened: PendingEscalation = {
+      answeringAuthority: { kind: "operator" },
+      attentionId: `escalation:${"b".repeat(64)}`,
+      escalationId: "standalone-choice",
+      instanceId: "standalone-instance",
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: "sample-session",
+      questions: [
+        {
+          id: "route",
+          options: [
+            { description: "Use route A", id: "a", label: "Route A" },
+            { description: "Use route B", id: "b", label: "Route B" },
+          ],
+          prompt: "Which route should be used?",
+        },
+      ],
+      stage: "inspect",
+    };
+
+    await expect(
+      effects.record({
+        answered: {
+          answeredBy: { kind: "operator" },
+          answers: { route: "a" },
+          escalationId: opened.escalationId,
+          ownerSessionKey: opened.ownerSessionKey,
+        },
+        opened,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(appendTaskActivity).toHaveBeenCalledTimes(1);
+    expect(appendTaskActivity).toHaveBeenCalledWith(
+      31,
+      expect.stringContaining(":task:31"),
+      expect.stringContaining("Answer: Route A (a)"),
+    );
+    persistence.close();
+  });
 });

@@ -671,10 +671,119 @@ describe("workflow MCP escalation tools", () => {
       "mcp:escalation-attention-raised",
       "mcp:escalation-notified",
       "mcp:escalation-answered",
-      "mcp:escalation-decision-recorded",
       "mcp:escalation-delivery-completed",
+      "mcp:escalation-decision-recorded",
     ]);
     recoveredPersistence.close();
+  });
+
+  it("delivers before retrying a failed decision log without duplicating the turn", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-decision-retry", [
+      {
+        sessionKey: "top",
+        token: "token-decision-retry",
+        tools: ["escalate"],
+      },
+    ]);
+    const binding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-decision-retry");
+    let decisionLogAvailable = false;
+    const delivery = vi.fn(async () => undefined);
+    const decisionLog = vi.fn(async () => {
+      if (!decisionLogAvailable) throw new Error("Sample decision log failed");
+    });
+    const coordinator = new EscalationCoordinator({
+      attention: { raise: async () => undefined },
+      decisionLog: { record: decisionLog },
+      delivery: { deliver: delivery },
+      persistence: subject.persistence,
+      pushover: { send: async () => undefined },
+      session: { steer: async () => undefined },
+    });
+
+    await coordinator.escalate(binding, {
+      escalationId: "decision-retry",
+      questions: sampleEscalationQuestions,
+    });
+    await expect(
+      coordinator.answerAsOperator({
+        answers: sampleEscalationAnswer,
+        escalationId: "decision-retry",
+        instanceId: "instance-decision-retry",
+        ownerSessionKey: "top",
+      }),
+    ).rejects.toThrow("Sample decision log failed");
+    expect(delivery).toHaveBeenCalledTimes(1);
+
+    decisionLogAvailable = true;
+    await coordinator.replayPendingDeliveries();
+    expect(delivery).toHaveBeenCalledTimes(1);
+    expect(decisionLog).toHaveBeenCalledTimes(2);
+  });
+
+  it("contains one replay settlement failure and continues other instances", async () => {
+    const subject = await createEscalationFixture();
+    for (const instanceId of [
+      "instance-settlement-a",
+      "instance-settlement-b",
+    ]) {
+      createEscalationInstance(subject.persistence, instanceId, [
+        {
+          sessionKey: `session-${instanceId.at(-1)}`,
+          token: `token-${instanceId.at(-1)}`,
+          tools: ["escalate"],
+        },
+      ]);
+    }
+    const contained: string[] = [];
+    const delivered: string[] = [];
+    const coordinator = new EscalationCoordinator({
+      attention: { raise: async () => undefined },
+      containSettlementFailure: async (_error, opened) => {
+        contained.push(opened.instanceId);
+        return true;
+      },
+      decisionLog: { record: async () => undefined },
+      delivery: {
+        deliver: async ({ opened }) => {
+          if (opened.instanceId.endsWith("-a")) {
+            throw new Error("Sample permanent delivery failure");
+          }
+          delivered.push(opened.instanceId);
+        },
+      },
+      persistence: subject.persistence,
+      pushover: { send: async () => undefined },
+      session: { steer: async () => undefined },
+    });
+    for (const [instanceId, sessionKey, token] of [
+      ["instance-settlement-a", "session-a", "token-a"],
+      ["instance-settlement-b", "session-b", "token-b"],
+    ] as const) {
+      await coordinator.escalate(
+        await new WorkflowMcpSessionResolver(subject.persistence).resolve(
+          token,
+        ),
+        {
+          escalationId: "settlement-replay",
+          questions: sampleEscalationQuestions,
+        },
+      );
+      subject.persistence.appendEvent(instanceId, "mcp:escalation-answered", {
+        answeredBy: { kind: "operator" },
+        answers: sampleEscalationAnswer,
+        escalationId: "settlement-replay",
+        ownerSessionKey: sessionKey,
+      });
+    }
+
+    await expect(
+      coordinator.replayPendingDeliveries(),
+    ).resolves.toBeUndefined();
+    expect(contained).toEqual(["instance-settlement-a"]);
+    expect(delivered).toEqual(["instance-settlement-b"]);
   });
 
   it("uses distinct delivery identities when an escalation ID recurs in a later session", async () => {
