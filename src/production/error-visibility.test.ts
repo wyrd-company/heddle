@@ -12,7 +12,6 @@ import {
   productionErrorIncidentEligible,
   productionErrorIncidentId,
   schedulerPassFailureAttention,
-  type ProductionErrorCode,
 } from "./error-visibility.js";
 
 describe("production error visibility", () => {
