@@ -304,37 +304,15 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     return this.#runtime(sessionKey)?.stageId === "adjudication";
   }
 
-  async observationFailure(sessionKey: string): Promise<string | undefined> {
+  async authorityFailure(sessionKey: string): Promise<string | undefined> {
     const runtime = this.#runtime(sessionKey);
     if (runtime?.stageId !== "adjudication") return undefined;
     const thread = (await this.options.t3.getShell()).threads.find(
       ({ id }) => id === runtime.threadId,
     );
-    if (thread === undefined) return "Adjudication session is absent";
+    if (thread === undefined) return undefined;
     if (thread.hasPendingApprovals || thread.hasPendingUserInput) {
       return "Adjudication attempted operator interaction outside its authority";
-    }
-    const phase = resolveT3AwarenessPhase(thread);
-    if (phase === "failed" || phase === "completed") {
-      return `Adjudication session ${phase} without deciding`;
-    }
-    const requestedAt = thread.latestTurn?.requestedAt;
-    if (requestedAt !== null && requestedAt !== undefined) {
-      const stored = this.options.persistence
-        .getInstance(runtime.instanceId)
-        ?.state.handoffs.map((candidate) => asRecord(candidate))
-        .find(
-          (candidate) =>
-            candidate?.["kind"] === "adjudication-handoff" &&
-            candidate["sessionKey"] === sessionKey,
-        );
-      const timeoutMilliseconds = stored?.["timeoutMilliseconds"];
-      if (typeof timeoutMilliseconds !== "number") {
-        return "Adjudication has no pinned time budget";
-      }
-      if (this.#now() - Date.parse(requestedAt) > timeoutMilliseconds) {
-        return "Adjudication exceeded its time budget";
-      }
     }
     return undefined;
   }
@@ -484,9 +462,6 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       });
       const expectedPrompt = renderPrompt({ context: handoff.context, policy });
       if (
-        stored.timeoutMilliseconds !== handoff.policy.timeoutMilliseconds ||
-        handoff.policy.timeoutMilliseconds !==
-          policy.policy.limits.timeoutMilliseconds ||
         handoff.decisionBoundary !==
           renderAdjudicationBoundary(policy.policy) ||
         stored.renderedHandoff !== expectedPrompt
@@ -529,7 +504,6 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         policy: {
           blobHash: policy.blobHash,
           path: policy.path,
-          timeoutMilliseconds: policy.policy.limits.timeoutMilliseconds,
         },
         version: 1,
       });
@@ -542,7 +516,6 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         ownerSessionKey: opened.ownerSessionKey,
         renderedHandoff: prompt,
         sessionKey: binding.sessionKey,
-        timeoutMilliseconds: policy.policy.limits.timeoutMilliseconds,
       } as const;
       const claimed = this.options.persistence.compareAndSwapInstance(
         opened.instanceId,

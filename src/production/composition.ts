@@ -640,7 +640,7 @@ export const createProductionComposition = (
             continue;
           }
           if (adjudicationSession) {
-            const failure = await scopedAdjudication!.observationFailure(
+            const failure = await scopedAdjudication!.authorityFailure(
               session.sessionKey,
             );
             if (failure !== undefined) {
@@ -653,8 +653,8 @@ export const createProductionComposition = (
                 modelSlug: runtime.binding.modelSlug,
                 sessionKey: session.sessionKey,
               });
+              continue;
             }
-            continue;
           }
           let observation: Awaited<ReturnType<SessionObserver["observe"]>>;
           try {
@@ -668,7 +668,7 @@ export const createProductionComposition = (
                 .find(({ incidentId }) => incidentId === session.instanceId)
                 ?.taskId;
             const ownerTask = after.find(({ id }) => id === ownerTaskId);
-            if (ownerTask !== undefined) {
+            if (!adjudicationSession && ownerTask !== undefined) {
               const thread = (await t3.getShell()).threads.find(
                 ({ id }) => id === session.threadId,
               );

@@ -870,13 +870,18 @@ to the operator and includes the original questions, model, cause, and reasoning
 in console attention and Pushover notification.
 
 Provider candidates apply only to session start. If every candidate fails, or
-if the session errors, times out, requests another turn or operator action,
-answers outside the offered values, or attempts another escalation occurrence,
-Heddle moves authority to the operator. One occurrence has one stable
+if the session requests another turn or operator action, answers outside the
+offered values, or attempts another escalation occurrence, Heddle moves
+authority to the operator. A started adjudication has no adjudication-specific
+wall-clock timeout. It remains authoritative until it answers or declines
+through its approved tool. Session failure, terminal exit, absence, and stalled
+execution use the normal session observation and escalation policy without
+settling the adjudication or stopping its thread. One occurrence has one stable
 adjudication session identity, with one stable thread identity per startup
 candidate; replay cannot create a second adjudication after start. The
 lifecycle event history shows every adjudicated answer's selected values,
-model, and reasoning. The session stops after answer, decline, or failure.
+model, and reasoning. The session stops only after an accepted answer, decline,
+or authority failure.
 
 Heddle can move authority to another named session or return it to the operator.
 The current authority answers through the same guarded answer contract. A

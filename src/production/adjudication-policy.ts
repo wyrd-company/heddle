@@ -28,7 +28,6 @@ const policySchema = z
     limits: z
       .object({
         maximumTurns: z.literal(1),
-        timeoutMilliseconds: z.number().int().min(1).max(900_000),
       })
       .strict(),
   })

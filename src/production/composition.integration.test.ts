@@ -215,6 +215,10 @@ describe("production composition", () => {
         path: "adjudication/policy.json",
       },
     });
+    expect(handoff).not.toHaveProperty("timeoutMilliseconds");
+    expect(
+      (JSON.parse(handoff["handoff"] as string) as { policy: object }).policy,
+    ).not.toHaveProperty("timeoutMilliseconds");
     expect(prompt.text).toContain("Which generic option should be selected?");
     expect(prompt.text).toContain(`"id": ${fixture.taskId}`);
     expect(prompt.text).not.toContain(
@@ -337,10 +341,67 @@ describe("production composition", () => {
     await composition.close();
   });
 
-  it("fails terminal, over-budget, and out-of-authority adjudications closed", async () => {
+  it("fails an out-of-authority adjudication closed", async () => {
     const fixture = await prepare();
     configureAdjudication(fixture);
-    fixture.configuration.pacing.maxConcurrentSessions = 8;
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause:
+            "Adjudication attempted operator interaction outside its authority",
+        }),
+        kind: "escalation",
+      }),
+    );
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "approval"),
+    ).toEqual([]);
+    await composition.close();
+  });
+
+  it("observes failed, ended, and timestamp-free stalled adjudications through normal session policy", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    fixture.configuration.pacing.maxConcurrentSessions = 6;
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
     const t3 = new SyntheticT3();
     const notify = vi.fn(async () => undefined);
     const composition = createProductionComposition({
@@ -360,7 +421,7 @@ describe("production composition", () => {
     const binding = await new WorkflowMcpSessionResolver(
       composition.persistence,
     ).resolve(token);
-    for (const escalationId of ["failed", "over-budget", "out-of-authority"]) {
+    for (const escalationId of ["failed", "ended", "stalled"]) {
       await composition.escalation.escalate(binding, {
         escalationId,
         questions: [
@@ -404,8 +465,8 @@ describe("production composition", () => {
       )!;
     };
     const failed = adjudicationFor("failed");
-    const overBudget = adjudicationFor("over-budget");
-    const outOfAuthority = adjudicationFor("out-of-authority");
+    const ended = adjudicationFor("ended");
+    const stalled = adjudicationFor("stalled");
     vi.spyOn(t3, "getShell").mockImplementation(async () => ({
       projects: [...t3.projects.values()],
       threads: [
@@ -420,16 +481,12 @@ describe("production composition", () => {
           session: { status: "error" },
         },
         {
-          id: overBudget!.threadId,
-          latestTurn: {
-            requestedAt: "2020-01-01T00:00:00.000Z",
-            state: "running",
-          },
-          session: { status: "running" },
+          id: ended!.threadId,
+          latestTurn: { state: "completed" },
+          session: { status: "idle" },
         },
         {
-          hasPendingApprovals: true,
-          id: outOfAuthority!.threadId,
+          id: stalled!.threadId,
           latestTurn: { state: "running" },
           session: { status: "running" },
         },
@@ -437,21 +494,37 @@ describe("production composition", () => {
     }));
 
     await composition.scheduler.trigger();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
     await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(3));
-    const evidence = composition.attention
-      .list()
-      .filter(({ kind }) => kind === "escalation")
-      .map(({ adjudication }) => adjudication?.cause);
-    expect(evidence).toEqual(
+    expect(
+      composition.attention
+        .list()
+        .filter(({ kind }) => ["ended", "failed", "stalled"].includes(kind))
+        .map(({ kind }) => kind),
+    ).toEqual(expect.arrayContaining(["ended", "failed", "stalled"]));
+    expect(
+      composition.escalation
+        .pendingEscalations(runtime.instanceId)
+        .map(({ answeringAuthority }) => answeringAuthority.kind),
+    ).toEqual(["adjudication", "adjudication", "adjudication"]);
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "escalation"),
+    ).toEqual([]);
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.session.stop" &&
+          adjudications.some((candidate) => candidate.threadId === threadId),
+      ),
+    ).toEqual([]);
+    expect(notify.mock.calls.map(([input]) => input.message)).toEqual(
       expect.arrayContaining([
-        "Adjudication session failed without deciding",
-        "Adjudication exceeded its time budget",
-        "Adjudication attempted operator interaction outside its authority",
+        expect.stringContaining("is failed without lifecycle advance"),
+        expect.stringContaining("is ended without lifecycle advance"),
+        expect.stringContaining("is stalled without lifecycle advance"),
       ]),
     );
-    expect(
-      composition.attention.list().filter(({ kind }) => kind === "approval"),
-    ).toEqual([]);
     await composition.close();
   });
 

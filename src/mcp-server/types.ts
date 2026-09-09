@@ -163,14 +163,13 @@ export type StoredAdjudicationHandoff = {
   ownerSessionKey: string;
   renderedHandoff: string;
   sessionKey: string;
-  timeoutMilliseconds: number;
 };
 
 export type AdjudicationHandoffDocument = {
   context: JsonValue;
   decisionBoundary: string;
   format: "heddle.adjudication-handoff";
-  policy: { blobHash: string; path: string; timeoutMilliseconds: number };
+  policy: { blobHash: string; path: string };
   version: 1;
 };
 

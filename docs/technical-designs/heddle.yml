@@ -653,7 +653,7 @@ proposed-design:
     A top-level escalation creates a fresh adjudication session bound to that
     one escalation occurrence. It is not a task or lifecycle instance and owns
     no board status. Its provider comes from the operator's adjudication alias;
-    its decide-versus-escalate boundary and one-turn time budget come from an
+    its decide-versus-escalate boundary and one-turn limit come from an
     organization blueprint repository policy pinned by Git blob at activation.
     The session receives a constructed, token-free view of the current epic and
     child statuses, escalating instance and stage, prior stage outputs, and
@@ -661,18 +661,22 @@ proposed-design:
     its selected provider's usage budget.
 
     Adjudication authority can only answer its bound escalation or decline it.
-    Its MCP binding exposes only those two actions, and its approval-required
-    runtime prevents repository or configuration writes. An accepted answer
+    Its MCP binding exposes only those two actions and grants no repository or
+    configuration write authority. Approval-required mode fails any observed
+    write-approval request closed to the operator. An accepted answer
     records the selected model and required reasoning and follows the same
     durable delivery and decision-log path as an operator answer. A decline
     moves authority to the operator without trying another model and carries
     its cause and reasoning into attention and notification. Candidate fallback
     applies only while starting the configured alias. Alias exhaustion, invalid
-    answers, another-escalation attempts, approval or input requests, model
-    failure, terminal exit without a decision, and the pinned time-budget limit
-    all fail closed to operator authority. Stable occurrence-derived session,
-    thread, command, and message identities make start, restart, and replay
-    idempotent. The session stops after answer, decline, or failure.
+    answers, another-escalation attempts, and approval or input requests fail
+    closed to operator authority. A started adjudication remains authoritative
+    until it answers or declines through its approved tool. Session failure,
+    terminal exit, absence, and stalled execution use the normal session
+    observation and escalation policy without settling the adjudication or
+    stopping its thread. Stable occurrence-derived session, thread, command,
+    and message identities make start, restart, and replay idempotent. The
+    session stops only after an accepted answer, decline, or authority failure.
 
     Heddle can otherwise move answering authority to another named session or
     back to the operator. The same answer predicate accepts an answer only from

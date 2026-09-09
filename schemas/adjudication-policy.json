@@ -36,14 +36,9 @@
     "limits": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["maximumTurns", "timeoutMilliseconds"],
+      "required": ["maximumTurns"],
       "properties": {
-        "maximumTurns": { "const": 1 },
-        "timeoutMilliseconds": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 900000
-        }
+        "maximumTurns": { "const": 1 }
       }
     }
   }
