@@ -265,6 +265,14 @@ describe("production composition", () => {
         .listReconcilerRuntime()
         .find(({ taskId }) => taskId === fixture.taskId),
     ).toMatchObject({ state: "waiting" });
+    await composition.scheduler.trigger();
+    expect(
+      composition.persistence.listSessionRuntime()[0]!.binding
+        .skippedCandidates,
+    ).toHaveLength(2);
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(creates.length);
     await composition.close();
   });
 

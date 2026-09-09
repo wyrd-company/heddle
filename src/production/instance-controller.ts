@@ -325,13 +325,20 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         `Provider alias '${session.binding.alias}' changed while session '${session.sessionKey}' was starting`,
       );
     }
-    const skipped = [
-      ...session.binding.skippedCandidates,
-      skippedProviderCandidate(
-        session.binding,
-        this.#providerFailureDetail(session.instanceId, cause),
-      ),
-    ];
+    const skipped = [...session.binding.skippedCandidates];
+    if (
+      !skipped.some(
+        ({ candidatePosition }) =>
+          candidatePosition === session.binding.candidatePosition,
+      )
+    ) {
+      skipped.push(
+        skippedProviderCandidate(
+          session.binding,
+          this.#providerFailureDetail(session.instanceId, cause),
+        ),
+      );
+    }
     for (
       let index = session.binding.candidatePosition;
       index < candidates.length;
