@@ -582,10 +582,7 @@ Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path;
 
 Use `advance` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
 
-Use `escalate` for a question that requires attention outside this session. It
-returns after Heddle records the wait. Do not act on the question's subject
-until Heddle dispatches the answer as a new turn. Continue unrelated work when
-possible, end the turn when none remains, and do not create a watcher or poll.
+Use `escalate` for a question that requires attention outside this session. It returns after Heddle records the wait. Do not act on the question's subject until Heddle dispatches the answer as a later turn. Continue unrelated work when possible; otherwise end the turn. Never create a watcher or poll for the answer.
 ```
 
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the

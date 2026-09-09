@@ -72,6 +72,16 @@ export type EscalationCoordinatorOptions = {
   pushover: PushoverEscalationNotifier;
 };
 
+const attentionFrom = (opened: PendingEscalation): EscalationAttention => ({
+  attentionId: opened.attentionId,
+  escalationId: opened.escalationId,
+  instanceId: opened.instanceId,
+  openedAt: opened.openedAt,
+  ownerSessionKey: opened.ownerSessionKey,
+  questions: opened.questions,
+  stage: opened.stage,
+});
+
 export class EscalationCoordinator {
   readonly #attention: EscalationAttentionQueue;
   readonly #containPushoverFailure?: EscalationCoordinatorOptions["containPushoverFailure"];
@@ -314,13 +324,14 @@ export class EscalationCoordinator {
       }
       return;
     }
+    const attention = attentionFrom(opened);
     if (!types.has(escalationEventTypes.attentionRaised)) {
-      await this.#attention.raise(opened);
+      await this.#attention.raise(attention);
       this.#history.recordRoute(opened, escalationEventTypes.attentionRaised);
     }
     if (!types.has(escalationEventTypes.notified)) {
       try {
-        await this.#pushover.send(opened);
+        await this.#pushover.send(attention);
       } catch (error) {
         if (await this.#containPushoverFailure?.(error, opened)) return;
         throw error;

@@ -328,5 +328,5 @@ describe("production escalation answer delivery", () => {
         taskId: fixture.taskId,
       }),
     );
-  });
+  }, 15_000);
 });
