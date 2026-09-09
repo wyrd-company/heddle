@@ -74,7 +74,7 @@ const isStoredStageHandoff = (value: JsonValue): value is StoredStageHandoff =>
   value["workflowMcp"] !== undefined &&
   isWorkflowMcpStageContract(value["workflowMcp"]);
 
-const isStoredAdjudicationHandoff = (
+export const isStoredAdjudicationHandoff = (
   value: JsonValue,
 ): value is StoredAdjudicationHandoff =>
   typeof value === "object" &&
@@ -86,10 +86,11 @@ const isStoredAdjudicationHandoff = (
   typeof value["escalationId"] === "string" &&
   typeof value["ownerSessionKey"] === "string" &&
   typeof value["modelSlug"] === "string" &&
+  typeof value["renderedHandoff"] === "string" &&
   typeof value["timeoutMilliseconds"] === "number" &&
   typeof value["handoff"] === "string";
 
-const parseAdjudicationHandoff = (
+export const parseAdjudicationHandoff = (
   serialized: string,
 ): AdjudicationHandoffDocument => {
   let value: unknown;

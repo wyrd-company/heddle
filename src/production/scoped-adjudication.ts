@@ -10,6 +10,10 @@ import type {
   AdjudicationEscalationRouter,
   PendingEscalation,
 } from "../mcp-server/index.js";
+import {
+  isStoredAdjudicationHandoff,
+  parseAdjudicationHandoff,
+} from "../mcp-server/session-binding.js";
 import type {
   JsonValue,
   ProviderCandidateFailureDetail,
@@ -32,6 +36,7 @@ import { StartupProviderSelectionResolver } from "./stage-session-selection.js";
 import { stableUuid } from "./stable-uuid.js";
 import { productionActiveSessions } from "./subagent-composition.js";
 import {
+  readAdjudicationPolicyBlob,
   readPinnedAdjudicationPolicy,
   renderAdjudicationBoundary,
   type PinnedAdjudicationPolicy,
@@ -45,6 +50,12 @@ type AdjudicationAuthority = Extract<
 
 type AdjudicationEscalation = PendingEscalation & {
   answeringAuthority: AdjudicationAuthority;
+};
+
+type AdjudicationActivation = {
+  context: JsonValue;
+  policy: PinnedAdjudicationPolicy;
+  prompt: string;
 };
 
 const taskSummary = (task: BoardTask) => ({
@@ -128,14 +139,12 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     if (configuration === undefined) {
       throw new Error("Adjudication is not configured");
     }
-    const policy = await readPinnedAdjudicationPolicy({
-      path: configuration.policyPath,
-      repositoryRoot: this.options.blueprintRepository.repositoryRoot,
-      sourceRef: this.options.blueprintRepository.sourceRef,
-    });
     const route = await this.#route(opened);
-    const context = await this.#context(opened, route.task, policy);
-    const prompt = renderPrompt({ context, policy });
+    const { context, policy, prompt } = await this.#activation(
+      opened,
+      route.task,
+      configuration.policyPath,
+    );
     const { token } = ensureCorrelationToken(
       this.options.persistence,
       opened.instanceId,
@@ -359,17 +368,9 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     binding: ResolvedSessionBinding,
     error: unknown,
   ): SkippedProviderCandidate {
-    const tokens = this.options.persistence
-      .listInstances()
-      .flatMap(({ state }) => Object.values(state.correlationTokens));
     return {
       candidatePosition: binding.candidatePosition,
-      failure: failureDetail(error, [
-        this.options.configuration.pushover.applicationToken,
-        this.options.configuration.pushover.userKey,
-        this.options.configuration.t3.accessToken,
-        ...tokens,
-      ]),
+      failure: failureDetail(error, this.#secrets()),
       modelSlug: binding.modelSlug,
       providerDisplayName: binding.providerDisplayName,
     };
@@ -423,7 +424,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       repositoryRoot: this.options.blueprintRepository.repositoryRoot,
       stageId: opened.stage,
     });
-    return {
+    const context: JsonValue = {
       epic: taskSummary(epic),
       children: board
         .filter(({ parent }) => parent === epicId)
@@ -442,6 +443,71 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
           ? prior.handoff.priorStageOutputs
           : [prior.handoff.review],
     };
+    return sanitizeIncidentValue(context, this.#secrets()) as JsonValue;
+  }
+
+  #secrets(): string[] {
+    return [
+      this.options.configuration.pushover.applicationToken,
+      this.options.configuration.pushover.userKey,
+      this.options.configuration.t3.accessToken,
+      ...this.options.persistence
+        .listInstances()
+        .flatMap(({ state }) => Object.values(state.correlationTokens)),
+    ];
+  }
+
+  async #activation(
+    opened: AdjudicationEscalation,
+    task: BoardTask,
+    policyPath: string,
+  ): Promise<AdjudicationActivation> {
+    const retained = this.options.persistence
+      .getInstance(opened.instanceId)
+      ?.state.handoffs.filter(isStoredAdjudicationHandoff)
+      .filter(
+        (handoff) =>
+          handoff.sessionKey === opened.answeringAuthority.sessionKey &&
+          handoff.escalationId === opened.escalationId &&
+          handoff.ownerSessionKey === opened.ownerSessionKey,
+      );
+    if (retained !== undefined && retained.length > 1) {
+      throw new Error("Adjudication occurrence has multiple retained handoffs");
+    }
+    if (retained?.[0] !== undefined) {
+      const stored = retained[0];
+      const handoff = parseAdjudicationHandoff(stored.handoff);
+      const policy = await readAdjudicationPolicyBlob({
+        blobHash: handoff.policy.blobHash,
+        path: handoff.policy.path,
+        repositoryRoot: this.options.blueprintRepository.repositoryRoot,
+      });
+      const expectedPrompt = renderPrompt({ context: handoff.context, policy });
+      if (
+        stored.timeoutMilliseconds !== handoff.policy.timeoutMilliseconds ||
+        handoff.policy.timeoutMilliseconds !==
+          policy.policy.limits.timeoutMilliseconds ||
+        handoff.decisionBoundary !==
+          renderAdjudicationBoundary(policy.policy) ||
+        stored.renderedHandoff !== expectedPrompt
+      ) {
+        throw new Error(
+          "Retained adjudication handoff disagrees with its policy blob",
+        );
+      }
+      return {
+        context: handoff.context,
+        policy,
+        prompt: expectedPrompt,
+      };
+    }
+    const policy = await readPinnedAdjudicationPolicy({
+      path: policyPath,
+      repositoryRoot: this.options.blueprintRepository.repositoryRoot,
+      sourceRef: this.options.blueprintRepository.sourceRef,
+    });
+    const context = await this.#context(opened, task, policy);
+    return { context, policy, prompt: renderPrompt({ context, policy }) };
   }
 
   #storeHandoff(

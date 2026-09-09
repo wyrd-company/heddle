@@ -161,6 +161,7 @@ export type StoredAdjudicationHandoff = {
   kind: "adjudication-handoff";
   modelSlug: string;
   ownerSessionKey: string;
+  renderedHandoff: string;
   sessionKey: string;
   timeoutMilliseconds: number;
 };

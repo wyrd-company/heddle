@@ -42,14 +42,39 @@ export type PinnedAdjudicationPolicy = {
   policy: AdjudicationPolicy;
 };
 
+const requirePolicyPath = (path: string): void => {
+  if (!/^adjudication\/[a-z][a-z-]*\.json$/.test(path)) {
+    throw new TypeError("Adjudication policy path is invalid");
+  }
+};
+
+export const readAdjudicationPolicyBlob = async (input: {
+  blobHash: string;
+  path: string;
+  repositoryRoot: string;
+}): Promise<PinnedAdjudicationPolicy> => {
+  requirePolicyPath(input.path);
+  if (!objectId.test(input.blobHash)) {
+    throw new Error("Adjudication policy did not resolve to a Git blob");
+  }
+  const { stdout: serialized } = await execute(
+    "git",
+    ["cat-file", "blob", input.blobHash],
+    { cwd: resolve(input.repositoryRoot), maxBuffer: 1024 * 1024 },
+  );
+  return {
+    blobHash: input.blobHash,
+    path: input.path,
+    policy: policySchema.parse(JSON.parse(serialized) as unknown),
+  };
+};
+
 export const readPinnedAdjudicationPolicy = async (input: {
   path: string;
   repositoryRoot: string;
   sourceRef: string;
 }): Promise<PinnedAdjudicationPolicy> => {
-  if (!/^adjudication\/[a-z][a-z-]*\.json$/.test(input.path)) {
-    throw new TypeError("Adjudication policy path is invalid");
-  }
+  requirePolicyPath(input.path);
   const repositoryRoot = resolve(input.repositoryRoot);
   const { stdout: commitOutput } = await execute(
     "git",
@@ -74,16 +99,11 @@ export const readPinnedAdjudicationPolicy = async (input: {
   if (!objectId.test(blobHash)) {
     throw new Error("Adjudication policy did not resolve to a Git blob");
   }
-  const { stdout: serialized } = await execute(
-    "git",
-    ["cat-file", "blob", blobHash],
-    { cwd: repositoryRoot, maxBuffer: 1024 * 1024 },
-  );
-  return {
+  return readAdjudicationPolicyBlob({
     blobHash,
     path: input.path,
-    policy: policySchema.parse(JSON.parse(serialized) as unknown),
-  };
+    repositoryRoot,
+  });
 };
 
 export const renderAdjudicationBoundary = (

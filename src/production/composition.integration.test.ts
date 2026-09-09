@@ -170,6 +170,24 @@ describe("production composition", () => {
       t3,
     });
     await composition.start();
+    const owner = composition.persistence
+      .listReconcilerRuntime()
+      .find(({ state }) => state === "waiting")!;
+    const ownerToken = composition.persistence.getInstance(owner.instanceId)!
+      .state.correlationTokens[owner.sessionKey!]!;
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--title",
+        `Sample ${ownerToken} ${fixture.configuration.t3.accessToken} ${fixture.configuration.pushover.applicationToken}`,
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
     const { adjudication, runtime } =
       await openProductionEscalation(composition);
     const handoff = composition.persistence
