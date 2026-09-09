@@ -16,9 +16,10 @@ is a replaceable worker.
 
 ## Why this service exists
 
-Heddle is the revision of `pi-orchestrator`, which made one coding harness
-event-driven from the inside as an extension suite. That approach worked well
-enough to show what the shape should be, and where it could not go:
+Heddle is the revision of `pi-orchestrator` and the skill-based workflow, which 
+made one coding harness event-driven from the inside as an extension suite. That 
+approach worked well enough to show what the shape should be, and where it could
+not go:
 
 - **The workflow was welded to one harness.** `pi-orchestrator` depended on a
   forked `pi` with an RPC socket. Every capability had to exist in that fork,
@@ -31,11 +32,22 @@ enough to show what the shape should be, and where it could not go:
   when it needs to be stable. It reduced that cost but kept an agent in the
   orchestrating seat. In Heddle the reconciler is code. No context, no
   compaction, no forgetting a task exists.
+- **The orchestrator as an agent kept the epic rolling.** One thing that has 
+  worked for the current workflow is having the orchestrator act as an 
+  adjudicator, with some guidelines, to answer questions or solve problems
+  _before_ escalating to me. Heddle must preserve this mechanism, but probably
+  not as a long standing agent session, but as a scoped decision making session
+  that is provided the current context of the epic.
 - **Escalation played the telephone game.** A subagent escalated to the
   orchestrator, which escalated to the operator, filling two contexts to carry
   one question. Heddle routes a top-level session's question into a durable
   attention queue the operator answers directly, and routes a subagent's
   question to its parent.
+- **Assistive tasks required a specific harness or complicated shell manipulation.**
+  The skill-based workflow required `claude --remote-session` launched as a shell
+  and pi-orchestrator required every "subagent" to be launched in an attachable
+  Zellij session. Creating Heddle as an integration of T3Code provides a stable
+  multi-harness UI for direct user interaction.
 - **Handoffs were prose.** Subagents followed written instructions and performed
   handoffs through shell commands, and got them wrong under long contexts.
   Heddle gives them tools that can only do it right, and renders the handoff
@@ -43,7 +55,8 @@ enough to show what the shape should be, and where it could not go:
 - **Observability depended on attaching to a process.** Zellij made sessions
   watchable, which is real but requires a terminal and a human at it. Heddle
   records every transition durably and projects it into a console, so the state
-  of the work outlives the process that produced it.
+  of the work outlives the process that produced it. It also integrates with T3code,
+  so every thread is directly observable there.
 - **Evolving the workflow meant editing skills.** Prose is a weak place to keep
   a process. Heddle's lifecycles are blueprints — data, versioned in their own
   repository, pinned by content hash at activation.
