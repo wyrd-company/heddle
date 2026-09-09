@@ -633,6 +633,14 @@ next_id: 1
     crashedPersistence.close();
     const changedConfiguration: ResolvedProductionConfiguration = {
       ...configuration,
+      incident: {
+        approvalSeverityThreshold: "high",
+        failureThreshold: 3,
+        githubIssueRepository: "sample-owner/sample-repository",
+        immediateEscalationCodes: [],
+        retryDelayMilliseconds: 1,
+        workspaceRoot: root,
+      },
       pacing: { ...configuration.pacing, defaultProvider: "changed-provider" },
       providerAliases: {
         "changed-selection": {
