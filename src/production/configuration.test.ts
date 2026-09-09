@@ -77,7 +77,12 @@ describe("production configuration", () => {
     ) as { properties: Record<string, unknown>; required: string[] };
     const configuration = fixture();
     expect(Object.keys(schema.properties).sort()).toEqual(
-      [...Object.keys(configuration), "providerUsage", "server"].sort(),
+      [
+        ...Object.keys(configuration),
+        "incident",
+        "providerUsage",
+        "server",
+      ].sort(),
     );
     expect([...schema.required].sort()).toEqual(
       Object.keys(configuration).sort(),
@@ -99,6 +104,43 @@ describe("production configuration", () => {
       true,
     );
     expect(validateProductionConfiguration(configuration)).toBe(configuration);
+  });
+
+  it("validates operator-owned incident authority and policy", async () => {
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const incident = {
+      approvalSeverityThreshold: "high" as const,
+      failureThreshold: 3,
+      githubIssueRepository: "sample-owner/sample-repository",
+      immediateEscalationCodes: ["known-fatal-shape"],
+      retryDelayMilliseconds: 1_000,
+      workspaceRoot: "/tmp/sample-workspace",
+    };
+    const configured = {
+      ...fixture(),
+      incident,
+      providerUsage: {
+        arguments: [],
+        executable: "/tmp/sample-provider-usage",
+        timeoutMilliseconds: 1_000,
+      },
+    };
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+
+    expect(validate(configured), JSON.stringify(validate.errors)).toBe(true);
+    expect(validateProductionConfiguration(configured)).toBe(configured);
+    expect(() =>
+      validateProductionConfiguration({
+        ...configured,
+        incident: { ...incident, githubIssueRepository: "missing-owner" },
+      }),
+    ).toThrow("must be an owner/name repository");
   });
 
   it("rejects an invalid cadence through both configuration boundaries", async () => {

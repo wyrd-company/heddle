@@ -10,6 +10,10 @@ import type {
   JsonValue,
   SqlitePersistence,
 } from "../persistence/index.js";
+import {
+  incidentSeverityLevels,
+  type IncidentSeverity,
+} from "./configuration.js";
 
 type RecordValue = Record<string, JsonValue>;
 
@@ -57,6 +61,30 @@ export const incidentProposedActionKinds = (
         })
       : [],
   );
+};
+
+export const incidentProductionMutationRequiresApproval = (
+  runtime: Pick<IncidentRuntimeRecord, "diagnosis">,
+  threshold: IncidentSeverity,
+): boolean => {
+  const actions = asRecord(runtime.diagnosis)?.["proposedActions"];
+  if (!Array.isArray(actions)) return false;
+  const thresholdIndex = incidentSeverityLevels.indexOf(threshold);
+  return actions.some((action) => {
+    const proposal = asRecord(action);
+    if (proposal?.["kind"] !== "production-mutation") return false;
+    const severity = proposal["severity"];
+    if (
+      typeof severity !== "string" ||
+      !incidentSeverityLevels.includes(severity as IncidentSeverity)
+    ) {
+      return true;
+    }
+    return (
+      incidentSeverityLevels.indexOf(severity as IncidentSeverity) >=
+      thresholdIndex
+    );
+  });
 };
 
 export const incidentProductionMutationApproval = (

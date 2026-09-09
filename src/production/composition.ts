@@ -92,7 +92,10 @@ import { ProductRoutingCatalog } from "./product-routing.js";
 import { pageSessionAttentions } from "./session-attention-paging.js";
 import { DynamicTaskAuthority } from "./dynamic-task-authority.js";
 import { EpicOperationCoordinator } from "./epic-operation-coordinator.js";
-import { ProductionIncidentCoordinator } from "./incident-coordinator.js";
+import {
+  incidentAdmissionPolicy,
+  ProductionIncidentCoordinator,
+} from "./incident-coordinator.js";
 import { SharedProjectCoordinator } from "./shared-project.js";
 
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
@@ -425,6 +428,33 @@ export const createProductionComposition = (
       lifecycle,
       instances,
       {
+        admissionPolicy: {
+          ...incidentAdmissionPolicy,
+          failureThreshold:
+            configuration.incident?.failureThreshold ??
+            incidentAdmissionPolicy.failureThreshold,
+          retryDelayMilliseconds:
+            configuration.incident?.retryDelayMilliseconds ??
+            incidentAdmissionPolicy.retryDelayMilliseconds,
+        },
+        ...(configuration.incident?.approvalSeverityThreshold === undefined
+          ? {}
+          : {
+              approvalSeverityThreshold:
+                configuration.incident.approvalSeverityThreshold,
+            }),
+        authority: {
+          blueprintRepositoryRoot: blueprintRepository.repositoryRoot,
+          boardDirectory: configuration.boardDirectory,
+          githubIssueRepository:
+            configuration.incident?.githubIssueRepository ?? null,
+          stateDirectory: configuration.stateDirectory,
+          t3BaseUrl: configuration.t3.baseUrl,
+          workspaceRoot: configuration.incident?.workspaceRoot ?? null,
+        },
+        immediateEscalationCodes: new Set(
+          configuration.incident?.immediateEscalationCodes ?? [],
+        ),
         secrets: [
           configuration.pushover.applicationToken,
           configuration.pushover.userKey,

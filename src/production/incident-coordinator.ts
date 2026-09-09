@@ -3,6 +3,7 @@
 //   implements: heddle
 // ---
 
+import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { delimiter, join } from "node:path";
@@ -32,21 +33,29 @@ import { sanitizeIncidentValue } from "./incident-redaction.js";
 import {
   incidentProductionMutationApproval,
   incidentProductionMutationApproved,
+  incidentProductionMutationRequiresApproval,
   incidentProposalDigest,
   incidentProposedActionKinds,
 } from "./incident-approval.js";
+import type { IncidentSeverity } from "./configuration.js";
 
 export { sanitizeIncidentValue } from "./incident-redaction.js";
 
-export const incidentAdmissionPolicy = {
+export type IncidentAdmissionPolicy = {
+  cooldownMilliseconds: number;
+  failureThreshold: number;
+  maximumConcurrent: number;
+  maximumReviewRejections: number;
+  retryDelayMilliseconds: number;
+};
+
+export const incidentAdmissionPolicy: IncidentAdmissionPolicy = {
   cooldownMilliseconds: 60_000,
   failureThreshold: 3,
   maximumConcurrent: 3,
   maximumReviewRejections: 3,
   retryDelayMilliseconds: 1_000,
-} as const;
-
-type IncidentAdmissionPolicy = typeof incidentAdmissionPolicy;
+};
 
 const incidentBlueprintPath = "blueprints/incident.json";
 const finalizeEffect = "incident-finalize";
@@ -187,6 +196,8 @@ export class ProductionIncidentCoordinator {
     private readonly instances: ProductionInstanceController,
     private readonly options: {
       admissionPolicy?: IncidentAdmissionPolicy;
+      approvalSeverityThreshold?: IncidentSeverity;
+      authority?: Record<string, JsonValue>;
       commandAvailable?: (name: string) => Promise<boolean>;
       immediateEscalationCodes?: ReadonlySet<string>;
       now?: () => number;
@@ -283,6 +294,7 @@ export class ProductionIncidentCoordinator {
     }
     if (runtime.stageId === "finalize" && input.disposition === "complete") {
       this.#assertFinalizationAuthorized(runtime);
+      await this.#recordFinalizationResult(runtime, input.output);
     }
     if (runtime.stageId === "implement" && input.disposition === "diagnosed") {
       intended = { ...intended, diagnosis: input.output ?? {} };
@@ -396,6 +408,10 @@ export class ProductionIncidentCoordinator {
       }
       if (
         incidentProposedActionKinds(runtime).has("production-mutation") &&
+        incidentProductionMutationRequiresApproval(
+          runtime,
+          this.options.approvalSeverityThreshold ?? "low",
+        ) &&
         !incidentProductionMutationApproved(this.persistence, runtime)
       ) {
         const approval = incidentProductionMutationApproval(runtime);
@@ -467,10 +483,56 @@ export class ProductionIncidentCoordinator {
     }
     if (!incidentProposedActionKinds(runtime).has("production-mutation"))
       return;
+    if (
+      !incidentProductionMutationRequiresApproval(
+        runtime,
+        this.options.approvalSeverityThreshold ?? "low",
+      )
+    ) {
+      return;
+    }
     if (!incidentProductionMutationApproved(this.persistence, runtime)) {
       throw new Error(
         "Incident production mutation requires accepted operator approval",
       );
+    }
+  }
+
+  async #recordFinalizationResult(
+    runtime: IncidentRuntimeRecord,
+    output: Record<string, JsonValue> | undefined,
+  ): Promise<void> {
+    if (output?.["conditionState"] !== "cleared") {
+      throw new Error(
+        "Incident finalization requires observed conditionState 'cleared'",
+      );
+    }
+    if (!incidentProposedActionKinds(runtime).has("github-issue")) return;
+    const report = asRecord(output["outwardReport"]);
+    if (report?.["status"] === "delivered") return;
+    if (report?.["status"] !== "undelivered") {
+      throw new Error(
+        "Incident finalization requires outward report delivery evidence",
+      );
+    }
+    const failure = createProductionErrorAttention({
+      attentionId: `production:incident-report-undelivered:${createHash(
+        "sha256",
+      )
+        .update(runtime.incidentId)
+        .digest("hex")}`,
+      code: "incident-report-undelivered",
+      error: new Error(
+        typeof report["safeReason"] === "string"
+          ? report["safeReason"]
+          : "Outward incident report was not delivered",
+      ),
+      instanceId: runtime.incidentId,
+      message: `Incident ${runtime.incidentId} could not deliver its outward report`,
+      taskId: runtime.taskId,
+    });
+    if (!(await this.attention.has(failure.attentionId))) {
+      await this.attention.raise(failure);
     }
   }
 
@@ -520,6 +582,16 @@ export class ProductionIncidentCoordinator {
           sourceInstanceId: source.instanceId,
           taskOnBoard,
         },
+        authority: this.options.authority ?? {},
+        approvalSeverityThreshold:
+          this.options.approvalSeverityThreshold ?? "low",
+        prohibitions: [
+          "suppress-condition-detection",
+          "read-move-or-write-secrets",
+          "push-real-remote-or-write-default-branch",
+          "degrade-attention-incident-or-notification-machinery",
+          "perform-unobservable-effect",
+        ],
         recheck: {
           instruction: "Observe the source condition again before diagnosis",
         },

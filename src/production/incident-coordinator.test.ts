@@ -37,6 +37,7 @@ import {
 } from "./incident-coordinator.js";
 import type { ProductionInstanceController } from "./instance-controller.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
+import type { IncidentSeverity } from "./configuration.js";
 
 const task = (id = 17): BoardTask => ({
   blocked: false,
@@ -187,6 +188,8 @@ describe("production incident coordinator", () => {
   const createSubject = async (
     options: {
       admissionPolicy?: typeof incidentAdmissionPolicy;
+      approvalSeverityThreshold?: IncidentSeverity;
+      authority?: Record<string, JsonValue>;
       commandAvailable?: (name: string) => Promise<boolean>;
       immediateEscalationCodes?: ReadonlySet<string>;
       now?: () => number;
@@ -331,6 +334,39 @@ describe("production incident coordinator", () => {
     ]);
   });
 
+  it("supplies observable authority and prohibitions to the incident handoff", async () => {
+    const { attention, coordinator, harness } = await createSubject({
+      approvalSeverityThreshold: "high",
+      authority: {
+        blueprintRepositoryRoot: "/tmp/sample-blueprints",
+        githubIssueRepository: "sample-owner/sample-repository",
+        workspaceRoot: "/tmp/sample-workspace",
+      },
+    });
+    await raise(attention);
+
+    await coordinator.reconcile([task()]);
+
+    expect(vi.mocked(harness.lifecycle.start).mock.calls[0]?.[0]).toMatchObject(
+      {
+        initialContext: {
+          incident: {
+            approvalSeverityThreshold: "high",
+            authority: {
+              blueprintRepositoryRoot: "/tmp/sample-blueprints",
+              githubIssueRepository: "sample-owner/sample-repository",
+              workspaceRoot: "/tmp/sample-workspace",
+            },
+            prohibitions: expect.arrayContaining([
+              "read-move-or-write-secrets",
+              "perform-unobservable-effect",
+            ]),
+          },
+        },
+      },
+    );
+  });
+
   it("dispatches unclassified failures and keeps only the explicit floor out", async () => {
     const { attention, coordinator } = await createSubject();
     const floorCodes = [
@@ -415,6 +451,10 @@ describe("production incident coordinator", () => {
       disposition: "complete",
       instanceId: source.incidentId!,
       operationId: "finalize-once",
+      output: {
+        conditionState: "cleared",
+        outwardReport: { status: "delivered" },
+      },
     });
 
     expect(persistence!.listAttention()).toEqual([]);
@@ -766,11 +806,99 @@ describe("production incident coordinator", () => {
       disposition: "complete",
       instanceId: source.incidentId!,
       operationId: "finalize-once",
+      output: { conditionState: "cleared" },
     });
     expect(
       persistence!
         .listAttention()
         .some(({ attentionId }) => attentionId === source.attentionId),
+    ).toBe(false);
+  });
+
+  it("closes a cleared incident while retaining an undelivered outward report as attention", async () => {
+    const { attention, coordinator } = await createSubject({
+      commandAvailable: async () => true,
+    });
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    await coordinator.resume({
+      disposition: "diagnosed",
+      instanceId: source.incidentId!,
+      operationId: "diagnose-report",
+      output: {
+        conditionState: "live",
+        proposedActions: [
+          { kind: "github-issue", summary: "Record the code fix" },
+        ],
+        rootCauseAnalysis: "Synthetic analysis",
+      },
+    });
+    await coordinator.resume({
+      disposition: "approve",
+      instanceId: source.incidentId!,
+      operationId: "approve-report",
+    });
+    await coordinator.resume({
+      disposition: "complete",
+      instanceId: source.incidentId!,
+      operationId: "complete-report",
+      output: {
+        conditionState: "cleared",
+        outwardReport: {
+          safeReason: "Synthetic GitHub transport failure",
+          status: "undelivered",
+        },
+      },
+    });
+
+    expect(persistence!.listIncidentRuntime()[0]?.state).toBe("done");
+    expect(
+      persistence!.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "incident-report-undelivered",
+        instanceId: source.incidentId,
+      }),
+    );
+  });
+
+  it("starts a below-threshold production mutation without operator approval", async () => {
+    const { attention, coordinator, harness } = await createSubject({
+      approvalSeverityThreshold: "high",
+    });
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    await coordinator.resume({
+      disposition: "diagnosed",
+      instanceId: source.incidentId!,
+      operationId: "diagnose-low-severity",
+      output: {
+        conditionState: "live",
+        proposedActions: [
+          {
+            kind: "production-mutation",
+            severity: "low",
+            summary: "Disable a broken sample provider",
+          },
+        ],
+        rootCauseAnalysis: "Synthetic analysis",
+      },
+    });
+    await coordinator.resume({
+      disposition: "approve",
+      instanceId: source.incidentId!,
+      operationId: "approve-low-severity",
+    });
+
+    expect(harness.activations).toEqual(["implement", "review", "finalize"]);
+    expect(
+      persistence!
+        .listAttention()
+        .some(({ payload }) =>
+          JSON.stringify(payload).includes(
+            "incident-production-mutation-approval",
+          ),
+        ),
     ).toBe(false);
   });
 

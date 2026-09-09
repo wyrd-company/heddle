@@ -57,10 +57,28 @@ export type PushoverConfiguration = {
   userKey: string;
 };
 
+export const incidentSeverityLevels = [
+  "low",
+  "moderate",
+  "high",
+  "critical",
+] as const;
+export type IncidentSeverity = (typeof incidentSeverityLevels)[number];
+
+export type IncidentConfiguration = {
+  approvalSeverityThreshold: IncidentSeverity;
+  failureThreshold: number;
+  githubIssueRepository: string;
+  immediateEscalationCodes?: string[];
+  retryDelayMilliseconds: number;
+  workspaceRoot: string;
+};
+
 export type ProductionConfiguration = {
   adHocProject: AdHocProjectConfiguration;
   boardDirectory: string;
   cadenceMilliseconds: number;
+  incident?: IncidentConfiguration;
   pacing: Omit<PacingConfiguration, "defaultProvider">;
   observationThresholds: {
     endedMilliseconds: number;
@@ -133,6 +151,39 @@ const validateCommonProductionConfiguration = (
     "cadenceMilliseconds",
     configuration.cadenceMilliseconds,
   );
+  if (configuration.incident !== undefined) {
+    requireAbsolute(
+      "incident.workspaceRoot",
+      configuration.incident.workspaceRoot,
+    );
+    requirePositiveInteger(
+      "incident.failureThreshold",
+      configuration.incident.failureThreshold,
+    );
+    requirePositiveInteger(
+      "incident.retryDelayMilliseconds",
+      configuration.incident.retryDelayMilliseconds,
+    );
+    if (
+      !incidentSeverityLevels.includes(
+        configuration.incident.approvalSeverityThreshold,
+      )
+    ) {
+      throw new TypeError(
+        `incident.approvalSeverityThreshold must be one of '${incidentSeverityLevels.join("', '")}'`,
+      );
+    }
+    if (
+      !/^[^/\s]+\/[^/\s]+$/.test(configuration.incident.githubIssueRepository)
+    ) {
+      throw new TypeError(
+        "incident.githubIssueRepository must be an owner/name repository",
+      );
+    }
+    for (const code of configuration.incident.immediateEscalationCodes ?? []) {
+      requireNonEmpty("incident.immediateEscalationCodes", code);
+    }
+  }
   requirePositiveInteger(
     "stopTimeoutMilliseconds",
     configuration.stopTimeoutMilliseconds,

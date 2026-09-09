@@ -116,6 +116,34 @@
         }
       }
     },
+    "incident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approvalSeverityThreshold",
+        "failureThreshold",
+        "githubIssueRepository",
+        "retryDelayMilliseconds",
+        "workspaceRoot"
+      ],
+      "properties": {
+        "approvalSeverityThreshold": {
+          "enum": ["low", "moderate", "high", "critical"]
+        },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "githubIssueRepository": {
+          "type": "string",
+          "pattern": "^[^/\\s]+/[^/\\s]+$"
+        },
+        "immediateEscalationCodes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        },
+        "retryDelayMilliseconds": { "type": "integer", "minimum": 1 },
+        "workspaceRoot": { "type": "string", "pattern": "^/" }
+      }
+    },
     "products": {
       "type": "array",
       "minItems": 1,
