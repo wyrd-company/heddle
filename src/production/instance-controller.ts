@@ -75,6 +75,27 @@ const taskContract = (task: BoardTask): JsonValue => {
   return json(contract);
 };
 
+const retainedProviderAliases = (
+  context: LifecycleContextRecord,
+  task: BoardTask,
+): BoardTask["providerAlias"] => {
+  if (context.serializedContext === null) return task.providerAlias;
+  const serialized = JSON.parse(context.serializedContext) as Record<
+    string,
+    unknown
+  >;
+  const retained = serialized["taskContract"];
+  if (
+    typeof retained !== "object" ||
+    retained === null ||
+    Array.isArray(retained) ||
+    (retained as Record<string, unknown>)["id"] !== task.id
+  ) {
+    return task.providerAlias;
+  }
+  return (retained as Partial<BoardTask>).providerAlias;
+};
+
 const stableUuid = (seed: string): string => {
   const hex = createHash("sha256").update(seed).digest("hex").slice(0, 32);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
@@ -668,7 +689,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             }
             throw error;
           });
-          await this.#synchronizeSnapshot(task, runtime, snapshot);
+          await this.#synchronizeSnapshot(
+            task,
+            runtime,
+            snapshot,
+            retainedProviderAliases(context, task),
+          );
           await this.#resolveTaskReconciliationError(runtime);
           await this.#resolveSynchronizationError(
             runtime,
@@ -676,7 +702,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           );
           continue;
         }
-        await this.#synchronizeSnapshot(task, runtime, context);
+        await this.#synchronizeSnapshot(
+          task,
+          runtime,
+          context,
+          retainedProviderAliases(context, task),
+        );
         await this.#resolveTaskReconciliationError(runtime);
         await this.#resolveSynchronizationError(
           runtime,
@@ -724,6 +755,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     task: BoardTask,
     runtime: ReconcilerRuntimeRecord,
     snapshot: Pick<LifecycleContextRecord, "awaitingNodeIds" | "status">,
+    providerAliases: BoardTask["providerAlias"],
   ): Promise<void> {
     const stageId = snapshot.awaitingNodeIds[0];
     if (stageId === undefined) {
@@ -758,7 +790,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     await this.lifecycle.validateTaskProviderAliases(
       runtime.instanceId,
       task.id,
-      task.providerAlias,
+      providerAliases,
     );
     const starting: ReconcilerRuntimeRecord = {
       ...runtime,
