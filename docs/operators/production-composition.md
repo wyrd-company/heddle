@@ -74,8 +74,8 @@ status mirroring invoke these tools without a shell. Incident finalization uses
 `gh` as the authenticated bot identity for an accepted GitHub issue. Startup
 does not replace or infer their locations.
 
-This complete single-product example uses one provider alias and no provider
-budget, so it omits the provider-usage executable:
+This complete single-product example uses one single-candidate provider alias
+and no provider budget, so it omits the provider-usage executable:
 
 ```yaml
 adHocProject:
@@ -104,8 +104,8 @@ pacing:
   usageWindowHours: 5
 providerAliases:
   primary:
-    providerDisplayName: Workbench Alpha
-    model: model-alpha
+    - providerDisplayName: Workbench Alpha
+      model: model-alpha
 products:
   - name: Sample collection
     repos:
@@ -187,11 +187,25 @@ ordinary notification route; it does not fail the repaired incident.
 ## Provider and session selection
 
 `providerAliases` is the operator-owned allowlist. An alias matches
-`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, is at most 64 characters, and contains
-exactly `providerDisplayName` and `model`. Both values are nonempty strings.
+`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, is at most 64 characters, and contains a
+non-empty ordered candidate list. Each candidate contains exactly
+`providerDisplayName` and `model`. Both values are nonempty strings.
 `providerDisplayName` is the exact, case-sensitive display name from the T3
 provider catalog. `model` is the exact, case-sensitive T3 model slug. It is not
-a model display name or model alias.
+a model display name or model alias. The prior single-object form continues to
+load and means a one-candidate list; converting it to the list form does not
+change selection.
+
+Use declared order to express the role preference:
+
+```yaml
+providerAliases:
+  reviewer:
+    - providerDisplayName: Workbench Alpha
+      model: model-alpha
+    - providerDisplayName: Workbench Beta
+      model: model-beta
+```
 
 Heddle reads `ServerConfig.providers` through T3's authenticated
 `server.getConfig` WebSocket RPC. It sends the configured bearer token to
@@ -216,8 +230,9 @@ A missing or malformed ticket, failed or malformed RPC, or response without a
 provider catalog is `provider-catalog-unavailable`. Heddle does not include
 transport details or returned configuration payloads in that selection error.
 
-Startup validates and resolves every alias, `session.defaultProviderAlias`, and
-each `pacing.providerBudgets` key against one catalog snapshot. A selectable
+Startup validates and resolves every candidate of every alias,
+`session.defaultProviderAlias`, and each `pacing.providerBudgets` key against
+one catalog snapshot. A selectable
 provider has one exact display-name match and is available, enabled, installed,
 and `ready`; its model catalog contains the configured slug. Providers without
 a display name cannot be selected. Duplicate display names are ambiguous.
@@ -228,9 +243,23 @@ New stage occurrences, new subagent assignments, and `list_providers` use a
 fresh catalog snapshot. Selection failures use one of these safe reasons:
 `provider-catalog-unavailable`, `provider-alias-not-allowed`,
 `provider-name-not-found`, `provider-name-ambiguous`,
-`provider-not-ready`, `provider-unavailable`, or `provider-model-not-found`. No failure tries another
-alias, provider, or model. A T3 rejection after resolution is reported as that
-T3 failure and also has no fallback.
+`provider-not-ready`, `provider-unavailable`, or `provider-model-not-found`.
+These configuration and catalog failures do not trigger fallback. Repair an
+invalid first candidate instead of relying on a later entry.
+
+Fallback starts only after T3 or its harness fails before the initial turn
+starts. Heddle tries the next candidate of the same alias on a distinct thread.
+If all candidates fail or collide, `provider-alias-exhausted` attention names
+the alias, every candidate, and each cause. A successful fallback raises
+`provider-fallback-active` attention and records the selected position and
+skipped causes in the session binding. Treat the unresolved attention as a
+standing degradation condition: repair or reorder the alias before new
+sessions repeatedly take the same fallback.
+
+A candidate cannot bind when a started session for another alias in the same
+lifecycle instance already uses that provider instance. Heddle records the
+collision as a skipped cause and continues in order. Sessions for the same
+alias may reuse the provider, and different lifecycle instances do not collide.
 
 Task front matter can override provider selection for specific stages with
 this exact optional map field:
@@ -275,26 +304,33 @@ wait stage or terminal alternative before it runs the selecting effect. An
 initial route with only terminal landings needs no session binding.
 
 The binding records the session and occurrence identity, selected alias,
-display-name snapshot,
-provider instance ID, open driver kind, observed provider CLI version, model
-slug, runtime mode, and interaction mode. It contains no provider setting or
-credential. Dispatch, observation, steering, stop, retry, restart, and a cold
-replacement thread for the same occurrence use this binding. A configuration,
+candidate position, skipped candidates and their failure causes, display-name
+snapshot, provider instance ID, open driver kind, observed provider CLI
+version, model slug, runtime mode, and interaction mode. It contains no provider
+setting or credential. The binding is provisional until T3 reports that its
+session or turn started. Dispatch may advance a provisional binding after a
+start failure.
+Observation, steering, stop, retry, restart, replay, and a cold replacement
+thread for the same occurrence use the confirmed binding. A configuration,
 task, blueprint, catalog, provider-display-name, or alias change cannot retarget
 an existing occurrence. If T3 can no longer use the bound provider or model,
-the session fails visibly. A new stage occurrence or subagent assignment makes
-a new selection.
+the session fails visibly. A failed turn, poor result, rejected review, or
+failed gate never selects another candidate. A new stage occurrence or
+subagent assignment makes a new selection.
 
 SQLite stores a top-level binding with its stage-session runtime row and a
 delegated binding with its todo assignment. The binding and session identity
-are immutable after publication. A pre-release state directory that contains a
-stage-session row without a binding cannot start recovery; clear that isolated
-state directory and restart Heddle.
+are immutable after T3 reports that the thread started. Existing binding JSON
+that predates candidate metadata loads as candidate position 1 with no skipped
+candidates. A pre-release state directory that contains a stage-session row
+without a binding cannot start recovery; clear that isolated state directory
+and restart Heddle.
 
 The existing instance runtime response includes a sorted `sessionBindings`
 array for each instance. Each entry contains only `sessionKey`, `threadId`,
 `alias`, `providerDisplayName`, `providerInstanceId`, `driverKind`,
-`observedCliVersion`, `modelSlug`, `runtimeMode`, and `interactionMode`. This is
+`observedCliVersion`, `modelSlug`, `runtimeMode`, `interactionMode`,
+`candidatePosition`, and `skippedCandidates`. This is
 the operator-safe projection used to diagnose routing. It never contains T3 or
 provider credentials, provider settings, correlation tokens, or handoff
 content.
@@ -335,8 +371,10 @@ the current allowed view:
 }
 ```
 
-Rows are sorted by alias. The tool returns only configured aliases and their
-configured provider and model. It does not expose provider instance IDs,
+Rows are sorted by alias. The tool returns only configured aliases and each
+alias's first configured provider and model. Fallback order remains an
+operator-owned start policy rather than an agent selection surface. The result
+does not expose provider instance IDs,
 credentials, provider settings, or T3 browser and desktop visibility
 preferences. A configured alias that is not currently selectable remains in
 the result with `selectable: false` and one safe selection reason. A catalog
@@ -489,11 +527,12 @@ execution and response output. The executable owns usage-service
 authentication; no credential belongs in its arguments or Heddle output.
 
 Provider budgets are keyed by configured alias for operator readability. At
-startup, Heddle resolves those keys and applies limits by provider instance ID.
-All aliases for one instance consume the same usage and concurrent-session
-capacity. If two aliases for one instance declare different limits,
-configuration is invalid. Omitting a second alias does not give that alias an
-unbudgeted route to the instance.
+startup, Heddle resolves those keys and applies the limit to every candidate
+provider instance in that alias. A session consumes the budget of the candidate
+that actually bound. All aliases for one instance consume the same usage and
+concurrent-session capacity. If two aliases whose candidate lists overlap on
+one instance declare different limits, configuration is invalid. Omitting a
+second alias does not give that alias an unbudgeted route to the instance.
 
 An in-progress epic gets one T3 project titled
 `{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares

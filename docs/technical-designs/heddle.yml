@@ -238,13 +238,14 @@ proposed-design:
     the shared pacing and T3 boundaries.
   provider-selection: >
     Production configuration owns a provider-alias allowlist. Each lower-kebab
-    alias maps exactly to one operator-visible T3 provider display name and one
-    T3 model slug. Display-name matching and model-slug matching are exact and
-    case-sensitive. An absent display name, no matching name, more than one
-    matching name, an unavailable or disabled provider, or an absent model
-    makes the alias nonselectable. Heddle never treats an alias, display name,
-    driver kind, or model name as a T3 routing identity and never falls back to
-    an unconfigured provider.
+    alias maps to a non-empty ordered candidate list. Each candidate names one
+    operator-visible T3 provider display name and one T3 model slug. The legacy
+    single-object form is a one-candidate list with the same meaning.
+    Display-name and model-slug matching are exact and case-sensitive. An
+    absent display name, no matching name, more than one matching name, an
+    unavailable or disabled provider, or an absent model makes the configured
+    catalog invalid. Heddle never infers a candidate from driver kind or
+    capability discovery and never selects a provider outside the alias list.
 
     Heddle reads the authenticated T3 provider catalog through the existing
     `server.getConfig` WebSocket RPC with the `orchestration:read` scope. Using
@@ -271,19 +272,20 @@ proposed-design:
     configuration payloads do not enter the operator-safe selection error.
 
     Configuration syntax is validated before composition. Startup also
-    resolves every configured alias, the default alias, and every pacing-budget
-    alias against one catalog snapshot before it binds the server. New stage
-    activations, new delegated sessions, and `list_providers` read a fresh
-    snapshot. A catalog read or selection failure names one safe reason and
-    performs no worktree, registration, thread, or dispatch effect.
+    resolves every candidate of every configured alias, the default alias, and
+    every pacing-budget alias against one catalog snapshot before it binds the
+    server. New stage activations, new delegated sessions, and `list_providers`
+    read a fresh snapshot. A catalog read or selection failure names one safe
+    reason and performs no worktree, registration, thread, or dispatch
+    effect.
     The stable selection reasons are `provider-catalog-unavailable`,
     `provider-alias-not-allowed`, `provider-name-not-found`,
     `provider-name-ambiguous`, `provider-not-ready`, `provider-unavailable`, and
     `provider-model-not-found`. A provider is selectable only when T3 reports
     it available, enabled, installed, and `ready`, and the selected model slug
-    is present. A catalog change between resolution and dispatch can still make
-    T3 reject the request; Heddle reports that rejection and never substitutes
-    another provider or model.
+    is present. Configuration and catalog failures do not advance the candidate
+    list. A first candidate that is permanently misconfigured prevents startup
+    instead of hiding behind a later candidate.
 
     A task's optional `provider-alias` front-matter value is a map from stage ID
     to provider alias. For the current stage, that map's own entry overrides the
@@ -308,30 +310,53 @@ proposed-design:
     blob hash. Initial-route planning, lifecycle execution, and recovery use
     this same snapshot even if the source ref moves. Before the lifecycle
     starts any mechanical effect or external session effect, Heddle durably
-    stores one resolved session binding containing the session and occurrence identity, selected
-    alias, display-name snapshot, provider instance ID, driver kind, observed
-    provider version, model slug, runtime mode, and interaction mode. It contains
-    no credential or provider setting. If any valid initial lifecycle landing
-    identifies a wait stage, every valid initial landing must identify that same
-    wait stage so the stored occurrence is authoritative for execution. Heddle
+    stores a provisional binding for the first candidate. It contains the
+    session and occurrence identity, alias, candidate position, display-name
+    snapshot, provider instance ID, driver kind, observed provider version,
+    model slug, runtime mode, interaction mode, and structured failure causes
+    for skipped candidates. It contains no credential or provider setting. If
+    any valid initial lifecycle landing identifies a wait stage, every valid
+    initial landing must identify that same wait stage so the stored occurrence
+    is authoritative for execution. Heddle
     rejects a different wait stage or terminal alternative before it runs the
     selecting effect. An initial route with only terminal landings needs no
     session binding. The instance ID routes T3 requests; the alias explains
     authorization, and the display name and driver kind support diagnostics.
-    First dispatch, observation, steering, stop, retry, recovery, and a cold
-    replacement thread for the same stage or assignment occurrence use this
-    stored binding. They never resolve current task front matter, blueprint,
-    configuration, or provider catalog again. If the bound provider or model is
-    no longer usable, the occurrence fails visibly rather than moving. A new
+
+    A T3 session whose latest turn has no start timestamp and whose session or
+    turn enters the error state has failed at session start. A synchronous
+    workflow-MCP-registration, thread-creation, or initial-turn rejection has
+    the same meaning. Heddle records that candidate and cause, then attempts the
+    next candidate in declared order on a distinct thread. Exhaustion raises
+    durable `provider-alias-exhausted` attention that names every candidate and
+    cause. Starting a candidate after the first raises durable
+    `provider-fallback-active` attention. The unresolved entry is a standing
+    operator-visible degradation condition.
+
+    A candidate may not bind when another started session under a different
+    alias in the same lifecycle instance already holds that provider instance.
+    Heddle records the collision as a skipped cause and continues in order.
+    Another occurrence of the same alias may reuse the provider. Separate
+    lifecycle instances do not collide.
+
+    T3 confirms a start when the session or turn is running, ready, idle, or
+    completed, or when the turn has a start timestamp. Heddle then confirms the
+    provisional binding. The binding and thread identity are immutable after
+    that point. Observation, steering, stop, retry, restart, replay, and a cold
+    replacement use the confirmed binding. A failed turn, poor result, rejected
+    review, failed gate, or agent behavior never advances the candidate list.
+    If the bound provider or model is no longer usable, the occurrence fails
+    visibly rather than moving. A new
     stage occurrence or new subagent assignment resolves current authority and
     receives a new binding. Recipient-targeted channels reuse a read-only
     projection of this binding keyed by trusted session or thread identity:
     thread ID, provider instance ID, driver kind, model slug, runtime mode, and
     interaction mode.
 
-    Pacing requests use the resolved provider instance ID. Configuration names
-    pacing budgets by allowed alias for operator readability, then startup
-    resolves and collapses them by instance ID. Aliases for one instance share
+    Pacing requests use the provider instance ID of the candidate that actually
+    bound. Configuration names pacing budgets by allowed alias for operator
+    readability, then startup applies a budget to every candidate instance and
+    collapses them by instance ID. Aliases for one instance share
     one budget, and conflicting limits for aliases that resolve to the same
     instance are invalid. An alias cannot create capacity by renaming an
     instance. Provider usage executables receive the provider instance ID, not
