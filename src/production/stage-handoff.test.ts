@@ -47,6 +47,7 @@ const temporaryDirectories: string[] = [];
 
 const binding = (sessionKey: string, threadId: string) => ({
   alias: "primary",
+  candidatePosition: 1,
   driverKind: "codex",
   interactionMode: "default",
   modelSlug: "sample-model",
@@ -55,6 +56,7 @@ const binding = (sessionKey: string, threadId: string) => ({
   providerInstanceId: "provider-alpha",
   runtimeMode: "auto" as const,
   sessionKey,
+  skippedCandidates: [],
   threadId,
 });
 

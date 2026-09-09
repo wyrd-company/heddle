@@ -526,6 +526,7 @@ describe("production mechanical worktree preparation", () => {
     const original = first.persistence.listSessionRuntime()[0]!;
     expect(original.binding).toEqual({
       alias: "primary",
+      candidatePosition: 1,
       driverKind: "codex",
       interactionMode: "default",
       modelSlug: "sample-model",
@@ -534,6 +535,7 @@ describe("production mechanical worktree preparation", () => {
       providerInstanceId: "codex",
       runtimeMode: "auto-accept-edits",
       sessionKey: `task-${fixture.taskId}:implement:1`,
+      skippedCandidates: [],
       threadId: expect.any(String),
     });
     expect(
@@ -582,9 +584,14 @@ describe("production mechanical worktree preparation", () => {
 
     await restarted.start();
 
+    const { bindingState: _provisional, ...confirmed } = original;
+    void _provisional;
     expect(restarted.persistence.listSessionRuntime()).toEqual([
-      expect.objectContaining(original),
+      expect.objectContaining(confirmed),
     ]);
+    expect(restarted.persistence.listSessionRuntime()[0]).not.toHaveProperty(
+      "bindingState",
+    );
     expect(restartedT3.commands).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

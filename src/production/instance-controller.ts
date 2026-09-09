@@ -1439,7 +1439,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       threadId,
     };
     this.persistence.writeSessionRuntime(sessionRuntime);
-    if (sessionRuntime.bindingState === "provisional") {
+    if (
+      sessionRuntime.bindingState === "provisional" &&
+      binding.candidatePosition > 1
+    ) {
       const collision = this.#providerRoleCollision(
         sessionRuntime,
         binding.providerInstanceId,

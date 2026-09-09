@@ -363,7 +363,7 @@ kind: standard
     },
   );
 
-  it("does not retarget a cold retry through a task edit or changed shared default", async () => {
+  it("does not retarget an exhausted occurrence through a task edit or changed shared default", async () => {
     const { blueprintsRepositoryRoot, configuration } = await prepare();
     configuration.providerAliases["specialist"] = {
       model: "sample-specialist-model",
@@ -452,7 +452,6 @@ kind: standard
         message: expect.stringContaining("synthetic dispatch interruption"),
       }),
     ]);
-    first.attention.resolve(interruptedAttention[0]!.attentionId);
     await first.close();
     await writeFile(
       taskPath,
@@ -506,15 +505,11 @@ kind: standard
     );
     expect(
       secondT3.commands.filter(({ type }) => type !== "project.create"),
-    ).toHaveLength(2);
-    expect(secondT3.providerContexts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          driver: "codex",
-          providerInstanceId: "specialist-provider",
-        }),
-      ]),
-    );
+    ).toHaveLength(0);
+    expect(secondT3.providerContexts).toEqual([]);
+    expect(second.persistence.listReconcilerRuntime()).toMatchObject([
+      { provider: "specialist-provider", state: "waiting" },
+    ]);
     expect(
       second.attention
         .list()
@@ -522,7 +517,12 @@ kind: standard
           ({ attentionId }) =>
             !attentionId.includes(":incident-execution-failed:"),
         ),
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining("synthetic dispatch interruption"),
+      }),
+    ]);
     await second.close();
   });
 
@@ -1175,6 +1175,7 @@ kind: standard
         activation,
         binding: {
           alias: configuration.session.defaultSelection.alias,
+          candidatePosition: 1,
           driverKind: configuration.session.defaultSelection.driverKind,
           interactionMode:
             configuration.session.defaultSelection.interactionMode,
@@ -1187,6 +1188,7 @@ kind: standard
             configuration.session.defaultSelection.providerInstanceId,
           runtimeMode: configuration.session.defaultSelection.runtimeMode,
           sessionKey: `task-${taskId}:review:${activation}`,
+          skippedCandidates: [],
           threadId: `review-thread-${activation}`,
         },
         instanceId: `task-${taskId}`,
