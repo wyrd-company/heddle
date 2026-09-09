@@ -60,6 +60,7 @@ export interface IncidentRuntimeRecord {
   createdAt: number;
   diagnosis?: JsonValue;
   incidentId: string;
+  occurrence: number;
   provider?: string;
   rejectionOperationIds: string[];
   sessionKey?: string;

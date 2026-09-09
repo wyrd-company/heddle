@@ -81,6 +81,10 @@ const productionError = (
 
 type IncidentSourceIndex = {
   readonly incidentById: ReadonlyMap<string, IncidentRuntimeRecord>;
+  readonly latestIncidentByAttentionId: ReadonlyMap<
+    string,
+    IncidentRuntimeRecord
+  >;
   readonly taskIdByInstanceId: ReadonlyMap<string, number>;
 };
 
@@ -215,7 +219,19 @@ export class ProductionIncidentCoordinator {
         shortCircuit: this.options.immediateEscalationCodes?.has(source.code),
       });
       if (observation.kind !== "breaker-open") continue;
-      const incidentId = productionErrorIncidentId(source.attentionId);
+      const latest = sourceIndex.latestIncidentByAttentionId.get(
+        source.attentionId,
+      );
+      const occurrence =
+        latest === undefined
+          ? 1
+          : latest.state === "starting" || latest.state === "waiting"
+            ? latest.occurrence
+            : latest.occurrence + 1;
+      const incidentId = productionErrorIncidentId(
+        source.attentionId,
+        occurrence,
+      );
       const admission = this.persistence.admitIncident({
         attentionId: source.attentionId,
         code: source.code,
@@ -223,6 +239,7 @@ export class ProductionIncidentCoordinator {
         createdAt: this.options.now?.() ?? Date.now(),
         incidentId,
         maximumConcurrent: policy.maximumConcurrent,
+        occurrence,
         ...(source.instanceId === null
           ? {}
           : { sourceInstanceId: source.instanceId }),
@@ -328,7 +345,7 @@ export class ProductionIncidentCoordinator {
           throw new Error("Incident lifecycle has no initial agent stage");
         }
         const source = knownSource ?? this.#sourceAttention(runtime);
-        const incident = this.#incidentContext(source, taskOnBoard);
+        const incident = this.#incidentContext(runtime, source, taskOnBoard);
         const task = taskForIncident(this.persistence, tasks, source, incident);
         runtime = await this.instances.prepareIncidentStart(
           runtime,
@@ -415,6 +432,7 @@ export class ProductionIncidentCoordinator {
     }
     const source = knownSource ?? this.#sourceAttention(runtime);
     const incident = this.#incidentContext(
+      runtime,
       source,
       tasks.some(({ id }) => id === runtime.taskId),
     );
@@ -541,12 +559,22 @@ export class ProductionIncidentCoordinator {
   }
 
   #sourceIndex(): IncidentSourceIndex {
+    const incidents = this.persistence.listIncidentRuntime();
+    const latestIncidentByAttentionId = new Map<
+      string,
+      IncidentRuntimeRecord
+    >();
+    for (const runtime of incidents) {
+      const latest = latestIncidentByAttentionId.get(runtime.attentionId);
+      if (latest === undefined || runtime.occurrence > latest.occurrence) {
+        latestIncidentByAttentionId.set(runtime.attentionId, runtime);
+      }
+    }
     return {
       incidentById: new Map(
-        this.persistence
-          .listIncidentRuntime()
-          .map((runtime) => [runtime.incidentId, runtime]),
+        incidents.map((runtime) => [runtime.incidentId, runtime]),
       ),
+      latestIncidentByAttentionId,
       taskIdByInstanceId: new Map(
         this.persistence
           .listReconcilerRuntime()
@@ -556,6 +584,7 @@ export class ProductionIncidentCoordinator {
   }
 
   #incidentContext(
+    runtime: IncidentRuntimeRecord,
     source: ProductionErrorAttention,
     taskOnBoard: boolean,
   ): JsonValue {
@@ -580,7 +609,8 @@ export class ProductionIncidentCoordinator {
         attentionId: source.attentionId,
         code: source.code,
         error: source.error,
-        incidentId: productionErrorIncidentId(source.attentionId),
+        incidentId: runtime.incidentId,
+        occurrence: runtime.occurrence,
         message: source.message,
         observations: {
           ...observations,

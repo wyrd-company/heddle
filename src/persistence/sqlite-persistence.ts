@@ -470,6 +470,7 @@ export class SqlitePersistence {
     createdAt: number;
     incidentId: string;
     maximumConcurrent: number;
+    occurrence: number;
     sourceInstanceId?: string;
     taskId: number;
   }): IncidentAdmission {
@@ -483,19 +484,28 @@ export class SqlitePersistence {
       !Number.isSafeInteger(input.cooldownMilliseconds) ||
       input.cooldownMilliseconds < 0 ||
       !Number.isSafeInteger(input.maximumConcurrent) ||
-      input.maximumConcurrent <= 0
+      input.maximumConcurrent <= 0 ||
+      !Number.isSafeInteger(input.occurrence) ||
+      input.occurrence <= 0
     ) {
       throw new TypeError("Incident admission bounds are invalid");
     }
     return this.database.transaction((): IncidentAdmission => {
-      const existing = this.listIncidentRuntime().find(
-        ({ attentionId, incidentId }) =>
-          attentionId === input.attentionId || incidentId === input.incidentId,
+      const runtimes = this.listIncidentRuntime();
+      const conditionRuntimes = runtimes.filter(
+        ({ attentionId }) => attentionId === input.attentionId,
       );
+      const active = conditionRuntimes.filter(
+        ({ state }) => state === "starting" || state === "waiting",
+      );
+      if (active.length > 1) {
+        throw new Error("Incident condition has multiple active occurrences");
+      }
+      const existing = active[0];
       if (existing !== undefined) {
         if (
-          existing.attentionId !== input.attentionId ||
           existing.incidentId !== input.incidentId ||
+          existing.occurrence !== input.occurrence ||
           existing.code !== input.code ||
           existing.taskId !== input.taskId ||
           existing.sourceInstanceId !== input.sourceInstanceId
@@ -503,6 +513,25 @@ export class SqlitePersistence {
           throw new Error("Incident admission changed durable identity");
         }
         return { kind: "existing", runtime: existing };
+      }
+      const latestOccurrence = conditionRuntimes.reduce(
+        (latest, runtime) => Math.max(latest, runtime.occurrence),
+        0,
+      );
+      if (input.occurrence !== latestOccurrence + 1) {
+        throw new Error("Incident admission occurrence is not next");
+      }
+      const priorConditionIdentity = conditionRuntimes.find(
+        ({ code, sourceInstanceId, taskId }) =>
+          code !== input.code ||
+          sourceInstanceId !== input.sourceInstanceId ||
+          taskId !== input.taskId,
+      );
+      if (priorConditionIdentity !== undefined) {
+        throw new Error("Incident admission changed durable identity");
+      }
+      if (runtimes.some(({ incidentId }) => incidentId === input.incidentId)) {
+        throw new Error("Incident admission changed durable identity");
       }
       const recent = this.database
         .prepare(
@@ -514,13 +543,13 @@ export class SqlitePersistence {
       if (recent !== undefined) {
         return { kind: "suppressed", reason: "per-code-cooldown" };
       }
-      const active = this.database
+      const activeCount = this.database
         .prepare(
           `SELECT count(*) AS count FROM heddle_incident_runtime
            WHERE state IN ('starting', 'waiting')`,
         )
         .get() as { count: number };
-      if (active.count >= input.maximumConcurrent) {
+      if (activeCount.count >= input.maximumConcurrent) {
         return { kind: "suppressed", reason: "concurrency-cap" };
       }
       const runtime: IncidentRuntimeRecord = {
@@ -529,6 +558,7 @@ export class SqlitePersistence {
         code: input.code,
         createdAt: input.createdAt,
         incidentId: input.incidentId,
+        occurrence: input.occurrence,
         rejectionOperationIds: [],
         ...(input.sourceInstanceId === undefined
           ? {}
@@ -656,12 +686,12 @@ export class SqlitePersistence {
   listIncidentRuntime(): IncidentRuntimeRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT incident_id, attention_id, code, task_id, source_instance_id,
-                created_at, state, provider, stage_id, stage_entered_at,
-                session_key, thread_id, diagnosis_json, accepted,
-                rejection_operation_ids_json
+        `SELECT incident_id, attention_id, occurrence, code, task_id,
+                source_instance_id, created_at, state, provider, stage_id,
+                stage_entered_at, session_key, thread_id, diagnosis_json,
+                accepted, rejection_operation_ids_json
          FROM heddle_incident_runtime
-         ORDER BY created_at, incident_id`,
+         ORDER BY created_at, attention_id, occurrence`,
       )
       .all() as Array<{
       accepted: number;
@@ -670,6 +700,7 @@ export class SqlitePersistence {
       created_at: number;
       diagnosis_json: string | null;
       incident_id: string;
+      occurrence: number;
       provider: string | null;
       rejection_operation_ids_json: string;
       session_key: string | null;
@@ -689,6 +720,7 @@ export class SqlitePersistence {
         ? {}
         : { diagnosis: JSON.parse(row.diagnosis_json) as JsonValue }),
       incidentId: row.incident_id,
+      occurrence: row.occurrence,
       ...(row.provider === null ? {} : { provider: row.provider }),
       rejectionOperationIds: JSON.parse(
         row.rejection_operation_ids_json,
@@ -709,7 +741,13 @@ export class SqlitePersistence {
 
   writeIncidentRuntime(record: IncidentRuntimeRecord): void {
     this.assertStableId("incidentId", record.incidentId);
-    const prior = this.listIncidentRuntime().find(
+    if (!Number.isSafeInteger(record.occurrence) || record.occurrence <= 0) {
+      throw new TypeError(
+        "Incident occurrence must be a positive safe integer",
+      );
+    }
+    const runtimes = this.listIncidentRuntime();
+    const prior = runtimes.find(
       ({ incidentId }) => incidentId === record.incidentId,
     );
     if (
@@ -717,19 +755,30 @@ export class SqlitePersistence {
       (prior.attentionId !== record.attentionId ||
         prior.code !== record.code ||
         prior.createdAt !== record.createdAt ||
+        prior.occurrence !== record.occurrence ||
         prior.sourceInstanceId !== record.sourceInstanceId ||
         prior.taskId !== record.taskId)
     ) {
       throw new Error("Incident runtime changed durable identity");
     }
+    const occurrence = runtimes.find(
+      ({ attentionId, occurrence }) =>
+        attentionId === record.attentionId && occurrence === record.occurrence,
+    );
+    if (
+      occurrence !== undefined &&
+      occurrence.incidentId !== record.incidentId
+    ) {
+      throw new Error("Incident runtime changed durable occurrence identity");
+    }
     this.database
       .prepare(
         `INSERT INTO heddle_incident_runtime
-           (incident_id, attention_id, code, task_id, source_instance_id,
-            created_at, state, provider, stage_id, stage_entered_at,
-            session_key, thread_id, diagnosis_json, accepted,
-            rejection_operation_ids_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (incident_id, attention_id, occurrence, code, task_id,
+            source_instance_id, created_at, state, provider, stage_id,
+            stage_entered_at, session_key, thread_id, diagnosis_json,
+            accepted, rejection_operation_ids_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(incident_id) DO UPDATE SET
            state = excluded.state,
            provider = excluded.provider,
@@ -744,6 +793,7 @@ export class SqlitePersistence {
       .run(
         record.incidentId,
         record.attentionId,
+        record.occurrence,
         record.code,
         record.taskId,
         record.sourceInstanceId ?? null,

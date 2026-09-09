@@ -260,25 +260,73 @@ describe("production incident coordinator", () => {
     expect(harness.boardWrites).toEqual([]);
   });
 
-  it("characterizes terminal runtime reuse when one condition recurs", async () => {
-    const { attention, coordinator, harness } = await createSubject();
-    const source = await raise(attention);
-    await coordinator.reconcile([task()]);
-    const first = persistence!.listIncidentRuntime()[0]!;
-    persistence!.writeIncidentRuntime({ ...first, state: "done" });
-    attention.resolve(source.attentionId);
-    attention.reopen(source.attentionId);
+  it.each(["done", "failed"] as const)(
+    "starts a fresh incident occurrence after a %s occurrence and restart",
+    async (terminalState) => {
+      const { attention, coordinator, harness } = await createSubject({
+        admissionPolicy: {
+          ...incidentAdmissionPolicy,
+          cooldownMilliseconds: 0,
+          failureThreshold: 1,
+          retryDelayMilliseconds: 0,
+        },
+      });
+      const source = await raise(attention);
+      const originalAttention = persistence!.getAttention(source.attentionId)!;
+      await coordinator.reconcile([task()]);
+      const first = persistence!.listIncidentRuntime()[0]!;
+      persistence!.writeIncidentRuntime({ ...first, state: terminalState });
+      attention.resolve(source.attentionId);
+      attention.reopen(source.attentionId);
 
-    await coordinator.reconcile([task()]);
+      await coordinator.reconcile([task()]);
+      const restarted = new ProductionIncidentCoordinator(
+        persistence!,
+        attention,
+        harness.lifecycle,
+        harness.instances,
+        {
+          admissionPolicy: {
+            ...incidentAdmissionPolicy,
+            cooldownMilliseconds: 0,
+            failureThreshold: 1,
+            retryDelayMilliseconds: 0,
+          },
+        },
+      );
+      await restarted.reconcile([task()]);
 
-    expect(persistence!.listIncidentRuntime()).toEqual([
-      expect.objectContaining({
-        incidentId: source.incidentId,
-        state: "done",
-      }),
-    ]);
-    expect(harness.activations).toEqual(["implement"]);
-  });
+      const incidents = persistence!.listIncidentRuntime();
+      expect(incidents).toEqual([
+        { ...first, state: terminalState },
+        expect.objectContaining({
+          attentionId: source.attentionId,
+          incidentId: productionErrorIncidentId(source.attentionId, 2),
+          occurrence: 2,
+          state: "waiting",
+        }),
+      ]);
+      expect(incidents[1]?.incidentId).not.toBe(first.incidentId);
+      expect(persistence!.getInstance(first.incidentId)).toBeDefined();
+      expect(persistence!.getInstance(incidents[1]!.incidentId)).toBeDefined();
+      expect(persistence!.getAttention(source.attentionId)).toMatchObject({
+        attentionId: originalAttention.attentionId,
+        payload: originalAttention.payload,
+        recordedAt: originalAttention.recordedAt,
+      });
+      expect(harness.activations).toEqual(["implement", "implement"]);
+      expect(
+        vi.mocked(harness.lifecycle.start).mock.calls[1]?.[0],
+      ).toMatchObject({
+        initialContext: {
+          incident: {
+            incidentId: incidents[1]!.incidentId,
+            occurrence: 2,
+          },
+        },
+      });
+    },
+  );
 
   it("opens the breaker only after later-pass retries reach the configured threshold", async () => {
     let observedAt = 1_000;

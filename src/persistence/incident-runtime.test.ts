@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqlitePersistence } from "./sqlite-persistence.js";
@@ -97,7 +98,7 @@ describe("incident runtime persistence", () => {
     restarted.close();
   });
 
-  it("converges repeated admission and restart on one incident identity", async () => {
+  it("converges restart within one occurrence and allocates after terminal state", async () => {
     const { stateDirectory, store } = await persistence();
     const input = {
       attentionId: "production:sample:task:17:first",
@@ -106,6 +107,7 @@ describe("incident runtime persistence", () => {
       createdAt: 1_000,
       incidentId: `incident:${"a".repeat(64)}`,
       maximumConcurrent: 3,
+      occurrence: 1,
       sourceInstanceId: "task-17",
       taskId: 17,
     };
@@ -116,8 +118,92 @@ describe("incident runtime persistence", () => {
 
     const restarted = new SqlitePersistence({ stateDirectory });
     expect(restarted.admitIncident(input).kind).toBe("existing");
-    expect(restarted.listIncidentRuntime()).toHaveLength(1);
+    const first = restarted.listIncidentRuntime()[0]!;
+    restarted.writeIncidentRuntime({ ...first, state: "done" });
+    const recurrence = {
+      ...input,
+      cooldownMilliseconds: 0,
+      createdAt: 2_000,
+      incidentId: `incident:${"b".repeat(64)}`,
+      occurrence: 2,
+    };
+    expect(restarted.admitIncident(recurrence)).toMatchObject({
+      kind: "admitted",
+      runtime: { occurrence: 2 },
+    });
     restarted.close();
+
+    const replayed = new SqlitePersistence({ stateDirectory });
+    expect(replayed.admitIncident(recurrence).kind).toBe("existing");
+    expect(replayed.listIncidentRuntime()).toMatchObject([
+      { incidentId: input.incidentId, occurrence: 1, state: "done" },
+      { incidentId: recurrence.incidentId, occurrence: 2, state: "starting" },
+    ]);
+    expect(() =>
+      replayed.admitIncident({
+        ...recurrence,
+        incidentId: `incident:${"c".repeat(64)}`,
+        occurrence: 3,
+      }),
+    ).toThrow("changed durable identity");
+    replayed.close();
+  });
+
+  it("migrates one retained incident as occurrence one without changing identity", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "incident-runtime-"));
+    directories.push(stateDirectory);
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_incident_runtime (
+        incident_id TEXT PRIMARY KEY,
+        attention_id TEXT NOT NULL UNIQUE,
+        code TEXT NOT NULL,
+        task_id INTEGER NOT NULL CHECK (task_id > 0),
+        source_instance_id TEXT,
+        created_at INTEGER NOT NULL CHECK (created_at >= 0),
+        state TEXT NOT NULL CHECK (state IN ('starting', 'waiting', 'done', 'failed')),
+        provider TEXT,
+        stage_id TEXT,
+        stage_entered_at INTEGER,
+        session_key TEXT,
+        thread_id TEXT,
+        diagnosis_json TEXT,
+        accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
+        rejection_operation_ids_json TEXT NOT NULL DEFAULT '[]'
+      );
+      CREATE INDEX heddle_incident_runtime_code_time
+        ON heddle_incident_runtime(code, created_at);
+      INSERT INTO heddle_incident_runtime
+        (incident_id, attention_id, code, task_id, created_at, state)
+      VALUES
+        ('incident:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+         'production:sample:task:17', 'sample-error', 17, 1000, 'done');
+    `);
+    legacy.close();
+
+    const store = new SqlitePersistence({ stateDirectory });
+    expect(store.listIncidentRuntime()).toMatchObject([
+      {
+        attentionId: "production:sample:task:17",
+        incidentId: `incident:${"a".repeat(64)}`,
+        occurrence: 1,
+        state: "done",
+      },
+    ]);
+    expect(
+      store.admitIncident({
+        attentionId: "production:sample:task:17",
+        code: "sample-error",
+        cooldownMilliseconds: 0,
+        createdAt: 2_000,
+        incidentId: `incident:${"b".repeat(64)}`,
+        maximumConcurrent: 3,
+        occurrence: 2,
+        taskId: 17,
+      }),
+    ).toMatchObject({ kind: "admitted", runtime: { occurrence: 2 } });
+    store.close();
   });
 
   it("bounds varying incident identities by code cooldown and concurrency", async () => {
@@ -132,6 +218,7 @@ describe("incident runtime persistence", () => {
         ...input,
         cooldownMilliseconds: 100,
         maximumConcurrent: 2,
+        occurrence: 1,
         taskId: 17,
       });
 

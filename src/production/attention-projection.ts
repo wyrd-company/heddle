@@ -68,6 +68,19 @@ const taskForInstance = (
   return validTaskId(matches[0]!.taskId, attentionId);
 };
 
+const latestIncidentForAttention = (
+  incidents: readonly IncidentRuntimeRecord[],
+  attentionId: string,
+): IncidentRuntimeRecord | undefined =>
+  incidents.reduce<IncidentRuntimeRecord | undefined>(
+    (latest, runtime) =>
+      runtime.attentionId === attentionId &&
+      (latest === undefined || runtime.occurrence > latest.occurrence)
+        ? runtime
+        : latest,
+    undefined,
+  );
+
 const projectEscalation = (
   payload: Payload,
   instanceId: string,
@@ -257,8 +270,7 @@ export const projectProductionAttention = (
       taskForInstance(instanceId, instanceRuntimes, attentionId),
       attentionId,
       kind,
-      incidents.find((runtime) => runtime.attentionId === attentionId)
-        ?.incidentId,
+      latestIncidentForAttention(incidents, attentionId)?.incidentId,
     );
   }
   if (
@@ -299,6 +311,7 @@ export const projectProductionAttention = (
     )
       ? productionErrorIncidentId(attentionId)
       : null;
+    const latestIncident = latestIncidentForAttention(incidents, attentionId);
     if (
       incidentIdValue !== undefined &&
       incidentIdValue !== expectedIncidentId
@@ -385,7 +398,7 @@ export const projectProductionAttention = (
       actions,
       attentionId,
       ...(typeof expectedIncidentId === "string"
-        ? { incidentId: expectedIncidentId }
+        ? { incidentId: latestIncident?.incidentId ?? expectedIncidentId }
         : {}),
       ...(typeof instanceIdValue === "string"
         ? { instanceId: instanceIdValue }

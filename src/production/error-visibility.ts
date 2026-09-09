@@ -31,8 +31,19 @@ export type ProductionErrorCode = string;
 const floorMessage =
   "An incident cannot be raised for this error. Operator action is required.";
 
-export const productionErrorIncidentId = (attentionId: string): string =>
-  `incident:${createHash("sha256").update(attentionId).digest("hex")}`;
+export const productionErrorIncidentId = (
+  attentionId: string,
+  occurrence = 1,
+): string => {
+  if (!Number.isSafeInteger(occurrence) || occurrence <= 0) {
+    throw new TypeError("Incident occurrence must be a positive safe integer");
+  }
+  const identity =
+    occurrence === 1
+      ? attentionId
+      : JSON.stringify({ attentionId, occurrence, type: "incident" });
+  return `incident:${createHash("sha256").update(identity).digest("hex")}`;
+};
 
 export const productionErrorIncidentEligible = (
   code: ProductionErrorCode,

@@ -318,6 +318,7 @@ describe("production instance controller", () => {
       code: failure.code,
       createdAt: 1_200,
       incidentId: productionErrorIncidentId(attentionId),
+      occurrence: 1,
       rejectionOperationIds: [],
       state: "failed",
       taskId: task.id,
@@ -353,6 +354,137 @@ describe("production instance controller", () => {
     ).toMatchObject({ failureCount: 1, kind: "retry-scheduled" });
     persistence.close();
   });
+
+  it.each(["per-code-cooldown", "concurrency-cap"] as const)(
+    "resumes synchronization and resolves after %s suppresses incident admission",
+    async (suppressionReason) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-suppressed-incident-"));
+      const persistence = new SqlitePersistence({
+        stateDirectory: join(root, "state"),
+      });
+      const task: BoardTask = {
+        blocked: false,
+        dependencies: [],
+        frontMatter: {},
+        id: 12,
+        priority: "medium",
+        status: "in-progress",
+        tags: [],
+        title: "Arrange inventory",
+      };
+      persistence.createInstance("sample-12", {
+        correlationTokens: {},
+        flowcraftContext: {
+          awaitingNodeIds: [],
+          blueprintBlobHash: "0123456789012345678901234567890123456789",
+          blueprintPath: "blueprints/sample.json",
+          completedOperations: {},
+          executionIds: ["sample-execution"],
+          nextTransitionNumber: 2,
+          pendingAttentions: [],
+          pendingTransition: null,
+          serializedContext: "{}",
+          status: "completed",
+        },
+        handoffs: [],
+        todoState: null,
+      });
+      persistence.writeReconcilerRuntime({
+        boardStatus: task.status,
+        instanceId: "sample-12",
+        state: "running",
+        taskId: task.id,
+      });
+      const attention = new DurableAttentionQueue(persistence);
+      const attentionId =
+        "production:instance-synchronization-failed:task:12:sample-12";
+      await attention.raise({
+        attentionId,
+        code: "instance-synchronization-failed",
+        error: { cause: null, message: "Synthetic failure", name: "Error" },
+        instanceId: "sample-12",
+        kind: "production-error",
+        message: "Synthetic failure",
+        taskId: task.id,
+      });
+      const failure = {
+        attentionId,
+        code: "instance-synchronization-failed",
+        failureThreshold: 3,
+        retryDelayMilliseconds: 100,
+      };
+      persistence.observeIncidentFailure({ ...failure, observedAt: 1_000 });
+      persistence.observeIncidentFailure({ ...failure, observedAt: 1_100 });
+      persistence.observeIncidentFailure({ ...failure, observedAt: 1_200 });
+      const limitingAttentionId = `limiting-${suppressionReason}`;
+      persistence.writeIncidentRuntime({
+        accepted: false,
+        attentionId: limitingAttentionId,
+        code:
+          suppressionReason === "per-code-cooldown"
+            ? failure.code
+            : "unrelated-failure",
+        createdAt: 1_200,
+        incidentId: productionErrorIncidentId(limitingAttentionId),
+        occurrence: 1,
+        rejectionOperationIds: [],
+        state: suppressionReason === "per-code-cooldown" ? "done" : "waiting",
+        taskId: 19,
+      });
+      const admission = persistence.admitIncident({
+        attentionId,
+        code: failure.code,
+        cooldownMilliseconds:
+          suppressionReason === "per-code-cooldown" ? 100 : 0,
+        createdAt: 1_200,
+        incidentId: productionErrorIncidentId(attentionId),
+        maximumConcurrent: suppressionReason === "concurrency-cap" ? 1 : 3,
+        occurrence: 1,
+        sourceInstanceId: "sample-12",
+        taskId: task.id,
+      });
+      expect(admission).toEqual({
+        kind: "suppressed",
+        reason: suppressionReason,
+      });
+      let now = 1_299;
+      const controller = new ProductionInstanceController(
+        {} as ProductionConfiguration,
+        persistence,
+        {} as ProductionLifecycleRouter,
+        {} as ProductRoutingCatalog,
+        {} as EpicProjectCoordinator,
+        attention,
+        {} as never,
+        "http://127.0.0.1:4774/mcp",
+        async () => "",
+        { readHandoffTemplate: async () => "", repositoryRoot: root },
+        undefined,
+        undefined,
+        () => now,
+      );
+
+      await controller.synchronize([task]);
+      expect(attention.list()).toHaveLength(1);
+      now = 1_300;
+      await controller.synchronize([task]);
+
+      expect(attention.list()).toEqual([]);
+      expect(
+        persistence
+          .listIncidentRuntime()
+          .filter((runtime) => runtime.attentionId === attentionId),
+      ).toEqual([]);
+      expect(persistence.incidentFailureRetryReady(attentionId, now)).toBe(
+        false,
+      );
+      expect(attention.reopen(attentionId)).toBe(true);
+      expect(
+        persistence.observeIncidentFailure({ ...failure, observedAt: now }),
+      ).toMatchObject({ failureCount: 1, kind: "retry-scheduled" });
+      persistence.close();
+    },
+  );
 
   it("does not replay a transition that is active in this service process", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-active-transition-"));

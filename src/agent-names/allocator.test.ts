@@ -322,6 +322,7 @@ describe("agent-name allocator", () => {
         code: "sample-code",
         createdAt: 1,
         incidentId: "incident-one",
+        occurrence: 1,
         rejectionOperationIds: [],
         state: "failed",
         taskId: 1,

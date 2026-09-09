@@ -190,7 +190,7 @@ describe("production attention projection", () => {
     });
   });
 
-  it("links a newly admitted incident to its dead-session attention", () => {
+  it("links dead-session attention to its latest admitted occurrence", () => {
     const attentionId = "attention-failed";
     const incident: IncidentRuntimeRecord = {
       accepted: false,
@@ -198,10 +198,17 @@ describe("production attention projection", () => {
       code: "session-failed",
       createdAt: 1_000,
       incidentId: productionErrorIncidentId(attentionId),
+      occurrence: 1,
       rejectionOperationIds: [],
       sourceInstanceId: "task-41",
       state: "starting",
       taskId: 41,
+    };
+    const recurrence: IncidentRuntimeRecord = {
+      ...incident,
+      createdAt: 2_000,
+      incidentId: productionErrorIncidentId(attentionId, 2),
+      occurrence: 2,
     };
 
     expect(
@@ -216,9 +223,9 @@ describe("production attention projection", () => {
         [runtime],
         undefined,
         undefined,
-        [incident],
+        [{ ...incident, state: "done" }, recurrence],
       ),
-    ).toMatchObject({ incidentId: incident.incidentId, scope: "task:41" });
+    ).toMatchObject({ incidentId: recurrence.incidentId, scope: "task:41" });
   });
 
   it("keeps pre-instance reconciler attention actionless", () => {
@@ -450,5 +457,44 @@ describe("production attention projection", () => {
         [runtime],
       ),
     ).toThrow("repeats option 'Same'");
+  });
+
+  it("links recurring production attention to its latest admitted occurrence", () => {
+    const attentionId = "attention-production-recurrence";
+    const first: IncidentRuntimeRecord = {
+      accepted: false,
+      attentionId,
+      code: "unregistered-production-failure",
+      createdAt: 1_000,
+      incidentId: productionErrorIncidentId(attentionId),
+      occurrence: 1,
+      rejectionOperationIds: [],
+      state: "done",
+      taskId: 41,
+    };
+    const second: IncidentRuntimeRecord = {
+      ...first,
+      createdAt: 2_000,
+      incidentId: productionErrorIncidentId(attentionId, 2),
+      occurrence: 2,
+      state: "waiting",
+    };
+
+    expect(
+      projectProductionAttention(
+        record(attentionId, {
+          code: first.code,
+          incidentId: first.incidentId,
+          instanceId: null,
+          kind: "production-error",
+          message: "Production failed",
+          taskId: first.taskId,
+        }),
+        [],
+        undefined,
+        undefined,
+        [second, first],
+      ),
+    ).toMatchObject({ incidentId: second.incidentId });
   });
 });

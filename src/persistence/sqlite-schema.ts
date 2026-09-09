@@ -5,6 +5,33 @@
 
 import type Database from "better-sqlite3";
 
+const incidentRuntimeTable = `
+  CREATE TABLE IF NOT EXISTS heddle_incident_runtime (
+    incident_id TEXT PRIMARY KEY,
+    attention_id TEXT NOT NULL,
+    occurrence INTEGER NOT NULL CHECK (occurrence > 0),
+    code TEXT NOT NULL,
+    task_id INTEGER NOT NULL CHECK (task_id > 0),
+    source_instance_id TEXT,
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    state TEXT NOT NULL CHECK (state IN ('starting', 'waiting', 'done', 'failed')),
+    provider TEXT,
+    stage_id TEXT,
+    stage_entered_at INTEGER,
+    session_key TEXT,
+    thread_id TEXT,
+    diagnosis_json TEXT,
+    accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
+    rejection_operation_ids_json TEXT NOT NULL DEFAULT '[]',
+    UNIQUE(attention_id, occurrence)
+  );
+`;
+
+const incidentRuntimeCodeIndex = `
+  CREATE INDEX IF NOT EXISTS heddle_incident_runtime_code_time
+    ON heddle_incident_runtime(code, created_at);
+`;
+
 export const initializePersistenceSchema = (
   database: Database.Database,
 ): void => {
@@ -54,26 +81,8 @@ export const initializePersistenceSchema = (
       resolved_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS heddle_incident_runtime (
-      incident_id TEXT PRIMARY KEY,
-      attention_id TEXT NOT NULL UNIQUE,
-      code TEXT NOT NULL,
-      task_id INTEGER NOT NULL CHECK (task_id > 0),
-      source_instance_id TEXT,
-      created_at INTEGER NOT NULL CHECK (created_at >= 0),
-      state TEXT NOT NULL CHECK (state IN ('starting', 'waiting', 'done', 'failed')),
-      provider TEXT,
-      stage_id TEXT,
-      stage_entered_at INTEGER,
-      session_key TEXT,
-      thread_id TEXT,
-      diagnosis_json TEXT,
-      accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
-      rejection_operation_ids_json TEXT NOT NULL DEFAULT '[]'
-    );
-
-    CREATE INDEX IF NOT EXISTS heddle_incident_runtime_code_time
-      ON heddle_incident_runtime(code, created_at);
+    ${incidentRuntimeTable}
+    ${incidentRuntimeCodeIndex}
 
     CREATE TABLE IF NOT EXISTS heddle_incident_admission (
       attention_id TEXT PRIMARY KEY,
@@ -248,6 +257,32 @@ export const initializePersistenceSchema = (
       SELECT RAISE(ABORT, 'scheduler pass history is append-only');
     END;
   `);
+
+  const incidentRuntimeColumns = database
+    .prepare("PRAGMA table_info(heddle_incident_runtime)")
+    .all() as Array<{ name: string }>;
+  if (!incidentRuntimeColumns.some(({ name }) => name === "occurrence")) {
+    database.transaction(() => {
+      database.exec(`
+        ALTER TABLE heddle_incident_runtime
+          RENAME TO heddle_incident_runtime_without_occurrence;
+        DROP INDEX IF EXISTS heddle_incident_runtime_code_time;
+        ${incidentRuntimeTable}
+        INSERT INTO heddle_incident_runtime
+          (incident_id, attention_id, occurrence, code, task_id,
+           source_instance_id, created_at, state, provider, stage_id,
+           stage_entered_at, session_key, thread_id, diagnosis_json, accepted,
+           rejection_operation_ids_json)
+        SELECT incident_id, attention_id, 1, code, task_id,
+               source_instance_id, created_at, state, provider, stage_id,
+               stage_entered_at, session_key, thread_id, diagnosis_json,
+               accepted, rejection_operation_ids_json
+        FROM heddle_incident_runtime_without_occurrence;
+        DROP TABLE heddle_incident_runtime_without_occurrence;
+        ${incidentRuntimeCodeIndex}
+      `);
+    })();
+  }
 
   const attentionColumns = database
     .prepare("PRAGMA table_info(heddle_attention)")

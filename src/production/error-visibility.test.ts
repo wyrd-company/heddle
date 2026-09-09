@@ -31,10 +31,16 @@ describe("production error visibility", () => {
     );
   });
 
-  it("derives one deterministic incident identity from an eligible attention identity", () => {
+  it("derives deterministic incident identities for numbered condition occurrences", () => {
     const attentionId = "production:task-reconciliation-failed:task:17";
     const first = productionErrorIncidentId(attentionId);
+    const second = productionErrorIncidentId(attentionId, 2);
+    const third = productionErrorIncidentId(attentionId, 3);
     expect(productionErrorIncidentId(attentionId)).toBe(first);
+    expect(productionErrorIncidentId(attentionId, 1)).toBe(first);
+    expect(second).not.toBe(first);
+    expect(productionErrorIncidentId(attentionId, 2)).toBe(second);
+    expect(third).not.toBe(second);
     expect(productionErrorIncidentId(`${attentionId}:other`)).not.toBe(first);
     expect(
       productionErrorAttention({
@@ -46,6 +52,9 @@ describe("production error visibility", () => {
     ).toMatchObject({
       incidentId: expect.stringMatching(/^incident:[a-f0-9]{64}$/),
     });
+    expect(() => productionErrorIncidentId(attentionId, 0)).toThrow(
+      "positive safe integer",
+    );
   });
 
   it.each([
