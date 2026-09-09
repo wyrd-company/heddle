@@ -65,9 +65,11 @@ describe("LifecycleEngine", () => {
         "todo-template": "sample",
       },
     );
+    const authoredChanged = { ...changed };
+    delete (authoredChanged as { id?: string }).id;
     await writeFile(
       join(fixture.repositoryRoot, fixture.blueprintPath),
-      JSON.stringify(changed),
+      JSON.stringify(authoredChanged),
     );
 
     await expect(fixture.engine.agentNameThemeKind("sample-a")).resolves.toBe(
