@@ -31,6 +31,10 @@ const schemaPath = resolve(
   import.meta.dirname,
   "../../schemas/lifecycle-blueprint.json",
 );
+const adjudicationSchemaPath = resolve(
+  import.meta.dirname,
+  "../../schemas/adjudication-policy.json",
+);
 const execute = promisify(execFile);
 
 const json = async (path: string): Promise<unknown> =>
@@ -266,5 +270,25 @@ export const validateBlueprintRepository = async (
     assertDeliveryHandoffs(artifactId, blueprint.nodes);
     await assertTemplateArtifacts(artifactId, blueprint.nodes, root);
   }
-  return filenames.map((filename) => basename(filename, ".json"));
+  const artifacts = filenames.map((filename) => basename(filename, ".json"));
+  const adjudicationPath = join(root, "adjudication", "policy.json");
+  const adjudication = await stat(adjudicationPath).catch(() => undefined);
+  if (adjudication !== undefined) {
+    if (!adjudication.isFile()) {
+      throw new BlueprintValidationError(
+        "Adjudication policy must be a JSON file",
+      );
+    }
+    const adjudicationValidator = new Ajv2020({
+      allErrors: true,
+      strict: false,
+    }).compile((await json(adjudicationSchemaPath)) as object);
+    if (!adjudicationValidator(await json(adjudicationPath))) {
+      throw new BlueprintValidationError(
+        `Adjudication policy violates its schema: ${JSON.stringify(adjudicationValidator.errors)}`,
+      );
+    }
+    artifacts.push("adjudication/policy");
+  }
+  return artifacts;
 };

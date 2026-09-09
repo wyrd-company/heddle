@@ -64,6 +64,11 @@ export interface WorkflowMcpDisposition extends StoredWorkflowMcpDisposition {
 }
 
 export interface WorkflowMcpSessionBinding {
+  adjudication?: {
+    escalationId: string;
+    modelSlug: string;
+    ownerSessionKey: string;
+  };
   dispositions: WorkflowMcpDisposition[];
   instance: InstanceRecord;
   parentSessionKey?: string;
@@ -147,6 +152,24 @@ export type StoredStageHandoff = {
     rootItemId: string;
   };
   workflowMcp: StoredWorkflowMcpStageContract;
+};
+
+export type StoredAdjudicationHandoff = {
+  correlationToken: string;
+  escalationId: string;
+  handoff: string;
+  kind: "adjudication-handoff";
+  modelSlug: string;
+  ownerSessionKey: string;
+  sessionKey: string;
+};
+
+export type AdjudicationHandoffDocument = {
+  context: JsonValue;
+  decisionBoundary: string;
+  format: "heddle.adjudication-handoff";
+  policy: { blobHash: string; path: string };
+  version: 1;
 };
 
 export type StageHandoffDocument = {

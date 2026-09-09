@@ -38,6 +38,18 @@
     "t3"
   ],
   "properties": {
+    "adjudication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyPath", "providerAlias"],
+      "properties": {
+        "policyPath": {
+          "type": "string",
+          "pattern": "^adjudication/[a-z][a-z-]*\\.json$"
+        },
+        "providerAlias": { "type": "string", "minLength": 1 }
+      }
+    },
     "adHocProject": {
       "type": "object",
       "additionalProperties": false,

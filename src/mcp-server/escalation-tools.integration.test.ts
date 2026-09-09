@@ -23,6 +23,197 @@ import {
 afterEach(cleanupEscalationFixtures);
 
 describe("workflow MCP escalation tools", () => {
+  it("routes each top-level escalation occurrence to one fresh adjudication session", async () => {
+    const starts: Array<{ escalationId: string; sessionKey: string }> = [];
+    const subject = await createEscalationFixture({
+      adjudication: {
+        start: async (opened) => {
+          starts.push({
+            escalationId: opened.escalationId,
+            sessionKey: opened.answeringAuthority.sessionKey,
+          });
+          return { modelSlug: "sample-capable-model" };
+        },
+        stop: async () => undefined,
+      },
+    });
+    createEscalationInstance(subject.persistence, "instance-adjudication", [
+      {
+        sessionKey: "top",
+        token: "token-adjudication",
+        tools: ["escalate"],
+      },
+    ]);
+    const binding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-adjudication");
+
+    for (const escalationId of ["first-choice", "second-choice"]) {
+      await subject.coordinator.escalate(binding, {
+        escalationId,
+        questions: sampleEscalationQuestions,
+      });
+    }
+    await vi.waitFor(() => expect(starts).toHaveLength(2));
+
+    expect(new Set(starts.map(({ sessionKey }) => sessionKey))).toHaveLength(2);
+    expect(subject.attentions).toHaveLength(0);
+    await subject.coordinator.replayPendingRoutes();
+    expect(starts).toHaveLength(2);
+  });
+
+  it("fails a top-level adjudication start closed to operator attention", async () => {
+    const subject = await createEscalationFixture({
+      adjudication: {
+        start: async () => {
+          throw new Error("sample alias exhausted");
+        },
+        stop: async () => undefined,
+      },
+    });
+    createEscalationInstance(subject.persistence, "instance-start-failure", [
+      {
+        sessionKey: "top",
+        token: "token-start-failure",
+        tools: ["escalate"],
+      },
+    ]);
+    const binding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-start-failure");
+
+    await subject.coordinator.escalate(binding, {
+      escalationId: "start-failure",
+      questions: sampleEscalationQuestions,
+    });
+    await vi.waitFor(() => expect(subject.notifications).toHaveLength(1));
+
+    expect(subject.attentions[0]).toMatchObject({
+      adjudication: { cause: "sample alias exhausted" },
+      questions: sampleEscalationQuestions,
+    });
+    expect(subject.notifications).toEqual(subject.attentions);
+  });
+
+  it("answers through the adjudication authority and records model reasoning", async () => {
+    const stopped: string[] = [];
+    const subject = await createEscalationFixture({
+      adjudication: {
+        start: async () => ({ modelSlug: "sample-capable-model" }),
+        stop: async ({ sessionKey }) => void stopped.push(sessionKey),
+      },
+    });
+    createEscalationInstance(subject.persistence, "instance-decided", [
+      { sessionKey: "top", token: "token-decided", tools: ["escalate"] },
+    ]);
+    const stageBinding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-decided");
+    await subject.coordinator.escalate(stageBinding, {
+      escalationId: "decided-choice",
+      questions: sampleEscalationQuestions,
+    });
+    const pending =
+      subject.coordinator.pendingEscalations("instance-decided")[0]!;
+    await vi.waitFor(() =>
+      expect(
+        subject.persistence
+          .replayEvents("instance-decided")
+          .some(({ type }) => type === "mcp:escalation-adjudication-started"),
+      ).toBe(true),
+    );
+
+    await subject.coordinator.answerAsSession(
+      {
+        ...stageBinding,
+        adjudication: {
+          escalationId: pending.escalationId,
+          modelSlug: "sample-capable-model",
+          ownerSessionKey: pending.ownerSessionKey,
+        },
+        sessionKey:
+          pending.answeringAuthority.kind === "adjudication"
+            ? pending.answeringAuthority.sessionKey
+            : "unreachable",
+      },
+      {
+        answers: sampleEscalationAnswer,
+        escalationId: pending.escalationId,
+        ownerSessionKey: pending.ownerSessionKey,
+        prose: "The choice preserves the current epic scope.",
+      },
+    );
+
+    expect(subject.attentions).toHaveLength(0);
+    expect(subject.deliveredAnswers[0]?.answered).toMatchObject({
+      answeredBy: { kind: "adjudication" },
+      modelSlug: "sample-capable-model",
+      prose: "The choice preserves the current epic scope.",
+    });
+    expect(stopped).toEqual([
+      pending.answeringAuthority.kind === "adjudication"
+        ? pending.answeringAuthority.sessionKey
+        : "unreachable",
+    ]);
+  });
+
+  it("declines once without shopping for another model and carries reasoning to the operator", async () => {
+    let starts = 0;
+    const subject = await createEscalationFixture({
+      adjudication: {
+        start: async () => {
+          starts += 1;
+          return { modelSlug: "sample-capable-model" };
+        },
+        stop: async () => undefined,
+      },
+    });
+    createEscalationInstance(subject.persistence, "instance-declined", [
+      { sessionKey: "top", token: "token-declined", tools: ["escalate"] },
+    ]);
+    const stageBinding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-declined");
+    await subject.coordinator.escalate(stageBinding, {
+      escalationId: "declined-choice",
+      questions: sampleEscalationQuestions,
+    });
+    const pending =
+      subject.coordinator.pendingEscalations("instance-declined")[0]!;
+    await vi.waitFor(() => expect(starts).toBe(1));
+
+    await subject.coordinator.declineAdjudication(
+      {
+        ...stageBinding,
+        adjudication: {
+          escalationId: pending.escalationId,
+          modelSlug: "sample-capable-model",
+          ownerSessionKey: pending.ownerSessionKey,
+        },
+        sessionKey:
+          pending.answeringAuthority.kind === "adjudication"
+            ? pending.answeringAuthority.sessionKey
+            : "unreachable",
+      },
+      {
+        reason: "The choice changes committed product intent.",
+        reasoning: "Both options change an operator-reserved outcome.",
+      },
+    );
+    await vi.waitFor(() => expect(subject.notifications).toHaveLength(1));
+    await subject.coordinator.replayPendingRoutes();
+
+    expect(starts).toBe(1);
+    expect(subject.attentions[0]).toMatchObject({
+      adjudication: {
+        cause: "The choice changes committed product intent.",
+        modelSlug: "sample-capable-model",
+        reasoning: "Both options change an operator-reserved outcome.",
+      },
+      questions: sampleEscalationQuestions,
+    });
+  });
+
   it("publishes the immediate-return behavior contract with the escalate tool", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-description", [

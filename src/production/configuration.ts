@@ -57,6 +57,11 @@ export type PushoverConfiguration = {
   userKey: string;
 };
 
+export type AdjudicationConfiguration = {
+  policyPath: string;
+  providerAlias: string;
+};
+
 export const incidentSeverityLevels = [
   "low",
   "moderate",
@@ -75,6 +80,7 @@ export type IncidentConfiguration = {
 };
 
 export type ProductionConfiguration = {
+  adjudication?: AdjudicationConfiguration;
   adHocProject: AdHocProjectConfiguration;
   boardDirectory: string;
   cadenceMilliseconds: number;
@@ -137,6 +143,21 @@ const validateCommonProductionConfiguration = (
   validateBudgetAliases = true,
 ): void => {
   requireNonEmpty("adHocProject.name", configuration.adHocProject.name);
+  if (configuration.adjudication !== undefined) {
+    requireNonEmpty(
+      "adjudication.providerAlias",
+      configuration.adjudication.providerAlias,
+    );
+    if (
+      !/^adjudication\/[a-z][a-z-]*\.json$/.test(
+        configuration.adjudication.policyPath,
+      )
+    ) {
+      throw new TypeError(
+        "adjudication.policyPath must name an adjudication JSON artifact",
+      );
+    }
+  }
   requireNonEmpty(
     "adHocProject.projectId",
     configuration.adHocProject.projectId,
@@ -170,6 +191,17 @@ const validateCommonProductionConfiguration = (
   ) {
     throw new TypeError(
       `incident.approvalSeverityThreshold must be one of '${incidentSeverityLevels.join("', '")}'`,
+    );
+  }
+  if (
+    configuration.adjudication !== undefined &&
+    !Object.hasOwn(
+      configuration.providerAliases,
+      configuration.adjudication.providerAlias,
+    )
+  ) {
+    throw new TypeError(
+      `adjudication.providerAlias '${configuration.adjudication.providerAlias}' is not configured in providerAliases`,
     );
   }
   if (

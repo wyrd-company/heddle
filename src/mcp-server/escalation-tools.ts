@@ -4,6 +4,7 @@
 // ---
 
 import type { McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
 
 import {
   escalationAnswerSchema,
@@ -59,7 +60,34 @@ const registerAnswer = (
   );
 };
 
+const registerDecline = (
+  server: McpServer,
+  context: WorkflowMcpToolContext,
+): void => {
+  server.registerTool(
+    "decline",
+    {
+      description:
+        "Decline the bound adjudication when the decision belongs to the operator",
+      inputSchema: z
+        .object({
+          reason: z.string().trim().min(1).max(4_000),
+          reasoning: z.string().trim().min(1).max(4_000),
+        })
+        .strict(),
+    },
+    async (input) => {
+      await context.escalationCoordinator.declineAdjudication(
+        context.binding,
+        input,
+      );
+      return result({ declined: true });
+    },
+  );
+};
+
 export const workflowMcpEscalationTools = (): WorkflowMcpToolContributor[] => [
   { name: "answer", register: registerAnswer },
+  { name: "decline", register: registerDecline },
   { name: "escalate", register: registerEscalate },
 ];

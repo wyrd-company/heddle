@@ -5,6 +5,8 @@
 
 import {
   escalationAnswerSchema,
+  adjudicationSessionKey,
+  escalationAttentionId,
   escalationKey,
   type AnsweredEscalation,
   type EscalationAnswerInput,
@@ -41,6 +43,21 @@ export interface SessionEscalationRouter {
   steer(escalation: SessionEscalation): Promise<void>;
 }
 
+export interface AdjudicationEscalationRouter {
+  start(
+    escalation: PendingEscalation & {
+      answeringAuthority: Extract<
+        EscalationAnsweringAuthority,
+        { kind: "adjudication" }
+      >;
+    },
+  ): Promise<{ modelSlug: string }>;
+  stop(input: {
+    reason: "answered" | "declined" | "failed";
+    sessionKey: string;
+  }): Promise<void>;
+}
+
 export interface EscalationAnswerDelivery {
   deliver(input: {
     answered: AnsweredEscalation;
@@ -59,6 +76,7 @@ export interface EscalationDecisionLog {
 }
 
 export type EscalationCoordinatorOptions = {
+  adjudication?: AdjudicationEscalationRouter;
   attention: EscalationAttentionQueue;
   containPushoverFailure?: (
     error: unknown,
@@ -85,9 +103,13 @@ const attentionFrom = (opened: PendingEscalation): EscalationAttention => ({
   ownerSessionKey: opened.ownerSessionKey,
   questions: opened.questions,
   stage: opened.stage,
+  ...(opened.adjudication === undefined
+    ? {}
+    : { adjudication: opened.adjudication }),
 });
 
 export class EscalationCoordinator {
+  readonly #adjudication?: AdjudicationEscalationRouter;
   readonly #attention: EscalationAttentionQueue;
   readonly #containPushoverFailure?: EscalationCoordinatorOptions["containPushoverFailure"];
   readonly #containSettlementFailure?: EscalationCoordinatorOptions["containSettlementFailure"];
@@ -103,6 +125,7 @@ export class EscalationCoordinator {
   readonly #settlements = new Map<string, Promise<void>>();
 
   constructor(options: EscalationCoordinatorOptions) {
+    this.#adjudication = options.adjudication;
     this.#attention = options.attention;
     this.#containPushoverFailure = options.containPushoverFailure;
     this.#containSettlementFailure = options.containSettlementFailure;
@@ -120,7 +143,23 @@ export class EscalationCoordinator {
     binding: WorkflowMcpSessionBinding,
     input: EscalationInput,
   ): Promise<EscalationResult> {
-    const history = this.#history.open(binding, input, this.#now());
+    const history = this.#history.open(
+      binding,
+      input,
+      this.#now(),
+      this.#adjudication === undefined
+        ? { kind: "operator" }
+        : {
+            kind: "adjudication",
+            sessionKey: adjudicationSessionKey(
+              escalationAttentionId(
+                binding.instance.instanceId,
+                binding.sessionKey,
+                input.escalationId,
+              ),
+            ),
+          },
+    );
     if (history.answered === undefined) {
       void this.#ensureRouted(history.opened).catch(() => undefined);
     } else {
@@ -150,6 +189,43 @@ export class EscalationCoordinator {
     binding: WorkflowMcpSessionBinding,
     input: EscalationAnswerInput,
   ): Promise<AnsweredEscalation> {
+    if (binding.adjudication !== undefined) {
+      const occurrence = binding.adjudication;
+      const opened = this.#requireOpened({
+        escalationId: occurrence.escalationId,
+        instanceId: binding.instance.instanceId,
+        ownerSessionKey: occurrence.ownerSessionKey,
+      });
+      try {
+        const parsed = escalationAnswerSchema.parse(input);
+        if (
+          parsed.escalationId !== occurrence.escalationId ||
+          parsed.ownerSessionKey !== occurrence.ownerSessionKey
+        ) {
+          throw new TypeError(
+            "Adjudication may answer only its bound escalation occurrence",
+          );
+        }
+        if (parsed.prose === undefined) {
+          throw new TypeError("Adjudication answer requires reasoning");
+        }
+        const answered = await this.#answer(
+          opened,
+          parsed.answers,
+          { kind: "adjudication", sessionKey: binding.sessionKey },
+          parsed.prose,
+          occurrence.modelSlug,
+        );
+        await this.#adjudication?.stop({
+          reason: "answered",
+          sessionKey: binding.sessionKey,
+        });
+        return answered;
+      } catch (error) {
+        await this.failAdjudication(binding, error);
+        throw error;
+      }
+    }
     const parsed = escalationAnswerSchema.parse(input);
     const opened = this.#requireOpened({
       ...parsed,
@@ -162,7 +238,74 @@ export class EscalationCoordinator {
     return this.#answer(opened, parsed.answers, authority, parsed.prose);
   }
 
+  async declineAdjudication(
+    binding: WorkflowMcpSessionBinding,
+    input: { reason: string; reasoning: string },
+  ): Promise<void> {
+    const occurrence = binding.adjudication;
+    if (occurrence === undefined) {
+      throw new TypeError("Only an adjudication session may decline");
+    }
+    const reason = input.reason.trim();
+    const reasoning = input.reasoning.trim();
+    if (reason === "" || reasoning === "") {
+      throw new TypeError("Adjudication decline requires reason and reasoning");
+    }
+    await this.moveAnswerAuthority({
+      adjudication: {
+        cause: reason,
+        modelSlug: occurrence.modelSlug,
+        reasoning,
+      },
+      escalationId: occurrence.escalationId,
+      instanceId: binding.instance.instanceId,
+      ownerSessionKey: occurrence.ownerSessionKey,
+      reason: `Adjudication declined: ${reason}`,
+      to: { kind: "operator" },
+    });
+    await this.#adjudication?.stop({
+      reason: "declined",
+      sessionKey: binding.sessionKey,
+    });
+  }
+
+  async failAdjudication(
+    binding: WorkflowMcpSessionBinding,
+    cause: unknown,
+  ): Promise<void> {
+    const occurrence = binding.adjudication;
+    if (occurrence === undefined) return;
+    const message = cause instanceof Error ? cause.message : String(cause);
+    const opened = this.#history.find(
+      binding.instance.instanceId,
+      occurrence.ownerSessionKey,
+      occurrence.escalationId,
+    );
+    if (
+      opened.opened?.answeringAuthority.kind !== "adjudication" ||
+      opened.opened.answeringAuthority.sessionKey !== binding.sessionKey
+    ) {
+      return;
+    }
+    await this.moveAnswerAuthority({
+      adjudication: {
+        cause: message,
+        modelSlug: occurrence.modelSlug,
+      },
+      escalationId: occurrence.escalationId,
+      instanceId: binding.instance.instanceId,
+      ownerSessionKey: occurrence.ownerSessionKey,
+      reason: `Adjudication failed: ${message}`,
+      to: { kind: "operator" },
+    });
+    await this.#adjudication?.stop({
+      reason: "failed",
+      sessionKey: binding.sessionKey,
+    });
+  }
+
   async moveAnswerAuthority(input: {
+    adjudication?: PendingEscalation["adjudication"];
     escalationId: string;
     instanceId: string;
     ownerSessionKey: string;
@@ -170,7 +313,12 @@ export class EscalationCoordinator {
     to: EscalationAnsweringAuthority;
   }): Promise<PendingEscalation> {
     const opened = this.#requireOpened(input);
-    const moved = this.#history.moveAuthority(opened, input.to, input.reason);
+    const moved = this.#history.moveAuthority(
+      opened,
+      input.to,
+      input.reason,
+      input.adjudication,
+    );
     await this.#ensureRouted(moved);
     return moved;
   }
@@ -294,8 +442,15 @@ export class EscalationCoordinator {
     answers: EscalationAnswers,
     answeredBy: EscalationAnsweringAuthority,
     prose?: string,
+    modelSlug?: string,
   ): Promise<AnsweredEscalation> {
-    const answered = this.#history.answer(opened, answers, answeredBy, prose);
+    const answered = this.#history.answer(
+      opened,
+      answers,
+      answeredBy,
+      prose,
+      modelSlug,
+    );
     await this.#settle(opened, answered);
     return answered;
   }
@@ -333,6 +488,44 @@ export class EscalationCoordinator {
 
   async #route(opened: PendingEscalation): Promise<void> {
     const types = this.#history.routeTypes(opened);
+    if (opened.answeringAuthority.kind === "adjudication") {
+      if (this.#adjudication === undefined) {
+        throw new Error("Adjudication routing is not configured");
+      }
+      if (!types.has(escalationEventTypes.adjudicationStartIntended)) {
+        this.#history.recordRoute(
+          opened,
+          escalationEventTypes.adjudicationStartIntended,
+          { adjudicationSessionKey: opened.answeringAuthority.sessionKey },
+        );
+      }
+      if (!types.has(escalationEventTypes.adjudicationStarted)) {
+        try {
+          const started = await this.#adjudication.start({
+            ...opened,
+            answeringAuthority: opened.answeringAuthority,
+          });
+          this.#history.recordRoute(
+            opened,
+            escalationEventTypes.adjudicationStarted,
+            {
+              adjudicationSessionKey: opened.answeringAuthority.sessionKey,
+              modelSlug: started.modelSlug,
+            },
+          );
+        } catch (error) {
+          const cause = error instanceof Error ? error.message : String(error);
+          const moved = this.#history.moveAuthority(
+            opened,
+            { kind: "operator" },
+            `Adjudication could not start: ${cause}`,
+            { cause },
+          );
+          await this.#routeOperator(moved);
+        }
+      }
+      return;
+    }
     if (opened.answeringAuthority.kind === "session") {
       if (
         !this.#history.sessionRouteRecorded(
@@ -350,6 +543,11 @@ export class EscalationCoordinator {
       }
       return;
     }
+    await this.#routeOperator(opened);
+  }
+
+  async #routeOperator(opened: PendingEscalation): Promise<void> {
+    const types = this.#history.routeTypes(opened);
     const attention = attentionFrom(opened);
     if (!types.has(escalationEventTypes.attentionRaised)) {
       await this.#attention.raise(attention);

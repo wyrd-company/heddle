@@ -19,6 +19,7 @@ import type { LifecycleSnapshot } from "../engine/index.js";
 import type { WorkflowMcpLifecycle } from "./types.js";
 import {
   EscalationCoordinator,
+  type AdjudicationEscalationRouter,
   type EscalationAttentionQueue,
   type EscalationAnswers,
   type EscalationAttention,
@@ -149,6 +150,7 @@ export const sampleEscalationAnswer: EscalationAnswers = {
 
 export const createEscalationFixture = async (
   options: {
+    adjudication?: AdjudicationEscalationRouter;
     attention?: EscalationAttentionQueue["raise"];
     resume?: WorkflowMcpLifecycle["resume"];
   } = {},
@@ -171,6 +173,9 @@ export const createEscalationFixture = async (
     >["record"]
   >[0][] = [];
   const coordinator = new EscalationCoordinator({
+    ...(options.adjudication === undefined
+      ? {}
+      : { adjudication: options.adjudication }),
     attention: {
       raise: async (value) => {
         attentions.push(value);

@@ -29,6 +29,8 @@ import { dispositionClaimFor } from "./session-disposition-claim.js";
 export const escalationEventTypes = {
   answered: "mcp:escalation-answered",
   authorityMoved: "mcp:escalation-authority-moved",
+  adjudicationStarted: "mcp:escalation-adjudication-started",
+  adjudicationStartIntended: "mcp:escalation-adjudication-start-intended",
   attentionRaised: "mcp:escalation-attention-raised",
   decisionRecorded: "mcp:escalation-decision-recorded",
   deliveryCompleted: "mcp:escalation-delivery-completed",
@@ -39,6 +41,8 @@ export const escalationEventTypes = {
 } as const;
 
 export type EscalationRouteEventType =
+  | typeof escalationEventTypes.adjudicationStarted
+  | typeof escalationEventTypes.adjudicationStartIntended
   | typeof escalationEventTypes.attentionRaised
   | typeof escalationEventTypes.notified
   | typeof escalationEventTypes.parentSteered
@@ -107,6 +111,7 @@ const answeredFrom = (
     escalationId: value["escalationId"],
     ownerSessionKey: value["ownerSessionKey"],
     prose: value["prose"],
+    modelSlug: value["modelSlug"],
   });
 };
 
@@ -122,6 +127,7 @@ export class EscalationHistory {
     binding: WorkflowMcpSessionBinding,
     input: EscalationInput,
     openedAt: string,
+    topLevelAuthority: EscalationAnsweringAuthority = { kind: "operator" },
   ): {
     answered?: AnsweredEscalation;
     opened: PendingEscalation;
@@ -145,7 +151,7 @@ export class EscalationHistory {
       stage: binding.stage.id,
       answeringAuthority:
         binding.parentSessionKey === undefined
-          ? { kind: "operator" }
+          ? topLevelAuthority
           : { kind: "session", sessionKey: binding.parentSessionKey },
     };
     while (true) {
@@ -198,6 +204,7 @@ export class EscalationHistory {
     answers: EscalationAnswers,
     answeredBy: EscalationAnsweringAuthority,
     prose?: string,
+    modelSlug?: string,
   ): AnsweredEscalation {
     validateAnswers(opened, answers);
     const answered: AnsweredEscalation = {
@@ -205,6 +212,7 @@ export class EscalationHistory {
       answeredBy,
       escalationId: opened.escalationId,
       ownerSessionKey: opened.ownerSessionKey,
+      ...(modelSlug === undefined ? {} : { modelSlug }),
       ...(prose === undefined ? {} : { prose }),
     };
     while (true) {
@@ -249,6 +257,7 @@ export class EscalationHistory {
     opened: PendingEscalation,
     to: EscalationAnsweringAuthority,
     reason: string,
+    adjudication?: PendingEscalation["adjudication"],
   ): PendingEscalation {
     if (reason.trim() === "") {
       throw new TypeError("Answering-authority move reason must not be empty");
@@ -288,10 +297,15 @@ export class EscalationHistory {
           ownerSessionKey: opened.ownerSessionKey,
           reason,
           to,
+          ...(adjudication === undefined ? {} : { adjudication }),
         },
       );
       if (claimed !== undefined) {
-        return { ...currentEscalation.opened, answeringAuthority: to };
+        return {
+          ...currentEscalation.opened,
+          answeringAuthority: to,
+          ...(adjudication === undefined ? {} : { adjudication }),
+        };
       }
     }
   }
@@ -398,6 +412,13 @@ export class EscalationHistory {
             answeringAuthority: escalationAnsweringAuthoritySchema.parse(
               value["to"],
             ),
+            ...(value["adjudication"] === undefined
+              ? {}
+              : {
+                  adjudication: value["adjudication"] as NonNullable<
+                    PendingEscalation["adjudication"]
+                  >,
+                }),
           },
         });
       } else if (event.type === escalationEventTypes.answered) {

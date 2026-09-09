@@ -11,7 +11,9 @@ import { assignmentForChild } from "../subagents/delegation-state.js";
 import { requireActiveAssignmentLineage } from "../subagents/delegation-authorization.js";
 import type {
   CorrelationTokenMatch,
+  AdjudicationHandoffDocument,
   StageHandoffDocument,
+  StoredAdjudicationHandoff,
   StoredStageHandoff,
   WorkflowMcpPersistence,
   WorkflowMcpSessionBinding,
@@ -71,6 +73,52 @@ const isStoredStageHandoff = (value: JsonValue): value is StoredStageHandoff =>
       typeof value["todoAssignment"]["rootItemId"] === "string")) &&
   value["workflowMcp"] !== undefined &&
   isWorkflowMcpStageContract(value["workflowMcp"]);
+
+const isStoredAdjudicationHandoff = (
+  value: JsonValue,
+): value is StoredAdjudicationHandoff =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  value["kind"] === "adjudication-handoff" &&
+  typeof value["sessionKey"] === "string" &&
+  typeof value["correlationToken"] === "string" &&
+  typeof value["escalationId"] === "string" &&
+  typeof value["ownerSessionKey"] === "string" &&
+  typeof value["modelSlug"] === "string" &&
+  typeof value["handoff"] === "string";
+
+const parseAdjudicationHandoff = (
+  serialized: string,
+): AdjudicationHandoffDocument => {
+  let value: unknown;
+  try {
+    value = JSON.parse(serialized) as unknown;
+  } catch {
+    throw new CorrelationTokenError();
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    (value as Partial<AdjudicationHandoffDocument>).format !==
+      "heddle.adjudication-handoff" ||
+    (value as Partial<AdjudicationHandoffDocument>).version !== 1 ||
+    Object.hasOwn(value, "correlationToken") ||
+    typeof (value as Partial<AdjudicationHandoffDocument>).decisionBoundary !==
+      "string" ||
+    !Object.hasOwn(value, "context") ||
+    typeof (value as Partial<AdjudicationHandoffDocument>).policy !==
+      "object" ||
+    (value as Partial<AdjudicationHandoffDocument>).policy === null ||
+    typeof (value as AdjudicationHandoffDocument).policy.blobHash !==
+      "string" ||
+    typeof (value as AdjudicationHandoffDocument).policy.path !== "string"
+  ) {
+    throw new CorrelationTokenError();
+  }
+  return value as AdjudicationHandoffDocument;
+};
 
 const parseHandoff = (serialized: string): StageHandoffDocument => {
   let value: unknown;
@@ -152,6 +200,31 @@ export const resolveWorkflowMcpSessionBinding = (
   token: string,
 ): WorkflowMcpSessionBinding => {
   const match = authenticateCorrelationToken(persistence, token);
+  const adjudications = match.instance.state.handoffs
+    .filter(isStoredAdjudicationHandoff)
+    .filter(
+      (handoff) =>
+        handoff.sessionKey === match.sessionKey &&
+        tokenEquals(handoff.correlationToken, token),
+    );
+  if (adjudications.length === 1) {
+    const stored = adjudications[0]!;
+    const handoff = parseAdjudicationHandoff(stored.handoff);
+    return {
+      adjudication: {
+        escalationId: stored.escalationId,
+        modelSlug: stored.modelSlug,
+        ownerSessionKey: stored.ownerSessionKey,
+      },
+      dispositions: [],
+      instance: match.instance,
+      sessionKey: match.sessionKey,
+      stage: { id: "adjudication", skills: [], tools: ["answer", "decline"] },
+      taskContext: handoff.context,
+      token,
+    };
+  }
+  if (adjudications.length > 1) throw new CorrelationTokenError();
   const storedHandoffs = authorityValidStoredStageHandoffsForSession(
     match.instance,
     match.sessionKey,

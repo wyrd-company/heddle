@@ -157,7 +157,7 @@ export const productionSessionTargets = (
   return targets;
 };
 
-const activeSessions = async (
+export const productionActiveSessions = async (
   persistence: SqlitePersistence,
   t3: ProductionT3Client,
 ): Promise<PacingSession[]> => {
@@ -222,7 +222,7 @@ export const createProductionSubagentCoordinator = (options: {
     workflowMcpEndpoint,
   } = options;
   return new SubagentCoordinator({
-    activeSessions: () => activeSessions(persistence, t3),
+    activeSessions: () => productionActiveSessions(persistence, t3),
     bootstrapDependencies: {
       activationEvents: persistence,
       persistence,

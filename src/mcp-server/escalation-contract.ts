@@ -73,10 +73,14 @@ export const escalationAnswerSchema = z
 export const escalationAnsweringAuthoritySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("operator") }).strict(),
   z.object({ kind: z.literal("session"), sessionKey: identifier }).strict(),
+  z
+    .object({ kind: z.literal("adjudication"), sessionKey: identifier })
+    .strict(),
 ]);
 
 export const answeredEscalationSchema = escalationAnswerSchema.extend({
   answeredBy: escalationAnsweringAuthoritySchema,
+  modelSlug: identifier.optional(),
 });
 
 export type EscalationQuestion = z.infer<typeof escalationQuestionSchema>;
@@ -100,6 +104,11 @@ export type EscalationAttention = {
   ownerSessionKey: string;
   questions: EscalationQuestion[];
   stage: string;
+  adjudication?: {
+    cause: string;
+    modelSlug?: string;
+    reasoning?: string;
+  };
 };
 
 export type PendingEscalation = EscalationAttention & {
@@ -123,8 +132,12 @@ export type AnsweredEscalation = {
   answeredBy: EscalationAnsweringAuthority;
   escalationId: string;
   ownerSessionKey: string;
+  modelSlug?: string;
   prose?: string;
 };
+
+export const adjudicationSessionKey = (attentionId: string): string =>
+  `adjudication:${attentionId.slice("escalation:".length)}`;
 
 export const escalationKey = (
   instanceId: string,
