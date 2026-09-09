@@ -223,6 +223,7 @@ describe.skipIf(!t3Binary)(
           },
         },
         escalations: {
+          isAwaitingAnswer: () => false,
           pendingEscalations: () => [],
           requireNoPendingForSession: () => undefined,
         },
