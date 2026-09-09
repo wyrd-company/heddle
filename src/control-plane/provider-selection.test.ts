@@ -441,6 +441,32 @@ describe("ProviderSelectionResolver", () => {
     );
   });
 
+  it("lists the first candidate when an alias has an ordered startup list", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: [aliases.primary, aliases.reviewer] },
+      { readProviderCatalog: async () => catalog() },
+    );
+    const startup = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: {},
+      runtimeMode: "auto",
+    });
+
+    const listing = await resolver.listAllowed(
+      { interactionMode: "default", runtimeMode: "auto" },
+      [...startup.candidates.values()].flat(),
+    );
+
+    expect(listing.aliases).toEqual([
+      expect.objectContaining({
+        alias: "primary",
+        model: expect.objectContaining({ slug: "model-alpha" }),
+        providerDisplayName: "Workbench Alpha",
+      }),
+    ]);
+  });
+
   it.each([
     {
       catalog: () =>

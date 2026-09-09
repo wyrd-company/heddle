@@ -186,9 +186,12 @@ export class ProviderSelectionResolver {
     startupSelections: readonly ResolvedProviderSelection[],
   ): Promise<ProviderAliasListing> {
     const catalog = await this.readCatalog();
-    const startupByAlias = new Map(
-      startupSelections.map((selection) => [selection.alias, selection]),
-    );
+    const startupByAlias = new Map<string, ResolvedProviderSelection>();
+    for (const selection of startupSelections) {
+      if (!startupByAlias.has(selection.alias)) {
+        startupByAlias.set(selection.alias, selection);
+      }
+    }
     const aliases = [...this.#aliases.keys()].sort().map((alias) => {
       const startup = startupByAlias.get(alias);
       if (startup === undefined) {
