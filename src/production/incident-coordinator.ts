@@ -50,7 +50,7 @@ export const incidentAdmissionPolicy: IncidentAdmissionPolicy = {
   failureThreshold: 3,
   maximumConcurrent: 3,
   maximumReviewRejections: 3,
-  retryDelayMilliseconds: 1_000,
+  retryDelayMilliseconds: 60_000,
 };
 
 const incidentBlueprintPath = "blueprints/incident.json";

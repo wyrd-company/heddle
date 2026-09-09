@@ -16,7 +16,10 @@ import { GitHandoffTemplateStore } from "../control-plane/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
 import { productionErrorAttention } from "./error-visibility.js";
-import { ProductionIncidentCoordinator } from "./incident-coordinator.js";
+import {
+  incidentAdmissionPolicy,
+  ProductionIncidentCoordinator,
+} from "./incident-coordinator.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
@@ -281,7 +284,10 @@ describe("production incident handoff", () => {
       attention,
       lifecycle,
       controller,
-      { secrets: [configuredSecret] },
+      {
+        admissionPolicy: { ...incidentAdmissionPolicy, failureThreshold: 1 },
+        secrets: [configuredSecret],
+      },
     );
     const source = productionErrorAttention({
       code: "task-reconciliation-failed",

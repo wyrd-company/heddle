@@ -614,6 +614,26 @@ export class SqlitePersistence {
     })();
   }
 
+  incidentFailureRetryReady(attentionId: string, observedAt: number): boolean {
+    this.assertStableId("attentionId", attentionId);
+    if (!Number.isSafeInteger(observedAt) || observedAt < 0) {
+      throw new TypeError("Incident failure observation time is invalid");
+    }
+    const admission = this.database
+      .prepare(
+        `SELECT next_attempt_at AS nextAttemptAt, state
+         FROM heddle_incident_admission
+         WHERE attention_id = ?`,
+      )
+      .get(attentionId) as
+      { nextAttemptAt: number; state: "closed" | "open" } | undefined;
+    return (
+      admission !== undefined &&
+      admission.state === "closed" &&
+      observedAt >= admission.nextAttemptAt
+    );
+  }
+
   listIncidentRuntime(): IncidentRuntimeRecord[] {
     const rows = this.database
       .prepare(

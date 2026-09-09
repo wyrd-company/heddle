@@ -43,6 +43,12 @@ describe("incident runtime persistence", () => {
       kind: "retry-scheduled",
       nextAttemptAt: 1_100,
     });
+    expect(store.incidentFailureRetryReady(input.attentionId, 1_099)).toBe(
+      false,
+    );
+    expect(store.incidentFailureRetryReady(input.attentionId, 1_100)).toBe(
+      true,
+    );
     expect(
       store.observeIncidentFailure({ ...input, observedAt: 1_050 }),
     ).toEqual({
@@ -59,6 +65,9 @@ describe("incident runtime persistence", () => {
     expect(
       restarted.observeIncidentFailure({ ...input, observedAt: 1_200 }),
     ).toEqual({ failureCount: 3, kind: "breaker-open" });
+    expect(restarted.incidentFailureRetryReady(input.attentionId, 1_300)).toBe(
+      false,
+    );
     restarted.close();
   });
 

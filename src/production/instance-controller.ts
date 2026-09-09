@@ -550,6 +550,27 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   async synchronize(tasks: readonly BoardTask[]): Promise<void> {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
     for (const runtime of this.persistence.listReconcilerRuntime()) {
+      const retryAttentionIds = [
+        `production:task-reconciliation-failed:task:${runtime.taskId}`,
+        `production:instance-synchronization-failed:task:${runtime.taskId}:${runtime.instanceId}`,
+      ];
+      const activeRetryAttentionIds = [];
+      for (const attentionId of retryAttentionIds) {
+        if (await this.attention.has(attentionId)) {
+          activeRetryAttentionIds.push(attentionId);
+        }
+      }
+      if (
+        activeRetryAttentionIds.some(
+          (attentionId) =>
+            !this.persistence.incidentFailureRetryReady(
+              attentionId,
+              Date.now(),
+            ),
+        )
+      ) {
+        continue;
+      }
       try {
         const record = this.persistence.getInstance(runtime.instanceId);
         if (record === undefined) {
