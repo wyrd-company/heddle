@@ -39,6 +39,62 @@ describe("production instance controller", () => {
     if (root !== "") await rm(root, { force: true, recursive: true });
   });
 
+  it("rejects escalation reactivation for a different awaiting stage", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-escalation-stage-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    persistence.createInstance("sample-10", {
+      correlationTokens: {},
+      flowcraftContext: {
+        awaitingNodeIds: ["arrange"],
+        blueprintBlobHash: "0123456789012345678901234567890123456789",
+        blueprintPath: "blueprints/sample.json",
+        completedOperations: {},
+        executionIds: ["sample-execution"],
+        nextTransitionNumber: 2,
+        pendingAttentions: [],
+        pendingTransition: null,
+        serializedContext: "{}",
+        status: "awaiting",
+      },
+      handoffs: [],
+      todoState: null,
+    });
+    const controller = new ProductionInstanceController(
+      {} as ProductionConfiguration,
+      persistence,
+      {} as ProductionLifecycleRouter,
+      {} as ProductRoutingCatalog,
+      {} as EpicProjectCoordinator,
+      new DurableAttentionQueue(persistence),
+      {} as never,
+      "http://127.0.0.1:4774/mcp",
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+    );
+
+    await expect(
+      controller.reactivateStageForEscalation({
+        instanceId: "sample-10",
+        stageId: "verify",
+        task: {
+          blocked: false,
+          dependencies: [],
+          frontMatter: {},
+          id: 10,
+          priority: "medium",
+          status: "in-progress",
+          tags: [],
+          title: "Arrange inventory",
+        },
+      }),
+    ).rejects.toThrow(
+      "Escalation delivery no longer matches the awaiting stage",
+    );
+    persistence.close();
+  });
+
   it("suppresses deferred lifecycle absence and preserves a genuine missing-instance alarm", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-instance-absence-"));
     const persistence = new SqlitePersistence({
