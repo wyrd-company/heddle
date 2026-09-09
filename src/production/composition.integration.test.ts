@@ -126,7 +126,7 @@ describe("production composition", () => {
                 },
                 session: {
                   lastError: "Sample harness could not start",
-                  status: "error",
+                  status: "ready",
                 },
               }
             : {

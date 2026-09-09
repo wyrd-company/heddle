@@ -201,6 +201,38 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     ]) as ProviderCandidateFailureDetail;
   }
 
+  async #confirmProviderBindingStarted(
+    task: BoardTask,
+    session: SessionRuntimeRecord,
+  ): Promise<void> {
+    if (session.binding.candidatePosition > 1) {
+      const fallback = createProductionErrorAttention({
+        attentionId: providerFallbackAttentionId(
+          "provider-fallback-active",
+          session.sessionKey,
+          session.binding.candidatePosition,
+        ),
+        code: "provider-fallback-active",
+        error: new Error(
+          session.binding.skippedCandidates.at(-1)?.failure.message ??
+            "An earlier provider candidate could not start",
+        ),
+        instanceId: session.instanceId,
+        message: `Provider alias '${session.binding.alias}' started candidate ${session.binding.candidatePosition} '${session.binding.providerDisplayName}' model '${session.binding.modelSlug}' after ${describeSkippedCandidates(session.binding.skippedCandidates)}`,
+        taskId: task.id,
+      });
+      if (!(await this.attention.has(fallback.attentionId))) {
+        await this.attention.raise(fallback);
+      } else {
+        this.attention.reopen(fallback.attentionId);
+      }
+    }
+    this.persistence.confirmSessionBindingStarted(
+      session.sessionKey,
+      session.threadId,
+    );
+  }
+
   async recoverProviderStartFailure(
     task: BoardTask,
     target: { instanceId: string; sessionKey: string; threadId: string },
@@ -217,53 +249,31 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     if (session?.bindingState !== "provisional") return false;
     if (
       thread?.latestTurn?.startedAt != null ||
-      thread?.session?.status === "running" ||
-      thread?.session?.status === "ready" ||
-      thread?.session?.status === "idle" ||
       thread?.latestTurn?.state === "running" ||
       thread?.latestTurn?.state === "completed"
     ) {
-      if (session.binding.candidatePosition > 1) {
-        const fallback = createProductionErrorAttention({
-          attentionId: providerFallbackAttentionId(
-            "provider-fallback-active",
-            session.sessionKey,
-            session.binding.candidatePosition,
-          ),
-          code: "provider-fallback-active",
-          error: new Error(
-            session.binding.skippedCandidates.at(-1)?.failure.message ??
-              "An earlier provider candidate could not start",
-          ),
-          instanceId: session.instanceId,
-          message: `Provider alias '${session.binding.alias}' started candidate ${session.binding.candidatePosition} '${session.binding.providerDisplayName}' model '${session.binding.modelSlug}' after ${describeSkippedCandidates(session.binding.skippedCandidates)}`,
-          taskId: task.id,
-        });
-        if (!(await this.attention.has(fallback.attentionId))) {
-          await this.attention.raise(fallback);
-        } else {
-          this.attention.reopen(fallback.attentionId);
-        }
-      }
-      this.persistence.confirmSessionBindingStarted(
-        session.sessionKey,
-        session.threadId,
-      );
+      await this.#confirmProviderBindingStarted(task, session);
       return false;
     }
     if (
-      thread === undefined ||
-      (thread.session?.status !== "error" &&
-        thread.latestTurn?.state !== "error")
+      thread?.session?.status === "error" ||
+      thread?.latestTurn?.state === "error"
     ) {
-      return false;
+      const cause = new Error(
+        thread.session?.lastError?.trim() ||
+          "T3 reported a session-start failure before the turn started",
+      );
+      await this.#fallbackProviderCandidate(task, session, cause);
+      return true;
     }
-    const cause = new Error(
-      thread.session?.lastError?.trim() ||
-        "T3 reported a session-start failure before the turn started",
-    );
-    await this.#fallbackProviderCandidate(task, session, cause);
-    return true;
+    if (
+      thread?.session?.status === "running" ||
+      thread?.session?.status === "ready" ||
+      thread?.session?.status === "idle"
+    ) {
+      await this.#confirmProviderBindingStarted(task, session);
+    }
+    return false;
   }
 
   #providerRoleCollision(
