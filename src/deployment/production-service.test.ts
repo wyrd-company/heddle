@@ -225,7 +225,7 @@ describe("configured production composition", () => {
       taskPath,
       authoredTask.replace(
         "class: standard\n---",
-        "class: standard\nprovider-alias:\n  implement: specialist\n---",
+        "class: standard\nprovider-alias:\n  remediate: specialist\n---",
       ),
     );
     const readProviderCatalog = vi.fn(async () => [
@@ -288,7 +288,7 @@ describe("configured production composition", () => {
         .serializedContext!,
     ) as Record<string, unknown>;
     expect(initialContext).toMatchObject({
-      taskContract: { providerAlias: { implement: "specialist" } },
+      taskContract: { providerAlias: { remediate: "specialist" } },
     });
     const implementKey = `${instanceId}:implement:1`;
     await production.lifecycle.resume({
@@ -308,8 +308,8 @@ describe("configured production composition", () => {
     expect(production.persistence.listSessionRuntime()).toMatchObject([
       {
         binding: {
-          alias: "specialist",
-          modelSlug: "model-specialist",
+          alias: "primary",
+          modelSlug: "model-primary",
           providerInstanceId: "instance-alpha",
           runtimeMode: "auto-accept-edits",
         },
@@ -317,8 +317,8 @@ describe("configured production composition", () => {
       },
       {
         binding: {
-          alias: "primary",
-          modelSlug: "model-primary",
+          alias: "specialist",
+          modelSlug: "model-specialist",
           providerInstanceId: "instance-alpha",
           runtimeMode: "auto-accept-edits",
         },
@@ -346,7 +346,7 @@ describe("configured production composition", () => {
       {
         modelSelection: {
           instanceId: "instance-alpha",
-          model: "model-specialist",
+          model: "model-primary",
         },
         runtimeMode: "auto-accept-edits",
       },
@@ -360,7 +360,7 @@ describe("configured production composition", () => {
       {
         modelSelection: {
           instanceId: "instance-alpha",
-          model: "model-primary",
+          model: "model-specialist",
         },
         runtimeMode: "auto-accept-edits",
       },
