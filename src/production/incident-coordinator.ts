@@ -4,10 +4,6 @@
 // ---
 
 import { createHash } from "node:crypto";
-import { access } from "node:fs/promises";
-import { constants } from "node:fs";
-import { delimiter, join } from "node:path";
-import process from "node:process";
 
 import type { BoardTask } from "../board-adapter/index.js";
 import {
@@ -122,19 +118,6 @@ const incidentSource = (
   });
 };
 
-const executableOnPath = async (name: string): Promise<boolean> => {
-  for (const directory of (process.env["PATH"] ?? "").split(delimiter)) {
-    if (directory === "") continue;
-    try {
-      await access(join(directory, name), constants.X_OK);
-      return true;
-    } catch {
-      // Continue through the service process PATH.
-    }
-  }
-  return false;
-};
-
 const sourceTaskContract = (
   persistence: SqlitePersistence,
   sourceInstanceId: string | undefined,
@@ -198,7 +181,6 @@ export class ProductionIncidentCoordinator {
       admissionPolicy?: IncidentAdmissionPolicy;
       approvalSeverityThreshold?: IncidentSeverity;
       authority?: Record<string, JsonValue>;
-      commandAvailable?: (name: string) => Promise<boolean>;
       immediateEscalationCodes?: ReadonlySet<string>;
       now?: () => number;
       secrets?: readonly string[];
@@ -397,14 +379,6 @@ export class ProductionIncidentCoordinator {
     if (stageId === "finalize") {
       if (!runtime.accepted) {
         throw new Error("Incident finalization requires accepted diagnosis");
-      }
-      if (
-        incidentProposedActionKinds(runtime).has("github-issue") &&
-        !(await (this.options.commandAvailable ?? executableOnPath)("gh"))
-      ) {
-        throw new Error(
-          "Incident finalize prerequisite is missing from PATH: gh",
-        );
       }
       if (
         incidentProposedActionKinds(runtime).has("production-mutation") &&

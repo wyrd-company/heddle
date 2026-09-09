@@ -190,7 +190,6 @@ describe("production incident coordinator", () => {
       admissionPolicy?: typeof incidentAdmissionPolicy;
       approvalSeverityThreshold?: IncidentSeverity;
       authority?: Record<string, JsonValue>;
-      commandAvailable?: (name: string) => Promise<boolean>;
       immediateEscalationCodes?: ReadonlySet<string>;
       now?: () => number;
     } = {},
@@ -419,10 +418,7 @@ describe("production incident coordinator", () => {
   });
 
   it("accepts review, runs one finalize stage occurrence, and resolves the retained attention with incident justification", async () => {
-    const commandAvailable = vi.fn(async () => true);
-    const { attention, coordinator, harness } = await createSubject({
-      commandAvailable,
-    });
+    const { attention, coordinator, harness } = await createSubject();
     const source = await raise(attention);
     await coordinator.reconcile([task()]);
     await coordinator.resume({
@@ -437,7 +433,6 @@ describe("production incident coordinator", () => {
         rootCauseAnalysis: "Synthetic analysis",
       },
     });
-    expect(commandAvailable).not.toHaveBeenCalled();
     await coordinator.resume({
       disposition: "approve",
       instanceId: source.incidentId!,
@@ -445,7 +440,6 @@ describe("production incident coordinator", () => {
     });
     await coordinator.reconcile([task()]);
 
-    expect(commandAvailable).toHaveBeenCalledTimes(1);
     expect(harness.activations).toEqual(["implement", "review", "finalize"]);
     await coordinator.resume({
       disposition: "complete",
@@ -469,9 +463,7 @@ describe("production incident coordinator", () => {
   });
 
   it("retains diagnosis and acceptance intent when the process stops after each lifecycle transition", async () => {
-    const { attention, coordinator, harness } = await createSubject({
-      commandAvailable: async () => true,
-    });
+    const { attention, coordinator, harness } = await createSubject({});
     const source = await raise(attention);
     await coordinator.reconcile([task()]);
     const underlyingResume = harness.lifecycle.resume.bind(harness.lifecycle);
@@ -579,11 +571,8 @@ describe("production incident coordinator", () => {
     expect(persistence!.listIncidentRuntime()[0]?.state).toBe("failed");
   });
 
-  it("fails finalize closed when gh is absent and does not recursively incident the failure", async () => {
-    const commandAvailable = vi.fn(async () => false);
-    const { attention, coordinator } = await createSubject({
-      commandAvailable,
-    });
+  it("lets finalization report unavailable GitHub delivery without failing the incident", async () => {
+    const { attention, coordinator, harness } = await createSubject();
     const source = await raise(attention);
     await coordinator.reconcile([task()]);
     const runtime = persistence!.listIncidentRuntime()[0]!;
@@ -606,17 +595,31 @@ describe("production incident coordinator", () => {
       operationId: "review-once",
     });
     await coordinator.reconcile([task()]);
+    expect(harness.activations).toEqual(["implement", "finalize"]);
+    await coordinator.resume({
+      disposition: "complete",
+      instanceId: source.incidentId!,
+      operationId: "report-gh-absent",
+      output: {
+        conditionState: "cleared",
+        outwardReport: {
+          safeReason: "GitHub command unavailable",
+          status: "undelivered",
+        },
+      },
+    });
 
-    const messages = persistence!
-      .listAttention()
-      .map(({ payload }) => JSON.stringify(payload));
-    expect(
-      messages.some((message) => message.includes("missing from PATH: gh")),
-    ).toBe(true);
     expect(persistence!.listIncidentRuntime()).toHaveLength(1);
     await coordinator.reconcile([task()]);
     expect(persistence!.listIncidentRuntime()).toHaveLength(1);
-    expect(persistence!.hasAttention(source.attentionId)).toBe(true);
+    expect(persistence!.listIncidentRuntime()[0]?.state).toBe("done");
+    expect(
+      persistence!
+        .listAttention()
+        .some(({ payload }) =>
+          JSON.stringify(payload).includes("incident-report-undelivered"),
+        ),
+    ).toBe(true);
   });
 
   it("refuses to activate finalize before review acceptance", async () => {
@@ -664,9 +667,7 @@ describe("production incident coordinator", () => {
   });
 
   it("does not reactivate a failed incident from its retained source attention", async () => {
-    const { attention, coordinator, harness } = await createSubject({
-      commandAvailable: async () => true,
-    });
+    const { attention, coordinator, harness } = await createSubject();
     const source = await raise(attention);
     await coordinator.reconcile([task()]);
     await coordinator.resume({
@@ -816,9 +817,7 @@ describe("production incident coordinator", () => {
   });
 
   it("closes a cleared incident while retaining an undelivered outward report as attention", async () => {
-    const { attention, coordinator } = await createSubject({
-      commandAvailable: async () => true,
-    });
+    const { attention, coordinator } = await createSubject();
     const source = await raise(attention);
     await coordinator.reconcile([task()]);
     await coordinator.resume({

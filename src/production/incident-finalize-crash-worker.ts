@@ -25,7 +25,10 @@ import { SqlitePersistence } from "../persistence/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
 import { productionErrorAttention } from "./error-visibility.js";
-import { ProductionIncidentCoordinator } from "./incident-coordinator.js";
+import {
+  incidentAdmissionPolicy,
+  ProductionIncidentCoordinator,
+} from "./incident-coordinator.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { ProductRoutingCatalog } from "./product-routing.js";
@@ -332,7 +335,9 @@ const coordinator = new ProductionIncidentCoordinator(
   attention,
   lifecycle,
   controller,
-  { commandAvailable: async (name) => name === "gh" },
+  {
+    admissionPolicy: { ...incidentAdmissionPolicy, failureThreshold: 1 },
+  },
 );
 
 if (mode === "crash") {
