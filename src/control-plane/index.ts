@@ -89,6 +89,11 @@ export {
   type SessionObservationThresholds,
 } from "./session-observation.js";
 export {
+  resolveT3AwarenessPhase,
+  type T3AwarenessPhase,
+  type T3ShellThread,
+} from "./t3-agent-awareness.js";
+export {
   T3ControlPlaneClient,
   T3ProviderCatalogReadError,
   type T3ControlPlaneClientOptions,

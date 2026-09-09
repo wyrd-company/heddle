@@ -180,12 +180,8 @@ const questionAnswers = (
       if (typeof answer !== "string") {
         throw new TypeError(`Answer for '${question.id}' must be one value`);
       }
-      const { maxLength, minLength, pattern } = question.validation;
-      if (
-        answer.length < minLength ||
-        answer.length > maxLength ||
-        (pattern !== undefined && !new RegExp(pattern, "u").test(answer))
-      ) {
+      const { maxLength, minLength } = question.validation;
+      if (answer.length < minLength || answer.length > maxLength) {
         throw new TypeError(
           `Answer for '${question.id}' does not satisfy its value validation`,
         );

@@ -19,6 +19,26 @@ import {
   SyntheticT3,
 } from "./composition.test-support.js";
 
+class TerminalSyntheticT3 extends SyntheticT3 {
+  readonly completedThreads = new Set<string>();
+
+  override async getShell() {
+    const shell = await super.getShell();
+    return {
+      ...shell,
+      threads: shell.threads.map((thread) =>
+        this.completedThreads.has(thread.id)
+          ? {
+              ...thread,
+              latestTurn: { state: "completed" },
+              session: { status: "idle" },
+            }
+          : thread,
+      ),
+    };
+  }
+}
+
 const storedCorrelationToken = (
   handoffs: JsonValue[],
   sessionKey: string,
@@ -89,7 +109,7 @@ describe("production escalation answer delivery", () => {
   it("reactivates an unavailable top-level stage, delivers one answer turn, records the decision, and permits advance", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
-    const t3 = new SyntheticT3();
+    const t3 = new TerminalSyntheticT3();
     const composition = createProductionComposition({
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
@@ -140,7 +160,17 @@ describe("production escalation answer delivery", () => {
     await vi.waitFor(() =>
       expect(composition.attention.list()).toHaveLength(1),
     );
-    t3.threads.delete(original.threadId!);
+    t3.completedThreads.add(original.threadId!);
+    const changedSelection = {
+      ...fixture.configuration.session.defaultSelection,
+      model: {
+        ...fixture.configuration.session.defaultSelection.model,
+        name: "Changed Sample Model",
+        slug: "changed-sample-model",
+      },
+    };
+    fixture.configuration.session.defaultSelection = changedSelection;
+    fixture.configuration.session.resolvedSelections = [changedSelection];
 
     const attention = composition.attention.list()[0]!;
     await composition.consoleActions.execute({

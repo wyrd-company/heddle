@@ -180,7 +180,6 @@ describe("console attention action contract", () => {
             validation: {
               maxLength: 12,
               minLength: 4,
-              pattern: "^[a-z]+-[0-9]+$",
             },
           },
         ],
@@ -204,7 +203,7 @@ describe("console attention action contract", () => {
     expect(() =>
       parseConsoleAttentionActionRequest(
         {
-          answers: { reference: "not valid" },
+          answers: { reference: "bad" },
           fingerprint: entry().fingerprint,
         },
         valueAction,

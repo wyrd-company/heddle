@@ -32,19 +32,7 @@ const choiceEscalationQuestionSchema = z
 const valueValidationSchema = z
   .object({
     maxLength: z.number().int().min(1).max(4_000),
-    minLength: z.number().int().min(0).max(4_000).default(1),
-    pattern: z
-      .string()
-      .max(1_000)
-      .refine((pattern) => {
-        try {
-          new RegExp(pattern, "u");
-          return true;
-        } catch {
-          return false;
-        }
-      }, "Value validation pattern must be a valid regular expression")
-      .optional(),
+    minLength: z.number().int().min(1).max(4_000).default(1),
   })
   .strict()
   .refine(
@@ -75,7 +63,7 @@ export const escalationInputSchema = z
 
 export const escalationAnswerSchema = z
   .object({
-    answers: z.record(identifier, identifier),
+    answers: z.record(identifier, z.string().min(1).max(4_000)),
     escalationId: identifier,
     ownerSessionKey: identifier,
     prose: z.string().trim().min(1).max(4_000).optional(),
@@ -190,12 +178,11 @@ export const validateAnswers = (
   for (const question of opened.questions) {
     const selected = answers[question.id];
     if (question.kind === "value") {
-      const { maxLength, minLength, pattern } = question.validation;
+      const { maxLength, minLength } = question.validation;
       if (
         selected === undefined ||
         selected.length < minLength ||
-        selected.length > maxLength ||
-        (pattern !== undefined && !new RegExp(pattern, "u").test(selected))
+        selected.length > maxLength
       ) {
         throw new TypeError(
           `Escalation answer for '${question.id}' does not satisfy its value validation`,

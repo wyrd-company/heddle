@@ -602,6 +602,76 @@ describe("workflow MCP escalation tools", () => {
     recoveredPersistence.close();
   });
 
+  it("uses distinct delivery identities when an escalation ID recurs in a later session", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-recurrence", [
+      { sessionKey: "first", token: "token-first", tools: ["escalate"] },
+      { sessionKey: "second", token: "token-second", tools: ["escalate"] },
+    ]);
+    const resolver = new WorkflowMcpSessionResolver(subject.persistence);
+    for (const [sessionKey, token] of [
+      ["first", "token-first"],
+      ["second", "token-second"],
+    ] as const) {
+      await subject.coordinator.escalate(await resolver.resolve(token), {
+        escalationId: "repeated-choice",
+        questions: sampleEscalationQuestions,
+      });
+      await subject.coordinator.answerAsOperator({
+        answers: sampleEscalationAnswer,
+        escalationId: "repeated-choice",
+        instanceId: "instance-recurrence",
+        ownerSessionKey: sessionKey,
+      });
+    }
+
+    expect(subject.deliveredAnswers).toHaveLength(2);
+    expect(
+      new Set(subject.deliveredAnswers.map(({ commandId }) => commandId)),
+    ).toHaveLength(2);
+    expect(
+      new Set(subject.deliveredAnswers.map(({ messageId }) => messageId)),
+    ).toHaveLength(2);
+  });
+
+  it("contains a rejected asynchronous route after returning its immediate receipt", async () => {
+    const failure = new Error("sample attention route failed");
+    const subject = await createEscalationFixture({
+      attention: async () => Promise.reject(failure),
+    });
+    createEscalationInstance(subject.persistence, "instance-route-rejection", [
+      {
+        sessionKey: "top",
+        token: "token-route-rejection",
+        tools: ["escalate"],
+      },
+    ]);
+    const binding = await new WorkflowMcpSessionResolver(
+      subject.persistence,
+    ).resolve("token-route-rejection");
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      await expect(
+        subject.coordinator.escalate(binding, {
+          escalationId: "route-rejection",
+          questions: sampleEscalationQuestions,
+        }),
+      ).resolves.toEqual({
+        awaitingAnswer: true,
+        escalationId: "route-rejection",
+      });
+      await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+      await expect(subject.coordinator.replayPendingRoutes()).rejects.toBe(
+        failure,
+      );
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("replays a retained answer that predates explicit answering authority", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-legacy-answer", [

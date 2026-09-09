@@ -73,7 +73,6 @@ export type ConsoleAttentionValueQuestion = {
   validation: {
     maxLength: number;
     minLength: number;
-    pattern?: string;
   };
 };
 

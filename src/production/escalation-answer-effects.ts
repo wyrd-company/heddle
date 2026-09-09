@@ -12,7 +12,10 @@ import {
 } from "../mcp-server/index.js";
 import type { SqlitePersistence } from "../persistence/index.js";
 import type { KanbanBoardAdapter } from "../board-adapter/index.js";
-import { steerStageSession } from "../control-plane/index.js";
+import {
+  resolveT3AwarenessPhase,
+  steerStageSession,
+} from "../control-plane/index.js";
 import type { ProductionT3Client } from "./composition.js";
 import type { ProductionInstanceController } from "./instance-controller.js";
 import { productionSessionBindingFor } from "./subagent-composition.js";
@@ -99,13 +102,17 @@ export class ProductionEscalationAnswerEffects
       input.opened.ownerSessionKey,
     );
     const shell = await this.t3.getShell();
-    const binding = shell.threads.some(({ id }) => id === existing.threadId)
-      ? existing
-      : await this.instances.reactivateStageForEscalation({
-          instanceId: input.opened.instanceId,
-          stageId: input.opened.stage,
-          task: await this.#taskFor(input.opened.instanceId),
-        });
+    const thread = shell.threads.find(({ id }) => id === existing.threadId);
+    const phase =
+      thread === undefined ? undefined : resolveT3AwarenessPhase(thread);
+    const binding =
+      phase !== undefined && phase !== "completed" && phase !== "failed"
+        ? existing
+        : await this.instances.reactivateStageForEscalation({
+            instanceId: input.opened.instanceId,
+            stageId: input.opened.stage,
+            task: await this.#taskFor(input.opened.instanceId),
+          });
     await steerStageSession(
       {
         commandId: input.commandId,

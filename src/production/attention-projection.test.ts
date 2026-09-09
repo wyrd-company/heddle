@@ -62,7 +62,6 @@ describe("production attention projection", () => {
             validation: {
               maxLength: 12,
               minLength: 4,
-              pattern: "^[a-z]+-[0-9]+$",
             },
           },
         ],
@@ -101,7 +100,6 @@ describe("production attention projection", () => {
                 validation: {
                   maxLength: 12,
                   minLength: 4,
-                  pattern: "^[a-z]+-[0-9]+$",
                 },
               },
             ],

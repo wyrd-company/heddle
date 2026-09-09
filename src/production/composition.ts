@@ -543,7 +543,6 @@ export const createProductionComposition = (
           mcp.toolNames,
         );
         await escalation.replayPendingRoutes();
-        await escalation.replayPendingDeliveries();
         const before = await board.readBoard();
         await projects.reconcile(before);
         routing.update(before);
@@ -553,6 +552,7 @@ export const createProductionComposition = (
         await projects.reconcile(after);
         routing.update(after);
         await instances.synchronize(after);
+        await escalation.replayPendingDeliveries();
         await incidents.reconcile(after);
         for (const session of productionSessionTargets(persistence!)) {
           const record = persistence!.getInstance(session.instanceId);

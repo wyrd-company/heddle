@@ -71,13 +71,11 @@ export const escalationQuestions = (
       );
       const minLength = validation["minLength"];
       const maxLength = validation["maxLength"];
-      const pattern = validation["pattern"];
       if (
         !Number.isSafeInteger(minLength) ||
-        (minLength as number) < 0 ||
+        (minLength as number) < 1 ||
         !Number.isSafeInteger(maxLength) ||
-        (maxLength as number) < (minLength as number) ||
-        (pattern !== undefined && typeof pattern !== "string")
+        (maxLength as number) < (minLength as number)
       ) {
         throw new Error(
           `Attention '${attentionId}' has malformed value validation`,
@@ -90,7 +88,6 @@ export const escalationQuestions = (
         validation: {
           maxLength: maxLength as number,
           minLength: minLength as number,
-          ...(pattern === undefined ? {} : { pattern }),
         },
       };
     }

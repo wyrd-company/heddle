@@ -556,6 +556,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     >,
     stageId: string,
   ): ResolvedSessionBinding {
+    if (runtime.stageId !== stageId || runtime.sessionKey === undefined) {
+      throw new Error("Escalation delivery disagrees with its active stage");
+    }
     const matches = this.persistence
       .listSessionRuntime()
       .filter(

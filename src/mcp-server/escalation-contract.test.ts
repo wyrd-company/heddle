@@ -93,12 +93,12 @@ describe("escalation contract", () => {
     ).not.toThrow();
   });
 
-  it("validates a value answer against its declared length and pattern", () => {
+  it("validates a value answer against its declared length", () => {
     const valueQuestion = escalationQuestionSchema.parse({
       id: "release-code",
       kind: "value",
       prompt: "Which release code should be used?",
-      validation: { maxLength: 8, minLength: 4, pattern: "^[A-Z0-9]+$" },
+      validation: { maxLength: 8, minLength: 4 },
     });
     const opened = { ...pending(), questions: [valueQuestion] };
 
@@ -108,9 +108,18 @@ describe("escalation contract", () => {
     expect(() => validateAnswers(opened, { "release-code": "A12" })).toThrow(
       /value validation/,
     );
-    expect(() => validateAnswers(opened, { "release-code": "ab12" })).toThrow(
-      /value validation/,
-    );
+    expect(() =>
+      validateAnswers(opened, { "release-code": "ABCDEFGHI" }),
+    ).toThrow(/value validation/);
+
+    const longValue = "x".repeat(256);
+    expect(
+      escalationAnswerSchema.parse({
+        answers: { "release-code": longValue },
+        escalationId: "choice-1",
+        ownerSessionKey: "session-1",
+      }).answers["release-code"],
+    ).toBe(longValue);
   });
 
   it("accepts bounded prose in addition to the authoritative answer", () => {

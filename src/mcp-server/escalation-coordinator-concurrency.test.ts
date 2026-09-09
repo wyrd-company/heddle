@@ -188,4 +188,96 @@ describe("escalation coordinator disposition concurrency", () => {
     expect(compareAndSwapInstance).toHaveBeenCalledTimes(1);
     expect(resume).not.toHaveBeenCalled();
   });
+
+  it("rejects a stale operator answer when authority moves before its compare-and-swap", async () => {
+    let record: InstanceRecord = {
+      instanceId: "instance-authority",
+      state: {
+        correlationTokens: {},
+        flowcraftContext: null,
+        handoffs: [],
+        todoState: null,
+      },
+      version: 1,
+    };
+    const events: PersistedEvent[] = [
+      {
+        instanceId: record.instanceId,
+        payload: {
+          attentionId: "attention-authority",
+          escalationId: "authority-choice",
+          openedAt: "2026-01-01T00:00:00.000Z",
+          ownerSessionKey: "owner-session",
+          questions: [
+            {
+              id: "selection",
+              options: [
+                {
+                  description: "Use the first sample",
+                  id: "first",
+                  label: "First",
+                },
+                {
+                  description: "Use the second sample",
+                  id: "second",
+                  label: "Second",
+                },
+              ],
+              prompt: "Which sample should be selected?",
+            },
+          ],
+          stage: "sample-stage",
+        },
+        recordedAt: "2026-01-01T00:00:00.000Z",
+        sequence: 1,
+        type: "mcp:escalation-opened",
+      },
+    ];
+    const compareAndSwapInstanceWithEvent = vi.fn(() => {
+      record = { ...record, version: record.version + 1 };
+      events.push({
+        instanceId: record.instanceId,
+        payload: {
+          escalationId: "authority-choice",
+          from: { kind: "operator" },
+          ownerSessionKey: "owner-session",
+          reason: "Delegate this sample decision.",
+          to: { kind: "session", sessionKey: "answering-session" },
+        },
+        recordedAt: "2026-01-01T00:00:01.000Z",
+        sequence: 2,
+        type: "mcp:escalation-authority-moved",
+      });
+      return undefined;
+    });
+    const persistence: WorkflowMcpPersistence = {
+      appendEvent: vi.fn(),
+      compareAndSwapInstance: vi.fn(),
+      compareAndSwapInstanceWithEvent,
+      getInstance: () => record,
+      listInstances: () => [record],
+      replayEvents: () => [...events],
+    };
+    const coordinator = new EscalationCoordinator({
+      attention: { raise: vi.fn() },
+      decisionLog: { record: vi.fn() },
+      delivery: { deliver: vi.fn() },
+      persistence,
+      pushover: { send: vi.fn() },
+      session: { steer: vi.fn() },
+    });
+
+    await expect(
+      coordinator.answerAsOperator({
+        answers: { selection: "first" },
+        escalationId: "authority-choice",
+        instanceId: record.instanceId,
+        ownerSessionKey: "owner-session",
+      }),
+    ).rejects.toThrow("does not hold answering authority");
+    expect(compareAndSwapInstanceWithEvent).toHaveBeenCalledTimes(1);
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "mcp:escalation-answered" }),
+    );
+  });
 });

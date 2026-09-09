@@ -276,6 +276,22 @@ describe("deployed configuration directory", () => {
     );
   });
 
+  it("rejects the removed session launch-preparation configuration", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
+    const configuration = fixture(root) as ProductionConfiguration & {
+      session: Record<string, unknown>;
+    };
+    configuration.session["launchPreparation"] = {
+      sample: { executable: "/tmp/sample-launch-preparation" },
+    };
+    await writeFile(join(root, "config.yml"), stringify(configuration));
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "/session must NOT have additional properties: launchPreparation",
+    );
+  });
+
   it("rejects an ephemeral port before the launcher projects Caddy settings", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await prepareBlueprintRepository(root);

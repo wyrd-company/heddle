@@ -782,7 +782,6 @@ const createAttentionAction = (entry, action) => {
         input.name = entry.attentionId + ":" + action.actionId + ":" + question.id;
         input.minLength = question.validation.minLength;
         input.maxLength = question.validation.maxLength;
-        if (question.validation.pattern) input.pattern = question.validation.pattern;
         fieldset.append(input);
         controls.push({ input, questionId: question.id });
       } else for (const option of question.options) {

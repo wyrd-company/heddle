@@ -208,18 +208,27 @@ export class EscalationHistory {
       ...(prose === undefined ? {} : { prose }),
     };
     while (true) {
-      const prior = this.find(
+      const currentEscalation = this.find(
         opened.instanceId,
         opened.ownerSessionKey,
         opened.escalationId,
-      ).answered;
-      if (prior !== undefined) {
-        if (!sameAnswers(opened, prior, answered)) {
+      );
+      if (currentEscalation.opened === undefined) {
+        throw new Error(`Escalation '${opened.escalationId}' is not pending`);
+      }
+      if (currentEscalation.answered !== undefined) {
+        if (!sameAnswers(opened, currentEscalation.answered, answered)) {
           throw new Error(
             `Escalation '${opened.escalationId}' is already answered differently`,
           );
         }
-        return prior;
+        return currentEscalation.answered;
+      }
+      if (
+        JSON.stringify(currentEscalation.opened.answeringAuthority) !==
+        JSON.stringify(answeredBy)
+      ) {
+        throw new Error("The caller does not hold answering authority");
       }
       const current = this.persistence.getInstance(opened.instanceId);
       if (current === undefined) {
