@@ -349,14 +349,14 @@ describe("production subagent composition", () => {
     await composition.scheduler.trigger();
 
     expect(schedulerErrors).not.toHaveBeenCalled();
-    expect(composition.attention.list()).toContainEqual(
-      expect.objectContaining({
-        attentionId: expect.stringContaining(
+    const settlementFailure = composition.attention
+      .list()
+      .find(({ attentionId }) =>
+        attentionId.startsWith(
           "production:escalation-settlement-failed:escalation:",
         ),
-        kind: "production-error",
-      }),
-    );
+      );
+    expect(settlementFailure).toMatchObject({ kind: "production-error" });
     const current = composition.persistence.getInstance(instanceId)!;
     expect(isTodoState(current.state.todoState)).toBe(true);
     if (!isTodoState(current.state.todoState)) {
@@ -370,6 +370,27 @@ describe("production subagent composition", () => {
         status: "stopped",
       }),
     );
+
+    t3.threads.add(spawned.assignment.threadId);
+    await composition.scheduler.trigger();
+
+    expect(
+      composition.attention
+        .list()
+        .some(
+          ({ attentionId }) => attentionId === settlementFailure?.attentionId,
+        ),
+    ).toBe(false);
+    expect(
+      t3.commands.filter(
+        (command) =>
+          command.type === "thread.turn.start" &&
+          command.threadId === spawned.assignment.threadId &&
+          JSON.stringify(command).includes(
+            "Escalation unavailable-child-answer was answered",
+          ),
+      ),
+    ).toHaveLength(1);
   });
 
   it("shares organization template authority, persistence, pacing, observation, and tokens", async () => {
