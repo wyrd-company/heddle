@@ -675,8 +675,7 @@ proposed-design:
     threshold as an optimization. Absence from that configuration never
     prevents admission. A task start that throws, a retained `starting` runtime
     with no activation, and a session observed dead without lifecycle advance
-    all enter this policy. A successful retry resolves the condition attention;
-    recurrence reopens its durable identity and begins a new failure episode.
+    all enter this policy. A successful retry resolves the condition attention.
 
     While SQLite is available, production-error pages retain their durable
     one-minute per-code cooldown and cap of three attempts in five minutes, so

@@ -21,6 +21,14 @@ const fixture = (): ProductionConfiguration => ({
   },
   boardDirectory: "/tmp/sample-board",
   cadenceMilliseconds: 1_000,
+  incident: {
+    approvalSeverityThreshold: "high",
+    failureThreshold: 3,
+    githubIssueRepository: "sample-owner/sample-repository",
+    immediateEscalationCodes: [],
+    retryDelayMilliseconds: 60_000,
+    workspaceRoot: "/tmp/sample-workspace",
+  },
   observationThresholds: {
     endedMilliseconds: 1_000,
     failedMilliseconds: 1_000,
@@ -77,12 +85,7 @@ describe("production configuration", () => {
     ) as { properties: Record<string, unknown>; required: string[] };
     const configuration = fixture();
     expect(Object.keys(schema.properties).sort()).toEqual(
-      [
-        ...Object.keys(configuration),
-        "incident",
-        "providerUsage",
-        "server",
-      ].sort(),
+      [...Object.keys(configuration), "providerUsage", "server"].sort(),
     );
     expect([...schema.required].sort()).toEqual(
       Object.keys(configuration).sort(),

@@ -580,6 +580,14 @@ next_id: 1
         },
         boardDirectory,
         cadenceMilliseconds: 60_000,
+        incident: {
+          approvalSeverityThreshold: "high",
+          failureThreshold: 3,
+          githubIssueRepository: "sample-owner/sample-repository",
+          immediateEscalationCodes: [],
+          retryDelayMilliseconds: 60_000,
+          workspaceRoot: root,
+        },
         observationThresholds: {
           endedMilliseconds: 60_000,
           failedMilliseconds: 60_000,

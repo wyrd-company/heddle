@@ -430,30 +430,21 @@ export const createProductionComposition = (
       {
         admissionPolicy: {
           ...incidentAdmissionPolicy,
-          failureThreshold:
-            configuration.incident?.failureThreshold ??
-            incidentAdmissionPolicy.failureThreshold,
-          retryDelayMilliseconds:
-            configuration.incident?.retryDelayMilliseconds ??
-            incidentAdmissionPolicy.retryDelayMilliseconds,
+          failureThreshold: configuration.incident.failureThreshold,
+          retryDelayMilliseconds: configuration.incident.retryDelayMilliseconds,
         },
-        ...(configuration.incident?.approvalSeverityThreshold === undefined
-          ? {}
-          : {
-              approvalSeverityThreshold:
-                configuration.incident.approvalSeverityThreshold,
-            }),
+        approvalSeverityThreshold:
+          configuration.incident.approvalSeverityThreshold,
         authority: {
           blueprintRepositoryRoot: blueprintRepository.repositoryRoot,
           boardDirectory: configuration.boardDirectory,
-          githubIssueRepository:
-            configuration.incident?.githubIssueRepository ?? null,
+          githubIssueRepository: configuration.incident.githubIssueRepository,
           stateDirectory: configuration.stateDirectory,
           t3BaseUrl: configuration.t3.baseUrl,
-          workspaceRoot: configuration.incident?.workspaceRoot ?? null,
+          workspaceRoot: configuration.incident.workspaceRoot,
         },
         immediateEscalationCodes: new Set(
-          configuration.incident?.immediateEscalationCodes ?? [],
+          configuration.incident.immediateEscalationCodes ?? [],
         ),
         secrets: [
           configuration.pushover.applicationToken,

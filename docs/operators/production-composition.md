@@ -162,7 +162,7 @@ delegated session resolves an allowed alias before it enters pacing or T3.
 T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
 the runtime validator and configuration schema reject other schemes.
 
-`incident` is the operator-owned incident policy and authority boundary.
+`incident` is the required operator-owned incident policy and authority boundary.
 `failureThreshold` opens the circuit breaker after that many failed
 later-pass attempts. `retryDelayMilliseconds` is the earliest time another
 pass can count a new attempt; it never sleeps or holds that pass open.
