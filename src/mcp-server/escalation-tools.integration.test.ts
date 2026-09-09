@@ -23,6 +23,29 @@ import {
 afterEach(cleanupEscalationFixtures);
 
 describe("workflow MCP escalation tools", () => {
+  it("publishes the immediate-return behavior contract with the escalate tool", async () => {
+    const subject = await createEscalationFixture();
+    createEscalationInstance(subject.persistence, "instance-description", [
+      {
+        sessionKey: "top",
+        token: "token-description",
+        tools: ["escalate"],
+      },
+    ]);
+    const client = await connectEscalationClient(
+      subject.url,
+      "token-description",
+      "description-client",
+    );
+
+    const escalation = (await client.listTools()).tools.find(
+      ({ name }) => name === "escalate",
+    );
+    expect(escalation?.description).toBe(
+      "Record structured questions for asynchronous answer delivery. Do not act on the question's subject until its answer arrives in a later turn. Continue unrelated work when available; otherwise end this turn. Never create a watcher or poll for the answer.",
+    );
+  });
+
   it("rejects advance while the session has a pending escalation", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-advance", [
