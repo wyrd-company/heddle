@@ -652,78 +652,101 @@ proposed-design:
     tool.
 
     Top-level routing composes one durable attention adapter and one Pushover
-    adapter. Escalations, every production error, and session-observation
-    attention of kind `ended`, `failed`, or `stalled` page through Pushover;
-    `ended` and `failed` are the dead-session states. Production-error codes
-    declare incident eligibility in one closed catalog. Eligible errors page at
-    the informational level and carry an incident identity derived from their
-    stable attention ID. Scheduler-pass and durable-catalog failures form the
-    operator-only floor: they page at the critical level, carry no incident
-    identity, and state that an incident cannot run. Configuration validation
-    fails before production composition exists and therefore cannot raise an
-    incident or production-error attention. While SQLite is available,
-    production-error pages have a durable one-minute per-code cooldown and a cap
-    of three attempts in five minutes, so varying error text cannot bypass storm
-    containment. If a floor failure makes SQLite unavailable, an in-memory
-    window applies the same bound within that process and resets when Heddle
-    restarts. Approval, user-input, stale-instance, lifecycle, repository, and
-    epic-acceptance attention remain in the console without a page. Both adapters
-    consume each pageable entry's
-    stable attention ID. Every durable attention ID must fit the 128-character console
-    attention identity bound; the durable adapter refuses an entry outside the
-    bound before persistence. A top-level escalation derives its external
-    attention ID as `escalation:` plus the SHA-256 digest of the lossless JSON
-    tuple containing its instance ID, owner session key, and escalation ID. The
-    75-character external identity is stable and sensitive to every component;
-    history, waiters, replay, and answer authority continue to use the exact
-    tuple components rather than the digest.
+    adapter. Escalations, production failures, and session-observation
+    attention of kind `ended`, `failed`, or `stalled` enter durable attention;
+    `ended` and `failed` are dead-session conditions. Incident admission does
+    not consume a catalog of predicted failure codes. Every task-scoped
+    production failure and dead or stalled session is eligible by default.
+    Scheduler-pass, durable-catalog, and incident-execution failures form the
+    explicit operator-only floor because the incident machinery cannot safely
+    handle its own loss. Floor failures page at the critical level, carry no
+    incident identity, and state that an incident cannot run. Configuration
+    validation fails before production composition exists and therefore cannot
+    raise an incident or production-error attention.
 
-    Each active incident-eligible, task-scoped production error admits one
-    ordinary `incident` lifecycle instance under the deterministic incident
-    identity. Admission consumes the closed production-error eligibility
-    catalog, limits active incidents to three, and applies a one-minute per-code
-    cooldown. Suppression does not resolve or replace the source attention.
-    Scheduler-pass, durable-catalog, and incident-execution failures remain on
-    the operator-only floor. An incident execution failure therefore cannot
-    recursively admit another incident.
+    One durable retry and circuit-breaker record governs each stable failure
+    condition. A failed effect records the first attempt and a deadline. A
+    later reconciliation pass may raise a new idempotent effect after that
+    deadline; no retry holds a request open, sleeps a pass, polls, or replays a
+    recorded occurrence. The failure count changes only at this later-pass
+    boundary. The breaker opens at the configured threshold and its opening,
+    not a permanent-or-transient classification, admits incident judgment.
+    Operator configuration may short-circuit a known failure code or change its
+    threshold as an optimization. Absence from that configuration never
+    prevents admission. A task start that throws, a retained `starting` runtime
+    with no activation, and a session observed dead without lifecycle advance
+    all enter this policy. A successful retry resolves the condition attention;
+    recurrence reopens its durable identity and begins a new failure episode.
+
+    While SQLite is available, production-error pages retain their durable
+    one-minute per-code cooldown and cap of three attempts in five minutes, so
+    varying error text cannot bypass notification storm containment. This page
+    policy is independent of incident admission. If a floor failure makes
+    SQLite unavailable, an in-memory window applies the same page bound within
+    that process and resets when Heddle restarts. Approval, user-input,
+    stale-instance, lifecycle, repository, and epic-acceptance attention remain
+    in the console without a page. Every durable attention ID fits the
+    128-character console attention identity bound. A top-level escalation
+    derives its external attention ID as `escalation:` plus the SHA-256 digest
+    of the lossless instance, owner-session, and escalation tuple.
+
+    An open task-scoped breaker admits one ordinary `incident` lifecycle under
+    the deterministic digest of its source attention identity. At most three
+    incidents are active and the per-code cooldown contains correlated storms;
+    suppression never resolves or replaces source attention. An incident
+    execution failure stays on the operator-only floor and cannot recursively
+    admit another incident.
 
     The incident blueprint has implement, review, and finalize wait stages and
-    no board-status map or board-writing mechanical node. Implement rechecks
-    the recorded condition as `live`, `cleared`, or `undetermined`, records a
-    root-cause analysis, and proposes only GitHub issue, operator escalation,
-    or production mutation actions. The MCP producer boundary rejects a missing
-    condition state and an unknown action kind. Review accepts the diagnosis or
-    returns findings to implement. Three rejected review operations are
-    permitted; another rejection raises floor attention and leaves the source
-    attention unresolved.
+    no board-status map or board-writing mechanical node. Its handoff carries
+    the operator-configured workspace root, organization blueprint repository,
+    board and Heddle state locations, T3 endpoint, GitHub issue sink, approval
+    threshold, and the observed source condition. The agent may change any
+    blueprint, Heddle or T3 configuration, Heddle or T3 data, provider enablement,
+    installed component version, or service process whose resulting condition
+    it can observe before closure. A component-version change is a permitted
+    production workaround; repository version strings record qualification and
+    do not pin production.
 
-    Every activated incident stage uses the ordinary resolved stage-session
-    binding, durable occurrence identity, bootstrap, and T3 dispatch path.
-    Incident execution adds no provider selector and no GitHub output port.
-    Finalize starts only for an accepted diagnosis. When the accepted proposal
-    contains a production mutation, Heddle projects a proposal-digest-bound
-    approval through the existing attention action port and creates no
-    finalizer session until the operator accepts it. It records durable
-    production-mutation effect intent before that action-capable session and
-    completion after activation; occurrence and command replay retain the same
-    session. An accepted GitHub issue
-    is authored by the agent through `gh`; the handoff requires the incident
-    identity in the body and inspection for an existing identity before
-    creation. The durable finalizer stage occurrence and T3 command identity
-    prevent another issuing attempt after process restart. Missing `gh` fails
-    the stage closed. Agent-authored external text retains an unmitigated
-    accidental-publication risk.
+    The authority is bounded by prohibitions rather than an allowlist. The
+    incident agent must not suppress its own condition detection, read, move, or
+    write credentials or secret-bearing material, push a real remote or write a
+    default branch, degrade attention, incident, or notification machinery, or
+    take an effect it cannot observe before closure. Implement rechecks the
+    condition as `live`, `cleared`, or `undetermined`, records a root-cause
+    analysis, and proposes GitHub issue, operator escalation, or production
+    mutation actions with severity. Review accepts the diagnosis or returns
+    findings to implement. Exhausting three rejected reviews raises floor
+    attention and leaves the source condition unresolved.
 
-    Finalize records durable intent before resolving the originating attention
-    and records the incident identity as resolution justification. The resolved
-    attention row is retained. Issue creation, operator escalation, and
-    resolution need no additional approval. A production mutation requires an
-    accepted operator approval event for the exact accepted proposal before
-    finalizer activation. Known correlation tokens, configured
-    secrets, and credential-bearing URLs are redacted before production-error
-    attention persistence and incident handoff assembly. The Console projects
-    the incident identity from the originating attention and reads the pinned
-    incident instance in the existing lifecycle canvas.
+    Every incident stage uses the ordinary pinned stage-session binding,
+    durable occurrence identity, bootstrap, and T3 dispatch path. Finalize
+    starts only for an accepted diagnosis. A production mutation at or above
+    the configured `low`, `moderate`, `high`, or `critical` threshold requires
+    proposal-digest-bound operator approval before the action-capable session
+    starts. A lower-severity mutation proceeds unattended; a missing or unknown
+    severity fails closed to approval. Heddle records mutation intent before
+    activation and completion afterward, so restart retains one occurrence.
+
+    Code changes to Heddle or the T3 fork are reportable but not executable by
+    an incident. They take effect only after a build and deployment the running
+    service cannot observe. The accepted GitHub `owner/name` sink is
+    operator-owned configuration. The finalizer includes the incident identity,
+    checks for an existing identity before creation, and records delivery in its
+    durable local result. If outward delivery fails, finalization retains a
+    task-scoped `incident-report-undelivered` attention and sends it through the
+    existing durable notification route; the repaired incident does not fail
+    and the report is not dropped.
+
+    Finalization requires a fresh observed `conditionState: cleared` result
+    before it resolves the source attention with the incident identity as
+    justification. The resolved row remains durable. A configuration workaround
+    alongside a code fix is applied and verified before the code finding is
+    reported. With no observable workaround, the incident reports and
+    escalates, and the task remains blocked. Known correlation tokens,
+    configured secrets, and credential-bearing URLs are redacted before
+    persistence and handoff assembly. The Console links the source condition to
+    its pinned incident lifecycle.
 
     Scheduler-pass health is one durable failure episode at a time. A failed
     pass with no unrecovered scheduler episode opens the next positive episode

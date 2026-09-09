@@ -76,8 +76,11 @@ When this file does not settle a question, decide with these.
    call that holds a request open waiting for a human is a design error — return
    immediately, record the wait durably, and dispatch a turn when the answer
    arrives. If you need to know something changed, arrange to be told, and make
-   the telling durable. A task that is forgotten is the failure this system
-   exists to prevent.
+   the telling durable. Retry means a later reconciliation pass raises a new,
+   idempotent effect after its durable deadline; it never holds a request open,
+   sleeps a pass, or polls. An open circuit breaker escalates to incident
+   judgment and does not park the work silently. A task that is forgotten is
+   the failure this system exists to prevent.
 2. **Automate everything algorithmic; never automate judgment.** Agent context
    is the scarce resource. Spending it on a deterministic transition is a
    defect. Resolving an ambiguous one without an agent is a worse one.
