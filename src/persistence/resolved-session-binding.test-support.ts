@@ -10,6 +10,7 @@ export const resolvedSessionBindingFixture = (
     Partial<ResolvedSessionBinding>,
 ): ResolvedSessionBinding => ({
   alias: "sample-selection",
+  candidatePosition: 1,
   driverKind: "sample-driver",
   interactionMode: "default",
   modelSlug: "sample-model",
@@ -17,5 +18,6 @@ export const resolvedSessionBindingFixture = (
   providerDisplayName: "Sample Workbench",
   providerInstanceId: "sample-provider",
   runtimeMode: "auto",
+  skippedCandidates: [],
   ...input,
 });

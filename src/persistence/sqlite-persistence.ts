@@ -28,6 +28,7 @@ import {
 } from "./sqlite-instance-recovery.js";
 import {
   assertResolvedSessionBinding,
+  normalizeResolvedSessionBinding,
   sameResolvedSessionBinding,
 } from "./resolved-session-binding.js";
 import {
@@ -116,8 +117,9 @@ const parseResolvedSessionBinding = (
   } catch {
     throw new Error(`Session '${sessionKey}' has an invalid resolved binding`);
   }
-  assertResolvedSessionBinding(value, sessionKey, threadId);
-  return value;
+  const normalized = normalizeResolvedSessionBinding(value);
+  assertResolvedSessionBinding(normalized, sessionKey, threadId);
+  return normalized;
 };
 
 export type FlowcraftHistory = SqliteFlowcraftHistory;
@@ -1668,7 +1670,7 @@ export class SqlitePersistence {
   listSessionRuntime(): SessionRuntimeRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT activation, binding_json AS bindingJson,
+        `SELECT activation, binding_json AS bindingJson, binding_state AS bindingState,
                 instance_id AS instanceId, project_id AS projectId,
                 repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
@@ -1676,30 +1678,37 @@ export class SqlitePersistence {
          ORDER BY instance_id, stage_id, activation`,
       )
       .all() as Array<
-      Omit<SessionRuntimeRecord, "binding" | "projectId" | "repositoryName"> & {
+      Omit<
+        SessionRuntimeRecord,
+        "binding" | "bindingState" | "projectId" | "repositoryName"
+      > & {
         bindingJson: string | null;
+        bindingState: "bound" | "provisional";
         projectId: string | null;
         repositoryName: string | null;
       }
     >;
-    return rows.map(({ bindingJson, projectId, repositoryName, ...row }) => {
-      if (bindingJson === null) {
-        throw new Error(
-          `Session '${row.sessionKey}' predates resolved session bindings; clear the pre-release state directory before restart`,
+    return rows.map(
+      ({ bindingJson, bindingState, projectId, repositoryName, ...row }) => {
+        if (bindingJson === null) {
+          throw new Error(
+            `Session '${row.sessionKey}' predates resolved session bindings; clear the pre-release state directory before restart`,
+          );
+        }
+        const binding = parseResolvedSessionBinding(
+          bindingJson,
+          row.sessionKey,
+          row.threadId,
         );
-      }
-      const binding = parseResolvedSessionBinding(
-        bindingJson,
-        row.sessionKey,
-        row.threadId,
-      );
-      return {
-        ...row,
-        binding,
-        ...(projectId === null ? {} : { projectId }),
-        ...(repositoryName === null ? {} : { repositoryName }),
-      };
-    });
+        return {
+          ...row,
+          binding,
+          ...(bindingState === "provisional" ? { bindingState } : {}),
+          ...(projectId === null ? {} : { projectId }),
+          ...(repositoryName === null ? {} : { repositoryName }),
+        };
+      },
+    );
   }
 
   writeSessionRuntime(record: SessionRuntimeRecord): void {
@@ -1727,7 +1736,7 @@ export class SqlitePersistence {
     );
     const priorRow = this.database
       .prepare(
-        `SELECT activation, binding_json AS bindingJson,
+        `SELECT activation, binding_json AS bindingJson, binding_state AS bindingState,
                 instance_id AS instanceId, project_id AS projectId,
                 repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
@@ -1737,9 +1746,10 @@ export class SqlitePersistence {
       .get(record.sessionKey) as
       | (Omit<
           SessionRuntimeRecord,
-          "binding" | "projectId" | "repositoryName"
+          "binding" | "bindingState" | "projectId" | "repositoryName"
         > & {
           bindingJson: string | null;
+          bindingState: "bound" | "provisional";
           projectId: string | null;
           repositoryName: string | null;
         })
@@ -1765,13 +1775,14 @@ export class SqlitePersistence {
               : { repositoryName: priorRow.repositoryName }),
           };
     if (prior !== undefined) {
-      const coreChanged =
+      const fixedIdentityChanged =
         prior.activation !== record.activation ||
-        prior.binding === undefined ||
-        !sameResolvedSessionBinding(prior.binding, record.binding) ||
         prior.instanceId !== record.instanceId ||
         prior.sessionKey !== record.sessionKey ||
-        prior.stageId !== record.stageId ||
+        prior.stageId !== record.stageId;
+      const bindingChanged =
+        prior.binding === undefined ||
+        !sameResolvedSessionBinding(prior.binding, record.binding) ||
         prior.threadId !== record.threadId;
       const routeChanged =
         (prior.projectId !== undefined &&
@@ -1780,10 +1791,33 @@ export class SqlitePersistence {
         (prior.repositoryName !== undefined &&
           record.repositoryName !== undefined &&
           prior.repositoryName !== record.repositoryName);
-      if (coreChanged || routeChanged) {
+      if (
+        fixedIdentityChanged ||
+        routeChanged ||
+        (bindingChanged && prior.bindingState !== "provisional")
+      ) {
         throw new Error(
           `Session '${record.sessionKey}' changed durable identity`,
         );
+      }
+      if (prior.bindingState === "provisional") {
+        this.database
+          .prepare(
+            `UPDATE heddle_session_runtime
+             SET binding_json = ?, binding_state = ?, thread_id = ?,
+                 project_id = COALESCE(project_id, ?),
+                 repository_name = COALESCE(repository_name, ?)
+             WHERE session_key = ?`,
+          )
+          .run(
+            serialize(record.binding),
+            record.bindingState ?? "bound",
+            record.threadId,
+            record.projectId ?? null,
+            record.repositoryName ?? null,
+            record.sessionKey,
+          );
+        return;
       }
       if (
         (prior.projectId === undefined && record.projectId !== undefined) ||
@@ -1808,20 +1842,50 @@ export class SqlitePersistence {
     this.database
       .prepare(
         `INSERT INTO heddle_session_runtime
-           (session_key, activation, binding_json, instance_id, project_id, repository_name,
+           (session_key, activation, binding_json, binding_state, instance_id, project_id, repository_name,
             stage_id, thread_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.sessionKey,
         record.activation,
         serialize(record.binding),
+        record.bindingState ?? "bound",
         record.instanceId,
         record.projectId ?? null,
         record.repositoryName ?? null,
         record.stageId,
         record.threadId,
       );
+  }
+
+  confirmSessionBindingStarted(sessionKey: string, threadId: string): void {
+    this.assertStableId("sessionKey", sessionKey);
+    this.assertStableId("threadId", threadId);
+    const changed = this.database
+      .prepare(
+        `UPDATE heddle_session_runtime
+         SET binding_state = 'bound'
+         WHERE session_key = ? AND thread_id = ? AND binding_state = 'provisional'`,
+      )
+      .run(sessionKey, threadId).changes;
+    if (changed === 0) {
+      const existing = this.database
+        .prepare(
+          `SELECT binding_state AS bindingState, thread_id AS threadId
+           FROM heddle_session_runtime WHERE session_key = ?`,
+        )
+        .get(sessionKey) as
+        { bindingState: "bound" | "provisional"; threadId: string } | undefined;
+      if (
+        existing?.bindingState !== "bound" ||
+        existing.threadId !== threadId
+      ) {
+        throw new Error(
+          `Session '${sessionKey}' cannot confirm a different thread binding`,
+        );
+      }
+    }
   }
 
   close(): void {

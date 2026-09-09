@@ -29,9 +29,11 @@ export {
   type PersistedEvent,
   type PersistenceConfiguration,
   type ReconcilerRuntimeRecord,
+  type ProviderCandidateFailureDetail,
   RESOLVED_SESSION_RUNTIME_MODES,
   type ResolvedSessionBinding,
   type ResolvedSessionRuntimeMode,
+  type SkippedProviderCandidate,
   type SchedulerPassFailureRecord,
   type SchedulerPassHistoryRecord,
   type SessionRuntimeRecord,
@@ -40,6 +42,7 @@ export {
 export {
   assertResolvedSessionBinding,
   isResolvedSessionBinding,
+  normalizeResolvedSessionBinding,
   resolvedSessionBindingFields,
   sameResolvedSessionBinding,
 } from "./resolved-session-binding.js";

@@ -6,13 +6,17 @@
 import type { ResolvedProviderSelection } from "../control-plane/index.js";
 import type { T3ProviderDispatchContext } from "../control-plane/t3-control-plane-client.js";
 import type { ResolvedSessionBinding } from "../persistence/index.js";
+import type { SkippedProviderCandidate } from "../persistence/index.js";
 
 export const bindResolvedSession = (
   selection: ResolvedProviderSelection,
   sessionKey: string,
   threadId: string,
+  candidatePosition = 1,
+  skippedCandidates: readonly SkippedProviderCandidate[] = [],
 ): ResolvedSessionBinding => ({
   alias: selection.alias,
+  candidatePosition,
   driverKind: selection.driverKind,
   interactionMode: selection.interactionMode,
   modelSlug: selection.model.slug,
@@ -21,6 +25,10 @@ export const bindResolvedSession = (
   providerInstanceId: selection.providerInstanceId,
   runtimeMode: selection.runtimeMode,
   sessionKey,
+  skippedCandidates: skippedCandidates.map((candidate) => ({
+    ...candidate,
+    failure: { ...candidate.failure },
+  })),
   threadId,
 });
 

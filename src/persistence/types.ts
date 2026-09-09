@@ -191,8 +191,25 @@ export const RESOLVED_SESSION_RUNTIME_MODES = [
 export type ResolvedSessionRuntimeMode =
   (typeof RESOLVED_SESSION_RUNTIME_MODES)[number];
 
+export interface ProviderCandidateFailureDetail extends Record<
+  string,
+  JsonValue
+> {
+  cause: ProviderCandidateFailureDetail | null;
+  message: string;
+  name: string;
+}
+
+export interface SkippedProviderCandidate extends Record<string, JsonValue> {
+  candidatePosition: number;
+  failure: ProviderCandidateFailureDetail;
+  modelSlug: string;
+  providerDisplayName: string;
+}
+
 export interface ResolvedSessionBinding extends Record<string, JsonValue> {
   alias: string;
+  candidatePosition: number;
   driverKind: string;
   interactionMode: string;
   modelSlug: string;
@@ -201,12 +218,14 @@ export interface ResolvedSessionBinding extends Record<string, JsonValue> {
   providerInstanceId: string;
   runtimeMode: ResolvedSessionRuntimeMode;
   sessionKey: string;
+  skippedCandidates: SkippedProviderCandidate[];
   threadId: string;
 }
 
 export interface SessionRuntimeRecord {
   activation: number;
   binding: ResolvedSessionBinding;
+  bindingState?: "provisional";
   instanceId: string;
   projectId?: string;
   repositoryName?: string;

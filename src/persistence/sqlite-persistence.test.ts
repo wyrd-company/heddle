@@ -77,6 +77,94 @@ afterEach(async () => {
 });
 
 describe("SqlitePersistence", () => {
+  it("normalizes a prior resolved binding to the single-candidate contract on restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const first = new SqlitePersistence({ stateDirectory });
+    const current = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+    first.writeSessionRuntime({
+      activation: 1,
+      binding: current,
+      instanceId: "instance-one",
+      sessionKey: current.sessionKey,
+      stageId: "implement",
+      threadId: current.threadId,
+    });
+    first.close();
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    const {
+      candidatePosition: _position,
+      skippedCandidates: _skipped,
+      ...legacy
+    } = current;
+    database
+      .prepare(
+        "UPDATE heddle_session_runtime SET binding_json = ? WHERE session_key = ?",
+      )
+      .run(JSON.stringify(legacy), current.sessionKey);
+    database.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    expect(restarted.listSessionRuntime()[0]?.binding).toEqual(current);
+    restarted.writeSessionRuntime({
+      activation: 1,
+      binding: current,
+      instanceId: "instance-one",
+      sessionKey: current.sessionKey,
+      stageId: "implement",
+      threadId: current.threadId,
+    });
+    restarted.close();
+  });
+
+  it("permits candidate replacement only while a binding is provisional", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const first = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+    const second = resolvedSessionBindingFixture({
+      candidatePosition: 2,
+      providerDisplayName: "Sample Workbench Two",
+      providerInstanceId: "sample-provider-two",
+      sessionKey: "session-one",
+      threadId: "thread-two",
+    });
+    const runtime = {
+      activation: 1,
+      bindingState: "provisional" as const,
+      instanceId: "instance-one",
+      sessionKey: "session-one",
+      stageId: "implement",
+    };
+    persistence.writeSessionRuntime({
+      ...runtime,
+      binding: first,
+      threadId: "thread-one",
+    });
+    persistence.writeSessionRuntime({
+      ...runtime,
+      binding: second,
+      threadId: "thread-two",
+    });
+    persistence.confirmSessionBindingStarted("session-one", "thread-two");
+
+    expect(persistence.listSessionRuntime()).toContainEqual(
+      expect.objectContaining({ binding: second, threadId: "thread-two" }),
+    );
+    expect(() =>
+      persistence.writeSessionRuntime({
+        ...runtime,
+        binding: first,
+        threadId: "thread-one",
+      }),
+    ).toThrow("changed durable identity");
+    persistence.close();
+  });
+
   it("rejects a starting binding that identifies a different occurrence", async () => {
     const stateDirectory = await makeStateDirectory();
     const persistence = new SqlitePersistence({ stateDirectory });

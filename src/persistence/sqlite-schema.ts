@@ -97,6 +97,7 @@ export const initializePersistenceSchema = (
       session_key TEXT PRIMARY KEY,
       activation INTEGER NOT NULL CHECK (activation > 0),
       binding_json TEXT NOT NULL,
+      binding_state TEXT NOT NULL DEFAULT 'bound' CHECK (binding_state IN ('bound', 'provisional')),
       instance_id TEXT NOT NULL,
       project_id TEXT,
       repository_name TEXT,
@@ -358,6 +359,11 @@ export const initializePersistenceSchema = (
   if (!sessionColumns.some(({ name }) => name === "repository_name")) {
     database.exec(
       "ALTER TABLE heddle_session_runtime ADD COLUMN repository_name TEXT",
+    );
+  }
+  if (!sessionColumns.some(({ name }) => name === "binding_state")) {
+    database.exec(
+      "ALTER TABLE heddle_session_runtime ADD COLUMN binding_state TEXT NOT NULL DEFAULT 'bound' CHECK (binding_state IN ('bound', 'provisional'))",
     );
   }
   const epicProjectColumns = database
