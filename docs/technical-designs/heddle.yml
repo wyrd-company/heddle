@@ -57,7 +57,10 @@ proposed-design:
     validation authority. Each blueprint maps every mechanical node `uses`
     value to the board status that the completed stage mirrors. Heddle rejects
     missing or unknown mechanical uses and statuses absent from the live board
-    configuration before an effect or board write. Each reconciliation pass fetches `origin` without
+    configuration before an effect or board write. An agent-only lifecycle may
+    declare the known `prepare-worktree` and `finalize` mappings without those
+    mechanical nodes. Heddle uses them as the initial and terminal task-status
+    boundaries without executing either mechanical effect. Each reconciliation pass fetches `origin` without
     changing the clone's branch, working tree, or held refs. New instances and
     explicit rebases resolve artifacts from the fetched upstream commit. An
     instance records the Git blob hash of the blueprint it started from, holds
