@@ -16,8 +16,8 @@ is a replaceable worker.
 
 ## Why this service exists
 
-Heddle is the revision of `pi-orchestrator` and the skill-based workflow, which 
-made one coding harness event-driven from the inside as an extension suite. That 
+Heddle is the revision of `pi-orchestrator` and the skill-based workflow, which
+made one coding harness event-driven from the inside as an extension suite. That
 approach worked well enough to show what the shape should be, and where it could
 not go:
 
@@ -32,8 +32,8 @@ not go:
   when it needs to be stable. It reduced that cost but kept an agent in the
   orchestrating seat. In Heddle the reconciler is code. No context, no
   compaction, no forgetting a task exists.
-- **The orchestrator as an agent kept the epic rolling.** One thing that has 
-  worked for the current workflow is having the orchestrator act as an 
+- **The orchestrator as an agent kept the epic rolling.** One thing that has
+  worked for the current workflow is having the orchestrator act as an
   adjudicator, with some guidelines, to answer questions or solve problems
   _before_ escalating to me. Heddle must preserve this mechanism, but probably
   not as a long standing agent session, but as a scoped decision making session
@@ -122,8 +122,9 @@ When this file does not settle a question, decide with these.
   survives restart and carries the actions that dispose it.
 - **blueprint** is the lifecycle definition a task follows, resolved from the
   organization blueprint repository and pinned by content hash at activation.
-- **escalation** is a blocking question from a session, routed to its parent if
-  it has one and to the operator's attention queue if it does not.
+- **escalation** is a durable question from a session. Answer authority begins
+  with its parent when it has one and with the operator when it does not. The
+  answer returns through a dispatched session turn.
 - **instance** is one running lifecycle bound to one task.
 - **lifecycle** is the prescribed stages and transitions through which a task
   moves to completion.

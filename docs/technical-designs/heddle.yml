@@ -256,8 +256,8 @@ proposed-design:
     The catalog reader consumes only `ServerConfig.providers`. Each provider
     snapshot keeps four distinct values: `displayName` is the operator-facing
     configuration name,
-    `instanceId` is the stable T3 routing key, open `driver` is capability and
-    launch-preparation metadata, and a selected model's `slug` is the dispatch
+    `instanceId` is the stable T3 routing key, open `driver` is capability
+    metadata, and a selected model's `slug` is the dispatch
     model identity. The observed provider CLI `version` is diagnostic and
     qualification evidence; it is not a Heddle allowlist. T3 owns provider
     discovery, driver support, CLI authentication, CLI compatibility, and
@@ -275,7 +275,7 @@ proposed-design:
     alias against one catalog snapshot before it binds the server. New stage
     activations, new delegated sessions, and `list_providers` read a fresh
     snapshot. A catalog read or selection failure names one safe reason and
-    performs no worktree, timeout, registration, thread, or dispatch effect.
+    performs no worktree, registration, thread, or dispatch effect.
     The stable selection reasons are `provider-catalog-unavailable`,
     `provider-alias-not-allowed`, `provider-name-not-found`,
     `provider-name-ambiguous`, `provider-not-ready`, `provider-unavailable`, and
@@ -317,8 +317,7 @@ proposed-design:
     rejects a different wait stage or terminal alternative before it runs the
     selecting effect. An initial route with only terminal landings needs no
     session binding. The instance ID routes T3 requests; the alias explains
-    authorization, the display name supports diagnostics, and the driver kind
-    selects an optional configured launch-preparation adapter.
+    authorization, and the display name and driver kind support diagnostics.
     First dispatch, observation, steering, stop, retry, recovery, and a cold
     replacement thread for the same stage or assignment occurrence use this
     stored binding. They never resolve current task front matter, blueprint,
@@ -433,7 +432,7 @@ proposed-design:
     Markdown template. Normalized task-contract data remains the machine
     authority; raw front matter is display input only. Undefined values,
     disabled nondeterministic filters, invalid identity, template and stage
-    disagreement, or unequal repeated renders fail before timeout setup,
+    disagreement, or unequal repeated renders fail before MCP registration,
     thread creation, or first-turn dispatch. The failure raises one durable,
     stable lifecycle-resolution attention entry.
 
@@ -488,7 +487,7 @@ proposed-design:
     agent harness supports through ordinary configuration. The tool
     suite includes `advance` (disposition the current stage),
     `get_task_context`, `report_blocked`, `escalate` (raise a
-    blocking question), follow-up and finding creation, and a todo
+    durable question), follow-up and finding creation, and a todo
     suite (list, check, add) that replaces each harness's built-in
     todo tools, which are disabled per harness. The tool list is
     per-session: computed at bootstrap from the task and its stage's
@@ -616,30 +615,31 @@ proposed-design:
     second steer. The subagent service supplies this hook to the session observer;
     it does not poll T3 or decide liveness separately.
 
-    Escalation is a blocking question through the MCP suite's
-    `escalate` tool: structured questions with options, the call
-    held open until answered, the answer returned as the tool
-    result. Heddle routes by parentage: a subagent's escalation is
-    steered to its parent, which answers through an answer tool
-    scoped by correlation token to its own children; a top-level
-    session's escalation enters the attention queue with a pushover
-    notification, and the operator answers from the console.
-    Session preparation configures the Heddle MCP server for these long-held
-    calls through an optional operator-configured launch-preparation executable
-    keyed by the open T3 `ProviderDriverKind` slug contract: 1–64 characters,
-    starting with a letter, with only letters, digits, `-`, and `_`. This port
-    exists because the pinned T3 application exposes no authenticated pre-thread
-    setting capability. Heddle invokes the matching adapter without a shell
-    through a closed, versioned JSON protocol before it creates the T3 thread and
-    fails closed when a configured adapter does not acknowledge success.
-    Operators configure Codex
-    to receive `tool_timeout_sec = 100000` and Claude Code to receive
-    `MCP_TOOL_TIMEOUT=100000000` milliseconds. The absence of an adapter never
-    makes an otherwise unknown driver unsupported by Heddle. Every driver
-    requires successful workflow MCP provider-session registration after
-    launch preparation, when configured, and before thread creation. Launch
-    preparation is selected by driver kind; thread dispatch remains routed by
-    the resolved provider instance ID. The
+    Escalation is an asynchronous durable question through the MCP suite's
+    `escalate` tool. It records the wait and returns its escalation identity
+    immediately. Each question is either a closed option set or a validated
+    value request. An answer retains its authoritative option or validated
+    value and may carry additional prose. The tool contract tells the caller
+    not to act on the question's subject until an answer turn arrives, to
+    continue unrelated work when possible, and never to create a watcher or
+    poll.
+
+    Answering authority begins with the parent session for a child escalation
+    and with the operator for a top-level escalation. Heddle can move that
+    authority to another named session or back to the operator. The same answer
+    predicate accepts an answer only from the current authority. Session
+    authority receives the question by a steered turn; operator authority raises
+    durable attention and Pushover notification.
+
+    An accepted answer is durable before effects. Heddle appends the question,
+    answer, optional prose, and named authority to the task and its epic, then
+    dispatches one answer turn to the escalating session. Stable command and
+    message identities bind delivery to the escalation occurrence. Replay can
+    retry an unfinished effect without creating a second delivered turn. When
+    the original thread is unavailable, Heddle reactivates the same stage
+    occurrence with its stored session binding and dispatches the answer to the
+    replacement thread. Every driver requires successful workflow MCP
+    provider-session registration before thread creation. The
     workflow MCP handler negotiates no protocol newer than 2025-11-25, advertises
     no Tasks capability, and returns ordinary tool results rather than
     `InputRequiredResult`.
@@ -806,8 +806,9 @@ proposed-design:
     for explicit state repair. An accepted console disposition invokes the
     canonical escalation or T3 action
     before recording the attention entry as resolved. The production adapter
-    records the exact action and answers as durable intent, uses the attention ID
-    as the T3 command identity, and reconciles pending local intent against the
+    records the exact action and answers as durable intent. Request responses use
+    the attention ID as the T3 command identity; escalation answer delivery uses
+    identities derived from its occurrence. The adapter reconciles pending local intent against the
     exact request and outcome in authoritative T3 resolved activity history. A
     matching approval decision or user-input answer completes locally without a
     second response; a mismatch fails closed. Heddle approval reject maps to T3
@@ -898,6 +899,10 @@ proposed-design:
     from polling T3's `GET /api/orchestration/shell` snapshot and
     deriving each thread's phase (running, completed, waiting for
     approval, failed) with the same derivation T3's own clients use.
+    A present, nonfailed thread whose session owns a pending Heddle escalation
+    has the durable `awaiting_answer` phase. It raises no ended or stalled
+    attention and clears earlier liveness attention. An absent or failed thread
+    remains genuinely dead and follows the ordinary attention and incident path.
     A session that ends, fails, or stalls without advancing is a
     designed-for transition: after its threshold, the instance moves
     to an attention state and notifies the operator. Pending T3

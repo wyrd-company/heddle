@@ -204,13 +204,13 @@ The control token needs `orchestration:read`, the same read scope used for the
 orchestration shell. Heddle discards the rest of the returned configuration. It
 keeps these values distinct:
 
-| Value                 | Authority and use                                      |
-| --------------------- | ------------------------------------------------------ |
-| provider alias        | Heddle authorization and operator configuration        |
-| provider display name | T3 catalog matching and operator diagnostics           |
-| provider instance ID  | T3 routing and pacing identity                         |
-| driver kind           | T3 capability metadata and optional launch preparation |
-| model slug            | T3 dispatch model identity                             |
+| Value                 | Authority and use                               |
+| --------------------- | ----------------------------------------------- |
+| provider alias        | Heddle authorization and operator configuration |
+| provider display name | T3 catalog matching and operator diagnostics    |
+| provider instance ID  | T3 routing and pacing identity                  |
+| driver kind           | T3 capability metadata and diagnostics          |
+| model slug            | T3 dispatch model identity                      |
 
 A missing or malformed ticket, failed or malformed RPC, or response without a
 provider catalog is `provider-catalog-unavailable`. Heddle does not include
@@ -268,7 +268,7 @@ with that blueprint path and blob hash before it resolves the session binding.
 Planning, lifecycle execution, and recovery use this same snapshot even when
 the source ref moves. Heddle stores one resolved session binding before the
 lifecycle starts any mechanical effect, including worktree creation, and before
-timeout preparation, MCP registration, thread creation, or first-turn dispatch.
+MCP registration, thread creation, or first-turn dispatch.
 If any valid initial lifecycle landing identifies a wait stage, every valid
 initial landing must identify that same wait stage. Heddle rejects a different
 wait stage or terminal alternative before it runs the selecting effect. An
@@ -357,7 +357,7 @@ The MCP `spawn` tool accepts this strict input:
 `providerAlias` is required and must be configured. `runtimeMode` is optional;
 when absent, `session.defaultRuntimeMode` applies. A child does not inherit its
 parent's provider or runtime mode. An invalid or nonselectable choice creates no
-todo assignment, pacing reservation, timeout effect, MCP registration, or T3
+todo assignment, pacing reservation, MCP registration, or T3
 thread. `operationId` is the replay-safe request identity. `rootItemId` names
 the requested todo-subtree root, and Heddle accepts it only within the caller's
 todo authority. The shared pacing gate evaluates an accepted request and can
@@ -478,8 +478,8 @@ For example, the routing portion has this shape:
 }
 ```
 
-The provider-usage source and session launch-preparation catalog are distinct
-explicit runtime ports. A nonempty `pacing.providerBudgets` requires top-level
+The provider-usage source is an explicit runtime port. A nonempty
+`pacing.providerBudgets` requires top-level
 `providerUsage`; an empty budget catalog forbids it. Its absolute executable is
 started without a shell, receives one version-1 JSON request on stdin containing
 the resolved provider instance ID and fixed five-hour window, and must return
@@ -494,38 +494,6 @@ All aliases for one instance consume the same usage and concurrent-session
 capacity. If two aliases for one instance declare different limits,
 configuration is invalid. Omitting a second alias does not give that alias an
 unbudgeted route to the instance.
-
-`session.launchPreparation` is an optional map keyed by the exact open T3 driver
-kind. A key is a 1–64 character `ProviderDriverKind` slug: it starts with a
-letter and contains only letters, digits, `-`, and `_`. Each configured entry is
-a separately preflighted absolute executable. It receives the accepted
-timeout-consumer input, including the resolved driver kind and provider instance
-ID, as one version-1 JSON request and must return exactly
-`{"version":1,"applied":true}`. Heddle invokes it before `thread.create` and
-fails closed on process, timeout, output, or acknowledgement errors. An entry
-accepts optional `arguments`. Its bounded `timeoutMilliseconds` defaults to 10000.
-
-Heddle terminates failed or timed-out children and does not expose their output.
-The production catalog configures Codex with
-`tool_timeout_sec = 100000` and Claude Code with
-`MCP_TOOL_TIMEOUT=100000000` milliseconds. A driver without a configured entry
-skips this Heddle-specific preparation; it is not rejected by a Heddle roster.
-The map key selects preparation only; the resolved provider instance ID still
-routes the T3 thread. T3 owns provider CLI authentication and launch
-configuration.
-
-For example, a production timeout-preparation catalog can contain:
-
-```yaml
-session:
-  launchPreparation:
-    claudeAgent:
-      executable: /opt/heddle/bin/configure-claude-timeout
-      timeoutMilliseconds: 10000
-    codex:
-      executable: /opt/heddle/bin/configure-codex-timeout
-      timeoutMilliseconds: 10000
-```
 
 An in-progress epic gets one T3 project titled
 `{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
@@ -614,7 +582,10 @@ Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path;
 
 Use `advance` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
 
-Use `escalate` for a blocking question that requires attention outside this session.
+Use `escalate` for a question that requires attention outside this session. It
+returns after Heddle records the wait. Do not act on the question's subject
+until Heddle dispatches the answer as a new turn. Continue unrelated work when
+possible, end the turn when none remains, and do not create a watcher or poll.
 ```
 
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
@@ -688,8 +659,8 @@ the rendered handoff, and durably stores both the prompt and exact composed
 Markdown document.
 A missing variable, invalid template or pinned skill, pin or kind disagreement, invalid
 identity, or nondeterministic render raises one stable
-`handoff-render-failed` lifecycle-resolution attention entry. No timeout,
-thread, or first-turn effect occurs. After T3 accepts the first turn, Heddle
+`handoff-render-failed` lifecycle-resolution attention entry. No MCP
+registration, thread, or first-turn effect occurs. After T3 accepts the first turn, Heddle
 records the effective prompt, exact rendered document, and task, instance,
 session, stage, and thread identity in `session:activated`. Restart accepts
 only an exact payload match and does not append or dispatch a second activation.
@@ -707,8 +678,7 @@ fails at the T3 boundary.
 
 The workflow MCP handler negotiates protocol 2025-11-25 or older. It advertises
 no Tasks capability and returns ordinary tool results, not
-`InputRequiredResult`. Session preparation applies the optional
-launch-preparation entry for the bound driver kind before registration. The
+`InputRequiredResult`. The
 Heddle `escalate` tool remains available through this MCP registration for every
 provider. It is independent from a provider's native question tool, which T3
 owns and records as user-input state.
@@ -837,13 +807,35 @@ before that pending escalation, or hold the state for a purpose-built repair.
 Do not delete or rewrite the event or attention row by hand; the pending event
 still blocks its session from stopping.
 
+An escalation records an answering authority. A child begins with its parent
+session as authority; a top-level session begins with the operator. Heddle can
+move authority to another named session or return it to the operator. The
+current authority answers through the same guarded answer contract. A question
+can require one offered option or a value with declared minimum and maximum
+lengths. Optional prose adds context but never replaces the authoritative
+option or validated value.
+
+Heddle records an accepted answer before delivery. It appends the question,
+answer, optional prose, and named answering authority to the task and its epic.
+It then dispatches one answer turn to the escalating session with command and
+message identities derived from the escalation occurrence. Restart replays an
+unfinished delivery with those identities. If the original thread is absent,
+completed, or failed, Heddle reactivates the same stage occurrence with its
+stored session binding and delivers the answer to the replacement thread.
+
+A present, nonfailed session thread with a pending escalation has the
+`awaiting_answer` phase. It raises no ended or stalled attention and admits no
+incident while the wait remains. An absent or failed thread is still a genuine
+dead session and follows normal attention and incident admission.
+
 An accepted disposition performs its canonical effect before marking the entry
 resolved. The resolved record remains durable so the same stable ID cannot raise
 a second entry after restart. The production action port records the exact action
 and answers as durable intent before effect. It delegates only to
 `EscalationCoordinator.answerAsOperator`, `SessionObserver.answerApproval`, or
-`SessionObserver.answerUserInput`. T3 dispatch uses the stable attention ID as
-its command identity. Before retry, Heddle reconciles the exact intended request,
+`SessionObserver.answerUserInput`. Request responses use the stable attention ID
+as their command identity; escalation answer delivery uses identities derived
+from its occurrence. Before retry, Heddle reconciles the exact intended request,
 approval decision, or user-input answers against authoritative T3 resolved
 activity history. A matching outcome completes locally without a second
 response; a different outcome fails closed. Heddle approval `reject` maps to T3
