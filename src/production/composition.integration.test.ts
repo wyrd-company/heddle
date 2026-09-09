@@ -184,6 +184,13 @@ describe("production composition", () => {
       ],
     });
     expect(
+      composition.persistence
+        .getInstance(session.instanceId)
+        ?.state.handoffs.filter(isStoredHandoff)
+        .find(({ sessionKey }) => sessionKey === session.sessionKey)
+        ?.renderedHandoffAuthentication,
+    ).toMatchObject({ driver: "sample-driver-two" });
+    expect(
       composition.persistence.listAttention().map(({ payload }) => payload),
     ).toContainEqual(
       expect.objectContaining({
