@@ -21,6 +21,10 @@ export interface StageProviderSelectionResolver {
     alias: string,
     inputs: ProviderSelectionInputs,
   ): Promise<ResolvedProviderSelection>;
+  resolveCandidates?(
+    alias: string,
+    inputs: ProviderSelectionInputs,
+  ): Promise<readonly ResolvedProviderSelection[]>;
 }
 
 export class StageSessionSelectionError extends Error {
@@ -41,7 +45,17 @@ export class StageSessionSelectionError extends Error {
   }
 }
 
-export const resolveStageSessionSelection = async (
+const aliasForStage = (input: {
+  session: ResolvedProductionSessionConfiguration;
+  stageId: string;
+  stageProviderAlias?: string;
+  taskProviderAliases?: TaskProviderAliasMap;
+}): string =>
+  taskProviderAliasForStage(input.taskProviderAliases, input.stageId) ??
+  input.stageProviderAlias ??
+  input.session.defaultProviderAlias;
+
+export const resolveStageSessionCandidates = async (
   input: {
     session: ResolvedProductionSessionConfiguration;
     stageId: string;
@@ -51,20 +65,26 @@ export const resolveStageSessionSelection = async (
     taskProviderAliases?: TaskProviderAliasMap;
   },
   resolver: StageProviderSelectionResolver,
-): Promise<ResolvedProviderSelection> => {
-  const alias =
-    taskProviderAliasForStage(input.taskProviderAliases, input.stageId) ??
-    input.stageProviderAlias ??
-    input.session.defaultProviderAlias;
+): Promise<readonly ResolvedProviderSelection[]> => {
+  const alias = aliasForStage(input);
+  const inputs = {
+    interactionMode: input.session.interactionMode,
+    runtimeMode: input.stageRuntimeMode ?? input.session.defaultRuntimeMode,
+  };
   try {
-    return await resolver.resolve(alias, {
-      interactionMode: input.session.interactionMode,
-      runtimeMode: input.stageRuntimeMode ?? input.session.defaultRuntimeMode,
-    });
+    return resolver.resolveCandidates === undefined
+      ? [await resolver.resolve(alias, inputs)]
+      : await resolver.resolveCandidates(alias, inputs);
   } catch (error) {
     throw new StageSessionSelectionError(input.taskId, input.stageId, error);
   }
 };
+
+export const resolveStageSessionSelection = async (
+  input: Parameters<typeof resolveStageSessionCandidates>[0],
+  resolver: StageProviderSelectionResolver,
+): Promise<ResolvedProviderSelection> =>
+  (await resolveStageSessionCandidates(input, resolver))[0]!;
 
 export class StartupProviderSelectionResolver implements StageProviderSelectionResolver {
   public constructor(
@@ -85,5 +105,16 @@ export class StartupProviderSelectionResolver implements StageProviderSelectionR
       );
     }
     return { ...selection, ...inputs };
+  }
+
+  public async resolveCandidates(
+    alias: string,
+    inputs: ProviderSelectionInputs,
+  ): Promise<readonly ResolvedProviderSelection[]> {
+    const selections = this.selections.filter(
+      (candidate) => candidate.alias === alias,
+    );
+    if (selections.length === 0) return [await this.resolve(alias, inputs)];
+    return selections.map((selection) => ({ ...selection, ...inputs }));
   }
 }

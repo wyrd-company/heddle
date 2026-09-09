@@ -104,17 +104,14 @@
         "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
       },
       "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["providerDisplayName", "model"],
-        "properties": {
-          "providerDisplayName": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "model": { "type": "string", "minLength": 1, "pattern": "\\S" }
-        }
+        "oneOf": [
+          { "$ref": "#/$defs/providerAliasCandidate" },
+          {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/providerAliasCandidate" }
+          }
+        ]
       }
     },
     "incident": {
@@ -279,6 +276,21 @@
           "format": "uri",
           "pattern": "^https?://"
         }
+      }
+    }
+  },
+  "$defs": {
+    "providerAliasCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerDisplayName", "model"],
+      "properties": {
+        "providerDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "model": { "type": "string", "minLength": 1, "pattern": "\\S" }
       }
     }
   }

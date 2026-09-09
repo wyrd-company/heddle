@@ -79,6 +79,58 @@ const fixture = (): ProductionConfiguration => ({
 });
 
 describe("production configuration", () => {
+  it("accepts both the legacy single-object alias and an ordered candidate list", async () => {
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+    const legacy: ProductionConfiguration = {
+      ...fixture(),
+      pacing: { ...fixture().pacing, providerBudgets: {} },
+    };
+    const ordered: ProductionConfiguration = {
+      ...legacy,
+      providerAliases: {
+        primary: [
+          fixture().providerAliases["primary"] as {
+            model: string;
+            providerDisplayName: string;
+          },
+          { model: "sample-model-two", providerDisplayName: "Workbench Beta" },
+        ],
+      },
+    };
+
+    expect(validate(legacy), JSON.stringify(validate.errors)).toBe(true);
+    expect(validate(ordered), JSON.stringify(validate.errors)).toBe(true);
+    expect(validateProductionConfiguration(legacy)).toBe(legacy);
+    expect(validateProductionConfiguration(ordered)).toBe(ordered);
+  });
+
+  it("rejects an empty candidate list through both configuration boundaries", async () => {
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+    const invalid = {
+      ...fixture(),
+      providerAliases: { primary: [] },
+    } as ProductionConfiguration;
+
+    expect(validate(invalid)).toBe(false);
+    expect(() => validateProductionConfiguration(invalid)).toThrow(
+      "providerAliases.primary must not be empty",
+    );
+  });
+
   it("keeps the runtime validator and JSON schema required surface aligned", async () => {
     const schema = JSON.parse(
       await readFile("schemas/production-configuration.json", "utf8"),

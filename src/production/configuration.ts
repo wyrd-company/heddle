@@ -286,11 +286,20 @@ const validateCommonProductionConfiguration = (
         `providerAliases key '${alias}' must be a lower-kebab alias of at most 64 characters`,
       );
     }
-    requireNonEmpty(
-      `providerAliases.${alias}.providerDisplayName`,
-      provider.providerDisplayName,
-    );
-    requireNonEmpty(`providerAliases.${alias}.model`, provider.model);
+    const candidates = Array.isArray(provider) ? provider : [provider];
+    if (candidates.length === 0) {
+      throw new TypeError(`providerAliases.${alias} must not be empty`);
+    }
+    candidates.forEach((candidate, index) => {
+      const path = Array.isArray(provider)
+        ? `providerAliases.${alias}[${index}]`
+        : `providerAliases.${alias}`;
+      requireNonEmpty(
+        `${path}.providerDisplayName`,
+        candidate.providerDisplayName,
+      );
+      requireNonEmpty(`${path}.model`, candidate.model);
+    });
   }
   if (
     !Object.hasOwn(
@@ -469,7 +478,7 @@ export const resolveProductionConfiguration = async (
     session: {
       ...validated.session,
       defaultSelection: startup.defaultSelection,
-      resolvedSelections: [...startup.aliases.values()],
+      resolvedSelections: [...startup.candidates.values()].flat(),
     },
   };
   return validateResolvedProductionConfiguration(resolved);

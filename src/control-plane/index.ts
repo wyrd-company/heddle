@@ -107,6 +107,7 @@ export {
   type ProviderAliasCatalog,
   type ProviderAliasAvailability,
   type ProviderAliasAvailabilityReason,
+  type ProviderAliasCandidateConfiguration,
   type ProviderAliasConfiguration,
   type ProviderAliasListing,
   type ProviderSelectionInputs,

@@ -144,6 +144,34 @@ describe("ProviderSelectionResolver", () => {
     });
   });
 
+  it("resolves ordered candidates and applies an alias budget to every candidate instance", async () => {
+    const resolver = new ProviderSelectionResolver(
+      {
+        primary: [aliases.primary, aliases.reviewer],
+      },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    const resolved = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: { primary: { usageLimit: 50 } },
+      runtimeMode: "auto",
+    });
+
+    expect(resolved.candidates.get("primary")).toEqual([
+      expect.objectContaining({ providerInstanceId: "instance-alpha" }),
+      expect.objectContaining({ providerInstanceId: "instance-beta" }),
+    ]);
+    expect(resolved.aliases.get("primary")?.providerInstanceId).toBe(
+      "instance-alpha",
+    );
+    expect(resolved.providerBudgets).toEqual({
+      "instance-alpha": { usageLimit: 50 },
+      "instance-beta": { usageLimit: 50 },
+    });
+  });
+
   it("rejects conflicting budgets for aliases on one provider instance", async () => {
     const resolver = new ProviderSelectionResolver(aliases, {
       readProviderCatalog: async () => catalog(),

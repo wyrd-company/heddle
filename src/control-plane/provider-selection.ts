@@ -9,10 +9,14 @@ import {
   type ResolvedSessionRuntimeMode,
 } from "../persistence/types.js";
 
-export type ProviderAliasConfiguration = {
+export type ProviderAliasCandidateConfiguration = {
   readonly model: string;
   readonly providerDisplayName: string;
 };
+
+export type ProviderAliasConfiguration =
+  | ProviderAliasCandidateConfiguration
+  | readonly ProviderAliasCandidateConfiguration[];
 
 export type ProviderAliasCatalog = Readonly<
   Record<string, ProviderAliasConfiguration>
@@ -83,6 +87,10 @@ export type ResolvedProviderSelection = {
 
 export type ResolvedProviderStartup = {
   readonly aliases: ReadonlyMap<string, ResolvedProviderSelection>;
+  readonly candidates: ReadonlyMap<
+    string,
+    readonly ResolvedProviderSelection[]
+  >;
   readonly defaultSelection: ResolvedProviderSelection;
   readonly providerBudgets: Readonly<Record<string, ProviderUsageBudget>>;
 };
@@ -123,7 +131,10 @@ const selectionError = (
   );
 
 export class ProviderSelectionResolver {
-  readonly #aliases: ReadonlyMap<string, ProviderAliasConfiguration>;
+  readonly #aliases: ReadonlyMap<
+    string,
+    readonly ProviderAliasCandidateConfiguration[]
+  >;
   readonly #catalog: T3ProviderCatalogReader;
 
   public constructor(
@@ -133,7 +144,9 @@ export class ProviderSelectionResolver {
     this.#aliases = new Map(
       Object.entries(aliases).map(([alias, configuration]) => [
         alias,
-        { ...configuration },
+        (Array.isArray(configuration) ? configuration : [configuration]).map(
+          (candidate) => ({ ...candidate }),
+        ),
       ]),
     );
     this.#catalog = catalog;
@@ -155,6 +168,17 @@ export class ProviderSelectionResolver {
     inputs: ProviderSelectionInputs,
   ): Promise<ResolvedProviderSelection> {
     return this.resolveFromCatalog(await this.readCatalog(), alias, inputs);
+  }
+
+  public async resolveCandidates(
+    alias: string,
+    inputs: ProviderSelectionInputs,
+  ): Promise<readonly ResolvedProviderSelection[]> {
+    return this.resolveCandidatesFromCatalog(
+      await this.readCatalog(),
+      alias,
+      inputs,
+    );
   }
 
   public async listAllowed(
@@ -212,69 +236,81 @@ export class ProviderSelectionResolver {
     alias: string,
     inputs: ProviderSelectionInputs,
   ): ResolvedProviderSelection {
-    const configured = this.#aliases.get(alias);
-    if (configured === undefined) {
+    return this.resolveCandidatesFromCatalog(catalog, alias, inputs)[0]!;
+  }
+
+  public resolveCandidatesFromCatalog(
+    catalog: T3ProviderCatalog,
+    alias: string,
+    inputs: ProviderSelectionInputs,
+  ): readonly ResolvedProviderSelection[] {
+    const configuredCandidates = this.#aliases.get(alias);
+    if (configuredCandidates === undefined) {
       throw selectionError(
         "provider-alias-not-allowed",
         alias,
         "the alias is not configured",
       );
     }
-    const providers = catalog.filter(
-      ({ displayName }) => displayName === configured.providerDisplayName,
-    );
-    if (providers.length === 0) {
-      throw selectionError(
-        "provider-name-not-found",
-        alias,
-        `T3 has no provider named '${configured.providerDisplayName}'`,
+    return configuredCandidates.map((configured) => {
+      const providers = catalog.filter(
+        ({ displayName }) => displayName === configured.providerDisplayName,
       );
-    }
-    if (providers.length > 1) {
-      throw selectionError(
-        "provider-name-ambiguous",
-        alias,
-        `T3 has more than one provider named '${configured.providerDisplayName}'`,
+      if (providers.length === 0) {
+        throw selectionError(
+          "provider-name-not-found",
+          alias,
+          `T3 has no provider named '${configured.providerDisplayName}'`,
+        );
+      }
+      if (providers.length > 1) {
+        throw selectionError(
+          "provider-name-ambiguous",
+          alias,
+          `T3 has more than one provider named '${configured.providerDisplayName}'`,
+        );
+      }
+      const provider = providers[0]!;
+      if (provider.enabled && provider.state === "warning") {
+        throw selectionError(
+          "provider-not-ready",
+          alias,
+          `T3 provider '${configured.providerDisplayName}' has not finished discovery`,
+        );
+      }
+      if (
+        provider.availability !== "available" ||
+        !provider.enabled ||
+        !provider.installed ||
+        provider.state !== "ready"
+      ) {
+        throw selectionError(
+          "provider-unavailable",
+          alias,
+          `T3 provider '${configured.providerDisplayName}' is not available, enabled, installed, and ready`,
+        );
+      }
+      const model = provider.models.find(
+        ({ slug }) => slug === configured.model,
       );
-    }
-    const provider = providers[0]!;
-    if (provider.enabled && provider.state === "warning") {
-      throw selectionError(
-        "provider-not-ready",
+      if (model === undefined) {
+        throw selectionError(
+          "provider-model-not-found",
+          alias,
+          `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
+        );
+      }
+      return {
         alias,
-        `T3 provider '${configured.providerDisplayName}' has not finished discovery`,
-      );
-    }
-    if (
-      provider.availability !== "available" ||
-      !provider.enabled ||
-      !provider.installed ||
-      provider.state !== "ready"
-    ) {
-      throw selectionError(
-        "provider-unavailable",
-        alias,
-        `T3 provider '${configured.providerDisplayName}' is not available, enabled, installed, and ready`,
-      );
-    }
-    const model = provider.models.find(({ slug }) => slug === configured.model);
-    if (model === undefined) {
-      throw selectionError(
-        "provider-model-not-found",
-        alias,
-        `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
-      );
-    }
-    return {
-      alias,
-      driverKind: provider.driverKind,
-      interactionMode: inputs.interactionMode,
-      model: { ...model },
-      observedCliVersion: provider.observedCliVersion,
-      providerDisplayName: configured.providerDisplayName,
-      providerInstanceId: provider.instanceId,
-      runtimeMode: inputs.runtimeMode,
-    };
+        driverKind: provider.driverKind,
+        interactionMode: inputs.interactionMode,
+        model: { ...model },
+        observedCliVersion: provider.observedCliVersion,
+        providerDisplayName: configured.providerDisplayName,
+        providerInstanceId: provider.instanceId,
+        runtimeMode: inputs.runtimeMode,
+      };
+    });
   }
 
   public async resolveStartup(
@@ -282,8 +318,15 @@ export class ProviderSelectionResolver {
   ): Promise<ResolvedProviderStartup> {
     const catalog = await this.readCatalog();
     const aliases = new Map<string, ResolvedProviderSelection>();
+    const candidates = new Map<string, readonly ResolvedProviderSelection[]>();
     for (const alias of [...this.#aliases.keys()].sort()) {
-      aliases.set(alias, this.resolveFromCatalog(catalog, alias, inputs));
+      const resolved = this.resolveCandidatesFromCatalog(
+        catalog,
+        alias,
+        inputs,
+      );
+      candidates.set(alias, resolved);
+      aliases.set(alias, resolved[0]!);
     }
     const defaultSelection =
       aliases.get(inputs.defaultAlias) ??
@@ -291,19 +334,23 @@ export class ProviderSelectionResolver {
     const providerBudgets = new Map<string, ProviderUsageBudget>();
     const budgetAliases = new Map<string, string>();
     for (const [alias, budget] of Object.entries(inputs.providerBudgets)) {
-      const selection =
-        aliases.get(alias) ?? this.resolveFromCatalog(catalog, alias, inputs);
-      const prior = providerBudgets.get(selection.providerInstanceId);
-      if (prior !== undefined && prior.usageLimit !== budget.usageLimit) {
-        throw new TypeError(
-          `Provider aliases '${budgetAliases.get(selection.providerInstanceId)}' and '${alias}' select provider instance '${selection.providerInstanceId}' with conflicting pacing limits`,
-        );
+      const selections =
+        candidates.get(alias) ??
+        this.resolveCandidatesFromCatalog(catalog, alias, inputs);
+      for (const selection of selections) {
+        const prior = providerBudgets.get(selection.providerInstanceId);
+        if (prior !== undefined && prior.usageLimit !== budget.usageLimit) {
+          throw new TypeError(
+            `Provider aliases '${budgetAliases.get(selection.providerInstanceId)}' and '${alias}' select provider instance '${selection.providerInstanceId}' with conflicting pacing limits`,
+          );
+        }
+        providerBudgets.set(selection.providerInstanceId, { ...budget });
+        budgetAliases.set(selection.providerInstanceId, alias);
       }
-      providerBudgets.set(selection.providerInstanceId, { ...budget });
-      budgetAliases.set(selection.providerInstanceId, alias);
     }
     return {
       aliases,
+      candidates,
       defaultSelection,
       providerBudgets: Object.fromEntries(providerBudgets),
     };
