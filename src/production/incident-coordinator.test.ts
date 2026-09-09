@@ -260,6 +260,26 @@ describe("production incident coordinator", () => {
     expect(harness.boardWrites).toEqual([]);
   });
 
+  it("characterizes terminal runtime reuse when one condition recurs", async () => {
+    const { attention, coordinator, harness } = await createSubject();
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    const first = persistence!.listIncidentRuntime()[0]!;
+    persistence!.writeIncidentRuntime({ ...first, state: "done" });
+    attention.resolve(source.attentionId);
+    attention.reopen(source.attentionId);
+
+    await coordinator.reconcile([task()]);
+
+    expect(persistence!.listIncidentRuntime()).toEqual([
+      expect.objectContaining({
+        incidentId: source.incidentId,
+        state: "done",
+      }),
+    ]);
+    expect(harness.activations).toEqual(["implement"]);
+  });
+
   it("opens the breaker only after later-pass retries reach the configured threshold", async () => {
     let observedAt = 1_000;
     const { attention, coordinator, harness } = await createSubject({
