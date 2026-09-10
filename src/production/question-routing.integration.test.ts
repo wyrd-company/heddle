@@ -626,6 +626,14 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     expect(starts()).toHaveLength(before + 1);
     for (const thread of [
       undefined,
+      {
+        id: runtime.threadId,
+        session: { status: "running" },
+        latestTurn: {
+          state: "running",
+          startedAt: "2026-01-02T00:00:00Z",
+        },
+      },
       { id: runtime.threadId, session: { status: "starting" } },
       { id: runtime.threadId, session: { status: "error" } },
       {
@@ -649,9 +657,10 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
         latestUserMessageAt: "2026-01-02T00:00:00Z",
         latestTurn: { state: "completed", completedAt: "2026-01-01T00:00:00Z" },
       },
-    ])
+    ]) {
       await recovered.poke(target, thread);
-    expect(starts()).toHaveLength(before + 1);
+      expect(starts(), JSON.stringify(thread)).toHaveLength(before + 1);
+    }
   });
 
   it.each(["session error", "observer error"])(
