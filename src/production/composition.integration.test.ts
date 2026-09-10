@@ -518,6 +518,131 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("resolves every pending sanctioned approval rather than only the latest", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(
+      adjudication.threadId,
+      ["request-older", "request-newer"].map((requestId) => ({
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId,
+          requestKind: "mcp-elicitation",
+        },
+      })),
+    );
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(t3.approvalResponses).toHaveLength(2));
+    expect(t3.approvalResponses.map(({ requestId }) => requestId)).toEqual([
+      "request-older",
+      "request-newer",
+    ]);
+    expect(
+      t3.approvalResponses.every(({ decision }) => decision === "accept"),
+    ).toBe(true);
+    await composition.close();
+  });
+
+  it("fails closed instead of suppressing observation when no approval can be accepted", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId: "request-stale",
+          requestKind: "mcp-elicitation",
+        },
+      },
+    ]);
+    // The control plane refuses a request that is no longer the latest one.
+    vi.spyOn(t3, "respondToApproval").mockImplementation(async () => {
+      const error = new Error("pending request does not exist on thread");
+      error.name = "T3PreconditionError";
+      throw error;
+    });
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause:
+            "Adjudication attempted operator interaction outside its authority",
+        }),
+        kind: "escalation",
+      }),
+    );
+    await composition.close();
+  });
+
   it("observes failed, ended, and timestamp-free stalled adjudications through normal session policy", async () => {
     const fixture = await prepare();
     configureAdjudication(fixture);

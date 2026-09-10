@@ -664,11 +664,17 @@ proposed-design:
     Its MCP binding exposes only those two actions and grants no repository or
     configuration write authority. Approval-required mode raises an approval
     request before every tool call, so Heddle approves, under its own
-    authority, an MCP-elicitation approval that reports the tool server Heddle
-    registered for that session. Containment comes from that per-session tool
-    registration, which exposes only the two sanctioned actions, not from the
-    request text. Every other approval request fails closed to the operator.
-    An accepted answer
+    authority, every pending MCP-elicitation approval that reports the tool
+    server Heddle registered for that session. Containment comes from that
+    per-session tool registration, which exposes only the two sanctioned
+    actions, not from the request text, and it applies only to a session
+    carrying the adjudication handoff Heddle wrote when it started that
+    session, never to a lifecycle stage that merely shares the name. A pass
+    that accepts an approval defers observation to the following pass and
+    reports progress only for an approval the control plane accepted, so
+    observation resumes once no sanctioned approval remains outstanding. Every
+    other approval request, and any sanctioned request the control plane will
+    not accept, fails closed to the operator. An accepted answer
     records the selected model and required reasoning and follows the same
     durable delivery and decision-log path as an operator answer. A decline
     moves authority to the operator without trying another model and carries

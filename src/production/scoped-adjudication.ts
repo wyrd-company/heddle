@@ -324,12 +324,12 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
   }
 
   isAdjudicationSession(sessionKey: string): boolean {
-    return this.#runtime(sessionKey)?.stageId === "adjudication";
+    return this.#adjudicationRuntime(sessionKey) !== undefined;
   }
 
   async authorityFailure(sessionKey: string): Promise<string | undefined> {
-    const runtime = this.#runtime(sessionKey);
-    if (runtime?.stageId !== "adjudication") return undefined;
+    const runtime = this.#adjudicationRuntime(sessionKey);
+    if (runtime === undefined) return undefined;
     const thread = (await this.options.t3.getShell()).threads.find(
       ({ id }) => id === runtime.threadId,
     );
@@ -352,40 +352,74 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
    * request is left pending for {@link authorityFailure} to read as a breach.
    */
   async settleSanctionedApprovals(sessionKey: string): Promise<boolean> {
-    const runtime = this.#runtime(sessionKey);
-    if (runtime?.stageId !== "adjudication") return false;
-    const thread = (await this.options.t3.getShell()).threads.find(
-      ({ id }) => id === runtime.threadId,
-    );
-    if (thread?.hasPendingApprovals !== true) return false;
-    return this.#approveSanctionedToolRequest(runtime.threadId);
-  }
-
-  async #approveSanctionedToolRequest(threadId: string): Promise<boolean> {
-    let pending: T3ThreadActivity[];
+    const runtime = this.#adjudicationRuntime(sessionKey);
+    if (runtime === undefined) return false;
     try {
-      pending = pendingRequestActivitiesFor(
-        await this.options.t3.getThread(threadId),
-        "approval.requested",
+      const thread = (await this.options.t3.getShell()).threads.find(
+        ({ id }) => id === runtime.threadId,
       );
+      if (thread?.hasPendingApprovals !== true) return false;
+      return await this.#approveSanctionedToolRequests(runtime.threadId);
     } catch {
       return false;
     }
-    const latest = pending.at(-1);
-    if (latest === undefined || !sanctionedToolApproval(latest)) return false;
-    const requestId = latest.payload?.requestId;
-    if (typeof requestId !== "string" || requestId.trim() === "") return false;
-    try {
-      await this.options.t3.respondToApproval(
-        threadId,
-        requestId,
-        "accept",
-        stableUuid(`${threadId}:approval:${requestId}`),
-      );
-    } catch (error) {
-      return isT3PreconditionError(error);
+  }
+
+  /**
+   * Accepts every pending sanctioned approval on the thread and reports
+   * whether this pass accepted at least one.
+   *
+   * A pass reports success only when it actually dispatched an acceptance, so
+   * a pass can never claim progress it did not make. A request the control
+   * plane refuses to accept leaves the pass reporting no progress, which
+   * returns the session to {@link authorityFailure} and fails it closed to the
+   * operator rather than suppressing observation indefinitely.
+   */
+  async #approveSanctionedToolRequests(threadId: string): Promise<boolean> {
+    const pending = pendingRequestActivitiesFor(
+      await this.options.t3.getThread(threadId),
+      "approval.requested",
+    );
+    if (pending.length === 0 || !pending.every(sanctionedToolApproval)) {
+      return false;
     }
-    return true;
+    let accepted = 0;
+    for (const activity of pending) {
+      const requestId = activity.payload?.requestId;
+      if (typeof requestId !== "string" || requestId.trim() === "") continue;
+      try {
+        await this.options.t3.respondToApproval(
+          threadId,
+          requestId,
+          "accept",
+          stableUuid(`${threadId}:approval:${requestId}`),
+        );
+        accepted += 1;
+      } catch (error) {
+        if (!isT3PreconditionError(error)) throw error;
+      }
+    }
+    return accepted > 0;
+  }
+
+  /**
+   * Resolves the session runtime only for a session Heddle itself started as
+   * an adjudication.
+   *
+   * A stage id is copied from a blueprint node id, so a lifecycle node named
+   * `adjudication` would otherwise present an ordinary session as an
+   * adjudication. The stored adjudication handoff is written by Heddle when it
+   * starts the session and carries the session key, so a blueprint author
+   * cannot produce one by naming a node.
+   */
+  #adjudicationRuntime(sessionKey: string): SessionRuntimeRecord | undefined {
+    const runtime = this.#runtime(sessionKey);
+    if (runtime?.stageId !== "adjudication") return undefined;
+    const stored = this.options.persistence
+      .getInstance(runtime.instanceId)
+      ?.state.handoffs.filter(isStoredAdjudicationHandoff)
+      .some((handoff) => handoff.sessionKey === sessionKey);
+    return stored === true ? runtime : undefined;
   }
 
   #runtime(sessionKey: string): SessionRuntimeRecord | undefined {
