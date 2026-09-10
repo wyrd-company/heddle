@@ -933,6 +933,146 @@ describe("production subagent composition", () => {
     await composition.close();
   });
 
+  it("paces and starts the next delegated candidate after a start failure", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    fixture.configuration.providerAliases.secondary = [
+      {
+        model: "model-beta",
+        providerDisplayName: "Workbench Beta",
+      },
+      {
+        model: "model-gamma",
+        providerDisplayName: "Workbench Gamma",
+      },
+    ];
+    fixture.configuration.providerAliasBudgets = {
+      secondary: { usageLimit: 100 },
+    };
+    const secondarySelections = [
+      {
+        alias: "secondary",
+        driverKind: "sample-driver",
+        interactionMode: "default",
+        model: {
+          isCustom: false,
+          name: "Model Beta",
+          slug: "model-beta",
+        },
+        observedCliVersion: "2.0.0",
+        providerDisplayName: "Workbench Beta",
+        providerInstanceId: "provider-beta",
+        runtimeMode: "auto-accept-edits" as const,
+      },
+      {
+        alias: "secondary",
+        driverKind: "sample-driver",
+        interactionMode: "default",
+        model: {
+          isCustom: false,
+          name: "Model Gamma",
+          slug: "model-gamma",
+        },
+        observedCliVersion: "3.0.0",
+        providerDisplayName: "Workbench Gamma",
+        providerInstanceId: "provider-gamma",
+        runtimeMode: "auto-accept-edits" as const,
+      },
+    ];
+    fixture.configuration.session.resolvedSelections.push(
+      ...secondarySelections,
+    );
+    const t3 = new SyntheticT3();
+    t3.providerCatalog.push(
+      {
+        availability: "available",
+        displayName: "Workbench Beta",
+        driverKind: "sample-driver",
+        enabled: true,
+        installed: true,
+        instanceId: "provider-beta",
+        models: [secondarySelections[0]!.model],
+        observedCliVersion: "2.0.0",
+        state: "ready",
+      },
+      {
+        availability: "available",
+        displayName: "Workbench Gamma",
+        driverKind: "sample-driver",
+        enabled: true,
+        installed: true,
+        instanceId: "provider-gamma",
+        models: [secondarySelections[1]!.model],
+        observedCliVersion: "3.0.0",
+        state: "ready",
+      },
+    );
+    const attemptedProviders: string[] = [];
+    const dispatch = t3.dispatch.bind(t3);
+    vi.spyOn(t3, "dispatch").mockImplementation(async (command, context) => {
+      if (command.type === "thread.create") {
+        attemptedProviders.push(command.modelSelection.instanceId);
+        if (command.modelSelection.instanceId === "provider-beta") {
+          throw new Error("Sample delegated beta did not start");
+        }
+      }
+      return dispatch(command, context);
+    });
+    const usageReads: string[] = [];
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async (provider) => {
+          usageReads.push(provider);
+          return { used: 0, windowStartedAt: 0 };
+        },
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    await composition.start();
+    attemptedProviders.length = 0;
+    usageReads.length = 0;
+    const record = composition.persistence.getInstance(
+      `task-${fixture.taskId}`,
+    )!;
+    const parent = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(storedCorrelationToken(record.state.handoffs));
+
+    const spawned = await composition.subagents.spawn(parent, {
+      operationId: "delegated-fallback",
+      providerAlias: "secondary",
+      rootItemId: "deliver",
+    });
+
+    expect(spawned).toMatchObject({
+      assignment: {
+        binding: {
+          candidatePosition: 2,
+          providerInstanceId: "provider-gamma",
+          skippedCandidates: [
+            expect.objectContaining({
+              candidatePosition: 1,
+              failure: expect.objectContaining({
+                message: expect.stringContaining(
+                  "Sample delegated beta did not start",
+                ),
+              }),
+            }),
+          ],
+        },
+        provider: "provider-gamma",
+      },
+      kind: "spawned",
+    });
+    expect(attemptedProviders).toEqual(["provider-beta", "provider-gamma"]);
+    expect(usageReads).toEqual(["provider-beta", "provider-gamma"]);
+    await composition.close();
+  });
+
   it("rechecks listed aliases at spawn and contains forbidden selections before effects", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

@@ -310,3 +310,110 @@ export const mutateTodoAssignment = (
     if (claimed !== undefined) return next;
   }
 };
+
+export const replaceTodoAssignmentCandidate = (
+  store: DelegationStateStore,
+  instanceId: string,
+  sessionKey: string,
+  replacement: Pick<
+    TodoAssignment,
+    "binding" | "bootstrap" | "model" | "provider" | "threadId"
+  >,
+): TodoAssignment => {
+  assertResolvedSessionBinding(
+    replacement.binding,
+    sessionKey,
+    replacement.threadId,
+  );
+  if (
+    replacement.binding.providerInstanceId !== replacement.provider ||
+    replacement.binding.modelSlug !== replacement.model
+  ) {
+    throw new Error(
+      "Replacement provider and model must match its resolved session binding",
+    );
+  }
+  while (true) {
+    const current = requireRecord(store, instanceId);
+    const { assignment, list } = assignmentForChild(current, sessionKey);
+    const currentBinding = assignment.binding;
+    const nextBinding = replacement.binding;
+    if (
+      assignment.status !== "active" ||
+      nextBinding.alias !== currentBinding.alias ||
+      nextBinding.sessionKey !== currentBinding.sessionKey ||
+      nextBinding.runtimeMode !== currentBinding.runtimeMode ||
+      nextBinding.interactionMode !== currentBinding.interactionMode ||
+      nextBinding.candidatePosition < currentBinding.candidatePosition
+    ) {
+      throw new Error("Replacement candidate changed delegated authority");
+    }
+    for (const skipped of currentBinding.skippedCandidates) {
+      const retained = nextBinding.skippedCandidates.find(
+        ({ candidatePosition }) =>
+          candidatePosition === skipped.candidatePosition,
+      );
+      if (JSON.stringify(retained) !== JSON.stringify(skipped)) {
+        throw new Error(
+          "Replacement candidate discarded prior failure evidence",
+        );
+      }
+    }
+    if (
+      nextBinding.candidatePosition > currentBinding.candidatePosition &&
+      !nextBinding.skippedCandidates.some(
+        ({ candidatePosition }) =>
+          candidatePosition === currentBinding.candidatePosition,
+      )
+    ) {
+      throw new Error("Replacement candidate omitted the failed predecessor");
+    }
+    if (
+      nextBinding.candidatePosition === currentBinding.candidatePosition &&
+      (replacement.provider !== assignment.provider ||
+        replacement.model !== assignment.model ||
+        replacement.threadId !== assignment.threadId ||
+        JSON.stringify(replacement.bootstrap) !==
+          JSON.stringify(assignment.bootstrap))
+    ) {
+      throw new Error("Same candidate cannot change delegated identity");
+    }
+    const todoState = current.state.todoState;
+    if (!isTodoState(todoState)) throw new Error("Invalid todo state");
+    if (
+      todoState.lists
+        .flatMap((candidateList) => candidateList.assignments ?? [])
+        .some(
+          (candidate) =>
+            candidate.sessionKey !== sessionKey &&
+            candidate.threadId === replacement.threadId,
+        )
+    ) {
+      throw new Error("The replacement thread identity is already assigned");
+    }
+    const nextAssignment: TodoAssignment = {
+      ...assignment,
+      ...replacement,
+    };
+    const nextList: TodoList = {
+      ...list,
+      assignments: (list.assignments ?? []).map((candidate) =>
+        candidate.sessionKey === sessionKey ? nextAssignment : candidate,
+      ),
+    };
+    const nextTodoState = {
+      ...todoState,
+      lists: todoState.lists.map((candidate) =>
+        candidate.sessionKey === list.sessionKey ? nextList : candidate,
+      ),
+    };
+    if (!isTodoState(nextTodoState)) {
+      throw new Error("The replacement candidate would create invalid state");
+    }
+    const replaced = store.compareAndSwapInstance(instanceId, current.version, {
+      ...current.state,
+      todoState: nextTodoState,
+    });
+    if (replaced !== undefined) return nextAssignment;
+  }
+};

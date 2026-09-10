@@ -5,6 +5,7 @@
 
 import {
   bootstrapStageSession,
+  SessionStartFailure,
   type SessionBootstrapDependencies,
   type SessionBootstrapInput,
 } from "../control-plane/session-bootstrap.js";
@@ -12,6 +13,7 @@ import type {
   SessionObservationResult,
   SessionObservationTarget,
 } from "../control-plane/session-observation-types.js";
+import { errorDetail } from "../error-details.js";
 import type {
   DispatchPacingEvaluator,
   PacingDeferral,
@@ -19,8 +21,10 @@ import type {
 } from "../pacing/index.js";
 import {
   sameResolvedSessionBinding,
+  type ProviderCandidateFailureDetail,
   type ResolvedSessionBinding,
   type ResolvedSessionRuntimeMode,
+  type SkippedProviderCandidate,
 } from "../persistence/index.js";
 import type { ProviderAliasListing } from "../control-plane/index.js";
 import type { WorkflowMcpSessionBinding } from "../mcp-server/types.js";
@@ -29,6 +33,7 @@ import {
   assignmentForChild,
   claimTodoAssignment,
   mutateTodoAssignment,
+  replaceTodoAssignmentCandidate,
   type DelegationStateStore,
 } from "./delegation-state.js";
 import { stopTodoAssignmentTree } from "./delegation-teardown.js";
@@ -91,6 +96,10 @@ export type SubagentCoordinatorOptions = {
     sessionKey: string;
     taskId: number;
   }): Promise<void>;
+  providerFailureDetail?(
+    error: unknown,
+    binding: ResolvedSessionBinding,
+  ): ProviderCandidateFailureDetail;
   pacing: DispatchPacingEvaluator;
   persistence: DelegationStateStore;
   providerSelection: {
@@ -101,6 +110,17 @@ export type SubagentCoordinatorOptions = {
       sessionKey: string;
       threadId: string;
     }): Promise<ResolvedSessionBinding>;
+    resolveCandidates?(input: {
+      alias: string;
+      runtimeMode: ResolvedSessionRuntimeMode;
+      sessionKey: string;
+      threadId: string;
+    }): Promise<
+      readonly {
+        binding: ResolvedSessionBinding;
+        catalogFailures: readonly SkippedProviderCandidate[];
+      }[]
+    >;
     runtimeModeFor(sessionKey: string): Promise<ResolvedSessionRuntimeMode>;
   };
   prepareSession(input: {
@@ -139,6 +159,43 @@ export class SubagentCoordinator {
     this.#now = options.now ?? (() => new Date().toISOString());
   }
 
+  #failureDetail(
+    error: unknown,
+    binding: ResolvedSessionBinding,
+  ): ProviderCandidateFailureDetail {
+    return (
+      this.options.providerFailureDetail?.(error, binding) ?? errorDetail(error)
+    );
+  }
+
+  #mergeSkippedCandidates(
+    ...groups: readonly (readonly SkippedProviderCandidate[])[]
+  ): SkippedProviderCandidate[] {
+    const byPosition = new Map<number, SkippedProviderCandidate>();
+    for (const group of groups) {
+      for (const candidate of group) {
+        if (!byPosition.has(candidate.candidatePosition)) {
+          byPosition.set(candidate.candidatePosition, candidate);
+        }
+      }
+    }
+    return [...byPosition.values()].sort(
+      (left, right) => left.candidatePosition - right.candidatePosition,
+    );
+  }
+
+  #failedCandidate(
+    binding: ResolvedSessionBinding,
+    error: unknown,
+  ): SkippedProviderCandidate {
+    return {
+      candidatePosition: binding.candidatePosition,
+      failure: this.#failureDetail(error, binding),
+      modelSlug: binding.modelSlug,
+      providerDisplayName: binding.providerDisplayName,
+    };
+  }
+
   async spawn(
     binding: WorkflowMcpSessionBinding,
     input: SpawnSubagentInput,
@@ -171,20 +228,37 @@ export class SubagentCoordinator {
     }
     let assignment = existing;
     let preparation: SubagentSessionPreparation;
+    let providerCandidates:
+      | readonly {
+          binding: ResolvedSessionBinding;
+          catalogFailures: readonly SkippedProviderCandidate[];
+        }[]
+      | undefined;
     if (assignment === undefined) {
       const identity: ChildIdentity = {
         correlationToken: this.#nextId(),
         sessionKey: this.#nextId(),
         threadId: this.#nextId(),
       };
-      const resolvedBinding = await this.options.providerSelection.resolve({
-        alias: input.providerAlias,
-        runtimeMode: await this.options.providerSelection.runtimeModeFor(
-          binding.sessionKey,
-        ),
-        sessionKey: identity.sessionKey,
-        threadId: identity.threadId,
-      });
+      const runtimeMode = await this.options.providerSelection.runtimeModeFor(
+        binding.sessionKey,
+      );
+      providerCandidates =
+        await this.options.providerSelection.resolveCandidates?.({
+          alias: input.providerAlias,
+          runtimeMode,
+          sessionKey: identity.sessionKey,
+          threadId: identity.threadId,
+        });
+      const resolvedBinding =
+        providerCandidates?.[0]?.binding ??
+        (await this.options.providerSelection.resolve({
+          alias: input.providerAlias,
+          runtimeMode,
+          sessionKey: identity.sessionKey,
+          threadId: identity.threadId,
+        }));
+      identity.threadId = resolvedBinding.threadId;
       const activeSessions = await this.options.activeSessions();
       const parent = activeSessions.find(
         ({ sessionId }) => sessionId === binding.sessionKey,
@@ -255,38 +329,10 @@ export class SubagentCoordinator {
     const { binding: _resolvedBinding, ...bootstrapPreparation } = preparation;
     void _resolvedBinding;
     try {
-      await this.#bootstrap(
-        {
-          ...bootstrapPreparation,
-          handoff: {
-            skillPointer: this.#skillPointer(binding),
-            stage: {
-              agentName: this.#childAgentName(binding, assignment.sessionKey),
-              kind: "standard",
-              name: binding.stage.id,
-              priorStageOutputs: [],
-              skills: [...binding.stage.skills],
-            },
-            taskContract: binding.taskContext,
-          },
-          instanceId: binding.instance.instanceId,
-          parentSessionKey: binding.sessionKey,
-          sessionKey: assignment.sessionKey,
-          createdAt: assignment.bootstrap.createdAt,
-          threadCreateCommandId: assignment.bootstrap.createCommandId,
-          threadId: assignment.threadId,
-          todoAssignment: {
-            listSessionKey:
-              binding.todoAssignment?.listSessionKey ?? binding.sessionKey,
-            rootItemId: assignment.rootItemId,
-          },
-          turnCommandId: assignment.bootstrap.turnCommandId,
-          turnMessageId: assignment.bootstrap.messageId,
-        },
-        {
-          ...this.options.bootstrapDependencies,
-          mintCorrelationToken: () => assignment.correlationToken,
-        },
+      await this.#bootstrapAssignment(
+        binding,
+        assignment,
+        bootstrapPreparation,
       );
     } catch (error) {
       await this.options.onBootstrapFailure?.({
@@ -295,9 +341,194 @@ export class SubagentCoordinator {
         sessionKey: assignment.sessionKey,
         taskId: preparation.taskId,
       });
-      throw error;
+      if (
+        !(error instanceof SessionStartFailure) ||
+        this.options.providerSelection.resolveCandidates === undefined
+      ) {
+        throw error;
+      }
+      let lastFailure: unknown = error;
+      let skipped = this.#mergeSkippedCandidates(
+        assignment.binding.skippedCandidates,
+        [this.#failedCandidate(assignment.binding, error)],
+      );
+      providerCandidates ??=
+        await this.options.providerSelection.resolveCandidates({
+          alias: input.providerAlias,
+          runtimeMode: assignment.binding.runtimeMode,
+          sessionKey: assignment.sessionKey,
+          threadId: assignment.threadId,
+        });
+      for (const candidate of providerCandidates.filter(
+        ({ binding: candidateBinding }) =>
+          candidateBinding.candidatePosition >
+          assignment!.binding.candidatePosition,
+      )) {
+        skipped = this.#mergeSkippedCandidates(
+          skipped,
+          candidate.binding.skippedCandidates,
+        );
+        const candidateBinding: ResolvedSessionBinding = {
+          ...candidate.binding,
+          skippedCandidates: skipped.map((failure) => ({
+            ...failure,
+            failure: { ...failure.failure },
+          })),
+        };
+        const activeSessions = await this.options.activeSessions();
+        const decision = await this.options.pacing.evaluate(
+          {
+            kind: "subagent",
+            parentSessionId: binding.sessionKey,
+            provider: candidateBinding.providerInstanceId,
+            providerAlias: candidateBinding.alias,
+            sessionId: candidateBinding.sessionKey,
+          },
+          activeSessions,
+        );
+        if (decision.kind === "defer") {
+          assignment = replaceTodoAssignmentCandidate(
+            this.options.persistence,
+            binding.instance.instanceId,
+            assignment.sessionKey,
+            {
+              binding: {
+                ...assignment.binding,
+                skippedCandidates: skipped.map((failure) => ({
+                  ...failure,
+                  failure: { ...failure.failure },
+                })),
+              },
+              bootstrap: assignment.bootstrap,
+              model: assignment.model,
+              provider: assignment.provider,
+              threadId: assignment.threadId,
+            },
+          );
+          return { deferral: decision.deferral, kind: "deferred" };
+        }
+        assignment = replaceTodoAssignmentCandidate(
+          this.options.persistence,
+          binding.instance.instanceId,
+          assignment.sessionKey,
+          {
+            binding: candidateBinding,
+            bootstrap: {
+              createCommandId: this.#nextId(),
+              createdAt: this.#now(),
+              messageId: this.#nextId(),
+              turnCommandId: this.#nextId(),
+            },
+            model: candidateBinding.modelSlug,
+            provider: candidateBinding.providerInstanceId,
+            threadId: candidateBinding.threadId,
+          },
+        );
+        const nextPreparation = await this.options.prepareSession({
+          binding,
+          identity: assignment,
+          model: assignment.model,
+          provider: assignment.provider,
+          resolvedBinding: assignment.binding,
+          rootItemId: assignment.rootItemId,
+        });
+        const { binding: _nextResolvedBinding, ...nextBootstrapPreparation } =
+          nextPreparation;
+        void _nextResolvedBinding;
+        try {
+          await this.#bootstrapAssignment(
+            binding,
+            assignment,
+            nextBootstrapPreparation,
+            true,
+          );
+          return { assignment, kind: "spawned" };
+        } catch (nextError) {
+          await this.options.onBootstrapFailure?.({
+            error: nextError,
+            instanceId: binding.instance.instanceId,
+            sessionKey: assignment.sessionKey,
+            taskId: nextPreparation.taskId,
+          });
+          if (!(nextError instanceof SessionStartFailure)) throw nextError;
+          skipped = this.#mergeSkippedCandidates(skipped, [
+            this.#failedCandidate(assignment.binding, nextError),
+          ]);
+          lastFailure = nextError;
+        }
+      }
+      skipped = this.#mergeSkippedCandidates(
+        skipped,
+        ...(providerCandidates ?? []).map(
+          ({ catalogFailures }) => catalogFailures,
+        ),
+      );
+      assignment = replaceTodoAssignmentCandidate(
+        this.options.persistence,
+        binding.instance.instanceId,
+        assignment.sessionKey,
+        {
+          binding: {
+            ...assignment.binding,
+            skippedCandidates: skipped.map((failure) => ({
+              ...failure,
+              failure: { ...failure.failure },
+            })),
+          },
+          bootstrap: assignment.bootstrap,
+          model: assignment.model,
+          provider: assignment.provider,
+          threadId: assignment.threadId,
+        },
+      );
+      throw new Error(
+        `Provider alias '${assignment.binding.alias}' exhausted every delegated candidate: ${skipped.map(({ failure }) => failure.message).join("; ")}`,
+        { cause: lastFailure },
+      );
     }
     return { assignment, kind: "spawned" };
+  }
+
+  async #bootstrapAssignment(
+    parent: WorkflowMcpSessionBinding,
+    assignment: TodoAssignment,
+    preparation: Omit<SubagentSessionPreparation, "binding">,
+    replaceStoredHandoffAuthentication: boolean = false,
+  ): Promise<void> {
+    await this.#bootstrap(
+      {
+        ...preparation,
+        handoff: {
+          skillPointer: this.#skillPointer(parent),
+          stage: {
+            agentName: this.#childAgentName(parent, assignment.sessionKey),
+            kind: "standard",
+            name: parent.stage.id,
+            priorStageOutputs: [],
+            skills: [...parent.stage.skills],
+          },
+          taskContract: parent.taskContext,
+        },
+        instanceId: parent.instance.instanceId,
+        parentSessionKey: parent.sessionKey,
+        replaceStoredHandoffAuthentication,
+        sessionKey: assignment.sessionKey,
+        createdAt: assignment.bootstrap.createdAt,
+        threadCreateCommandId: assignment.bootstrap.createCommandId,
+        threadId: assignment.threadId,
+        todoAssignment: {
+          listSessionKey:
+            parent.todoAssignment?.listSessionKey ?? parent.sessionKey,
+          rootItemId: assignment.rootItemId,
+        },
+        turnCommandId: assignment.bootstrap.turnCommandId,
+        turnMessageId: assignment.bootstrap.messageId,
+      },
+      {
+        ...this.options.bootstrapDependencies,
+        mintCorrelationToken: () => assignment.correlationToken,
+      },
+    );
   }
 
   async listProviders(): Promise<ProviderAliasListing> {

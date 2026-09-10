@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DispatchPacingGate } from "../pacing/index.js";
+import { SessionStartFailure } from "../control-plane/session-bootstrap.js";
 import {
   SqlitePersistence,
   type InstanceRecord,
@@ -106,6 +107,8 @@ const binding = (store: MemoryStore): WorkflowMcpSessionBinding => ({
 const fixture = (
   configuration = { maxDepth: 2, maxFanOut: 2 },
   aliasBudget?: { usageLimit: number; used: number },
+  fallback = false,
+  fallbackSuccessorUsed?: number,
 ) => {
   const store = new MemoryStore();
   const bootstrap = vi.fn(async () => ({
@@ -115,6 +118,14 @@ const fixture = (
     threadId: "child-thread",
     worktree: { branch: "sample", created: true, path: "/tmp/sample" },
   }));
+  if (fallback) {
+    bootstrap.mockRejectedValueOnce(
+      new SessionStartFailure(
+        "thread-create",
+        new Error("Sample first candidate did not start"),
+      ),
+    );
+  }
   const steerParent = vi.fn(async () => undefined);
   let observedPhase: "failed" | "running" = "running";
   const ids = [
@@ -151,8 +162,12 @@ const fixture = (
         usageWindowHours: 5,
       },
       {
-        readFiveHourWindow: async () => ({
-          used: aliasBudget?.used ?? 0,
+        readFiveHourWindow: async (provider) => ({
+          used:
+            provider === "sample-provider-two" &&
+            fallbackSuccessorUsed !== undefined
+              ? fallbackSuccessorUsed
+              : (aliasBudget?.used ?? 0),
           windowStartedAt: 0,
         }),
       },
@@ -164,6 +179,46 @@ const fixture = (
     persistence: store,
     providerSelection: {
       list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
+      ...(fallback
+        ? {
+            resolveCandidates: async ({
+              alias,
+              runtimeMode,
+              sessionKey,
+            }: {
+              alias: string;
+              runtimeMode: "approval-required";
+              sessionKey: string;
+            }) => [
+              {
+                binding: resolvedSessionBindingFixture({
+                  alias,
+                  candidatePosition: 1,
+                  modelSlug: "sample-model-one",
+                  providerDisplayName: "Workbench One",
+                  providerInstanceId: "sample-provider-one",
+                  runtimeMode,
+                  sessionKey,
+                  threadId: "child-thread",
+                }),
+                catalogFailures: [],
+              },
+              {
+                binding: resolvedSessionBindingFixture({
+                  alias,
+                  candidatePosition: 2,
+                  modelSlug: "sample-model-two",
+                  providerDisplayName: "Workbench Two",
+                  providerInstanceId: "sample-provider-two",
+                  runtimeMode,
+                  sessionKey,
+                  threadId: "child-thread-two",
+                }),
+                catalogFailures: [],
+              },
+            ],
+          }
+        : {}),
       resolve: async ({ alias, runtimeMode, sessionKey, threadId }) =>
         resolvedSessionBindingFixture({
           alias,
@@ -355,6 +410,81 @@ describe("SubagentCoordinator", () => {
       kind: "deferred",
     });
     expect(test.bootstrap).not.toHaveBeenCalled();
+  });
+
+  it("paces and starts the next delegated candidate after a start failure", async () => {
+    const test = fixture({ maxDepth: 2, maxFanOut: 2 }, undefined, true);
+
+    await expect(spawn(test.coordinator, test.store)).resolves.toMatchObject({
+      assignment: {
+        binding: {
+          candidatePosition: 2,
+          providerInstanceId: "sample-provider-two",
+          skippedCandidates: [
+            expect.objectContaining({
+              candidatePosition: 1,
+              failure: expect.objectContaining({
+                message: expect.stringContaining(
+                  "Sample first candidate did not start",
+                ),
+              }),
+            }),
+          ],
+        },
+        provider: "sample-provider-two",
+        threadId: "child-thread-two",
+      },
+      kind: "spawned",
+    });
+    expect(test.bootstrap).toHaveBeenCalledTimes(2);
+    expect(test.bootstrap.mock.calls[1]?.[0]).toMatchObject({
+      modelSelection: {
+        instanceId: "sample-driver",
+        model: "sample-model-two",
+      },
+      replaceStoredHandoffAuthentication: true,
+      threadId: "child-thread-two",
+    });
+  });
+
+  it("does not persist or start a delegated successor until its alias budget admits it", async () => {
+    const test = fixture(
+      { maxDepth: 2, maxFanOut: 2 },
+      { usageLimit: 40, used: 0 },
+      true,
+      40,
+    );
+
+    await expect(spawn(test.coordinator, test.store)).resolves.toMatchObject({
+      deferral: {
+        limit: 40,
+        provider: "sample-provider-two",
+        reason: "provider-usage-window",
+        used: 40,
+      },
+      kind: "deferred",
+    });
+    expect(test.bootstrap).toHaveBeenCalledTimes(1);
+    expect(
+      assignmentForChild(test.store.record, "child-session").assignment,
+    ).toMatchObject({
+      binding: {
+        candidatePosition: 1,
+        providerInstanceId: "sample-provider-one",
+        skippedCandidates: [
+          expect.objectContaining({
+            candidatePosition: 1,
+            failure: expect.objectContaining({
+              message: expect.stringContaining(
+                "Sample first candidate did not start",
+              ),
+            }),
+          }),
+        ],
+      },
+      provider: "sample-provider-one",
+      threadId: "child-thread",
+    });
   });
 
   it("honors the shared fan-out guard before claiming the subtree", async () => {

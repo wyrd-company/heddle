@@ -26,11 +26,14 @@ import {
 import { SubagentCoordinator } from "../subagents/index.js";
 import { isTodoState, type TodoAssignment } from "../todo/index.js";
 import { EscalationHistory } from "../mcp-server/escalation-history.js";
+import { errorDetail } from "../error-details.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 import type { KanbanBoardAdapter } from "../board-adapter/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
 import { heddleSessionTitle } from "./session-title.js";
+import { sanitizeIncidentValue } from "./incident-redaction.js";
+import { stableUuid } from "./stable-uuid.js";
 import {
   bindResolvedSession,
   modelSelectionFromBinding,
@@ -236,6 +239,26 @@ export const createProductionSubagentCoordinator = (options: {
     templateAuthority,
     workflowMcpEndpoint,
   } = options;
+  const resolveCandidates = async (input: {
+    alias: string;
+    runtimeMode: ResolvedSessionBinding["runtimeMode"];
+    sessionKey: string;
+  }) =>
+    (
+      await providerResolver.resolveCandidates(input.alias, {
+        interactionMode: configuration.session.interactionMode,
+        runtimeMode: input.runtimeMode,
+      })
+    ).map((candidate) => ({
+      binding: bindResolvedSession(
+        candidate,
+        input.sessionKey,
+        stableUuid(
+          `${input.sessionKey}:candidate:${candidate.candidatePosition}:thread`,
+        ),
+      ),
+      catalogFailures: candidate.catalogFailures,
+    }));
   return new SubagentCoordinator({
     activeSessions: () => productionActiveSessions(persistence, t3),
     bootstrapDependencies: {
@@ -271,6 +294,16 @@ export const createProductionSubagentCoordinator = (options: {
         });
       }
     },
+    providerFailureDetail: (error, binding) =>
+      sanitizeIncidentValue(errorDetail(error), [
+        configuration.pushover?.applicationToken ?? "",
+        configuration.pushover?.userKey ?? "",
+        configuration.t3?.accessToken ?? "",
+        ...persistence
+          .listInstances()
+          .flatMap(({ state }) => Object.values(state.correlationTokens)),
+        binding.sessionKey,
+      ]) as ReturnType<typeof errorDetail>,
     pacing,
     persistence,
     providerSelection: {
@@ -283,14 +316,18 @@ export const createProductionSubagentCoordinator = (options: {
           configuration.session.resolvedSelections,
         ),
       resolve: async ({ alias, runtimeMode, sessionKey, threadId }) => {
-        const candidate = (
-          await providerResolver.resolveCandidates(alias, {
-            interactionMode: configuration.session.interactionMode,
-            runtimeMode,
-          })
-        )[0]!;
-        return bindResolvedSession(candidate, sessionKey, threadId);
+        const [candidate] = await resolveCandidates({
+          alias,
+          runtimeMode,
+          sessionKey,
+        });
+        return {
+          ...candidate!.binding,
+          threadId,
+        };
       },
+      resolveCandidates: ({ alias, runtimeMode, sessionKey }) =>
+        resolveCandidates({ alias, runtimeMode, sessionKey }),
       runtimeModeFor: async (sessionKey) =>
         productionSessionBindingFor(persistence, sessionKey).runtimeMode,
     },
