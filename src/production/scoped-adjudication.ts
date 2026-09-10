@@ -331,7 +331,43 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         return { modelSlug: binding.modelSlug };
       } catch (error) {
         skipped.push(this.#skipped(binding, error));
+        this.options.persistence.writeSessionRuntime({
+          ...runtime,
+          binding: {
+            ...binding,
+            skippedCandidates: skipped.map((candidate) => ({
+              ...candidate,
+              failure: { ...candidate.failure },
+            })),
+          },
+        });
       }
+    }
+    const catalogFailures = configuredCandidates.flatMap(
+      ({ catalogFailures: failures }) => failures,
+    );
+    for (const catalogFailure of catalogFailures) {
+      if (
+        !skipped.some(
+          ({ candidatePosition }) =>
+            candidatePosition === catalogFailure.candidatePosition,
+        )
+      ) {
+        skipped.push(catalogFailure);
+      }
+    }
+    const exhausted = this.#runtime(opened.answeringAuthority.sessionKey);
+    if (exhausted !== undefined) {
+      this.options.persistence.writeSessionRuntime({
+        ...exhausted,
+        binding: {
+          ...exhausted.binding,
+          skippedCandidates: skipped.map((candidate) => ({
+            ...candidate,
+            failure: { ...candidate.failure },
+          })),
+        },
+      });
     }
     throw new Error(
       `Adjudication provider alias '${configuration.providerAlias}' exhausted every candidate: ${skipped.map(({ failure }) => failure.message).join("; ")}`,

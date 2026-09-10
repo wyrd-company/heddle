@@ -28,7 +28,11 @@ import {
   type LifecycleSnapshot,
   type MechanicalNodeUse,
 } from "../engine/index.js";
-import type { PacingDeferral } from "../pacing/index.js";
+import type {
+  DispatchPacingEvaluator,
+  PacingDeferral,
+  PacingSession,
+} from "../pacing/index.js";
 import type {
   JsonValue,
   IncidentRuntimeRecord,
@@ -192,6 +196,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       ProductLifecycleResolver,
       "resolve" | "validateTaskProviderAliases"
     >,
+    private readonly fallbackPacing?: {
+      activeSessions(): Promise<readonly PacingSession[]>;
+      evaluator: DispatchPacingEvaluator;
+    },
   ) {}
 
   private sessionSelectionResolver(): StageProviderSelectionResolver {
@@ -216,6 +224,22 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       this.configuration.t3?.accessToken ?? "",
       ...correlationTokens,
     ]) as ProviderCandidateFailureDetail;
+  }
+
+  async #providerPacingDeferral(
+    binding: ResolvedSessionBinding,
+  ): Promise<PacingDeferral | undefined> {
+    if (this.fallbackPacing === undefined) return undefined;
+    const decision = await this.fallbackPacing.evaluator.evaluate(
+      {
+        kind: "task",
+        provider: binding.providerInstanceId,
+        providerAlias: binding.alias,
+        sessionId: binding.sessionKey,
+      },
+      await this.fallbackPacing.activeSessions(),
+    );
+    return decision.kind === "defer" ? decision.deferral : undefined;
   }
 
   async #confirmProviderBindingStarted(
@@ -335,6 +359,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
                   selectionInputs,
                 )),
                 candidatePosition: 1,
+                catalogFailures: [],
                 skippedCandidates: [],
               },
             ]
@@ -435,6 +460,45 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       const reconcilerRuntime = this.persistence
         .listReconcilerRuntime()
         .find(({ instanceId }) => instanceId === session.instanceId);
+      const incidentRuntime = this.persistence
+        .listIncidentRuntime()
+        .find(({ incidentId }) => incidentId === session.instanceId);
+      if (reconcilerRuntime === undefined && incidentRuntime === undefined) {
+        throw new Error(
+          `Session '${session.sessionKey}' has no owning production runtime`,
+        );
+      }
+      const pacingDeferral =
+        await this.#providerPacingDeferral(candidateBinding);
+      if (pacingDeferral !== undefined) {
+        if (reconcilerRuntime !== undefined) {
+          this.persistence.writeDeferredSessionRuntime(
+            {
+              ...reconcilerRuntime,
+              deferral: json(pacingDeferral),
+              provider: candidate.providerInstanceId,
+              sessionKey: session.sessionKey,
+              stageId: session.stageId,
+              state: "deferred",
+              threadId: candidateThreadId,
+            },
+            candidateSession,
+          );
+        } else {
+          this.persistence.writeStartingIncidentSessionRuntime(
+            {
+              ...incidentRuntime!,
+              provider: candidate.providerInstanceId,
+              sessionKey: session.sessionKey,
+              stageId: session.stageId,
+              state: "starting",
+              threadId: candidateThreadId,
+            },
+            candidateSession,
+          );
+        }
+        return;
+      }
       if (reconcilerRuntime !== undefined) {
         const starting: ReconcilerRuntimeRecord = {
           ...reconcilerRuntime,
@@ -457,9 +521,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         );
         return;
       }
-      const incidentRuntime = this.persistence
-        .listIncidentRuntime()
-        .find(({ incidentId }) => incidentId === session.instanceId);
       if (incidentRuntime !== undefined) {
         const starting: IncidentRuntimeRecord = {
           ...incidentRuntime,
@@ -473,13 +534,20 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           starting,
           candidateSession,
         );
-        await this.activateIncident(task, starting, session.stageId);
+        await this.activateIncident(
+          task,
+          starting,
+          session.stageId,
+          undefined,
+          true,
+        );
         return;
       }
-      throw new Error(
-        `Session '${session.sessionKey}' has no owning production runtime`,
-      );
     }
+    skipped = mergeSkippedCandidates(
+      skipped,
+      ...candidates.map(({ catalogFailures }) => catalogFailures),
+    );
     await this.#recordProviderExhaustion(task, session, skipped, cause);
   }
 
@@ -691,9 +759,15 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       .listReconcilerRuntime()
       .find(({ instanceId }) => instanceId === input.instanceId);
     const provider = input.dispatch?.provider ?? previous?.provider;
+    const retainedStarting =
+      previous?.state === "starting" ||
+      (previous?.state === "deferred" && previous.sessionKey !== undefined)
+        ? previous
+        : undefined;
     let starting: ReconcilerRuntimeRecord = {
-      ...(previous?.state === "starting" ? previous : {}),
+      ...(retainedStarting ?? {}),
       boardStatus: input.task.status,
+      deferral: undefined,
       instanceId: input.instanceId,
       ...(provider === undefined ? {} : { provider }),
       state: "starting",
@@ -868,6 +942,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     runtime: IncidentRuntimeRecord,
     stageId: string,
     replacementBinding?: ResolvedSessionBinding,
+    pacingApproved: boolean = false,
   ): Promise<void> {
     const starting: ReconcilerRuntimeRecord = {
       boardStatus: "incident",
@@ -884,6 +959,17 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       taskId: runtime.taskId,
       ...(runtime.threadId === undefined ? {} : { threadId: runtime.threadId }),
     };
+    if (!pacingApproved && runtime.sessionKey !== undefined) {
+      const retainedSession = this.persistence
+        .listSessionRuntime()
+        .find(({ sessionKey }) => sessionKey === runtime.sessionKey);
+      if (retainedSession?.bindingState === "provisional") {
+        const pacingDeferral = await this.#providerPacingDeferral(
+          retainedSession.binding,
+        );
+        if (pacingDeferral !== undefined) return;
+      }
+    }
     await this.#activate(
       task,
       runtime.incidentId,
@@ -1169,7 +1255,8 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const activeAttentionIds = new Set(
       this.persistence.listAttention().map(({ attentionId }) => attentionId),
     );
-    for (const runtime of this.persistence.listReconcilerRuntime()) {
+    for (const persistedRuntime of this.persistence.listReconcilerRuntime()) {
+      let runtime = persistedRuntime;
       const retryAttentionIds = [
         `production:task-reconciliation-failed:task:${runtime.taskId}`,
         `production:instance-synchronization-failed:task:${runtime.taskId}:${runtime.instanceId}`,
@@ -1274,6 +1361,32 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           continue;
         }
         const context = readLifecycleContext(record);
+        if (runtime.state === "deferred" && runtime.sessionKey !== undefined) {
+          const retainedSession = this.persistence
+            .listSessionRuntime()
+            .find(({ sessionKey }) => sessionKey === runtime.sessionKey);
+          if (retainedSession === undefined) {
+            throw new Error(
+              `Deferred instance ${runtime.instanceId} has no retained session binding`,
+            );
+          }
+          const pacingDeferral = await this.#providerPacingDeferral(
+            retainedSession.binding,
+          );
+          if (pacingDeferral !== undefined) {
+            this.persistence.writeReconcilerRuntime({
+              ...runtime,
+              deferral: json(pacingDeferral),
+            });
+            continue;
+          }
+          runtime = {
+            ...runtime,
+            deferral: undefined,
+            state: "starting",
+          };
+          this.persistence.writeReconcilerRuntime(runtime);
+        }
         if (
           runtime.state === "deferred" &&
           context.pendingTransition?.kind === "start" &&

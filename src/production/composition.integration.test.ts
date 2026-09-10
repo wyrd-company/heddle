@@ -865,6 +865,17 @@ describe("production composition", () => {
         kind: "escalation",
       }),
     );
+    const failedAdjudication = composition.persistence
+      .listSessionRuntime()
+      .find(({ stageId }) => stageId === "adjudication")!;
+    expect(failedAdjudication.binding.skippedCandidates.at(-1)).toMatchObject({
+      failure: {
+        message: expect.stringContaining(
+          "Sample adjudication harness did not start",
+        ),
+      },
+    });
+    const exhaustedBinding = failedAdjudication.binding;
     expect(notify.mock.calls[0]?.[0].message).toContain(
       "No questions were supplied.",
     );
@@ -873,6 +884,11 @@ describe("production composition", () => {
     expect(
       composition.attention.list().filter(({ kind }) => kind === "escalation"),
     ).toHaveLength(1);
+    expect(
+      composition.persistence
+        .listSessionRuntime()
+        .find(({ stageId }) => stageId === "adjudication")?.binding,
+    ).toEqual(exhaustedBinding);
     await composition.close();
   });
 
@@ -1224,6 +1240,85 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("paces a successor candidate after the first candidate fails to start", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    const dispatch = t3.dispatch.bind(t3);
+    vi.spyOn(t3, "dispatch").mockImplementation(async (command, context) => {
+      if (
+        command.type === "thread.create" &&
+        command.modelSelection?.instanceId === "codex"
+      ) {
+        throw new Error("Sample primary candidate did not start");
+      }
+      return dispatch(command, context);
+    });
+    const usageReads: string[] = [];
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async (provider) => {
+          usageReads.push(provider);
+          return {
+            used: provider === "provider-two" ? 40 : 0,
+            windowStartedAt: Date.now() - 1_000,
+          };
+        },
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(usageReads[0]).toBe("codex");
+    expect(usageReads.slice(1)).toEqual(
+      expect.arrayContaining(["provider-two"]),
+    );
+    expect(
+      t3.commands.filter(
+        ({ modelSelection, type }) =>
+          type === "thread.create" &&
+          modelSelection?.instanceId === "provider-two",
+      ),
+    ).toEqual([]);
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === fixture.taskId),
+    ).toMatchObject({
+      deferral: expect.objectContaining({
+        provider: "provider-two",
+        reason: "provider-usage-window",
+      }),
+      provider: "provider-two",
+      state: "deferred",
+    });
+    expect(
+      composition.persistence.listSessionRuntime()[0]?.binding,
+    ).toMatchObject({
+      candidatePosition: 2,
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: expect.stringContaining(
+              "Sample primary candidate did not start",
+            ),
+          }),
+        }),
+      ],
+    });
+    await composition.close();
+  });
+
   it("refuses an unpaced candidate when the catalog changes after pacing", async () => {
     const fixture = await prepare();
     const t3 = new SyntheticT3();
@@ -1387,6 +1482,84 @@ describe("production composition", () => {
         code: "provider-alias-exhausted",
         message: expect.stringMatching(
           /candidate 1 'Workbench Alpha'.*candidate 2 'Workbench Beta'/,
+        ),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("retains trailing catalog failures when the last usable candidate fails to start", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.providerAliases.primary = [
+      ...fixture.configuration.providerAliases.primary,
+      {
+        model: "sample-model-three",
+        providerDisplayName: "Workbench Gamma",
+      },
+    ];
+    t3.providerCatalog[0]!.availability = "unavailable";
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [...t3.threads].map((id) => ({
+        id,
+        latestTurn: {
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: null,
+          state: "error",
+        },
+        session: {
+          lastError: "Sample middle candidate could not start",
+          status: "error",
+        },
+      })),
+    }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(
+      session.binding.skippedCandidates.map(
+        ({ candidatePosition, failure }) => ({
+          candidatePosition,
+          message: failure.message,
+        }),
+      ),
+    ).toEqual([
+      {
+        candidatePosition: 1,
+        message: expect.stringContaining("not available"),
+      },
+      {
+        candidatePosition: 2,
+        message: "Sample middle candidate could not start",
+      },
+      {
+        candidatePosition: 3,
+        message: expect.stringContaining(
+          "has no provider named 'Workbench Gamma'",
+        ),
+      },
+    ]);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-alias-exhausted",
+        message: expect.stringMatching(
+          /candidate 1 'Workbench Alpha'.*candidate 2 'Workbench Beta'.*candidate 3 'Workbench Gamma'/,
         ),
       }),
     );

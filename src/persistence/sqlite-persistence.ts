@@ -1667,6 +1667,27 @@ export class SqlitePersistence {
     })();
   }
 
+  writeDeferredSessionRuntime(
+    runtime: ReconcilerRuntimeRecord,
+    session: SessionRuntimeRecord,
+  ): void {
+    if (
+      runtime.state !== "deferred" ||
+      runtime.instanceId !== session.instanceId ||
+      runtime.sessionKey !== session.sessionKey ||
+      runtime.stageId !== session.stageId ||
+      runtime.threadId !== session.threadId
+    ) {
+      throw new Error(
+        "Deferred runtime and resolved session binding identify different occurrences",
+      );
+    }
+    this.database.transaction(() => {
+      this.writeSessionRuntime(session);
+      this.writeReconcilerRuntime(runtime);
+    })();
+  }
+
   listSessionRuntime(): SessionRuntimeRecord[] {
     const rows = this.database
       .prepare(

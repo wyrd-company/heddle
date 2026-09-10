@@ -266,6 +266,149 @@ describe("production instance controller", () => {
     persistence.close();
   });
 
+  it("paces an incident successor candidate before creating its thread", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-incident-fallback-pacing-"));
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const task = { id: 11 } as BoardTask;
+    const sessionKey = "incident-11:implement:1";
+    const current = resolvedSessionBindingFixture({
+      alias: "primary",
+      candidatePosition: 1,
+      modelSlug: "model-one",
+      providerDisplayName: "Workbench One",
+      providerInstanceId: "provider-one",
+      sessionKey,
+      threadId: "thread-one",
+    });
+    persistence.writeIncidentRuntime({
+      accepted: false,
+      attentionId: "attention-one",
+      code: "sample-condition",
+      createdAt: 1,
+      incidentId: "incident-11",
+      occurrence: 1,
+      provider: "provider-one",
+      rejectionOperationIds: [],
+      sessionKey,
+      stageId: "implement",
+      state: "starting",
+      taskId: task.id,
+      threadId: "thread-one",
+    });
+    persistence.writeSessionRuntime({
+      activation: 1,
+      binding: current,
+      bindingState: "provisional",
+      instanceId: "incident-11",
+      sessionKey,
+      stageId: "implement",
+      threadId: "thread-one",
+    });
+    const dispatch = vi.fn();
+    const evaluate = vi.fn(async () => ({
+      deferral: {
+        limit: 20,
+        provider: "provider-two",
+        reason: "provider-usage-window" as const,
+        retryAt: 10_000,
+        used: 20,
+      },
+      kind: "defer" as const,
+    }));
+    const controller = new ProductionInstanceController(
+      { session: {} } as never,
+      persistence,
+      {} as ProductionLifecycleRouter,
+      {} as ProductRoutingCatalog,
+      {} as EpicProjectCoordinator,
+      new DurableAttentionQueue(persistence),
+      { dispatch } as never,
+      "http://127.0.0.1:4774/mcp",
+      async () => "",
+      { readHandoffTemplate: async () => "", repositoryRoot: root },
+      undefined,
+      undefined,
+      undefined,
+      {
+        resolve: async () => {
+          throw new Error("singular resolution is not expected");
+        },
+        resolveCandidates: async () => [
+          {
+            alias: "primary",
+            candidatePosition: 1,
+            catalogFailures: [],
+            driverKind: "sample-driver",
+            interactionMode: "default",
+            model: { isCustom: false, name: "One", slug: "model-one" },
+            observedCliVersion: null,
+            providerDisplayName: "Workbench One",
+            providerInstanceId: "provider-one",
+            runtimeMode: "auto",
+            skippedCandidates: [],
+          },
+          {
+            alias: "primary",
+            candidatePosition: 2,
+            catalogFailures: [],
+            driverKind: "sample-driver",
+            interactionMode: "default",
+            model: { isCustom: false, name: "Two", slug: "model-two" },
+            observedCliVersion: null,
+            providerDisplayName: "Workbench Two",
+            providerInstanceId: "provider-two",
+            runtimeMode: "auto",
+            skippedCandidates: [],
+          },
+        ],
+      },
+      undefined,
+      undefined,
+      {
+        activeSessions: async () => [],
+        evaluator: { defaultProvider: "provider-one", evaluate },
+      },
+    );
+
+    await expect(
+      controller.recoverProviderStartFailure(
+        task,
+        {
+          instanceId: "incident-11",
+          sessionKey,
+          threadId: "thread-one",
+        },
+        {
+          id: "thread-one",
+          latestTurn: { startedAt: null, state: "error" },
+          session: { lastError: "Sample start failure", status: "error" },
+        },
+      ),
+    ).resolves.toBe(true);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      {
+        kind: "task",
+        provider: "provider-two",
+        providerAlias: "primary",
+        sessionId: sessionKey,
+      },
+      [],
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(persistence.listIncidentRuntime()[0]).toMatchObject({
+      provider: "provider-two",
+      state: "starting",
+    });
+    expect(persistence.listSessionRuntime()[0]?.binding).toMatchObject({
+      candidatePosition: 2,
+      providerInstanceId: "provider-two",
+    });
+    persistence.close();
+  });
+
   it("locks a provisional binding instead of falling back after a turn starts", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-provider-started-"));
     const persistence = new SqlitePersistence({

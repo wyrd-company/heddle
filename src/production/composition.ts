@@ -72,6 +72,7 @@ import { ProductionScheduler } from "./scheduler.js";
 import { SchedulerPassAttentionLifecycle } from "./scheduler-pass-attention.js";
 import {
   createProductionSubagentCoordinator,
+  productionActiveSessions,
   productionSessionBindingFor,
   productionSessionTargets,
 } from "./subagent-composition.js";
@@ -300,6 +301,12 @@ export const createProductionComposition = (
       persistence,
       t3,
     );
+    const pacing = new DispatchPacingGate(
+      configuration.pacing,
+      options.providerUsage,
+      Date.now,
+      configuration.providerAliasBudgets,
+    );
     const instances = new ProductionInstanceController(
       configuration,
       persistence,
@@ -326,6 +333,10 @@ export const createProductionComposition = (
       providerResolver,
       agentNames,
       lifecycleResolver,
+      {
+        activeSessions: () => productionActiveSessions(persistence!, t3),
+        evaluator: pacing,
+      },
     );
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(
       persistence,
@@ -352,12 +363,6 @@ export const createProductionComposition = (
       persistence,
       board,
       t3,
-    );
-    const pacing = new DispatchPacingGate(
-      configuration.pacing,
-      options.providerUsage,
-      Date.now,
-      configuration.providerAliasBudgets,
     );
     const scopedAdjudication =
       configuration.adjudication === undefined
