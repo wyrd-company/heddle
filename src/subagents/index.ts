@@ -4,6 +4,7 @@
 // ---
 
 export {
+  DelegatedProviderExhaustionError,
   SubagentCoordinator,
   type SpawnSubagentInput,
   type SpawnSubagentResult,

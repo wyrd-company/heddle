@@ -280,11 +280,11 @@ proposed-design:
     activations, new delegated sessions, and `list_providers` read a fresh
     snapshot. `list_providers` continues to project the first configured
     candidate and reports its current safe failure instead of projecting a
-    fallback candidate. A catalog read failure or an alias with no usable candidate names
-    safe failures and performs no worktree, registration, thread, or dispatch
-    effect.
+    fallback candidate. A catalog read failure or an alias with no usable
+    candidate names safe failures and performs no worktree, registration,
+    thread, or dispatch effect.
     The stable selection reasons are `provider-catalog-unavailable`,
-    `provider-alias-not-allowed`, `provider-name-not-found`,
+    `provider-alias-exhausted`, `provider-alias-not-allowed`, `provider-name-not-found`,
     `provider-name-ambiguous`, `provider-not-ready`, `provider-unavailable`, and
     `provider-model-not-found`. A provider is selectable only when T3 reports
     it available, enabled, installed, and `ready`, and the selected model slug
@@ -358,6 +358,15 @@ proposed-design:
     projection of this binding keyed by trusted session or thread identity:
     thread ID, provider instance ID, driver kind, model slug, runtime mode, and
     interaction mode.
+
+    A delegated start failure advances its durable assignment to the next
+    candidate before pacing deferral returns. The assignment marks that
+    successor as pacing-deferred. Replay evaluates the successor again and
+    cannot bootstrap it until pacing admits the exact alias and provider
+    instance. Admission clears the marker before bootstrap. Exhaustion from
+    catalog validation or session start returns the same
+    `provider-alias-exhausted` selection reason and raises durable attention
+    that names every candidate and safe cause.
 
     Pacing requests carry both the alias selected for the stage and the provider
     instance ID of its current first usable candidate. Configuration names

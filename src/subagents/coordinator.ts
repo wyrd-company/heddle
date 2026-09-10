@@ -9,6 +9,10 @@ import {
   type SessionBootstrapDependencies,
   type SessionBootstrapInput,
 } from "../control-plane/session-bootstrap.js";
+import {
+  ProviderAliasUnusableError,
+  ProviderSelectionError,
+} from "../control-plane/provider-selection.js";
 import type {
   SessionObservationResult,
   SessionObservationTarget,
@@ -55,6 +59,23 @@ export type SpawnSubagentResult =
       kind: "deferred";
     };
 
+export class DelegatedProviderExhaustionError extends ProviderSelectionError {
+  constructor(
+    readonly alias: string,
+    readonly skippedCandidates: readonly SkippedProviderCandidate[],
+    options?: ErrorOptions,
+  ) {
+    super(
+      "provider-alias-exhausted",
+      `Provider alias '${alias}' exhausted every delegated candidate: ${skippedCandidates
+        .map(({ failure }) => failure.message)
+        .join("; ")}`,
+    );
+    if (options !== undefined && "cause" in options) this.cause = options.cause;
+    this.name = "DelegatedProviderExhaustionError";
+  }
+}
+
 export type SubagentLiveness = {
   kind: "crashed" | "stopped" | "working";
   phase: SessionObservationResult["phase"];
@@ -95,6 +116,12 @@ export type SubagentCoordinatorOptions = {
     instanceId: string;
     sessionKey: string;
     taskId: number;
+  }): Promise<void>;
+  onProviderExhaustion?(input: {
+    binding: WorkflowMcpSessionBinding;
+    error: DelegatedProviderExhaustionError;
+    operationId: string;
+    sessionKey: string;
   }): Promise<void>;
   providerFailureDetail?(
     error: unknown,
@@ -196,6 +223,60 @@ export class SubagentCoordinator {
     };
   }
 
+  async #providerExhaustion(
+    binding: WorkflowMcpSessionBinding,
+    input: SpawnSubagentInput,
+    sessionKey: string,
+    skippedCandidates: readonly SkippedProviderCandidate[],
+    cause: unknown,
+  ): Promise<DelegatedProviderExhaustionError> {
+    const error = new DelegatedProviderExhaustionError(
+      input.providerAlias,
+      skippedCandidates,
+      { cause },
+    );
+    await this.options.onProviderExhaustion?.({
+      binding,
+      error,
+      operationId: input.operationId,
+      sessionKey,
+    });
+    return error;
+  }
+
+  async #resolveProviderCandidates(
+    binding: WorkflowMcpSessionBinding,
+    input: SpawnSubagentInput,
+    runtimeMode: ResolvedSessionRuntimeMode,
+    sessionKey: string,
+    threadId: string,
+  ): Promise<
+    readonly {
+      binding: ResolvedSessionBinding;
+      catalogFailures: readonly SkippedProviderCandidate[];
+    }[]
+  > {
+    const resolveCandidates = this.options.providerSelection.resolveCandidates;
+    if (resolveCandidates === undefined) return [];
+    try {
+      return await resolveCandidates({
+        alias: input.providerAlias,
+        runtimeMode,
+        sessionKey,
+        threadId,
+      });
+    } catch (error) {
+      if (!(error instanceof ProviderAliasUnusableError)) throw error;
+      throw await this.#providerExhaustion(
+        binding,
+        input,
+        sessionKey,
+        error.skippedCandidates,
+        error,
+      );
+    }
+  }
+
   async spawn(
     binding: WorkflowMcpSessionBinding,
     input: SpawnSubagentInput,
@@ -244,12 +325,15 @@ export class SubagentCoordinator {
         binding.sessionKey,
       );
       providerCandidates =
-        await this.options.providerSelection.resolveCandidates?.({
-          alias: input.providerAlias,
-          runtimeMode,
-          sessionKey: identity.sessionKey,
-          threadId: identity.threadId,
-        });
+        this.options.providerSelection.resolveCandidates === undefined
+          ? undefined
+          : await this.#resolveProviderCandidates(
+              binding,
+              input,
+              runtimeMode,
+              identity.sessionKey,
+              identity.threadId,
+            );
       const resolvedBinding =
         providerCandidates?.[0]?.binding ??
         (await this.options.providerSelection.resolve({
@@ -311,6 +395,35 @@ export class SubagentCoordinator {
         stage: binding.stage.id,
       });
     } else {
+      if (assignment.status === "stopped") {
+        return { assignment, kind: "spawned" };
+      }
+      if (assignment.providerFallback?.status === "pacing-deferred") {
+        const activeSessions = await this.options.activeSessions();
+        const decision = await this.options.pacing.evaluate(
+          {
+            kind: "subagent",
+            parentSessionId: binding.sessionKey,
+            provider: assignment.binding.providerInstanceId,
+            providerAlias: assignment.binding.alias,
+            sessionId: assignment.sessionKey,
+          },
+          activeSessions,
+        );
+        if (decision.kind === "defer") {
+          return { deferral: decision.deferral, kind: "deferred" };
+        }
+        assignment = mutateTodoAssignment(
+          this.options.persistence,
+          binding.instance.instanceId,
+          assignment.sessionKey,
+          (current) => {
+            const { providerFallback: _providerFallback, ...ready } = current;
+            void _providerFallback;
+            return ready;
+          },
+        );
+      }
       preparation = await this.options.prepareSession({
         binding,
         identity: assignment,
@@ -320,9 +433,7 @@ export class SubagentCoordinator {
         rootItemId: assignment.rootItemId,
       });
     }
-    if (assignment.status === "stopped") {
-      return { assignment, kind: "spawned" };
-    }
+    if (assignment.status === "stopped") return { assignment, kind: "spawned" };
     if (!sameResolvedSessionBinding(preparation.binding, assignment.binding)) {
       throw new Error("Prepared subagent session changed its durable binding");
     }
@@ -352,13 +463,13 @@ export class SubagentCoordinator {
         assignment.binding.skippedCandidates,
         [this.#failedCandidate(assignment.binding, error)],
       );
-      providerCandidates ??=
-        await this.options.providerSelection.resolveCandidates({
-          alias: input.providerAlias,
-          runtimeMode: assignment.binding.runtimeMode,
-          sessionKey: assignment.sessionKey,
-          threadId: assignment.threadId,
-        });
+      providerCandidates ??= await this.#resolveProviderCandidates(
+        binding,
+        input,
+        assignment.binding.runtimeMode,
+        assignment.sessionKey,
+        assignment.threadId,
+      );
       for (const candidate of providerCandidates.filter(
         ({ binding: candidateBinding }) =>
           candidateBinding.candidatePosition >
@@ -392,17 +503,17 @@ export class SubagentCoordinator {
             binding.instance.instanceId,
             assignment.sessionKey,
             {
-              binding: {
-                ...assignment.binding,
-                skippedCandidates: skipped.map((failure) => ({
-                  ...failure,
-                  failure: { ...failure.failure },
-                })),
+              binding: candidateBinding,
+              bootstrap: {
+                createCommandId: this.#nextId(),
+                createdAt: this.#now(),
+                messageId: this.#nextId(),
+                turnCommandId: this.#nextId(),
               },
-              bootstrap: assignment.bootstrap,
-              model: assignment.model,
-              provider: assignment.provider,
-              threadId: assignment.threadId,
+              model: candidateBinding.modelSlug,
+              provider: candidateBinding.providerInstanceId,
+              providerFallback: { status: "pacing-deferred" },
+              threadId: candidateBinding.threadId,
             },
           );
           return { deferral: decision.deferral, kind: "deferred" };
@@ -481,9 +592,12 @@ export class SubagentCoordinator {
           threadId: assignment.threadId,
         },
       );
-      throw new Error(
-        `Provider alias '${assignment.binding.alias}' exhausted every delegated candidate: ${skipped.map(({ failure }) => failure.message).join("; ")}`,
-        { cause: lastFailure },
+      throw await this.#providerExhaustion(
+        binding,
+        input,
+        assignment.sessionKey,
+        skipped,
+        lastFailure,
       );
     }
     return { assignment, kind: "spawned" };

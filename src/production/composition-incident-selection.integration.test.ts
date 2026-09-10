@@ -31,15 +31,28 @@ describe("production incident provider selection", () => {
   });
 
   const prepare = async (input: {
+    fallback?: { successorUsage(): number };
     stageAlias: string;
     taskAliases?: Readonly<Record<string, string>>;
   }) => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
-    fixture.configuration.providerAliases["incident-stage"] = {
-      model: "sample-stage-model",
-      providerDisplayName: "Sample Stage Workbench",
-    };
+    fixture.configuration.providerAliases["incident-stage"] =
+      input.fallback === undefined
+        ? {
+            model: "sample-stage-model",
+            providerDisplayName: "Sample Stage Workbench",
+          }
+        : [
+            {
+              model: "sample-stage-model",
+              providerDisplayName: "Sample Stage Workbench",
+            },
+            {
+              model: "sample-successor-model",
+              providerDisplayName: "Sample Successor Workbench",
+            },
+          ];
     fixture.configuration.providerAliases["incident-task"] = {
       model: "sample-task-model",
       providerDisplayName: "Sample Task Workbench",
@@ -51,6 +64,12 @@ describe("production incident provider selection", () => {
       retryDelayMilliseconds: 1_000,
       workspaceRoot: fixture.root,
     };
+    if (input.fallback !== undefined) {
+      fixture.configuration.pacing.providerBudgets = {
+        ...fixture.configuration.pacing.providerBudgets,
+        "incident-successor-provider": { usageLimit: 20 },
+      };
+    }
     fixture.configuration.session.resolvedSelections.push(
       {
         alias: "incident-stage",
@@ -66,6 +85,24 @@ describe("production incident provider selection", () => {
         providerInstanceId: "incident-stage-provider",
         runtimeMode: "auto-accept-edits",
       },
+      ...(input.fallback === undefined
+        ? []
+        : [
+            {
+              alias: "incident-stage",
+              driverKind: "cursor",
+              interactionMode: "default",
+              model: {
+                isCustom: false,
+                name: "Sample Successor Model",
+                slug: "sample-successor-model",
+              },
+              observedCliVersion: "sample-successor-version",
+              providerDisplayName: "Sample Successor Workbench",
+              providerInstanceId: "incident-successor-provider",
+              runtimeMode: "auto-accept-edits" as const,
+            },
+          ]),
       {
         alias: "incident-task",
         driverKind: "codex",
@@ -271,6 +308,27 @@ kind: standard
         observedCliVersion: "sample-stage-version",
         state: "ready",
       },
+      ...(input.fallback === undefined
+        ? []
+        : [
+            {
+              availability: "available" as const,
+              displayName: "Sample Successor Workbench",
+              driverKind: "cursor",
+              enabled: true,
+              installed: true,
+              instanceId: "incident-successor-provider",
+              models: [
+                {
+                  isCustom: false,
+                  name: "Sample Successor Model",
+                  slug: "sample-successor-model",
+                },
+              ],
+              observedCliVersion: "sample-successor-version",
+              state: "ready",
+            },
+          ]),
       {
         availability: "available",
         displayName: "Sample Task Workbench",
@@ -289,12 +347,31 @@ kind: standard
         state: "ready",
       },
     );
+    if (input.fallback !== undefined) {
+      const dispatch = t3.dispatch.bind(t3);
+      vi.spyOn(t3, "dispatch").mockImplementation(async (command, context) => {
+        if (
+          command.type === "thread.create" &&
+          command.modelSelection.instanceId === "incident-stage-provider"
+        ) {
+          throw new Error("Sample initial incident candidate did not start");
+        }
+        return dispatch(command, context);
+      });
+    }
+    const readProviderUsage = vi.fn(async (provider: string) => ({
+      used:
+        provider === "incident-successor-provider"
+          ? (input.fallback?.successorUsage() ?? 0)
+          : 0,
+      windowStartedAt: Date.now(),
+    }));
     const composition = createProductionComposition({
       workflowMcpEndpoint,
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        readFiveHourWindow: readProviderUsage,
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
       t3,
@@ -313,7 +390,7 @@ kind: standard
       }),
     );
     await composition.scheduler.trigger();
-    return { composition, fixture, t3 };
+    return { composition, fixture, readProviderUsage, t3 };
   };
 
   const incidentSession = (
@@ -333,6 +410,50 @@ kind: standard
     expect(incident.provider).toBe(session.binding.providerInstanceId);
     return session;
   };
+
+  it("admits one incident successor thread when capacity opens after deferral", async () => {
+    let successorUsage = 20;
+    const { composition, fixture, readProviderUsage, t3 } = await prepare({
+      fallback: { successorUsage: () => successorUsage },
+      stageAlias: "incident-stage",
+    });
+    const deferred = composition.persistence.listIncidentRuntime()[0]!;
+
+    expect(readProviderUsage).toHaveBeenCalledWith(
+      "incident-successor-provider",
+    );
+    expect(deferred).toMatchObject({
+      provider: "incident-successor-provider",
+      stageId: "implement",
+      state: "starting",
+    });
+    expect(
+      t3.commands.filter(
+        (command) =>
+          command.type === "thread.create" &&
+          command.modelSelection.instanceId === "incident-successor-provider",
+      ),
+    ).toHaveLength(0);
+
+    successorUsage = 0;
+    await composition.instances.activateIncident(
+      await composition.board.readTask(fixture.taskId),
+      deferred,
+      "implement",
+    );
+
+    expect(composition.persistence.listIncidentRuntime()[0]).toMatchObject({
+      provider: "incident-successor-provider",
+      state: "waiting",
+    });
+    expect(
+      t3.commands.filter(
+        (command) =>
+          command.type === "thread.create" &&
+          command.modelSelection.instanceId === "incident-successor-provider",
+      ),
+    ).toHaveLength(1);
+  });
 
   it("uses the pinned incident stage alias and runtime in the durable binding and T3 request", async () => {
     const { composition, fixture, t3 } = await prepare({

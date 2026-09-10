@@ -17,7 +17,10 @@ import {
   SyntheticT3,
 } from "./composition.test-support.js";
 import { productionSessionTargets } from "./subagent-composition.js";
-import type { SpawnSubagentResult } from "../subagents/index.js";
+import {
+  DelegatedProviderExhaustionError,
+  type SpawnSubagentResult,
+} from "../subagents/index.js";
 
 class PhaseSyntheticT3 extends SyntheticT3 {
   readonly terminalPhases = new Map<
@@ -1073,6 +1076,187 @@ describe("production subagent composition", () => {
     await composition.close();
   });
 
+  it("records sanitized durable attention for both delegated exhaustion modes", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    fixture.configuration.providerAliases.secondary = [
+      { model: "model-beta", providerDisplayName: "Workbench Beta" },
+      { model: "model-gamma", providerDisplayName: "Workbench Gamma" },
+    ];
+    fixture.configuration.providerAliasBudgets = {
+      secondary: { usageLimit: 100 },
+    };
+    const selections = [
+      {
+        alias: "secondary",
+        driverKind: "sample-driver",
+        interactionMode: "default",
+        model: {
+          isCustom: false,
+          name: "Model Beta",
+          slug: "model-beta",
+        },
+        observedCliVersion: "2.0.0",
+        providerDisplayName: "Workbench Beta",
+        providerInstanceId: "provider-beta",
+        runtimeMode: "auto-accept-edits" as const,
+      },
+      {
+        alias: "secondary",
+        driverKind: "sample-driver",
+        interactionMode: "default",
+        model: {
+          isCustom: false,
+          name: "Model Gamma",
+          slug: "model-gamma",
+        },
+        observedCliVersion: "3.0.0",
+        providerDisplayName: "Workbench Gamma",
+        providerInstanceId: "provider-gamma",
+        runtimeMode: "auto-accept-edits" as const,
+      },
+    ];
+    fixture.configuration.session.resolvedSelections.push(...selections);
+    const t3 = new SyntheticT3();
+    t3.providerCatalog.push(
+      {
+        availability: "available",
+        displayName: "Workbench Beta",
+        driverKind: "sample-driver",
+        enabled: true,
+        installed: true,
+        instanceId: "provider-beta",
+        models: [selections[0]!.model],
+        observedCliVersion: "2.0.0",
+        state: "ready",
+      },
+      {
+        availability: "available",
+        displayName: "Workbench Gamma",
+        driverKind: "sample-driver",
+        enabled: true,
+        installed: true,
+        instanceId: "provider-gamma",
+        models: [selections[1]!.model],
+        observedCliVersion: "3.0.0",
+        state: "ready",
+      },
+    );
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    await composition.start();
+    const record = composition.persistence.getInstance(
+      `task-${fixture.taskId}`,
+    )!;
+    const parent = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(storedCorrelationToken(record.state.handoffs));
+    for (const provider of t3.providerCatalog.filter(({ instanceId }) =>
+      ["provider-beta", "provider-gamma"].includes(instanceId),
+    )) {
+      provider.availability = "unavailable";
+      provider.state = "failed";
+    }
+
+    const catalogFailure = await composition.subagents
+      .spawn(parent, {
+        operationId: "delegated-catalog-exhaustion",
+        providerAlias: "secondary",
+        rootItemId: "deliver",
+      })
+      .catch((error: unknown) => error);
+
+    expect(catalogFailure).toBeInstanceOf(DelegatedProviderExhaustionError);
+    expect(catalogFailure).toMatchObject({
+      reason: "provider-alias-exhausted",
+      skippedCandidates: [
+        expect.objectContaining({ candidatePosition: 1 }),
+        expect.objectContaining({ candidatePosition: 2 }),
+      ],
+    });
+
+    for (const provider of t3.providerCatalog.filter(({ instanceId }) =>
+      ["provider-beta", "provider-gamma"].includes(instanceId),
+    )) {
+      provider.availability = "available";
+      provider.state = "ready";
+    }
+    const dispatch = t3.dispatch.bind(t3);
+    vi.spyOn(t3, "dispatch").mockImplementation(async (command, context) => {
+      if (
+        command.type === "thread.create" &&
+        ["provider-beta", "provider-gamma"].includes(
+          command.modelSelection.instanceId,
+        )
+      ) {
+        throw new Error(
+          `Sample ${command.modelSelection.instanceId} start failed with sample-access-token at https://actor:password@host.invalid/path`,
+        );
+      }
+      return dispatch(command, context);
+    });
+
+    const startFailure = await composition.subagents
+      .spawn(parent, {
+        operationId: "delegated-start-exhaustion",
+        providerAlias: "secondary",
+        rootItemId: "deliver",
+      })
+      .catch((error: unknown) => error);
+
+    expect(startFailure).toBeInstanceOf(DelegatedProviderExhaustionError);
+    expect(startFailure).toMatchObject({
+      reason: "provider-alias-exhausted",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: expect.stringContaining("[redacted]"),
+          }),
+        }),
+        expect.objectContaining({
+          candidatePosition: 2,
+          failure: expect.objectContaining({
+            message: expect.stringContaining("[redacted]"),
+          }),
+        }),
+      ],
+    });
+    const exhaustedAttention = composition.persistence
+      .listAttention()
+      .filter(
+        ({ payload }) =>
+          typeof payload === "object" &&
+          payload !== null &&
+          !Array.isArray(payload) &&
+          payload["code"] === "provider-alias-exhausted",
+      );
+    expect(exhaustedAttention).toHaveLength(2);
+    for (const attention of exhaustedAttention) {
+      expect(JSON.stringify(attention.payload)).toContain("candidate 1");
+      expect(JSON.stringify(attention.payload)).toContain("candidate 2");
+      expect(JSON.stringify(attention.payload)).not.toContain(
+        "sample-access-token",
+      );
+      expect(JSON.stringify(attention.payload)).not.toContain("actor:password");
+    }
+    expect(JSON.stringify(exhaustedAttention)).toContain(
+      "Sample provider-beta start failed",
+    );
+    expect(JSON.stringify(exhaustedAttention)).toContain(
+      "Sample provider-gamma start failed",
+    );
+    await composition.close();
+  });
+
   it("rechecks listed aliases at spawn and contains forbidden selections before effects", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
@@ -1163,7 +1347,7 @@ describe("production subagent composition", () => {
     )!.enabled = false;
 
     for (const [providerAlias, reason] of [
-      ["secondary", "provider-unavailable"],
+      ["secondary", "provider-alias-exhausted"],
       ["unknown", "provider-alias-not-allowed"],
     ] as const) {
       const rejected = await callMcpTool(composition, parent.token, "spawn", {

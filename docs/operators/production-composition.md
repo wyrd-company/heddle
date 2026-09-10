@@ -259,7 +259,7 @@ read.
 New stage occurrences, new subagent assignments, and `list_providers` use a
 fresh catalog snapshot. Selection failures use one of these safe reasons:
 `provider-catalog-unavailable`, `provider-alias-not-allowed`,
-`provider-name-not-found`, `provider-name-ambiguous`,
+`provider-alias-exhausted`, `provider-name-not-found`, `provider-name-ambiguous`,
 `provider-not-ready`, `provider-unavailable`, or `provider-model-not-found`.
 For new session selection, these candidate configuration and catalog failures
 advance to the next candidate in declared order. `list_providers` reports the
@@ -274,6 +274,13 @@ alias, every candidate, and each cause. A successful fallback raises
 earlier catalog, collision, and start-failure causes in the session binding.
 Treat the unresolved attention as a standing degradation condition: repair or
 reorder the alias before new sessions repeatedly take the same fallback.
+
+When a delegated successor is over budget, its assignment remains marked as
+pacing-deferred. Replaying the spawn operation evaluates that successor again;
+it does not retry the failed predecessor or create the successor thread before
+admission. Delegated catalog exhaustion and start exhaustion both return the
+`provider-alias-exhausted` selection reason and raise the same durable attention
+boundary.
 
 A candidate cannot bind when a started session for another alias in the same
 lifecycle instance already uses that provider instance. Heddle records the

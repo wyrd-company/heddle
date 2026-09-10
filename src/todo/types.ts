@@ -33,6 +33,9 @@ export type TodoAssignment = Record<string, JsonValue> & {
   operationId: string;
   parentSessionKey: string;
   parentThreadId: string;
+  providerFallback?: {
+    status: "pacing-deferred";
+  };
   provider: string;
   rootItemId: string;
   sessionKey: string;

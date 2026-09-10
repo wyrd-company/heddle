@@ -195,6 +195,15 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
       ) {
         return false;
       }
+      const providerFallback = assignment["providerFallback"];
+      if (
+        providerFallback !== undefined &&
+        (!isObject(providerFallback) ||
+          providerFallback["status"] !== "pacing-deferred" ||
+          assignment["status"] !== "active")
+      ) {
+        return false;
+      }
       const notice = assignment["stopNotification"];
       if (
         notice !== undefined &&

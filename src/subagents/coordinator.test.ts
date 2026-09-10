@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DispatchPacingGate } from "../pacing/index.js";
 import { SessionStartFailure } from "../control-plane/session-bootstrap.js";
+import { ProviderAliasUnusableError } from "../control-plane/provider-selection.js";
 import {
   SqlitePersistence,
   type InstanceRecord,
@@ -24,7 +25,10 @@ import {
   type DelegationStateStore,
 } from "./delegation-state.js";
 import { stopTodoAssignmentTree } from "./delegation-teardown.js";
-import { SubagentCoordinator } from "./coordinator.js";
+import {
+  DelegatedProviderExhaustionError,
+  SubagentCoordinator,
+} from "./coordinator.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -109,23 +113,35 @@ const fixture = (
   aliasBudget?: { usageLimit: number; used: number },
   fallback = false,
   fallbackSuccessorUsed?: number,
+  failEveryFallbackCandidate = false,
+  catalogUnusable = false,
 ) => {
   const store = new MemoryStore();
-  const bootstrap = vi.fn(async () => ({
-    correlationToken: "child-token",
-    handoff: "handoff",
-    harnessConfiguration: {} as never,
-    threadId: "child-thread",
-    worktree: { branch: "sample", created: true, path: "/tmp/sample" },
-  }));
-  if (fallback) {
-    bootstrap.mockRejectedValueOnce(
-      new SessionStartFailure(
-        "thread-create",
-        new Error("Sample first candidate did not start"),
-      ),
-    );
-  }
+  const bootstrap = vi.fn(
+    async (input: { modelSelection: { model: string } }) => {
+      if (
+        fallback &&
+        (input.modelSelection.model === "sample-model-one" ||
+          failEveryFallbackCandidate)
+      ) {
+        throw new SessionStartFailure(
+          "thread-create",
+          new Error(
+            input.modelSelection.model === "sample-model-one"
+              ? "Sample first candidate did not start"
+              : "Sample second candidate did not start",
+          ),
+        );
+      }
+      return {
+        correlationToken: "child-token",
+        handoff: "handoff",
+        harnessConfiguration: {} as never,
+        threadId: "child-thread",
+        worktree: { branch: "sample", created: true, path: "/tmp/sample" },
+      };
+    },
+  );
   const steerParent = vi.fn(async () => undefined);
   let observedPhase: "failed" | "running" = "running";
   const ids = [
@@ -138,6 +154,8 @@ const fixture = (
     "stop-command",
     "stop-message",
   ];
+  let successorUsed = fallbackSuccessorUsed;
+  const onProviderExhaustion = vi.fn(async () => undefined);
   const coordinator = new SubagentCoordinator({
     activeSessions: async () => [
       { depth: 0, provider: "sample-provider", sessionId: "parent" },
@@ -153,6 +171,7 @@ const fixture = (
       attentions: [],
       phase: observedPhase,
     }),
+    onProviderExhaustion,
     pacing: new DispatchPacingGate(
       {
         defaultProvider: "sample-provider",
@@ -164,9 +183,8 @@ const fixture = (
       {
         readFiveHourWindow: async (provider) => ({
           used:
-            provider === "sample-provider-two" &&
-            fallbackSuccessorUsed !== undefined
-              ? fallbackSuccessorUsed
+            provider === "sample-provider-two" && successorUsed !== undefined
+              ? successorUsed
               : (aliasBudget?.used ?? 0),
           windowStartedAt: 0,
         }),
@@ -189,34 +207,52 @@ const fixture = (
               alias: string;
               runtimeMode: "approval-required";
               sessionKey: string;
-            }) => [
-              {
-                binding: resolvedSessionBindingFixture({
-                  alias,
-                  candidatePosition: 1,
-                  modelSlug: "sample-model-one",
-                  providerDisplayName: "Workbench One",
-                  providerInstanceId: "sample-provider-one",
-                  runtimeMode,
-                  sessionKey,
-                  threadId: "child-thread",
-                }),
-                catalogFailures: [],
-              },
-              {
-                binding: resolvedSessionBindingFixture({
-                  alias,
-                  candidatePosition: 2,
-                  modelSlug: "sample-model-two",
-                  providerDisplayName: "Workbench Two",
-                  providerInstanceId: "sample-provider-two",
-                  runtimeMode,
-                  sessionKey,
-                  threadId: "child-thread-two",
-                }),
-                catalogFailures: [],
-              },
-            ],
+            }) => {
+              if (catalogUnusable) {
+                throw new ProviderAliasUnusableError(
+                  "provider-unavailable",
+                  "Every sample candidate is unavailable",
+                  [1, 2].map((candidatePosition) => ({
+                    candidatePosition,
+                    failure: {
+                      message: `Sample candidate ${candidatePosition} is unavailable`,
+                      name: "ProviderSelectionError",
+                      reason: "provider-unavailable" as const,
+                    },
+                    modelSlug: `sample-model-${candidatePosition}`,
+                    providerDisplayName: `Workbench ${candidatePosition}`,
+                  })),
+                );
+              }
+              return [
+                {
+                  binding: resolvedSessionBindingFixture({
+                    alias,
+                    candidatePosition: 1,
+                    modelSlug: "sample-model-one",
+                    providerDisplayName: "Workbench One",
+                    providerInstanceId: "sample-provider-one",
+                    runtimeMode,
+                    sessionKey,
+                    threadId: "child-thread",
+                  }),
+                  catalogFailures: [],
+                },
+                {
+                  binding: resolvedSessionBindingFixture({
+                    alias,
+                    candidatePosition: 2,
+                    modelSlug: "sample-model-two",
+                    providerDisplayName: "Workbench Two",
+                    providerInstanceId: "sample-provider-two",
+                    runtimeMode,
+                    sessionKey,
+                    threadId: "child-thread-two",
+                  }),
+                  catalogFailures: [],
+                },
+              ];
+            },
           }
         : {}),
       resolve: async ({ alias, runtimeMode, sessionKey, threadId }) =>
@@ -267,8 +303,12 @@ const fixture = (
   return {
     bootstrap,
     coordinator,
+    onProviderExhaustion,
     setObservedPhase(phase: "failed" | "running") {
       observedPhase = phase;
+    },
+    setFallbackSuccessorUsed(used: number) {
+      successorUsed = used;
     },
     steerParent,
     store,
@@ -447,7 +487,7 @@ describe("SubagentCoordinator", () => {
     });
   });
 
-  it("does not persist or start a delegated successor until its alias budget admits it", async () => {
+  it("replays a pacing-deferred delegated successor without restarting its failed predecessor", async () => {
     const test = fixture(
       { maxDepth: 2, maxFanOut: 2 },
       { usageLimit: 40, used: 0 },
@@ -469,8 +509,8 @@ describe("SubagentCoordinator", () => {
       assignmentForChild(test.store.record, "child-session").assignment,
     ).toMatchObject({
       binding: {
-        candidatePosition: 1,
-        providerInstanceId: "sample-provider-one",
+        candidatePosition: 2,
+        providerInstanceId: "sample-provider-two",
         skippedCandidates: [
           expect.objectContaining({
             candidatePosition: 1,
@@ -482,9 +522,84 @@ describe("SubagentCoordinator", () => {
           }),
         ],
       },
-      provider: "sample-provider-one",
-      threadId: "child-thread",
+      provider: "sample-provider-two",
+      providerFallback: { status: "pacing-deferred" },
+      threadId: "child-thread-two",
     });
+
+    await expect(spawn(test.coordinator, test.store)).resolves.toMatchObject({
+      deferral: { provider: "sample-provider-two" },
+      kind: "deferred",
+    });
+    expect(test.bootstrap).toHaveBeenCalledTimes(1);
+
+    test.setFallbackSuccessorUsed(0);
+    const admitted = await spawn(test.coordinator, test.store);
+    expect(admitted).toMatchObject({
+      assignment: { binding: { candidatePosition: 2 } },
+      kind: "spawned",
+    });
+    if (admitted.kind !== "spawned") throw new Error("Successor was deferred");
+    expect(admitted.assignment.providerFallback).toBeUndefined();
+    expect(test.bootstrap).toHaveBeenCalledTimes(2);
+    expect(
+      test.bootstrap.mock.calls.map(([call]) => call.modelSelection.model),
+    ).toEqual(["sample-model-one", "sample-model-two"]);
+  });
+
+  it("returns structured delegated exhaustion after every start candidate fails", async () => {
+    const test = fixture(
+      { maxDepth: 2, maxFanOut: 2 },
+      undefined,
+      true,
+      undefined,
+      true,
+    );
+
+    const failure = await spawn(test.coordinator, test.store).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(DelegatedProviderExhaustionError);
+    expect(failure).toMatchObject({
+      alias: "primary",
+      reason: "provider-alias-exhausted",
+      skippedCandidates: [
+        expect.objectContaining({ candidatePosition: 1 }),
+        expect.objectContaining({ candidatePosition: 2 }),
+      ],
+    });
+    expect(test.onProviderExhaustion).toHaveBeenCalledWith(
+      expect.objectContaining({ error: failure, operationId: "spawn-one" }),
+    );
+  });
+
+  it("normalizes all-catalog-unusable delegated exhaustion through the same boundary", async () => {
+    const test = fixture(
+      { maxDepth: 2, maxFanOut: 2 },
+      undefined,
+      true,
+      undefined,
+      false,
+      true,
+    );
+
+    const failure = await spawn(test.coordinator, test.store).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(DelegatedProviderExhaustionError);
+    expect(failure).toMatchObject({
+      reason: "provider-alias-exhausted",
+      skippedCandidates: [
+        expect.objectContaining({ candidatePosition: 1 }),
+        expect.objectContaining({ candidatePosition: 2 }),
+      ],
+    });
+    expect(test.onProviderExhaustion).toHaveBeenCalledWith(
+      expect.objectContaining({ error: failure, operationId: "spawn-one" }),
+    );
+    expect(test.bootstrap).not.toHaveBeenCalled();
   });
 
   it("honors the shared fan-out guard before claiming the subtree", async () => {

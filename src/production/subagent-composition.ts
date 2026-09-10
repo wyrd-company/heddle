@@ -23,7 +23,10 @@ import {
   type ResolvedSessionBinding,
   type SqlitePersistence,
 } from "../persistence/index.js";
-import { SubagentCoordinator } from "../subagents/index.js";
+import {
+  SubagentCoordinator,
+  type DelegatedProviderExhaustionError,
+} from "../subagents/index.js";
 import { isTodoState, type TodoAssignment } from "../todo/index.js";
 import { EscalationHistory } from "../mcp-server/escalation-history.js";
 import { errorDetail } from "../error-details.js";
@@ -34,6 +37,7 @@ import type { DurableAttentionQueue } from "./durable-adapters.js";
 import { heddleSessionTitle } from "./session-title.js";
 import { sanitizeIncidentValue } from "./incident-redaction.js";
 import { stableUuid } from "./stable-uuid.js";
+import { createProductionErrorAttention } from "./error-visibility.js";
 import {
   bindResolvedSession,
   modelSelectionFromBinding,
@@ -48,6 +52,16 @@ const assignments = (persistence: SqlitePersistence): TodoAssignment[] =>
         ? state.todoState.lists.flatMap((list) => list.assignments ?? [])
         : [],
     );
+
+const describeDelegatedExhaustion = (
+  error: DelegatedProviderExhaustionError,
+): string =>
+  error.skippedCandidates
+    .map(
+      ({ candidatePosition, failure, modelSlug, providerDisplayName }) =>
+        `candidate ${candidatePosition} (${providerDisplayName}/${modelSlug}): ${failure.reason}: ${failure.message}`,
+    )
+    .join("; ");
 
 const parentSessionRoute = (
   persistence: SqlitePersistence,
@@ -151,8 +165,9 @@ export const productionSessionTargets = (
       ? instance.state.todoState.lists.flatMap((list) =>
           (list.assignments ?? [])
             .filter(
-              ({ status, sessionKey }) =>
-                status === "active" || questionSessions.has(sessionKey),
+              ({ providerFallback, status, sessionKey }) =>
+                (status === "active" && providerFallback === undefined) ||
+                questionSessions.has(sessionKey),
             )
             .map((assignment) => ({
               instanceId: instance.instanceId,
@@ -292,6 +307,33 @@ export const createProductionSubagentCoordinator = (options: {
           message: error.message,
           taskId,
         });
+      }
+    },
+    onProviderExhaustion: async ({
+      binding,
+      error,
+      operationId,
+      sessionKey,
+    }) => {
+      const taskId = persistence
+        .listReconcilerRuntime()
+        .find(
+          ({ instanceId }) => instanceId === binding.instance.instanceId,
+        )?.taskId;
+      const exhausted = createProductionErrorAttention({
+        attentionId: `production:provider-alias-exhausted:subagent:${stableUuid(
+          `${binding.instance.instanceId}:${sessionKey}:${operationId}`,
+        )}`,
+        code: error.reason,
+        error,
+        instanceId: binding.instance.instanceId,
+        message: `Provider alias '${error.alias}' exhausted every delegated candidate: ${describeDelegatedExhaustion(error)}`,
+        ...(taskId === undefined ? {} : { taskId }),
+      });
+      if (!(await attention.has(exhausted.attentionId))) {
+        await attention.raise(exhausted);
+      } else {
+        attention.reopen(exhausted.attentionId);
       }
     },
     providerFailureDetail: (error, binding) =>

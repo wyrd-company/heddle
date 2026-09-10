@@ -318,7 +318,8 @@ export const replaceTodoAssignmentCandidate = (
   replacement: Pick<
     TodoAssignment,
     "binding" | "bootstrap" | "model" | "provider" | "threadId"
-  >,
+  > &
+    Partial<Pick<TodoAssignment, "providerFallback">>,
 ): TodoAssignment => {
   assertResolvedSessionBinding(
     replacement.binding,

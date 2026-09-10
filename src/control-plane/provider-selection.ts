@@ -50,6 +50,7 @@ export interface T3ProviderCatalogReader {
 
 export type ProviderSelectionReason =
   | "provider-catalog-unavailable"
+  | "provider-alias-exhausted"
   | "provider-alias-not-allowed"
   | "provider-name-not-found"
   | "provider-name-ambiguous"
