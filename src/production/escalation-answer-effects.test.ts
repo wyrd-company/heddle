@@ -23,90 +23,95 @@ describe("production escalation answer effects", () => {
     if (root !== "") await rm(root, { force: true, recursive: true });
   });
 
-  it("records a delegated value answer with prose on both task and epic", async () => {
-    root = await mkdtemp(join(tmpdir(), "heddle-escalation-effects-"));
-    const persistence = new SqlitePersistence({
-      stateDirectory: join(root, "state"),
-    });
-    persistence.writeReconcilerRuntime({
-      boardStatus: "in-progress",
-      instanceId: "sample-instance",
-      state: "waiting",
-      taskId: 24,
-    });
-    const appendTaskActivity = vi.fn(async () => true);
-    const effects = new ProductionEscalationAnswerEffects(
-      persistence,
-      {
-        appendTaskActivity,
-        readTask: async () => ({
-          blocked: false,
-          dependencies: [],
-          frontMatter: {},
-          id: 24,
-          parent: 12,
-          priority: "medium",
-          status: "in-progress",
-          tags: [],
-          title: "Arrange inventory",
-        }),
-      },
-      {} as never,
-    );
-    const opened: PendingEscalation = {
-      threadId: "thread-17",
-      requestId: "request-one",
-      answeringAuthority: {
-        kind: "session",
-        sessionKey: "review-session",
-      },
-      attentionId: `escalation:${"a".repeat(64)}`,
-      escalationId: "sample-reference",
-      instanceId: "sample-instance",
-      openedAt: "2026-01-01T00:00:00.000Z",
-      ownerSessionKey: "work-session",
-      questions: [
+  it.each(["", " \t "])(
+    "records a delegated selected answer on task and epic with inactive text %j",
+    async (inactiveText) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-escalation-effects-"));
+      const persistence = new SqlitePersistence({
+        stateDirectory: join(root, "state"),
+      });
+      persistence.writeReconcilerRuntime({
+        boardStatus: "in-progress",
+        instanceId: "sample-instance",
+        state: "waiting",
+        taskId: 24,
+      });
+      const appendTaskActivity = vi.fn(async () => true);
+      const effects = new ProductionEscalationAnswerEffects(
+        persistence,
         {
-          options: [],
-          multiSelect: false,
-          id: "reference",
-          question: "Which sample reference should be used?",
+          appendTaskActivity,
+          readTask: async () => ({
+            blocked: false,
+            dependencies: [],
+            frontMatter: {},
+            id: 24,
+            parent: 12,
+            priority: "medium",
+            status: "in-progress",
+            tags: [],
+            title: "Arrange inventory",
+          }),
         },
-      ],
-      stage: "arrange",
-    };
-    const answered: AnsweredEscalation = {
-      answeredBy: { kind: "session", sessionKey: "review-session" },
-      answers: {
-        reference: {
-          selectedOptions: ["AB12"],
-          text: "",
-          reasoning: "The selected route fits the requested result.",
+        {} as never,
+      );
+      const opened: PendingEscalation = {
+        threadId: "thread-17",
+        requestId: "request-one",
+        answeringAuthority: {
+          kind: "session",
+          sessionKey: "review-session",
         },
-      },
-      escalationId: opened.escalationId,
-      ownerSessionKey: opened.ownerSessionKey,
-      prose: "Use this reference for the current sample.",
-    };
+        attentionId: `escalation:${"a".repeat(64)}`,
+        escalationId: "sample-reference",
+        instanceId: "sample-instance",
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: "work-session",
+        questions: [
+          {
+            options: [{ label: "AB12" }],
+            multiSelect: false,
+            id: "reference",
+            question: "Which sample reference should be used?",
+          },
+        ],
+        stage: "arrange",
+      };
+      const answered: AnsweredEscalation = {
+        answeredBy: { kind: "session", sessionKey: "review-session" },
+        answers: {
+          reference: {
+            selectedOptions: ["AB12"],
+            text: inactiveText,
+            reasoning: "The selected route fits the requested result.",
+          },
+        },
+        escalationId: opened.escalationId,
+        ownerSessionKey: opened.ownerSessionKey,
+        prose: "Use this reference for the current sample.",
+      };
 
-    await effects.record({ answered, opened });
+      await effects.record({ answered, opened });
 
-    expect(appendTaskActivity).toHaveBeenCalledTimes(2);
-    expect(appendTaskActivity.mock.calls.map(([taskId]) => taskId)).toEqual([
-      24, 12,
-    ]);
-    for (const [, , activity] of appendTaskActivity.mock.calls) {
-      expect(activity).toContain(
-        "Question: Which sample reference should be used?",
-      );
-      expect(activity).toContain("Answer: AB12");
-      expect(activity).toContain(
-        "Prose: Use this reference for the current sample.",
-      );
-      expect(activity).toContain("Answering authority: session:review-session");
-    }
-    persistence.close();
-  });
+      expect(appendTaskActivity).toHaveBeenCalledTimes(2);
+      expect(appendTaskActivity.mock.calls.map(([taskId]) => taskId)).toEqual([
+        24, 12,
+      ]);
+      for (const [, , activity] of appendTaskActivity.mock.calls) {
+        expect(activity).toContain(
+          "Question: Which sample reference should be used?",
+        );
+        expect(activity).toContain("Answer: AB12");
+        expect(activity).toContain(
+          "Prose: Use this reference for the current sample.",
+        );
+        expect(activity).toContain(
+          "Answering authority: session:review-session",
+        );
+      }
+      persistence.close();
+    },
+  );
 
   it("records a standalone task decision without requiring an epic parent", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-escalation-effects-"));

@@ -23,7 +23,10 @@ const answerLines = (
 ): string[] =>
   opened.questions.flatMap((question) => {
     const answer = answered.answers[question.id]!;
-    const selected = answer.text || answer.selectedOptions.join(", ");
+    const selected =
+      answer.text.trim() === ""
+        ? answer.selectedOptions.join(", ")
+        : answer.text;
     return [
       `- Question: ${question.question}`,
       `  Answer: ${selected}`,

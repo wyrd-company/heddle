@@ -17,7 +17,9 @@ describe("production native question answer delivery", () => {
   afterEach(async () => {
     for (const close of cleanup.splice(0).reverse()) await close();
   });
-  const setup = async (answerKind: "text" | "single" | "multi" = "text") => {
+  const setup = async (
+    answerKind: "text" | "single" | "multi" | "single-whitespace" = "text",
+  ) => {
     const fixture = await prepareProductionEpicFixture();
     cleanup.push(fixture.cleanup);
     const t3 = new SyntheticT3();
@@ -62,10 +64,15 @@ describe("production native question answer delivery", () => {
           selectedOptions:
             answerKind === "text"
               ? []
-              : answerKind === "single"
+              : answerKind !== "multi"
                 ? ["Short"]
                 : ["Short", "Long"],
-          text: answerKind === "text" ? "The shorter route" : "",
+          text:
+            answerKind === "text"
+              ? "The shorter route"
+              : answerKind === "single-whitespace"
+                ? " \t "
+                : "",
           reasoning: "The ingredients arrive sooner.",
         },
       },
@@ -75,45 +82,59 @@ describe("production native question answer delivery", () => {
     };
     return { fixture, t3, composition, runtime, input };
   };
-  it("replies once to the original request and records reasoning on task and epic", async () => {
-    const { fixture, t3, composition, runtime, input } = await setup();
-    const creates = t3.commands.filter(
-      (x) => x.type === "thread.create",
-    ).length;
-    await composition.escalation.answerAsOperator(input);
-    await composition.escalation.answerAsOperator(input);
-    await composition.escalation.replayPendingDeliveries();
-    expect(t3.userInputResponses).toEqual([
-      {
-        answers: { route: "The shorter route" },
-        threadId: runtime.threadId,
-        requestId: "request-one",
-        commandId: expect.any(String),
-      },
-    ]);
-    expect(t3.commands.filter((x) => x.type === "thread.create")).toHaveLength(
-      creates,
-    );
-    const task = await composition.board.readTask(fixture.taskId);
-    for (const id of [task.id, task.parent!]) {
-      const result = await execute("kanban-md", [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "show",
-        String(id),
-        "--json",
+  it.each(["text", "single", "multi", "single-whitespace"] as const)(
+    "replies once to the original request and records the %s answer on task and epic",
+    async (answerKind) => {
+      const { fixture, t3, composition, runtime, input } =
+        await setup(answerKind);
+      const creates = t3.commands.filter(
+        (x) => x.type === "thread.create",
+      ).length;
+      await composition.escalation.answerAsOperator(input);
+      await composition.escalation.answerAsOperator(input);
+      await composition.escalation.replayPendingDeliveries();
+      expect(t3.userInputResponses).toEqual([
+        {
+          answers: {
+            route:
+              answerKind === "text"
+                ? "The shorter route"
+                : answerKind === "multi"
+                  ? ["Short", "Long"]
+                  : "Short",
+          },
+          threadId: runtime.threadId,
+          requestId: "request-one",
+          commandId: expect.any(String),
+        },
       ]);
-      expect(JSON.parse(result.stdout).body).toContain(
-        "Reasoning: The ingredients arrive sooner.",
-      );
-    }
-    expect(() =>
-      composition.escalation.requireNoPendingForSession(
-        runtime.instanceId,
-        runtime.sessionKey,
-      ),
-    ).not.toThrow();
-  });
+      expect(
+        t3.commands.filter((x) => x.type === "thread.create"),
+      ).toHaveLength(creates);
+      const task = await composition.board.readTask(fixture.taskId);
+      for (const id of [task.id, task.parent!]) {
+        const result = await execute("kanban-md", [
+          "--dir",
+          fixture.configuration.boardDirectory,
+          "show",
+          String(id),
+          "--json",
+        ]);
+        expect(JSON.parse(result.stdout).body).toContain(
+          "Reasoning: The ingredients arrive sooner.",
+        );
+        expect(JSON.parse(result.stdout).body).toContain(
+          `Answer: ${answerKind === "text" ? "The shorter route" : answerKind === "multi" ? "Short, Long" : "Short"}`,
+        );
+      }
+      expect(() =>
+        composition.escalation.requireNoPendingForSession(
+          runtime.instanceId,
+          runtime.sessionKey,
+        ),
+      ).not.toThrow();
+    },
+  );
   it.each(["text", "single", "multi"] as const)(
     "reconciles an accepted %s native reply after a crash before local completion",
     async (answerKind) => {
