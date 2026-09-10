@@ -1632,11 +1632,16 @@ describe("production composition", () => {
   it("releases composition resources when scheduler draining times out", async () => {
     const fixture = await prepare();
     fixture.configuration.stopTimeoutMilliseconds = 1;
+    let signalDispatch!: () => void;
+    const dispatchStarted = new Promise<void>((resolve) => {
+      signalDispatch = resolve;
+    });
     class HangingDispatchT3 extends SyntheticT3 {
       override async dispatch(
         command: Parameters<SyntheticT3["dispatch"]>[0],
       ): Promise<{ sequence: number }> {
         if (command.type === "project.create") return super.dispatch(command);
+        signalDispatch();
         return new Promise(() => undefined);
       }
     }
@@ -1652,7 +1657,7 @@ describe("production composition", () => {
     });
 
     void composition.start().catch(() => undefined);
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await dispatchStarted;
 
     await expect(composition.close()).rejects.toThrow(
       "Timed out draining the reconciliation pass",
