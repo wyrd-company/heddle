@@ -106,6 +106,39 @@ describe("one question contract", () => {
       validateAnswers({ ...opened(), questions: [native] }, answers),
     ).not.toThrow();
   });
+  it("accepts 10001-character native harness strings without a Heddle-only limit", () => {
+    const values = {
+      id: "i".repeat(10_001),
+      header: "h".repeat(10_001),
+      question: "q".repeat(10_001),
+      label: "l".repeat(10_001),
+      description: "d".repeat(10_001),
+      reasoning: "r".repeat(10_001),
+    };
+    const native = {
+      id: values.id,
+      header: values.header,
+      multiSelect: false,
+      options: [{ label: values.label, description: values.description }],
+      question: values.question,
+    };
+    expect(escalationQuestionSchema.parse(native)).toEqual(native);
+    expect(
+      escalationAnswerSchema.shape.answers.parse({
+        [values.id]: {
+          selectedOptions: [values.label],
+          text: "",
+          reasoning: values.reasoning,
+        },
+      }),
+    ).toEqual({
+      [values.id]: {
+        selectedOptions: [values.label],
+        text: "",
+        reasoning: values.reasoning,
+      },
+    });
+  });
   it("applies one keyed answer to every repeated native question occurrence", () => {
     const request = {
       ...opened(),
@@ -222,23 +255,61 @@ describe("one question contract", () => {
       validateAnswers(pending, { route: answer([], "x".repeat(5000)) }),
     ).not.toThrow();
   });
-  it("quotes identifiers cardinality text alternative and the complete answer tool contract", () => {
+  it("renders exact question IDs prompts options cardinality tool arguments and reasoning guidance", () => {
     const prompt = renderQuestionSet({
       ...opened(),
-      questions: [question([], true)],
+      escalationId: 'request "quoted"',
+      ownerSessionKey: 'owner "quoted"',
+      questions: [
+        {
+          id: "free-reference",
+          question: "Enter a free reference.",
+          multiSelect: false,
+          options: [],
+        },
+        {
+          id: "single-route",
+          question: "Which single route?",
+          multiSelect: false,
+          options: [{ label: "North", description: "The shorter path." }],
+        },
+        {
+          id: "multi-supplies",
+          question: "Which supplies?",
+          multiSelect: true,
+          options: [
+            { label: "Rice" },
+            { label: "Beans", description: "A pantry staple." },
+          ],
+        },
+      ],
     });
-    for (const fragment of [
-      "Question ID: route",
-      "Which route?",
-      "one or more",
-      "text answer",
-      "answer tool",
-      "selectedOptions",
-      "reasoning",
-      "ownerSessionKey",
-      "escalationId",
-    ])
-      expect(prompt).toContain(fragment);
+    expect(prompt).toBe(
+      [
+        'Question set request "quoted" from session owner "quoted" requires an answer.',
+        'Use the Heddle answer tool with escalationId="request \\"quoted\\"", ownerSessionKey="owner \\"quoted\\"", and answers keyed by question ID.',
+        "Each answer requires selectedOptions (labels), text, and reasoning. Supply either selected options or text, never both. Answer every question in one call. Do not stop or advance while an answer is owed.",
+        [
+          "Question ID: free-reference",
+          "Enter a free reference.",
+          "Select one option, or give text instead.",
+          "There are no options; give a text answer.",
+        ].join("\n"),
+        [
+          "Question ID: single-route",
+          "Which single route?",
+          "Select one option, or give text instead.",
+          "- North: The shorter path.",
+        ].join("\n"),
+        [
+          "Question ID: multi-supplies",
+          "Which supplies?",
+          "Select one or more options, or give text instead.",
+          "- Rice",
+          "- Beans: A pantry staple.",
+        ].join("\n"),
+      ].join("\n\n"),
+    );
   });
   it("binds replay to selected answers and reasoning", () => {
     const left = {

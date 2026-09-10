@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
+import { ProductionEscalationAnswerEffects } from "./escalation-answer-effects.js";
 import {
   execute,
   prepareProductionEpicFixture,
@@ -140,6 +141,38 @@ describe("production native question answer delivery", () => {
         .replayEvents(runtime.instanceId)
         .filter((x) => x.type === "mcp:escalation-decision-recorded"),
     ).toHaveLength(1);
+  });
+  it("refuses a reply when the native thread differs from the retained owner binding", async () => {
+    const { t3, composition, runtime, input } = await setup();
+    const opened = composition.escalation.pendingEscalations(
+      runtime.instanceId,
+    )[0]!;
+    const replacementThreadId = "replacement-thread";
+    t3.threads.add(replacementThreadId);
+    expect(t3.threads).toEqual(
+      new Set([runtime.threadId, replacementThreadId]),
+    );
+    const effects = new ProductionEscalationAnswerEffects(
+      composition.persistence,
+      composition.board,
+      t3,
+    );
+
+    await expect(
+      effects.deliver({
+        answered: {
+          answeredBy: { kind: "operator" },
+          answers: input.answers,
+          escalationId: input.escalationId,
+          ownerSessionKey: input.ownerSessionKey,
+        },
+        commandId: "replacement-reply",
+        message: "Answer the retained request.",
+        messageId: "replacement-message",
+        opened: { ...opened, threadId: replacementThreadId },
+      }),
+    ).rejects.toThrow("Question reply cannot target a replacement thread");
+    expect(t3.userInputResponses).toEqual([]);
   });
   it("contains unavailable-thread delivery without creating a replacement and recovers the original request", async () => {
     const { t3, composition, runtime, input } = await setup();
