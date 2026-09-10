@@ -110,9 +110,6 @@ export class SessionObserver {
     answers: Record<string, string | string[]>,
     commandId?: string,
   ): Promise<void> {
-    if (Object.keys(answers).length === 0) {
-      throw new TypeError("User-input answers must not be empty");
-    }
     await this.options.t3.respondToUserInput(
       target.threadId,
       requestId,

@@ -54,7 +54,7 @@ const questions = (
   value: unknown,
   attentionId: string,
 ): ConsoleAttentionQuestion[] => {
-  if (!Array.isArray(value) || value.length === 0) {
+  if (!Array.isArray(value)) {
     throw new Error(`Attention '${attentionId}' has no questions`);
   }
   const questionIds = new Set<string>();

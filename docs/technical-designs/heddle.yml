@@ -649,7 +649,10 @@ proposed-design:
     requires text.
 
     The answer tool accepts one complete answer set keyed by question
-    ID. Every entry contains selectedOptions, text, and required reasoning.
+    ID. A native question set has no count limit and may be empty. An empty
+    request remains pending until its current authority explicitly supplies
+    an empty keyed answer set; Heddle does not automatically settle it.
+    Every entry contains selectedOptions, text, and required reasoning.
     Exactly one of nonempty selectedOptions or nonempty text supplies the
     answer. Validation rejects missing or unknown question IDs, unknown options,
     options for a question with none, multiple selections on a single-select

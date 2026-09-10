@@ -1170,6 +1170,15 @@ describe("SessionObserver operator actions", () => {
     expect(test.t3.commands).toHaveLength(0);
   });
 
+  it("delivers an explicit empty native answer map without synthesizing a stop", async () => {
+    const test = fixture();
+    await test.observer.answerUserInput(target, "empty-request", {});
+    expect(test.t3.userInputAnswers).toEqual([
+      { threadId: target.threadId, requestId: "empty-request", answers: {} },
+    ]);
+    expect(test.t3.commands).toEqual([]);
+  });
+
   it("refuses to stop while a Heddle escalation is pending", async () => {
     const test = fixture();
     test.escalations.pending = [

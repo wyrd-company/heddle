@@ -106,7 +106,7 @@ const userInputQuestionsFrom = (
     activity === undefined
       ? undefined
       : activityPayload(activity)?.["questions"];
-  if (!Array.isArray(questions) || questions.length === 0) {
+  if (!Array.isArray(questions)) {
     throw new Error("T3 pending user-input has no canonical question catalog");
   }
   const questionIds = new Set<string>();

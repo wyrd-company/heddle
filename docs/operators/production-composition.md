@@ -893,6 +893,9 @@ text. The optional multi-select flag defaults to false. Each answer is keyed by
 question ID and contains selectedOptions, text, and required reasoning. Exactly
 one of selections or text provides the answer. Every question must be answered;
 unknown questions or options and excess single-select answers are rejected.
+A native question set has no count limit. An empty set remains pending until
+its current authority explicitly answers with `answers: {}`. It is not
+automatically settled and does not permit an early adjudicator stop.
 An answerer that stops owing an answer receives its questions again. An answerer
 asking its own question waits while the same routing rule handles that question.
 

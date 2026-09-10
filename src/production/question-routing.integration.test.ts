@@ -4,10 +4,14 @@
 // ---
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { requestIdsFor } from "../control-plane/session-observation-attention.js";
-import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
+import {
+  EscalationCoordinator,
+  WorkflowMcpSessionResolver,
+} from "../mcp-server/index.js";
 import { EscalationHistory } from "../mcp-server/escalation-history.js";
 import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
 import { ProductionQuestionRouting } from "./question-routing.js";
+import { ProductionEscalationAnswerEffects } from "./escalation-answer-effects.js";
 import { isTodoState } from "../todo/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -119,6 +123,113 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     );
     return { fixture, t3, page, composition, runtime, resolver, parent };
   };
+  it.each([0, 21])(
+    "requires an explicit authorized answer for %s native questions and preserves delivery across replay",
+    async (count) => {
+      const { t3, composition, runtime, resolver, page } = await setup(true);
+      const questions = Array.from({ length: count }, (_, index) => ({
+        id: `reference-${index}`,
+        question: "Enter a reference",
+        options: [],
+      }));
+      const keyed = Object.fromEntries(
+        questions.map(({ id }) => [
+          id,
+          {
+            selectedOptions: [],
+            text: "sample-reference",
+            reasoning: "Matches the recipe.",
+          },
+        ]),
+      );
+      const native = Object.fromEntries(
+        questions.map(({ id }) => [id, "sample-reference"]),
+      );
+      t3.threadActivities.set(runtime.threadId, [
+        {
+          kind: "user-input.requested",
+          payload: { requestId: "native-count", questions },
+        },
+      ]);
+      await composition.scheduler.trigger();
+      await composition.escalation.replayPendingRoutes();
+      const pending = composition.escalation.pendingEscalations(
+        runtime.instanceId,
+      )[0]!;
+      expect(pending.questions).toHaveLength(count);
+      expect(t3.userInputResponses).toEqual([]);
+      expect(page).not.toHaveBeenCalled();
+      expect(composition.attention.list()).toEqual([]);
+      const adjudication = composition.persistence
+        .listSessionRuntime()
+        .find((item) => item.stageId === "adjudication")!;
+      await expect(
+        new ProductionScopedAdjudication({
+          persistence: composition.persistence,
+          t3,
+        } as never).stop({
+          reason: "answered",
+          sessionKey: adjudication.sessionKey,
+        }),
+      ).rejects.toThrow(/answer is pending/);
+      const binding = await resolver.resolve(
+        composition.persistence.getInstance(runtime.instanceId)!.state
+          .correlationTokens[adjudication.sessionKey]!,
+      );
+      const response = await composition.mcp.fetch(
+        new globalThis.Request("http://127.0.0.1:4774/mcp", {
+          method: "POST",
+          headers: {
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${binding.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            id: "answer-count",
+            jsonrpc: "2.0",
+            method: "tools/call",
+            params: {
+              name: "answer",
+              arguments: {
+                answers: keyed,
+                escalationId: pending.escalationId,
+                ownerSessionKey: runtime.sessionKey,
+              },
+            },
+          }),
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).result.isError).not.toBe(true);
+      const recovered = new EscalationCoordinator({
+        persistence: composition.persistence,
+        attention: { raise: vi.fn() },
+        pushover: { send: vi.fn() },
+        session: { steer: vi.fn() },
+        delivery: new ProductionEscalationAnswerEffects(
+          composition.persistence,
+          composition.board,
+          t3,
+        ),
+      });
+      expect(recovered.pendingEscalations(runtime.instanceId)).toEqual([]);
+      await recovered.replayPendingDeliveries();
+      await recovered.replayPendingDeliveries();
+      expect(t3.userInputResponses).toEqual([
+        {
+          answers: native,
+          requestId: "native-count",
+          threadId: runtime.threadId,
+          commandId: expect.any(String),
+        },
+      ]);
+      expect(
+        new EscalationHistory(composition.persistence).answered(
+          runtime.instanceId,
+        )[0]?.answered.answers,
+      ).toEqual(keyed);
+    },
+  );
   it("routes a zero-option harness request to adjudication and durably replies to its original request once", async () => {
     const { t3, composition, runtime, resolver, page, fixture } =
       await setup(true);

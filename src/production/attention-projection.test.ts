@@ -401,7 +401,7 @@ describe("production attention projection", () => {
           instanceId: "task-41",
           kind: "user-input",
           message: "Input required",
-          questions: [],
+          questions: null,
           requestId: "input-one",
           sessionKey: "session-one",
           threadId: "thread-one",

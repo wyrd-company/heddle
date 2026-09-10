@@ -34,7 +34,7 @@ export const escalationInputSchema = z
     escalationId: identifier,
     requestId: z.string().min(1),
     threadId: z.string().min(1),
-    questions: z.array(escalationQuestionSchema).min(1).max(20),
+    questions: z.array(escalationQuestionSchema),
   })
   .strict();
 
@@ -175,6 +175,11 @@ export const renderQuestionSet = (opened: EscalationAttention): string =>
     `Question set ${opened.escalationId} from session ${opened.ownerSessionKey} requires an answer.`,
     `Use the Heddle answer tool with escalationId=${JSON.stringify(opened.escalationId)}, ownerSessionKey=${JSON.stringify(opened.ownerSessionKey)}, and answers keyed by question ID.`,
     "Each answer requires selectedOptions (labels), text, and reasoning. Supply either selected options or text, never both. Answer every question in one call. Do not stop or advance while an answer is owed.",
+    ...(opened.questions.length === 0
+      ? [
+          "This request has no questions. Explicitly adjudicate it with answers: {} through the answer tool; do not skip the request.",
+        ]
+      : []),
     ...opened.questions.map((question) =>
       [
         `Question ID: ${question.id}`,

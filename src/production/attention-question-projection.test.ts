@@ -13,6 +13,9 @@ import {
 describe.each([escalationQuestions, t3Questions])(
   "harness question projection",
   (project) => {
+    it("accepts an empty native question set", () => {
+      expect(project([], "sample-attention")).toEqual([]);
+    });
     it("preserves unbounded native question IDs", () => {
       const id = "reference-".repeat(30);
       expect(

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   escalationQuestionSchema,
+  escalationInputSchema,
   escalationAnswerSchema,
   escalationAttentionId,
   escalationKey,
@@ -65,6 +66,31 @@ describe("one question contract", () => {
         }),
       ).toMatchObject({ multiSelect: false, options });
   });
+  it.each([0, 21])(
+    "preserves the native question count %s without a Heddle-only bound",
+    (count) => {
+      const questions = Array.from({ length: count }, (_, index) => ({
+        ...question([]),
+        id: `reference-${index}`,
+      }));
+      expect(
+        escalationInputSchema.parse({
+          escalationId: "native-request",
+          requestId: "native-request",
+          threadId: "native-thread",
+          questions,
+        }).questions,
+      ).toEqual(questions);
+      if (count === 0) {
+        expect(() =>
+          validateAnswers({ ...opened(), questions }, {}),
+        ).not.toThrow();
+        expect(renderQuestionSet({ ...opened(), questions })).toContain(
+          "Explicitly adjudicate it with answers: {}",
+        );
+      }
+    },
+  );
   it("preserves exact harness question IDs and option labels across answers", () => {
     const native = escalationQuestionSchema.parse({
       id: " route ",
@@ -151,6 +177,17 @@ describe("one question contract", () => {
       ).not.toThrow();
     }
   });
+  it.each([
+    ["missing question", {}],
+    ["substituted question", { extra: answer() }],
+  ])(
+    "reports complete-set validation for %s instead of dereferencing an absent entry",
+    (_case, answers) => {
+      expect(() => validateAnswers(opened(), answers as never)).toThrow(
+        "Escalation answer must answer every question exactly once",
+      );
+    },
+  );
   it("rejects duplicate selections even when multiple distinct selections are allowed", () => {
     const pending = { ...opened(), questions: [question(undefined, true)] };
     expect(() =>
