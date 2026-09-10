@@ -15,6 +15,7 @@ import type {
   ReconcilerRuntimeRecord,
 } from "../persistence/index.js";
 import {
+  escalationQuestionSummary,
   escalationQuestions,
   requiredAttentionIdentifier as requiredIdentifier,
   requiredAttentionString as requiredString,
@@ -147,7 +148,7 @@ const projectEscalation = (
     instanceId,
     kind: "escalation",
     message: [
-      questions[0]!.question,
+      escalationQuestionSummary(questions),
       ...(adjudication === undefined
         ? []
         : [

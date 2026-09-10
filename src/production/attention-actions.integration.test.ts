@@ -239,6 +239,68 @@ describe("production attention actions", () => {
     await composition.close();
   });
 
+  it("answers an empty production escalation through the full console attention source once", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const instance = composition.persistence.getInstance(runtime.instanceId)!;
+    const binding: WorkflowMcpSessionBinding = {
+      dispositions: [],
+      instance,
+      sessionKey: runtime.sessionKey!,
+      stage: { id: runtime.stageId!, tools: ["answer"] },
+      taskContext: { id: fixture.taskId, title: "Sample Item" },
+      token: "correlation-token",
+    };
+    await composition.escalation.escalate(binding, {
+      threadId: runtime.threadId!,
+      requestId: "request-empty",
+      escalationId: "empty-question-set",
+      questions: [],
+    });
+    await vi.waitFor(async () =>
+      expect(await composition.consoleState.listAttention()).toHaveLength(1),
+    );
+    const attention = (await composition.consoleState.listAttention())[0]!;
+    expect(attention).toMatchObject({ message: "No questions were supplied." });
+    expect(attention.actions[0]!.input).toEqual({
+      kind: "questions",
+      questions: [],
+    });
+
+    await composition.consoleActions.execute({
+      action: attention.actions[0]!,
+      answers: {},
+      attention,
+    });
+    await composition.consoleActions.execute({
+      action: attention.actions[0]!,
+      answers: {},
+      attention,
+    });
+
+    expect(t3.userInputResponses).toEqual([
+      {
+        answers: {},
+        commandId: expect.any(String),
+        requestId: "request-empty",
+        threadId: runtime.threadId,
+      },
+    ]);
+    expect(await composition.consoleState.listAttention()).toEqual([]);
+    await composition.close();
+  });
+
   it("retains an overlength raw pending identity for explicit repair", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

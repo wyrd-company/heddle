@@ -533,6 +533,9 @@ describe("deployed configuration directory", () => {
     expect(operatorGuide).toContain(
       "Configuration changes require service restart",
     );
+    expect(operatorGuide.replace(/\s+/g, " ")).toContain(
+      "Escalation entries offer the exact recorded option labels as submitted answer values.",
+    );
     expect(featureGuide).not.toContain("`boardPath`");
     expect(featureGuide).not.toContain("`statePath`");
     expect(featureGuide).not.toContain("`port`");

@@ -77,6 +77,7 @@ import {
 } from "./subagent-composition.js";
 import { providerContextFromBinding } from "./session-binding.js";
 import { ProductionAttentionActions } from "./attention-actions.js";
+import { escalationQuestionSummary } from "./attention-question-projection.js";
 import { ProductionQuestionRouting } from "./question-routing.js";
 import { renderQuestionSet } from "../mcp-server/escalation-contract.js";
 import { stableUuid } from "./stable-uuid.js";
@@ -453,7 +454,7 @@ export const createProductionComposition = (
             value.adjudication === undefined
               ? `Heddle escalation in ${value.stage}`
               : [
-                  `Heddle escalation in ${value.stage}: ${value.questions[0]!.question}`,
+                  `Heddle escalation in ${value.stage}: ${escalationQuestionSummary(value.questions)}`,
                   `Adjudication${value.adjudication.modelSlug === undefined ? "" : ` by ${value.adjudication.modelSlug}`} did not decide: ${value.adjudication.cause}`,
                   ...(value.adjudication.reasoning === undefined
                     ? []

@@ -770,7 +770,8 @@ links retain their scope-shaped routes.
 The console attention source projects the current unresolved durable queue
 through the same reconciler runtime records. Those records supply task scope;
 the source does not infer a task from an attention message or instance-name
-shape. Escalation entries offer the exact recorded option IDs. Approval entries
+shape. Escalation entries offer the exact recorded option labels as submitted
+answer values. Approval entries
 offer accept and reject. User-input entries preserve the recorded question,
 optional header, selection mode, option labels, and descriptions; T3 option
 labels are the submitted answer values. Stale, terminal, and lifecycle

@@ -88,3 +88,7 @@ const questions = (
 
 export const escalationQuestions = questions;
 export const t3Questions = questions;
+
+export const escalationQuestionSummary = (
+  questions: readonly Pick<ConsoleAttentionQuestion, "question">[],
+): string => questions[0]?.question ?? "No questions were supplied.";

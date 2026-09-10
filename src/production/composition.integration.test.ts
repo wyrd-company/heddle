@@ -18,6 +18,7 @@ import type { LifecycleBlueprint } from "../engine/index.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import {
   isWorkflowMcpStageContract,
+  type EscalationQuestion,
   WorkflowMcpSessionResolver,
 } from "../mcp-server/index.js";
 import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
@@ -110,6 +111,23 @@ describe("production composition", () => {
 
   const openProductionEscalation = async (
     composition: ReturnType<typeof createProductionComposition>,
+    questions: EscalationQuestion[] = [
+      {
+        multiSelect: false,
+        id: "selection",
+        options: [
+          {
+            description: "Use the first generic option",
+            label: "first",
+          },
+          {
+            description: "Use the second generic option",
+            label: "second",
+          },
+        ],
+        question: "Which generic option should be selected?",
+      },
+    ],
   ) => {
     const runtime = composition.persistence
       .listReconcilerRuntime()
@@ -123,23 +141,7 @@ describe("production composition", () => {
       threadId: runtime.threadId!,
       requestId: "request-one",
       escalationId: "production-choice",
-      questions: [
-        {
-          multiSelect: false,
-          id: "selection",
-          options: [
-            {
-              description: "Use the first generic option",
-              label: "first",
-            },
-            {
-              description: "Use the second generic option",
-              label: "second",
-            },
-          ],
-          question: "Which generic option should be selected?",
-        },
-      ],
+      questions,
     });
     await vi.waitFor(() =>
       expect(
@@ -288,7 +290,7 @@ describe("production composition", () => {
     await composition.close();
   });
 
-  it("routes a production adjudication decline to operator attention", async () => {
+  it("routes an empty production adjudication decline to operator attention without replaying its notification", async () => {
     const fixture = await prepare();
     configureAdjudication(fixture);
     const t3 = new SyntheticT3();
@@ -304,8 +306,10 @@ describe("production composition", () => {
       t3,
     });
     await composition.start();
-    const { adjudication, runtime } =
-      await openProductionEscalation(composition);
+    const { adjudication, runtime } = await openProductionEscalation(
+      composition,
+      [],
+    );
     const token = composition.persistence.getInstance(runtime.instanceId)!.state
       .correlationTokens[adjudication.sessionKey]!;
     await composition.escalation.declineAdjudication(
@@ -337,7 +341,7 @@ describe("production composition", () => {
       ),
     ).toHaveLength(1);
     expect(notify.mock.calls[0]?.[0].message).toContain(
-      "Which generic option should be selected?",
+      "No questions were supplied.",
     );
     expect(notify.mock.calls[0]?.[0].message).toContain(
       "The choice changes committed product intent.",
@@ -345,6 +349,11 @@ describe("production composition", () => {
     expect(notify.mock.calls[0]?.[0].message).toContain(
       "The options have materially different outward behavior.",
     );
+    await composition.escalation.replayPendingRoutes();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "escalation"),
+    ).toHaveLength(1);
     await composition.close();
   });
 
@@ -802,7 +811,7 @@ describe("production composition", () => {
     await composition.close();
   });
 
-  it("fails an exhausted production adjudication start closed to operator", async () => {
+  it("fails an exhausted empty production adjudication start closed to operator without replaying its notification", async () => {
     const fixture = await prepare();
     configureAdjudication(fixture);
     const t3 = new SyntheticT3();
@@ -839,17 +848,7 @@ describe("production composition", () => {
         threadId: "thread-17",
         requestId: "request-one",
         escalationId: "production-choice",
-        questions: [
-          {
-            multiSelect: false,
-            id: "selection",
-            options: [
-              { description: "Use first", label: "first" },
-              { description: "Use second", label: "second" },
-            ],
-            question: "Which generic option should be selected?",
-          },
-        ],
+        questions: [],
       },
     );
     await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
@@ -862,6 +861,14 @@ describe("production composition", () => {
         kind: "escalation",
       }),
     );
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "No questions were supplied.",
+    );
+    await composition.escalation.replayPendingRoutes();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "escalation"),
+    ).toHaveLength(1);
     await composition.close();
   });
 
