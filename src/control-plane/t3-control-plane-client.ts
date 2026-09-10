@@ -11,6 +11,7 @@ import {
   type T3AwarenessPhase,
   type T3ShellThread,
 } from "./t3-agent-awareness.js";
+import { requestIdsFor } from "./session-observation-attention.js";
 import {
   assertT3ProviderDispatchPreconditions,
   type T3ProviderDispatchContext,
@@ -625,13 +626,14 @@ export class T3ControlPlaneClient implements T3ProviderCatalogReader {
         `Cannot dispatch '${command.type}': thread '${command.threadId}' has no pending request of the required kind`,
       );
 
+    // Any request that is still pending may be responded to, not only the
+    // newest. Multiple requests stack up when an earlier one goes stale, and
+    // responding to the stale request is what clears it.
     const snapshot = await this.getThread(command.threadId);
-    const latestRequestedId = snapshot.thread.activities
-      ?.filter(({ kind }) => kind === requestKind)
-      .at(-1)?.payload?.requestId;
-    if (latestRequestedId !== command.requestId)
+    const pendingRequestIds = requestIdsFor(snapshot, requestKind);
+    if (!pendingRequestIds.includes(command.requestId))
       throw new T3PreconditionError(
-        `Cannot dispatch '${command.type}': pending request '${command.requestId}' does not exist on thread '${command.threadId}'`,
+        `Cannot dispatch '${command.type}': request '${command.requestId}' is not pending on thread '${command.threadId}'`,
       );
   }
 

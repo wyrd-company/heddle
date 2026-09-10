@@ -250,7 +250,9 @@ describe("T3ControlPlaneClient preconditions", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("requires the response id to match the latest request of its kind", async () => {
+  it("responds to a pending request that is not the newest of its kind", async () => {
+    // Requests stack up when an earlier one goes stale, and responding to the
+    // stale request is what clears it.
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
@@ -273,7 +275,8 @@ describe("T3ControlPlaneClient preconditions", () => {
             ],
           },
         }),
-      );
+      )
+      .mockResolvedValueOnce(jsonResponse({ sequence: 1 }));
     const client = new T3ControlPlaneClient({
       baseUrl: "http://t3.test",
       accessToken: "access-token",
@@ -287,8 +290,49 @@ describe("T3ControlPlaneClient preconditions", () => {
         "accept",
         "command-1",
       ),
+    ).resolves.toEqual({ sequence: 1 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("refuses a response id that is not pending on the thread", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          threads: [{ id: "thread-1", hasPendingApprovals: true }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          thread: {
+            activities: [
+              {
+                kind: "approval.requested",
+                payload: { requestId: "request-current" },
+              },
+              {
+                kind: "approval.resolved",
+                payload: { requestId: "request-current" },
+              },
+            ],
+          },
+        }),
+      );
+    const client = new T3ControlPlaneClient({
+      baseUrl: "http://t3.test",
+      accessToken: "access-token",
+      fetch,
+    });
+
+    await expect(
+      client.respondToApproval(
+        "thread-1",
+        "request-current",
+        "accept",
+        "command-1",
+      ),
     ).rejects.toThrow(
-      "pending request 'request-old' does not exist on thread 'thread-1'",
+      "request 'request-current' is not pending on thread 'thread-1'",
     );
     expect(fetch).toHaveBeenCalledTimes(2);
   });

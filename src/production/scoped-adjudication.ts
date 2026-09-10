@@ -78,6 +78,16 @@ const sanctionedToolApproval = (activity: T3ThreadActivity): boolean => {
   );
 };
 
+const pendingApprovalIdentity = (
+  activities: readonly T3ThreadActivity[],
+): string =>
+  JSON.stringify(
+    activities
+      .map(({ payload }) => payload?.requestId)
+      .filter((requestId): requestId is string => typeof requestId === "string")
+      .sort(),
+  );
+
 const isT3PreconditionError = (error: unknown): boolean =>
   error instanceof Error && error.name === "T3PreconditionError";
 
@@ -367,13 +377,17 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
 
   /**
    * Accepts every pending sanctioned approval on the thread and reports
-   * whether this pass accepted at least one.
+   * whether the pending set moved.
    *
-   * A pass reports success only when it actually dispatched an acceptance, so
-   * a pass can never claim progress it did not make. A request the control
-   * plane refuses to accept leaves the pass reporting no progress, which
-   * returns the session to {@link authorityFailure} and fails it closed to the
-   * operator rather than suppressing observation indefinitely.
+   * A request that the provider has forgotten stays counted as pending, and
+   * dispatching a response is what clears it, so a stale request is answered
+   * exactly like a live one. Progress is read back from the thread rather than
+   * taken from the dispatch receipt, because the control plane replays an
+   * accepted receipt for a repeated command id. A pass that leaves the pending
+   * set unchanged defers nothing and returns the session to
+   * {@link authorityFailure} to fail closed to the operator. Reading progress
+   * from the thread holds across a restart, which remembering an attempt
+   * would not.
    */
   async #approveSanctionedToolRequests(threadId: string): Promise<boolean> {
     const pending = pendingRequestActivitiesFor(
@@ -383,7 +397,8 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     if (pending.length === 0 || !pending.every(sanctionedToolApproval)) {
       return false;
     }
-    let accepted = 0;
+    const before = pendingApprovalIdentity(pending);
+    let dispatched = 0;
     for (const activity of pending) {
       const requestId = activity.payload?.requestId;
       if (typeof requestId !== "string" || requestId.trim() === "") continue;
@@ -394,12 +409,19 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
           "accept",
           stableUuid(`${threadId}:approval:${requestId}`),
         );
-        accepted += 1;
+        dispatched += 1;
       } catch (error) {
         if (!isT3PreconditionError(error)) throw error;
       }
     }
-    return accepted > 0;
+    if (dispatched === 0) return false;
+    const after = pendingApprovalIdentity(
+      pendingRequestActivitiesFor(
+        await this.options.t3.getThread(threadId),
+        "approval.requested",
+      ),
+    );
+    return after !== before;
   }
 
   /**

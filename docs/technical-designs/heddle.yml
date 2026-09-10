@@ -670,11 +670,13 @@ proposed-design:
     actions, not from the request text, and it applies only to a session
     carrying the adjudication handoff Heddle wrote when it started that
     session, never to a lifecycle stage that merely shares the name. A pass
-    that accepts an approval defers observation to the following pass and
-    reports progress only for an approval the control plane accepted, so
-    observation resumes once no sanctioned approval remains outstanding. Every
-    other approval request, and any sanctioned request the control plane will
-    not accept, fails closed to the operator. An accepted answer
+    that answers an approval reads the pending requests back and defers
+    observation to the following pass only when that set moved, because the
+    control plane replays an accepted receipt for a repeated command id. A
+    pass that leaves the pending set unchanged defers nothing, so no sequence
+    of passes or restarts can withhold observation. Every other approval
+    request, and any sanctioned request that stays pending after its answer,
+    fails closed to the operator. An accepted answer
     records the selected model and required reasoning and follows the same
     durable delivery and decision-log path as an operator answer. A decline
     moves authority to the operator without trying another model and carries
@@ -990,7 +992,10 @@ proposed-design:
     prompts, options, or answer cardinality from thread messages or shell
     flags. Heddle dispositions every pending approval and user-input
     request before stopping a session, because stop settles unanswered
-    questions with empty answers. Interrupt, question-disposition, stop,
+    questions with empty answers. Any request that is currently pending may be
+    responded to, not only the most recent one of its kind, because requests
+    stack up when a provider forgets an earlier one and responding to that
+    request is what clears it. Interrupt, question-disposition, stop,
     and archive commands use replayable event-before-effect records;
     intent is durable before dispatch and a completed effect is not
     dispatched again.

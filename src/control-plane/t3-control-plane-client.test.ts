@@ -591,7 +591,7 @@ describe("T3ControlPlaneClient", () => {
     await expect(
       client.respondToApproval("thread-1", "request-1", "accept", "command-1"),
     ).rejects.toThrow(
-      "pending request 'request-1' does not exist on thread 'thread-1'",
+      "request 'request-1' is not pending on thread 'thread-1'",
     );
     expect(fetch).toHaveBeenCalledTimes(2);
   });

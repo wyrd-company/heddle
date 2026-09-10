@@ -194,6 +194,10 @@ export class SyntheticT3 implements ProductionT3Client {
       requestId,
       threadId,
     });
+    const activities = this.threadActivities.get(threadId);
+    if (activities !== undefined) {
+      activities.push({ kind: "approval.resolved", payload: { requestId } });
+    }
     return { sequence: 1 };
   }
 
