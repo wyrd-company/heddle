@@ -325,6 +325,39 @@ describe("console attention action contract", () => {
     ).toThrow("repeats an option");
   });
 
+  it("preserves a prototype-like question ID as an own answer key", () => {
+    if (action.input.kind !== "questions")
+      throw new Error("questions expected");
+    const prototypeAction: ConsoleAttentionAction = {
+      ...action,
+      input: {
+        kind: "questions",
+        questions: action.input.questions.map((question) => ({
+          ...question,
+          id: "__proto__",
+        })),
+      },
+    };
+    const parsed = parseConsoleAttentionActionRequest(
+      {
+        answers: Object.fromEntries([
+          [
+            "__proto__",
+            {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          ],
+        ]),
+        fingerprint: entry().fingerprint,
+      },
+      prototypeAction,
+    );
+
+    expect(Object.hasOwn(parsed.answers, "__proto__")).toBe(true);
+  });
+
   it.each([
     {},
     { unknown: { selectedOptions: [], text: "sample", reasoning: "Needed." } },
