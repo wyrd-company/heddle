@@ -640,6 +640,13 @@ export const createProductionComposition = (
             continue;
           }
           if (adjudicationSession) {
+            if (
+              await scopedAdjudication!.settleSanctionedApprovals(
+                session.sessionKey,
+              )
+            ) {
+              continue;
+            }
             const failure = await scopedAdjudication!.authorityFailure(
               session.sessionKey,
             );

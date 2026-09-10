@@ -393,6 +393,131 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("approves the adjudicator's own sanctioned tool request", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId: "request-sanctioned",
+          requestKind: "mcp-elicitation",
+        },
+      },
+    ]);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(t3.approvalResponses).toHaveLength(1));
+    expect(t3.approvalResponses[0]).toEqual(
+      expect.objectContaining({
+        decision: "accept",
+        requestId: "request-sanctioned",
+        threadId: adjudication.threadId,
+      }),
+    );
+    expect(
+      composition.attention
+        .list()
+        .filter(({ kind }) => kind === "approval" || kind === "escalation"),
+    ).toEqual([]);
+    expect(notify).not.toHaveBeenCalled();
+    await composition.close();
+  });
+
+  it("fails closed on an approval that is not a sanctioned tool request", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: "Allow the edit?",
+          requestId: "request-unsanctioned",
+          requestKind: "file-change",
+        },
+      },
+    ]);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause:
+            "Adjudication attempted operator interaction outside its authority",
+        }),
+        kind: "escalation",
+      }),
+    );
+    expect(t3.approvalResponses).toEqual([]);
+    await composition.close();
+  });
+
   it("observes failed, ended, and timestamp-free stalled adjudications through normal session policy", async () => {
     const fixture = await prepare();
     configureAdjudication(fixture);

@@ -5,6 +5,8 @@
 
 import type { BoardTask, KanbanBoardAdapter } from "../board-adapter/index.js";
 import { ensureCorrelationToken } from "../control-plane/correlation-token.js";
+import { pendingRequestActivitiesFor } from "../control-plane/session-observation-attention.js";
+import type { T3ThreadActivity } from "../control-plane/t3-control-plane-client.js";
 import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
 import type {
   AdjudicationEscalationRouter,
@@ -57,6 +59,27 @@ type AdjudicationActivation = {
   policy: PinnedAdjudicationPolicy;
   prompt: string;
 };
+
+/**
+ * The name our T3 Code fork reports for an externally-registered MCP server.
+ * Heddle registers exactly one such server per adjudication session and
+ * declares the tools it exposes (`answer` and `decline`), so a request that
+ * reports this server is a request to run one of those sanctioned tools.
+ */
+const sanctionedToolServer = "external";
+
+const sanctionedToolApproval = (activity: T3ThreadActivity): boolean => {
+  const payload = activity.payload;
+  if (typeof payload !== "object" || payload === null) return false;
+  const record = payload as Record<string, unknown>;
+  return (
+    record["requestKind"] === "mcp-elicitation" &&
+    record["appName"] === sanctionedToolServer
+  );
+};
+
+const isT3PreconditionError = (error: unknown): boolean =>
+  error instanceof Error && error.name === "T3PreconditionError";
 
 const taskSummary = (task: BoardTask) => ({
   blocked: task.blocked,
@@ -315,6 +338,54 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       return "Adjudication attempted operator interaction outside its authority";
     }
     return undefined;
+  }
+
+  /**
+   * Approves a pending approval request that the adjudicator raised by calling
+   * one of the tools Heddle sanctioned for it, and reports whether it did.
+   *
+   * The adjudicator runs in `approval-required` runtime mode, so T3 Code raises
+   * an approval request before every MCP tool call. Heddle registers exactly
+   * one MCP server for an adjudication session and declares the tools that
+   * server exposes, so a request that reports that server is a request to run a
+   * sanctioned tool and Heddle answers it under its own authority. Every other
+   * request is left pending for {@link authorityFailure} to read as a breach.
+   */
+  async settleSanctionedApprovals(sessionKey: string): Promise<boolean> {
+    const runtime = this.#runtime(sessionKey);
+    if (runtime?.stageId !== "adjudication") return false;
+    const thread = (await this.options.t3.getShell()).threads.find(
+      ({ id }) => id === runtime.threadId,
+    );
+    if (thread?.hasPendingApprovals !== true) return false;
+    return this.#approveSanctionedToolRequest(runtime.threadId);
+  }
+
+  async #approveSanctionedToolRequest(threadId: string): Promise<boolean> {
+    let pending: T3ThreadActivity[];
+    try {
+      pending = pendingRequestActivitiesFor(
+        await this.options.t3.getThread(threadId),
+        "approval.requested",
+      );
+    } catch {
+      return false;
+    }
+    const latest = pending.at(-1);
+    if (latest === undefined || !sanctionedToolApproval(latest)) return false;
+    const requestId = latest.payload?.requestId;
+    if (typeof requestId !== "string" || requestId.trim() === "") return false;
+    try {
+      await this.options.t3.respondToApproval(
+        threadId,
+        requestId,
+        "accept",
+        stableUuid(`${threadId}:approval:${requestId}`),
+      );
+    } catch (error) {
+      return isT3PreconditionError(error);
+    }
+    return true;
   }
 
   #runtime(sessionKey: string): SessionRuntimeRecord | undefined {

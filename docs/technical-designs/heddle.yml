@@ -662,15 +662,20 @@ proposed-design:
 
     Adjudication authority can only answer its bound escalation or decline it.
     Its MCP binding exposes only those two actions and grants no repository or
-    configuration write authority. Approval-required mode fails any observed
-    write-approval request closed to the operator. An accepted answer
+    configuration write authority. Approval-required mode raises an approval
+    request before every tool call, so Heddle approves, under its own
+    authority, an MCP-elicitation approval that reports the tool server Heddle
+    registered for that session. Containment comes from that per-session tool
+    registration, which exposes only the two sanctioned actions, not from the
+    request text. Every other approval request fails closed to the operator.
+    An accepted answer
     records the selected model and required reasoning and follows the same
     durable delivery and decision-log path as an operator answer. A decline
     moves authority to the operator without trying another model and carries
     its cause and reasoning into attention and notification. Candidate fallback
     applies only while starting the configured alias. Alias exhaustion, invalid
-    answers, another-escalation attempts, and approval or input requests fail
-    closed to operator authority. A started adjudication remains authoritative
+    answers, another-escalation attempts, input requests, and approval requests
+    outside the sanctioned tool server fail closed to operator authority. A started adjudication remains authoritative
     until it answers or declines through its approved tool. Session failure,
     terminal exit, absence, and stalled execution use the normal session
     observation and escalation policy without settling the adjudication or

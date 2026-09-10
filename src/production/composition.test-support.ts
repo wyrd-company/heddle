@@ -16,6 +16,7 @@ import type {
   T3ProviderCatalogEntry,
   T3ProviderCatalogModel,
 } from "../control-plane/index.js";
+import type { T3ThreadActivity } from "../control-plane/t3-control-plane-client.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 
@@ -74,6 +75,8 @@ export class SyntheticT3 implements ProductionT3Client {
     threadId: string;
   }> = [];
   readonly commands: T3DispatchCommand[] = [];
+  /** Activities returned by {@link getThread}, keyed by thread id. */
+  readonly threadActivities = new Map<string, T3ThreadActivity[]>();
   readonly dispatches: Array<{
     command: T3DispatchCommand;
     providerContext?: T3ProviderDispatchContext;
@@ -167,8 +170,12 @@ export class SyntheticT3 implements ProductionT3Client {
     this.mcpRegistrations.push(globalThis.structuredClone(registration));
   }
 
-  async getThread() {
-    return { thread: { activities: [] } };
+  async getThread(threadId?: string) {
+    return {
+      thread: {
+        activities: [...(this.threadActivities.get(threadId ?? "") ?? [])],
+      },
+    };
   }
 
   async readProviderCatalog() {
