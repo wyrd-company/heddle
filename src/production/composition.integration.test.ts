@@ -978,6 +978,96 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("starts through a catalog-invalid first candidate and records the catalog failure", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    const creates = t3.commands.filter(({ type }) => type === "thread.create");
+    expect(creates).toHaveLength(1);
+    expect(creates[0]!.modelSelection).toEqual({
+      instanceId: "provider-two",
+      model: "sample-model-two",
+    });
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(session).not.toHaveProperty("bindingState");
+    expect(session.binding).toMatchObject({
+      alias: "primary",
+      candidatePosition: 2,
+      providerDisplayName: "Workbench Beta",
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: expect.stringContaining(
+              "not available, enabled, installed, and ready",
+            ),
+          }),
+          modelSlug: "sample-model",
+          providerDisplayName: "Workbench Alpha",
+        }),
+      ],
+    });
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-fallback-active",
+        message: expect.stringContaining("candidate 1 'Workbench Alpha'"),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("surfaces every catalog failure when no candidate can dispatch", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    t3.providerCatalog[0]!.enabled = false;
+    t3.providerCatalog[1]!.models = [];
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "task-reconciliation-failed",
+        message: expect.stringMatching(
+          /candidate 1 'Workbench Alpha'.*candidate 2 'Workbench Beta'/,
+        ),
+      }),
+    );
+    await composition.close();
+  });
+
   it("exhausts every candidate after each candidate fails before starting", async () => {
     const fixture = await prepare();
     const t3 = new SyntheticT3();

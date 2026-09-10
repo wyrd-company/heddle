@@ -172,6 +172,125 @@ describe("ProviderSelectionResolver", () => {
     });
   });
 
+  it("skips catalog-invalid candidates while preserving their declared positions and failures", async () => {
+    const resolver = new ProviderSelectionResolver(
+      {
+        primary: [
+          aliases.primary,
+          {
+            model: "missing-model",
+            providerDisplayName: "Workbench Missing",
+          },
+          aliases.reviewer,
+        ],
+      },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, availability: "unavailable" },
+          catalog()[1]!,
+        ],
+      },
+    );
+
+    const startup = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: { primary: { usageLimit: 40 } },
+      runtimeMode: "auto",
+    });
+    const resolved = startup.candidates.get("primary");
+
+    expect(resolved).toEqual([
+      expect.objectContaining({
+        candidatePosition: 3,
+        providerInstanceId: "instance-beta",
+        skippedCandidates: [
+          expect.objectContaining({
+            candidatePosition: 1,
+            failure: expect.objectContaining({
+              message: expect.stringContaining("not available"),
+            }),
+            modelSlug: "model-alpha",
+            providerDisplayName: "Workbench Alpha",
+          }),
+          expect.objectContaining({
+            candidatePosition: 2,
+            failure: expect.objectContaining({
+              message: expect.stringContaining(
+                "has no provider named 'Workbench Missing'",
+              ),
+            }),
+            modelSlug: "missing-model",
+            providerDisplayName: "Workbench Missing",
+          }),
+        ],
+      }),
+    ]);
+    expect(startup.aliases.get("primary")).toMatchObject({
+      providerInstanceId: "instance-beta",
+    });
+    expect(startup.defaultSelection).toMatchObject({
+      providerInstanceId: "instance-beta",
+    });
+    expect(startup.providerBudgets).toEqual({
+      "instance-beta": { usageLimit: 40 },
+    });
+  });
+
+  it("names every configured candidate failure when an alias is unusable", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: [aliases.primary, aliases.reviewer] },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, enabled: false },
+          { ...catalog()[1]!, models: [] },
+        ],
+      },
+    );
+
+    const error = await resolver
+      .resolveCandidates("primary", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      })
+      .catch((candidate: unknown) => candidate);
+
+    expect(error).toBeInstanceOf(ProviderSelectionError);
+    expect(error).toMatchObject({ reason: "provider-unavailable" });
+    expect(String(error)).toContain("every candidate is unusable");
+    expect(String(error)).toContain("candidate 1 'Workbench Alpha'");
+    expect(String(error)).toContain("candidate 2 'Workbench Beta'");
+    expect(String(error)).toContain(
+      "not available, enabled, installed, and ready",
+    );
+    expect(String(error)).toContain("no model slug 'model-beta'");
+  });
+
+  it("keeps startup retryable while any unusable candidate is still discovering", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: [aliases.primary, aliases.reviewer] },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, enabled: false },
+          {
+            ...catalog()[1]!,
+            installed: false,
+            state: "warning",
+          },
+        ],
+      },
+    );
+
+    await expect(
+      resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: {},
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-not-ready" });
+  });
+
   it("rejects conflicting budgets for aliases on one provider instance", async () => {
     const resolver = new ProviderSelectionResolver(aliases, {
       readProviderCatalog: async () => catalog(),

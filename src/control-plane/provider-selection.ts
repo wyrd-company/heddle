@@ -4,8 +4,10 @@
 // ---
 
 import type { ProviderUsageBudget } from "../pacing/index.js";
+import { errorDetail } from "../error-details.js";
 import {
   RESOLVED_SESSION_RUNTIME_MODES,
+  type SkippedProviderCandidate,
   type ResolvedSessionRuntimeMode,
 } from "../persistence/types.js";
 
@@ -85,11 +87,16 @@ export type ResolvedProviderSelection = {
   readonly runtimeMode: T3RuntimeMode;
 };
 
+export type ResolvedProviderCandidateSelection = ResolvedProviderSelection & {
+  readonly candidatePosition: number;
+  readonly skippedCandidates: readonly SkippedProviderCandidate[];
+};
+
 export type ResolvedProviderStartup = {
   readonly aliases: ReadonlyMap<string, ResolvedProviderSelection>;
   readonly candidates: ReadonlyMap<
     string,
-    readonly ResolvedProviderSelection[]
+    readonly ResolvedProviderCandidateSelection[]
   >;
   readonly defaultSelection: ResolvedProviderSelection;
   readonly providerBudgets: Readonly<Record<string, ProviderUsageBudget>>;
@@ -118,6 +125,19 @@ export type ProviderAliasListing = {
 export type ProviderStartupInputs = ProviderSelectionInputs & {
   readonly defaultAlias: string;
   readonly providerBudgets: Readonly<Record<string, ProviderUsageBudget>>;
+};
+
+const providerSelectionOnly = (
+  candidate: ResolvedProviderCandidateSelection,
+): ResolvedProviderSelection => {
+  const {
+    candidatePosition: _candidatePosition,
+    skippedCandidates: _skippedCandidates,
+    ...selection
+  } = candidate;
+  void _candidatePosition;
+  void _skippedCandidates;
+  return selection;
 };
 
 const selectionError = (
@@ -173,7 +193,7 @@ export class ProviderSelectionResolver {
   public async resolveCandidates(
     alias: string,
     inputs: ProviderSelectionInputs,
-  ): Promise<readonly ResolvedProviderSelection[]> {
+  ): Promise<readonly ResolvedProviderCandidateSelection[]> {
     return this.resolveCandidatesFromCatalog(
       await this.readCatalog(),
       alias,
@@ -239,14 +259,16 @@ export class ProviderSelectionResolver {
     alias: string,
     inputs: ProviderSelectionInputs,
   ): ResolvedProviderSelection {
-    return this.resolveCandidatesFromCatalog(catalog, alias, inputs)[0]!;
+    return providerSelectionOnly(
+      this.resolveCandidatesFromCatalog(catalog, alias, inputs)[0]!,
+    );
   }
 
   public resolveCandidatesFromCatalog(
     catalog: T3ProviderCatalog,
     alias: string,
     inputs: ProviderSelectionInputs,
-  ): readonly ResolvedProviderSelection[] {
+  ): readonly ResolvedProviderCandidateSelection[] {
     const configuredCandidates = this.#aliases.get(alias);
     if (configuredCandidates === undefined) {
       throw selectionError(
@@ -255,65 +277,103 @@ export class ProviderSelectionResolver {
         "the alias is not configured",
       );
     }
-    return configuredCandidates.map((configured) => {
-      const providers = catalog.filter(
-        ({ displayName }) => displayName === configured.providerDisplayName,
-      );
-      if (providers.length === 0) {
-        throw selectionError(
-          "provider-name-not-found",
-          alias,
-          `T3 has no provider named '${configured.providerDisplayName}'`,
+    const resolved: ResolvedProviderCandidateSelection[] = [];
+    const skipped: SkippedProviderCandidate[] = [];
+    const failures: ProviderSelectionError[] = [];
+    configuredCandidates.forEach((configured, index) => {
+      const candidatePosition = index + 1;
+      let selection: ResolvedProviderSelection;
+      try {
+        const providers = catalog.filter(
+          ({ displayName }) => displayName === configured.providerDisplayName,
         );
-      }
-      if (providers.length > 1) {
-        throw selectionError(
-          "provider-name-ambiguous",
-          alias,
-          `T3 has more than one provider named '${configured.providerDisplayName}'`,
+        if (providers.length === 0) {
+          throw selectionError(
+            "provider-name-not-found",
+            alias,
+            `T3 has no provider named '${configured.providerDisplayName}'`,
+          );
+        }
+        if (providers.length > 1) {
+          throw selectionError(
+            "provider-name-ambiguous",
+            alias,
+            `T3 has more than one provider named '${configured.providerDisplayName}'`,
+          );
+        }
+        const provider = providers[0]!;
+        if (provider.enabled && provider.state === "warning") {
+          throw selectionError(
+            "provider-not-ready",
+            alias,
+            `T3 provider '${configured.providerDisplayName}' has not finished discovery`,
+          );
+        }
+        if (
+          provider.availability !== "available" ||
+          !provider.enabled ||
+          !provider.installed ||
+          provider.state !== "ready"
+        ) {
+          throw selectionError(
+            "provider-unavailable",
+            alias,
+            `T3 provider '${configured.providerDisplayName}' is not available, enabled, installed, and ready`,
+          );
+        }
+        const model = provider.models.find(
+          ({ slug }) => slug === configured.model,
         );
-      }
-      const provider = providers[0]!;
-      if (provider.enabled && provider.state === "warning") {
-        throw selectionError(
-          "provider-not-ready",
+        if (model === undefined) {
+          throw selectionError(
+            "provider-model-not-found",
+            alias,
+            `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
+          );
+        }
+        selection = {
           alias,
-          `T3 provider '${configured.providerDisplayName}' has not finished discovery`,
-        );
+          driverKind: provider.driverKind,
+          interactionMode: inputs.interactionMode,
+          model: { ...model },
+          observedCliVersion: provider.observedCliVersion,
+          providerDisplayName: configured.providerDisplayName,
+          providerInstanceId: provider.instanceId,
+          runtimeMode: inputs.runtimeMode,
+        };
+      } catch (error) {
+        if (!(error instanceof ProviderSelectionError)) throw error;
+        failures.push(error);
+        skipped.push({
+          candidatePosition,
+          failure: errorDetail(error),
+          modelSlug: configured.model,
+          providerDisplayName: configured.providerDisplayName,
+        });
+        return;
       }
-      if (
-        provider.availability !== "available" ||
-        !provider.enabled ||
-        !provider.installed ||
-        provider.state !== "ready"
-      ) {
-        throw selectionError(
-          "provider-unavailable",
-          alias,
-          `T3 provider '${configured.providerDisplayName}' is not available, enabled, installed, and ready`,
-        );
-      }
-      const model = provider.models.find(
-        ({ slug }) => slug === configured.model,
-      );
-      if (model === undefined) {
-        throw selectionError(
-          "provider-model-not-found",
-          alias,
-          `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
-        );
-      }
-      return {
-        alias,
-        driverKind: provider.driverKind,
-        interactionMode: inputs.interactionMode,
-        model: { ...model },
-        observedCliVersion: provider.observedCliVersion,
-        providerDisplayName: configured.providerDisplayName,
-        providerInstanceId: provider.instanceId,
-        runtimeMode: inputs.runtimeMode,
-      };
+      resolved.push({
+        ...selection,
+        candidatePosition,
+        skippedCandidates: skipped.map((candidate) => ({
+          ...candidate,
+          failure: { ...candidate.failure },
+        })),
+      });
     });
+    if (resolved.length > 0) return resolved;
+    const reportedFailure =
+      failures.find(({ reason }) => reason === "provider-not-ready") ??
+      failures[0]!;
+    throw new ProviderSelectionError(
+      reportedFailure.reason,
+      `Provider alias '${alias}' cannot be selected because every candidate is unusable: ${skipped
+        .map(
+          ({ candidatePosition, failure, modelSlug, providerDisplayName }) =>
+            `candidate ${candidatePosition} '${providerDisplayName}' model '${modelSlug}': ${failure.message}`,
+        )
+        .join("; ")}`,
+    );
   }
 
   public async resolveStartup(
@@ -321,7 +381,10 @@ export class ProviderSelectionResolver {
   ): Promise<ResolvedProviderStartup> {
     const catalog = await this.readCatalog();
     const aliases = new Map<string, ResolvedProviderSelection>();
-    const candidates = new Map<string, readonly ResolvedProviderSelection[]>();
+    const candidates = new Map<
+      string,
+      readonly ResolvedProviderCandidateSelection[]
+    >();
     for (const alias of [...this.#aliases.keys()].sort()) {
       const resolved = this.resolveCandidatesFromCatalog(
         catalog,
@@ -329,7 +392,7 @@ export class ProviderSelectionResolver {
         inputs,
       );
       candidates.set(alias, resolved);
-      aliases.set(alias, resolved[0]!);
+      aliases.set(alias, providerSelectionOnly(resolved[0]!));
     }
     const defaultSelection =
       aliases.get(inputs.defaultAlias) ??

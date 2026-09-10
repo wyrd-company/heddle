@@ -7,6 +7,7 @@ import {
   ProviderSelectionError,
   type ProviderSelectionInputs,
   type ProviderSelectionReason,
+  type ResolvedProviderCandidateSelection,
   type ResolvedProviderSelection,
 } from "../control-plane/index.js";
 import type { ResolvedSessionRuntimeMode } from "../persistence/index.js";
@@ -24,7 +25,7 @@ export interface StageProviderSelectionResolver {
   resolveCandidates?(
     alias: string,
     inputs: ProviderSelectionInputs,
-  ): Promise<readonly ResolvedProviderSelection[]>;
+  ): Promise<readonly ResolvedProviderCandidateSelection[]>;
 }
 
 export class StageSessionSelectionError extends Error {
@@ -65,7 +66,7 @@ export const resolveStageSessionCandidates = async (
     taskProviderAliases?: TaskProviderAliasMap;
   },
   resolver: StageProviderSelectionResolver,
-): Promise<readonly ResolvedProviderSelection[]> => {
+): Promise<readonly ResolvedProviderCandidateSelection[]> => {
   const alias = aliasForStage(input);
   const inputs = {
     interactionMode: input.session.interactionMode,
@@ -73,7 +74,13 @@ export const resolveStageSessionCandidates = async (
   };
   try {
     return resolver.resolveCandidates === undefined
-      ? [await resolver.resolve(alias, inputs)]
+      ? [
+          {
+            ...(await resolver.resolve(alias, inputs)),
+            candidatePosition: 1,
+            skippedCandidates: [],
+          },
+        ]
       : await resolver.resolveCandidates(alias, inputs);
   } catch (error) {
     throw new StageSessionSelectionError(input.taskId, input.stageId, error);
@@ -83,7 +90,7 @@ export const resolveStageSessionCandidates = async (
 export const resolveStageSessionSelection = async (
   input: Parameters<typeof resolveStageSessionCandidates>[0],
   resolver: StageProviderSelectionResolver,
-): Promise<ResolvedProviderSelection> =>
+): Promise<ResolvedProviderCandidateSelection> =>
   (await resolveStageSessionCandidates(input, resolver))[0]!;
 
 export class StartupProviderSelectionResolver implements StageProviderSelectionResolver {
@@ -110,11 +117,28 @@ export class StartupProviderSelectionResolver implements StageProviderSelectionR
   public async resolveCandidates(
     alias: string,
     inputs: ProviderSelectionInputs,
-  ): Promise<readonly ResolvedProviderSelection[]> {
+  ): Promise<readonly ResolvedProviderCandidateSelection[]> {
     const selections = this.selections.filter(
       (candidate) => candidate.alias === alias,
     );
-    if (selections.length === 0) return [await this.resolve(alias, inputs)];
-    return selections.map((selection) => ({ ...selection, ...inputs }));
+    if (selections.length === 0) {
+      return [
+        {
+          ...(await this.resolve(alias, inputs)),
+          candidatePosition: 1,
+          skippedCandidates: [],
+        },
+      ];
+    }
+    return selections.map((selection, index) => {
+      const candidate =
+        selection as Partial<ResolvedProviderCandidateSelection>;
+      return {
+        ...selection,
+        ...inputs,
+        candidatePosition: candidate.candidatePosition ?? index + 1,
+        skippedCandidates: candidate.skippedCandidates ?? [],
+      };
+    });
   }
 }

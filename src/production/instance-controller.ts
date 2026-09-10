@@ -148,6 +148,22 @@ const describeSkippedCandidates = (
     )
     .join("; ");
 
+const mergeSkippedCandidates = (
+  ...groups: readonly (readonly SkippedProviderCandidate[])[]
+): SkippedProviderCandidate[] => {
+  const byPosition = new Map<number, SkippedProviderCandidate>();
+  for (const group of groups) {
+    for (const candidate of group) {
+      if (!byPosition.has(candidate.candidatePosition)) {
+        byPosition.set(candidate.candidatePosition, candidate);
+      }
+    }
+  }
+  return [...byPosition.values()].sort(
+    (left, right) => left.candidatePosition - right.candidatePosition,
+  );
+};
+
 export class ProductionInstanceController implements ReconcilerInstanceController {
   public constructor(
     private readonly configuration: ResolvedProductionConfiguration,
@@ -309,23 +325,35 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     };
     const candidates =
       resolver.resolveCandidates === undefined
-        ? [await resolver.resolve(session.binding.alias, selectionInputs)]
+        ? [
+            {
+              ...(await resolver.resolve(
+                session.binding.alias,
+                selectionInputs,
+              )),
+              candidatePosition: 1,
+              skippedCandidates: [],
+            },
+          ]
         : await resolver.resolveCandidates(
             session.binding.alias,
             selectionInputs,
           );
-    const configuredCurrent = candidates[session.binding.candidatePosition - 1];
+    const configuredCurrent = candidates.find(
+      ({ candidatePosition }) =>
+        candidatePosition === session.binding.candidatePosition,
+    );
     if (
-      configuredCurrent === undefined ||
-      configuredCurrent.providerInstanceId !==
+      configuredCurrent !== undefined &&
+      (configuredCurrent.providerInstanceId !==
         session.binding.providerInstanceId ||
-      configuredCurrent.model.slug !== session.binding.modelSlug
+        configuredCurrent.model.slug !== session.binding.modelSlug)
     ) {
       throw new Error(
         `Provider alias '${session.binding.alias}' changed while session '${session.sessionKey}' was starting`,
       );
     }
-    const skipped = [...session.binding.skippedCandidates];
+    let skipped = [...session.binding.skippedCandidates];
     if (
       !skipped.some(
         ({ candidatePosition }) =>
@@ -339,13 +367,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         ),
       );
     }
-    for (
-      let index = session.binding.candidatePosition;
-      index < candidates.length;
-      index += 1
-    ) {
-      const candidate = candidates[index]!;
-      const candidatePosition = index + 1;
+    for (const candidate of candidates.filter(
+      ({ candidatePosition }) =>
+        candidatePosition > session.binding.candidatePosition,
+    )) {
+      const candidatePosition = candidate.candidatePosition;
+      skipped = mergeSkippedCandidates(skipped, candidate.skippedCandidates);
       const candidateThreadId = stableUuid(
         `${session.sessionKey}:candidate:${candidatePosition}:thread`,
       );

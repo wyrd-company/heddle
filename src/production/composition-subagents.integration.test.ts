@@ -719,13 +719,19 @@ describe("production subagent composition", () => {
     await composition.close();
   });
 
-  it("uses a delegated provider and inherits the parent runtime mode through shared pacing and bootstrap", async () => {
+  it("skips a catalog-invalid delegated candidate and inherits the parent runtime mode", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
-    fixture.configuration.providerAliases.secondary = {
-      model: "sample-model",
-      providerDisplayName: "Workbench Beta",
-    };
+    fixture.configuration.providerAliases.secondary = [
+      {
+        model: "sample-model-missing",
+        providerDisplayName: "Workbench Missing",
+      },
+      {
+        model: "sample-model",
+        providerDisplayName: "Workbench Beta",
+      },
+    ];
     fixture.configuration.session.resolvedSelections = [
       ...fixture.configuration.session.resolvedSelections,
       {
@@ -801,6 +807,7 @@ describe("production subagent composition", () => {
       assignment: {
         binding: {
           alias: "secondary",
+          candidatePosition: 2,
           driverKind: "codex",
           interactionMode: "default",
           modelSlug: "sample-model",
@@ -809,6 +816,18 @@ describe("production subagent composition", () => {
           providerInstanceId: "provider-beta",
           runtimeMode: "auto-accept-edits",
           sessionKey: expect.any(String),
+          skippedCandidates: [
+            expect.objectContaining({
+              candidatePosition: 1,
+              failure: expect.objectContaining({
+                message: expect.stringContaining(
+                  "has no provider named 'Workbench Missing'",
+                ),
+              }),
+              modelSlug: "sample-model-missing",
+              providerDisplayName: "Workbench Missing",
+            }),
+          ],
           threadId: expect.any(String),
         },
         model: "sample-model",

@@ -211,13 +211,14 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     const skipped: SkippedProviderCandidate[] = [
       ...(existing?.binding.skippedCandidates ?? []),
     ];
-    const firstIndex = existing?.binding.candidatePosition ?? 0;
+    const priorCandidatePosition = existing?.binding.candidatePosition ?? 0;
     if (existing !== undefined) {
       const recovered = await this.#recoverStarted(existing);
       if (recovered) return { modelSlug: existing.binding.modelSlug };
       if (
         !skipped.some(
-          ({ candidatePosition }) => candidatePosition === firstIndex,
+          ({ candidatePosition }) =>
+            candidatePosition === priorCandidatePosition,
         )
       ) {
         skipped.push(
@@ -228,13 +229,20 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         );
       }
     }
-    for (
-      let index = firstIndex;
-      index < configuredCandidates.length;
-      index += 1
-    ) {
-      const selection = configuredCandidates[index]!;
-      const candidatePosition = index + 1;
+    for (const selection of configuredCandidates.filter(
+      ({ candidatePosition }) => candidatePosition > priorCandidatePosition,
+    )) {
+      for (const catalogFailure of selection.skippedCandidates) {
+        if (
+          !skipped.some(
+            ({ candidatePosition }) =>
+              candidatePosition === catalogFailure.candidatePosition,
+          )
+        ) {
+          skipped.push(catalogFailure);
+        }
+      }
+      const candidatePosition = selection.candidatePosition;
       const threadId = stableUuid(
         `${opened.answeringAuthority.sessionKey}:candidate:${candidatePosition}:thread`,
       );

@@ -282,15 +282,15 @@ export const createProductionSubagentCoordinator = (options: {
           },
           configuration.session.resolvedSelections,
         ),
-      resolve: async ({ alias, runtimeMode, sessionKey, threadId }) =>
-        bindResolvedSession(
-          await providerResolver.resolve(alias, {
+      resolve: async ({ alias, runtimeMode, sessionKey, threadId }) => {
+        const candidate = (
+          await providerResolver.resolveCandidates(alias, {
             interactionMode: configuration.session.interactionMode,
             runtimeMode,
-          }),
-          sessionKey,
-          threadId,
-        ),
+          })
+        )[0]!;
+        return bindResolvedSession(candidate, sessionKey, threadId);
+      },
       runtimeModeFor: async (sessionKey) =>
         productionSessionBindingFor(persistence, sessionKey).runtimeMode,
     },

@@ -116,6 +116,7 @@ export {
   type ProviderSelectionReason,
   type ProviderStartupInputs,
   type ResolvedProviderSelection,
+  type ResolvedProviderCandidateSelection,
   type ResolvedProviderStartup,
   type T3ProviderCatalog,
   type T3ProviderCatalogEntry,
