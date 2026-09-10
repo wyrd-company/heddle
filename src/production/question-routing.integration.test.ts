@@ -428,6 +428,11 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
         .replayEvents(runtime.instanceId)
         .find((x) => x.type === "mcp:escalation-answered")?.payload,
     ).toMatchObject({ answers, answeredBy: { kind: "adjudication" } });
+    expect(
+      new EscalationHistory(composition.persistence).answered(
+        runtime.instanceId,
+      )[0]?.answered.answers,
+    ).toEqual(answers);
     const record = await execute("kanban-md", [
       "--dir",
       fixture.configuration.boardDirectory,
