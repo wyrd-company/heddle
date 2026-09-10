@@ -40,12 +40,14 @@ export type PacingDispatchRequest =
   | {
       kind: "task";
       provider: string;
+      providerAlias?: string;
       sessionId: string;
     }
   | {
       kind: "subagent";
       parentSessionId: string;
       provider: string;
+      providerAlias?: string;
       sessionId: string;
     };
 

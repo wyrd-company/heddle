@@ -10,6 +10,7 @@ import {
   type PacingDispatchRequest,
   type PacingSession,
   PROVIDER_USAGE_WINDOW_MS,
+  type ProviderUsageBudget,
   type ProviderUsageSource,
 } from "./types.js";
 
@@ -60,6 +61,9 @@ const validateConfiguration = (configuration: PacingConfiguration): void => {
 const validateRequest = (request: PacingDispatchRequest): void => {
   requireNonEmpty("sessionId", request.sessionId);
   requireNonEmpty("provider", request.provider);
+  if (request.providerAlias !== undefined) {
+    requireNonEmpty("providerAlias", request.providerAlias);
+  }
   if (request.kind === "subagent") {
     requireNonEmpty("parentSessionId", request.parentSessionId);
   }
@@ -67,6 +71,9 @@ const validateRequest = (request: PacingDispatchRequest): void => {
 
 export class DispatchPacingGate implements DispatchPacingEvaluator {
   private readonly configuration: PacingConfiguration;
+  private readonly providerAliasBudgets: Readonly<
+    Record<string, ProviderUsageBudget>
+  >;
   public readonly defaultProvider: string;
   private readonly now: () => number;
 
@@ -74,13 +81,27 @@ export class DispatchPacingGate implements DispatchPacingEvaluator {
     configuration: PacingConfiguration,
     private readonly usage: ProviderUsageSource,
     now: () => number = Date.now,
+    providerAliasBudgets: Readonly<Record<string, ProviderUsageBudget>> = {},
   ) {
     validateConfiguration(configuration);
+    for (const [alias, budget] of Object.entries(providerAliasBudgets)) {
+      requireNonEmpty("provider alias", alias);
+      requireNonNegativeFinite(
+        `providerAliasBudgets.${alias}.usageLimit`,
+        budget.usageLimit,
+      );
+    }
     this.configuration = {
       ...configuration,
       providerBudgets: { ...configuration.providerBudgets },
       subagents: { ...configuration.subagents },
     };
+    this.providerAliasBudgets = Object.fromEntries(
+      Object.entries(providerAliasBudgets).map(([alias, budget]) => [
+        alias,
+        { ...budget },
+      ]),
+    );
     this.defaultProvider = configuration.defaultProvider;
     this.now = now;
   }
@@ -140,12 +161,16 @@ export class DispatchPacingGate implements DispatchPacingEvaluator {
       };
     }
 
-    const budget = Object.hasOwn(
-      this.configuration.providerBudgets,
-      request.provider,
-    )
-      ? this.configuration.providerBudgets[request.provider]
-      : undefined;
+    const aliasBudget =
+      request.providerAlias !== undefined &&
+      Object.hasOwn(this.providerAliasBudgets, request.providerAlias)
+        ? this.providerAliasBudgets[request.providerAlias]
+        : undefined;
+    const budget =
+      aliasBudget ??
+      (Object.hasOwn(this.configuration.providerBudgets, request.provider)
+        ? this.configuration.providerBudgets[request.provider]
+        : undefined);
     if (budget === undefined) return { kind: "dispatch" };
 
     const usage = await this.usage.readFiveHourWindow(request.provider);

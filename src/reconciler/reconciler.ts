@@ -562,16 +562,31 @@ export class Reconciler {
           continue;
         }
 
-        let dispatch: { depth: 0; provider: string } | undefined;
+        let dispatch:
+          { depth: 0; provider: string; providerAlias?: string } | undefined;
         if (this.options.pacing !== undefined) {
-          const provider =
+          const selection =
             existing?.state === "starting" && existing.provider !== undefined
-              ? existing.provider
-              : this.options.pacing.providerFor === undefined
-                ? this.options.pacing.evaluator.defaultProvider
-                : await this.options.pacing.providerFor(task, resolution);
+              ? {
+                  provider: existing.provider,
+                  ...(existing.providerAlias === undefined
+                    ? {}
+                    : { providerAlias: existing.providerAlias }),
+                }
+              : this.options.pacing.selectionFor !== undefined
+                ? await this.options.pacing.selectionFor(task, resolution)
+                : {
+                    provider:
+                      this.options.pacing.providerFor === undefined
+                        ? this.options.pacing.evaluator.defaultProvider
+                        : await this.options.pacing.providerFor(
+                            task,
+                            resolution,
+                          ),
+                  };
+          const { provider } = selection;
           const decision = await this.options.pacing.evaluator.evaluate(
-            { kind: "task", provider, sessionId: instanceId },
+            { kind: "task", ...selection, sessionId: instanceId },
             activeSessions,
           );
           if (decision.kind === "defer") {
@@ -594,7 +609,7 @@ export class Reconciler {
             }
             continue;
           }
-          dispatch = { depth: 0, provider };
+          dispatch = { depth: 0, ...selection };
         }
 
         await this.options.instances.start({

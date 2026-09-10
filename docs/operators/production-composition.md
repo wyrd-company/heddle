@@ -545,13 +545,17 @@ execution and response output. The executable owns usage-service
 authentication; no credential belongs in its arguments or Heddle output.
 
 Provider budgets are keyed by configured alias for operator readability. At
-startup, Heddle resolves those keys and applies the limit to every candidate
-provider instance in that alias that is usable in the startup snapshot. A
-session consumes the budget of the candidate that actually bound. All aliases
-for one instance consume the same usage and concurrent-session capacity. If two
-aliases whose usable candidate lists overlap on one instance declare different
-limits, configuration is invalid. Omitting a second alias does not give that
-alias an unbudgeted route to the instance.
+startup, Heddle retains those keys and applies each limit to every candidate in
+the alias, including a candidate that becomes usable only on a later fresh
+catalog read. The pacing request carries the selected alias and the selected
+provider instance. The provider-usage source reads the actual provider
+instance, while the alias supplies its configured limit. A catalog change
+between pacing and session binding cannot substitute an unpaced provider; the
+dispatch stops with task-reconciliation attention. All aliases for one instance
+consume the same usage and concurrent-session capacity. If two aliases whose startup-usable candidate
+lists overlap on one instance declare different limits, configuration is
+invalid. Omitting a second alias does not give that alias an unbudgeted route to
+an instance that received a startup-resolved budget.
 
 An in-progress epic gets one T3 project titled
 `{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares

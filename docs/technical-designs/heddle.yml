@@ -357,13 +357,18 @@ proposed-design:
     thread ID, provider instance ID, driver kind, model slug, runtime mode, and
     interaction mode.
 
-    Pacing requests use the provider instance ID of the candidate that actually
-    bound. Configuration names pacing budgets by allowed alias for operator
-    readability, then startup applies a budget to every usable candidate
-    instance and collapses them by instance ID. Aliases for one instance share
-    one budget, and conflicting limits for aliases that resolve to the same
-    instance are invalid. An alias cannot create capacity by renaming an
-    instance. Provider usage executables receive the provider instance ID, not
+    Pacing requests carry both the alias selected for the stage and the provider
+    instance ID of its current first usable candidate. Configuration names
+    pacing budgets by allowed alias for operator readability. Startup retains
+    each alias budget independently of candidate usability and also collapses
+    currently usable candidates by provider instance ID. A fresh catalog read
+    can therefore recover a candidate without creating unbudgeted capacity: the
+    alias supplies the configured limit and the provider usage executable reads
+    the recovered provider instance. Heddle refuses dispatch when the selection
+    changes between pacing and binding so an unpaced candidate cannot be
+    substituted. Aliases for one startup-resolved instance share one budget,
+    and conflicting limits for aliases that resolve to that instance are
+    invalid. Provider usage executables receive the provider instance ID, not
     an alias, display name, or driver kind.
   agent-names: >
     Agent names are organization blueprint data. YAML artifacts under the
@@ -1305,9 +1310,10 @@ proposed-design:
     a closed versioned five-hour-window JSON protocol. It is required exactly
     when provider budgets are nonempty; an empty budget catalog uses a
     throw-if-called source. Each request identifies the resolved T3 provider
-    instance so all aliases for that instance consume one budget. Usage-service
-    authentication belongs to the executable and never enters Heddle arguments
-    or output. Provider CLI authentication belongs to T3.
+    instance while the pacing request retains its selected alias, so a candidate
+    that recovers after startup still receives the alias's configured limit.
+    Usage-service authentication belongs to the executable and never enters
+    Heddle arguments or output. Provider CLI authentication belongs to T3.
 
     The installation uses one configured shared T3 project for ad-hoc tasks
     and one Heddle-managed T3 project per started epic. Managed projects remain

@@ -78,6 +78,53 @@ describe("DispatchPacingGate", () => {
     expect(usage.reads).toEqual(["provider-a", "provider-a"]);
   });
 
+  it("applies an alias budget to a recovered provider absent from the startup instance map", async () => {
+    const windowStartedAt = 10_000;
+    const usage = new UsageStub({
+      "provider-recovered": { used: 40, windowStartedAt },
+    });
+    const gate = new DispatchPacingGate(
+      configuration({ providerBudgets: {} }),
+      usage,
+      () => windowStartedAt + 1,
+      { primary: { usageLimit: 40 } },
+    );
+
+    await expect(
+      gate.evaluate(
+        {
+          kind: "task",
+          provider: "provider-recovered",
+          providerAlias: "primary",
+          sessionId: "session-a",
+        },
+        [],
+      ),
+    ).resolves.toEqual({
+      deferral: {
+        limit: 40,
+        provider: "provider-recovered",
+        reason: "provider-usage-window",
+        retryAt: windowStartedAt + PROVIDER_USAGE_WINDOW_MS,
+        used: 40,
+      },
+      kind: "defer",
+    });
+    expect(usage.reads).toEqual(["provider-recovered"]);
+  });
+
+  it("rejects an invalid recovered-candidate alias budget", () => {
+    expect(
+      () =>
+        new DispatchPacingGate(
+          configuration({ providerBudgets: {} }),
+          new UsageStub({}),
+          () => 1,
+          { primary: { usageLimit: Number.NaN } },
+        ),
+    ).toThrow("providerAliasBudgets.primary.usageLimit");
+  });
+
   it("enforces subagent depth and fan-out before shared capacity", async () => {
     const usage = new UsageStub({
       "provider-a": { used: 0, windowStartedAt: 1_000 },

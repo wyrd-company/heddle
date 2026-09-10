@@ -199,6 +199,7 @@ export class SubagentCoordinator {
           kind: "subagent",
           parentSessionId: binding.sessionKey,
           provider: resolvedBinding.providerInstanceId,
+          providerAlias: resolvedBinding.alias,
           sessionId: identity.sessionKey,
         },
         activeSessions,

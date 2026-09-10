@@ -15,7 +15,10 @@ import {
   renderStageHandoff,
 } from "../control-plane/index.js";
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
-import type { LifecycleBlueprint } from "../engine/index.js";
+import {
+  readLifecycleContext,
+  type LifecycleBlueprint,
+} from "../engine/index.js";
 import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
 import {
   isWorkflowMcpStageContract,
@@ -1087,18 +1090,141 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("paces a candidate that recovers after startup with its alias budget", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const resolver = new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    );
+    const startup = await resolver.resolveStartup({
+      defaultAlias: fixture.configuration.session.defaultProviderAlias,
+      interactionMode: fixture.configuration.session.interactionMode,
+      providerBudgets: { primary: { usageLimit: 40 } },
+      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
+    });
+    fixture.configuration.pacing.defaultProvider =
+      startup.defaultSelection.providerInstanceId;
+    fixture.configuration.pacing.providerBudgets = startup.providerBudgets;
+    fixture.configuration.providerAliasBudgets = startup.providerAliasBudgets;
+    fixture.configuration.session.defaultSelection = startup.defaultSelection;
+    fixture.configuration.session.resolvedSelections = [
+      ...startup.candidates.values(),
+    ].flat();
+    t3.providerCatalog[0]!.availability = "available";
+    const usageReads: string[] = [];
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerResolver: resolver,
+      providerUsage: {
+        readFiveHourWindow: async (provider) => {
+          usageReads.push(provider);
+          return {
+            used: provider === "codex" ? 40 : 0,
+            windowStartedAt: Date.now() - 1_000,
+          };
+        },
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(usageReads).toEqual(["codex"]);
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    const planned = composition.persistence.getInstance(
+      `task-${fixture.taskId}`,
+    );
+    expect(planned).toBeDefined();
+    expect(readLifecycleContext(planned!).pendingTransition).toMatchObject({
+      initialContext: null,
+      kind: "start",
+    });
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === fixture.taskId),
+    ).toMatchObject({
+      deferral: expect.objectContaining({
+        provider: "codex",
+        reason: "provider-usage-window",
+      }),
+      provider: "codex",
+      state: "deferred",
+    });
+    await composition.close();
+  });
+
+  it("refuses an unpaced candidate when the catalog changes after pacing", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    const resolver = new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerResolver: resolver,
+      providerUsage: {
+        readFiveHourWindow: async () => {
+          t3.providerCatalog[0]!.availability = "unavailable";
+          return { used: 0, windowStartedAt: 0 };
+        },
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "task-reconciliation-failed",
+        message: expect.stringContaining(
+          "Paced provider selection changed before session binding",
+        ),
+      }),
+    );
+    await composition.close();
+  });
+
   it("surfaces every catalog failure when no candidate can dispatch", async () => {
     const fixture = await prepare();
     const t3 = new SyntheticT3();
     configureProviderCandidates(fixture, t3);
     t3.providerCatalog[0]!.enabled = false;
     t3.providerCatalog[1]!.models = [];
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    fixture.configuration.pacing.providerBudgets = {
+      codex: { usageLimit: 40 },
+    };
+    const usage = vi.fn(async () => ({ used: 0, windowStartedAt: 0 }));
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+        readFiveHourWindow: usage,
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
       t3,
@@ -1119,6 +1245,7 @@ describe("production composition", () => {
         ),
       }),
     );
+    expect(usage).not.toHaveBeenCalled();
     await composition.close();
   });
 

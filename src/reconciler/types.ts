@@ -26,6 +26,7 @@ export interface ReconcilerInstance {
   instanceId: string;
   parentSessionId?: string;
   provider?: string;
+  providerAlias?: string;
   stageEnteredAt?: number;
   stageId?: string;
   state: "deferred" | "done" | "running" | "starting" | "waiting";
@@ -37,6 +38,7 @@ export interface StartReconcilerInstanceInput {
   dispatch?: {
     depth: 0;
     provider: string;
+    providerAlias?: string;
   };
   instanceId: string;
   repositoryName?: string;
@@ -89,6 +91,10 @@ export interface ReconcilerPacing {
     task: BoardTask,
     resolution: Extract<LifecycleResolution, { kind: "resolved" }>,
   ): Promise<string>;
+  selectionFor?(
+    task: BoardTask,
+    resolution: Extract<LifecycleResolution, { kind: "resolved" }>,
+  ): Promise<{ provider: string; providerAlias: string }>;
 }
 
 export interface ReconcilerDynamicTaskAuthority {

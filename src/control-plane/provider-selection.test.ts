@@ -232,6 +232,9 @@ describe("ProviderSelectionResolver", () => {
     expect(startup.defaultSelection).toMatchObject({
       providerInstanceId: "instance-beta",
     });
+    expect(startup.providerAliasBudgets).toEqual({
+      primary: { usageLimit: 40 },
+    });
     expect(startup.providerBudgets).toEqual({
       "instance-beta": { usageLimit: 40 },
     });

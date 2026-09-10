@@ -572,6 +572,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         depth: 0,
         instanceId: runtime.instanceId,
         ...(provider === undefined ? {} : { provider }),
+        ...(boundSession === undefined
+          ? {}
+          : { providerAlias: boundSession.binding.alias }),
         ...(runtime.stageEnteredAt === undefined
           ? {}
           : { stageEnteredAt: runtime.stageEnteredAt }),
@@ -600,6 +603,67 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       );
     });
     return [...topLevel, ...delegated];
+  }
+
+  async pacingSelectionFor(
+    task: BoardTask,
+    resolution: { blueprintPath: string },
+  ): Promise<{ provider: string; providerAlias: string }> {
+    const instanceId = instanceIdForTask(task.id);
+    const runtime = this.persistence
+      .listReconcilerRuntime()
+      .find((candidate) => candidate.instanceId === instanceId);
+    const retainedSession =
+      runtime?.sessionKey === undefined
+        ? undefined
+        : this.persistence
+            .listSessionRuntime()
+            .find(({ sessionKey }) => sessionKey === runtime.sessionKey);
+    if (retainedSession !== undefined) {
+      return {
+        provider: retainedSession.binding.providerInstanceId,
+        providerAlias: retainedSession.binding.alias,
+      };
+    }
+    const stageId =
+      runtime?.stageId ??
+      (await this.lifecycle.plannedStartStage({
+        blueprintPath: resolution.blueprintPath,
+        instanceId,
+      }));
+    if (stageId === undefined) {
+      return {
+        provider:
+          this.configuration.session.defaultSelection.providerInstanceId,
+        providerAlias: this.configuration.session.defaultProviderAlias,
+      };
+    }
+    await this.lifecycle.validateTaskProviderAliases(
+      instanceId,
+      task.id,
+      task.providerAlias,
+    );
+    const stage = await readProductionHandoffStage({
+      instanceId,
+      persistence: this.persistence,
+      repositoryRoot: this.templateAuthority.repositoryRoot,
+      stageId,
+    });
+    const selection = await resolveStageSessionSelection(
+      {
+        session: this.configuration.session,
+        stageId,
+        stageProviderAlias: stage.providerAlias,
+        stageRuntimeMode: stage.runtimeMode,
+        taskId: task.id,
+        taskProviderAliases: task.providerAlias,
+      },
+      this.sessionSelectionResolver(),
+    );
+    return {
+      provider: selection.providerInstanceId,
+      providerAlias: selection.alias,
+    };
   }
 
   async defer(input: DeferReconcilerInstanceInput): Promise<void> {
@@ -699,6 +763,16 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           sessionKey,
           threadId,
         );
+        if (
+          input.dispatch !== undefined &&
+          (input.dispatch.provider !== binding.providerInstanceId ||
+            (input.dispatch.providerAlias !== undefined &&
+              input.dispatch.providerAlias !== binding.alias))
+        ) {
+          throw new Error(
+            "Paced provider selection changed before session binding; retry required",
+          );
+        }
         starting = {
           ...starting,
           provider: binding.providerInstanceId,
@@ -1197,6 +1271,13 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           continue;
         }
         const context = readLifecycleContext(record);
+        if (
+          runtime.state === "deferred" &&
+          context.pendingTransition?.kind === "start" &&
+          context.pendingTransition.initialContext === null
+        ) {
+          continue;
+        }
         if (context.pendingTransition !== null) {
           if (this.lifecycle.isTransitionActive(runtime.instanceId)) continue;
           const snapshot = await this.#replayPendingTransition(

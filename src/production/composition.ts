@@ -356,6 +356,8 @@ export const createProductionComposition = (
     const pacing = new DispatchPacingGate(
       configuration.pacing,
       options.providerUsage,
+      Date.now,
+      configuration.providerAliasBudgets,
     );
     const scopedAdjudication =
       configuration.adjudication === undefined
@@ -561,6 +563,8 @@ export const createProductionComposition = (
       lifecycleResolver,
       pacing: {
         evaluator: pacing,
+        selectionFor: (task, resolution) =>
+          instances.pacingSelectionFor(task, resolution),
       },
       staleThresholds: configuration.stageThresholds,
     });

@@ -14,7 +14,10 @@ import {
   type ResolvedProviderSelection,
   type T3RuntimeMode,
 } from "../control-plane/provider-selection.js";
-import type { PacingConfiguration } from "../pacing/index.js";
+import type {
+  PacingConfiguration,
+  ProviderUsageBudget,
+} from "../pacing/index.js";
 import { isProviderAlias } from "../provider-alias.js";
 
 export type ProductionSessionConfiguration = {
@@ -114,6 +117,7 @@ export type ResolvedProductionConfiguration = Omit<
   "pacing" | "session"
 > & {
   pacing: PacingConfiguration;
+  providerAliasBudgets?: Readonly<Record<string, ProviderUsageBudget>>;
   session: ResolvedProductionSessionConfiguration;
 };
 
@@ -525,6 +529,7 @@ export const resolveProductionConfiguration = async (
       defaultProvider: startup.defaultSelection.providerInstanceId,
       providerBudgets: startup.providerBudgets,
     },
+    providerAliasBudgets: startup.providerAliasBudgets,
     session: {
       ...validated.session,
       defaultSelection: startup.defaultSelection,

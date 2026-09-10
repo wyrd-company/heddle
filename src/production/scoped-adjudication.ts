@@ -257,6 +257,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         {
           kind: "task",
           provider: binding.providerInstanceId,
+          providerAlias: binding.alias,
           sessionId: binding.sessionKey,
         },
         await productionActiveSessions(

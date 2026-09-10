@@ -110,6 +110,7 @@ export type ResolvedProviderStartup = {
     readonly ResolvedProviderCandidateSelection[]
   >;
   readonly defaultSelection: ResolvedProviderSelection;
+  readonly providerAliasBudgets: Readonly<Record<string, ProviderUsageBudget>>;
   readonly providerBudgets: Readonly<Record<string, ProviderUsageBudget>>;
 };
 
@@ -430,6 +431,12 @@ export class ProviderSelectionResolver {
       aliases,
       candidates,
       defaultSelection,
+      providerAliasBudgets: Object.fromEntries(
+        Object.entries(inputs.providerBudgets).map(([alias, budget]) => [
+          alias,
+          { ...budget },
+        ]),
+      ),
       providerBudgets: Object.fromEntries(providerBudgets),
     };
   }
