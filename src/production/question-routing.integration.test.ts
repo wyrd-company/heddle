@@ -2,6 +2,7 @@
 // relationships:
 //   verifies: heddle
 // ---
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { requestIdsFor } from "../control-plane/session-observation-attention.js";
 import {
@@ -93,9 +94,11 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
   afterEach(async () => {
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   });
-  const setup = async (adjudication = false) => {
+  const setup = async (adjudication = false, endedMilliseconds = 60_000) => {
     const fixture = await prepareProductionEpicFixture();
     cleanups.push(fixture.cleanup);
+    fixture.configuration.observationThresholds.endedMilliseconds =
+      endedMilliseconds;
     if (adjudication)
       fixture.configuration.adjudication = {
         policyPath: "adjudication/policy.json",
@@ -595,7 +598,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     ).rejects.toThrow();
   });
   it("pokes a completed unfinished stage once but never a running stage", async () => {
-    const { t3, composition, runtime } = await setup();
+    const { t3, composition, runtime } = await setup(false, 1);
     const starts = () =>
       t3.commands.filter(
         (x) =>
@@ -611,8 +614,10 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       "Finish the work or use advance",
     );
     expect(composition.attention.list()).toEqual([]);
+    await delay(2);
     await composition.scheduler.trigger();
     expect(starts()).toHaveLength(before + 1);
+    expect(composition.attention.list()).toEqual([]);
     const recovered = new ProductionQuestionRouting(
       composition.persistence,
       composition.escalation,
