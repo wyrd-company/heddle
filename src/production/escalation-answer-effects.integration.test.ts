@@ -17,7 +17,7 @@ describe("production native question answer delivery", () => {
   afterEach(async () => {
     for (const close of cleanup.splice(0).reverse()) await close();
   });
-  const setup = async () => {
+  const setup = async (answerKind: "text" | "single" | "multi" = "text") => {
     const fixture = await prepareProductionEpicFixture();
     cleanup.push(fixture.cleanup);
     const t3 = new SyntheticT3();
@@ -48,16 +48,24 @@ describe("production native question answer delivery", () => {
         {
           id: "route",
           question: "Which route?",
-          multiSelect: false,
-          options: [],
+          multiSelect: answerKind === "multi",
+          options:
+            answerKind === "text"
+              ? []
+              : [{ label: "Short" }, { label: "Long" }],
         },
       ],
     });
     const input = {
       answers: {
         route: {
-          selectedOptions: [],
-          text: "The shorter route",
+          selectedOptions:
+            answerKind === "text"
+              ? []
+              : answerKind === "single"
+                ? ["Short"]
+                : ["Short", "Long"],
+          text: answerKind === "text" ? "The shorter route" : "",
           reasoning: "The ingredients arrive sooner.",
         },
       },
@@ -106,42 +114,50 @@ describe("production native question answer delivery", () => {
       ),
     ).not.toThrow();
   });
-  it("reconciles an accepted native reply after a crash before local completion", async () => {
-    const { t3, composition, runtime, input } = await setup();
-    const original = t3.respondToUserInput.bind(t3);
-    let fail = true;
-    t3.respondToUserInput = async (threadId, requestId, answers, commandId) => {
-      const result = await original(threadId, requestId, answers, commandId);
-      t3.threadActivities.set(threadId, [
-        { kind: "user-input.resolved", payload: { requestId, answers } },
-      ]);
-      if (fail) {
-        fail = false;
-        throw new Error("Response receipt interrupted");
-      }
-      return result;
-    };
-    await expect(
-      composition.escalation.answerAsOperator(input),
-    ).rejects.toThrow("Response receipt interrupted");
-    expect(
-      composition.persistence
-        .replayEvents(runtime.instanceId)
-        .some((x) => x.type === "mcp:escalation-delivery-completed"),
-    ).toBe(false);
-    await composition.escalation.replayPendingDeliveries();
-    expect(t3.userInputResponses).toHaveLength(1);
-    expect(
-      composition.persistence
-        .replayEvents(runtime.instanceId)
-        .filter((x) => x.type === "mcp:escalation-delivery-completed"),
-    ).toHaveLength(1);
-    expect(
-      composition.persistence
-        .replayEvents(runtime.instanceId)
-        .filter((x) => x.type === "mcp:escalation-decision-recorded"),
-    ).toHaveLength(1);
-  });
+  it.each(["text", "single", "multi"] as const)(
+    "reconciles an accepted %s native reply after a crash before local completion",
+    async (answerKind) => {
+      const { t3, composition, runtime, input } = await setup(answerKind);
+      const original = t3.respondToUserInput.bind(t3);
+      let fail = true;
+      t3.respondToUserInput = async (
+        threadId,
+        requestId,
+        answers,
+        commandId,
+      ) => {
+        const result = await original(threadId, requestId, answers, commandId);
+        t3.threadActivities.set(threadId, [
+          { kind: "user-input.resolved", payload: { requestId, answers } },
+        ]);
+        if (fail) {
+          fail = false;
+          throw new Error("Response receipt interrupted");
+        }
+        return result;
+      };
+      await expect(
+        composition.escalation.answerAsOperator(input),
+      ).rejects.toThrow("Response receipt interrupted");
+      expect(
+        composition.persistence
+          .replayEvents(runtime.instanceId)
+          .some((x) => x.type === "mcp:escalation-delivery-completed"),
+      ).toBe(false);
+      await composition.escalation.replayPendingDeliveries();
+      expect(t3.userInputResponses).toHaveLength(1);
+      expect(
+        composition.persistence
+          .replayEvents(runtime.instanceId)
+          .filter((x) => x.type === "mcp:escalation-delivery-completed"),
+      ).toHaveLength(1);
+      expect(
+        composition.persistence
+          .replayEvents(runtime.instanceId)
+          .filter((x) => x.type === "mcp:escalation-decision-recorded"),
+      ).toHaveLength(1);
+    },
+  );
   it("refuses a reply when the native thread differs from the retained owner binding", async () => {
     const { t3, composition, runtime, input } = await setup();
     const opened = composition.escalation.pendingEscalations(
