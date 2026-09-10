@@ -38,6 +38,12 @@ describe("system prompt", () => {
     expect(guide).toContain(`\`\`\`md\n${builtInSystemPrompt}\`\`\``);
   });
 
+  it("directs questions through the harness and answers through Heddle", () => {
+    expect(builtInSystemPrompt).toContain("Use your harness question tool");
+    expect(builtInSystemPrompt).toContain("Heddle's `answer` tool");
+    expect(builtInSystemPrompt).not.toContain("Use `escalate`");
+  });
+
   it("prepends one effective prompt without moving the identity token", () => {
     const prompt = "# Session guidance\n\nUse the workflow tools.";
     const handoff = '---\ncorrelationToken: "sample-token"\n---\n\n# Work';
