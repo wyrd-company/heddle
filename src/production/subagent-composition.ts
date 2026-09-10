@@ -259,7 +259,6 @@ export const createProductionSubagentCoordinator = (options: {
     pacing,
     persistence,
     providerSelection: {
-      defaultRuntimeMode: configuration.session.defaultRuntimeMode,
       list: () =>
         providerResolver.listAllowed(
           {
@@ -277,6 +276,8 @@ export const createProductionSubagentCoordinator = (options: {
           sessionKey,
           threadId,
         ),
+      runtimeModeFor: async (sessionKey) =>
+        productionSessionBindingFor(persistence, sessionKey).runtimeMode,
     },
     prepareSession: async ({ binding, identity, resolvedBinding }) => {
       const runtimes = persistence

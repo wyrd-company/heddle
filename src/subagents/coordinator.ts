@@ -38,7 +38,6 @@ export type SpawnSubagentInput = {
   operationId: string;
   providerAlias: string;
   rootItemId: string;
-  runtimeMode?: ResolvedSessionRuntimeMode;
 };
 
 export type SpawnSubagentResult =
@@ -95,7 +94,6 @@ export type SubagentCoordinatorOptions = {
   pacing: DispatchPacingEvaluator;
   persistence: DelegationStateStore;
   providerSelection: {
-    readonly defaultRuntimeMode: ResolvedSessionRuntimeMode;
     list(): Promise<ProviderAliasListing>;
     resolve(input: {
       alias: string;
@@ -103,6 +101,7 @@ export type SubagentCoordinatorOptions = {
       sessionKey: string;
       threadId: string;
     }): Promise<ResolvedSessionBinding>;
+    runtimeModeFor(sessionKey: string): Promise<ResolvedSessionRuntimeMode>;
   };
   prepareSession(input: {
     binding: WorkflowMcpSessionBinding;
@@ -164,9 +163,7 @@ export class SubagentCoordinator {
     if (
       existing !== undefined &&
       (existing.rootItemId !== input.rootItemId ||
-        existing.binding.alias !== input.providerAlias ||
-        (input.runtimeMode !== undefined &&
-          existing.binding.runtimeMode !== input.runtimeMode))
+        existing.binding.alias !== input.providerAlias)
     ) {
       throw new Error(
         `Subagent operation '${input.operationId}' does not match its stored assignment`,
@@ -182,9 +179,9 @@ export class SubagentCoordinator {
       };
       const resolvedBinding = await this.options.providerSelection.resolve({
         alias: input.providerAlias,
-        runtimeMode:
-          input.runtimeMode ??
-          this.options.providerSelection.defaultRuntimeMode,
+        runtimeMode: await this.options.providerSelection.runtimeModeFor(
+          binding.sessionKey,
+        ),
         sessionKey: identity.sessionKey,
         threadId: identity.threadId,
       });

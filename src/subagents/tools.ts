@@ -11,10 +11,7 @@ import type {
   WorkflowMcpToolContributor,
 } from "../mcp-server/types.js";
 import type { SubagentCoordinator } from "./coordinator.js";
-import {
-  ProviderSelectionError,
-  T3_RUNTIME_MODES,
-} from "../control-plane/index.js";
+import { ProviderSelectionError } from "../control-plane/index.js";
 
 const result = (value: Record<string, unknown>) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value) }],
@@ -54,7 +51,6 @@ const registerSpawn = (
           operationId: z.string().trim().min(1),
           providerAlias: z.string().trim().min(1),
           rootItemId: z.string().trim().min(1),
-          runtimeMode: z.enum(T3_RUNTIME_MODES).optional(),
         })
         .strict(),
     },

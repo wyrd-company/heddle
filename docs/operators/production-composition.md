@@ -403,14 +403,14 @@ The MCP `spawn` tool accepts this strict input:
 {
   "operationId": "operation-alpha",
   "rootItemId": "item-alpha",
-  "providerAlias": "specialist",
-  "runtimeMode": "full-access"
+  "providerAlias": "specialist"
 }
 ```
 
-`providerAlias` is required and must be configured. `runtimeMode` is optional;
-when absent, `session.defaultRuntimeMode` applies. A child does not inherit its
-parent's provider or runtime mode. An invalid or nonselectable choice creates no
+`providerAlias` is required and must be configured. A child inherits its
+parent session's resolved runtime mode and cannot select its own; a child does
+not inherit its parent's provider. A parent whose resolved binding is absent
+fails the spawn. An invalid or nonselectable choice creates no
 todo assignment, pacing reservation, MCP registration, or T3
 thread. `operationId` is the replay-safe request identity. `rootItemId` names
 the requested todo-subtree root, and Heddle accepts it only within the caller's

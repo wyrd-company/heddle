@@ -260,9 +260,11 @@ describe.skipIf(!t3Binary)(
         ),
         persistence,
         providerSelection: {
-          defaultRuntimeMode: "auto",
           list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
           resolve: async () => {
+            throw new Error("spawn is not used by this integration");
+          },
+          runtimeModeFor: async () => {
             throw new Error("spawn is not used by this integration");
           },
         },

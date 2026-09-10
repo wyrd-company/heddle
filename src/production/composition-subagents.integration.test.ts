@@ -679,7 +679,7 @@ describe("production subagent composition", () => {
     await composition.close();
   });
 
-  it("uses a delegated provider and model through shared pacing and bootstrap", async () => {
+  it("uses a delegated provider and inherits the parent runtime mode through shared pacing and bootstrap", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     fixture.configuration.providerAliases.secondary = {
@@ -749,11 +749,13 @@ describe("production subagent composition", () => {
       .listSessionRuntime()
       .find(({ sessionKey }) => sessionKey === parent.sessionKey)!;
 
+    expect(parentRuntime.binding.runtimeMode).toBe("auto-accept-edits");
+    fixture.configuration.session.defaultRuntimeMode = "approval-required";
+
     const spawned = await composition.subagents.spawn(parent, {
       operationId: "delegated-provider",
       providerAlias: "secondary",
       rootItemId: "deliver",
-      runtimeMode: "full-access",
     });
     expect(spawned).toMatchObject({
       assignment: {
@@ -765,7 +767,7 @@ describe("production subagent composition", () => {
           observedCliVersion: "catalog-version-secondary",
           providerDisplayName: "Workbench Beta",
           providerInstanceId: "provider-beta",
-          runtimeMode: "full-access",
+          runtimeMode: "auto-accept-edits",
           sessionKey: expect.any(String),
           threadId: expect.any(String),
         },
@@ -804,7 +806,7 @@ describe("production subagent composition", () => {
           type: "thread.create",
         }),
         expect.objectContaining({
-          runtimeMode: "full-access",
+          runtimeMode: "auto-accept-edits",
           threadId: spawned.assignment.threadId,
           type: "thread.turn.start",
         }),
@@ -986,20 +988,20 @@ describe("production subagent composition", () => {
     expect(rawSelection.result?.content?.[0]?.text).toMatch(
       /Input validation error.*Unrecognized keys.*model.*provider/,
     );
-    const invalidRuntime = await callMcpTool(
+    const runtimeSelection = await callMcpTool(
       composition,
       parent.token,
       "spawn",
       {
-        operationId: "reject-invalid-runtime",
+        operationId: "reject-runtime-selection",
         providerAlias: "primary",
         rootItemId: "deliver",
-        runtimeMode: "default",
+        runtimeMode: "full-access",
       },
     );
-    expect(invalidRuntime.result?.isError).toBe(true);
-    expect(invalidRuntime.result?.content?.[0]?.text).toMatch(
-      /Input validation error.*runtimeMode.*Invalid option/,
+    expect(runtimeSelection.result?.isError).toBe(true);
+    expect(runtimeSelection.result?.content?.[0]?.text).toMatch(
+      /Input validation error.*Unrecognized key.*runtimeMode/,
     );
     const catalogFailure = vi
       .spyOn(t3, "readProviderCatalog")

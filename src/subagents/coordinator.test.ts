@@ -151,7 +151,6 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
     ),
     persistence: store,
     providerSelection: {
-      defaultRuntimeMode: "approval-required",
       list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
       resolve: async ({ alias, runtimeMode, sessionKey, threadId }) =>
         resolvedSessionBindingFixture({
@@ -162,6 +161,7 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
           sessionKey,
           threadId,
         }),
+      runtimeModeFor: async () => "approval-required",
     },
     prepareSession: async ({ identity, model, resolvedBinding }) => ({
       binding:
@@ -306,14 +306,6 @@ describe("SubagentCoordinator", () => {
         operationId: "spawn-one",
         providerAlias: "different-selection",
         rootItemId: "root",
-      }),
-    ).rejects.toThrow(/does not match its stored assignment/);
-    await expect(
-      test.coordinator.spawn(binding(test.store), {
-        operationId: "spawn-one",
-        providerAlias: "primary",
-        rootItemId: "root",
-        runtimeMode: "full-access",
       }),
     ).rejects.toThrow(/does not match its stored assignment/);
   });
@@ -493,11 +485,11 @@ describe("SubagentCoordinator", () => {
       ),
       persistence: racingStore,
       providerSelection: {
-        defaultRuntimeMode: "auto",
         list: async () => ({ aliases: [], runtimeModes: [], version: 1 }),
         resolve: async () => {
           throw new Error("not used");
         },
+        runtimeModeFor: async () => "auto",
       },
       prepareSession: async () => {
         throw new Error("not used");
