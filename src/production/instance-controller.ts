@@ -682,8 +682,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
   }
 
   async start(input: StartReconcilerInstanceInput): Promise<void> {
+    const lifecycleAtStart = this.persistence.getInstance(input.instanceId);
     const lifecycleExistedAtStart =
-      this.persistence.getInstance(input.instanceId) !== undefined;
+      lifecycleAtStart !== undefined &&
+      readLifecycleContext(lifecycleAtStart).pendingTransition
+        ?.initialContext !== null;
     const previous = this.persistence
       .listReconcilerRuntime()
       .find(({ instanceId }) => instanceId === input.instanceId);

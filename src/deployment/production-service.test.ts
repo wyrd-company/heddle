@@ -334,7 +334,9 @@ describe("configured production composition", () => {
         stageId: "review",
       },
     ]);
-    expect(readProviderCatalog).toHaveBeenCalledTimes(4);
+    // Startup, pre-pacing selection, and each new stage bind read current
+    // provider authority. The initial bind rechecks the pre-pacing selection.
+    expect(readProviderCatalog).toHaveBeenCalledTimes(5);
     expect(
       t3.commands
         .filter(({ type }) => type === "thread.create")
