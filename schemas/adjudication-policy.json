@@ -4,7 +4,7 @@
   "relationships": { "implements": "heddle" },
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "relationships", "decision-boundary", "limits"],
+  "required": ["$schema", "relationships", "decision-boundary"],
   "properties": {
     "$schema": {
       "const": "https://wyrd.company/heddle/adjudication-policy.schema.json"
@@ -31,14 +31,6 @@
           "items": { "type": "string", "minLength": 1, "pattern": "\\S" }
         },
         "test": { "type": "string", "minLength": 1, "pattern": "\\S" }
-      }
-    },
-    "limits": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["maximumTurns"],
-      "properties": {
-        "maximumTurns": { "const": 1 }
       }
     }
   }

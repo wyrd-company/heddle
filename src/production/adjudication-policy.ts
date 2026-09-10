@@ -25,11 +25,6 @@ const policySchema = z
         test: z.string().trim().min(1),
       })
       .strict(),
-    limits: z
-      .object({
-        maximumTurns: z.literal(1),
-      })
-      .strict(),
   })
   .strict();
 

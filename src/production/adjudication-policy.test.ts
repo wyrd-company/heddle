@@ -3,11 +3,12 @@
 //   verifies: heddle
 // ---
 
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, expect, it } from "vitest";
+import Ajv2020 from "ajv/dist/2020.js";
 
 import { execute } from "./composition.test-support.js";
 import {
@@ -31,7 +32,19 @@ const policy = (decision: string) => ({
     escalate: ["Escalate a material product decision."],
     test: "Who outside the current effort would break?",
   },
-  limits: { maximumTurns: 1 },
+});
+
+it("publishes a decision boundary without adjudication execution limits", async () => {
+  const schema = JSON.parse(
+    await readFile("schemas/adjudication-policy.json", "utf8"),
+  );
+  const validate = new Ajv2020({ strict: false }).compile(schema);
+  const boundary = policy("Decide the reversible detail.");
+  expect(validate(boundary)).toBe(true);
+  expect(validate({ ...boundary, limits: { maximumTurns: 1 } })).toBe(false);
+  expect(
+    validate({ ...boundary, limits: { timeoutMilliseconds: 60_000 } }),
+  ).toBe(false);
 });
 
 it("reads the retained policy blob after the configured source advances", async () => {
@@ -96,41 +109,44 @@ it("reads the retained policy blob after the configured source advances", async 
   ]);
 });
 
-it("rejects the removed adjudication timeout surface", async () => {
-  const root = await mkdtemp(join(tmpdir(), "heddle-adjudication-policy-"));
-  roots.push(root);
-  await mkdir(join(root, "adjudication"));
-  await execute("git", ["init", "--quiet", "--initial-branch=main"], {
-    cwd: root,
-  });
-  await writeFile(
-    join(root, "adjudication", "policy.json"),
-    JSON.stringify({
-      ...policy("Decide the reversible detail."),
-      limits: { maximumTurns: 1, timeoutMilliseconds: 60_000 },
-    }),
-  );
-  await execute("git", ["add", "adjudication/policy.json"], { cwd: root });
-  await execute(
-    "git",
-    [
-      "-c",
-      "user.name=Fixture User",
-      "-c",
-      "user.email=fixture@example.invalid",
-      "commit",
-      "--quiet",
-      "-m",
-      "Add policy with removed timeout",
-    ],
-    { cwd: root },
-  );
+it.each([{ maximumTurns: 1 }, { timeoutMilliseconds: 60_000 }])(
+  "rejects removed adjudication execution limits %j",
+  async (limits) => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-adjudication-policy-"));
+    roots.push(root);
+    await mkdir(join(root, "adjudication"));
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: root,
+    });
+    await writeFile(
+      join(root, "adjudication", "policy.json"),
+      JSON.stringify({
+        ...policy("Decide the reversible detail."),
+        limits,
+      }),
+    );
+    await execute("git", ["add", "adjudication/policy.json"], { cwd: root });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add policy with removed timeout",
+      ],
+      { cwd: root },
+    );
 
-  await expect(
-    readPinnedAdjudicationPolicy({
-      path: "adjudication/policy.json",
-      repositoryRoot: root,
-      sourceRef: "main",
-    }),
-  ).rejects.toThrow(/timeoutMilliseconds|unrecognized/i);
-});
+    await expect(
+      readPinnedAdjudicationPolicy({
+        path: "adjudication/policy.json",
+        repositoryRoot: root,
+        sourceRef: "main",
+      }),
+    ).rejects.toThrow(/limits|unrecognized/i);
+  },
+);

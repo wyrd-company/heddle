@@ -313,7 +313,6 @@ bystanders: [sample-bystander]
           escalate: ["Escalate material product decisions."],
           test: "Who outside this sample would break?",
         },
-        limits: { maximumTurns: 1 },
       }),
     );
     await execute("git", ["init", "--quiet", "--initial-branch=main"], {
