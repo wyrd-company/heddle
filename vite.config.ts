@@ -13,6 +13,10 @@ const artifactHeader = `// ---\n// relationships:\n//   implements: heddle\n//  
 const stylesheetArtifactHeader = `/* ---\nrelationships:\n  implements: heddle\n  references: flowcraft-gate\n--- */\n`;
 
 export default defineConfig({
+  resolve: {
+    // Keep generated module paths relative to this checkout, not a symlink target.
+    preserveSymlinks: true,
+  },
   define: {
     "process.env": "{}",
     "process.env.NODE_ENV": JSON.stringify("production"),
