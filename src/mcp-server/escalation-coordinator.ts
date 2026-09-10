@@ -33,6 +33,7 @@ import {
 
 export interface EscalationAttentionQueue {
   raise(attention: EscalationAttention): Promise<void>;
+  resolve?(attentionId: string): void | Promise<void>;
 }
 
 export interface PushoverEscalationNotifier {
@@ -53,7 +54,7 @@ export interface AdjudicationEscalationRouter {
     },
   ): Promise<{ modelSlug: string }>;
   stop(input: {
-    reason: "answered" | "declined" | "failed";
+    reason: "answered" | "declined" | "failed" | "withdrawn";
     sessionKey: string;
   }): Promise<void>;
 }
@@ -407,7 +408,47 @@ export class EscalationCoordinator {
       for (const opened of this.#history.pending(instanceId)) {
         await this.#ensureRouted(opened);
       }
+      for (const opened of this.#history.withdrawn(instanceId)) {
+        await this.#releaseWithdrawn(opened);
+      }
     }
+  }
+
+  async #releaseWithdrawn(opened: PendingEscalation): Promise<void> {
+    // Finish an in-flight start before cancelling its resulting session.
+    const key = escalationKey(
+      opened.instanceId,
+      opened.ownerSessionKey,
+      opened.escalationId,
+    );
+    await this.#routes.get(key)?.catch(() => undefined);
+    if (
+      this.#history.effectRecorded(
+        opened,
+        escalationEventTypes.withdrawalCompleted,
+      )
+    )
+      return;
+    await this.#attention.resolve?.(opened.attentionId);
+    if (opened.answeringAuthority.kind === "adjudication") {
+      const sessionKey = opened.answeringAuthority.sessionKey;
+      if (
+        this.#history
+          .pending(opened.instanceId)
+          .some(
+            (question) =>
+              question.ownerSessionKey === sessionKey ||
+              (question.answeringAuthority.kind !== "operator" &&
+                question.answeringAuthority.sessionKey === sessionKey),
+          )
+      )
+        return;
+      await this.#adjudication?.stop({ reason: "withdrawn", sessionKey });
+    }
+    this.#history.recordEffect(
+      opened,
+      escalationEventTypes.withdrawalCompleted,
+    );
   }
 
   async replayPendingDeliveries(): Promise<void> {
@@ -536,6 +577,7 @@ export class EscalationCoordinator {
   }
 
   async #route(opened: PendingEscalation): Promise<void> {
+    if (!this.#isPending(opened)) return;
     const types = this.#history.routeTypes(opened);
     if (opened.answeringAuthority.kind === "adjudication") {
       if (this.#adjudication === undefined) {
@@ -563,6 +605,7 @@ export class EscalationCoordinator {
             },
           );
         } catch (error) {
+          if (!this.#isPending(opened)) return;
           const cause = error instanceof Error ? error.message : String(error);
           const moved = this.#history.moveAuthority(
             opened,
@@ -602,6 +645,7 @@ export class EscalationCoordinator {
       await this.#attention.raise(attention);
       this.#history.recordRoute(opened, escalationEventTypes.attentionRaised);
     }
+    if (!this.#isPending(opened)) return;
     if (!types.has(escalationEventTypes.notified)) {
       try {
         await this.#pushover.send(attention);
@@ -611,6 +655,19 @@ export class EscalationCoordinator {
       }
       this.#history.recordRoute(opened, escalationEventTypes.notified);
     }
+  }
+
+  #isPending(opened: PendingEscalation): boolean {
+    const current = this.#history.find(
+      opened.instanceId,
+      opened.ownerSessionKey,
+      opened.escalationId,
+    );
+    return (
+      current.opened !== undefined &&
+      current.answered === undefined &&
+      !current.withdrawn
+    );
   }
 
   async #recordAndDeliver(

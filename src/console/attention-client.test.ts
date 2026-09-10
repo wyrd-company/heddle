@@ -225,9 +225,13 @@ describe("global console attention overlay", () => {
     expect(action?.textContent).toBe("Retry notification →");
   });
 
-  it.each([false, true])(
-    "switches options and text while retaining reasoning (multiSelect=%s)",
-    async (multiSelect) => {
+  it.each([
+    [false, "reference"],
+    [true, "reference"],
+    [false, "__proto__"],
+  ] as const)(
+    "switches options and text while retaining reasoning (multiSelect=%s, id=%s)",
+    async (multiSelect, referenceId) => {
       const entry = createConsoleAttention({
         actions: [
           {
@@ -249,7 +253,7 @@ describe("global console attention overlay", () => {
                   options: [{ label: "First" }, { label: "Second" }],
                 },
                 {
-                  id: "reference",
+                  id: referenceId,
                   question: "Enter a reference",
                   multiSelect: false,
                   options: [],
@@ -282,9 +286,11 @@ describe("global console attention overlay", () => {
       const reasoning = elements.find(
         ({ name }) => name === "choice:reasoning",
       )!;
-      const reference = elements.find(({ name }) => name === "reference:text")!;
+      const reference = elements.find(
+        ({ name }) => name === `${referenceId}:text`,
+      )!;
       const referenceReasoning = elements.find(
-        ({ name }) => name === "reference:reasoning",
+        ({ name }) => name === `${referenceId}:reasoning`,
       )!;
       const action = elements.find(
         ({ className }) => className === "attention-action",
@@ -322,7 +328,7 @@ describe("global console attention overlay", () => {
             text: "",
             reasoning: "Fits the recipe.",
           },
-          reference: {
+          [referenceId]: {
             selectedOptions: [],
             text: "sample-12",
             reasoning: "Matches the sample label.",

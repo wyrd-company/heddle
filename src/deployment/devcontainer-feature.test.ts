@@ -24,6 +24,21 @@ const featureDirectory = ".devcontainer/features/heddle";
 const execute = promisify(execFile);
 
 describe("Heddle devcontainer feature", () => {
+  it.each([
+    "AGENTS.md",
+    "docs/operators/production-composition.md",
+    "docs/technical-designs/heddle.yml",
+  ])(
+    "keeps %s aligned with the approved supported T3 release",
+    async (path) => {
+      const versions = JSON.parse(
+        await readFile("deployment/supported-versions.json", "utf8"),
+      );
+      const document = await readFile(path, "utf8");
+      expect(document).toContain(versions.t3);
+      expect(document.match(/0\.0\.\d+-wyrd\.\d+/g)).toEqual([versions.t3]);
+    },
+  );
   it("declares only the configuration-directory and Caddy routing options", async () => {
     const manifest = JSON.parse(
       await readFile(`${featureDirectory}/devcontainer-feature.json`, "utf8"),
@@ -186,9 +201,9 @@ describe("Heddle devcontainer feature", () => {
       "utf8",
     );
 
-    expect(versions.t3).toBe("0.0.38-wyrd.1");
+    expect(versions.t3).toBe("0.0.38-wyrd.2");
     expect(versions.t3PackageSource).toBe(
-      "https://github.com/wyrd-company/t3code/releases/download/server/0.0.38-wyrd.1/t3-0.0.38-wyrd.1.tgz",
+      "https://github.com/wyrd-company/t3code/releases/download/server/0.0.38-wyrd.2/t3-0.0.38-wyrd.2.tgz",
     );
     expect(versions.kanbanMd).toBe("0.37.0-fork+b9fc380");
     expect(readme).toContain(

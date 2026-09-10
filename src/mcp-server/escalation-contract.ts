@@ -38,18 +38,50 @@ export const escalationInputSchema = z
   })
   .strict();
 
+const answerEntrySchema = z
+  .object({
+    selectedOptions: z.array(z.string().min(1)),
+    text: z.string(),
+    reasoning: harnessString,
+  })
+  .strict();
+
+// Zod records discard __proto__. Native question IDs are data, so validate the
+// original own entries without rewriting their keys. Publish the same entry
+// schema to MCP clients that the runtime validator uses.
+const answerSetSchema = z
+  .unknown()
+  .superRefine((value, context) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      context.addIssue({
+        code: "custom",
+        message: "Answers must be a keyed object",
+      });
+      return;
+    }
+    for (const key of Reflect.ownKeys(value)) {
+      const keyResult = harnessString.safeParse(key);
+      if (!keyResult.success) {
+        context.addIssue({
+          code: "custom",
+          message: "Answer keys must be nonblank question IDs",
+        });
+        continue;
+      }
+      const result = answerEntrySchema.safeParse(Reflect.get(value, key));
+      if (!result.success)
+        for (const issue of result.error.issues) {
+          context.addIssue({ ...issue, path: [keyResult.data, ...issue.path] });
+        }
+    }
+  })
+  .meta(
+    z.toJSONSchema(z.record(harnessString, answerEntrySchema)),
+  ) as z.ZodType<Record<string, z.infer<typeof answerEntrySchema>>>;
+
 export const escalationAnswerSchema = z
   .object({
-    answers: z.record(
-      harnessString,
-      z
-        .object({
-          selectedOptions: z.array(z.string().min(1)),
-          text: z.string(),
-          reasoning: z.string().trim().min(1),
-        })
-        .strict(),
-    ),
+    answers: answerSetSchema,
     escalationId: identifier,
     ownerSessionKey: identifier,
     prose: z.string().trim().min(1).max(4_000).optional(),

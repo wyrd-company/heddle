@@ -38,6 +38,7 @@ export const escalationEventTypes = {
   notified: "mcp:escalation-notified",
   opened: "mcp:escalation-opened",
   withdrawn: "mcp:escalation-withdrawn",
+  withdrawalCompleted: "mcp:escalation-withdrawal-completed",
   parentSteered: "mcp:escalation-parent-steered",
   sessionSteered: "mcp:escalation-session-steered",
 } as const;
@@ -349,6 +350,12 @@ export class EscalationHistory {
   pending(instanceId: string): PendingEscalation[] {
     return [...this.#replay(instanceId).values()]
       .filter(({ answered, withdrawn }) => answered === undefined && !withdrawn)
+      .map(({ opened }) => opened);
+  }
+
+  withdrawn(instanceId: string): PendingEscalation[] {
+    return [...this.#replay(instanceId).values()]
+      .filter(({ withdrawn }) => withdrawn === true)
       .map(({ opened }) => opened);
   }
 

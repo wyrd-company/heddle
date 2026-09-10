@@ -375,6 +375,10 @@ export const createProductionComposition = (
         ? {}
         : { adjudication: scopedAdjudication }),
       attention: {
+        resolve: (attentionId) => {
+          if (persistence!.hasAttention(attentionId))
+            attention.resolve(attentionId);
+        },
         raise: async (value) => {
           await attention.raise(value);
           await options.afterEscalationEffect?.("attention", value.attentionId);

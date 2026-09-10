@@ -86,7 +86,7 @@ for the complete schema and executable-adapter contracts.
 
 ## T3 compatibility qualification
 
-This release supports the Wyrd Company T3 fork `0.0.38-wyrd.1`, recorded with
+This release supports the Wyrd Company T3 fork `0.0.38-wyrd.2`, recorded with
 its public release-tarball source in `deployment/supported-versions.json`. The
 repository gate installs that exact artifact into a temporary prefix, launches
 it on an unused non-live loopback port with temporary T3 state and a temporary

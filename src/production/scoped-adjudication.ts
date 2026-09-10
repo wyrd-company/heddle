@@ -330,7 +330,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
   }
 
   async stop(input: {
-    reason: "answered" | "declined" | "failed";
+    reason: "answered" | "declined" | "failed" | "withdrawn";
     sessionKey: string;
   }): Promise<void> {
     const runtime = this.#runtime(input.sessionKey);

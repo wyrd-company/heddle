@@ -3,6 +3,6 @@
     "references": ["t3-headless"]
   },
   "kanbanMd": "0.37.0-fork+b9fc380",
-  "t3": "0.0.38-wyrd.1",
-  "t3PackageSource": "https://github.com/wyrd-company/t3code/releases/download/server/0.0.38-wyrd.1/t3-0.0.38-wyrd.1.tgz"
+  "t3": "0.0.38-wyrd.2",
+  "t3PackageSource": "https://github.com/wyrd-company/t3code/releases/download/server/0.0.38-wyrd.2/t3-0.0.38-wyrd.2.tgz"
 }

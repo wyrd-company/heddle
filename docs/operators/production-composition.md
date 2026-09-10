@@ -717,7 +717,7 @@ records the effective prompt, exact rendered document, and task, instance,
 session, stage, and thread identity in `session:activated`. Restart accepts
 only an exact payload match and does not append or dispatch a second activation.
 
-Pinned Wyrd Company T3 fork 0.0.38-wyrd.1 supplies authenticated per-thread MCP
+Pinned Wyrd Company T3 fork 0.0.38-wyrd.2 supplies authenticated per-thread MCP
 registration through each of its provider adapters. Heddle derives
 the workflow MCP endpoint from the configured server host and port, then sends
 that endpoint and the session's bearer correlation token to
@@ -873,14 +873,18 @@ if the session requests an unauthorized action, submits invalid answers, or
 attempts to answer another escalation occurrence, Heddle moves
 authority to the operator. A started adjudication has no adjudication-specific
 wall-clock timeout. It remains authoritative until it answers or declines
-through its approved tool. Session failure, terminal exit, absence, and stalled
+through its approved tool, or its native question is durably cancelled. Session failure, terminal exit, absence, and stalled
 execution use the normal session observation and escalation policy without
 settling the adjudication or stopping its thread. One occurrence has one stable
 adjudication session identity, with one stable thread identity per startup
 candidate; replay cannot create a second adjudication after start. The
 lifecycle event history shows every adjudicated answer's selected values,
 model, and reasoning. The session stops only after an accepted answer, decline,
-or authority failure.
+authority failure, or durable cancellation of its native question. Native
+withdrawal or confirmed loss of the asking session cancels the occurrence
+without an answer or decline. Cleanup waits for any in-flight start and does
+not stop an adjudicator that still asks or owes another pending question.
+Replay confirms cleanup without redelivery.
 
 Heddle can move authority to another named session or return it to the operator.
 The current authority answers through the same guarded answer contract. A
@@ -916,6 +920,7 @@ or advance. Running and starting phases are not poked based on the stalled
 liveness bucket. A session owing an answer receives the pending question set
 again and cannot advance or stop until its obligation clears. Adjudication has
 no execution timeout and completes through its approved answer or decline tool.
+Durable native cancellation releases it without fabricating completion.
 
 An accepted disposition performs its canonical effect before marking the entry
 resolved. The resolved record remains durable so the same stable ID cannot raise

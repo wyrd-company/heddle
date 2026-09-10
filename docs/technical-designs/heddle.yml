@@ -427,7 +427,7 @@ proposed-design:
     the delivery state produced by prior stages. First-turn dispatch omits
     `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived seed.
 
-    Qualification against isolated pinned Wyrd Company T3 fork 0.0.38-wyrd.1 creates a project and a
+    Qualification against isolated pinned Wyrd Company T3 fork 0.0.38-wyrd.2 creates a project and a
     thread whose worktree is a sibling of, and therefore outside, the project
     workspace root. T3 accepts the command and reports the thread through its
     authenticated shell. A thread's worktree is its working directory; the
@@ -662,7 +662,7 @@ proposed-design:
     and otherwise routes to the operator. Adjudication is bound to that
     one escalation occurrence. It is not a task or lifecycle instance and owns
     no board status. Its provider comes from the operator's adjudication alias;
-    its decide-versus-escalate boundary and one-turn limit come from an
+    its decide-versus-escalate boundary comes from an
     organization blueprint repository policy pinned by Git blob at activation.
     The session receives a constructed, token-free view of the current epic and
     child statuses, escalating instance and stage, prior stage outputs, and
@@ -707,7 +707,11 @@ proposed-design:
     observation and escalation policy without settling the adjudication or
     stopping its thread. Stable occurrence-derived session, thread, command,
     and message identities make start, restart, and replay idempotent. The
-    session stops only after an accepted answer, decline, or authority failure.
+    session stops only after an accepted answer, decline, authority failure, or
+    durable cancellation of its question. Native withdrawal or disappearance of
+    the asking session cancels the occurrence without synthesizing an answer or
+    decline. Replay completes cancellation cleanup after any in-flight start and
+    records its completion. Other pending questions still prevent stopping.
 
     Heddle can otherwise move answering authority to another named session or
     back to the operator. The same answer predicate accepts an answer only from
@@ -983,8 +987,9 @@ proposed-design:
     the prompt regardless of who answered. Question support is a T3 runtime
     capability, not a Heddle provider allowlist or selection precondition.
     Heddle rejects stop while a session owes a pending answer. Adjudication has
-    no execution timeout and stops only after its approved tool completes the
-    adjudication. Session errors use normal escalation policy.
+    no execution timeout. Its approved tool completes adjudication; durable
+    native withdrawal or loss of the asking session cancels the occurrence
+    without an answer or decline. Session errors use normal escalation policy.
   observation: >
     Two channels report on running work, split by who holds the truth.
     Semantic outcomes — the verdict of a review, the completion of an

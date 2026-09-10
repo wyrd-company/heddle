@@ -13,6 +13,15 @@ import {
 describe.each([escalationQuestions, t3Questions])(
   "harness question projection",
   (project) => {
+    it("preserves unbounded native question IDs", () => {
+      const id = "reference-".repeat(30);
+      expect(
+        project(
+          [{ id, question: "Enter a reference", options: [] }],
+          "sample-attention",
+        )[0]?.id,
+      ).toBe(id);
+    });
     it("preserves metadata and permits zero or one option with default cardinality", () => {
       expect(
         project(

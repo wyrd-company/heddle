@@ -51,7 +51,8 @@ export class ProductionQuestionRouting {
     if (thread === undefined) {
       for (const opened of pending) {
         this.escalation.withdraw(opened);
-        this.attention.resolve(opened.attentionId);
+        if (this.persistence.hasAttention(opened.attentionId))
+          this.attention.resolve(opened.attentionId);
       }
       return;
     }
@@ -66,7 +67,8 @@ export class ProductionQuestionRouting {
         )
       ) {
         this.escalation.withdraw(opened);
-        this.attention.resolve(opened.attentionId);
+        if (this.persistence.hasAttention(opened.attentionId))
+          this.attention.resolve(opened.attentionId);
       }
     }
     const assignment = isTodoState(record.state.todoState)

@@ -3,6 +3,7 @@
 //   verifies: heddle
 // ---
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   escalationQuestionSchema,
   escalationAnswerSchema,
@@ -88,9 +89,36 @@ describe("one question contract", () => {
       /repeats option/,
     );
   });
+  it("preserves prototype-like native question IDs in the parsed answer set", () => {
+    const native = { ...question([]), id: "__proto__" };
+    const answers = escalationAnswerSchema.shape.answers.parse(
+      Object.fromEntries([[native.id, answer([], "A route")]]),
+    );
+    expect(Object.hasOwn(answers, native.id)).toBe(true);
+    expect(() =>
+      validateAnswers({ ...opened(), questions: [native] }, answers),
+    ).not.toThrow();
+  });
+  it("publishes the required whole-answer entry fields in the MCP JSON schema", () => {
+    const json = z.toJSONSchema(escalationAnswerSchema);
+    expect(json.properties?.answers).toMatchObject({
+      type: "object",
+      additionalProperties: {
+        type: "object",
+        required: ["selectedOptions", "text", "reasoning"],
+        additionalProperties: false,
+        properties: {
+          selectedOptions: { type: "array" },
+          text: { type: "string" },
+          reasoning: { type: "string" },
+        },
+      },
+    });
+  });
   it.each([
     ["missing answer", {}],
     ["unknown question", { route: answer(), extra: answer() }],
+    ["substituted question", { extra: answer() }],
     ["selection and text", { route: answer(["First"], "A custom route") }],
     ["neither selection nor text", { route: answer([], "") }],
     ["whitespace text", { route: answer([], "  ") }],
@@ -99,6 +127,15 @@ describe("one question contract", () => {
     ["duplicate option", { route: answer(["First", "First"]) }],
     ["missing reasoning", { route: { selectedOptions: ["First"], text: "" } }],
     ["empty reasoning", { route: answer(["First"], "", "") }],
+    ["blank reasoning", { route: answer(["First"], "", "  ") }],
+    [
+      "missing selections field",
+      { route: { text: "A route", reasoning: "Fits" } },
+    ],
+    [
+      "missing text field",
+      { route: { selectedOptions: ["First"], reasoning: "Fits" } },
+    ],
   ])("rejects %s", (_name, answers) =>
     expect(() => validateAnswers(opened(), answers as never)).toThrow(),
   );
@@ -113,6 +150,15 @@ describe("one question contract", () => {
         validateAnswers(pending, { route: answer([], "A custom route") }),
       ).not.toThrow();
     }
+  });
+  it("rejects duplicate selections even when multiple distinct selections are allowed", () => {
+    const pending = { ...opened(), questions: [question(undefined, true)] };
+    expect(() =>
+      validateAnswers(pending, { route: answer(["First", "First"]) }),
+    ).toThrow(/offered option/);
+    expect(() =>
+      validateAnswers(pending, { route: answer(["First", "Second"]) }),
+    ).not.toThrow();
   });
   it("requires text for a zero-option question without imposing length bounds", () => {
     const pending = { ...opened(), questions: [question([])] };

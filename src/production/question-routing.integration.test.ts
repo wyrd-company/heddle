@@ -59,6 +59,7 @@ class QuestionT3 extends SyntheticT3 {
             multiSelect: true,
             options: [{ label: "Rice" }, { label: "Beans" }],
           },
+          { id: "__proto__", question: "Enter a reference", options: [] },
         ],
       },
     });
@@ -66,6 +67,11 @@ class QuestionT3 extends SyntheticT3 {
   }
 }
 const answers = {
+  ["__proto__"]: {
+    selectedOptions: [],
+    text: "sample-reference",
+    reasoning: "Matches the recipe.",
+  },
   route: {
     selectedOptions: [],
     text: "The short route",
@@ -137,6 +143,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       questions: [
         { id: "route", multiSelect: false, options: [] },
         { id: "ingredients", multiSelect: true },
+        { id: "__proto__", multiSelect: false, options: [] },
       ],
     });
     const adjudication = composition.persistence
@@ -184,7 +191,11 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     await composition.escalation.replayPendingDeliveries();
     expect(t3.userInputResponses).toEqual([
       {
-        answers: { route: "The short route", ingredients: ["Rice"] },
+        answers: {
+          route: "The short route",
+          ingredients: ["Rice"],
+          ["__proto__"]: "sample-reference",
+        },
         requestId: "native-request",
         threadId: runtime.threadId,
         commandId: expect.any(String),
@@ -258,6 +269,25 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     const parentQuestion = composition.escalation
       .pendingEscalations(runtime.instanceId)
       .find((x) => x.ownerSessionKey === parent.sessionKey)!;
+    const beforeOwnQuestionPoke = t3.commands.length;
+    await new ProductionQuestionRouting(
+      composition.persistence,
+      composition.escalation,
+      t3,
+      composition.attention,
+    ).poke(
+      {
+        instanceId: runtime.instanceId,
+        sessionKey: parent.sessionKey,
+        threadId: runtime.threadId,
+      },
+      {
+        id: runtime.threadId,
+        session: { status: "idle" },
+        latestTurn: { state: "completed", completedAt: "2026-01-03T00:00:00Z" },
+      },
+    );
+    expect(t3.commands).toHaveLength(beforeOwnQuestionPoke);
     await composition.escalation.answerAsOperator({
       answers,
       escalationId: parentQuestion.escalationId,
@@ -372,7 +402,19 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     );
     expect(starts()).toHaveLength(before + 1);
     for (const thread of [
+      undefined,
       { id: runtime.threadId, session: { status: "starting" } },
+      { id: runtime.threadId, session: { status: "error" } },
+      {
+        id: runtime.threadId,
+        session: { status: "idle" },
+        hasPendingApprovals: true,
+      },
+      {
+        id: runtime.threadId,
+        session: { status: "idle" },
+        hasPendingUserInput: true,
+      },
       {
         id: runtime.threadId,
         session: { status: "idle" },
@@ -388,6 +430,48 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       await recovered.poke(target, thread);
     expect(starts()).toHaveLength(before + 1);
   });
+
+  it.each(["withdrawn", "asker absent"])(
+    "stops the scoped adjudicator after its native question is %s",
+    async (cancellation) => {
+      const { t3, composition, runtime } = await setup(true);
+      t3.ask(runtime.threadId, "cancelled-request");
+      await composition.scheduler.trigger();
+      await composition.escalation.replayPendingRoutes();
+      const adjudication = composition.persistence
+        .listSessionRuntime()
+        .find((item) => item.stageId === "adjudication")!;
+      expect(adjudication).toBeDefined();
+      if (cancellation === "asker absent") t3.threads.delete(runtime.threadId);
+      else
+        t3.threadActivities.get(runtime.threadId)!.push({
+          kind: "user-input.resolved",
+          payload: {
+            requestId: "cancelled-request",
+            answers: { route: "Another route", ingredients: ["Beans"] },
+          },
+        });
+      await composition.scheduler.trigger();
+      await composition.escalation.replayPendingRoutes();
+      await composition.escalation.replayPendingRoutes();
+      expect(
+        composition.escalation.pendingEscalations(runtime.instanceId),
+      ).toEqual([]);
+      expect(
+        t3.commands.filter(
+          (command) =>
+            command.type === "thread.session.stop" &&
+            command.threadId === adjudication.threadId,
+        ),
+      ).toHaveLength(1);
+      expect(t3.userInputResponses).toEqual([]);
+      expect(
+        composition.persistence
+          .replayEvents(runtime.instanceId)
+          .filter((event) => event.type === "mcp:escalation-answered"),
+      ).toEqual([]);
+    },
+  );
 
   it("retains a delegated answerer after it stops while holding reassigned authority", async () => {
     const { t3, composition, runtime, parent } = await setup();

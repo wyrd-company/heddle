@@ -119,7 +119,7 @@ When this file does not settle a question, decide with these.
 
 - **attention** is a durable record that the operator must see or act on. It
   survives restart and carries the actions that dispose it.
-- **adjudication** is a one-turn agent session bound to one top-level escalation
+- **adjudication** is a scoped agent session bound to one top-level escalation
   occurrence. It can answer that escalation or decline it to the operator and
   has no task, lifecycle instance, or board status.
 - **blueprint** is the lifecycle definition a task follows, resolved from the
@@ -229,7 +229,7 @@ Pinned dependencies that the service checks or assumes:
 - **`wyrd-company/kanban-md`** at `0.37.0-fork+b9fc380`, which preserves
   unrecognized front-matter properties through every task mutation. The service
   verifies this at startup and refuses to run against another build.
-- **Wyrd Company T3Code fork `0.0.38-wyrd.1`**, against which the control-plane integration is qualified from its public release tarball.
+- **Wyrd Company T3Code fork `0.0.38-wyrd.2`**, against which the control-plane integration is qualified from its public release tarball.
 - **Provider CLI versions** are discovered and enforced by T3. Heddle records
   the observed version as diagnostic and qualification evidence and keeps no
   driver-name or CLI-version allowlist.

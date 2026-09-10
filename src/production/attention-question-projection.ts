@@ -66,7 +66,7 @@ const questions = (
     ) {
       throw new Error(`Attention '${attentionId}' has malformed questions`);
     }
-    const id = requiredAttentionIdentifier(question, "id", attentionId);
+    const id = requiredAttentionString(question, "id", attentionId);
     if (questionIds.has(id)) {
       throw new Error(`Attention '${attentionId}' repeats question '${id}'`);
     }
