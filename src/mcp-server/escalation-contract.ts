@@ -216,25 +216,6 @@ export const escalationAttentionId = (
     .update(escalationKey(instanceId, ownerSessionKey, escalationId))
     .digest("hex")}`;
 
-export const validateQuestions = (questions: EscalationQuestion[]): void => {
-  const questionIds = new Set<string>();
-  for (const question of questions) {
-    if (questionIds.has(question.id)) {
-      throw new TypeError(`Escalation repeats question ID '${question.id}'`);
-    }
-    questionIds.add(question.id);
-    const optionIds = new Set<string>();
-    for (const option of question.options) {
-      if (optionIds.has(option.label)) {
-        throw new TypeError(
-          `Escalation question '${question.id}' repeats option label '${option.label}'`,
-        );
-      }
-      optionIds.add(option.label);
-    }
-  }
-};
-
 export const validateAnswers = (
   opened: PendingEscalation,
   answers: EscalationAnswers,
@@ -249,9 +230,9 @@ export const validateAnswers = (
       "Escalation answer must answer every question exactly once",
     );
   }
+  const parsedAnswers = escalationAnswerSchema.shape.answers.parse(answers);
   for (const question of opened.questions) {
-    const answer =
-      escalationAnswerSchema.shape.answers.parse(answers)[question.id]!;
+    const answer = parsedAnswers[question.id]!;
     const selected = answer.selectedOptions;
     if (selected.length > 0 === answer.text.trim().length > 0) {
       throw new TypeError(

@@ -983,13 +983,17 @@ describe("SessionObserver operator actions", () => {
     expect(test.attention.entries).toEqual([]);
   });
 
-  it("rejects repeated user-input question identities", async () => {
+  it("preserves repeated user-input question identities", async () => {
     await expect(
       observeUserInputQuestions([...userInputQuestions, ...userInputQuestions]),
-    ).rejects.toThrow("repeats question 'quantity'");
+    ).resolves.toMatchObject({
+      attentions: [
+        { questions: [...userInputQuestions, ...userInputQuestions] },
+      ],
+    });
   });
 
-  it("rejects repeated user-input option identities", async () => {
+  it("preserves repeated user-input option identities", async () => {
     await expect(
       observeUserInputQuestions([
         {
@@ -1000,7 +1004,20 @@ describe("SessionObserver operator actions", () => {
           ],
         },
       ]),
-    ).rejects.toThrow("repeats option label 'Small'");
+    ).resolves.toMatchObject({
+      attentions: [
+        {
+          questions: [
+            {
+              options: [
+                { label: "Small" },
+                { description: "Repeated", label: "Small" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("records an interrupt fact before dispatch and replays the completed operation", async () => {

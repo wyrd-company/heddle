@@ -123,6 +123,117 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     );
     return { fixture, t3, page, composition, runtime, resolver, parent };
   };
+  it.each(["compatible", "disjoint"])(
+    "preserves repeated native IDs and labels with %s option catalogs through MCP delivery and replay",
+    async (catalog) => {
+      const { t3, composition, runtime, parent } = await setup();
+      const child = await composition.subagents.spawn(parent, {
+        operationId: "prepare-references",
+        providerAlias: "primary",
+        rootItemId: "deliver",
+      });
+      if (child.kind !== "spawned") throw new Error("Child did not start");
+      const questions = [
+        {
+          id: "reference",
+          question: "Choose the initial reference",
+          multiSelect: true,
+          options: [
+            { label: "First" },
+            { label: "First" },
+            { label: "Second" },
+          ],
+        },
+        {
+          id: "reference",
+          question: "Choose the shared reference",
+          multiSelect: false,
+          options: [{ label: catalog === "compatible" ? "First" : "Third" }],
+        },
+      ];
+      t3.threadActivities.set(child.assignment.threadId, [
+        {
+          kind: "user-input.requested",
+          payload: { requestId: "repeated-native", questions },
+        },
+      ]);
+      await composition.scheduler.trigger();
+      const pending = composition.escalation.pendingEscalations(
+        runtime.instanceId,
+      )[0]!;
+      expect(pending.questions).toEqual(questions);
+      const callAnswer = async (entry: typeof answers.route) => {
+        const response = await composition.mcp.fetch(
+          new globalThis.Request("http://127.0.0.1:4774/mcp", {
+            method: "POST",
+            headers: {
+              accept: "application/json, text/event-stream",
+              authorization: `Bearer ${parent.token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              id: "answer-repeated",
+              jsonrpc: "2.0",
+              method: "tools/call",
+              params: {
+                name: "answer",
+                arguments: {
+                  answers: { reference: entry },
+                  escalationId: pending.escalationId,
+                  ownerSessionKey: child.assignment.sessionKey,
+                },
+              },
+            }),
+          }),
+        );
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      const invalid = await callAnswer({
+        selectedOptions: ["Second"],
+        text: "",
+        reasoning: "The first catalog offers this value.",
+      });
+      expect(invalid.result.isError).toBe(true);
+      expect(JSON.stringify(invalid)).toContain("offered option");
+      expect(
+        composition.escalation.pendingEscalations(runtime.instanceId),
+      ).toHaveLength(1);
+      expect(t3.userInputResponses).toEqual([]);
+      expect(() =>
+        composition.escalation.requireNoPendingForSession(
+          runtime.instanceId,
+          parent.sessionKey,
+        ),
+      ).toThrow(/pending/);
+      const entry = {
+        selectedOptions: catalog === "compatible" ? ["First"] : [],
+        text: catalog === "compatible" ? "" : "A shared reference",
+        reasoning: "This answer satisfies both occurrences.",
+      };
+      expect((await callAnswer(entry)).result.isError).not.toBe(true);
+      const history = new EscalationHistory(composition.persistence);
+      expect(history.answered(runtime.instanceId)[0]?.opened.questions).toEqual(
+        questions,
+      );
+      expect(history.answered(runtime.instanceId)[0]?.answered.answers).toEqual(
+        { reference: entry },
+      );
+      await composition.escalation.replayPendingDeliveries();
+      expect(t3.userInputResponses).toEqual([
+        {
+          answers: {
+            reference:
+              catalog === "compatible" ? ["First"] : "A shared reference",
+          },
+          requestId: "repeated-native",
+          threadId: child.assignment.threadId,
+          commandId: expect.any(String),
+        },
+      ]);
+      expect(history.pending(runtime.instanceId)).toEqual([]);
+    },
+  );
   it.each([0, 21])(
     "requires an explicit authorized answer for %s native questions and preserves delivery across replay",
     async (count) => {

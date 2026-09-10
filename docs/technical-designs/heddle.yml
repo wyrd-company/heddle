@@ -657,6 +657,11 @@ proposed-design:
     answer. Validation rejects missing or unknown question IDs, unknown options,
     options for a question with none, multiple selections on a single-select
     question, and absent reasoning. A multi-select question accepts one option.
+    Repeated question IDs share one keyed answer, which must satisfy every
+    occurrence. Repeated option labels identify the same selectable value.
+    Incompatible selections remain pending; a shared text answer is valid for
+    every occurrence. The console retains each occurrence's question and
+    options while sharing its keyed answer controls.
     Answerer prompts quote each question's ID, prompt, options, cardinality,
     text alternative, and the answer tool contract.
 

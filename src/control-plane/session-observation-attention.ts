@@ -109,7 +109,6 @@ const userInputQuestionsFrom = (
   if (!Array.isArray(questions)) {
     throw new Error("T3 pending user-input has no canonical question catalog");
   }
-  const questionIds = new Set<string>();
   return questions.map((value) => {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new Error("T3 pending user-input has a malformed question catalog");
@@ -124,13 +123,6 @@ const userInputQuestionsFrom = (
     ) {
       throw new Error("T3 pending user-input has a malformed question catalog");
     }
-    if (questionIds.has(question["id"])) {
-      throw new Error(
-        `T3 pending user-input repeats question '${question["id"]}'`,
-      );
-    }
-    questionIds.add(question["id"]);
-    const labels = new Set<string>();
     const options = question["options"].map((value) => {
       if (typeof value !== "object" || value === null || Array.isArray(value)) {
         throw new Error("T3 pending user-input has a malformed option catalog");
@@ -139,12 +131,6 @@ const userInputQuestionsFrom = (
       if (!nonEmptyString(option["label"])) {
         throw new Error("T3 pending user-input has a malformed option catalog");
       }
-      if (labels.has(option["label"])) {
-        throw new Error(
-          `T3 pending user-input repeats option label '${option["label"]}'`,
-        );
-      }
-      labels.add(option["label"]);
       if (
         option["description"] !== undefined &&
         !nonEmptyString(option["description"])

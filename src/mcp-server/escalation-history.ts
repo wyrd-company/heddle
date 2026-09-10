@@ -19,7 +19,6 @@ import {
   type EscalationInput,
   type PendingEscalation,
   validateAnswers,
-  validateQuestions,
 } from "./escalation-contract.js";
 import type {
   WorkflowMcpPersistence,
@@ -72,7 +71,6 @@ const openedFrom = (event: PersistedEvent): PendingEscalation => {
     requestId: value["requestId"],
     threadId: value["threadId"],
   });
-  validateQuestions(parsed.questions);
   if (
     typeof value["attentionId"] !== "string" ||
     typeof value["openedAt"] !== "string" ||
@@ -144,7 +142,6 @@ export class EscalationHistory {
     opened: PendingEscalation;
   } {
     const parsed = escalationInputSchema.parse(input);
-    validateQuestions(parsed.questions);
     const opened: PendingEscalation = {
       attentionId: escalationAttentionId(
         binding.instance.instanceId,

@@ -13,7 +13,6 @@ import {
   renderQuestionSet,
   sameAnswers,
   validateAnswers,
-  validateQuestions,
   type PendingEscalation,
 } from "./escalation-contract.js";
 
@@ -107,13 +106,30 @@ describe("one question contract", () => {
       validateAnswers({ ...opened(), questions: [native] }, answers),
     ).not.toThrow();
   });
-  it("rejects duplicate question IDs and option labels", () => {
-    expect(() => validateQuestions([question(), question()])).toThrow(
-      /repeats question/,
-    );
-    expect(() => validateQuestions([question(["First", "First"])])).toThrow(
-      /repeats option/,
-    );
+  it("applies one keyed answer to every repeated native question occurrence", () => {
+    const request = {
+      ...opened(),
+      questions: [
+        question(["First", "First", "Second"], true),
+        question(["First"]),
+      ],
+    };
+    expect(() =>
+      validateAnswers(request, { route: answer(["First"]) }),
+    ).not.toThrow();
+    expect(() =>
+      validateAnswers(request, { route: answer(["Second"]) }),
+    ).toThrow(/offered option/);
+    expect(() =>
+      validateAnswers(request, { route: answer(["First", "Second"]) }),
+    ).toThrow(/only one selected option/);
+    request.questions[1] = question(["Third"]);
+    expect(() =>
+      validateAnswers(request, { route: answer(["First"]) }),
+    ).toThrow(/offered option/);
+    expect(() =>
+      validateAnswers(request, { route: answer([], "A shared reference") }),
+    ).not.toThrow();
   });
   it("preserves prototype-like native question IDs in the parsed answer set", () => {
     const native = { ...question([]), id: "__proto__" };
