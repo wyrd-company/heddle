@@ -901,9 +901,10 @@ An answerer that stops owing an answer receives its questions again. An answerer
 asking its own question waits while the same routing rule handles that question.
 For parent or delegated session authority, a failed or absent answerer returns
 the pending question to operator authority without answering or cancelling it.
-A delegated answerer remains observable while it owes an answer, even after its
-assignment becomes terminal. Scoped adjudication retains its separate settlement
-and session-error policy.
+A delegated session remains observable while it asks or owes a pending question,
+even after its assignment becomes terminal. Unrelated terminal assignments do
+not remain observation targets. Scoped adjudication retains its separate
+settlement and session-error policy.
 
 Heddle records an accepted answer before effects. It replies to the original
 T3 request on its recorded thread with a command identity derived from the

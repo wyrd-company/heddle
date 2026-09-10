@@ -134,21 +134,22 @@ export const productionSessionTargets = (
   }));
   const history = new EscalationHistory(persistence);
   const children = persistence.listInstances().flatMap((instance) => {
-    const answeringSessions = new Set(
+    const questionSessions = new Set(
       history
         .pending(instance.instanceId)
-        .flatMap((question) =>
-          question.answeringAuthority.kind === "operator"
+        .flatMap((question) => [
+          question.ownerSessionKey,
+          ...(question.answeringAuthority.kind === "operator"
             ? []
-            : [question.answeringAuthority.sessionKey],
-        ),
+            : [question.answeringAuthority.sessionKey]),
+        ]),
     );
     return isTodoState(instance.state.todoState)
       ? instance.state.todoState.lists.flatMap((list) =>
           (list.assignments ?? [])
             .filter(
               ({ status, sessionKey }) =>
-                status === "active" || answeringSessions.has(sessionKey),
+                status === "active" || questionSessions.has(sessionKey),
             )
             .map((assignment) => ({
               instanceId: instance.instanceId,

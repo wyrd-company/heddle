@@ -13,6 +13,7 @@ import { EscalationHistory } from "../mcp-server/escalation-history.js";
 import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
 import { ProductionQuestionRouting } from "./question-routing.js";
 import { ProductionEscalationAnswerEffects } from "./escalation-answer-effects.js";
+import { productionSessionTargets } from "./subagent-composition.js";
 import { isTodoState } from "../todo/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -873,6 +874,134 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       ).toEqual([]);
     },
   );
+
+  it.each(["withdrawn", "asker absent"] as const)(
+    "keeps a failed terminal delegated asker observable until its native question is %s",
+    async (cancellation) => {
+      const { t3, composition, runtime, parent } = await setup();
+      const child = await composition.subagents.spawn(parent, {
+        operationId: "read-reference",
+        providerAlias: "primary",
+        rootItemId: "deliver",
+      });
+      if (child.kind !== "spawned") throw new Error("Child did not start");
+      t3.ask(child.assignment.threadId, "child-owned-request");
+      await composition.scheduler.trigger();
+      const opened = composition.escalation.pendingEscalations(
+        runtime.instanceId,
+      )[0]!;
+      expect(opened).toMatchObject({
+        answeringAuthority: {
+          kind: "session",
+          sessionKey: parent.sessionKey,
+        },
+        ownerSessionKey: child.assignment.sessionKey,
+      });
+
+      t3.failed.add(child.assignment.threadId);
+      const getShell = t3.getShell.bind(t3);
+      t3.getShell = async () => {
+        const shell = await getShell();
+        return {
+          ...shell,
+          threads: shell.threads.map((thread) =>
+            thread.id === child.assignment.threadId
+              ? { ...thread, hasPendingUserInput: false }
+              : thread,
+          ),
+        };
+      };
+      await composition.scheduler.trigger();
+      const todoState = composition.persistence.getInstance(runtime.instanceId)!
+        .state.todoState;
+      if (!isTodoState(todoState)) throw new Error("Missing todo state");
+      expect(
+        todoState.lists
+          .flatMap((list) => list.assignments ?? [])
+          .find(({ sessionKey }) => sessionKey === child.assignment.sessionKey)
+          ?.status,
+      ).toBe("stopped");
+      expect(productionSessionTargets(composition.persistence)).toContainEqual({
+        instanceId: runtime.instanceId,
+        sessionKey: child.assignment.sessionKey,
+        threadId: child.assignment.threadId,
+      });
+
+      if (cancellation === "asker absent") {
+        t3.threads.delete(child.assignment.threadId);
+      } else {
+        t3.threadActivities.get(child.assignment.threadId)!.push({
+          kind: "user-input.resolved",
+          payload: {
+            requestId: "child-owned-request",
+            answers: { route: "Another route", ingredients: ["Beans"] },
+          },
+        });
+      }
+      await composition.scheduler.trigger();
+      await composition.scheduler.trigger();
+
+      expect(
+        composition.escalation.pendingEscalations(runtime.instanceId),
+      ).toEqual([]);
+      expect(
+        productionSessionTargets(composition.persistence),
+      ).not.toContainEqual({
+        instanceId: runtime.instanceId,
+        sessionKey: child.assignment.sessionKey,
+        threadId: child.assignment.threadId,
+      });
+      expect(t3.userInputResponses).toEqual([]);
+    },
+  );
+
+  it("does not retain an unrelated terminal delegated assignment for another session's pending question", async () => {
+    const { t3, composition, runtime, parent } = await setup();
+    const unrelated = await composition.subagents.spawn(parent, {
+      operationId: "compare-reference",
+      providerAlias: "primary",
+      rootItemId: "deliver",
+    });
+    if (unrelated.kind !== "spawned") {
+      throw new Error("Unrelated child did not start");
+    }
+    await composition.subagents.onObserved(
+      {
+        instanceId: runtime.instanceId,
+        sessionKey: unrelated.assignment.sessionKey,
+        threadId: unrelated.assignment.threadId,
+      },
+      { archiveDispatched: false, attentions: [], phase: "completed" },
+    );
+    const asker = await composition.subagents.spawn(parent, {
+      operationId: "read-reference",
+      providerAlias: "primary",
+      rootItemId: "deliver",
+    });
+    if (asker.kind !== "spawned") throw new Error("Asking child did not start");
+    t3.ask(asker.assignment.threadId, "child-owned-request");
+    await composition.scheduler.trigger();
+    await composition.subagents.onObserved(
+      {
+        instanceId: runtime.instanceId,
+        sessionKey: asker.assignment.sessionKey,
+        threadId: asker.assignment.threadId,
+      },
+      { archiveDispatched: false, attentions: [], phase: "completed" },
+    );
+
+    const targets = productionSessionTargets(composition.persistence);
+    expect(targets).toContainEqual({
+      instanceId: runtime.instanceId,
+      sessionKey: asker.assignment.sessionKey,
+      threadId: asker.assignment.threadId,
+    });
+    expect(targets).not.toContainEqual({
+      instanceId: runtime.instanceId,
+      sessionKey: unrelated.assignment.sessionKey,
+      threadId: unrelated.assignment.threadId,
+    });
+  });
 
   it("retains a delegated answerer after it stops while holding reassigned authority", async () => {
     const { t3, composition, runtime, parent } = await setup();

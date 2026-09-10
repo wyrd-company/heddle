@@ -728,9 +728,10 @@ proposed-design:
     notification. A session that stops owing an answer receives its questions
     again while the request remains pending. For parent or delegated session
     authority, a failed or absent answerer returns its owed questions to operator
-    authority without answering or cancelling them. Delegated answerers with
-    pending obligations remain observation targets even when their assignment is
-    terminal. The question remains pending until it is answered, withdrawn, or
+    authority without answering or cancelling them. Delegated sessions with
+    pending asking or answering obligations remain observation targets even when
+    their assignment is terminal. Unrelated terminal assignments do not remain
+    targets. The question remains pending until it is answered, withdrawn, or
     its asking session is gone. Session
     errors follow the normal observation and escalation policy.
 
