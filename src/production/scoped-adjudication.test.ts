@@ -297,6 +297,101 @@ describe("scoped adjudication sanctioned approvals", () => {
     expect(approvals).toHaveLength(1);
   });
 
+  it("refuses to stop for its own pending native question after settling the original answer", async () => {
+    const dispatches: unknown[] = [];
+    const openedAt = "2026-01-01T00:00:00.000Z";
+    const question = {
+      id: "sample",
+      multiSelect: false,
+      options: [{ label: "First" }],
+      question: "Which sample should be used?",
+    };
+    const persistence = {
+      listSessionRuntime: () => [runtimeRow("adjudication")],
+      replayEvents: () => [
+        {
+          instanceId,
+          payload: {
+            answeringAuthority: { kind: "adjudication", sessionKey },
+            attentionId: "attention-original",
+            escalationId: "original-question",
+            openedAt,
+            ownerSessionKey: "owner-session",
+            questions: [question],
+            requestId: "request-original",
+            threadId: "thread-owner",
+            stage: "assess",
+          },
+          recordedAt: openedAt,
+          sequence: 1,
+          type: "mcp:escalation-opened",
+        },
+        {
+          instanceId,
+          payload: {
+            answeredBy: { kind: "adjudication", sessionKey },
+            answers: {
+              sample: {
+                selectedOptions: ["First"],
+                text: "",
+                reasoning: "The first sample fits.",
+              },
+            },
+            escalationId: "original-question",
+            ownerSessionKey: "owner-session",
+          },
+          recordedAt: openedAt,
+          sequence: 2,
+          type: "mcp:escalation-answered",
+        },
+        {
+          instanceId,
+          payload: {
+            answeringAuthority: { kind: "operator" },
+            attentionId: "attention-adjudicator",
+            escalationId: "adjudicator-question",
+            openedAt,
+            ownerSessionKey: sessionKey,
+            questions: [question],
+            requestId: "request-adjudicator",
+            threadId,
+            stage: "adjudication",
+          },
+          recordedAt: openedAt,
+          sequence: 3,
+          type: "mcp:escalation-opened",
+        },
+      ],
+    } as unknown as SqlitePersistence;
+    const t3 = {
+      dispatch: async (command: unknown) => {
+        dispatches.push(command);
+        return { sequence: dispatches.length };
+      },
+      getShell: async () => ({
+        projects: [],
+        threads: [
+          {
+            id: threadId,
+            latestTurn: { state: "running" },
+            session: { status: "running" },
+          },
+        ],
+      }),
+    } as unknown as ProductionT3Client;
+    const adjudication = new ProductionScopedAdjudication({
+      persistence,
+      t3,
+    } as unknown as ConstructorParameters<
+      typeof ProductionScopedAdjudication
+    >[0]);
+
+    await expect(
+      adjudication.stop({ reason: "answered", sessionKey }),
+    ).rejects.toThrow("Adjudication cannot stop while its answer is pending");
+    expect(dispatches).toEqual([]);
+  });
+
   it("answers a request at least once before abandoning it under default configuration", async () => {
     // The scheduler visits a session on a cadence, so a request recorded just
     // after one pass can exceed the default bound before a pass reaches it.

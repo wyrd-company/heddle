@@ -34,38 +34,50 @@ const input = {
 };
 
 describe("native question cancellation", () => {
-  it("keeps a cancelled occurrence's adjudicator alive while its own question remains pending", async () => {
-    const stop = vi.fn();
-    const subject = await createEscalationFixture({
-      adjudication: {
-        start: async () => ({ modelSlug: "sample-model" }),
-        stop,
-      },
-    });
-    const binding = await bindingFor(subject);
-    await subject.coordinator.escalate(binding, input);
-    await subject.coordinator.replayPendingRoutes();
-    const original = subject.coordinator.pendingEscalations("instance-a")[0]!;
-    if (original.answeringAuthority.kind !== "adjudication")
-      throw new Error("Expected adjudication");
-    const history = new EscalationHistory(subject.persistence);
-    const clarification = history.open(
-      { ...binding, sessionKey: original.answeringAuthority.sessionKey },
-      {
-        ...input,
-        escalationId: "clarification",
-        requestId: "clarification-native",
-        threadId: "clarification-thread",
-      },
-      "2026-01-01T00:00:00Z",
-    ).opened;
-    subject.coordinator.withdraw(original);
-    await subject.coordinator.replayPendingRoutes();
-    expect(stop).not.toHaveBeenCalled();
-    subject.coordinator.withdraw(clarification);
-    await subject.coordinator.replayPendingRoutes();
-    expect(stop).toHaveBeenCalledOnce();
-  });
+  it.each(["asked", "owed"] as const)(
+    "keeps a cancelled occurrence's adjudicator alive while another %s question remains pending",
+    async (obligation) => {
+      const stop = vi.fn();
+      const subject = await createEscalationFixture({
+        adjudication: {
+          start: async () => ({ modelSlug: "sample-model" }),
+          stop,
+        },
+      });
+      const binding = await bindingFor(subject);
+      await subject.coordinator.escalate(binding, input);
+      await subject.coordinator.replayPendingRoutes();
+      const original = subject.coordinator.pendingEscalations("instance-a")[0]!;
+      if (original.answeringAuthority.kind !== "adjudication")
+        throw new Error("Expected adjudication");
+      const history = new EscalationHistory(subject.persistence);
+      const clarification = history.open(
+        {
+          ...binding,
+          sessionKey:
+            obligation === "asked"
+              ? original.answeringAuthority.sessionKey
+              : "another-owner",
+          ...(obligation === "owed"
+            ? { parentSessionKey: original.answeringAuthority.sessionKey }
+            : {}),
+        },
+        {
+          ...input,
+          escalationId: "clarification",
+          requestId: "clarification-native",
+          threadId: "clarification-thread",
+        },
+        "2026-01-01T00:00:00Z",
+      ).opened;
+      subject.coordinator.withdraw(original);
+      await subject.coordinator.replayPendingRoutes();
+      expect(stop).not.toHaveBeenCalled();
+      subject.coordinator.withdraw(clarification);
+      await subject.coordinator.replayPendingRoutes();
+      expect(stop).toHaveBeenCalledOnce();
+    },
+  );
   it("waits for an in-flight adjudication start before durable cancellation cleanup and never synthesizes settlement", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
