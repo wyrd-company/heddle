@@ -718,8 +718,9 @@ enableKeyboardScroll(graphViewportElement);
 const selectedAnswers = (questions, controls) => {
   const answers = Object.create(null);
   for (const question of questions) {
-    const control = controls.find(({ questionId }) => questionId === question.id);
-    const selectedOptions = [...new Set(control.options.filter((input) => input.checked).map((input) => input.value))];
+    const peers = controls.filter(({ questionId }) => questionId === question.id);
+    const control = peers[0];
+    const selectedOptions = [...new Set(peers.flatMap(({ options }) => options.filter((input) => input.checked).map((input) => input.value)))];
     const answerText = control.answerText.value;
     const reasoning = control.reasoning.value;
     if ((selectedOptions.length > 0) === (answerText.trim().length > 0)) {
@@ -785,7 +786,7 @@ const createAttentionAction = (entry, action) => {
         label.className = "attention-option";
         const input = document.createElement("input");
         input.type = question.multiSelect ? "checkbox" : "radio";
-        input.name = entry.attentionId + ":" + action.actionId + ":" + question.id;
+        input.name = entry.attentionId + ":" + action.actionId + ":" + question.id + ":" + controls.length;
         input.value = option.label;
         input.addEventListener("change", () => {
           if (input.checked && !question.multiSelect) {

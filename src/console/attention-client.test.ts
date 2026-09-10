@@ -430,6 +430,7 @@ describe("global console attention overlay", () => {
         .map(({ textContent }) => textContent),
     ).toEqual(["Choose the first route", "Choose the second route"]);
     const options = elements.filter(({ tagName }) => tagName === "input");
+    expect(options[0]!.name).not.toBe(options[2]!.name);
     const textEditors = elements.filter(({ name }) => name === "route:text");
     const reasoningEditors = elements.filter(
       ({ name }) => name === "route:reasoning",
@@ -458,6 +459,70 @@ describe("global console attention overlay", () => {
       },
       fingerprint: entry.fingerprint,
     });
+  });
+
+  it("submits the union selected by later repeated multi-select occurrences", async () => {
+    const entry = createConsoleAttention({
+      actions: [
+        {
+          actionId: "answer",
+          label: "Answer",
+          contract: {
+            kind: "escalation.answer",
+            escalationId: "sample-repeat-union",
+            instanceId: "instance-11",
+            ownerSessionKey: "sample-session",
+          },
+          input: {
+            kind: "questions",
+            questions: [
+              {
+                id: "route",
+                question: "Choose the first routes",
+                multiSelect: true,
+                options: [{ label: "First" }],
+              },
+              {
+                id: "route",
+                question: "Choose the later routes",
+                multiSelect: true,
+                options: [{ label: "First" }, { label: "Third" }],
+              },
+            ],
+          },
+        },
+      ],
+      attentionId: "attention-repeat-union",
+      instanceId: "instance-11",
+      kind: "escalation",
+      message: "Repeated sample input needed",
+      scope: "task:11",
+      taskId: 11,
+    });
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      undefined,
+      undefined,
+      undefined,
+      [entry],
+    );
+    const elements = harness.attentionElements();
+    const options = elements.filter(({ tagName }) => tagName === "input");
+    elements.find(({ name }) => name === "route:reasoning")!.value =
+      "Tests the complete shared selection.";
+    options[1]!.checked = true;
+    options[1]!.dispatch("change");
+    options[2]!.checked = true;
+    options[2]!.dispatch("change");
+    elements
+      .find(({ className }) => className === "attention-action")!
+      .dispatch("click");
+
+    await vi.waitFor(() => expect(harness.attentionRequests).toHaveLength(1));
+    expect(
+      JSON.parse(String(harness.attentionRequests[0]?.options?.body)).answers
+        .route.selectedOptions,
+    ).toEqual(["First", "Third"]);
   });
 
   it("links an originating production error to its incident lifecycle canvas", async () => {
