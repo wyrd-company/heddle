@@ -51,6 +51,7 @@ describe("scoped adjudication sanctioned approvals", () => {
    */
   const syntheticT3 = (input: {
     activities: unknown[];
+    hasPendingUserInput?: boolean;
     onRespond?: (requestId: string) => unknown;
   }) => {
     const activities = [...input.activities];
@@ -65,7 +66,15 @@ describe("scoped adjudication sanctioned approvals", () => {
       t3: {
         getShell: async () => ({
           projects: [],
-          threads: [{ hasPendingApprovals: true, id: threadId }],
+          threads: [
+            {
+              hasPendingApprovals: true,
+              ...(input.hasPendingUserInput === true
+                ? { hasPendingUserInput: true }
+                : {}),
+              id: threadId,
+            },
+          ],
         }),
         getThread: async () => ({ thread: { activities: [...activities] } }),
         respondToApproval: async (_threadId: string, requestId: string) => {
@@ -84,6 +93,7 @@ describe("scoped adjudication sanctioned approvals", () => {
     activities: unknown[];
     approvalSettlementMilliseconds?: number;
     handoffs: unknown[];
+    hasPendingUserInput?: boolean;
     onRespond?: (requestId: string) => unknown;
     stageId: string;
   }) => {
@@ -209,7 +219,8 @@ describe("scoped adjudication sanctioned approvals", () => {
       cause: "Adjudication tool approval did not settle within 60000ms",
       kind: "abandoned",
     });
-    expect(approvals).toEqual([]);
+    // The request was answered before the bound was weighed.
+    expect(approvals).toEqual(["request-stuck"]);
   });
 
   it("keeps deferring only while the answer is inside the settlement bound", async () => {
@@ -248,7 +259,7 @@ describe("scoped adjudication sanctioned approvals", () => {
     }
 
     expect(outcomes.every((kind) => kind === "abandoned")).toBe(true);
-    expect(approvals).toEqual([]);
+    expect(approvals).toHaveLength(25);
   });
 
   it("treats an unreadable request timestamp as outside the bound", async () => {
@@ -270,6 +281,37 @@ describe("scoped adjudication sanctioned approvals", () => {
     expect(
       (await adjudication.settleSanctionedApprovals(sessionKey)).kind,
     ).toBe("abandoned");
+  });
+
+  it("refuses the sanctioned path while a question to the operator is open", async () => {
+    // Pending user input is itself an attempt at operator interaction, so the
+    // adjudicator must not have its tool call answered while it holds one.
+    const { adjudication, approvals } = build({
+      activities: [sanctionedRequest("request-sanctioned")],
+      handoffs: [adjudicationHandoff],
+      hasPendingUserInput: true,
+      stageId: "adjudication",
+    });
+
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
+    expect(approvals).toEqual([]);
+  });
+
+  it("answers a request at least once before abandoning it under default configuration", async () => {
+    // The scheduler visits a session on a cadence, so a request recorded just
+    // after one pass can exceed the default bound before a pass reaches it.
+    const { adjudication, approvals } = build({
+      activities: [sanctionedRequest("request-late", now - 120_000)],
+      handoffs: [adjudicationHandoff],
+      stageId: "adjudication",
+    });
+
+    const outcome = await adjudication.settleSanctionedApprovals(sessionKey);
+
+    expect(outcome.kind).toBe("abandoned");
+    expect(approvals).toEqual(["request-late"]);
   });
 
   it("keeps a shell read from escaping into the scheduler pass", async () => {

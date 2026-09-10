@@ -676,10 +676,14 @@ proposed-design:
     on a later read. A pass therefore ends after answering and a later pass
     reads whether the request cleared, rather than waiting inside the pass and
     stalling every remaining session in the walk. Answering again is harmless
-    because the command identity is derived from the request. A request still
-    pending beyond the configured approval settlement bound, measured from the
-    request the control plane recorded rather than from anything Heddle
-    remembers, abandons the adjudication and carries that cause into attention.
+    because the command identity is derived from the request. Every request is
+    answered before the bound is weighed, so no request is abandoned without a
+    response attempt whatever the scheduler cadence. A request still pending
+    beyond the configured approval settlement bound, measured from the request
+    the control plane recorded rather than from anything Heddle remembers,
+    abandons the adjudication and carries that cause into attention. A pending
+    user-input request suspends the sanctioned path entirely, because an open
+    question to the operator is itself outside the adjudicator's authority.
     Every other approval request fails closed to the operator. An accepted
     answer
     records the selected model and required reasoning and follows the same

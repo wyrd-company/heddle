@@ -389,6 +389,10 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         ({ id }) => id === runtime.threadId,
       );
       if (thread?.hasPendingApprovals !== true) return { kind: "none" };
+      // An open question to a human is itself outside the adjudicator's
+      // authority, so it must reach the guard rather than have its tool call
+      // answered while the channel to the operator stays open.
+      if (thread.hasPendingUserInput === true) return { kind: "none" };
       return await this.#answerSanctionedToolRequests(runtime.threadId);
     } catch {
       return { kind: "none" };
@@ -424,15 +428,10 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       this.options.configuration?.adjudication
         ?.approvalSettlementMilliseconds ??
       defaultApprovalSettlementMilliseconds;
-    const unsettled = pending.filter(
-      (activity) => !withinSettlementBound(activity, this.#now(), bound),
-    );
-    if (unsettled.length > 0) {
-      return {
-        cause: `Adjudication tool approval did not settle within ${bound}ms`,
-        kind: "abandoned",
-      };
-    }
+    // Every request is answered before the bound is weighed, so no request is
+    // ever abandoned without a response attempt. The scheduler visits a
+    // session on a cadence, so a request recorded just after one pass would
+    // otherwise be able to exceed the bound before any pass reached it.
     let dispatched = 0;
     for (const activity of pending) {
       const requestId = activity.payload?.requestId;
@@ -448,6 +447,15 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       } catch (error) {
         if (!isT3PreconditionError(error)) throw error;
       }
+    }
+    const unsettled = pending.filter(
+      (activity) => !withinSettlementBound(activity, this.#now(), bound),
+    );
+    if (unsettled.length > 0) {
+      return {
+        cause: `Adjudication tool approval did not settle within ${bound}ms`,
+        kind: "abandoned",
+      };
     }
     return dispatched > 0 ? { kind: "deferred" } : { kind: "none" };
   }
