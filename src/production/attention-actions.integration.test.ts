@@ -419,6 +419,12 @@ describe("production attention actions", () => {
           ],
           question: "Choose a route",
         },
+        {
+          id: "ingredients",
+          multiSelect: true,
+          options: [{ label: "Rice" }, { label: "Beans" }],
+          question: "Which ingredients?",
+        },
       ],
       requestId: "input-one",
       sessionKey: runtime.sessionKey!,
@@ -426,7 +432,10 @@ describe("production attention actions", () => {
     });
     const userInput = composition.attention.list()[0]!;
     expect(userInput.actions[0]?.input).toMatchObject({
-      questions: [{ header: "Direction", question: "Choose a route" }],
+      questions: [
+        { header: "Direction", question: "Choose a route" },
+        { id: "ingredients", multiSelect: true },
+      ],
     });
     await composition.consoleActions.execute({
       action: userInput.actions[0]!,
@@ -436,12 +445,17 @@ describe("production attention actions", () => {
           text: "",
           reasoning: "The selected route fits the requested result.",
         },
+        ingredients: {
+          selectedOptions: ["Rice", "Beans"],
+          text: "",
+          reasoning: "Both ingredients are needed.",
+        },
       },
       attention: userInput,
     });
     expect(t3.userInputResponses).toEqual([
       {
-        answers: { "question-one": ["Second"] },
+        answers: { "question-one": "Second", ingredients: ["Rice", "Beans"] },
         commandId: "user-input-attention",
         requestId: "input-one",
         threadId: runtime.threadId,

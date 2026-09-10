@@ -898,6 +898,11 @@ its current authority explicitly answers with `answers: {}`. It is not
 automatically settled and does not permit an early adjudicator stop.
 An answerer that stops owing an answer receives its questions again. An answerer
 asking its own question waits while the same routing rule handles that question.
+For parent or delegated session authority, a failed or absent answerer returns
+the pending question to operator authority without answering or cancelling it.
+A delegated answerer remains observable while it owes an answer, even after its
+assignment becomes terminal. Scoped adjudication retains its separate settlement
+and session-error policy.
 
 Heddle records an accepted answer before effects. It replies to the original
 T3 request on its recorded thread with a command identity derived from the
@@ -907,6 +912,9 @@ replays either unfinished effect with the same identity and never redelivers a
 completed reply. An absent or failed asking thread cannot receive a reply on a
 replacement thread. Answer obligations clear when the request is answered,
 withdrawn, or its asking session is gone.
+Selected single-option answers reach T3 as strings; multi-select answers reach
+T3 as arrays. Text answers remain strings. For repeated question IDs, each answer
+must satisfy every occurrence and the last occurrence sets native wire cardinality.
 
 One failed answer settlement raises
 `production:escalation-settlement-failed:<escalation-attention-id>` and does not

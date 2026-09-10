@@ -25,6 +25,7 @@ import {
 } from "../persistence/index.js";
 import { SubagentCoordinator } from "../subagents/index.js";
 import { isTodoState, type TodoAssignment } from "../todo/index.js";
+import { EscalationHistory } from "../mcp-server/escalation-history.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 import type { KanbanBoardAdapter } from "../board-adapter/index.js";
@@ -131,19 +132,32 @@ export const productionSessionTargets = (
     sessionKey: session.sessionKey,
     threadId: session.threadId,
   }));
-  const children = persistence.listInstances().flatMap((instance) =>
-    isTodoState(instance.state.todoState)
+  const history = new EscalationHistory(persistence);
+  const children = persistence.listInstances().flatMap((instance) => {
+    const answeringSessions = new Set(
+      history
+        .pending(instance.instanceId)
+        .flatMap((question) =>
+          question.answeringAuthority.kind === "operator"
+            ? []
+            : [question.answeringAuthority.sessionKey],
+        ),
+    );
+    return isTodoState(instance.state.todoState)
       ? instance.state.todoState.lists.flatMap((list) =>
           (list.assignments ?? [])
-            .filter(({ status }) => status === "active")
+            .filter(
+              ({ status, sessionKey }) =>
+                status === "active" || answeringSessions.has(sessionKey),
+            )
             .map((assignment) => ({
               instanceId: instance.instanceId,
               sessionKey: assignment.sessionKey,
               threadId: assignment.threadId,
             })),
         )
-      : [],
-  );
+      : [];
+  });
   const targets = [...topLevel, ...children];
   const sessionKeys = new Set<string>();
   const threadIds = new Set<string>();

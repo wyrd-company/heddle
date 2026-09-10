@@ -8,7 +8,7 @@
 
 import type { Buffer } from "node:buffer";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -16,7 +16,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import type { AddressInfo } from "node:net";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createConsoleAttention } from "../console/attention-contract.js";
 import { createConsoleServer } from "../console/server.js";
@@ -27,6 +27,10 @@ import type {
 } from "../console/types.js";
 import type { InstanceState } from "../persistence/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
+import { ProductionEscalationAnswerEffects } from "../production/escalation-answer-effects.js";
+import type { PendingEscalation } from "../mcp-server/escalation-contract.js";
+import { userInputQuestionsFor } from "./session-observation-attention.js";
 import { SessionObserver } from "./session-observation.js";
 import type {
   SessionObservationAttention,
@@ -158,6 +162,10 @@ describe.skipIf(!t3Binary)(
             HEDDLE_CURSOR_AGENT_BINARY: cursorFixture,
             HEDDLE_CURSOR_API_KEY: "isolated-api-key",
             HEDDLE_CURSOR_EXPECTED_API_KEY: "isolated-api-key",
+            HEDDLE_CURSOR_TEST_REQUEST_LOG: join(
+              scratch,
+              "cursor-requests.jsonl",
+            ),
             NO_COLOR: "1",
             T3CODE_HOME: home,
           },
@@ -238,7 +246,10 @@ describe.skipIf(!t3Binary)(
 
     const createThread = async (
       instanceId: string,
-      prompt?: "REQUEST_APPROVAL" | "REQUEST_USER_INPUT",
+      prompt?:
+        | "REQUEST_APPROVAL"
+        | "REQUEST_USER_INPUT"
+        | "REQUEST_USER_INPUT_SELECTIONS",
     ): Promise<SessionObservationTarget> => {
       persistence.createInstance(instanceId, lifecycleState(false));
       const threadId = globalThis.crypto.randomUUID();
@@ -314,6 +325,122 @@ describe.skipIf(!t3Binary)(
       }
       throw new Error("Isolated T3 did not record the resolved approval");
     };
+
+    it("delivers selected single and multi answers through the production effect and exact pinned T3, then reconciles its receipt", async () => {
+      const target = await createThread(
+        "sample-selections",
+        "REQUEST_USER_INPUT_SELECTIONS",
+      );
+      const question = await awaitAttention(observer(), target, "user-input");
+      const requestId = question.requestId!;
+      persistence.writeSessionRuntime({
+        activation: 1,
+        instanceId: target.instanceId,
+        stageId: "mix",
+        sessionKey: target.sessionKey,
+        threadId: target.threadId,
+        binding: resolvedSessionBindingFixture({
+          sessionKey: target.sessionKey,
+          threadId: target.threadId,
+        }),
+      });
+      const opened: PendingEscalation = {
+        ...target,
+        ownerSessionKey: target.sessionKey,
+        requestId,
+        attentionId: question.attentionId,
+        escalationId: "selected-native-answer",
+        openedAt: new Date().toISOString(),
+        stage: "mix",
+        answeringAuthority: { kind: "operator" },
+        questions: userInputQuestionsFor(
+          await client.getThread(target.threadId),
+          requestId,
+        ),
+      };
+      expect(
+        opened.questions.map(({ id, multiSelect }) => ({ id, multiSelect })),
+      ).toEqual([
+        { id: "quantity", multiSelect: false },
+        { id: "ingredients", multiSelect: true },
+      ]);
+      const effects = new ProductionEscalationAnswerEffects(
+        persistence,
+        {
+          readTask: async () => {
+            throw new Error("Delivery must not read the board");
+          },
+          appendTaskActivity: async () => {
+            throw new Error("Delivery must not write the board");
+          },
+        },
+        client,
+      );
+      const input = {
+        opened,
+        answered: {
+          answeredBy: { kind: "operator" as const },
+          escalationId: opened.escalationId,
+          ownerSessionKey: target.sessionKey,
+          answers: {
+            quantity: {
+              selectedOptions: ["Small"],
+              text: "",
+              reasoning: "This quantity fits the recipe.",
+            },
+            ingredients: {
+              selectedOptions: ["Rice", "Beans"],
+              text: "",
+              reasoning: "Both ingredients are needed.",
+            },
+          },
+        },
+        commandId: globalThis.crypto.randomUUID(),
+        messageId: globalThis.crypto.randomUUID(),
+        message: "Selected answers",
+      };
+      const respond = vi.spyOn(client, "respondToUserInput");
+      await effects.deliver(input);
+      const resolved = async () =>
+        (await client.getThread(target.threadId)).thread.activities?.filter(
+          (activity) =>
+            activity.kind === "user-input.resolved" &&
+            activity.payload?.requestId === requestId,
+        ) ?? [];
+      for (
+        let attempt = 0;
+        attempt < 100 && (await resolved()).length === 0;
+        attempt += 1
+      )
+        await delay(100);
+      expect((await resolved()).map(({ payload }) => payload?.answers)).toEqual(
+        [{ quantity: "Small", ingredients: ["Rice", "Beans"] }],
+      );
+      // A fresh command identity would duplicate dispatch if receipt reconciliation failed.
+      await effects.deliver({
+        ...input,
+        commandId: globalThis.crypto.randomUUID(),
+      });
+      expect(respond).toHaveBeenCalledTimes(1);
+      respond.mockRestore();
+      expect(await resolved()).toHaveLength(1);
+      await vi.waitFor(async () => {
+        const log = await readFile(
+          join(scratch, "cursor-requests.jsonl"),
+          "utf8",
+        );
+        expect(
+          log
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line) as unknown),
+        ).toContainEqual({
+          userInputResponse: {
+            answers: { quantity: "Small", ingredients: ["Rice", "Beans"] },
+          },
+        });
+      });
+    }, 30_000);
 
     it("projects and answers approval and user-input through the pinned T3 client", async () => {
       const sessionObserver = observer();

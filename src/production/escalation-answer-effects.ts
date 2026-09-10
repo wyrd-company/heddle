@@ -108,18 +108,22 @@ export class ProductionEscalationAnswerEffects
         `Escalation owner session '${input.opened.ownerSessionKey}' is unavailable`,
       );
     }
+    const wireAnswers = harnessAnswers(
+      input.opened.questions,
+      input.answered.answers,
+    );
     if (
       userInputResponseRecorded(
         await this.t3.getThread(input.opened.threadId),
         input.opened.requestId,
-        harnessAnswers(input.answered.answers),
+        wireAnswers,
       )
     )
       return;
     await this.t3.respondToUserInput(
       input.opened.threadId,
       input.opened.requestId,
-      harnessAnswers(input.answered.answers),
+      wireAnswers,
       input.commandId,
     );
   }

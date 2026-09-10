@@ -44,6 +44,16 @@ export class ProductionQuestionRouting {
     target: SessionObservationTarget,
     thread: T3ShellThread | undefined,
   ): Promise<void> {
+    if (thread === undefined || resolveT3AwarenessPhase(thread) === "failed") {
+      await this.escalation.returnAnswerAuthorityToOperatorForSession({
+        instanceId: target.instanceId,
+        sessionKey: target.sessionKey,
+        reason:
+          thread === undefined
+            ? "The answering session no longer exists."
+            : "The answering session failed.",
+      });
+    }
     const record = this.persistence.getInstance(target.instanceId)!;
     const pending = this.escalation
       .pendingEscalations(target.instanceId)

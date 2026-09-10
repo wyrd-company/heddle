@@ -112,6 +112,7 @@ process.stdin.on("data", (chunk) => {
     log({ id: request.id, method: request.method });
     const pendingPrompt = pendingPrompts.get(request.id);
     if (pendingPrompt) {
+      log({ userInputResponse: request.result });
       pendingPrompts.delete(request.id);
       completePrompt(pendingPrompt);
       newline = input.indexOf("\n");
@@ -161,6 +162,19 @@ process.stdin.on("data", (chunk) => {
                       { id: "large", label: "Large" },
                     ],
                   },
+                  ...(promptText.includes("REQUEST_USER_INPUT_SELECTIONS")
+                    ? [
+                        {
+                          id: "ingredients",
+                          prompt: "Which ingredients?",
+                          allowMultiple: true,
+                          options: [
+                            { id: "rice", label: "Rice" },
+                            { id: "beans", label: "Beans" },
+                          ],
+                        },
+                      ]
+                    : []),
                 ],
               },
             })}\n`,

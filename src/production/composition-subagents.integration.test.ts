@@ -215,7 +215,7 @@ describe("production subagent composition", () => {
   });
 
   it.each(["absent", "completed", "failed"] as const)(
-    "retains the answer obligation when its session is %s",
+    "retains a pending child question with a live authority when its parent is %s",
     async (phase) => {
       const fixture = await prepareProductionEpicFixture();
       cleanup = fixture.cleanup;
@@ -252,7 +252,7 @@ describe("production subagent composition", () => {
       if (spawned.kind !== "spawned") throw new Error("Child was deferred");
       const child = await resolver.resolve(spawned.assignment.correlationToken);
       await composition.escalation.escalate(child, {
-        threadId: "thread-17",
+        threadId: spawned.assignment.threadId,
         requestId: "request-one",
         escalationId: `authority-${phase}`,
         questions: [
@@ -280,40 +280,56 @@ describe("production subagent composition", () => {
         composition.escalation.pendingEscalations(instanceId),
       ).toMatchObject([
         {
-          answeringAuthority: {
-            kind: "session",
-            sessionKey: parent.sessionKey,
-          },
+          answeringAuthority:
+            phase === "completed"
+              ? { kind: "session", sessionKey: parent.sessionKey }
+              : { kind: "operator" },
           escalationId: `authority-${phase}`,
           ownerSessionKey: child.sessionKey,
         },
       ]);
-      expect(composition.attention.list()).not.toContainEqual(
-        expect.objectContaining({
-          actions: [
-            expect.objectContaining({
-              contract: expect.objectContaining({
-                escalationId: `authority-${phase}`,
-              }),
+      const operatorAttention = expect.objectContaining({
+        actions: [
+          expect.objectContaining({
+            contract: expect.objectContaining({
+              escalationId: `authority-${phase}`,
             }),
-          ],
-          kind: "escalation",
-        }),
-      );
-      await expect(
-        composition.escalation.answerAsOperator({
-          answers: {
-            route: {
-              selectedOptions: ["a"],
-              text: "",
-              reasoning: "The selected route fits the requested result.",
-            },
+          }),
+        ],
+        kind: "escalation",
+      });
+      if (phase === "completed")
+        expect(composition.attention.list()).not.toContainEqual(
+          operatorAttention,
+        );
+      else
+        expect(composition.attention.list()).toContainEqual(operatorAttention);
+      const answer = composition.escalation.answerAsOperator({
+        answers: {
+          route: {
+            selectedOptions: ["a"],
+            text: "",
+            reasoning: "The selected route fits the requested result.",
           },
-          escalationId: `authority-${phase}`,
-          instanceId,
-          ownerSessionKey: child.sessionKey,
-        }),
-      ).rejects.toThrow(/answering authority/);
+        },
+        escalationId: `authority-${phase}`,
+        instanceId,
+        ownerSessionKey: child.sessionKey,
+      });
+      if (phase === "completed")
+        await expect(answer).rejects.toThrow(/answering authority/);
+      else {
+        await expect(answer).resolves.toMatchObject({
+          answeredBy: { kind: "operator" },
+        });
+        expect(t3.userInputResponses).toMatchObject([
+          {
+            threadId: spawned.assignment.threadId,
+            requestId: "request-one",
+            answers: { route: "a" },
+          },
+        ]);
+      }
     },
   );
 

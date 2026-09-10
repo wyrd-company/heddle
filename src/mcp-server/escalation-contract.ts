@@ -161,13 +161,21 @@ export type AnsweredEscalation = {
 };
 
 export const harnessAnswers = (
+  questions: readonly Pick<EscalationQuestion, "id" | "multiSelect">[],
   answers: EscalationAnswers,
 ): Record<string, string | string[]> =>
   Object.fromEntries(
-    Object.entries(answers).map(([id, answer]) => [
-      id,
-      answer.text.trim() === "" ? answer.selectedOptions : answer.text,
-    ]),
+    questions.map(({ id, multiSelect }) => {
+      const answer = answers[id]!;
+      return [
+        id,
+        answer.text.trim() !== ""
+          ? answer.text
+          : multiSelect
+            ? answer.selectedOptions
+            : answer.selectedOptions[0]!,
+      ];
+    }),
   );
 
 export const renderQuestionSet = (opened: EscalationAttention): string =>

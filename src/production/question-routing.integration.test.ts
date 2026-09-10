@@ -23,6 +23,7 @@ import {
 
 class QuestionT3 extends SyntheticT3 {
   readonly completed = new Set<string>();
+  readonly failed = new Set<string>();
   override async getShell() {
     const shell = await super.getShell();
     return {
@@ -46,6 +47,9 @@ class QuestionT3 extends SyntheticT3 {
               },
               session: { status: "idle" },
             }
+          : {}),
+        ...(this.failed.has(thread.id)
+          ? { latestTurn: { state: "error" }, session: { status: "error" } }
           : {}),
       })),
     };
@@ -227,7 +231,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
         {
           answers: {
             reference:
-              catalog === "compatible" ? ["First"] : "A shared reference",
+              catalog === "compatible" ? "First" : "A shared reference",
           },
           requestId: "repeated-native",
           threadId: child.assignment.threadId,
@@ -779,6 +783,93 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
         composition.persistence
           .replayEvents(runtime.instanceId)
           .filter((event) => event.type === "mcp:escalation-answered"),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["failed", "active"],
+    ["absent", "active"],
+    ["failed", "terminal"],
+    ["absent", "terminal"],
+  ] as const)(
+    "returns a %s delegated answerer's owed question to the operator from a %s assignment",
+    async (phase, assignmentState) => {
+      const { t3, composition, runtime, parent, page } = await setup();
+      const child = await composition.subagents.spawn(parent, {
+        operationId: "read-reference",
+        providerAlias: "primary",
+        rootItemId: "deliver",
+      });
+      if (child.kind !== "spawned") throw new Error("Child did not start");
+      const target = {
+        instanceId: runtime.instanceId,
+        sessionKey: child.assignment.sessionKey,
+        threadId: child.assignment.threadId,
+      };
+      if (assignmentState === "terminal") {
+        await composition.subagents.onObserved(target, {
+          phase: "completed",
+          attentions: [],
+          archiveDispatched: false,
+        });
+      }
+      t3.ask(runtime.threadId, "assigned-request");
+      await composition.scheduler.trigger();
+      const opened = composition.escalation.pendingEscalations(
+        runtime.instanceId,
+      )[0]!;
+      await composition.escalation.moveAnswerAuthority({
+        instanceId: runtime.instanceId,
+        ownerSessionKey: parent.sessionKey,
+        escalationId: opened.escalationId,
+        reason: "The reference reader can answer",
+        to: { kind: "session", sessionKey: target.sessionKey },
+      });
+      if (phase === "failed") t3.failed.add(target.threadId);
+      else t3.threads.delete(target.threadId);
+      const steers = t3.commands.filter(
+        (command) =>
+          command.type === "thread.turn.start" &&
+          command.threadId === target.threadId,
+      ).length;
+      await composition.scheduler.trigger();
+      await composition.scheduler.trigger();
+      expect(
+        composition.escalation.pendingEscalations(runtime.instanceId),
+      ).toEqual([{ ...opened, answeringAuthority: { kind: "operator" } }]);
+      expect(t3.userInputResponses).toEqual([]);
+      expect(
+        t3.commands.filter(
+          (command) =>
+            command.type === "thread.turn.start" &&
+            command.threadId === target.threadId,
+        ),
+      ).toHaveLength(steers);
+      const notices = composition.persistence
+        .listAttention()
+        .filter((entry) => entry.attentionId === opened.attentionId);
+      expect(notices).toHaveLength(1);
+      expect(page).toHaveBeenCalledTimes(1);
+      await composition.escalation.answerAsOperator({
+        instanceId: runtime.instanceId,
+        ownerSessionKey: parent.sessionKey,
+        escalationId: opened.escalationId,
+        answers,
+      });
+      await composition.escalation.replayPendingDeliveries();
+      expect(t3.userInputResponses).toHaveLength(1);
+      expect(t3.userInputResponses[0]).toMatchObject({
+        requestId: "assigned-request",
+        threadId: runtime.threadId,
+        answers: {
+          route: "The short route",
+          ingredients: ["Rice"],
+          ["__proto__"]: "sample-reference",
+        },
+      });
+      expect(
+        composition.escalation.pendingEscalations(runtime.instanceId),
       ).toEqual([]);
     },
   );

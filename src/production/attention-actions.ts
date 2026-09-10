@@ -69,6 +69,14 @@ const escalationAnswers = (
   return answers as EscalationAnswers;
 };
 
+const nativeAnswers = (
+  input: Parameters<ConsoleAttentionActionPort["execute"]>[0],
+) => {
+  if (input.action.input.kind !== "questions")
+    throw new TypeError("Native answers require the offered question catalog");
+  return harnessAnswers(input.action.input.questions, input.answers!);
+};
+
 export class ProductionAttentionActions implements ConsoleAttentionActionPort {
   public constructor(
     private readonly persistence: SqlitePersistence,
@@ -209,7 +217,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     return this.observer.userInputResponseRecorded(
       target,
       contract.requestId,
-      harnessAnswers(input.answers!),
+      nativeAnswers(input),
     );
   }
 
@@ -297,7 +305,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
         threadId: contract.threadId,
       },
       contract.requestId,
-      harnessAnswers(input.answers!),
+      nativeAnswers(input),
       input.attention.attentionId,
     );
   }

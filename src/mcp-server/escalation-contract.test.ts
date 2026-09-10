@@ -10,6 +10,7 @@ import {
   escalationAnswerSchema,
   escalationAttentionId,
   escalationKey,
+  harnessAnswers,
   renderQuestionSet,
   sameAnswers,
   validateAnswers,
@@ -45,6 +46,45 @@ const answer = (
 ) => ({ selectedOptions, text, reasoning });
 
 describe("one question contract", () => {
+  it("encodes selected native answers with question cardinality and preserves text and own keys", () => {
+    const questions = [
+      { ...question(), id: "single" },
+      { ...question(undefined, true), id: "multi" },
+      { ...question(undefined, true), id: "many" },
+      { ...question(), id: "text" },
+      { ...question(), id: "__proto__" },
+    ];
+    expect(
+      harnessAnswers(questions, {
+        single: answer(),
+        multi: answer(),
+        many: answer(["First", "Second"]),
+        text: answer([], " A reference "),
+        ["__proto__"]: answer(),
+      }),
+    ).toEqual({
+      single: "First",
+      multi: ["First"],
+      many: ["First", "Second"],
+      text: " A reference ",
+      ["__proto__"]: "First",
+    });
+    expect(harnessAnswers([], {})).toEqual({});
+  });
+  it.each([false, true])(
+    "uses the last repeated native question's cardinality (%s) after validating every occurrence",
+    (lastMultiSelect) => {
+      const questions = [
+        question(undefined, !lastMultiSelect),
+        question(undefined, lastMultiSelect),
+      ];
+      const answers = { route: answer() };
+      validateAnswers({ ...opened(), questions }, answers);
+      expect(harnessAnswers(questions, answers)).toEqual({
+        route: lastMultiSelect ? ["First"] : "First",
+      });
+    },
+  );
   it("separates bounded attention identity from its lossless request key", () => {
     expect(escalationKey("instance", "owner", "r".repeat(128))).toBe(
       JSON.stringify(["instance", "owner", "r".repeat(128)]),

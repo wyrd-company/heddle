@@ -726,13 +726,21 @@ proposed-design:
     the current authority. Parent session authority receives the question by a
     steered turn; operator authority raises durable attention and Pushover
     notification. A session that stops owing an answer receives its questions
-    again while the request remains pending. Its obligation ends when the
-    request is answered, withdrawn, or its asking session is gone. Session
+    again while the request remains pending. For parent or delegated session
+    authority, a failed or absent answerer returns its owed questions to operator
+    authority without answering or cancelling them. Delegated answerers with
+    pending obligations remain observation targets even when their assignment is
+    terminal. The question remains pending until it is answered, withdrawn, or
+    its asking session is gone. Session
     errors follow the normal observation and escalation policy.
 
     An accepted answer is durable before effects. Heddle replies to the original
     harness request on its recorded thread, quoting the request through its ID,
-    then appends the question, answer, per-answer reasoning,
+    with a string for a single selected option and an array for a multi-select
+    answer. Text answers remain strings. Repeated question IDs share an answer
+    validated against every occurrence; the last occurrence determines native
+    wire cardinality, matching the T3 client.
+    Heddle then appends the question, answer, per-answer reasoning,
     answering model when adjudicated, and named authority to the
     task and, when present, its epic. The lifecycle console renders adjudicated
     answers with their model, selected values, and reasoning even though no
