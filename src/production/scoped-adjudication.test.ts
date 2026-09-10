@@ -13,8 +13,10 @@ describe("scoped adjudication sanctioned approvals", () => {
   const sessionKey = "session-under-test";
   const threadId = "thread-under-test";
   const instanceId = "instance-under-test";
+  const now = 1_000_000;
 
-  const sanctionedRequest = (requestId: string) => ({
+  const sanctionedRequest = (requestId: string, createdAt = now) => ({
+    createdAt: new Date(createdAt).toISOString(),
     kind: "approval.requested",
     payload: {
       appName: "external",
@@ -35,51 +37,89 @@ describe("scoped adjudication sanctioned approvals", () => {
     sessionKey,
   };
 
-  const build = (input: {
+  const runtimeRow = (stageId: string) => ({
+    binding: { modelSlug: "model-under-test" },
+    instanceId,
+    sessionKey,
+    stageId,
+    threadId,
+  });
+
+  /**
+   * A control plane that accepts a response and only records the resolution
+   * when its reactor runs, the way T3 does.
+   */
+  const syntheticT3 = (input: {
     activities: unknown[];
-    handoffs: unknown[];
-    stageId: string;
+    onRespond?: (requestId: string) => unknown;
   }) => {
-    const approvals: Array<{ decision: string; requestId: string }> = [];
     const activities = [...input.activities];
-    const persistence = {
-      getInstance: () => ({ state: { handoffs: input.handoffs } }),
-      listSessionRuntime: () => [
-        {
-          binding: { modelSlug: "model-under-test" },
-          instanceId,
-          sessionKey,
-          stageId: input.stageId,
-          threadId,
-        },
-      ],
-    } as unknown as SqlitePersistence;
-    const t3 = {
-      getShell: async () => ({
-        projects: [],
-        threads: [{ hasPendingApprovals: true, id: threadId }],
-      }),
-      getThread: async () => ({ thread: { activities: [...activities] } }),
-      respondToApproval: async (
-        _threadId: string,
-        requestId: string,
-        decision: string,
-      ) => {
-        approvals.push({ decision, requestId });
-        activities.push({ kind: "approval.resolved", payload: { requestId } });
-        return { sequence: approvals.length };
-      },
-    } as unknown as ProductionT3Client;
+    const approvals: string[] = [];
+    const reactor: Array<() => void> = [];
     return {
-      adjudication: new ProductionScopedAdjudication({
-        persistence,
-        t3,
-      } as unknown as ConstructorParameters<
-        typeof ProductionScopedAdjudication
-      >[0]),
+      activities,
       approvals,
+      runReactor: () => {
+        for (const deliver of reactor.splice(0)) deliver();
+      },
+      t3: {
+        getShell: async () => ({
+          projects: [],
+          threads: [{ hasPendingApprovals: true, id: threadId }],
+        }),
+        getThread: async () => ({ thread: { activities: [...activities] } }),
+        respondToApproval: async (_threadId: string, requestId: string) => {
+          approvals.push(requestId);
+          const recorded = input.onRespond?.(requestId);
+          if (recorded !== undefined) {
+            reactor.push(() => activities.push(recorded as never));
+          }
+          return { sequence: approvals.length };
+        },
+      } as unknown as ProductionT3Client,
     };
   };
+
+  const build = (input: {
+    activities: unknown[];
+    approvalSettlementMilliseconds?: number;
+    handoffs: unknown[];
+    onRespond?: (requestId: string) => unknown;
+    stageId: string;
+  }) => {
+    const synthetic = syntheticT3(input);
+    const persistence = {
+      getInstance: () => ({ state: { handoffs: input.handoffs } }),
+      listSessionRuntime: () => [runtimeRow(input.stageId)],
+    } as unknown as SqlitePersistence;
+    const construct = () =>
+      new ProductionScopedAdjudication({
+        configuration: {
+          adjudication: {
+            ...(input.approvalSettlementMilliseconds === undefined
+              ? {}
+              : {
+                  approvalSettlementMilliseconds:
+                    input.approvalSettlementMilliseconds,
+                }),
+            policyPath: "adjudication/policy.json",
+            providerAlias: "primary",
+          },
+        },
+        now: () => now,
+        persistence,
+        t3: synthetic.t3,
+      } as unknown as ConstructorParameters<
+        typeof ProductionScopedAdjudication
+      >[0]);
+    return { ...synthetic, adjudication: construct(), construct };
+  };
+
+  const resolved = (requestId: string) => ({
+    createdAt: new Date(now).toISOString(),
+    kind: "approval.resolved",
+    payload: { requestId },
+  });
 
   it("refuses to approve for an ordinary session whose stage is named adjudication", async () => {
     // A blueprint author can name a lifecycle node "adjudication", and ordinary
@@ -92,239 +132,150 @@ describe("scoped adjudication sanctioned approvals", () => {
     });
 
     expect(adjudication.isAdjudicationSession(sessionKey)).toBe(false);
-    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toBe(
-      false,
-    );
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
     expect(approvals).toEqual([]);
   });
 
-  it("approves for a session carrying a stored adjudication handoff", async () => {
-    const { adjudication, approvals } = build({
+  it("defers the pass after answering rather than reading the result back at once", async () => {
+    // The response is delivered by a separate reactor, so the request is still
+    // pending when the dispatch returns. Reading it back here would see no
+    // change and kill a healthy adjudication.
+    const { adjudication, approvals, runReactor } = build({
       activities: [sanctionedRequest("request-sanctioned")],
       handoffs: [adjudicationHandoff],
+      onRespond: resolved,
       stageId: "adjudication",
     });
 
     expect(adjudication.isAdjudicationSession(sessionKey)).toBe(true);
-    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toBe(true);
-    expect(approvals).toEqual([
-      { decision: "accept", requestId: "request-sanctioned" },
-    ]);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    expect(approvals).toEqual(["request-sanctioned"]);
+
+    // The reactor delivers, and a later pass sees nothing left to answer.
+    runReactor();
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
   });
 
-  it("drains a stale request stacked under a live one without deferring forever", async () => {
-    // The provider forgets a request across a restart, so it stays counted as
-    // pending while a newer request arrives on top of it. Dispatching a
-    // response to the stale request is what clears it.
-    const approvals: string[] = [];
-    const activities: unknown[] = [
-      sanctionedRequest("request-stale"),
-      sanctionedRequest("request-live"),
-    ];
-    const persistence = {
-      getInstance: () => ({ state: { handoffs: [adjudicationHandoff] } }),
-      listSessionRuntime: () => [
-        {
-          binding: { modelSlug: "model-under-test" },
-          instanceId,
-          sessionKey,
-          stageId: "adjudication",
-          threadId,
-        },
+  it("drains a stale request stacked under a live one", async () => {
+    // The provider forgot the older request across a restart, so it stays
+    // counted as pending. Answering it is what clears it.
+    const { adjudication, approvals, runReactor } = build({
+      activities: [
+        sanctionedRequest("request-stale"),
+        sanctionedRequest("request-live"),
       ],
-    } as unknown as SqlitePersistence;
-    const t3 = {
-      getShell: async () => ({
-        projects: [],
-        threads: [{ hasPendingApprovals: activities.length > 0, id: threadId }],
-      }),
-      getThread: async () => ({ thread: { activities: [...activities] } }),
-      respondToApproval: async (_threadId: string, requestId: string) => {
-        approvals.push(requestId);
-        activities.push(
-          requestId === "request-stale"
-            ? {
-                kind: "provider.approval.respond.failed",
-                payload: {
-                  detail: "stale pending approval request",
-                  requestId,
-                },
-              }
-            : { kind: "approval.resolved", payload: { requestId } },
-        );
-        return { sequence: approvals.length };
-      },
-    } as unknown as ProductionT3Client;
-    const adjudication = new ProductionScopedAdjudication({
-      persistence,
-      t3,
-    } as unknown as ConstructorParameters<
-      typeof ProductionScopedAdjudication
-    >[0]);
+      handoffs: [adjudicationHandoff],
+      onRespond: (requestId) =>
+        requestId === "request-stale"
+          ? {
+              createdAt: new Date(now).toISOString(),
+              kind: "provider.approval.respond.failed",
+              payload: {
+                detail: "stale pending approval request",
+                requestId,
+              },
+            }
+          : resolved(requestId),
+      stageId: "adjudication",
+    });
 
-    // One pass attempts both: the stale one is cleared, the live one answered.
-    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toBe(true);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
     expect(approvals).toEqual(["request-stale", "request-live"]);
 
-    // Nothing is left pending, so the next pass defers observation no further.
-    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toBe(
-      false,
-    );
-    expect(approvals).toHaveLength(2);
+    runReactor();
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
   });
 
-  it("cannot defer observation indefinitely however many passes run", async () => {
-    // T3 replays an accepted receipt for a repeated command id, so an accepted
-    // dispatch is not evidence that anything moved. Progress is counted per
-    // request, so deferral is bounded by the number of distinct requests
-    // however many receipts come back accepted.
-    const requestIds = ["request-a", "request-b", "request-c"];
-    const approvals: string[] = [];
-    const persistence = {
-      getInstance: () => ({ state: { handoffs: [adjudicationHandoff] } }),
-      listSessionRuntime: () => [
-        {
-          binding: { modelSlug: "model-under-test" },
-          instanceId,
-          sessionKey,
-          stageId: "adjudication",
-          threadId,
-        },
-      ],
-    } as unknown as SqlitePersistence;
-    const t3 = {
-      getShell: async () => ({
-        projects: [],
-        threads: [{ hasPendingApprovals: true, id: threadId }],
-      }),
-      // The pending set never changes, whatever is dispatched.
-      getThread: async () => ({
-        thread: { activities: requestIds.map(sanctionedRequest) },
-      }),
-      // T3 replays the accepted receipt for a repeated command id.
-      respondToApproval: async (_threadId: string, requestId: string) => {
-        approvals.push(requestId);
-        return { sequence: approvals.length };
-      },
-    } as unknown as ProductionT3Client;
-    const adjudication = new ProductionScopedAdjudication({
-      persistence,
-      t3,
-    } as unknown as ConstructorParameters<
-      typeof ProductionScopedAdjudication
-    >[0]);
+  it("abandons the adjudication with a visible cause when an answer never settles", async () => {
+    // The reactor never delivers, so the request stays pending for good.
+    const { adjudication, approvals } = build({
+      activities: [sanctionedRequest("request-stuck", now - 90_000)],
+      approvalSettlementMilliseconds: 60_000,
+      handoffs: [adjudicationHandoff],
+      stageId: "adjudication",
+    });
 
-    const passes: boolean[] = [];
-    for (let pass = 0; pass < 25; pass += 1) {
-      passes.push(await adjudication.settleSanctionedApprovals(sessionKey));
-    }
-
-    // The pending set never moved, so no pass ever deferred observation.
-    expect(passes.filter(Boolean)).toEqual([]);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      cause: "Adjudication tool approval did not settle within 60000ms",
+      kind: "abandoned",
+    });
+    expect(approvals).toEqual([]);
   });
 
-  it("permits no further deferral after a restart when nothing has changed", async () => {
-    // Progress is read from the thread, not remembered, so reconstructing the
-    // object cannot reopen the deferral a crash loop would otherwise repeat.
-    const approvals: string[] = [];
-    const persistence = {
-      getInstance: () => ({ state: { handoffs: [adjudicationHandoff] } }),
-      listSessionRuntime: () => [
-        {
-          binding: { modelSlug: "model-under-test" },
-          instanceId,
-          sessionKey,
-          stageId: "adjudication",
-          threadId,
-        },
-      ],
-    } as unknown as SqlitePersistence;
-    const t3 = {
-      getShell: async () => ({
-        projects: [],
-        threads: [{ hasPendingApprovals: true, id: threadId }],
-      }),
-      getThread: async () => ({
-        thread: { activities: [sanctionedRequest("request-stuck")] },
-      }),
-      respondToApproval: async (_threadId: string, requestId: string) => {
-        approvals.push(requestId);
-        return { sequence: approvals.length };
-      },
-    } as unknown as ProductionT3Client;
+  it("keeps deferring only while the answer is inside the settlement bound", async () => {
+    const { adjudication, approvals } = build({
+      activities: [sanctionedRequest("request-slow", now - 30_000)],
+      approvalSettlementMilliseconds: 60_000,
+      handoffs: [adjudicationHandoff],
+      stageId: "adjudication",
+    });
 
-    const passes: boolean[] = [];
+    // Answering again is harmless, so a pass inside the bound defers again.
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    expect(approvals).toEqual(["request-slow", "request-slow"]);
+  });
+
+  it("permits no unbounded deferral across restarts when nothing settles", async () => {
+    // The bound is read from the request the control plane recorded, so
+    // reconstructing the object cannot extend it.
+    const { construct, approvals } = build({
+      activities: [sanctionedRequest("request-stuck", now - 90_000)],
+      approvalSettlementMilliseconds: 60_000,
+      handoffs: [adjudicationHandoff],
+      stageId: "adjudication",
+    });
+
+    const outcomes: string[] = [];
     for (let restart = 0; restart < 25; restart += 1) {
-      const adjudication = new ProductionScopedAdjudication({
-        persistence,
-        t3,
-      } as unknown as ConstructorParameters<
-        typeof ProductionScopedAdjudication
-      >[0]);
-      passes.push(await adjudication.settleSanctionedApprovals(sessionKey));
+      outcomes.push(
+        (await construct().settleSanctionedApprovals(sessionKey)).kind,
+      );
     }
 
-    expect(passes.filter(Boolean)).toEqual([]);
+    expect(outcomes.every((kind) => kind === "abandoned")).toBe(true);
+    expect(approvals).toEqual([]);
   });
 
-  it("stops deferring observation for a request that never clears", async () => {
-    const approvals: string[] = [];
-    const persistence = {
-      getInstance: () => ({ state: { handoffs: [adjudicationHandoff] } }),
-      listSessionRuntime: () => [
+  it("treats an unreadable request timestamp as outside the bound", async () => {
+    const { adjudication } = build({
+      activities: [
         {
-          binding: { modelSlug: "model-under-test" },
-          instanceId,
-          sessionKey,
-          stageId: "adjudication",
-          threadId,
+          kind: "approval.requested",
+          payload: {
+            appName: "external",
+            requestId: "request-undated",
+            requestKind: "mcp-elicitation",
+          },
         },
       ],
-    } as unknown as SqlitePersistence;
-    const t3 = {
-      getShell: async () => ({
-        projects: [],
-        threads: [{ hasPendingApprovals: true, id: threadId }],
-      }),
-      // The request stays pending however often it is answered.
-      getThread: async () => ({
-        thread: { activities: [sanctionedRequest("request-stuck")] },
-      }),
-      respondToApproval: async (_threadId: string, requestId: string) => {
-        approvals.push(requestId);
-        return { sequence: approvals.length };
-      },
-    } as unknown as ProductionT3Client;
-    const adjudication = new ProductionScopedAdjudication({
-      persistence,
-      t3,
-    } as unknown as ConstructorParameters<
-      typeof ProductionScopedAdjudication
-    >[0]);
+      handoffs: [adjudicationHandoff],
+      stageId: "adjudication",
+    });
 
-    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toBe(
-      false,
-    );
-    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toBe(
-      false,
-    );
-    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toBe(
-      false,
-    );
+    expect(
+      (await adjudication.settleSanctionedApprovals(sessionKey)).kind,
+    ).toBe("abandoned");
   });
 
   it("keeps a shell read from escaping into the scheduler pass", async () => {
     const persistence = {
       getInstance: () => ({ state: { handoffs: [adjudicationHandoff] } }),
-      listSessionRuntime: () => [
-        {
-          binding: { modelSlug: "model-under-test" },
-          instanceId,
-          sessionKey,
-          stageId: "adjudication",
-          threadId,
-        },
-      ],
+      listSessionRuntime: () => [runtimeRow("adjudication")],
     } as unknown as SqlitePersistence;
     const t3 = {
       getShell: async () => {
@@ -340,6 +291,6 @@ describe("scoped adjudication sanctioned approvals", () => {
 
     await expect(
       adjudication.settleSanctionedApprovals(sessionKey),
-    ).resolves.toBe(false);
+    ).resolves.toEqual({ kind: "none" });
   });
 });

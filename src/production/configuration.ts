@@ -58,9 +58,17 @@ export type PushoverConfiguration = {
 };
 
 export type AdjudicationConfiguration = {
+  /**
+   * How long a sanctioned tool approval may stay pending after Heddle answers
+   * it before the adjudication is abandoned to the operator.
+   */
+  approvalSettlementMilliseconds?: number;
   policyPath: string;
   providerAlias: string;
 };
+
+/** Applied when `adjudication.approvalSettlementMilliseconds` is absent. */
+export const defaultApprovalSettlementMilliseconds = 60_000;
 
 export const incidentSeverityLevels = [
   "low",
@@ -148,6 +156,16 @@ const validateCommonProductionConfiguration = (
       "adjudication.providerAlias",
       configuration.adjudication.providerAlias,
     );
+    const settlement =
+      configuration.adjudication.approvalSettlementMilliseconds;
+    if (
+      settlement !== undefined &&
+      (!Number.isInteger(settlement) || settlement < 1)
+    ) {
+      throw new TypeError(
+        "adjudication.approvalSettlementMilliseconds must be a positive integer",
+      );
+    }
     if (
       !/^adjudication\/[a-z][a-z-]*\.json$/.test(
         configuration.adjudication.policyPath,

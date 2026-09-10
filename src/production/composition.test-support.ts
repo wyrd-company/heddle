@@ -77,6 +77,8 @@ export class SyntheticT3 implements ProductionT3Client {
   readonly commands: T3DispatchCommand[] = [];
   /** Activities returned by {@link getThread}, keyed by thread id. */
   readonly threadActivities = new Map<string, T3ThreadActivity[]>();
+  /** Resolutions the reactor has accepted but not yet ingested. */
+  readonly pendingResolutions: Array<() => void> = [];
   readonly dispatches: Array<{
     command: T3DispatchCommand;
     providerContext?: T3ProviderDispatchContext;
@@ -170,6 +172,12 @@ export class SyntheticT3 implements ProductionT3Client {
     this.mcpRegistrations.push(globalThis.structuredClone(registration));
   }
 
+  /** Runs the reactor, so accepted responses become recorded resolutions. */
+  settleProviderResponses(): void {
+    const queued = this.pendingResolutions.splice(0);
+    for (const resolve of queued) resolve();
+  }
+
   async getThread(threadId?: string) {
     return {
       thread: {
@@ -194,9 +202,14 @@ export class SyntheticT3 implements ProductionT3Client {
       requestId,
       threadId,
     });
+    // T3 accepts the response and a separate reactor delivers it to the
+    // provider, so the resolution appears on a later read, never before this
+    // dispatch returns.
     const activities = this.threadActivities.get(threadId);
     if (activities !== undefined) {
-      activities.push({ kind: "approval.resolved", payload: { requestId } });
+      this.pendingResolutions.push(() => {
+        activities.push({ kind: "approval.resolved", payload: { requestId } });
+      });
     }
     return { sequence: 1 };
   }

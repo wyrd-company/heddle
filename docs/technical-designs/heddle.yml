@@ -669,14 +669,19 @@ proposed-design:
     per-session tool registration, which exposes only the two sanctioned
     actions, not from the request text, and it applies only to a session
     carrying the adjudication handoff Heddle wrote when it started that
-    session, never to a lifecycle stage that merely shares the name. A pass
-    that answers an approval reads the pending requests back and defers
-    observation to the following pass only when that set moved, because the
-    control plane replays an accepted receipt for a repeated command id. A
-    pass that leaves the pending set unchanged defers nothing, so no sequence
-    of passes or restarts can withhold observation. Every other approval
-    request, and any sanctioned request that stays pending after its answer,
-    fails closed to the operator. An accepted answer
+    session, never to a lifecycle stage that merely shares the name. Answering
+    is asynchronous: the control plane accepts the response and a separate
+    reactor delivers it to the provider, so the request is normally still
+    pending when the dispatch returns and the recorded resolution appears only
+    on a later read. A pass therefore ends after answering and a later pass
+    reads whether the request cleared, rather than waiting inside the pass and
+    stalling every remaining session in the walk. Answering again is harmless
+    because the command identity is derived from the request. A request still
+    pending beyond the configured approval settlement bound, measured from the
+    request the control plane recorded rather than from anything Heddle
+    remembers, abandons the adjudication and carries that cause into attention.
+    Every other approval request fails closed to the operator. An accepted
+    answer
     records the selected model and required reasoning and follows the same
     durable delivery and decision-log path as an operator answer. A decline
     moves authority to the operator without trying another model and carries

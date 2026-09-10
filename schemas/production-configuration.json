@@ -43,6 +43,10 @@
       "additionalProperties": false,
       "required": ["policyPath", "providerAlias"],
       "properties": {
+        "approvalSettlementMilliseconds": {
+          "type": "integer",
+          "minimum": 1
+        },
         "policyPath": {
           "type": "string",
           "pattern": "^adjudication/[a-z][a-z-]*\\.json$"

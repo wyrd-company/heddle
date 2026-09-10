@@ -640,16 +640,17 @@ export const createProductionComposition = (
             continue;
           }
           if (adjudicationSession) {
-            if (
+            const settlement =
               await scopedAdjudication!.settleSanctionedApprovals(
                 session.sessionKey,
-              )
-            ) {
-              continue;
-            }
-            const failure = await scopedAdjudication!.authorityFailure(
-              session.sessionKey,
-            );
+              );
+            if (settlement.kind === "deferred") continue;
+            const failure =
+              settlement.kind === "abandoned"
+                ? settlement.cause
+                : await scopedAdjudication!.authorityFailure(
+                    session.sessionKey,
+                  );
             if (failure !== undefined) {
               const runtime = persistence!
                 .listSessionRuntime()

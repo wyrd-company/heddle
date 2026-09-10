@@ -413,6 +413,7 @@ describe("production composition", () => {
       await openProductionEscalation(composition);
     t3.threadActivities.set(adjudication.threadId, [
       {
+        createdAt: new Date().toISOString(),
         kind: "approval.requested",
         payload: {
           appName: "external",
@@ -477,6 +478,7 @@ describe("production composition", () => {
       await openProductionEscalation(composition);
     t3.threadActivities.set(adjudication.threadId, [
       {
+        createdAt: new Date().toISOString(),
         kind: "approval.requested",
         payload: {
           appName: "external",
@@ -539,6 +541,7 @@ describe("production composition", () => {
     t3.threadActivities.set(
       adjudication.threadId,
       ["request-older", "request-newer"].map((requestId) => ({
+        createdAt: new Date().toISOString(),
         kind: "approval.requested",
         payload: {
           appName: "external",
@@ -597,6 +600,7 @@ describe("production composition", () => {
       await openProductionEscalation(composition);
     t3.threadActivities.set(adjudication.threadId, [
       {
+        createdAt: new Date().toISOString(),
         kind: "approval.requested",
         payload: {
           appName: "external",

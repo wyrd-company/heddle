@@ -27,7 +27,10 @@ import type {
 import type { DispatchPacingEvaluator } from "../pacing/index.js";
 import { errorDetail } from "../error-details.js";
 import { sanitizeIncidentValue } from "./incident-redaction.js";
-import type { ResolvedProductionConfiguration } from "./configuration.js";
+import {
+  defaultApprovalSettlementMilliseconds,
+  type ResolvedProductionConfiguration,
+} from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 import {
   bindResolvedSession,
@@ -54,6 +57,12 @@ type AdjudicationEscalation = PendingEscalation & {
   answeringAuthority: AdjudicationAuthority;
 };
 
+/** What a scheduler pass should do about an adjudication's pending approvals. */
+export type AdjudicationApprovalOutcome =
+  | { kind: "none" }
+  | { kind: "deferred" }
+  | { kind: "abandoned"; cause: string };
+
 type AdjudicationActivation = {
   context: JsonValue;
   policy: PinnedAdjudicationPolicy;
@@ -78,15 +87,24 @@ const sanctionedToolApproval = (activity: T3ThreadActivity): boolean => {
   );
 };
 
-const pendingApprovalIdentity = (
-  activities: readonly T3ThreadActivity[],
-): string =>
-  JSON.stringify(
-    activities
-      .map(({ payload }) => payload?.requestId)
-      .filter((requestId): requestId is string => typeof requestId === "string")
-      .sort(),
-  );
+/**
+ * Whether a request is still inside the settlement bound, measured from when
+ * the control plane recorded the request.
+ *
+ * A request whose age cannot be read is treated as outside the bound, so an
+ * unreadable timestamp fails closed rather than deferring observation forever.
+ */
+const withinSettlementBound = (
+  activity: T3ThreadActivity,
+  now: number,
+  boundMilliseconds: number,
+): boolean => {
+  const createdAt = activity["createdAt"];
+  if (typeof createdAt !== "string") return false;
+  const requestedAt = Date.parse(createdAt);
+  if (Number.isNaN(requestedAt)) return false;
+  return now - requestedAt <= boundMilliseconds;
+};
 
 const isT3PreconditionError = (error: unknown): boolean =>
   error instanceof Error && error.name === "T3PreconditionError";
@@ -361,43 +379,60 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
    * sanctioned tool and Heddle answers it under its own authority. Every other
    * request is left pending for {@link authorityFailure} to read as a breach.
    */
-  async settleSanctionedApprovals(sessionKey: string): Promise<boolean> {
+  async settleSanctionedApprovals(
+    sessionKey: string,
+  ): Promise<AdjudicationApprovalOutcome> {
     const runtime = this.#adjudicationRuntime(sessionKey);
-    if (runtime === undefined) return false;
+    if (runtime === undefined) return { kind: "none" };
     try {
       const thread = (await this.options.t3.getShell()).threads.find(
         ({ id }) => id === runtime.threadId,
       );
-      if (thread?.hasPendingApprovals !== true) return false;
-      return await this.#approveSanctionedToolRequests(runtime.threadId);
+      if (thread?.hasPendingApprovals !== true) return { kind: "none" };
+      return await this.#answerSanctionedToolRequests(runtime.threadId);
     } catch {
-      return false;
+      return { kind: "none" };
     }
   }
 
   /**
-   * Accepts every pending sanctioned approval on the thread and reports
-   * whether the pending set moved.
+   * Answers every pending sanctioned approval on the thread.
    *
-   * A request that the provider has forgotten stays counted as pending, and
-   * dispatching a response is what clears it, so a stale request is answered
-   * exactly like a live one. Progress is read back from the thread rather than
-   * taken from the dispatch receipt, because the control plane replays an
-   * accepted receipt for a repeated command id. A pass that leaves the pending
-   * set unchanged defers nothing and returns the session to
-   * {@link authorityFailure} to fail closed to the operator. Reading progress
-   * from the thread holds across a restart, which remembering an attempt
-   * would not.
+   * Answering is asynchronous: the control plane accepts the response and a
+   * separate reactor delivers it to the provider, so the request is normally
+   * still pending when the dispatch returns. The pass therefore ends after
+   * dispatching and a later pass reads whether the request cleared, rather
+   * than waiting inside the pass and stalling every remaining session in the
+   * walk. Answering again is harmless because the command id is derived from
+   * the request.
+   *
+   * A request that never clears would otherwise defer observation forever, so
+   * a request still pending beyond the configured settlement bound abandons
+   * the adjudication with a cause the operator can see.
    */
-  async #approveSanctionedToolRequests(threadId: string): Promise<boolean> {
+  async #answerSanctionedToolRequests(
+    threadId: string,
+  ): Promise<AdjudicationApprovalOutcome> {
     const pending = pendingRequestActivitiesFor(
       await this.options.t3.getThread(threadId),
       "approval.requested",
     );
     if (pending.length === 0 || !pending.every(sanctionedToolApproval)) {
-      return false;
+      return { kind: "none" };
     }
-    const before = pendingApprovalIdentity(pending);
+    const bound =
+      this.options.configuration?.adjudication
+        ?.approvalSettlementMilliseconds ??
+      defaultApprovalSettlementMilliseconds;
+    const unsettled = pending.filter(
+      (activity) => !withinSettlementBound(activity, this.#now(), bound),
+    );
+    if (unsettled.length > 0) {
+      return {
+        cause: `Adjudication tool approval did not settle within ${bound}ms`,
+        kind: "abandoned",
+      };
+    }
     let dispatched = 0;
     for (const activity of pending) {
       const requestId = activity.payload?.requestId;
@@ -414,14 +449,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         if (!isT3PreconditionError(error)) throw error;
       }
     }
-    if (dispatched === 0) return false;
-    const after = pendingApprovalIdentity(
-      pendingRequestActivitiesFor(
-        await this.options.t3.getThread(threadId),
-        "approval.requested",
-      ),
-    );
-    return after !== before;
+    return dispatched > 0 ? { kind: "deferred" } : { kind: "none" };
   }
 
   /**
