@@ -181,6 +181,20 @@ describe("console attention action contract", () => {
     ).toThrow("does not name an offered option");
   });
 
+  it("accepts an explicit empty answer set for an empty question set", () => {
+    const emptyAction: ConsoleAttentionAction = {
+      ...action,
+      input: { kind: "questions", questions: [] },
+    };
+
+    expect(
+      parseConsoleAttentionActionRequest(
+        { answers: {}, fingerprint: entry().fingerprint },
+        emptyAction,
+      ),
+    ).toEqual({ answers: {}, fingerprint: entry().fingerprint });
+  });
+
   it("accepts text with reasoning when no options are offered", () => {
     const valueAction: ConsoleAttentionAction = {
       ...action,

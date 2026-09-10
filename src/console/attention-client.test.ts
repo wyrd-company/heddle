@@ -177,6 +177,46 @@ describe("global console attention overlay", () => {
     );
   });
 
+  it("submits an explicit empty answer set for an empty question set", async () => {
+    const entry = createConsoleAttention({
+      actions: [
+        {
+          actionId: "answer",
+          contract: {
+            escalationId: "sample-empty",
+            instanceId: "instance-11",
+            kind: "escalation.answer",
+            ownerSessionKey: "sample-session",
+          },
+          input: { kind: "questions", questions: [] },
+          label: "Answer",
+        },
+      ],
+      attentionId: "attention-empty",
+      instanceId: "instance-11",
+      kind: "escalation",
+      message: "An empty sample answer is required",
+      scope: "task:11",
+      taskId: 11,
+    });
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      undefined,
+      undefined,
+      undefined,
+      [entry],
+    );
+    harness
+      .attentionElements()
+      .find(({ className }) => className === "attention-action")!
+      .dispatch("click");
+
+    await vi.waitFor(() => expect(harness.attentionRequests).toHaveLength(1));
+    expect(
+      JSON.parse(String(harness.attentionRequests[0]?.options?.body)),
+    ).toEqual({ answers: {}, fingerprint: entry.fingerprint });
+  });
+
   it("renders notification verification before the Retry action", async () => {
     const entry = createConsoleAttention({
       actions: [
