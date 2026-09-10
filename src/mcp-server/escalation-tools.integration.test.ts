@@ -698,7 +698,7 @@ describe("workflow MCP escalation tools", () => {
     ).not.toThrow();
   });
 
-  it("requires reasoning and carries a zero-option text answer into its delivered turn", async () => {
+  it("delivers only the native answer contract with zero-option text and reasoning", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-value", [
       { sessionKey: "top", token: "token-value", tools: [] },
@@ -741,13 +741,25 @@ describe("workflow MCP escalation tools", () => {
     });
 
     expect(subject.deliveredAnswers).toHaveLength(1);
-    expect(subject.deliveredAnswers[0]?.message).toContain("Answer: AB12");
-    expect(subject.deliveredAnswers[0]?.message).toContain(
-      "Matches the sample label.",
-    );
-    expect(subject.deliveredAnswers[0]?.message).toContain(
-      "Additional context: Use this reference for the current sample.",
-    );
+    const delivered = subject.deliveredAnswers[0]!;
+    expect(Object.keys(delivered).sort()).toEqual([
+      "answered",
+      "commandId",
+      "opened",
+    ]);
+    expect(delivered.answered).toEqual({
+      answeredBy: { kind: "operator" },
+      answers: {
+        reference: {
+          selectedOptions: [],
+          text: "AB12",
+          reasoning: "Matches the sample label.",
+        },
+      },
+      escalationId: "reference-value",
+      ownerSessionKey: "top",
+      prose: "Use this reference for the current sample.",
+    });
   });
 
   it("allows only a parent correlation token to answer its child", async () => {
@@ -1143,9 +1155,6 @@ describe("workflow MCP escalation tools", () => {
     expect(subject.deliveredAnswers).toHaveLength(2);
     expect(
       new Set(subject.deliveredAnswers.map(({ commandId }) => commandId)),
-    ).toHaveLength(2);
-    expect(
-      new Set(subject.deliveredAnswers.map(({ messageId }) => messageId)),
     ).toHaveLength(2);
   });
 

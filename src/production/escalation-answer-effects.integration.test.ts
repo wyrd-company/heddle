@@ -204,8 +204,6 @@ describe("production native question answer delivery", () => {
           ownerSessionKey: input.ownerSessionKey,
         },
         commandId: "replacement-reply",
-        message: "Answer the retained request.",
-        messageId: "replacement-message",
         opened: { ...opened, threadId: replacementThreadId },
       }),
     ).rejects.toThrow("Question reply cannot target a replacement thread");

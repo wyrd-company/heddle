@@ -63,8 +63,6 @@ export interface EscalationAnswerDelivery {
   deliver(input: {
     answered: AnsweredEscalation;
     commandId: string;
-    message: string;
-    messageId: string;
     opened: PendingEscalation;
   }): Promise<void>;
 }
@@ -686,8 +684,6 @@ export class EscalationCoordinator {
       await this.#delivery.deliver({
         answered,
         commandId: stableUuid(0),
-        message: this.#deliveryMessage(opened, answered),
-        messageId: stableUuid(32),
         opened,
       });
       this.#history.recordEffect(
@@ -704,25 +700,6 @@ export class EscalationCoordinator {
       await this.#decisionLog.record({ answered, opened });
       this.#history.recordEffect(opened, escalationEventTypes.decisionRecorded);
     }
-  }
-
-  #deliveryMessage(
-    opened: PendingEscalation,
-    answered: AnsweredEscalation,
-  ): string {
-    const answers = opened.questions.map((question) => {
-      const value = answered.answers[question.id]!;
-      const rendered = value.text || value.selectedOptions.join(", ");
-      return `Question: ${question.question}\nAnswer: ${rendered}\nReasoning: ${value.reasoning}`;
-    });
-    return [
-      `Escalation ${opened.escalationId} was answered.`,
-      ...answers,
-      ...(answered.prose === undefined
-        ? []
-        : [`Additional context: ${answered.prose}`]),
-      "Continue the stage using this answer.",
-    ].join("\n\n");
   }
 }
 

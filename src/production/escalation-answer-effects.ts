@@ -91,8 +91,6 @@ export class ProductionEscalationAnswerEffects
   async deliver(input: {
     answered: AnsweredEscalation;
     commandId: string;
-    message: string;
-    messageId: string;
     opened: PendingEscalation;
   }): Promise<void> {
     const binding = this.#currentDeliveryBinding(input.opened);
