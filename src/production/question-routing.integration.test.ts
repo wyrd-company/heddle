@@ -605,6 +605,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     expect(JSON.stringify(starts().at(-1))).toContain(
       "Finish the work or use advance",
     );
+    expect(composition.attention.list()).toEqual([]);
     await composition.scheduler.trigger();
     expect(starts()).toHaveLength(before + 1);
     const recovered = new ProductionQuestionRouting(
@@ -653,6 +654,74 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     expect(starts()).toHaveLength(before + 1);
   });
 
+  it.each(["session error", "observer error"])(
+    "keeps native adjudication pending after an ordinary %s",
+    async (failure) => {
+      const { t3, composition, runtime } = await setup(true);
+      t3.ask(runtime.threadId, "retained-request");
+      await composition.scheduler.trigger();
+      await composition.escalation.replayPendingRoutes();
+      const adjudication = composition.persistence
+        .listSessionRuntime()
+        .find((item) => item.stageId === "adjudication")!;
+      if (failure === "session error") {
+        const getShell = t3.getShell.bind(t3);
+        t3.getShell = async () => {
+          const shell = await getShell();
+          return {
+            ...shell,
+            threads: shell.threads.map((thread) =>
+              thread.id === runtime.threadId
+                ? { ...thread, session: { status: "error" } }
+                : thread,
+            ),
+          };
+        };
+      } else {
+        const getThread = t3.getThread.bind(t3);
+        t3.getThread = async (threadId) => {
+          if (threadId === runtime.threadId)
+            throw new Error("Snapshot temporarily unavailable");
+          return getThread(threadId);
+        };
+      }
+      await composition.scheduler.trigger();
+      await composition.escalation.replayPendingRoutes();
+      expect(
+        composition.escalation.pendingEscalations(runtime.instanceId),
+      ).toHaveLength(1);
+      expect(
+        composition.persistence
+          .replayEvents(runtime.instanceId)
+          .filter(
+            ({ type }) =>
+              type === "mcp:escalation-withdrawn" ||
+              type === "mcp:escalation-answered",
+          ),
+      ).toEqual([]);
+      expect(t3.userInputResponses).toEqual([]);
+      await expect(
+        new ProductionScopedAdjudication({
+          persistence: composition.persistence,
+          t3,
+        } as never).stop({
+          reason: "failed",
+          sessionKey: adjudication.sessionKey,
+        }),
+      ).rejects.toThrow(/answer is pending/);
+      if (failure === "observer error")
+        expect(JSON.stringify(composition.attention.list())).toContain(
+          "session-observation-failed",
+        );
+      expect(
+        t3.commands.filter(
+          (command) =>
+            command.type === "thread.session.stop" &&
+            command.threadId === adjudication.threadId,
+        ),
+      ).toEqual([]);
+    },
+  );
   it.each(["withdrawn", "asker absent"])(
     "stops the scoped adjudicator after its native question is %s",
     async (cancellation) => {

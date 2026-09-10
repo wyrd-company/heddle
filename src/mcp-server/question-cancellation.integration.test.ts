@@ -2,6 +2,7 @@
 // relationships:
 //   verifies: heddle
 // ---
+import { setImmediate } from "node:timers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EscalationCoordinator } from "./escalation-coordinator.js";
 import { EscalationHistory } from "./escalation-history.js";
@@ -85,11 +86,13 @@ describe("native question cancellation", () => {
     subject.coordinator.withdraw(opened);
     const cleanup = subject.coordinator.replayPendingRoutes();
     try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
       expect(stop).not.toHaveBeenCalled();
     } finally {
       release();
+      await cleanup;
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
-    await cleanup;
     expect(stop).toHaveBeenCalledExactlyOnceWith({
       reason: "withdrawn",
       sessionKey:

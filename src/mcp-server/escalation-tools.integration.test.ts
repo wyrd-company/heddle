@@ -400,6 +400,7 @@ describe("workflow MCP escalation tools", () => {
 
   it("does not expose an MCP escalate tool", async () => {
     const subject = await createEscalationFixture();
+    expect(subject.handler.toolNames.has("escalate")).toBe(false);
     createEscalationInstance(subject.persistence, "instance-description", [
       {
         sessionKey: "top",
