@@ -216,6 +216,45 @@ const spawn = (coordinator: SubagentCoordinator, store: MemoryStore) =>
   });
 
 describe("SubagentCoordinator", () => {
+  it("names the child after the parent agent and its own session key", async () => {
+    const test = fixture();
+    const stored = test.store.record.state.handoffs[0] as {
+      handoff: string;
+    };
+    stored.handoff = JSON.stringify({
+      skillPointer: "skill://sample",
+      stage: { agentName: "sample-agent", name: "implement" },
+    });
+
+    await spawn(test.coordinator, test.store);
+
+    expect(test.bootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handoff: expect.objectContaining({
+          stage: expect.objectContaining({
+            agentName: "sample-agent-child-se",
+          }),
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("falls back to a placeholder name when the parent has none", async () => {
+    const test = fixture();
+
+    await spawn(test.coordinator, test.store);
+
+    expect(test.bootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handoff: expect.objectContaining({
+          stage: expect.objectContaining({ agentName: "subagent-child-se" }),
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
   it("claims one subtree and bootstraps the child through the stage-session path", async () => {
     const test = fixture();
 

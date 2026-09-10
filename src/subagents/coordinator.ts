@@ -263,6 +263,7 @@ export class SubagentCoordinator {
           handoff: {
             skillPointer: this.#skillPointer(binding),
             stage: {
+              agentName: this.#childAgentName(binding, assignment.sessionKey),
               kind: "standard",
               name: binding.stage.id,
               priorStageOutputs: [],
@@ -400,7 +401,37 @@ export class SubagentCoordinator {
     return record;
   }
 
-  #skillPointer(binding: WorkflowMcpSessionBinding): string {
+  #childAgentName(
+    binding: WorkflowMcpSessionBinding,
+    childSessionKey: string,
+  ): string {
+    const shortId = childSessionKey.slice(0, 8);
+    return `${this.#parentAgentName(binding) ?? "subagent"}-${shortId}`;
+  }
+
+  #parentAgentName(binding: WorkflowMcpSessionBinding): string | undefined {
+    let handoff: unknown;
+    try {
+      handoff = this.#parentHandoff(binding);
+    } catch {
+      handoff = undefined;
+    }
+    if (
+      typeof handoff === "object" &&
+      handoff !== null &&
+      "stage" in handoff &&
+      typeof handoff.stage === "object" &&
+      handoff.stage !== null &&
+      "agentName" in handoff.stage &&
+      typeof handoff.stage.agentName === "string" &&
+      handoff.stage.agentName.trim() !== ""
+    ) {
+      return handoff.stage.agentName;
+    }
+    return undefined;
+  }
+
+  #parentHandoff(binding: WorkflowMcpSessionBinding): unknown {
     const stored = binding.instance.state.handoffs.find(
       (candidate) =>
         typeof candidate === "object" &&
@@ -417,7 +448,11 @@ export class SubagentCoordinator {
     ) {
       throw new Error("The parent session has no canonical handoff");
     }
-    const handoff = JSON.parse(stored["handoff"]) as unknown;
+    return JSON.parse(stored["handoff"]) as unknown;
+  }
+
+  #skillPointer(binding: WorkflowMcpSessionBinding): string {
+    const handoff = this.#parentHandoff(binding);
     if (
       typeof handoff !== "object" ||
       handoff === null ||
