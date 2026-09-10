@@ -62,6 +62,8 @@ const openEscalation = (
     runtime.instanceId,
     "mcp:escalation-opened",
     {
+      threadId: "thread-17",
+      requestId: "request-one",
       attentionId,
       escalationId,
       instanceId: runtime.instanceId,
@@ -69,20 +71,19 @@ const openEscalation = (
       ownerSessionKey: runtime.sessionKey,
       questions: [
         {
+          multiSelect: false,
           id: "selection",
           options: [
             {
               description: "Use the first sample",
-              id: "first",
-              label: "First",
+              label: "first",
             },
             {
               description: "Use the second sample",
-              id: "second",
-              label: "Second",
+              label: "second",
             },
           ],
-          prompt,
+          question: prompt,
         },
       ],
       stage: runtime.stageId,
@@ -270,7 +271,7 @@ describe("production notification failure projection", () => {
     ).toContainEqual(
       expect.objectContaining({
         attentionId: targetId,
-        questions: [expect.objectContaining({ prompt: targetPrompt })],
+        questions: [expect.objectContaining({ question: targetPrompt })],
       }),
     );
     expect(first.attention.list()).toContainEqual(
@@ -321,7 +322,7 @@ describe("production notification failure projection", () => {
     ).toContainEqual(
       expect.objectContaining({
         attentionId: targetId,
-        questions: [expect.objectContaining({ prompt: targetPrompt })],
+        questions: [expect.objectContaining({ question: targetPrompt })],
       }),
     );
     await restarted.close();
@@ -370,7 +371,7 @@ describe("production notification failure projection", () => {
     ).toContainEqual(
       expect.objectContaining({
         attentionId: targetId,
-        questions: [expect.objectContaining({ prompt: targetPrompt })],
+        questions: [expect.objectContaining({ question: targetPrompt })],
       }),
     );
     await afterActionRestart.close();
@@ -401,6 +402,7 @@ describe("production notification failure projection", () => {
         throw new Error("Synthetic network failure");
       },
     );
+    const t3 = new SyntheticT3();
     const createComposition = () =>
       createProductionComposition({
         workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -411,7 +413,7 @@ describe("production notification failure projection", () => {
         },
         notificationNow: () => now,
         pushoverFetch: fetch,
-        t3: new SyntheticT3(),
+        t3,
       });
     const first = createComposition();
     await first.start();
@@ -512,7 +514,7 @@ describe("production notification failure projection", () => {
     ).toContainEqual(
       expect.objectContaining({
         attentionId: targetId,
-        questions: [expect.objectContaining({ prompt: targetPrompt })],
+        questions: [expect.objectContaining({ question: targetPrompt })],
       }),
     );
     await first.close();
@@ -540,7 +542,7 @@ describe("production notification failure projection", () => {
     ).toContainEqual(
       expect.objectContaining({
         attentionId: targetId,
-        questions: [expect.objectContaining({ prompt: targetPrompt })],
+        questions: [expect.objectContaining({ question: targetPrompt })],
       }),
     );
     await restarted.close();

@@ -186,9 +186,9 @@ describe("Heddle devcontainer feature", () => {
       "utf8",
     );
 
-    expect(versions.t3).toBe("0.0.37-wyrd.2");
+    expect(versions.t3).toBe("0.0.38-wyrd.1");
     expect(versions.t3PackageSource).toBe(
-      "https://github.com/wyrd-company/t3code/releases/download/server/0.0.37-wyrd.2/t3-0.0.37-wyrd.2.tgz",
+      "https://github.com/wyrd-company/t3code/releases/download/server/0.0.38-wyrd.1/t3-0.0.38-wyrd.1.tgz",
     );
     expect(versions.kanbanMd).toBe("0.37.0-fork+b9fc380");
     expect(readme).toContain(

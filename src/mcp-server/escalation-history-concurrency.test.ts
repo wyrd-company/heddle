@@ -60,7 +60,7 @@ describe("escalation history disposition concurrency", () => {
       dispositions: [{ description: "Complete the sample", name: "complete" }],
       instance: record,
       sessionKey: "session-a",
-      stage: { id: "sample-stage", tools: ["escalate"] },
+      stage: { id: "sample-stage", tools: [] },
       taskContext: { title: "Handle a sample" },
       token: "token-a",
     };
@@ -69,23 +69,24 @@ describe("escalation history disposition concurrency", () => {
       new EscalationHistory(persistence).open(
         binding,
         {
+          threadId: "thread-17",
+          requestId: "request-one",
           escalationId: "choice-a",
           questions: [
             {
+              multiSelect: false,
               id: "label-choice",
               options: [
                 {
                   description: "Use the first sample label",
-                  id: "first",
-                  label: "First",
+                  label: "first",
                 },
                 {
                   description: "Use the second sample label",
-                  id: "second",
-                  label: "Second",
+                  label: "second",
                 },
               ],
-              prompt: "Which sample label should be used?",
+              question: "Which sample label should be used?",
             },
           ],
         },

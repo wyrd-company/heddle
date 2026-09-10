@@ -166,6 +166,13 @@ export const observeSessionLiveness = async (
     await resolveCompletedSessionLiveness(options, target);
     return undefined;
   }
+  if (
+    options.questions !== undefined &&
+    (phase === "completed" || phase === "none")
+  ) {
+    await resolveCompletedSessionLiveness(options, target);
+    return undefined;
+  }
   const kind = livenessKindFor(phase);
   const fingerprint = stageFingerprint(record, target.sessionKey);
   const latest = eventsForSession(

@@ -127,25 +127,28 @@ export const connectEscalationClient = async (
 
 export const sampleEscalationQuestions: EscalationQuestion[] = [
   {
+    multiSelect: false,
     id: "delivery-window",
     options: [
       {
         description: "Continue with the current delivery window",
-        id: "continue",
-        label: "Continue",
+        label: "continue",
       },
       {
         description: "Wait for the next delivery window",
-        id: "wait",
-        label: "Wait",
+        label: "wait",
       },
     ],
-    prompt: "Which delivery window should be used?",
+    question: "Which delivery window should be used?",
   },
 ];
 
 export const sampleEscalationAnswer: EscalationAnswers = {
-  "delivery-window": "continue",
+  "delivery-window": {
+    selectedOptions: ["continue"],
+    text: "",
+    reasoning: "The current window fits the requested result.",
+  },
 };
 
 export const createEscalationFixture = async (

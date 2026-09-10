@@ -21,6 +21,9 @@ import {
   steerStageSession,
 } from "./session-bootstrap.js";
 import { T3ControlPlaneClient } from "./t3-control-plane-client.js";
+import { createWorkflowMcpHttpHandler } from "../mcp-server/workflow-mcp-handler.js";
+import { startQualificationMcpServer } from "./fixtures/workflow-mcp-http.js";
+import { safeT3StartupDiagnostic } from "../production/driver-qualification.test-support.js";
 import {
   sampleHandoffTemplate,
   sampleTemplateAuthority,
@@ -71,6 +74,8 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
   let projectPath = "";
   let templateRepositoryRoot = "";
   let requestLog = "";
+  let mcpServer: Awaited<ReturnType<typeof startQualificationMcpServer>>;
+  let mcpHandler: ReturnType<typeof createWorkflowMcpHttpHandler>;
 
   beforeAll(async () => {
     scratch = await mkdtemp(join(tmpdir(), "heddle-session-bootstrap-"));
@@ -160,13 +165,30 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
     persistence = new SqlitePersistence({ stateDirectory });
     persistence.createInstance("instance-1", {
       correlationTokens: {},
-      flowcraftContext: null,
+      flowcraftContext: {
+        awaitingNodeIds: ["prepare"],
+        blueprintBlobHash: "a".repeat(40),
+        blueprintPath: "blueprints/sample-process.json",
+        completedOperations: {},
+      },
       handoffs: [],
       todoState: null,
     });
+    mcpServer = await startQualificationMcpServer();
+    mcpHandler = createWorkflowMcpHttpHandler({
+      persistence,
+      lifecycle: {
+        resume: async () => {
+          throw new Error("Bootstrap fixture does not advance");
+        },
+      },
+    });
+    mcpServer.use(mcpHandler);
   }, 20_000);
 
   afterAll(async () => {
+    await mcpHandler?.close();
+    await mcpServer?.stop();
     persistence?.close();
     if (server && server.exitCode == null) {
       server.kill("SIGTERM");
@@ -231,13 +253,19 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
           tools: ["advance", "get_task_context"],
         }),
         t3: client,
-        workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+        workflowMcpEndpoint: mcpServer.endpoint,
       },
     );
 
     let running = false;
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      if ((await client.observeThread(session.threadId)).phase === "running") {
+      const observation = await client.observeThread(session.threadId);
+      if (observation.phase === "failed") {
+        throw new Error(
+          `Stage session failed before steering: ${safeT3StartupDiagnostic(observation.thread.session?.lastError ?? "No provider diagnostic")}`,
+        );
+      }
+      if (observation.phase === "running") {
         running = true;
         break;
       }

@@ -102,6 +102,8 @@ const attentionFrom = (opened: PendingEscalation): EscalationAttention => ({
   openedAt: opened.openedAt,
   ownerSessionKey: opened.ownerSessionKey,
   questions: opened.questions,
+  requestId: opened.requestId,
+  threadId: opened.threadId,
   stage: opened.stage,
   ...(opened.adjudication === undefined
     ? {}
@@ -140,7 +142,10 @@ export class EscalationCoordinator {
   }
 
   async escalate(
-    binding: WorkflowMcpSessionBinding,
+    binding: Pick<
+      WorkflowMcpSessionBinding,
+      "instance" | "sessionKey" | "parentSessionKey" | "stage"
+    >,
     input: EscalationInput,
   ): Promise<EscalationResult> {
     const history = this.#history.open(
@@ -160,6 +165,15 @@ export class EscalationCoordinator {
             ),
           },
     );
+    if (
+      this.#history.find(
+        binding.instance.instanceId,
+        binding.sessionKey,
+        input.escalationId,
+      ).withdrawn
+    ) {
+      return { awaitingAnswer: false, escalationId: input.escalationId };
+    }
     if (history.answered === undefined) {
       void this.#ensureRouted(history.opened).catch(() => undefined);
     } else {
@@ -205,9 +219,6 @@ export class EscalationCoordinator {
           throw new TypeError(
             "Adjudication may answer only its bound escalation occurrence",
           );
-        }
-        if (parsed.prose === undefined) {
-          throw new TypeError("Adjudication answer requires reasoning");
         }
         const answered = await this.#answer(
           opened,
@@ -282,6 +293,8 @@ export class EscalationCoordinator {
       occurrence.escalationId,
     );
     if (
+      opened.answered !== undefined ||
+      opened.withdrawn ||
       opened.opened?.answeringAuthority.kind !== "adjudication" ||
       opened.opened.answeringAuthority.sessionKey !== binding.sessionKey
     ) {
@@ -379,6 +392,10 @@ export class EscalationCoordinator {
     return this.#history.pending(instanceId);
   }
 
+  withdraw(opened: PendingEscalation): void {
+    this.#history.withdraw(opened);
+  }
+
   isAwaitingAnswer(instanceId: string, sessionKey: string): boolean {
     return this.pendingEscalations(instanceId).some(
       ({ ownerSessionKey }) => ownerSessionKey === sessionKey,
@@ -410,8 +427,10 @@ export class EscalationCoordinator {
   requireNoPendingForSession(instanceId: string, sessionKey: string): void {
     if (
       this.pendingEscalations(instanceId).some(
-        ({ ownerSessionKey, parentSessionKey }) =>
-          ownerSessionKey === sessionKey || parentSessionKey === sessionKey,
+        ({ ownerSessionKey, answeringAuthority }) =>
+          ownerSessionKey === sessionKey ||
+          (answeringAuthority.kind !== "operator" &&
+            answeringAuthority.sessionKey === sessionKey),
       )
     ) {
       throw new Error(
@@ -636,11 +655,8 @@ export class EscalationCoordinator {
   ): string {
     const answers = opened.questions.map((question) => {
       const value = answered.answers[question.id]!;
-      const rendered =
-        question.kind === "value"
-          ? value
-          : `${question.options.find(({ id }) => id === value)!.label} (${value})`;
-      return `Question: ${question.prompt}\nAnswer: ${rendered}`;
+      const rendered = value.text || value.selectedOptions.join(", ");
+      return `Question: ${question.question}\nAnswer: ${rendered}\nReasoning: ${value.reasoning}`;
     });
     return [
       `Escalation ${opened.escalationId} was answered.`,

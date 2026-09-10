@@ -44,25 +44,20 @@ describe("production attention projection", () => {
             options: [
               {
                 description: "Use the first path",
-                id: "first",
                 label: "First",
               },
               {
                 description: "Use the second path",
-                id: "second",
                 label: "Second",
               },
             ],
-            prompt: "Select a path",
+            question: "Select a path",
           },
           {
             id: "sample-reference",
-            kind: "value",
-            prompt: "Enter the sample reference",
-            validation: {
-              maxLength: 12,
-              minLength: 4,
-            },
+            multiSelect: false,
+            options: [],
+            question: "Enter the sample reference",
           },
         ],
         stage: "implement",
@@ -82,25 +77,18 @@ describe("production attention projection", () => {
           },
           input: {
             kind: "questions",
-            prose: { label: "Additional context", maxLength: 4_000 },
             questions: [
               {
                 id: "question-one",
                 multiSelect: false,
-                options: [
-                  { label: "First", value: "first" },
-                  { label: "Second", value: "second" },
-                ],
-                prompt: "Select a path",
+                options: [{ label: "First" }, { label: "Second" }],
+                question: "Select a path",
               },
               {
                 id: "sample-reference",
-                kind: "value",
-                prompt: "Enter the sample reference",
-                validation: {
-                  maxLength: 12,
-                  minLength: 4,
-                },
+                multiSelect: false,
+                options: [],
+                question: "Enter the sample reference",
               },
             ],
           },
@@ -177,10 +165,10 @@ describe("production attention projection", () => {
           id: "question-one",
           multiSelect: true,
           options: [
-            { description: "First route", label: "First", value: "First" },
-            { description: "Second route", label: "Second", value: "Second" },
+            { description: "First route", label: "First" },
+            { description: "Second route", label: "Second" },
           ],
-          prompt: "Choose routes",
+          question: "Choose routes",
         },
       ],
     });
@@ -420,7 +408,7 @@ describe("production attention projection", () => {
         }),
         [runtime],
       ),
-    ).toThrow("has no user-input questions");
+    ).toThrow("has no questions");
     expect(() =>
       projectProductionAttention(
         record("attention-approval", {
@@ -444,17 +432,17 @@ describe("production attention projection", () => {
             {
               id: "question-one",
               options: [
-                { description: "First", id: "same", label: "First" },
-                { description: "Second", id: "same", label: "Second" },
+                { description: "First", label: "Same" },
+                { description: "Second", label: "Same" },
               ],
-              prompt: "Select a path",
+              question: "Select a path",
             },
           ],
           stage: "implement",
         }),
         [runtime],
       ),
-    ).toThrow("repeats option 'same'");
+    ).toThrow("repeats option 'Same'");
     expect(() =>
       projectProductionAttention(
         record("attention-input", {

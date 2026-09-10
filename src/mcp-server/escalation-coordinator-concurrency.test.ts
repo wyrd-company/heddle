@@ -16,6 +16,8 @@ describe("escalation coordinator disposition concurrency", () => {
       (instanceId, index): PersistedEvent => ({
         instanceId,
         payload: {
+          threadId: "thread-17",
+          requestId: "request-one",
           attentionId: `${instanceId}:session:choice`,
           escalationId: "choice",
           instanceId,
@@ -23,20 +25,19 @@ describe("escalation coordinator disposition concurrency", () => {
           ownerSessionKey: "session",
           questions: [
             {
+              multiSelect: false,
               id: "selection",
               options: [
                 {
                   description: "Use the first sample",
-                  id: "first",
-                  label: "First",
+                  label: "first",
                 },
                 {
                   description: "Use the second sample",
-                  id: "second",
-                  label: "Second",
+                  label: "second",
                 },
               ],
-              prompt: "Which sample should be selected?",
+              question: "Which sample should be selected?",
             },
           ],
           stage: "sample-stage",
@@ -131,26 +132,27 @@ describe("escalation coordinator disposition concurrency", () => {
       events.push({
         instanceId: "instance-a",
         payload: {
+          threadId: "thread-17",
+          requestId: "request-one",
           attentionId: "instance-a:session-a:choice-a",
           escalationId: "choice-a",
           openedAt: "2026-01-01T00:00:00.000Z",
           ownerSessionKey: "session-a",
           questions: [
             {
+              multiSelect: false,
               id: "label-choice",
               options: [
                 {
                   description: "Use the first sample label",
-                  id: "first",
-                  label: "First",
+                  label: "first",
                 },
                 {
                   description: "Use the second sample label",
-                  id: "second",
-                  label: "Second",
+                  label: "second",
                 },
               ],
-              prompt: "Which sample label should be used?",
+              question: "Which sample label should be used?",
             },
           ],
           stage: "sample-stage",
@@ -204,26 +206,27 @@ describe("escalation coordinator disposition concurrency", () => {
       {
         instanceId: record.instanceId,
         payload: {
+          threadId: "thread-17",
+          requestId: "request-one",
           attentionId: "attention-authority",
           escalationId: "authority-choice",
           openedAt: "2026-01-01T00:00:00.000Z",
           ownerSessionKey: "owner-session",
           questions: [
             {
+              multiSelect: false,
               id: "selection",
               options: [
                 {
                   description: "Use the first sample",
-                  id: "first",
-                  label: "First",
+                  label: "first",
                 },
                 {
                   description: "Use the second sample",
-                  id: "second",
-                  label: "Second",
+                  label: "second",
                 },
               ],
-              prompt: "Which sample should be selected?",
+              question: "Which sample should be selected?",
             },
           ],
           stage: "sample-stage",
@@ -269,7 +272,13 @@ describe("escalation coordinator disposition concurrency", () => {
 
     await expect(
       coordinator.answerAsOperator({
-        answers: { selection: "first" },
+        answers: {
+          selection: {
+            selectedOptions: ["first"],
+            text: "",
+            reasoning: "The selected route fits the requested result.",
+          },
+        },
         escalationId: "authority-choice",
         instanceId: record.instanceId,
         ownerSessionKey: "owner-session",

@@ -24,9 +24,10 @@ const hasPendingEscalation = (
   options.escalations
     .pendingEscalations(target.instanceId)
     .some(
-      ({ ownerSessionKey, parentSessionKey }) =>
+      ({ ownerSessionKey, answeringAuthority }) =>
         ownerSessionKey === target.sessionKey ||
-        parentSessionKey === target.sessionKey,
+        (answeringAuthority.kind !== "operator" &&
+          answeringAuthority.sessionKey === target.sessionKey),
     );
 
 const hasConversationalHandoff = (
@@ -73,7 +74,7 @@ const isActive = (thread: T3ShellThread): boolean =>
 const hasBackgroundLiveness = (thread: T3ShellThread): boolean =>
   thread.backgroundLiveness != null;
 
-const hasQueuedTurn = (thread: T3ShellThread): boolean => {
+export const hasQueuedTurn = (thread: T3ShellThread): boolean => {
   if (thread.latestUserMessageAt == null) return false;
   const latestUserMessageAt = Date.parse(thread.latestUserMessageAt);
   if (!Number.isFinite(latestUserMessageAt)) return true;

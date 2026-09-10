@@ -185,7 +185,7 @@ button, input, select { font: inherit; }
   letter-spacing: 0.09em;
 }
 
-.attention-toggle:focus-visible, .attention-close:focus-visible, .attention-action:focus-visible, .attention-option input:focus-visible {
+.attention-toggle:focus-visible, .attention-close:focus-visible, .attention-action:focus-visible, .attention-option input:focus-visible, .attention-question textarea:focus-visible {
   outline: 2px solid var(--signal-focus);
   outline-offset: 3px;
 }
@@ -248,6 +248,8 @@ button, input, select { font: inherit; }
 .attention-actions { margin-top: 14px; padding-top: 13px; display: grid; gap: 10px; border-top: 1px dotted var(--rule-dark); }
 .attention-question { min-width: 0; margin: 0; padding: 9px; display: grid; gap: 8px; border: 1px solid var(--rule); }
 .attention-question legend { padding: 0 5px; font-size: 10px; font-weight: 800; }
+.attention-question > label { display: grid; gap: 4px; }
+.attention-question textarea { box-sizing: border-box; width: 100%; max-width: 100%; min-height: 54px; resize: vertical; }
 .attention-option { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; color: var(--muted); font-size: 10px; }
 .attention-option input { margin-top: 2px; accent-color: var(--signal); }
 .attention-option strong, .attention-option small { display: block; }
@@ -714,26 +716,22 @@ enableKeyboardScroll(boardElement);
 enableKeyboardScroll(graphViewportElement);
 
 const selectedAnswers = (questions, controls) => {
-  const answers = {};
+  const answers = Object.create(null);
   for (const question of questions) {
-    if (question.kind === "value") {
-      const control = controls.find(({ questionId }) => questionId === question.id);
-      if (!control || control.input.value.length === 0) {
-        throw new Error("Enter an answer for " + question.prompt);
-      }
-      answers[question.id] = control.input.value;
-      continue;
+    const control = controls.find(({ questionId }) => questionId === question.id);
+    const selectedOptions = control.options.filter((input) => input.checked).map((input) => input.value);
+    const answerText = control.answerText.value;
+    const reasoning = control.reasoning.value;
+    if ((selectedOptions.length > 0) === (answerText.trim().length > 0)) {
+      throw new Error("Select options or enter an answer for " + question.question);
     }
-    const selected = controls
-      .filter(({ questionId, input }) => questionId === question.id && input.checked)
-      .map(({ input }) => input.value);
-    if (selected.length === 0) throw new Error("Select an answer for " + question.prompt);
-    answers[question.id] = question.multiSelect ? selected : selected[0];
+    if (reasoning.trim().length === 0) throw new Error("Enter reasoning for " + question.question);
+    answers[question.id] = { selectedOptions, text: answerText, reasoning };
   }
   return answers;
 };
 
-const performAttentionAction = async (entry, action, controls, prose, button) => {
+const performAttentionAction = async (entry, action, controls, button) => {
   button.disabled = true;
   attentionStatusElement.dataset.error = "false";
   attentionStatusElement.textContent = "Applying " + action.label + "…";
@@ -741,7 +739,6 @@ const performAttentionAction = async (entry, action, controls, prose, button) =>
     const body = { fingerprint: entry.fingerprint };
     if (action.input.kind === "questions") {
       body.answers = selectedAnswers(action.input.questions, controls);
-      if (prose && prose.value.trim().length > 0) body.prose = prose.value;
     }
     await fetchJson(
       "/api/attention/" + encodeURIComponent(entry.attentionId) + "/actions/" + encodeURIComponent(action.actionId),
@@ -763,7 +760,6 @@ const performAttentionAction = async (entry, action, controls, prose, button) =>
 const createAttentionAction = (entry, action) => {
   const container = document.createElement("section");
   const controls = [];
-  let prose;
   if (action.input.kind === "questions") {
     for (const question of action.input.questions) {
       const fieldset = document.createElement("fieldset");
@@ -772,45 +768,54 @@ const createAttentionAction = (entry, action) => {
         text(
           "legend",
           question.header
-            ? question.header + " — " + question.prompt
-            : question.prompt,
+            ? question.header + " — " + question.question
+            : question.question,
         ),
       );
-      if (question.kind === "value") {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.name = entry.attentionId + ":" + action.actionId + ":" + question.id;
-        input.minLength = question.validation.minLength;
-        input.maxLength = question.validation.maxLength;
-        fieldset.append(input);
-        controls.push({ input, questionId: question.id });
-      } else for (const option of question.options) {
+      const answerText = document.createElement("textarea");
+      answerText.value = "";
+      answerText.name = question.id + ":text";
+      const reasoning = document.createElement("textarea");
+      reasoning.value = "";
+      reasoning.name = question.id + ":reasoning";
+      reasoning.required = true;
+      const optionInputs = [];
+      for (const option of question.options) {
         const label = document.createElement("label");
         label.className = "attention-option";
         const input = document.createElement("input");
         input.type = question.multiSelect ? "checkbox" : "radio";
         input.name = entry.attentionId + ":" + action.actionId + ":" + question.id;
-        input.value = option.value;
+        input.value = option.label;
+        input.addEventListener("change", () => {
+          if (!input.checked) return;
+          answerText.value = "";
+          if (!question.multiSelect) {
+            for (const other of optionInputs) if (other !== input) other.checked = false;
+          }
+        });
         const copy = document.createElement("span");
         copy.append(text("strong", option.label));
         if (option.description) copy.append(text("small", option.description));
         label.append(input, copy);
         fieldset.append(label);
-        controls.push({ input, questionId: question.id });
+        optionInputs.push(input);
       }
+      answerText.addEventListener("input", () => {
+        for (const input of optionInputs) input.checked = false;
+      });
+      const textLabel = text("label", question.options.length > 0 ? "Or enter an answer" : "Answer");
+      textLabel.append(answerText);
+      const reasoningLabel = text("label", "Reasoning (required)");
+      reasoningLabel.append(reasoning);
+      fieldset.append(textLabel, reasoningLabel);
+      controls.push({ questionId: question.id, options: optionInputs, answerText, reasoning });
       container.append(fieldset);
-    }
-    if (action.input.prose) {
-      const label = text("label", action.input.prose.label, "attention-question");
-      prose = document.createElement("textarea");
-      prose.maxLength = action.input.prose.maxLength;
-      label.append(prose);
-      container.append(label);
     }
   }
   const button = text("button", action.label + " →", "attention-action");
   button.type = "button";
-  button.addEventListener("click", () => performAttentionAction(entry, action, controls, prose, button));
+  button.addEventListener("click", () => performAttentionAction(entry, action, controls, button));
   container.append(button);
   return container;
 };

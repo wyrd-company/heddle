@@ -118,11 +118,8 @@ describe("global console attention overlay", () => {
                 header: "Batch size",
                 id: "batch-size",
                 multiSelect: false,
-                options: [
-                  { label: "Small", value: "small" },
-                  { label: "Large", value: "large" },
-                ],
-                prompt: "Which batch size should be used?",
+                options: [{ label: "Small" }, { label: "Large" }],
+                question: "Which batch size should be used?",
               },
             ],
           },
@@ -152,6 +149,8 @@ describe("global console attention overlay", () => {
       elements.find(({ tagName }) => tagName === "legend")?.textContent,
     ).toBe("Batch size — Which batch size should be used?");
     inputs[0]!.checked = true;
+    elements.find(({ name }) => name === "batch-size:reasoning")!.value =
+      "Fits the available ingredients.";
     action!.dispatch("click");
 
     await vi.waitFor(() => expect(harness.attentionRequests).toHaveLength(1));
@@ -161,7 +160,13 @@ describe("global console attention overlay", () => {
     expect(
       JSON.parse(String(harness.attentionRequests[0]?.options?.body)),
     ).toEqual({
-      answers: { "batch-size": "small" },
+      answers: {
+        "batch-size": {
+          selectedOptions: ["Small"],
+          text: "",
+          reasoning: "Fits the available ingredients.",
+        },
+      },
       fingerprint: entry.fingerprint,
     });
     expect(harness.location()).toBe(
@@ -219,6 +224,113 @@ describe("global console attention overlay", () => {
     ]);
     expect(action?.textContent).toBe("Retry notification →");
   });
+
+  it.each([false, true])(
+    "switches options and text while retaining reasoning (multiSelect=%s)",
+    async (multiSelect) => {
+      const entry = createConsoleAttention({
+        actions: [
+          {
+            actionId: "answer",
+            label: "Answer",
+            contract: {
+              kind: "escalation.answer",
+              escalationId: "sample",
+              instanceId: "instance-11",
+              ownerSessionKey: "sample-session",
+            },
+            input: {
+              kind: "questions",
+              questions: [
+                {
+                  id: "choice",
+                  question: "Choose ingredients",
+                  multiSelect,
+                  options: [{ label: "First" }, { label: "Second" }],
+                },
+                {
+                  id: "reference",
+                  question: "Enter a reference",
+                  multiSelect: false,
+                  options: [],
+                },
+              ],
+            },
+          },
+        ],
+        attentionId: "attention-11",
+        instanceId: "instance-11",
+        kind: "escalation",
+        message: "Sample input needed",
+        scope: "task:11",
+        taskId: 11,
+      });
+      const harness = await clientHarness(
+        [rootTask, childTask],
+        undefined,
+        undefined,
+        undefined,
+        [entry],
+      );
+      const elements = harness.attentionElements();
+      const options = elements.filter(({ tagName }) => tagName === "input");
+      expect(options.map(({ type }) => type)).toEqual([
+        multiSelect ? "checkbox" : "radio",
+        multiSelect ? "checkbox" : "radio",
+      ]);
+      const answerText = elements.find(({ name }) => name === "choice:text")!;
+      const reasoning = elements.find(
+        ({ name }) => name === "choice:reasoning",
+      )!;
+      const reference = elements.find(({ name }) => name === "reference:text")!;
+      const referenceReasoning = elements.find(
+        ({ name }) => name === "reference:reasoning",
+      )!;
+      const action = elements.find(
+        ({ className }) => className === "attention-action",
+      )!;
+      reasoning.value = "Fits the recipe.";
+      options[0]!.checked = true;
+      options[0]!.dispatch("change");
+      options[1]!.checked = true;
+      options[1]!.dispatch("change");
+      expect(options[0]!.checked).toBe(multiSelect);
+      answerText.value = "A different ingredient";
+      answerText.dispatch("input");
+      expect(options.every(({ checked }) => !checked)).toBe(true);
+      expect(reasoning.value).toBe("Fits the recipe.");
+      options[0]!.checked = true;
+      options[0]!.dispatch("change");
+      expect(answerText.value).toBe("");
+      expect(reasoning.value).toBe("Fits the recipe.");
+      reference.value = "sample-12";
+      action.dispatch("click");
+      expect(harness.attentionRequests).toHaveLength(0);
+      expect(harness.attentionStatus.textContent).toContain(
+        "Enter reasoning for Enter a reference",
+      );
+      referenceReasoning.value = "Matches the sample label.";
+      action.dispatch("click");
+      await vi.waitFor(() => expect(harness.attentionRequests).toHaveLength(1));
+      expect(
+        JSON.parse(String(harness.attentionRequests[0]?.options?.body)),
+      ).toEqual({
+        fingerprint: entry.fingerprint,
+        answers: {
+          choice: {
+            selectedOptions: ["First"],
+            text: "",
+            reasoning: "Fits the recipe.",
+          },
+          reference: {
+            selectedOptions: [],
+            text: "sample-12",
+            reasoning: "Matches the sample label.",
+          },
+        },
+      });
+    },
+  );
 
   it("links an originating production error to its incident lifecycle canvas", async () => {
     const entry = createConsoleAttention({

@@ -189,7 +189,7 @@ const binding: WorkflowMcpSessionBinding = {
   dispositions: [],
   instance,
   sessionKey: "task-17:implement",
-  stage: { id: "implement", skills: [], tools: ["escalate", "answer"] },
+  stage: { id: "implement", skills: [], tools: ["answer"] },
   taskContext: { id: 17, title: "Example Item" },
   token: "correlation-token",
 };
@@ -197,15 +197,18 @@ if (mode === "resume") {
   await composition.start();
 } else {
   await composition.escalation.escalate(binding, {
+    threadId: "thread-17",
+    requestId: "request-one",
     escalationId: "delivery-choice",
     questions: [
       {
+        multiSelect: false,
         id: "decision",
         options: [
-          { description: "Use route A", id: "a", label: "Route A" },
-          { description: "Use route B", id: "b", label: "Route B" },
+          { description: "Use route A", label: "a" },
+          { description: "Use route B", label: "b" },
         ],
-        prompt: "Choose a route",
+        question: "Choose a route",
       },
     ],
   });

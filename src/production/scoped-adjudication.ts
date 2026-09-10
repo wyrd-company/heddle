@@ -4,6 +4,7 @@
 // ---
 
 import type { BoardTask, KanbanBoardAdapter } from "../board-adapter/index.js";
+import { EscalationHistory } from "../mcp-server/escalation-history.js";
 import { ensureCorrelationToken } from "../control-plane/correlation-token.js";
 import { pendingRequestActivitiesFor } from "../control-plane/session-observation-attention.js";
 import type { T3ThreadActivity } from "../control-plane/t3-control-plane-client.js";
@@ -144,10 +145,10 @@ const renderPrompt = (input: {
     "# Scoped escalation adjudication",
     "",
     "You have authority only to answer the bound escalation or decline it to the operator.",
-    "Use `answer` with every offered question ID and include your reasoning in `prose`.",
+    "Use `answer` with every question ID. Each answer requires selectedOptions (offered labels), text, and reasoning. Supply either selected options or text, never both. Respect multiSelect; zero options requires text.",
     "Use `decline` with a concise reason and reasoning when the decision belongs to the operator.",
     "Do not change board state, tasks, repositories, service configuration, or start another session.",
-    "Do not request approval or user input. Finish after one tool call.",
+    "Finish through the approved answer or decline tool. Do not stop while you owe an answer. If you need clarification, use the harness question tool and wait for its answer.",
     "",
     renderAdjudicationBoundary(input.policy.policy),
     "",
@@ -334,6 +335,18 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
   }): Promise<void> {
     const runtime = this.#runtime(input.sessionKey);
     if (runtime === undefined) return;
+    if (
+      new EscalationHistory(this.options.persistence)
+        .pending(runtime.instanceId)
+        .some(
+          ({ answeringAuthority, ownerSessionKey }) =>
+            ownerSessionKey === input.sessionKey ||
+            (answeringAuthority.kind !== "operator" &&
+              answeringAuthority.sessionKey === input.sessionKey),
+        )
+    ) {
+      throw new Error("Adjudication cannot stop while its answer is pending");
+    }
     const thread = (await this.options.t3.getShell()).threads.find(
       ({ id }) => id === runtime.threadId,
     );
@@ -362,7 +375,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       ({ id }) => id === runtime.threadId,
     );
     if (thread === undefined) return undefined;
-    if (thread.hasPendingApprovals || thread.hasPendingUserInput) {
+    if (thread.hasPendingApprovals) {
       return "Adjudication attempted operator interaction outside its authority";
     }
     return undefined;
@@ -389,10 +402,6 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         ({ id }) => id === runtime.threadId,
       );
       if (thread?.hasPendingApprovals !== true) return { kind: "none" };
-      // An open question to a human is itself outside the adjudicator's
-      // authority, so it must reach the guard rather than have its tool call
-      // answered while the channel to the operator stays open.
-      if (thread.hasPendingUserInput === true) return { kind: "none" };
       return await this.#answerSanctionedToolRequests(runtime.threadId);
     } catch {
       return { kind: "none" };

@@ -283,9 +283,7 @@ describe("scoped adjudication sanctioned approvals", () => {
     ).toBe("abandoned");
   });
 
-  it("refuses the sanctioned path while a question to the operator is open", async () => {
-    // Pending user input is itself an attempt at operator interaction, so the
-    // adjudicator must not have its tool call answered while it holds one.
+  it("approves its sanctioned tool while its own routed question is open", async () => {
     const { adjudication, approvals } = build({
       activities: [sanctionedRequest("request-sanctioned")],
       handoffs: [adjudicationHandoff],
@@ -294,9 +292,9 @@ describe("scoped adjudication sanctioned approvals", () => {
     });
 
     expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
-      kind: "none",
+      kind: "deferred",
     });
-    expect(approvals).toEqual([]);
+    expect(approvals).toHaveLength(1);
   });
 
   it("answers a request at least once before abandoning it under default configuration", async () => {

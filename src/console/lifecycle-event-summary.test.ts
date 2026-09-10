@@ -14,15 +14,20 @@ describe("lifecycle event summary", () => {
         executionId: "execution-one",
         payload: {
           answeredBy: { kind: "adjudication", sessionKey: "session-one" },
-          answers: { selection: "first" },
+          answers: {
+            selection: {
+              selectedOptions: ["First"],
+              text: "",
+              reasoning: "Fits the sample.",
+            },
+          },
           modelSlug: "sample-model",
-          prose: "The selection is reversible within the epic.",
         },
         sequence: 1,
         type: "mcp:escalation-answered",
       }),
     ).toBe(
-      'ADJUDICATION · sample-model · {"selection":"first"} · The selection is reversible within the epic.',
+      'ADJUDICATION · sample-model · {"selection":{"selectedOptions":["First"],"text":"","reasoning":"Fits the sample."}}',
     );
   });
 });

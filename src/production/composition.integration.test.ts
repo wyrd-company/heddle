@@ -120,23 +120,24 @@ describe("production composition", () => {
       composition.persistence,
     ).resolve(token);
     await composition.escalation.escalate(binding, {
+      threadId: runtime.threadId!,
+      requestId: "request-one",
       escalationId: "production-choice",
       questions: [
         {
+          multiSelect: false,
           id: "selection",
           options: [
             {
               description: "Use the first generic option",
-              id: "first",
-              label: "First",
+              label: "first",
             },
             {
               description: "Use the second generic option",
-              id: "second",
-              label: "Second",
+              label: "second",
             },
           ],
-          prompt: "Which generic option should be selected?",
+          question: "Which generic option should be selected?",
         },
       ],
     });
@@ -249,7 +250,13 @@ describe("production composition", () => {
     ).resolve(adjudicationToken);
     expect(binding.stage.tools).toEqual(["answer", "decline"]);
     await composition.escalation.answerAsSession(binding, {
-      answers: { selection: "first" },
+      answers: {
+        selection: {
+          selectedOptions: ["first"],
+          text: "",
+          reasoning: "The selected route fits the requested result.",
+        },
+      },
       escalationId: "production-choice",
       ownerSessionKey: runtime.sessionKey!,
       prose: "The first option is reversible within the current epic.",
@@ -677,15 +684,18 @@ describe("production composition", () => {
     ).resolve(token);
     for (const escalationId of ["failed", "ended", "stalled"]) {
       await composition.escalation.escalate(binding, {
+        threadId: "thread-17",
+        requestId: "request-one",
         escalationId,
         questions: [
           {
+            multiSelect: false,
             id: "selection",
             options: [
-              { description: "Use first", id: "first", label: "First" },
-              { description: "Use second", id: "second", label: "Second" },
+              { description: "Use first", label: "first" },
+              { description: "Use second", label: "second" },
             ],
-            prompt: `Which option applies to ${escalationId}?`,
+            question: `Which option applies to ${escalationId}?`,
           },
         ],
       });
@@ -750,13 +760,24 @@ describe("production composition", () => {
     await composition.scheduler.trigger();
     await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
     await composition.scheduler.trigger();
-    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(2));
     expect(
       composition.attention
         .list()
         .filter(({ kind }) => ["ended", "failed", "stalled"].includes(kind))
         .map(({ kind }) => kind),
-    ).toEqual(expect.arrayContaining(["ended", "failed", "stalled"]));
+    ).toEqual(expect.arrayContaining(["failed", "stalled"]));
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "ended"),
+    ).toEqual([]);
+    expect(
+      t3.commands.some(
+        (command) =>
+          command.type === "thread.turn.start" &&
+          command.threadId === ended!.threadId &&
+          JSON.stringify(command).includes("Question ID"),
+      ),
+    ).toBe(true);
     expect(
       composition.escalation
         .pendingEscalations(runtime.instanceId)
@@ -775,7 +796,6 @@ describe("production composition", () => {
     expect(notify.mock.calls.map(([input]) => input.message)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("is failed without lifecycle advance"),
-        expect.stringContaining("is ended without lifecycle advance"),
         expect.stringContaining("is stalled without lifecycle advance"),
       ]),
     );
@@ -816,15 +836,18 @@ describe("production composition", () => {
         token,
       ),
       {
+        threadId: "thread-17",
+        requestId: "request-one",
         escalationId: "production-choice",
         questions: [
           {
+            multiSelect: false,
             id: "selection",
             options: [
-              { description: "Use first", id: "first", label: "First" },
-              { description: "Use second", id: "second", label: "Second" },
+              { description: "Use first", label: "first" },
+              { description: "Use second", label: "second" },
             ],
-            prompt: "Which generic option should be selected?",
+            question: "Which generic option should be selected?",
           },
         ],
       },
@@ -1219,6 +1242,8 @@ describe("production composition", () => {
       escalationId,
     );
     first.persistence.appendEvent(runtime.instanceId, "mcp:escalation-opened", {
+      threadId: "thread-17",
+      requestId: "request-one",
       attentionId,
       escalationId,
       instanceId: runtime.instanceId,
@@ -1226,20 +1251,19 @@ describe("production composition", () => {
       ownerSessionKey: runtime.sessionKey!,
       questions: [
         {
+          multiSelect: false,
           id: "selection",
           options: [
             {
               description: "Use the first sample",
-              id: "first",
-              label: "First",
+              label: "first",
             },
             {
               description: "Use the second sample",
-              id: "second",
-              label: "Second",
+              label: "second",
             },
           ],
-          prompt: "Which sample should be selected?",
+          question: "Which sample should be selected?",
         },
       ],
       stage: runtime.stageId!,
@@ -1397,6 +1421,8 @@ describe("production composition", () => {
       runtime.instanceId,
       "mcp:escalation-opened",
       {
+        threadId: "thread-17",
+        requestId: "request-one",
         attentionId,
         escalationId,
         instanceId: runtime.instanceId,
@@ -1404,20 +1430,19 @@ describe("production composition", () => {
         ownerSessionKey: runtime.sessionKey!,
         questions: [
           {
+            multiSelect: false,
             id: "selection",
             options: [
               {
                 description: "Use the first sample",
-                id: "first",
-                label: "First",
+                label: "first",
               },
               {
                 description: "Use the second sample",
-                id: "second",
-                label: "Second",
+                label: "second",
               },
             ],
-            prompt: "Which sample should be selected?",
+            question: "Which sample should be selected?",
           },
         ],
         stage: runtime.stageId!,
@@ -1528,6 +1553,8 @@ describe("production composition", () => {
       runtime.instanceId,
       "mcp:escalation-opened",
       {
+        threadId: "thread-17",
+        requestId: "request-one",
         attentionId,
         escalationId,
         instanceId: runtime.instanceId,
@@ -1535,20 +1562,19 @@ describe("production composition", () => {
         ownerSessionKey: runtime.sessionKey!,
         questions: [
           {
+            multiSelect: false,
             id: "selection",
             options: [
               {
                 description: "Use the first sample",
-                id: "first",
-                label: "First",
+                label: "first",
               },
               {
                 description: "Use the second sample",
-                id: "second",
-                label: "Second",
+                label: "second",
               },
             ],
-            prompt: "Which sample should be selected?",
+            question: "Which sample should be selected?",
           },
         ],
         stage: runtime.stageId!,

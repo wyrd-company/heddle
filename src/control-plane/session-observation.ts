@@ -61,6 +61,7 @@ export class SessionObserver {
     this.#recordThread(target);
     const shell = await this.options.t3.getShell();
     const thread = shell.threads.find(({ id }) => id === target.threadId);
+    await this.options.questions?.observe(target, thread);
     const phase = phaseFor(
       thread,
       this.options.escalations.isAwaitingAnswer(
@@ -69,6 +70,7 @@ export class SessionObserver {
       ),
     );
     const attentions = await this.#requestAttentions(target, thread);
+    await this.options.questions?.poke(target, thread);
     const liveness = await observeSessionLiveness(
       this.options,
       target,
@@ -177,7 +179,8 @@ export class SessionObserver {
   ): Promise<SessionObservationAttention[]> {
     const kinds: RequestAttentionKind[] = [];
     if (thread?.hasPendingApprovals) kinds.push("approval");
-    if (thread?.hasPendingUserInput) kinds.push("user-input");
+    if (thread?.hasPendingUserInput && this.options.questions === undefined)
+      kinds.push("user-input");
     if (kinds.length === 0) return [];
     const snapshot = await this.options.t3.getThread(target.threadId);
     return (

@@ -2,136 +2,160 @@
 // relationships:
 //   verifies: heddle
 // ---
-
 import { describe, expect, it } from "vitest";
-
 import {
-  escalationAnswerSchema,
   escalationQuestionSchema,
+  escalationAnswerSchema,
   escalationAttentionId,
   escalationKey,
-  type PendingEscalation,
+  renderQuestionSet,
+  sameAnswers,
   validateAnswers,
   validateQuestions,
+  type PendingEscalation,
 } from "./escalation-contract.js";
-import {
-  sampleEscalationAnswer,
-  sampleEscalationQuestions,
-} from "./escalation-tools.test-support.js";
 
-const pending = (): PendingEscalation => ({
+const question = (
+  options: string[] = ["First", "Second"],
+  multiSelect = false,
+) =>
+  escalationQuestionSchema.parse({
+    id: "route",
+    question: "Which route?",
+    options: options.map((label) => ({ label })),
+    multiSelect,
+  });
+const opened = (): PendingEscalation => ({
   answeringAuthority: { kind: "operator" },
-  attentionId: "attention-1",
-  escalationId: "choice-1",
-  instanceId: "instance-1",
-  openedAt: "2026-01-01T00:00:00.000Z",
-  ownerSessionKey: "session-1",
-  questions: sampleEscalationQuestions,
+  attentionId: "attention-one",
+  escalationId: "request-one",
+  instanceId: "instance-one",
+  openedAt: "2026-01-01T00:00:00Z",
+  ownerSessionKey: "session-one",
+  requestId: "request-one",
+  threadId: "thread-one",
   stage: "assess",
+  questions: [question()],
 });
+const answer = (
+  selectedOptions: string[] = ["First"],
+  text = "",
+  reasoning = "The first route fits.",
+) => ({ selectedOptions, text, reasoning });
 
-describe("escalation contract", () => {
-  it("separates the bounded attention identity from the lossless key", () => {
-    const instanceId = "task-41";
-    const ownerSessionKey = "12345678-1234-4234-8234-123456789abc";
-    const escalationId = "e".repeat(128);
-
-    expect(escalationKey(instanceId, ownerSessionKey, escalationId)).toBe(
-      JSON.stringify([instanceId, ownerSessionKey, escalationId]),
+describe("one question contract", () => {
+  it("separates bounded attention identity from its lossless request key", () => {
+    expect(escalationKey("instance", "owner", "r".repeat(128))).toBe(
+      JSON.stringify(["instance", "owner", "r".repeat(128)]),
     );
-    const attentionId = escalationAttentionId(
-      instanceId,
-      ownerSessionKey,
-      escalationId,
+    const ids = ["first", "second"].map((id) =>
+      escalationAttentionId("instance", "owner", id),
     );
-    expect(attentionId).toMatch(/^escalation:[0-9a-f]{64}$/);
-    expect(attentionId).toHaveLength(75);
-    expect(
-      escalationAttentionId(instanceId, ownerSessionKey, escalationId),
-    ).toBe(attentionId);
-    expect(
-      new Set([
-        attentionId,
-        escalationAttentionId("task-43", ownerSessionKey, escalationId),
-        escalationAttentionId(
-          instanceId,
-          "87654321-4321-4321-8321-cba987654321",
-          escalationId,
-        ),
-        escalationAttentionId(instanceId, ownerSessionKey, "f".repeat(128)),
-      ]),
-    ).toHaveLength(4);
+    expect(new Set(ids).size).toBe(2);
+    for (const id of ids) expect(id).toMatch(/^escalation:[0-9a-f]{64}$/);
   });
-
-  it("rejects duplicate question and option identities", () => {
-    expect(() =>
-      validateQuestions([
-        ...sampleEscalationQuestions,
-        { ...sampleEscalationQuestions[0]! },
-      ]),
-    ).toThrow(/repeats question ID/);
-    expect(() =>
-      validateQuestions([
-        {
-          ...sampleEscalationQuestions[0]!,
-          options: [
-            ...sampleEscalationQuestions[0]!.options,
-            { ...sampleEscalationQuestions[0]!.options[0]! },
-          ],
-        },
-      ]),
-    ).toThrow(/repeats option ID/);
+  it("defaults omitted multiSelect to false and accepts zero or one option", () => {
+    for (const options of [[], [{ label: "Only" }]])
+      expect(
+        escalationQuestionSchema.parse({
+          id: "route",
+          question: "Which route?",
+          options,
+        }),
+      ).toMatchObject({ multiSelect: false, options });
   });
-
-  it("requires exactly one offered option for each question", () => {
-    expect(() => validateAnswers(pending(), {})).toThrow(/one option/);
-    expect(() =>
-      validateAnswers(pending(), { "delivery-window": "unoffered" }),
-    ).toThrow(/does not name an offered option/);
-    expect(() =>
-      validateAnswers(pending(), sampleEscalationAnswer),
-    ).not.toThrow();
-  });
-
-  it("validates a value answer against its declared length", () => {
-    const valueQuestion = escalationQuestionSchema.parse({
-      id: "release-code",
-      kind: "value",
-      prompt: "Which release code should be used?",
-      validation: { maxLength: 8, minLength: 4 },
+  it("preserves exact harness question IDs and option labels across answers", () => {
+    const native = escalationQuestionSchema.parse({
+      id: " route ",
+      question: " Which route? ",
+      options: [{ label: " First " }],
     });
-    const opened = { ...pending(), questions: [valueQuestion] };
-
+    expect(native.id).toBe(" route ");
+    expect(native.options[0]!.label).toBe(" First ");
+    const answers = escalationAnswerSchema.shape.answers.parse({
+      " route ": answer([" First "]),
+    });
+    expect(Object.keys(answers)).toEqual([" route "]);
     expect(() =>
-      validateAnswers(opened, { "release-code": "AB12" }),
+      validateAnswers({ ...opened(), questions: [native] }, answers),
     ).not.toThrow();
-    expect(() => validateAnswers(opened, { "release-code": "A12" })).toThrow(
-      /value validation/,
+  });
+  it("rejects duplicate question IDs and option labels", () => {
+    expect(() => validateQuestions([question(), question()])).toThrow(
+      /repeats question/,
+    );
+    expect(() => validateQuestions([question(["First", "First"])])).toThrow(
+      /repeats option/,
+    );
+  });
+  it.each([
+    ["missing answer", {}],
+    ["unknown question", { route: answer(), extra: answer() }],
+    ["selection and text", { route: answer(["First"], "A custom route") }],
+    ["neither selection nor text", { route: answer([], "") }],
+    ["whitespace text", { route: answer([], "  ") }],
+    ["multiple single-select answers", { route: answer(["First", "Second"]) }],
+    ["unknown option", { route: answer(["Third"]) }],
+    ["duplicate option", { route: answer(["First", "First"]) }],
+    ["missing reasoning", { route: { selectedOptions: ["First"], text: "" } }],
+    ["empty reasoning", { route: answer(["First"], "", "") }],
+  ])("rejects %s", (_name, answers) =>
+    expect(() => validateAnswers(opened(), answers as never)).toThrow(),
+  );
+  it("accepts a single option for multi-select and free text for any question", () => {
+    for (const multiSelect of [true, false]) {
+      const pending = {
+        ...opened(),
+        questions: [question(undefined, multiSelect)],
+      };
+      expect(() => validateAnswers(pending, { route: answer() })).not.toThrow();
+      expect(() =>
+        validateAnswers(pending, { route: answer([], "A custom route") }),
+      ).not.toThrow();
+    }
+  });
+  it("requires text for a zero-option question without imposing length bounds", () => {
+    const pending = { ...opened(), questions: [question([])] };
+    expect(() => validateAnswers(pending, { route: answer() })).toThrow(
+      /offered option/,
     );
     expect(() =>
-      validateAnswers(opened, { "release-code": "ABCDEFGHI" }),
-    ).toThrow(/value validation/);
-
-    const longValue = "x".repeat(256);
-    expect(
-      escalationAnswerSchema.parse({
-        answers: { "release-code": longValue },
-        escalationId: "choice-1",
-        ownerSessionKey: "session-1",
-      }).answers["release-code"],
-    ).toBe(longValue);
+      validateAnswers(pending, { route: answer([], "x".repeat(5000)) }),
+    ).not.toThrow();
   });
-
-  it("accepts bounded prose in addition to the authoritative answer", () => {
+  it("quotes identifiers cardinality text alternative and the complete answer tool contract", () => {
+    const prompt = renderQuestionSet({
+      ...opened(),
+      questions: [question([], true)],
+    });
+    for (const fragment of [
+      "Question ID: route",
+      "Which route?",
+      "one or more",
+      "text answer",
+      "answer tool",
+      "selectedOptions",
+      "reasoning",
+      "ownerSessionKey",
+      "escalationId",
+    ])
+      expect(prompt).toContain(fragment);
+  });
+  it("binds replay to selected answers and reasoning", () => {
+    const left = {
+      answers: { route: answer() },
+      answeredBy: { kind: "operator" as const },
+      escalationId: "request-one",
+      ownerSessionKey: "session-one",
+    };
+    expect(sameAnswers(opened(), left, globalThis.structuredClone(left))).toBe(
+      true,
+    );
     expect(
-      escalationAnswerSchema.parse({
-        answers: sampleEscalationAnswer,
-        escalationId: "choice-1",
-        ownerSessionKey: "session-1",
-        prose: "Use the ordinary window after the current operation.",
+      sameAnswers(opened(), left, {
+        ...left,
+        answers: { route: answer(["First"], "", "A different rationale") },
       }),
-    ).toMatchObject({
-      prose: "Use the ordinary window after the current operation.",
-    });
+    ).toBe(false);
   });
 });

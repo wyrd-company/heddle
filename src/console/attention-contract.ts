@@ -175,31 +175,36 @@ const questionAnswers = (
   }
   const result: ConsoleAttentionActionAnswers = {};
   for (const question of action.input.questions) {
-    const answer = answers[question.id];
-    if (question.kind === "value") {
-      if (typeof answer !== "string") {
-        throw new TypeError(`Answer for '${question.id}' must be one value`);
-      }
-      const { maxLength, minLength } = question.validation;
-      if (answer.length < minLength || answer.length > maxLength) {
-        throw new TypeError(
-          `Answer for '${question.id}' does not satisfy its value validation`,
-        );
-      }
-      result[question.id] = answer;
-      continue;
-    }
-    const selected = Array.isArray(answer) ? answer : [answer];
+    const answer = requireRecord(
+      answers[question.id],
+      `Answer for '${question.id}'`,
+    );
+    const { selectedOptions: selected, text, reasoning } = answer;
     if (
-      selected.length === 0 ||
+      Object.keys(answer).some(
+        (key) => !["selectedOptions", "text", "reasoning"].includes(key),
+      ) ||
+      !Array.isArray(selected) ||
       selected.some((item) => typeof item !== "string") ||
-      (!question.multiSelect && selected.length !== 1)
+      typeof text !== "string" ||
+      typeof reasoning !== "string" ||
+      reasoning.trim() === ""
     ) {
       throw new TypeError(
-        `Answer for '${question.id}' must select ${question.multiSelect ? "one or more options" : "one option"}`,
+        `Answer for '${question.id}' requires selectedOptions, text, and nonempty reasoning`,
       );
     }
-    const offered = new Set(question.options.map(({ value: item }) => item));
+    if (selected.length > 0 === (text.trim() !== "")) {
+      throw new TypeError(
+        `Answer for '${question.id}' must supply selected options or text exclusively`,
+      );
+    }
+    if (!question.multiSelect && selected.length > 1) {
+      throw new TypeError(
+        `Answer for '${question.id}' must select at most one option`,
+      );
+    }
+    const offered = new Set(question.options.map(({ label }) => label));
     if (new Set(selected).size !== selected.length) {
       throw new TypeError(`Answer for '${question.id}' repeats an option`);
     }
@@ -208,9 +213,12 @@ const questionAnswers = (
         `Answer for '${question.id}' does not name an offered option`,
       );
     }
-    result[question.id] = question.multiSelect
-      ? (selected as string[])
-      : (selected[0] as string);
+    Object.defineProperty(result, question.id, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: { selectedOptions: selected as string[], text, reasoning },
+    });
   }
   return result;
 };
@@ -222,11 +230,7 @@ export const parseConsoleAttentionActionRequest = (
   const body = requireRecord(value, "request body");
   const allowed = new Set(
     action.input.kind === "questions"
-      ? [
-          "answers",
-          "fingerprint",
-          ...(action.input.prose === undefined ? [] : ["prose"]),
-        ]
+      ? ["answers", "fingerprint"]
       : ["fingerprint"],
   );
   if (Object.keys(body).some((key) => !allowed.has(key))) {
@@ -234,19 +238,9 @@ export const parseConsoleAttentionActionRequest = (
   }
   const fingerprint = identifier(body["fingerprint"], "fingerprint");
   if (action.input.kind === "questions") {
-    const prose = body["prose"];
-    if (
-      prose !== undefined &&
-      (typeof prose !== "string" ||
-        prose.trim() === "" ||
-        prose.length > (action.input.prose?.maxLength ?? 0))
-    ) {
-      throw new TypeError("prose does not satisfy its input contract");
-    }
     return {
       answers: questionAnswers(body["answers"], action),
       fingerprint,
-      ...(prose === undefined ? {} : { prose }),
     };
   }
   return { fingerprint };

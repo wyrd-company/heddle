@@ -361,6 +361,8 @@ describe("SessionObserver liveness", () => {
   it("keeps a completed thread awaiting an escalation answer out of liveness attention", async () => {
     const test = fixture();
     test.escalations.pending.push({
+      threadId: "thread-17",
+      requestId: "request-one",
       answeringAuthority: { kind: "operator" },
       attentionId: "escalation-attention",
       escalationId: "sample-choice",
@@ -369,12 +371,13 @@ describe("SessionObserver liveness", () => {
       ownerSessionKey: target.sessionKey,
       questions: [
         {
+          multiSelect: false,
           id: "sample-option",
           options: [
-            { description: "Use option A", id: "a", label: "Option A" },
-            { description: "Use option B", id: "b", label: "Option B" },
+            { description: "Use option A", label: "a" },
+            { description: "Use option B", label: "b" },
           ],
-          prompt: "Which option should be used?",
+          question: "Which option should be used?",
         },
       ],
       stage: "assess",
@@ -417,6 +420,8 @@ describe("SessionObserver liveness", () => {
     async ({ expected, shell, threshold }) => {
       const test = fixture();
       test.escalations.pending.push({
+        threadId: "thread-17",
+        requestId: "request-one",
         answeringAuthority: { kind: "operator" },
         attentionId: "escalation-attention",
         escalationId: "sample-choice",
@@ -425,12 +430,13 @@ describe("SessionObserver liveness", () => {
         ownerSessionKey: target.sessionKey,
         questions: [
           {
+            multiSelect: false,
             id: "sample-option",
             options: [
-              { description: "Use option A", id: "a", label: "Option A" },
-              { description: "Use option B", id: "b", label: "Option B" },
+              { description: "Use option A", label: "a" },
+              { description: "Use option B", label: "b" },
             ],
-            prompt: "Which option should be used?",
+            question: "Which option should be used?",
           },
         ],
         stage: "assess",
@@ -1286,6 +1292,8 @@ describe("SessionObserver terminal visibility", () => {
     makeTerminal(test);
     test.escalations.pending = [
       {
+        threadId: "thread-17",
+        requestId: "request-one",
         attentionId: "attention-one",
         escalationId: "choice-one",
         instanceId: target.instanceId,

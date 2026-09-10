@@ -17,6 +17,7 @@ import type {
   T3ShellSnapshot,
   T3ThreadSnapshot,
   T3UserInputQuestion,
+  T3ShellThread,
 } from "./t3-control-plane-client.js";
 
 export type SessionObservationTarget = {
@@ -114,6 +115,16 @@ export type SessionObservationOptions = {
   };
   escalations: SessionObservationEscalations;
   nextId?: () => string;
+  questions?: {
+    observe(
+      target: SessionObservationTarget,
+      thread: T3ShellThread | undefined,
+    ): Promise<void>;
+    poke(
+      target: SessionObservationTarget,
+      thread: T3ShellThread | undefined,
+    ): Promise<void>;
+  };
   now?: () => number;
   persistence: SessionObservationPersistence;
   t3: SessionObservationT3Client;

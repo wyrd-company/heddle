@@ -11,4 +11,4 @@ Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path;
 
 Use `advance` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
 
-Use `escalate` for a question that requires attention outside this session. It returns after Heddle records the wait. Do not act on the question's subject until Heddle dispatches the answer as a later turn. Continue unrelated work when possible; otherwise end the turn. Never create a watcher or poll for the answer.
+Use your harness question tool when you need an answer. Heddle routes the question set to your parent, an adjudicator, or the operator. Answer assigned questions with Heddle's `answer` tool: every question ID needs selectedOptions or text, plus reasoning. Finish the work or advance; do not stop while you owe an answer.

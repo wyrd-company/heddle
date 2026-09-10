@@ -1046,10 +1046,25 @@ const exerciseAttentionActions = async (baseUrl) => {
   await openAttentionEntry(baseUrl, "choice-a");
   await press("Tab");
   await assertFocused(
-    '.attention-entry[data-attention-id="choice-a"] input[value="compact"]',
+    '.attention-entry[data-attention-id="choice-a"] input[value="Compact"]',
     "escalation option",
   );
   await press("Space");
+  await press("Tab");
+  await assertFocused(
+    'textarea[name="layout:text"]',
+    "question text alternative",
+  );
+  await press("Tab");
+  await assertFocused(
+    'textarea[name="layout:reasoning"]',
+    "question reasoning",
+  );
+  await command(
+    "fill",
+    'textarea[name="layout:reasoning"]',
+    "The smaller arrangement fits.",
+  );
   await press("Tab");
   await assertFocused(
     '.attention-entry[data-attention-id="choice-a"] .attention-action',
@@ -1059,7 +1074,12 @@ const exerciseAttentionActions = async (baseUrl) => {
   let action = await waitForAction();
   invariant(
     action.action.contract.kind === "escalation.answer" &&
-      action.answers.layout === "compact",
+      JSON.stringify(action.answers.layout) ===
+        JSON.stringify({
+          selectedOptions: ["Compact"],
+          text: "",
+          reasoning: "The smaller arrangement fits.",
+        }),
     "keyboard-authorized-action",
     "escalation answer did not preserve the offered target and value",
   );
@@ -1087,10 +1107,37 @@ const exerciseAttentionActions = async (baseUrl) => {
   await openAttentionEntry(baseUrl, "input-a");
   await press("Tab");
   await assertFocused(
-    '.attention-entry[data-attention-id="input-a"] input[value="compact"]',
+    '.attention-entry[data-attention-id="input-a"] input[value="Compact"]',
     "user-input option",
   );
   await press("Space");
+  await press("Tab");
+  await assertFocused(
+    'textarea[name="placement:text"]',
+    "user-input text alternative",
+  );
+  await command(
+    "fill",
+    'textarea[name="placement:text"]',
+    "A custom arrangement",
+  );
+  invariant(
+    (await evaluate(
+      "document.querySelectorAll('.attention-entry[data-attention-id=\"input-a\"] input:checked').length",
+    )) === 0,
+    "question-answer-exclusivity",
+    "Typing an answer did not clear the selected option",
+  );
+  await press("Tab");
+  await assertFocused(
+    'textarea[name="placement:reasoning"]',
+    "user-input reasoning",
+  );
+  await command(
+    "fill",
+    'textarea[name="placement:reasoning"]',
+    "The custom arrangement fits.",
+  );
   await press("Tab");
   await assertFocused(
     '.attention-entry[data-attention-id="input-a"] .attention-action',
@@ -1100,7 +1147,12 @@ const exerciseAttentionActions = async (baseUrl) => {
   action = await waitForAction();
   invariant(
     action.action.contract.kind === "t3.user-input.respond" &&
-      action.answers.placement === "compact",
+      JSON.stringify(action.answers.placement) ===
+        JSON.stringify({
+          selectedOptions: [],
+          text: "A custom arrangement",
+          reasoning: "The custom arrangement fits.",
+        }),
     "keyboard-authorized-action",
     "user-input response did not preserve the offered target and value",
   );

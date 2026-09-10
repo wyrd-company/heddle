@@ -104,7 +104,6 @@ const projectEscalation = (
     },
     input: {
       kind: "questions",
-      prose: { label: "Additional context", maxLength: 4_000 },
       questions,
     },
     label: "Answer escalation",
@@ -148,7 +147,7 @@ const projectEscalation = (
     instanceId,
     kind: "escalation",
     message: [
-      questions[0]!.prompt,
+      questions[0]!.question,
       ...(adjudication === undefined
         ? []
         : [

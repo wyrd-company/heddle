@@ -12,14 +12,10 @@ import {
 } from "../mcp-server/index.js";
 import type { SqlitePersistence } from "../persistence/index.js";
 import type { KanbanBoardAdapter } from "../board-adapter/index.js";
-import {
-  resolveT3AwarenessPhase,
-  steerStageSession,
-} from "../control-plane/index.js";
+import { harnessAnswers } from "../mcp-server/escalation-contract.js";
+import { userInputResponseRecorded } from "../control-plane/session-response-reconciliation.js";
 import type { ProductionT3Client } from "./composition.js";
-import type { ProductionInstanceController } from "./instance-controller.js";
 import { productionSessionBindingFor } from "./subagent-composition.js";
-import { providerContextFromBinding } from "./session-binding.js";
 
 const answerLines = (
   opened: PendingEscalation,
@@ -27,11 +23,12 @@ const answerLines = (
 ): string[] =>
   opened.questions.flatMap((question) => {
     const answer = answered.answers[question.id]!;
-    const selected =
-      question.kind === "value"
-        ? answer
-        : `${question.options.find(({ id }) => id === answer)!.label} (${answer})`;
-    return [`- Question: ${question.prompt}`, `  Answer: ${selected}`];
+    const selected = answer.text || answer.selectedOptions.join(", ");
+    return [
+      `- Question: ${question.question}`,
+      `  Answer: ${selected}`,
+      `  Reasoning: ${answer.reasoning}`,
+    ];
   });
 
 const authorityName = (answered: AnsweredEscalation): string =>
@@ -60,7 +57,6 @@ export class ProductionEscalationAnswerEffects
       KanbanBoardAdapter,
       "appendTaskActivity" | "readTask"
     >,
-    private readonly instances: ProductionInstanceController,
     private readonly t3: ProductionT3Client,
   ) {}
 
@@ -96,67 +92,43 @@ export class ProductionEscalationAnswerEffects
     messageId: string;
     opened: PendingEscalation;
   }): Promise<void> {
-    const existing = this.#currentDeliveryBinding(input.opened);
-    const delegated = !this.persistence
-      .listSessionRuntime()
-      .some(({ sessionKey }) => sessionKey === input.opened.ownerSessionKey);
-    const shell = await this.t3.getShell();
-    const thread = shell.threads.find(({ id }) => id === existing.threadId);
-    const phase =
-      thread === undefined ? undefined : resolveT3AwarenessPhase(thread);
-    if (delegated && (phase === undefined || phase === "failed")) {
+    const binding = this.#currentDeliveryBinding(input.opened);
+    if (binding.threadId !== input.opened.threadId) {
+      throw new Error("Question reply cannot target a replacement thread");
+    }
+    if (
+      !(await this.t3.getShell()).threads.some(
+        (thread) =>
+          thread.id === input.opened.threadId &&
+          thread.session?.status !== "error" &&
+          thread.latestTurn?.state !== "error",
+      )
+    ) {
       throw new Error(
         `Escalation owner session '${input.opened.ownerSessionKey}' is unavailable`,
       );
     }
-    const dispatchable =
-      phase !== undefined && phase !== "completed" && phase !== "failed";
-    const binding =
-      delegated || dispatchable
-        ? existing
-        : await this.instances.reactivateStageForEscalation({
-            instanceId: input.opened.instanceId,
-            stageId: input.opened.stage,
-            task: await this.#taskFor(input.opened.instanceId),
-          });
-    await steerStageSession(
-      {
-        commandId: input.commandId,
-        interactionMode: binding.interactionMode,
-        message: input.message,
-        messageId: input.messageId,
-        providerContext: providerContextFromBinding(binding),
-        runtimeMode: binding.runtimeMode,
-        threadId: binding.threadId,
-      },
-      { t3: this.t3 },
+    if (
+      userInputResponseRecorded(
+        await this.t3.getThread(input.opened.threadId),
+        input.opened.requestId,
+        harnessAnswers(input.answered.answers),
+      )
+    )
+      return;
+    await this.t3.respondToUserInput(
+      input.opened.threadId,
+      input.opened.requestId,
+      harnessAnswers(input.answered.answers),
+      input.commandId,
     );
   }
 
   #currentDeliveryBinding(opened: PendingEscalation) {
-    const sessions = this.persistence.listSessionRuntime();
-    if (
-      !sessions.some(({ sessionKey }) => sessionKey === opened.ownerSessionKey)
-    ) {
-      return productionSessionBindingFor(
-        this.persistence,
-        opened.ownerSessionKey,
-      );
-    }
-    const runtime = this.persistence
-      .listReconcilerRuntime()
-      .find(({ instanceId }) => instanceId === opened.instanceId);
-    const incident = this.persistence
-      .listIncidentRuntime()
-      .find(({ incidentId }) => incidentId === opened.instanceId);
-    const current = runtime ?? incident;
-    if (current?.stageId !== opened.stage || current.sessionKey === undefined) {
-      return productionSessionBindingFor(
-        this.persistence,
-        opened.ownerSessionKey,
-      );
-    }
-    return productionSessionBindingFor(this.persistence, current.sessionKey);
+    return productionSessionBindingFor(
+      this.persistence,
+      opened.ownerSessionKey,
+    );
   }
 
   async #taskFor(instanceId: string) {

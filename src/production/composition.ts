@@ -77,6 +77,9 @@ import {
 } from "./subagent-composition.js";
 import { providerContextFromBinding } from "./session-binding.js";
 import { ProductionAttentionActions } from "./attention-actions.js";
+import { ProductionQuestionRouting } from "./question-routing.js";
+import { renderQuestionSet } from "../mcp-server/escalation-contract.js";
+import { stableUuid } from "./stable-uuid.js";
 import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
@@ -347,7 +350,6 @@ export const createProductionComposition = (
     const escalationAnswerEffects = new ProductionEscalationAnswerEffects(
       persistence,
       board,
-      instances,
       t3,
     );
     const pacing = new DispatchPacingGate(
@@ -422,7 +424,13 @@ export const createProductionComposition = (
           await steerStageSession(
             {
               interactionMode: binding.interactionMode,
-              message: `Child escalation ${pending.attentionId} requires an answer`,
+              commandId: stableUuid(
+                `${pending.attentionId}:route:${pending.answeringAuthority.sessionKey}`,
+              ),
+              messageId: stableUuid(
+                `${pending.attentionId}:message:${pending.answeringAuthority.sessionKey}`,
+              ),
+              message: renderQuestionSet(pending),
               providerContext: providerContextFromBinding(binding),
               runtimeMode: binding.runtimeMode,
               threadId: binding.threadId,
@@ -441,7 +449,7 @@ export const createProductionComposition = (
             value.adjudication === undefined
               ? `Heddle escalation in ${value.stage}`
               : [
-                  `Heddle escalation in ${value.stage}: ${value.questions[0]!.prompt}`,
+                  `Heddle escalation in ${value.stage}: ${value.questions[0]!.question}`,
                   `Adjudication${value.adjudication.modelSlug === undefined ? "" : ` by ${value.adjudication.modelSlug}`} did not decide: ${value.adjudication.cause}`,
                   ...(value.adjudication.reasoning === undefined
                     ? []
@@ -462,16 +470,15 @@ export const createProductionComposition = (
       childStops: {
         onObserved: async (target, result) => {
           if (
-            result.phase === "absent" ||
-            result.phase === "completed" ||
-            result.phase === "failed"
-          ) {
-            await escalation.returnAnswerAuthorityToOperatorForSession({
-              instanceId: target.instanceId,
-              reason: `Session '${target.sessionKey}' ${result.phase} without answering`,
-              sessionKey: target.sessionKey,
-            });
-          }
+            escalation
+              .pendingEscalations(target.instanceId)
+              .some(
+                ({ answeringAuthority }) =>
+                  answeringAuthority.kind !== "operator" &&
+                  answeringAuthority.sessionKey === target.sessionKey,
+              )
+          )
+            return;
           if (subagents === undefined) {
             throw new Error("Production subagent composition is not active");
           }
@@ -479,6 +486,12 @@ export const createProductionComposition = (
         },
       },
       escalations: escalation,
+      questions: new ProductionQuestionRouting(
+        persistence,
+        escalation,
+        t3,
+        attention,
+      ),
       persistence,
       t3,
       thresholds: configuration.observationThresholds,

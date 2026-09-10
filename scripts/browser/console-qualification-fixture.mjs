@@ -162,15 +162,13 @@ const question = ({ header, id, prompt }) => ({
     {
       description: "Use the smaller available arrangement.",
       label: "Compact",
-      value: "compact",
     },
     {
       description: "Use the larger available arrangement.",
       label: "Expanded",
-      value: "expanded",
     },
   ],
-  prompt,
+  question: prompt,
 });
 
 const longAttentionId = "recovery-record-".padEnd(128, "x");

@@ -6,10 +6,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import {
-  escalationAnswerSchema,
-  escalationInputSchema,
-} from "./escalation-coordinator.js";
+import { escalationAnswerSchema } from "./escalation-coordinator.js";
 import type {
   WorkflowMcpToolContext,
   WorkflowMcpToolContributor,
@@ -20,24 +17,6 @@ const result = (value: Record<string, unknown>) => ({
   structuredContent: value,
 });
 
-const registerEscalate = (
-  server: McpServer,
-  context: WorkflowMcpToolContext,
-): void => {
-  server.registerTool(
-    "escalate",
-    {
-      description:
-        "Record structured questions for asynchronous answer delivery. Do not act on the question's subject until its answer arrives in a later turn. Continue unrelated work when available; otherwise end this turn. Never create a watcher or poll for the answer.",
-      inputSchema: escalationInputSchema,
-    },
-    async (input) =>
-      result(
-        await context.escalationCoordinator.escalate(context.binding, input),
-      ),
-  );
-};
-
 const registerAnswer = (
   server: McpServer,
   context: WorkflowMcpToolContext,
@@ -46,7 +25,7 @@ const registerAnswer = (
     "answer",
     {
       description:
-        "Answer an escalation only when this session holds its current answering authority",
+        "Answer every question in the assigned request in one call, keyed by question ID. Each answer supplies selectedOptions or text (never both), plus required reasoning. Use offered option labels, respecting single or multiple selection. A question with no options requires text. Only the current answering authority may answer.",
       inputSchema: escalationAnswerSchema,
     },
     async (input) =>
@@ -89,5 +68,4 @@ const registerDecline = (
 export const workflowMcpEscalationTools = (): WorkflowMcpToolContributor[] => [
   { name: "answer", register: registerAnswer },
   { name: "decline", register: registerDecline },
-  { name: "escalate", register: registerEscalate },
 ];

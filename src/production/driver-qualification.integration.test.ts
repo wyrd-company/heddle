@@ -16,6 +16,7 @@ import {
   T3ControlPlaneClient,
 } from "../control-plane/index.js";
 import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
+import { startQualificationMcpServer } from "../control-plane/fixtures/workflow-mcp-http.js";
 import { prepareProductionFixture } from "./composition.test-support.js";
 import { createProductionComposition } from "./composition.js";
 import { resolveProductionConfiguration } from "./configuration.js";
@@ -24,6 +25,7 @@ import {
   CONTROLLED_QUALIFICATION_REVIEW as REVIEW,
   CONTROLLED_QUALIFICATION_SECOND_DRIVER as SECOND_DRIVER,
   makeQualificationScratch,
+  safeT3StartupDiagnostic,
   startIsolatedT3,
 } from "./driver-qualification.test-support.js";
 
@@ -173,12 +175,15 @@ describe.skipIf(!t3Binary)(
 
       // Neither `t3` nor `providerResolver` is supplied, so the composition
       // constructs the real control-plane client and the real resolver itself.
+      const mcpServer = await startQualificationMcpServer();
+      teardown.push(mcpServer.stop);
       const composition = createProductionComposition({
         blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
         configuration,
         providerUsage: { readProviderUsage: async () => [] },
-        workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
+        workflowMcpEndpoint: mcpServer.endpoint,
       });
+      mcpServer.use(composition.mcp);
       teardown.push(() => composition.close());
 
       const listing = await composition.subagents.listProviders();
@@ -280,14 +285,17 @@ describe.skipIf(!t3Binary)(
         new ProviderSelectionResolver(providerAliases, catalogClient),
       );
 
+      const mcpServer = await startQualificationMcpServer();
+      teardown.push(mcpServer.stop);
       const composition = createProductionComposition({
         blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
         configuration,
         providerUsage: {
           readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
         },
-        workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
+        workflowMcpEndpoint: mcpServer.endpoint,
       });
+      mcpServer.use(composition.mcp);
       teardown.push(() => composition.close());
 
       await composition.start();
@@ -349,7 +357,7 @@ describe.skipIf(!t3Binary)(
           }
           if (phase === "failed" || phase === "ended") {
             throw new Error(
-              `Parent session reached '${phase}' before it could spawn`,
+              `Parent session reached '${phase}' before it could spawn: ${safeT3StartupDiagnostic(thread?.session?.lastError ?? "No provider diagnostic")}`,
             );
           }
           await new Promise((resolve) => globalThis.setTimeout(resolve, 500));

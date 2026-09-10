@@ -28,12 +28,11 @@ export const lifecycleEventSummary = (
     Array.isArray(answeredBy) ||
     answeredBy["kind"] !== "adjudication" ||
     typeof payload["modelSlug"] !== "string" ||
-    typeof payload["prose"] !== "string" ||
     typeof payload["answers"] !== "object" ||
     payload["answers"] === null ||
     Array.isArray(payload["answers"])
   ) {
     return event.executionId;
   }
-  return `ADJUDICATION · ${payload["modelSlug"]} · ${JSON.stringify(payload["answers"])} · ${payload["prose"]}`;
+  return `ADJUDICATION · ${payload["modelSlug"]} · ${JSON.stringify(payload["answers"])}`;
 };

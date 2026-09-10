@@ -37,6 +37,7 @@ export const escalationEventTypes = {
   deliveryCompleted: "mcp:escalation-delivery-completed",
   notified: "mcp:escalation-notified",
   opened: "mcp:escalation-opened",
+  withdrawn: "mcp:escalation-withdrawn",
   parentSteered: "mcp:escalation-parent-steered",
   sessionSteered: "mcp:escalation-session-steered",
 } as const;
@@ -67,6 +68,8 @@ const openedFrom = (event: PersistedEvent): PendingEscalation => {
   const parsed = escalationInputSchema.parse({
     escalationId: value["escalationId"],
     questions: value["questions"],
+    requestId: value["requestId"],
+    threadId: value["threadId"],
   });
   validateQuestions(parsed.questions);
   if (
@@ -97,6 +100,8 @@ const openedFrom = (event: PersistedEvent): PendingEscalation => {
       ? {}
       : { parentSessionKey: value["parentSessionKey"] }),
     questions: parsed.questions,
+    requestId: parsed.requestId,
+    threadId: parsed.threadId,
     stage: value["stage"],
   };
 };
@@ -118,6 +123,7 @@ const answeredFrom = (
 
 type ReplayedEscalation = {
   answered?: AnsweredEscalation;
+  withdrawn?: boolean;
   opened: PendingEscalation;
 };
 
@@ -125,7 +131,10 @@ export class EscalationHistory {
   constructor(private readonly persistence: WorkflowMcpPersistence) {}
 
   open(
-    binding: WorkflowMcpSessionBinding,
+    binding: Pick<
+      WorkflowMcpSessionBinding,
+      "instance" | "sessionKey" | "parentSessionKey" | "stage"
+    >,
     input: EscalationInput,
     openedAt: string,
     topLevelAuthority: EscalationAnsweringAuthority = { kind: "operator" },
@@ -149,6 +158,8 @@ export class EscalationHistory {
         ? {}
         : { parentSessionKey: binding.parentSessionKey }),
       questions: parsed.questions,
+      requestId: parsed.requestId,
+      threadId: parsed.threadId,
       stage: binding.stage.id,
       answeringAuthority:
         binding.parentSessionKey === undefined
@@ -163,7 +174,9 @@ export class EscalationHistory {
       );
       if (
         prior.opened !== undefined &&
-        !sameQuestions(prior.opened.questions, parsed.questions)
+        (!sameQuestions(prior.opened.questions, parsed.questions) ||
+          prior.opened.requestId !== parsed.requestId ||
+          prior.opened.threadId !== parsed.threadId)
       ) {
         throw new TypeError(
           `Escalation '${parsed.escalationId}' was retried with different questions`,
@@ -222,7 +235,10 @@ export class EscalationHistory {
         opened.ownerSessionKey,
         opened.escalationId,
       );
-      if (currentEscalation.opened === undefined) {
+      if (
+        currentEscalation.opened === undefined ||
+        currentEscalation.withdrawn
+      ) {
         throw new Error(`Escalation '${opened.escalationId}' is not pending`);
       }
       if (currentEscalation.answered !== undefined) {
@@ -269,7 +285,10 @@ export class EscalationHistory {
         opened.ownerSessionKey,
         opened.escalationId,
       );
-      if (currentEscalation.opened === undefined) {
+      if (
+        currentEscalation.opened === undefined ||
+        currentEscalation.withdrawn
+      ) {
         throw new Error(`Escalation '${opened.escalationId}' is not pending`);
       }
       if (currentEscalation.answered !== undefined) {
@@ -315,7 +334,11 @@ export class EscalationHistory {
     instanceId: string,
     ownerSessionKey: string,
     escalationId: string,
-  ): { answered?: AnsweredEscalation; opened?: PendingEscalation } {
+  ): {
+    answered?: AnsweredEscalation;
+    opened?: PendingEscalation;
+    withdrawn?: boolean;
+  } {
     return (
       this.#replay(instanceId).get(
         escalationKey(instanceId, ownerSessionKey, escalationId),
@@ -325,8 +348,40 @@ export class EscalationHistory {
 
   pending(instanceId: string): PendingEscalation[] {
     return [...this.#replay(instanceId).values()]
-      .filter(({ answered }) => answered === undefined)
+      .filter(({ answered, withdrawn }) => answered === undefined && !withdrawn)
       .map(({ opened }) => opened);
+  }
+
+  withdraw(opened: PendingEscalation): void {
+    while (true) {
+      const prior = this.find(
+        opened.instanceId,
+        opened.ownerSessionKey,
+        opened.escalationId,
+      );
+      if (
+        prior.opened === undefined ||
+        prior.answered !== undefined ||
+        prior.withdrawn
+      )
+        return;
+      const current = this.persistence.getInstance(opened.instanceId);
+      if (current === undefined)
+        throw new Error(`Instance does not exist: ${opened.instanceId}`);
+      if (
+        this.persistence.compareAndSwapInstanceWithEvent(
+          opened.instanceId,
+          current.version,
+          current.state,
+          escalationEventTypes.withdrawn,
+          {
+            escalationId: opened.escalationId,
+            ownerSessionKey: opened.ownerSessionKey,
+          },
+        )
+      )
+        return;
+    }
   }
 
   answered(instanceId: string): Array<{
@@ -375,6 +430,18 @@ export class EscalationHistory {
           );
         }
         replayed.set(key, { opened });
+      } else if (event.type === escalationEventTypes.withdrawn) {
+        const value = eventPayload(event);
+        const prior = replayed.get(
+          escalationKey(
+            instanceId,
+            String(value["ownerSessionKey"]),
+            String(value["escalationId"]),
+          ),
+        );
+        if (prior === undefined)
+          throw new Error("Withdrawn question has no open event");
+        prior.withdrawn = true;
       } else if (event.type === escalationEventTypes.authorityMoved) {
         const value = eventPayload(event);
         if (
@@ -393,7 +460,11 @@ export class EscalationHistory {
           value["escalationId"],
         );
         const prior = replayed.get(key);
-        if (prior === undefined || prior.answered !== undefined) {
+        if (
+          prior === undefined ||
+          prior.answered !== undefined ||
+          prior.withdrawn
+        ) {
           throw new Error(
             `Escalation '${value["escalationId"]}' authority move has no pending open event`,
           );

@@ -118,9 +118,9 @@ const userInputQuestionsFrom = (
     if (
       !nonEmptyString(question["id"]) ||
       !nonEmptyString(question["question"]) ||
-      typeof question["multiSelect"] !== "boolean" ||
-      !Array.isArray(question["options"]) ||
-      question["options"].length < 2
+      (question["multiSelect"] !== undefined &&
+        typeof question["multiSelect"] !== "boolean") ||
+      !Array.isArray(question["options"])
     ) {
       throw new Error("T3 pending user-input has a malformed question catalog");
     }
@@ -169,7 +169,7 @@ const userInputQuestionsFrom = (
         ? {}
         : { header: question["header"] }),
       id: question["id"],
-      multiSelect: question["multiSelect"],
+      multiSelect: question["multiSelect"] ?? false,
       options,
       question: question["question"],
     };
@@ -178,9 +178,13 @@ const userInputQuestionsFrom = (
 
 export const userInputQuestionsFor = (
   snapshot: T3ThreadSnapshot,
+  requestId?: string,
 ): T3UserInputQuestion[] =>
   userInputQuestionsFrom(
-    pendingRequestActivitiesFor(snapshot, "user-input.requested").at(-1),
+    pendingRequestActivitiesFor(snapshot, "user-input.requested").findLast(
+      (activity) =>
+        requestId === undefined || activity.payload?.requestId === requestId,
+    ),
   );
 
 export const ensureObservationAttention = async (

@@ -637,7 +637,7 @@ Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path;
 
 Use `advance` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
 
-Use your harness question tool when you need an answer. Heddle routes the complete question set to your parent, a configured adjudicator, or the operator. Reply to question sets assigned to you through Heddle's `answer` tool, with reasoning for every answer. Finish the work or advance; do not stop while you owe an answer.
+Use your harness question tool when you need an answer. Heddle routes the question set to your parent, an adjudicator, or the operator. Answer assigned questions with Heddle's `answer` tool: every question ID needs selectedOptions or text, plus reasoning. Finish the work or advance; do not stop while you owe an answer.
 ```
 
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
@@ -717,7 +717,7 @@ records the effective prompt, exact rendered document, and task, instance,
 session, stage, and thread identity in `session:activated`. Restart accepts
 only an exact payload match and does not append or dispatch a second activation.
 
-Pinned Wyrd Company T3 fork 0.0.37-wyrd.2 supplies authenticated per-thread MCP
+Pinned Wyrd Company T3 fork 0.0.38-wyrd.1 supplies authenticated per-thread MCP
 registration through each of its provider adapters. Heddle derives
 the workflow MCP endpoint from the configured server host and port, then sends
 that endpoint and the session's bearer correlation token to

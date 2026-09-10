@@ -8,62 +8,48 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 const identifier = z.string().trim().min(1).max(128);
+const harnessString = z
+  .string()
+  .refine((value) => value.trim() !== "", "Harness values must not be blank");
 
-const choiceEscalationQuestionSchema = z
+export const escalationQuestionSchema = z
   .object({
-    id: identifier,
-    kind: z.literal("choice").optional(),
-    options: z
-      .array(
-        z
-          .object({
-            description: z.string().trim().min(1).max(2_000),
-            id: identifier,
-            label: z.string().trim().min(1).max(200),
-          })
-          .strict(),
-      )
-      .min(2)
-      .max(20),
-    prompt: z.string().trim().min(1).max(4_000),
+    id: harnessString,
+    header: harnessString.optional(),
+    multiSelect: z.boolean().default(false),
+    options: z.array(
+      z
+        .object({
+          description: harnessString.optional(),
+          label: harnessString,
+        })
+        .strict(),
+    ),
+    question: harnessString,
   })
   .strict();
-
-const valueValidationSchema = z
-  .object({
-    maxLength: z.number().int().min(1).max(4_000),
-    minLength: z.number().int().min(1).max(4_000).default(1),
-  })
-  .strict()
-  .refine(
-    ({ maxLength, minLength }) => minLength <= maxLength,
-    "Value validation minimum length must not exceed its maximum length",
-  );
-
-const valueEscalationQuestionSchema = z
-  .object({
-    id: identifier,
-    kind: z.literal("value"),
-    prompt: z.string().trim().min(1).max(4_000),
-    validation: valueValidationSchema,
-  })
-  .strict();
-
-export const escalationQuestionSchema = z.union([
-  choiceEscalationQuestionSchema,
-  valueEscalationQuestionSchema,
-]);
 
 export const escalationInputSchema = z
   .object({
     escalationId: identifier,
+    requestId: z.string().min(1),
+    threadId: z.string().min(1),
     questions: z.array(escalationQuestionSchema).min(1).max(20),
   })
   .strict();
 
 export const escalationAnswerSchema = z
   .object({
-    answers: z.record(identifier, z.string().min(1).max(4_000)),
+    answers: z.record(
+      harnessString,
+      z
+        .object({
+          selectedOptions: z.array(z.string().min(1)),
+          text: z.string(),
+          reasoning: z.string().trim().min(1),
+        })
+        .strict(),
+    ),
     escalationId: identifier,
     ownerSessionKey: identifier,
     prose: z.string().trim().min(1).max(4_000).optional(),
@@ -94,7 +80,7 @@ export const answeredEscalationSchema = escalationAnswerSchema.extend({
 export type EscalationQuestion = z.infer<typeof escalationQuestionSchema>;
 export type EscalationInput = z.infer<typeof escalationInputSchema>;
 export type EscalationAnswerInput = z.infer<typeof escalationAnswerSchema>;
-export type EscalationAnswers = Record<string, string>;
+export type EscalationAnswers = EscalationAnswerInput["answers"];
 export type EscalationResult = {
   awaitingAnswer: boolean;
   escalationId: string;
@@ -110,6 +96,8 @@ export type EscalationAttention = {
   instanceId: string;
   openedAt: string;
   ownerSessionKey: string;
+  requestId: string;
+  threadId: string;
   questions: EscalationQuestion[];
   stage: string;
   adjudication?: z.infer<typeof adjudicationEvidenceSchema>;
@@ -140,6 +128,39 @@ export type AnsweredEscalation = {
   prose?: string;
 };
 
+export const harnessAnswers = (
+  answers: EscalationAnswers,
+): Record<string, string | string[]> =>
+  Object.fromEntries(
+    Object.entries(answers).map(([id, answer]) => [
+      id,
+      answer.text.trim() === "" ? answer.selectedOptions : answer.text,
+    ]),
+  );
+
+export const renderQuestionSet = (opened: EscalationAttention): string =>
+  [
+    `Question set ${opened.escalationId} from session ${opened.ownerSessionKey} requires an answer.`,
+    `Use the Heddle answer tool with escalationId=${JSON.stringify(opened.escalationId)}, ownerSessionKey=${JSON.stringify(opened.ownerSessionKey)}, and answers keyed by question ID.`,
+    "Each answer requires selectedOptions (labels), text, and reasoning. Supply either selected options or text, never both. Answer every question in one call. Do not stop or advance while an answer is owed.",
+    ...opened.questions.map((question) =>
+      [
+        `Question ID: ${question.id}`,
+        question.question,
+        question.multiSelect
+          ? "Select one or more options, or give text instead."
+          : "Select one option, or give text instead.",
+        ...question.options.map(
+          (option) =>
+            `- ${option.label}${option.description === undefined ? "" : `: ${option.description}`}`,
+        ),
+        ...(question.options.length === 0
+          ? ["There are no options; give a text answer."]
+          : []),
+      ].join("\n"),
+    ),
+  ].join("\n\n");
+
 export const adjudicationSessionKey = (attentionId: string): string =>
   `adjudication:${attentionId.slice("escalation:".length)}`;
 
@@ -165,15 +186,14 @@ export const validateQuestions = (questions: EscalationQuestion[]): void => {
       throw new TypeError(`Escalation repeats question ID '${question.id}'`);
     }
     questionIds.add(question.id);
-    if (question.kind === "value") continue;
     const optionIds = new Set<string>();
     for (const option of question.options) {
-      if (optionIds.has(option.id)) {
+      if (optionIds.has(option.label)) {
         throw new TypeError(
-          `Escalation question '${question.id}' repeats option ID '${option.id}'`,
+          `Escalation question '${question.id}' repeats option label '${option.label}'`,
         );
       }
-      optionIds.add(option.id);
+      optionIds.add(option.label);
     }
   }
 };
@@ -189,25 +209,29 @@ export const validateAnswers = (
     actual.some((id) => !expected.has(id))
   ) {
     throw new TypeError(
-      "Escalation answer must select one option per question",
+      "Escalation answer must answer every question exactly once",
     );
   }
   for (const question of opened.questions) {
-    const selected = answers[question.id];
-    if (question.kind === "value") {
-      const { maxLength, minLength } = question.validation;
-      if (
-        selected === undefined ||
-        selected.length < minLength ||
-        selected.length > maxLength
-      ) {
-        throw new TypeError(
-          `Escalation answer for '${question.id}' does not satisfy its value validation`,
-        );
-      }
-      continue;
+    const answer =
+      escalationAnswerSchema.shape.answers.parse(answers)[question.id]!;
+    const selected = answer.selectedOptions;
+    if (selected.length > 0 === answer.text.trim().length > 0) {
+      throw new TypeError(
+        `Answer '${question.id}' requires either selected options or text`,
+      );
     }
-    if (!question.options.some(({ id }) => id === selected)) {
+    if (!question.multiSelect && selected.length > 1) {
+      throw new TypeError(
+        `Answer '${question.id}' permits only one selected option`,
+      );
+    }
+    if (
+      new Set(selected).size !== selected.length ||
+      selected.some(
+        (value) => !question.options.some(({ label }) => label === value),
+      )
+    ) {
       throw new TypeError(
         `Escalation answer for '${question.id}' does not name an offered option`,
       );
@@ -225,7 +249,10 @@ export const sameAnswers = (
   left: AnsweredEscalation,
   right: AnsweredEscalation,
 ): boolean =>
-  opened.questions.every(({ id }) => left.answers[id] === right.answers[id]) &&
+  opened.questions.every(
+    ({ id }) =>
+      JSON.stringify(left.answers[id]) === JSON.stringify(right.answers[id]),
+  ) &&
   Object.keys(left.answers).length === Object.keys(right.answers).length &&
   left.prose === right.prose &&
   JSON.stringify(left.answeredBy) === JSON.stringify(right.answeredBy);

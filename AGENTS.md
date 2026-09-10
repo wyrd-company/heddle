@@ -40,9 +40,8 @@ not go:
   that is provided the current context of the epic.
 - **Escalation played the telephone game.** A subagent escalated to the
   orchestrator, which escalated to the operator, filling two contexts to carry
-  one question. Heddle routes a top-level session's question into a durable
-  attention queue the operator answers directly, and routes a subagent's
-  question to its parent.
+  one question. Heddle routes each harness question to its parent, a configured
+  adjudicator, or the operator. Every tier uses one complete answer contract.
 - **Assistive tasks required a specific harness or complicated shell manipulation.**
   The skill-based workflow required `claude --remote-session` launched as a shell
   and pi-orchestrator required every "subagent" to be launched in an attachable
@@ -127,7 +126,7 @@ When this file does not settle a question, decide with these.
   organization blueprint repository and pinned by content hash at activation.
 - **escalation** is a durable question from a session. Answer authority begins
   with its parent when it has one and with a fresh adjudication when it does
-  not. The answer returns through a dispatched session turn.
+  not. The answer replies to the original harness request on its recorded thread.
 - **instance** is one running lifecycle bound to one task.
 - **lifecycle** is the prescribed stages and transitions through which a task
   moves to completion.
@@ -230,7 +229,7 @@ Pinned dependencies that the service checks or assumes:
 - **`wyrd-company/kanban-md`** at `0.37.0-fork+b9fc380`, which preserves
   unrecognized front-matter properties through every task mutation. The service
   verifies this at startup and refuses to run against another build.
-- **Wyrd Company T3Code fork `0.0.37-wyrd.2`**, against which the control-plane integration is qualified from its public release tarball.
+- **Wyrd Company T3Code fork `0.0.38-wyrd.1`**, against which the control-plane integration is qualified from its public release tarball.
 - **Provider CLI versions** are discovered and enforced by T3. Heddle records
   the observed version as diagnostic and qualification evidence and keeps no
   driver-name or CLI-version allowlist.

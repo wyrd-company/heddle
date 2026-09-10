@@ -31,11 +31,8 @@ const action: ConsoleAttentionAction = {
       {
         id: "delivery-window",
         multiSelect: false,
-        options: [
-          { label: "Continue", value: "continue" },
-          { label: "Wait", value: "wait" },
-        ],
-        prompt: "Which delivery window should be used?",
+        options: [{ label: "Continue" }, { label: "Wait" }],
+        question: "Which delivery window should be used?",
       },
     ],
   },
@@ -146,19 +143,37 @@ describe("console attention action contract", () => {
     expect(
       parseConsoleAttentionActionRequest(
         {
-          answers: { "delivery-window": "continue" },
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
           fingerprint: entry().fingerprint,
         },
         action,
       ),
     ).toEqual({
-      answers: { "delivery-window": "continue" },
+      answers: {
+        "delivery-window": {
+          selectedOptions: ["Continue"],
+          text: "",
+          reasoning: "Fits the sample schedule.",
+        },
+      },
       fingerprint: entry().fingerprint,
     });
     expect(() =>
       parseConsoleAttentionActionRequest(
         {
-          answers: { "delivery-window": "later" },
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Later"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
           fingerprint: entry().fingerprint,
         },
         action,
@@ -166,21 +181,17 @@ describe("console attention action contract", () => {
     ).toThrow("does not name an offered option");
   });
 
-  it("validates a value answer and optional prose against the projected contract", () => {
+  it("accepts text with reasoning when no options are offered", () => {
     const valueAction: ConsoleAttentionAction = {
       ...action,
       input: {
         kind: "questions",
-        prose: { label: "Additional context", maxLength: 80 },
         questions: [
           {
             id: "reference",
-            kind: "value",
-            prompt: "Enter the sample reference",
-            validation: {
-              maxLength: 12,
-              minLength: 4,
-            },
+            multiSelect: false,
+            question: "Enter the sample reference",
+            options: [],
           },
         ],
       },
@@ -189,26 +200,141 @@ describe("console attention action contract", () => {
     expect(
       parseConsoleAttentionActionRequest(
         {
-          answers: { reference: "alpha-12" },
+          answers: {
+            reference: {
+              selectedOptions: [],
+              text: "alpha-12",
+              reasoning: "Matches the sample label.",
+            },
+          },
           fingerprint: entry().fingerprint,
-          prose: "Apply this reference to the current sample.",
         },
         valueAction,
       ),
     ).toEqual({
-      answers: { reference: "alpha-12" },
+      answers: {
+        reference: {
+          selectedOptions: [],
+          text: "alpha-12",
+          reasoning: "Matches the sample label.",
+        },
+      },
       fingerprint: entry().fingerprint,
-      prose: "Apply this reference to the current sample.",
     });
     expect(() =>
       parseConsoleAttentionActionRequest(
         {
-          answers: { reference: "bad" },
+          answers: {
+            reference: {
+              selectedOptions: ["alpha-12"],
+              text: "",
+              reasoning: "Matches the sample label.",
+            },
+          },
           fingerprint: entry().fingerprint,
         },
         valueAction,
       ),
-    ).toThrow("does not satisfy its value validation");
+    ).toThrow("does not name an offered option");
+  });
+
+  it.each([
+    [{ selectedOptions: [], text: "", reasoning: "Needed." }, "exclusively"],
+    [
+      { selectedOptions: ["Continue"], text: "Later", reasoning: "Needed." },
+      "exclusively",
+    ],
+    [
+      { selectedOptions: ["Continue"], text: "", reasoning: " " },
+      "nonempty reasoning",
+    ],
+    [
+      { selectedOptions: ["Continue", "Wait"], text: "", reasoning: "Needed." },
+      "at most one",
+    ],
+    [
+      {
+        selectedOptions: ["Continue", "Continue"],
+        text: "",
+        reasoning: "Needed.",
+      },
+      "at most one",
+    ],
+    [
+      {
+        selectedOptions: [],
+        text: "Later",
+        reasoning: "Needed.",
+        value: "old",
+      },
+      "requires selectedOptions",
+    ],
+    ["Continue", "must be an object"],
+  ])("rejects invalid answer %j", (answer, message) => {
+    expect(() =>
+      parseConsoleAttentionActionRequest(
+        {
+          answers: { "delivery-window": answer },
+          fingerprint: entry().fingerprint,
+        },
+        action,
+      ),
+    ).toThrow(message);
+  });
+
+  it("accepts one selection for multi-select and rejects duplicate selections", () => {
+    if (action.input.kind !== "questions")
+      throw new Error("questions expected");
+    const multiAction: ConsoleAttentionAction = {
+      ...action,
+      input: {
+        kind: "questions",
+        questions: action.input.questions.map((question) => ({
+          ...question,
+          multiSelect: true,
+        })),
+      },
+    };
+    const answer = {
+      selectedOptions: ["Continue"],
+      text: "",
+      reasoning: "Fits the schedule.",
+    };
+    expect(
+      parseConsoleAttentionActionRequest(
+        {
+          answers: { "delivery-window": answer },
+          fingerprint: entry().fingerprint,
+        },
+        multiAction,
+      ).answers,
+    ).toEqual({ "delivery-window": answer });
+    expect(() =>
+      parseConsoleAttentionActionRequest(
+        {
+          answers: {
+            "delivery-window": {
+              ...answer,
+              selectedOptions: ["Continue", "Continue"],
+            },
+          },
+          fingerprint: entry().fingerprint,
+        },
+        multiAction,
+      ),
+    ).toThrow("repeats an option");
+  });
+
+  it.each([
+    {},
+    { unknown: { selectedOptions: [], text: "sample", reasoning: "Needed." } },
+  ])("rejects incomplete or unknown question IDs", (answers) => {
+    expect(() =>
+      parseConsoleAttentionActionRequest(
+        { answers, fingerprint: entry().fingerprint },
+        action,
+      ),
+    ).toThrow("every offered question exactly once");
   });
 
   it("carries an identity of exactly the bound and refuses one past it", () => {

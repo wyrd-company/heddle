@@ -149,15 +149,18 @@ describe("production subagent composition", () => {
     const child = await resolver.resolve(spawned.assignment.correlationToken);
 
     const opened = await composition.escalation.escalate(child, {
+      threadId: spawned.assignment.threadId,
+      requestId: "request-one",
       escalationId: "child-choice",
       questions: [
         {
+          multiSelect: false,
           id: "route",
           options: [
-            { description: "Use route A", id: "a", label: "Route A" },
-            { description: "Use route B", id: "b", label: "Route B" },
+            { description: "Use route A", label: "a" },
+            { description: "Use route B", label: "b" },
           ],
-          prompt: "Which route should be used?",
+          question: "Which route should be used?",
         },
       ],
     });
@@ -171,7 +174,7 @@ describe("production subagent composition", () => {
           (command) =>
             command.type === "thread.turn.start" &&
             command.threadId === spawned.assignment.parentThreadId &&
-            JSON.stringify(command).includes("Child escalation"),
+            JSON.stringify(command).includes("Question ID: route"),
         ),
       ).toBe(true),
     );
@@ -181,7 +184,13 @@ describe("production subagent composition", () => {
     );
 
     const answered = await callMcpTool(composition, parent.token, "answer", {
-      answers: { route: "b" },
+      answers: {
+        route: {
+          selectedOptions: ["b"],
+          text: "",
+          reasoning: "The selected route fits the requested result.",
+        },
+      },
       escalationId: "child-choice",
       ownerSessionKey: child.sessionKey,
       prose: "Use route B for this sample.",
@@ -192,13 +201,10 @@ describe("production subagent composition", () => {
       createsBeforeAnswer,
     );
     expect(
-      t3.commands.filter(
-        (command) =>
-          command.type === "thread.turn.start" &&
-          command.threadId === spawned.assignment.threadId &&
-          JSON.stringify(command).includes(
-            "Escalation child-choice was answered",
-          ),
+      t3.userInputResponses.filter(
+        (response) =>
+          response.threadId === spawned.assignment.threadId &&
+          response.requestId === "request-one",
       ),
     ).toHaveLength(1);
     expect(
@@ -209,7 +215,7 @@ describe("production subagent composition", () => {
   });
 
   it.each(["absent", "completed", "failed"] as const)(
-    "returns answer authority to the operator when its session is %s",
+    "retains the answer obligation when its session is %s",
     async (phase) => {
       const fixture = await prepareProductionEpicFixture();
       cleanup = fixture.cleanup;
@@ -246,15 +252,18 @@ describe("production subagent composition", () => {
       if (spawned.kind !== "spawned") throw new Error("Child was deferred");
       const child = await resolver.resolve(spawned.assignment.correlationToken);
       await composition.escalation.escalate(child, {
+        threadId: "thread-17",
+        requestId: "request-one",
         escalationId: `authority-${phase}`,
         questions: [
           {
+            multiSelect: false,
             id: "route",
             options: [
-              { description: "Use route A", id: "a", label: "Route A" },
-              { description: "Use route B", id: "b", label: "Route B" },
+              { description: "Use route A", label: "a" },
+              { description: "Use route B", label: "b" },
             ],
-            prompt: "Which route should be used?",
+            question: "Which route should be used?",
           },
         ],
       });
@@ -271,12 +280,15 @@ describe("production subagent composition", () => {
         composition.escalation.pendingEscalations(instanceId),
       ).toMatchObject([
         {
-          answeringAuthority: { kind: "operator" },
+          answeringAuthority: {
+            kind: "session",
+            sessionKey: parent.sessionKey,
+          },
           escalationId: `authority-${phase}`,
           ownerSessionKey: child.sessionKey,
         },
       ]);
-      expect(composition.attention.list()).toContainEqual(
+      expect(composition.attention.list()).not.toContainEqual(
         expect.objectContaining({
           actions: [
             expect.objectContaining({
@@ -290,12 +302,18 @@ describe("production subagent composition", () => {
       );
       await expect(
         composition.escalation.answerAsOperator({
-          answers: { route: "a" },
+          answers: {
+            route: {
+              selectedOptions: ["a"],
+              text: "",
+              reasoning: "The selected route fits the requested result.",
+            },
+          },
           escalationId: `authority-${phase}`,
           instanceId,
           ownerSessionKey: child.sessionKey,
         }),
-      ).resolves.toMatchObject({ answeredBy: { kind: "operator" } });
+      ).rejects.toThrow(/answering authority/);
     },
   );
 
@@ -334,21 +352,30 @@ describe("production subagent composition", () => {
     if (spawned.kind !== "spawned") throw new Error("Child was deferred");
     const child = await resolver.resolve(spawned.assignment.correlationToken);
     await composition.escalation.escalate(child, {
+      threadId: spawned.assignment.threadId,
+      requestId: "request-one",
       escalationId: "unavailable-child-answer",
       questions: [
         {
+          multiSelect: false,
           id: "route",
           options: [
-            { description: "Use route A", id: "a", label: "Route A" },
-            { description: "Use route B", id: "b", label: "Route B" },
+            { description: "Use route A", label: "a" },
+            { description: "Use route B", label: "b" },
           ],
-          prompt: "Which route should be used?",
+          question: "Which route should be used?",
         },
       ],
     });
     composition.persistence.appendEvent(instanceId, "mcp:escalation-answered", {
       answeredBy: { kind: "session", sessionKey: parent.sessionKey },
-      answers: { route: "a" },
+      answers: {
+        route: {
+          selectedOptions: ["a"],
+          text: "",
+          reasoning: "The selected route fits the requested result.",
+        },
+      },
       escalationId: "unavailable-child-answer",
       ownerSessionKey: child.sessionKey,
     });
@@ -390,13 +417,10 @@ describe("production subagent composition", () => {
         ),
     ).toBe(false);
     expect(
-      t3.commands.filter(
-        (command) =>
-          command.type === "thread.turn.start" &&
-          command.threadId === spawned.assignment.threadId &&
-          JSON.stringify(command).includes(
-            "Escalation unavailable-child-answer was answered",
-          ),
+      t3.userInputResponses.filter(
+        (response) =>
+          response.threadId === spawned.assignment.threadId &&
+          response.requestId === "request-one",
       ),
     ).toHaveLength(1);
   });
@@ -1117,6 +1141,8 @@ describe("production subagent composition", () => {
       escalationId,
     );
     first.persistence.appendEvent(instanceId, "mcp:escalation-opened", {
+      threadId: "thread-17",
+      requestId: "request-one",
       attentionId,
       escalationId,
       instanceId,
@@ -1125,20 +1151,19 @@ describe("production subagent composition", () => {
       parentSessionKey: parent.sessionKey,
       questions: [
         {
+          multiSelect: false,
           id: "selection",
           options: [
             {
               description: "Use the first sample",
-              id: "first",
-              label: "First",
+              label: "first",
             },
             {
               description: "Use the second sample",
-              id: "second",
-              label: "Second",
+              label: "second",
             },
           ],
-          prompt: "Which sample should be selected?",
+          question: "Which sample should be selected?",
         },
       ],
       stage: child.stage.id,
@@ -1189,8 +1214,7 @@ describe("production subagent composition", () => {
     const escalationDispatches = restartedT3.dispatches.filter(
       ({ command }) =>
         command.type === "thread.turn.start" &&
-        command.message.text ===
-          `Child escalation ${attentionId} requires an answer`,
+        command.message.text.includes("Question set pending-child-choice"),
     );
     expect(escalationDispatches).toEqual([
       {

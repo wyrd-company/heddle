@@ -173,21 +173,24 @@ describe("production attention actions", () => {
       dispositions: [],
       instance,
       sessionKey: runtime.sessionKey!,
-      stage: { id: runtime.stageId!, tools: ["escalate", "answer"] },
+      stage: { id: runtime.stageId!, tools: ["answer"] },
       taskContext: { id: fixture.taskId, title: "Example Item" },
       token: "correlation-token",
     };
     const escalationId = "e".repeat(128);
     const pending = await composition.escalation.escalate(binding, {
+      threadId: runtime.threadId!,
+      requestId: "request-one",
       escalationId,
       questions: [
         {
+          multiSelect: false,
           id: "decision",
           options: [
-            { description: "Use route A", id: "a", label: "Route A" },
-            { description: "Use route B", id: "b", label: "Route B" },
+            { description: "Use route A", label: "a" },
+            { description: "Use route B", label: "b" },
           ],
-          prompt: "Choose a route",
+          question: "Choose a route",
         },
       ],
     });
@@ -216,7 +219,13 @@ describe("production attention actions", () => {
 
     await composition.consoleActions.execute({
       action: attention.actions[0]!,
-      answers: { decision: "b" },
+      answers: {
+        decision: {
+          selectedOptions: ["b"],
+          text: "",
+          reasoning: "The selected route fits the requested result.",
+        },
+      },
       attention,
     });
 
@@ -256,6 +265,8 @@ describe("production attention actions", () => {
       runtime.instanceId,
       "mcp:escalation-opened",
       {
+        threadId: "thread-17",
+        requestId: "request-one",
         attentionId,
         escalationId,
         instanceId: runtime.instanceId,
@@ -263,12 +274,13 @@ describe("production attention actions", () => {
         ownerSessionKey: runtime.sessionKey!,
         questions: [
           {
+            multiSelect: false,
             id: "decision",
             options: [
-              { description: "Use route A", id: "a", label: "Route A" },
-              { description: "Use route B", id: "b", label: "Route B" },
+              { description: "Use route A", label: "a" },
+              { description: "Use route B", label: "b" },
             ],
-            prompt: "Choose a route",
+            question: "Choose a route",
           },
         ],
         stage: runtime.stageId!,
@@ -311,6 +323,8 @@ describe("production attention actions", () => {
       runtime.instanceId,
       "mcp:escalation-opened",
       {
+        threadId: "thread-17",
+        requestId: "request-one",
         attentionId,
         escalationId,
         instanceId: runtime.instanceId,
@@ -318,12 +332,13 @@ describe("production attention actions", () => {
         ownerSessionKey: runtime.sessionKey!,
         questions: [
           {
+            multiSelect: false,
             id: "decision",
             options: [
-              { description: "Use route A", id: "a", label: "Route A" },
-              { description: "Use route B", id: "b", label: "Route B" },
+              { description: "Use route A", label: "a" },
+              { description: "Use route B", label: "b" },
             ],
-            prompt: "Choose a route",
+            question: "Choose a route",
           },
         ],
         stage: runtime.stageId!,
@@ -411,16 +426,22 @@ describe("production attention actions", () => {
     });
     const userInput = composition.attention.list()[0]!;
     expect(userInput.actions[0]?.input).toMatchObject({
-      questions: [{ header: "Direction", prompt: "Choose a route" }],
+      questions: [{ header: "Direction", question: "Choose a route" }],
     });
     await composition.consoleActions.execute({
       action: userInput.actions[0]!,
-      answers: { "question-one": "Second" },
+      answers: {
+        "question-one": {
+          selectedOptions: ["Second"],
+          text: "",
+          reasoning: "The selected route fits the requested result.",
+        },
+      },
       attention: userInput,
     });
     expect(t3.userInputResponses).toEqual([
       {
-        answers: { "question-one": "Second" },
+        answers: { "question-one": ["Second"] },
         commandId: "user-input-attention",
         requestId: "input-one",
         threadId: runtime.threadId,
@@ -512,7 +533,13 @@ describe("production attention actions", () => {
     await expect(
       composition.consoleActions.execute({
         action: attention.actions[0]!,
-        answers: { unsupported: "answer" },
+        answers: {
+          unsupported: {
+            selectedOptions: ["answer"],
+            text: "",
+            reasoning: "The selected route fits the requested result.",
+          },
+        },
         attention,
       }),
     ).rejects.toThrow("request body contains an unsupported field");

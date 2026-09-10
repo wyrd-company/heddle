@@ -1843,7 +1843,6 @@ describe("workflow MCP HTTP server", () => {
       "advance",
       "get_task_context",
       "report_blocked",
-      "escalate",
       "create_follow_up",
       "create_finding",
       "todo_list",

@@ -39,11 +39,8 @@ const actionable = (message = "A delivery choice is required") =>
             {
               id: "delivery-window",
               multiSelect: false,
-              options: [
-                { label: "Continue", value: "continue" },
-                { label: "Wait", value: "wait" },
-              ],
-              prompt: "Which delivery window should be used?",
+              options: [{ label: "Continue" }, { label: "Wait" }],
+              question: "Which delivery window should be used?",
             },
           ],
         },
@@ -110,7 +107,13 @@ describe("console attention action endpoint", () => {
       `${baseUrl}/api/attention/attention-12/actions/answer`,
       {
         body: JSON.stringify({
-          answers: { "delivery-window": "continue" },
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
           fingerprint: current.fingerprint,
         }),
         headers: { "content-type": "application/json" },
@@ -121,7 +124,13 @@ describe("console attention action endpoint", () => {
     expect(response.status).toBe(204);
     expect(execute).toHaveBeenCalledWith({
       action: current.actions[0],
-      answers: { "delivery-window": "continue" },
+      answers: {
+        "delivery-window": {
+          selectedOptions: ["Continue"],
+          text: "",
+          reasoning: "Fits the sample schedule.",
+        },
+      },
       attention: current,
     });
   });
@@ -138,7 +147,13 @@ describe("console attention action endpoint", () => {
       `${baseUrl}/api/attention/attention-12/actions/answer`,
       {
         body: JSON.stringify({
-          answers: { "delivery-window": "continue" },
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
           fingerprint: shown.fingerprint,
         }),
         headers: { "content-type": "application/json" },
@@ -161,7 +176,13 @@ describe("console attention action endpoint", () => {
         `${baseUrl}/api/attention/attention-12/actions/${actionId}`,
         {
           body: JSON.stringify({
-            answers: { "delivery-window": answer },
+            answers: {
+              "delivery-window": {
+                selectedOptions: [answer],
+                text: "",
+                reasoning: "Fits the sample schedule.",
+              },
+            },
             fingerprint: current.fingerprint,
           }),
           headers: { "content-type": "application/json" },
@@ -199,7 +220,13 @@ describe("console attention action endpoint", () => {
         `${baseUrl}/api/attention/${attentionId}/actions/answer`,
         {
           body: JSON.stringify({
-            answers: { "delivery-window": "continue" },
+            answers: {
+              "delivery-window": {
+                selectedOptions: ["Continue"],
+                text: "",
+                reasoning: "Fits the sample schedule.",
+              },
+            },
             fingerprint: current.fingerprint,
           }),
           headers: { "content-type": "application/json" },
@@ -243,7 +270,13 @@ describe("console attention action endpoint", () => {
       `${baseUrl}/api/attention/attention-12/actions/answer`,
       {
         body: JSON.stringify({
-          answers: { "delivery-window": "continue" },
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
           fingerprint: current.fingerprint,
         }),
         headers: { "content-type": "application/json" },

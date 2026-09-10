@@ -8237,7 +8237,7 @@ function j(e, t, n) {
 	return e.has(t) ? e.get(t) : (e.set(t, n), n);
 }
 //#endregion
-//#region node_modules/lodash.isequal/index.js
+//#region ../epic-656/node_modules/lodash.isequal/index.js
 var M = /* @__PURE__ */ o(((e, t) => {
 	var n = "__lodash_hash_undefined__", r = 9007199254740991, i = "[object Arguments]", a = "[object Array]", o = "[object Boolean]", s = "[object Date]", c = "[object Error]", l = "[object Function]", u = "[object Map]", d = "[object Number]", f = "[object Object]", p = "[object Promise]", m = "[object RegExp]", h = "[object Set]", g = "[object String]", _ = "[object WeakMap]", v = "[object ArrayBuffer]", y = "[object DataView]", b = "[object Float32Array]", x = "[object Float64Array]", S = "[object Int8Array]", C = "[object Int16Array]", w = "[object Int32Array]", T = "[object Uint8Array]", E = "[object Uint8ClampedArray]", D = "[object Uint16Array]", O = "[object Uint32Array]", k = /[\\^$.*+?()[\]{}|]/g, A = /^\[object .+?Constructor\]$/, j = /^(?:0|[1-9]\d*)$/, M = {};
 	M[b] = M[x] = M[S] = M[C] = M[w] = M[T] = M[E] = M[D] = M[O] = !0, M[i] = M[a] = M[v] = M[o] = M[y] = M[s] = M[c] = M[l] = M[u] = M[d] = M[f] = M[m] = M[h] = M[g] = M[_] = !1;
@@ -9362,7 +9362,7 @@ function le(e, t, n) {
 	return i;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/function.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/function.mjs
 function ue(e) {
 	let t = (...n) => {
 		try {
@@ -9375,7 +9375,7 @@ function ue(e) {
 }
 function de() {}
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/control.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/control.mjs
 var fe = {
 	ok(e) {
 		return {
@@ -9416,7 +9416,7 @@ function ge(e) {
 	return new Promise((t) => setTimeout(t, e));
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/bind.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/bind.mjs
 function _e(...e) {
 	if (e.length === 2) {
 		let [t, n] = e;
@@ -9446,7 +9446,7 @@ function _e(...e) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/cache.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/cache.mjs
 var ve = class {
 	items = /* @__PURE__ */ new WeakMap();
 	get(e, t) {
@@ -9454,7 +9454,7 @@ var ve = class {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/debounce.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/debounce.mjs
 function ye(e, t) {
 	let n, r = (...r) => (n || (n = {}, n.promise = new Promise((e, t) => {
 		n.resolve = e, n.reject = t;
@@ -9475,7 +9475,7 @@ function ye(e, t) {
 	}, r;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/error.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/error.mjs
 var be = /* @__PURE__ */ new WeakMap();
 function xe(e, t) {
 	if (typeof e != "object" || !e) return;
@@ -9492,7 +9492,7 @@ function xe(e, t) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/network.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/network.mjs
 async function Se(e, t) {
 	return window.fetch(e, {
 		referrerPolicy: "strict-origin-when-cross-origin",
@@ -9504,7 +9504,7 @@ function Ce(e, t) {
 	return n.referrerPolicy = "strict-origin-when-cross-origin", n;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/file.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/file.mjs
 var we = class e {
 	static async urlToArrayBuffer(e) {
 		return await (await Se(e)).arrayBuffer();
@@ -9538,14 +9538,14 @@ var we = class e {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/hash.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/hash.mjs
 function Te(e) {
 	let t = 0;
 	for (let n = 0; n < e.length; n++) t = (t << 5) - t + e.charCodeAt(n), t |= 0;
 	return t + "";
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/id.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/id.mjs
 var Ee = globalThis.crypto, De = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict", Oe = 128, ke, Ae;
 function je(e) {
 	!ke || ke.length < e ? (ke = new Uint8Array(e * Oe), Ee.getRandomValues(ke), Ae = 0) : Ae + e > ke.length && (Ee.getRandomValues(ke), Ae = 0), Ae += e;
@@ -9561,7 +9561,7 @@ function Pe(e) {
 	return Ne(e);
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/LruCache.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/LruCache.mjs
 var Fe = class {
 	constructor(e) {
 		this.maxSize = e;
@@ -9584,7 +9584,7 @@ var Fe = class {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/media/apng.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/media/apng.mjs
 function Ie(e) {
 	let t = new Uint8Array(e);
 	if (!t || !(typeof Buffer < "u" && Buffer.isBuffer(t) || t instanceof Uint8Array) || t.length < 16 || t[0] !== 137 || t[1] !== 80 || t[2] !== 78 || t[3] !== 71 || t[4] !== 13 || t[5] !== 10 || t[6] !== 26 || t[7] !== 10) return !1;
@@ -9611,12 +9611,12 @@ function Ie(e) {
 	return r >= 12 && n(t, "acTL", 8, r) >= 8;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/media/avif.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/media/avif.mjs
 function Le(e) {
 	return new Uint8Array(e)[3] === 44;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/media/gif.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/media/gif.mjs
 function Re(e, t) {
 	let n = 0;
 	for (; e[t + n];) n += e[t + n] + 1;
@@ -9643,7 +9643,7 @@ function Be(e) {
 	return a > 1;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/media/png.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/media/png.mjs
 var Ve = [
 	0,
 	1996959894,
@@ -9969,7 +9969,7 @@ var He = (e, t) => {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/media/webp.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/media/webp.mjs
 function Ke(e) {
 	return !e || e.length < 12 ? !1 : e[8] === 87 && e[9] === 69 && e[10] === 66 && e[11] === 80;
 }
@@ -9978,7 +9978,7 @@ function qe(e) {
 	return !Ke(t) || !t || t.length < 21 ? !1 : (t[20] >> 1 & 1) == 1;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/media/media.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/media/media.mjs
 var Je = Object.freeze(["image/svg+xml"]), Ye = Object.freeze([
 	"image/jpeg",
 	"image/png",
@@ -10121,7 +10121,7 @@ var $e = class e {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/number.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/number.mjs
 function et(e, t, n) {
 	return e + (t - e) * n;
 }
@@ -10142,7 +10142,7 @@ function rt(e, t, n, r = !1) {
 	return r ? o < s ? Math.max(Math.min(c, s), o) : Math.max(Math.min(c, o), s) : c;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/object.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/object.mjs
 function it(e, t) {
 	return Object.prototype.hasOwnProperty.call(e, t);
 }
@@ -10193,7 +10193,7 @@ function mt(e, t, n = 1e-6) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/perf.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/perf.mjs
 var ht = {
 	Good: "#40C057",
 	Mid: "#FFC078",
@@ -10331,7 +10331,7 @@ function Nt(e, t, n) {
 	return i;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/reordering.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/reordering.mjs
 var Pt = Nt;
 function Ft(e) {
 	try {
@@ -10362,12 +10362,12 @@ function Ht(e, t) {
 	return e.index < t.index ? -1 : +(e.index > t.index);
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/sort.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/sort.mjs
 function Ut(e, t) {
 	return e.id > t.id ? 1 : -1;
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/storage.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/storage.mjs
 function Wt(e) {
 	try {
 		return localStorage.getItem(e);
@@ -10408,7 +10408,7 @@ function Xt() {
 	} catch {}
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/string.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/string.mjs
 var Zt;
 function Qt(e) {
 	if (!e) return "";
@@ -10417,7 +10417,7 @@ function Qt(e) {
 	return "";
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/throttle.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/throttle.mjs
 var $t = () => typeof process < "u" && !1, en = .9, tn = (e) => Math.floor(1e3 / e) * en, nn = new class {
 	targetFps;
 	targetTimePerFrame;
@@ -10477,7 +10477,7 @@ function rn(e) {
 	return nn.throttleToNextFrame(e);
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/timers.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/timers.mjs
 var an = class {
 	timeouts = /* @__PURE__ */ new Map();
 	intervals = /* @__PURE__ */ new Map();
@@ -10513,7 +10513,7 @@ var an = class {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/url.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/url.mjs
 function on(e, t) {
 	try {
 		return new URL(e, t);
@@ -10522,7 +10522,7 @@ function on(e, t) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/lib/value.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/lib/value.mjs
 function sn(e) {
 	return e !== void 0;
 }
@@ -10536,10 +10536,10 @@ function pn(e) {
 	fn.has(e) || (fn.add(e), console.warn(`[tldraw] ${e}`));
 }
 //#endregion
-//#region node_modules/@tldraw/utils/dist-esm/index.mjs
+//#region ../epic-656/node_modules/@tldraw/utils/dist-esm/index.mjs
 T("@tldraw/utils", "5.3.2", "esm");
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/helpers.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/helpers.mjs
 function mn(e) {
 	return e && typeof e == "object" && "parents" in e;
 }
@@ -10615,12 +10615,12 @@ var bn = yn("empty_array", () => Object.freeze([])), xn = class {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/isComputed.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/isComputed.mjs
 function Sn(e) {
 	return !!(e && e.__isComputed === !0);
 }
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/capture.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/capture.mjs
 var Cn = class {
 	constructor(e, t) {
 		this.below = e, this.child = t;
@@ -10704,7 +10704,7 @@ function jn(e, t) {
 	i(n, 1), console.log(r);
 }
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/types.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/types.mjs
 var Mn = /* @__PURE__ */ Symbol.for("com.tldraw.state/RESET_VALUE"), Nn = class {
 	constructor(e) {
 		this.capacity = e, this.buffer = Array(e);
@@ -10837,7 +10837,7 @@ function qn(e) {
 	return Fn.currentTransaction ? e() : Kn(e);
 }
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/Atom.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/Atom.mjs
 var Jn = class {
 	constructor(e, t, n) {
 		this.name = e, this.current = t, this.isEqual = n?.isEqual ?? null, n && (n.historyLength && (this.historyBuffer = new Nn(n.historyLength)), this.computeDiff = n.computeDiff);
@@ -10872,13 +10872,13 @@ function Xn(e, t, n) {
 	return new Yn(e, t, n);
 }
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/warnings.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/warnings.mjs
 var Zn = !1;
 function Qn() {
 	Zn || (Zn = !0, console.warn("Using `@computed` as a decorator for getters is deprecated and will be removed in the near future. Please refactor to use `@computed` as a decorator for methods.\n\n// Before\n@computed\nget foo() {\n	return 'foo'\n}\n\n// After\n@computed\ngetFoo() {\n	return 'foo'\n}\n"));
 }
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/Computed.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/Computed.mjs
 var $n = /* @__PURE__ */ Symbol.for("com.tldraw.state/UNINITIALIZED");
 function er(e) {
 	return e === $n;
@@ -11010,7 +11010,7 @@ function R() {
 	return typeof arguments[0] == "string" ? new ir(arguments[0], arguments[1], arguments[2]) : cr(void 0, arguments);
 }
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/lib/EffectScheduler.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/lib/EffectScheduler.mjs
 var ur = class {
 	constructor(e, t, n) {
 		this.name = e, this.runEffect = t, this._scheduleEffect = n?.scheduleEffect;
@@ -11086,12 +11086,12 @@ function pr(e, t, n) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/state/dist-esm/index.mjs
+//#region ../epic-656/node_modules/@tldraw/state/dist-esm/index.mjs
 var mr = 1;
 if (yn("apiVersion", () => mr) !== mr) throw Error("You have multiple incompatible versions of @tldraw/state in your app. Please deduplicate the package.");
 T("@tldraw/state", "5.3.2", "esm");
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/lib/useStateTracking.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/lib/useStateTracking.mjs
 function hr(e, t, n = []) {
 	let r = _.useRef(t);
 	r.current = t;
@@ -11112,7 +11112,7 @@ function hr(e, t, n = []) {
 	}), [i]), i.execute();
 }
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/lib/track.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/lib/track.mjs
 var gr = { apply(e, t, n) {
 	return hr(e.displayName ?? e.name ?? "tracked(???)", () => e.apply(t, n));
 } }, _r = /* @__PURE__ */ Symbol.for("react.memo"), vr = /* @__PURE__ */ Symbol.for("react.forward_ref");
@@ -11121,7 +11121,7 @@ function yr(e) {
 	return n === _r && (e = e.type, t = e.compare), n === vr ? (0, _.memo)((0, _.forwardRef)(new Proxy(e.render, gr))) : (0, _.memo)(new Proxy(e, gr), t);
 }
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/lib/useAtom.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/lib/useAtom.mjs
 function br(e, t, n) {
 	return (0, _.useState)(() => {
 		let r = typeof t == "function" ? t() : t;
@@ -11129,13 +11129,13 @@ function br(e, t, n) {
 	})[0];
 }
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/lib/useComputed.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/lib/useComputed.mjs
 function xr() {
 	let e = arguments[0], t = arguments[1], n = arguments.length === 3 ? void 0 : arguments[2], r = arguments.length === 3 ? arguments[2] : arguments[3];
 	return (0, _.useMemo)(() => R(`useComputed(${e})`, t, n), r);
 }
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/lib/useQuickReactor.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/lib/useQuickReactor.mjs
 function Sr(e, t, n = bn) {
 	(0, _.useEffect)(() => {
 		let n = new dr(e, t);
@@ -11145,7 +11145,7 @@ function Sr(e, t, n = bn) {
 	}, n);
 }
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/lib/useReactor.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/lib/useReactor.mjs
 function Cr(e, t, n = []) {
 	(0, _.useEffect)(() => {
 		let n, r = new dr(e, t, { scheduleEffect: (e) => {
@@ -11157,7 +11157,7 @@ function Cr(e, t, n = []) {
 	}, n);
 }
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/lib/useValue.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/lib/useValue.mjs
 function z() {
 	let e = arguments, t = e.length === 3 ? e[2] : [e[0]], n = e.length === 3 ? e[0] : `useValue(${e[0].name})`, { $val: r, subscribe: i, getSnapshot: a } = (0, _.useMemo)(() => {
 		let t = e.length === 1 ? e[0] : R(n, e[1]);
@@ -11175,10 +11175,10 @@ function z() {
 	return (0, _.useSyncExternalStore)(i, a, a), r.__unsafe__getWithoutCapture();
 }
 //#endregion
-//#region node_modules/@tldraw/state-react/dist-esm/index.mjs
+//#region ../epic-656/node_modules/@tldraw/state-react/dist-esm/index.mjs
 T("@tldraw/state-react", "5.3.2", "esm");
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/ImmutableMap.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/ImmutableMap.mjs
 function wr(e) {
 	return e >>> 1 & 1073741824 | e & 3221225471;
 }
@@ -11680,7 +11680,7 @@ function ki() {
 	return Oi;
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/devFreeze.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/devFreeze.mjs
 function Ai(e) {
 	if (!ki()) return e;
 	let t = Object.getPrototypeOf(e);
@@ -11694,7 +11694,7 @@ function Ai(e) {
 	return Object.freeze(e);
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/IncrementalSetConstructor.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/IncrementalSetConstructor.mjs
 var ji = class {
 	constructor(e) {
 		this.previousValue = e;
@@ -11727,7 +11727,7 @@ var ji = class {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/migrate.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/migrate.mjs
 function Mi(e) {
 	let t = [];
 	for (let n = e.length - 1; n >= 0; n--) {
@@ -11819,7 +11819,7 @@ var Bi = {
 	UnrecognizedSubtype: "unrecognized-subtype"
 };
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/RecordsDiff.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/RecordsDiff.mjs
 function Vi() {
 	return {
 		added: {},
@@ -11882,7 +11882,7 @@ function Ki(e, t) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/RecordType.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/RecordType.mjs
 var qi = class e {
 	constructor(e, t) {
 		this.typeName = e, this.createDefaultProperties = t.createDefaultProperties, this.validator = t.validator ?? { validate: (e) => e }, this.scope = t.scope ?? "document", this.ephemeralKeys = t.ephemeralKeys;
@@ -11946,7 +11946,7 @@ function Ji(e, t) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/setUtils.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/setUtils.mjs
 function Yi(e) {
 	if (e.length === 0) return /* @__PURE__ */ new Set();
 	let t = e[0], n = e.slice(1), r = /* @__PURE__ */ new Set();
@@ -11960,7 +11960,7 @@ function Xi(e, t) {
 	return n.added || n.removed ? n : void 0;
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/executeQuery.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/executeQuery.mjs
 function Zi(e) {
 	return typeof e != "object" || !e ? !1 : "eq" in e || "neq" in e || "gt" in e;
 }
@@ -12003,7 +12003,7 @@ function ea(e, t, n) {
 	return Yi(Object.values(i));
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/StoreQueries.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/StoreQueries.mjs
 var ta = class {
 	constructor(e, t) {
 		this.recordMap = e, this.history = t;
@@ -12241,7 +12241,7 @@ function ra(e, t) {
 	n >= 0 && e.splice(n, 1);
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/Store.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/Store.mjs
 var ia = class {
 	id;
 	records;
@@ -12575,7 +12575,7 @@ function sa(e, t, n) {
 	} };
 }
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/lib/StoreSchema.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/lib/StoreSchema.mjs
 function ca(e) {
 	if (e.schemaVersion > 2 || e.schemaVersion < 1) return fe.err("Bad schema version");
 	if (e.schemaVersion === 2) return fe.ok(e);
@@ -12767,10 +12767,10 @@ var la = class e {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/store/dist-esm/index.mjs
+//#region ../epic-656/node_modules/@tldraw/store/dist-esm/index.mjs
 T("@tldraw/store", "5.3.2", "esm");
 //#endregion
-//#region node_modules/@tldraw/validate/dist-esm/lib/validation.mjs
+//#region ../epic-656/node_modules/@tldraw/validate/dist-esm/lib/validation.mjs
 function ua(e) {
 	if (!e.length) return null;
 	let t = "";
@@ -13239,10 +13239,10 @@ var Xa = Sa.refine((e) => {
 	}
 });
 //#endregion
-//#region node_modules/@tldraw/validate/dist-esm/index.mjs
+//#region ../epic-656/node_modules/@tldraw/validate/dist-esm/index.mjs
 T("@tldraw/validate", "5.3.2", "esm");
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/misc/id-validator.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/misc/id-validator.mjs
 function Za(e) {
 	return Sa.refine((t) => {
 		if (!t.startsWith(`${e}:`)) throw Error(`${e} ID must start with "${e}:"`);
@@ -13250,7 +13250,7 @@ function Za(e) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/assets/TLBaseAsset.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/assets/TLBaseAsset.mjs
 var Qa = Za("asset");
 function $a(e, t, n) {
 	let r = t instanceof ma ? t : t ? Na(t) : Ia;
@@ -13263,7 +13263,7 @@ function $a(e, t, n) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/assets/TLBookmarkAsset.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/assets/TLBookmarkAsset.mjs
 var eo = {
 	title: Sa,
 	description: Sa,
@@ -13463,7 +13463,7 @@ function ho(e, t, n) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/bindings/TLBaseBinding.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/bindings/TLBaseBinding.mjs
 var go = Za("binding");
 function _o(e, t, n) {
 	return Na({
@@ -13500,7 +13500,7 @@ function So(e) {
 	}).withDefaultProperties(() => ({ meta: {} }));
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/misc/TLRichText.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/misc/TLRichText.mjs
 var Co = Na({
 	type: Sa,
 	content: Ma(ba),
@@ -13519,7 +13519,7 @@ function wo(e) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/styles/StyleProp.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/styles/StyleProp.mjs
 var To = class e {
 	constructor(e, t, n) {
 		this.id = e, this.defaultValue = t, this.type = n;
@@ -13637,7 +13637,7 @@ function Fo(e) {
 	}));
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/recordsWithProps.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/recordsWithProps.mjs
 function Io(e, t) {
 	let n = [];
 	for (let [r, { migrations: i }] of Object.entries(t)) {
@@ -13687,7 +13687,7 @@ function Lo(e, t, n) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/styles/TLColorStyle.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/styles/TLColorStyle.mjs
 var Ro = [
 	"black",
 	"grey",
@@ -13717,7 +13717,7 @@ function Vo(e) {
 	n.length > 0 && (zo.removeValues(...n), Bo.removeValues(...n));
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/styles/TLDashStyle.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/styles/TLDashStyle.mjs
 var Ho = To.defineEnum("tldraw:dash", {
 	defaultValue: "draw",
 	values: [
@@ -13763,7 +13763,7 @@ function qo(e) {
 	r.length > 0 && Wo.removeValues(...r);
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/styles/TLSizeStyle.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/styles/TLSizeStyle.mjs
 var Jo = To.defineEnum("tldraw:size", {
 	defaultValue: "m",
 	values: [
@@ -14052,7 +14052,7 @@ function bs(e) {
 	return ys.isId(e);
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/records/TLUser.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/records/TLUser.mjs
 var xs = Za("user"), Ss = Fi({
 	sequenceId: "com.tldraw.user",
 	recordType: "user",
@@ -14095,7 +14095,7 @@ function Ts(e) {
 	return ws.createId(e);
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/records/TLInstance.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/records/TLInstance.mjs
 var Es = {
 	id: !1,
 	typeName: !1,
@@ -14732,7 +14732,7 @@ function Gs(e) {
 }
 var Ks = Ji("asset", { scope: "document" }).withDefaultProperties(() => ({ meta: {} }));
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/records/TLCustomRecord.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/records/TLCustomRecord.mjs
 function qs(e, t) {
 	return Ji(e, {
 		scope: t.scope,
@@ -14769,7 +14769,7 @@ function Js(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/records/TLDocument.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/records/TLDocument.mjs
 var Ys = Ba("document", Na({
 	typeName: Aa("document"),
 	id: Aa("document:document"),
@@ -16053,7 +16053,7 @@ var Dc = class e {
 	]
 }), gl = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", _l = () => gl.charAt(Math.floor(Math.random() * 61)), vl = (e) => Array.from({ length: e }, _l).join("");
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/TLStore.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/TLStore.mjs
 function yl(e) {
 	e.typeName === "asset" && ("src" in e && (e.src = "<redacted>"), "src" in e.props && (e.props.src = "<redacted>"));
 }
@@ -16153,7 +16153,7 @@ function Cl(e) {
 	return r;
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/createTLSchema.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/createTLSchema.mjs
 var wl = {
 	arrow: {
 		migrations: ns,
@@ -16286,7 +16286,7 @@ function Dl({ shapes: e = wl, bindings: t = Tl, assets: n = El, user: r, records
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/records/TLComment.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/records/TLComment.mjs
 var Ol = Sa.check((e) => {
 	if (e.length === 0 || e.length > 64) throw new da(`Expected an emoji of 1-64 characters, got ${e.length}`);
 }), kl = Ra("type", {
@@ -16389,7 +16389,7 @@ Al("comment-thread", [{
 	meta: Ia
 });
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/translations/languages.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/translations/languages.mjs
 var jl = [
 	{
 		locale: "id",
@@ -16589,7 +16589,7 @@ var jl = [
 	}
 ];
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/translations/translations.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/translations/translations.mjs
 function Ml() {
 	return Nl(typeof window < "u" && window.navigator ? window.navigator.languages ?? ["en"] : ["en"]);
 }
@@ -16617,10 +16617,10 @@ function Fl(e) {
 	return n in Pl ? Pl[n] : null;
 }
 //#endregion
-//#region node_modules/@tldraw/tlschema/dist-esm/index.mjs
+//#region ../epic-656/node_modules/@tldraw/tlschema/dist-esm/index.mjs
 T("@tldraw/tlschema", "5.3.2", "esm");
 //#endregion
-//#region node_modules/react/cjs/react-jsx-runtime.production.js
+//#region ../epic-656/node_modules/react/cjs/react-jsx-runtime.production.js
 var Il = /* @__PURE__ */ o(((e) => {
 	var t = Symbol.for("react.transitional.element"), n = Symbol.for("react.fragment");
 	function r(e, n, r) {
@@ -16643,7 +16643,7 @@ function Ll() {
 	return /* @__PURE__ */ (0, V.jsx)("div", { className: "tl-background" });
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/debug-flags.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/debug-flags.mjs
 var Rl = /* @__PURE__ */ c((/* @__PURE__ */ o(((e, t) => {
 	(function() {
 		var e = {}.hasOwnProperty;
@@ -16743,7 +16743,7 @@ function Kl(e) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/dom.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/dom.mjs
 function H(e) {
 	"cancelable" in e && !e.cancelable || (e.preventDefault(), Vl.logPreventDefaults.get() && console.warn("preventDefault called on event:", e));
 }
@@ -16784,7 +16784,7 @@ function eu(e = !0, t) {
 	return Zl((t ?? Ql()).activeElement, e);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/globals/environment.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/globals/environment.mjs
 var tu = {
 	isSafari: !1,
 	isIos: !1,
@@ -16832,7 +16832,7 @@ if (typeof window < "u" && !nu) {
 	}, { capture: !0 });
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/EditorComponentsContext.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/EditorComponentsContext.mjs
 var iu = (0, _.createContext)(null);
 function au() {
 	let e = (0, _.useContext)(iu);
@@ -16840,12 +16840,12 @@ function au() {
 	return e;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/keyboard.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/keyboard.mjs
 function ou(e) {
 	return tu.isDarwin ? e.metaKey : e.ctrlKey || e.metaKey;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/pointer.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/pointer.mjs
 function su(e) {
 	return e.pointerType === "pen" && tu.isTouchDevice;
 }
@@ -16856,7 +16856,7 @@ function lu(e) {
 	return cu(e) ? 2 : e.button;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/getPointerInfo.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/getPointerInfo.mjs
 function uu(e, t) {
 	return e.markEventAsHandled(t), {
 		point: {
@@ -16875,7 +16875,7 @@ function uu(e, t) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useSafeId.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useSafeId.mjs
 function du(e, t) {
 	return mu(`${e}_${t}`);
 }
@@ -16897,7 +16897,7 @@ function gu({ children: e }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useEditor.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useEditor.mjs
 var _u = (0, _.createContext)(null);
 function U() {
 	let e = _.useContext(_u);
@@ -16914,7 +16914,7 @@ function yu({ editor: e, children: t }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useCanvasEvents.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useCanvasEvents.mjs
 function bu() {
 	let e = U(), t = e.getContainerDocument(), n = z("current tool", () => e.getCurrentTool(), [e]), r = (0, _.useMemo)(function() {
 		let t = !1;
@@ -17059,7 +17059,7 @@ function bu() {
 	]), r;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useCoarsePointer.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useCoarsePointer.mjs
 function xu() {
 	let e = U();
 	Cr("coarse pointer change", () => {
@@ -17068,7 +17068,7 @@ function xu() {
 	}, [e]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useContainer.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useContainer.mjs
 var Su = (0, _.createContext)(null);
 function Cu({ container: e, children: t }) {
 	return /* @__PURE__ */ (0, V.jsx)(Su.Provider, {
@@ -17080,7 +17080,7 @@ function wu() {
 	return me((0, _.useContext)(Su), "useContainer used outside of <Tldraw />");
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useDocumentEvents.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useDocumentEvents.mjs
 function Tu() {
 	let e = U(), t = wu(), n = z("isEditing", () => e.getEditingShapeId(), [e]), r = z("isFocused", () => e.getIsFocused(), [e]);
 	(0, _.useEffect)(() => {
@@ -17196,7 +17196,7 @@ function Eu(e) {
 	return e.menus.hasOpenMenus() || eu(!0, e.getContainerDocument());
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useFixSafariDoubleTapZoomPencilEvents.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useFixSafariDoubleTapZoomPencilEvents.mjs
 function Du(e) {
 	let t = U();
 	(0, _.useEffect)(() => {
@@ -17216,7 +17216,7 @@ function Du(e) {
 	}, [t, e]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/easings.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/easings.mjs
 var Ou = {
 	linear: (e) => e,
 	easeInQuad: (e) => e * e,
@@ -17614,7 +17614,7 @@ function Pu(e) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useGestureEvents.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useGestureEvents.mjs
 function Fu(e) {
 	let t = U();
 	_.useEffect(() => {
@@ -17789,7 +17789,7 @@ function Fu(e) {
 	}, [t, e]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/domUtils.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/domUtils.mjs
 function Iu(e) {
 	if (e.shadowRoot) return e.shadowRoot.childNodes;
 	if (Gu(e)) {
@@ -17832,7 +17832,7 @@ function qu(e, t) {
 	return Vu(e).getComputedStyle(e, t);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useScreenBounds.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useScreenBounds.mjs
 function Ju(e) {
 	let t = U();
 	(0, _.useLayoutEffect)(() => {
@@ -17894,7 +17894,7 @@ function Qu() {
 	return e;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/utils.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/utils.mjs
 var $u = Math.PI, ed = $u / 2, td = $u * 2, nd = Math.sin;
 function rd(e, t, n) {
 	return Math.max(t, n === void 0 ? e : Math.min(e, n));
@@ -18006,18 +18006,18 @@ function Od(e, t, n) {
 	return !Number.isFinite(i) || !Number.isFinite(a) ? null : new W(i, a);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/getHtmlLayerTransform.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/getHtmlLayerTransform.mjs
 function kd(e) {
 	let { x: t, y: n, z: r } = e.getCamera(), i = r >= 1 ? rt(r, [1, 8], [.125, .5], !0) : rt(r, [.1, 1], [-2, .125], !0);
 	return `scale(${Cd(r)}) translate(${Cd(t + i)}px,${Cd(n + i)}px)`;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/collaborators.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/collaborators.mjs
 function Ad(e, t, n) {
 	return !(e.x < t.minX - 12 / n || e.y < t.minY - 16 / n || e.x > t.maxX - 12 / n || e.y > t.maxY - 16 / n);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/LiveCollaborators.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/LiveCollaborators.mjs
 var jd = yr(function() {
 	let e = U(), { CollaboratorCursor: t } = au(), n = (0, _.useRef)(null);
 	(0, _.useLayoutEffect)(() => {
@@ -18075,7 +18075,7 @@ function Nd() {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/MenuClickCapture.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/MenuClickCapture.mjs
 var Pd = /* @__PURE__ */ c(m(), 1);
 function Fd() {
 	let e = U(), t = z("is menu open", () => e.menus.hasAnyOpenMenus(), [e]), [n, r] = (0, _.useState)(!1), i = t || n, a = bu(), o = (0, _.useRef)({
@@ -18187,7 +18187,7 @@ function Fd() {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/Box.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/Box.mjs
 var G = class e {
 	constructor(e = 0, t = 0, n = 0, r = 0) {
 		this.x = e, this.y = t, this.w = n, this.h = r;
@@ -18562,7 +18562,7 @@ function Bd(e) {
 	return e === "top_left" || e === "top_right" || e === "bottom_right" || e === "bottom_left";
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/Mat.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/Mat.mjs
 var K = class e {
 	constructor(e, t, n, r, i, a) {
 		this.a = e, this.b = t, this.c = n, this.d = r, this.e = i, this.f = a;
@@ -18732,12 +18732,12 @@ var K = class e {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/areShapesContentEqual.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/areShapesContentEqual.mjs
 function Vd(e, t) {
 	return e.props === t.props && e.meta === t.meta;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/ErrorBoundary.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/ErrorBoundary.mjs
 var Hd = { error: null }, Ud = class extends _.Component {
 	static getDerivedStateFromError(e) {
 		return { error: e };
@@ -18763,7 +18763,7 @@ function Wd({ children: e, fallback: t, ...n }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/Shape.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/Shape.mjs
 var Gd = (0, _.memo)(function({ id: e, shape: t, util: n, index: r, backgroundIndex: i, opacity: a }) {
 	let o = U(), { ShapeErrorFallback: s, ShapeWrapper: c } = au(), l = (0, _.useRef)(null), u = (0, _.useRef)(null);
 	(0, _.useEffect)(() => fr("load fonts", () => {
@@ -18868,7 +18868,7 @@ var Gd = (0, _.memo)(function({ id: e, shape: t, util: n, index: r, backgroundIn
 	return hr("InnerShape:" + e.type, () => t.backgroundComponent?.(t.editor.store.unsafeGetWithoutCapture(e.id)), [t, e.id]);
 }, (e, t) => e.shape.props === t.shape.props && e.shape.meta === t.shape.meta && e.util === t.util);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/intersect.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/intersect.mjs
 function Yd(e, t, n, r, i = 1e-10) {
 	let a = e.x - n.x, o = e.y - n.y, s = r.x - n.x, c = r.y - n.y, l = t.x - e.x, u = t.y - e.y, d = s * o - c * a, f = l * o - u * a, p = c * l - s * u;
 	if (Math.abs(d) <= i || Math.abs(f) <= i || Math.abs(p) <= i) return null;
@@ -18974,7 +18974,7 @@ function uf(e, t) {
 	return !1;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/Geometry2d.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/Geometry2d.mjs
 var df = {
 	EXCLUDE_NON_STANDARD: {
 		includeLabels: !1,
@@ -19395,7 +19395,7 @@ function gf(e, t) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultCanvas.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultCanvas.mjs
 function _f({ className: e }) {
 	let t = U(), { Background: n, SvgDefs: r } = au(), i = (0, _.useRef)(null), a = (0, _.useRef)(null), o = wu();
 	Ju(i), Tu(), xu(), Fu(i), Du(i), Sr("update canvas state data attributes", () => {
@@ -19570,7 +19570,7 @@ function Tf() {
 	return /* @__PURE__ */ (0, V.jsx)("div", { className: (0, Rl.default)("tl-hit-test-blocker", { "tl-hit-test-blocker__hidden": t === "idle" }) });
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useTransform.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useTransform.mjs
 function Ef(e, t, n, r, i, a) {
 	let o = a?.x, s = a?.y;
 	(0, _.useLayoutEffect)(() => {
@@ -19589,7 +19589,7 @@ function Ef(e, t, n, r, i, a) {
 	]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultCursor.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultCursor.mjs
 var Df = (0, _.memo)(function({ className: e, zoom: t, point: n, color: r, name: i, chatMessage: a }) {
 	let o = (0, _.useRef)(null);
 	Ef(o, n?.x, n?.y, 1 / t);
@@ -19705,7 +19705,7 @@ function Wf(e) {
 }
 var Gf = (e) => Lf.get(e);
 //#endregion
-//#region node_modules/idb/build/index.js
+//#region ../epic-656/node_modules/idb/build/index.js
 function Kf(e, t, { blocked: n, upgrade: r, blocking: i, terminated: a } = {}) {
 	let o = indexedDB.open(e, t), s = Wf(o);
 	return r && o.addEventListener("upgradeneeded", (e) => {
@@ -19747,7 +19747,7 @@ Vf((e) => ({
 	has: (t, n) => !!Zf(t, n) || e.has(t, n)
 }));
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/sync/LocalIndexedDb.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/sync/LocalIndexedDb.mjs
 var Qf = "TLDRAW_DOCUMENT_v2", $f = "TLDRAW_ASSET_STORE_v1", ep = "TLDRAW_DB_NAME_INDEX_v2", tp = {
 	Records: "records",
 	Schema: "schema",
@@ -19886,14 +19886,14 @@ function op(e) {
 	t.add(e), Gt(ep, JSON.stringify([...t]));
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/sync/hardReset.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/sync/hardReset.mjs
 async function sp({ shouldReload: e = !0 } = {}) {
 	Xt();
 	for (let e of ip.connectedInstances) await e.close();
 	await Promise.all(ap().map((e) => qf(e))), Kt(), e && window.location.reload();
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/runtime.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/runtime.mjs
 var cp = {
 	openWindow(e, t, n = !1) {
 		return window.open(e, t, n ? "noopener" : "noopener noreferrer");
@@ -19915,7 +19915,7 @@ function dp() {
 	cp.hardReset();
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultErrorFallback.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultErrorFallback.mjs
 var fp = "https://github.com/tldraw/tldraw/issues/new", pp = function({ error: e, editor: t }) {
 	let n = (0, _.useRef)(null), [r, i] = (0, _.useState)(!1), [a, o] = (0, _.useState)(!1), [s, c] = (0, _.useState)(!1), l = null;
 	try {
@@ -20041,7 +20041,7 @@ My browser: ${navigator.userAgent}`), /* @__PURE__ */ (0, V.jsxs)("div", {
 	});
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultGrid.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultGrid.mjs
 function mp({ x: e, y: t, z: n, size: r }) {
 	let i = fu("grid"), { gridSteps: a } = U().options;
 	return /* @__PURE__ */ (0, V.jsxs)("svg", {
@@ -20072,7 +20072,7 @@ function mp({ x: e, y: t, z: n, size: r }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultShapeWrapper.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultShapeWrapper.mjs
 var hp = (0, _.forwardRef)(function({ children: e, shape: t, isBackground: n, ...r }, i) {
 	let a = "fill" in t.props && t.props.fill !== "none";
 	return /* @__PURE__ */ (0, V.jsx)("div", {
@@ -20087,7 +20087,7 @@ var hp = (0, _.forwardRef)(function({ children: e, shape: t, isBackground: n, ..
 	});
 });
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultSpinner.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultSpinner.mjs
 function gp(e) {
 	return /* @__PURE__ */ (0, V.jsx)("svg", {
 		width: 16,
@@ -20115,12 +20115,12 @@ function gp(e) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultSvgDefs.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultSvgDefs.mjs
 function _p() {
 	return null;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/EditorPortal.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/EditorPortal.mjs
 var vp = (0, _.createContext)(null);
 function yp({ host: e, children: t }) {
 	return /* @__PURE__ */ (0, V.jsx)(vp.Provider, {
@@ -20129,7 +20129,7 @@ function yp({ host: e, children: t }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/HTMLContainer.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/HTMLContainer.mjs
 function bp({ children: e, className: t = "", ...n }) {
 	return /* @__PURE__ */ (0, V.jsx)("div", {
 		...n,
@@ -20138,7 +20138,7 @@ function bp({ children: e, className: t = "", ...n }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/SVGContainer.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/SVGContainer.mjs
 function xp({ children: e, className: t = "", ...n }) {
 	return /* @__PURE__ */ (0, V.jsx)("svg", {
 		...n,
@@ -20148,7 +20148,7 @@ function xp({ children: e, className: t = "", ...n }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useIdentity.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useIdentity.mjs
 function Sp(e, t) {
 	let n = (0, _.useRef)(e);
 	return t(e, n.current) ? n.current : (n.current = e, e);
@@ -20162,7 +20162,7 @@ function Ep(e) {
 	return Sp(e, Tp);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/TLUserPreferences.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/TLUserPreferences.mjs
 var Dp = "TLDRAW_USER_DATA_v3", Op = Na({
 	id: Sa,
 	name: Sa.nullable().optional(),
@@ -20287,7 +20287,7 @@ function Jp() {
 	return e || (e = Rp(), Vp(e)), e;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/createTLCurrentUser.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/createTLCurrentUser.mjs
 var Yp = R("defaultLocalStorageUserPrefs", () => Jp());
 function Xp(e = {}) {
 	return {
@@ -20296,7 +20296,7 @@ function Xp(e = {}) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/defaultAssets.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/defaultAssets.mjs
 var Zp = /* @__PURE__ */ c((/* @__PURE__ */ o(((e, t) => {
 	var n = Object.prototype.hasOwnProperty, r = "~";
 	function i() {}
@@ -20394,7 +20394,7 @@ function Qp(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/defaultBindings.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/defaultBindings.mjs
 function $p(e) {
 	let t = [], n = /* @__PURE__ */ new Set();
 	for (let r of e) {
@@ -20404,7 +20404,7 @@ function $p(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/Edge2d.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/Edge2d.mjs
 var em = class extends ff {
 	_start;
 	_end;
@@ -20550,7 +20550,7 @@ function im(e) {
 	return Object.is(e, -0) ? 0 : e;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/ShapeUtil.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/ShapeUtil.mjs
 var am = class {
 	constructor(e) {
 		this.editor = e;
@@ -20660,7 +20660,7 @@ var am = class {
 	getAriaDescriptor(e) {}
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/shared/getPerfectDashProps.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/shared/getPerfectDashProps.mjs
 function om(e, t, n = {}) {
 	let { closed: r = !1, snap: i = 1, start: a = "outset", end: o = "outset", lengthRatio: s = 2, style: c = "dashed", forceSolid: l = !1 } = n, u = 0, d = 0, f = 1, p = 0, m = 0;
 	if (l || c === "none") return {
@@ -20685,7 +20685,7 @@ function om(e, t, n = {}) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/group/DashedOutlineBox.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/group/DashedOutlineBox.mjs
 function sm({ bounds: e, className: t }) {
 	let n = U(), r = z("zoom level", () => n.getEfficientZoomLevel(), [n]);
 	return /* @__PURE__ */ (0, V.jsx)("g", {
@@ -20710,7 +20710,7 @@ function sm({ bounds: e, className: t }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/defaultShapes.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/defaultShapes.mjs
 var cm = [class extends am {
 	static type = "group";
 	static props = Gc;
@@ -20795,7 +20795,7 @@ function um(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/TLSessionStateSnapshot.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/TLSessionStateSnapshot.mjs
 var dm = "TLDRAW_TAB_ID_v2", fm = globalThis.window;
 function eee() {
 	return fm ? [
@@ -20944,7 +20944,7 @@ function nee(e) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/TLEditorSnapshot.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/TLEditorSnapshot.mjs
 function bm(e, t, n) {
 	let r = {};
 	if ("store" in t) {
@@ -20973,7 +20973,7 @@ function Sm(e) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/constants.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/constants.mjs
 var Cm = {
 	isLocked: !1,
 	wheelBehavior: "pan",
@@ -20994,7 +20994,7 @@ var Cm = {
 	easing: Ou.easeInOutCubic
 }, Tm = { CAMERA_MOVE: -10 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/fetchCache.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/fetchCache.mjs
 function Em(e, t) {
 	let n = new Fe(100);
 	return async function(r) {
@@ -21013,7 +21013,7 @@ function Em(e, t) {
 }
 var Dm = Em(async (e) => await we.blobToDataUrl(await e.blob()));
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/embedMedia.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/embedMedia.mjs
 function Om(e, t) {
 	Array.from(e.attributes).forEach((e) => {
 		t.setAttribute(e.name, e.value);
@@ -21062,7 +21062,7 @@ async function jm(e) {
 	e instanceof t.HTMLInputElement ? e.setAttribute("value", e.value) : e instanceof t.HTMLTextAreaElement && (e.textContent = e.value), await Promise.all(Array.from(Lu(e), (e) => jm(e)));
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/parseCss.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/parseCss.mjs
 var aee = /@import\s+(?:"([^"]+)"|'([^']+)'|url\s*\(\s*(?:"([^"]+)"|'([^']+)'|([^'")]+))\s*\))([^;]+);/gi, Mm = /@font-face\s*{([^}]+)}/gi, Nm = /url\s*\(\s*(?:"([^"]+)"|'([^']+)'|([^'")]+))\s*\)/gi, Pm = /(?:^|;)\s*font-family\s*:\s*(?:([^'"][^;\n]+)|"([^"]+)"|'([^']+)')\s*(?:;|$)/gi;
 function Fm(e) {
 	return Array.from(e.matchAll(aee), (e) => ({
@@ -21113,7 +21113,7 @@ function Bm(e) {
 	})).filter((e) => !e.url.startsWith("#"));
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/FontEmbedder.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/FontEmbedder.mjs
 var Vm = Object.defineProperty, Hm = Object.getOwnPropertyDescriptor, Um = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? Hm(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && Vm(t, n, i), i;
@@ -21798,7 +21798,7 @@ function Ym(e, t, n) {
 	return !r || typeof r == "string" ? t : r[n];
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useEvent.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useEvent.mjs
 function Xm(e) {
 	let t = (0, _.useRef)(void 0);
 	return (0, _.useLayoutEffect)(() => {
@@ -21809,7 +21809,7 @@ function Xm(e) {
 	}, []);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/types/SvgExportContext.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/types/SvgExportContext.mjs
 var Zm = (0, _.createContext)(null);
 function Qm({ context: e, editor: t, children: n }) {
 	let r = t.options.exportProvider;
@@ -21836,7 +21836,7 @@ function eh() {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/ExportDelay.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/ExportDelay.mjs
 var th = Object.defineProperty, nh = Object.getOwnPropertyDescriptor, rh = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? nh(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && th(t, n, i), i;
@@ -21862,7 +21862,7 @@ var th = Object.defineProperty, nh = Object.getOwnPropertyDescriptor, rh = (e, t
 };
 rh([_e], ih.prototype, "waitUntil", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/getSvgJsx.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/getSvgJsx.mjs
 function ah(e, t, n = {}) {
 	let r = e.getContainerDocument();
 	if (!r) throw Error("No document");
@@ -22116,7 +22116,7 @@ function sh({ shape: e, util: t, className: n, component: r, bbox: i, opacity: a
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/cssRules.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/cssRules.mjs
 var ch = (e, t, { currentColor: n }) => e === "currentColor" || e === n, lh = (e, t, { parentStyles: n }) => n[t] === e, uh = (e) => (t, n, { getStyle: r }) => {
 	let i = r(`border-${e}-width`), a = r(`border-${e}-style`);
 	return i === "0px" || a === "none";
@@ -22378,7 +22378,7 @@ function uee(e, t) {
 	return n;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/exportToSvg.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/exportToSvg.mjs
 var dee = 1;
 async function fee(e, t, n = {}) {
 	let r = ah(e, t, n);
@@ -22432,7 +22432,7 @@ ${i}`, e.prepend(t);
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/browserCanvasMaxSize.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/browserCanvasMaxSize.mjs
 var Sh = null;
 function Ch() {
 	return Sh ||= {
@@ -22490,7 +22490,7 @@ function Oh(e, t) {
 	return [e, t];
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/exports/getSvgAsImage.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/exports/getSvgAsImage.mjs
 async function kh(e, t) {
 	let { type: n, width: r, height: i, quality: a = 1, pixelRatio: o = 2, trimPadding: s = 0, scale: c = 1 } = t;
 	if (r <= 0 || i <= 0) return null;
@@ -22626,7 +22626,7 @@ async function Nh(e, t) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/globals/menus.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/globals/menus.mjs
 var Ph = {
 	menus: Xn("open menus", []),
 	getOpenMenus(e) {
@@ -22759,7 +22759,7 @@ var Ph = {
 	patch: "2026-08-18T09:59:40.172Z"
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/assets.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/assets.mjs
 async function zh(e, t, n) {
 	let r = await (await Se(e)).arrayBuffer();
 	return new File([r], t, { type: n });
@@ -22769,7 +22769,7 @@ function Vh() {
 	return `${Bh}/${Lh}`;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/deepLinks.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/deepLinks.mjs
 function Hh(e) {
 	switch (e.type) {
 		case "shapes": return `s${e.shapeIds.map((e) => Wh(e.slice(6))).join(".")}`;
@@ -22806,14 +22806,14 @@ function Wh(e) {
 	return encodeURIComponent(e).replace(/\./g, "%2E");
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/getIncrementedName.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/getIncrementedName.mjs
 function Gh(e, t) {
 	let n = e, r = new Set(t);
 	for (; r.has(n);) n = /^.*(\d+)$/.exec(n)?.[1] ? n.replace(/(\d+)$/, (e) => (+e + 1).toString()) : `${n} 1`;
 	return n;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/reorderShapes.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/reorderShapes.mjs
 function Kh(e, t, n, r) {
 	if (n.length === 0) return [];
 	let i = /* @__PURE__ */ new Map();
@@ -22948,7 +22948,7 @@ function Zh(e, t, n, r, i) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/reparenting.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/reparenting.mjs
 function Qh(e, t, n) {
 	let r = /* @__PURE__ */ new Set();
 	for (let n of t) {
@@ -23059,7 +23059,7 @@ function eg(e, t, n) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/rotation.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/rotation.mjs
 function tg({ editor: e, ids: t }) {
 	let n = I(t.map((t) => e.getShape(t))), r = e.getShapesSharedRotation(t), i = e.getShapesRotatedPageBounds(t);
 	if (!i) return null;
@@ -23103,7 +23103,7 @@ function ng({ delta: e, editor: t, snapshot: n, stage: r, centerOverride: i }) {
 	}), s.length > 0 && t.updateShapes(s);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/SharedStylesMap.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/SharedStylesMap.mjs
 function rg(e, t) {
 	if (!t) return !1;
 	switch (e.type) {
@@ -23172,7 +23172,7 @@ var ig = class {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/bindingsIndex.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/bindingsIndex.mjs
 function og(e) {
 	let t = e.get(), n = /* @__PURE__ */ new Map();
 	for (let e of t) {
@@ -23214,7 +23214,7 @@ function sg(e) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/notVisibleShapes.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/notVisibleShapes.mjs
 function cg(e) {
 	let t = /* @__PURE__ */ new Set(), n = am.prototype.canCull;
 	return R("notVisibleShapes", function(r) {
@@ -23246,7 +23246,7 @@ function cg(e) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/parentsToChildren.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/parentsToChildren.mjs
 function lg(e, t) {
 	let n = {}, r = e.get();
 	return Array.from(r, (e) => t.get(e)).sort(Ht).forEach((e) => {
@@ -23285,7 +23285,7 @@ function ug(e) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/shapeIdsInCurrentPage.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/derivations/shapeIdsInCurrentPage.mjs
 var dg = (e, t, n) => {
 	for (; !bs(n.parentId);) {
 		let t = e.get(n.parentId);
@@ -23317,7 +23317,7 @@ function fg(e, t) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/ClickManager/ClickManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/ClickManager/ClickManager.mjs
 var pg = Object.defineProperty, mg = Object.getOwnPropertyDescriptor, hg = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? mg(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && pg(t, n, i), i;
@@ -23379,7 +23379,7 @@ var pg = Object.defineProperty, mg = Object.getOwnPropertyDescriptor, hg = (e, t
 };
 hg([_e], _g.prototype, "_getClickTimeout", 1), hg([_e], _g.prototype, "cancelDoubleClickTimeout", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/CollaboratorsManager/CollaboratorsManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/CollaboratorsManager/CollaboratorsManager.mjs
 var vg = Object.defineProperty, yg = Object.getOwnPropertyDescriptor, bg = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? yg(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && vg(t, n, i), i;
@@ -23424,7 +23424,7 @@ var vg = Object.defineProperty, yg = Object.getOwnPropertyDescriptor, bg = (e, t
 };
 bg([R], xg.prototype, "_getCollaboratorsQuery", 1), bg([R({ isEqual: ce })], xg.prototype, "getCollaborators", 1), bg([R({ isEqual: ce })], xg.prototype, "getCollaboratorsOnCurrentPage", 1), bg([R({ isEqual: ce })], xg.prototype, "getVisibleCollaborators", 1), bg([R({ isEqual: ce })], xg.prototype, "getVisibleCollaboratorsOnCurrentPage", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/EdgeScrollManager/EdgeScrollManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/EdgeScrollManager/EdgeScrollManager.mjs
 var Sg = 1e3, Cg = .612, wg = class {
 	constructor(e) {
 		this.editor = e;
@@ -23518,7 +23518,7 @@ var Sg = 1e3, Cg = .612, wg = class {
 };
 Og([_e], kg.prototype, "handleKeyDown", 1), Og([_e], kg.prototype, "handleMouseDown", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/FontManager/FontManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/FontManager/FontManager.mjs
 var Ag = { get: () => void 0 }, jg = { get: () => void 0 }, Mg = class {
 	constructor(e, t) {
 		this.editor = e, this.assetUrls = t, this.shapeFontFacesCache = e.store.createComputedCache("shape font faces", (e) => this.editor.getShapeUtil(e).getFontFaces(e), {
@@ -23642,7 +23642,7 @@ function Fg(e) {
 	return JSON.stringify([e.family, ...ct(Ng).map(([t, n]) => e[t] ?? n)]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/HistoryManager/HistoryManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/HistoryManager/HistoryManager.mjs
 var Ig = {
 	Recording: "recording",
 	RecordingPreserveRedoStack: "recordingPreserveRedoStack",
@@ -23899,7 +23899,7 @@ function Wg(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/InputsManager/InputsManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/InputsManager/InputsManager.mjs
 var Gg = Object.defineProperty, Kg = Object.getOwnPropertyDescriptor, qg = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? Kg(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && Gg(t, n, i), i;
@@ -24178,7 +24178,7 @@ var Gg = Object.defineProperty, Kg = Object.getOwnPropertyDescriptor, qg = (e, t
 };
 qg([_e], Yg.prototype, "_onFrame", 1), qg([R], Yg.prototype, "_getHasCollaborators", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/PerformanceManager/PerformanceManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/PerformanceManager/PerformanceManager.mjs
 var Xg = Object.defineProperty, Zg = Object.getOwnPropertyDescriptor, Qg = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? Zg(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && Xg(t, n, i), i;
@@ -24436,7 +24436,7 @@ var t_ = class {
 };
 Qg([_e], t_.prototype, "_onFrame", 1), Qg([_e], t_.prototype, "_onShapesCreated", 1), Qg([_e], t_.prototype, "_onShapesEdited", 1), Qg([_e], t_.prototype, "_onShapesDeleted", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/ScribbleManager/ScribbleManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/ScribbleManager/ScribbleManager.mjs
 var mee = class {
 	constructor(e) {
 		this.editor = e;
@@ -25078,7 +25078,7 @@ function o_(e, t) {
 	return o;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/SnapManager/HandleSnaps.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/SnapManager/HandleSnaps.mjs
 var vee = Object.defineProperty, yee = Object.getOwnPropertyDescriptor, bee = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? yee(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && vee(t, n, i), i;
@@ -25195,7 +25195,7 @@ var vee = Object.defineProperty, yee = Object.getOwnPropertyDescriptor, bee = (e
 };
 bee([R], s_.prototype, "getSnapGeometryCache", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/SnapManager/SnapManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/SnapManager/SnapManager.mjs
 var Cee = Object.defineProperty, wee = Object.getOwnPropertyDescriptor, c_ = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? wee(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && Cee(t, n, i), i;
@@ -25248,7 +25248,7 @@ var Cee = Object.defineProperty, wee = Object.getOwnPropertyDescriptor, c_ = (e,
 };
 c_([R], l_.prototype, "getSnapThreshold", 1), c_([R], l_.prototype, "getSnappableShapes", 1), c_([R], l_.prototype, "getCurrentCommonAncestor", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/SpatialIndexManager/RBushIndex.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/SpatialIndexManager/RBushIndex.mjs
 var Tee = /* @__PURE__ */ c((/* @__PURE__ */ o(((e, t) => {
 	(function(n, r) {
 		typeof e == "object" && t !== void 0 ? t.exports = r() : typeof define == "function" && define.amd ? define(r) : (n ||= self).RBush = r();
@@ -25601,7 +25601,7 @@ var Tee = /* @__PURE__ */ c((/* @__PURE__ */ o(((e, t) => {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/TextManager/TextManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/TextManager/TextManager.mjs
 function u_(e, t) {
 	return Math.round(e * t);
 }
@@ -25859,7 +25859,7 @@ var __ = class {
 };
 Nee([R], __.prototype, "getColorMode", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/TickManager/TickManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/TickManager/TickManager.mjs
 var v_ = Object.defineProperty, y_ = Object.getOwnPropertyDescriptor, b_ = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? y_(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && v_(t, n, i), i;
@@ -25884,7 +25884,7 @@ var v_ = Object.defineProperty, y_ = Object.getOwnPropertyDescriptor, b_ = (e, t
 };
 b_([_e], S_.prototype, "tick", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/managers/UserPreferencesManager/UserPreferencesManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/managers/UserPreferencesManager/UserPreferencesManager.mjs
 var C_ = Object.defineProperty, w_ = Object.getOwnPropertyDescriptor, T_ = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? w_(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && C_(t, n, i), i;
@@ -25988,7 +25988,7 @@ var C_ = Object.defineProperty, w_ = Object.getOwnPropertyDescriptor, T_ = (e, t
 };
 T_([R], E_.prototype, "getUserPreferences", 1), T_([R], E_.prototype, "getIsDarkMode", 1), T_([R], E_.prototype, "getEdgeScrollSpeed", 1), T_([R], E_.prototype, "getAnimationSpeed", 1), T_([R], E_.prototype, "getAreKeyboardShortcutsEnabled", 1), T_([R], E_.prototype, "getExternalId", 1), T_([R], E_.prototype, "getId", 1), T_([R], E_.prototype, "getRecordId", 1), T_([R], E_.prototype, "getName", 1), T_([R], E_.prototype, "getLocale", 1), T_([R], E_.prototype, "getColor", 1), T_([R], E_.prototype, "getIsSnapMode", 1), T_([R], E_.prototype, "getIsWrapMode", 1), T_([R], E_.prototype, "getIsDynamicResizeMode", 1), T_([R], E_.prototype, "getIsPasteAtCursorMode", 1), T_([R], E_.prototype, "getEnhancedA11yMode", 1), T_([R], E_.prototype, "getInputMode", 1), T_([R], E_.prototype, "getIsZoomDirectionInverted", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/overlays/OverlayManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/overlays/OverlayManager.mjs
 var D_ = Object.defineProperty, Pee = Object.getOwnPropertyDescriptor, O_ = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? Pee(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && D_(t, n, i), i;
@@ -26064,7 +26064,7 @@ var D_ = Object.defineProperty, Pee = Object.getOwnPropertyDescriptor, O_ = (e, 
 };
 O_([R], k_.prototype, "getOverlayUtilsInZOrder", 1), O_([R], k_.prototype, "getActiveOverlayEntries", 1), O_([R], k_.prototype, "getCurrentOverlays", 1);
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/types/event-types.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/types/event-types.mjs
 var Fee = {
 	wheel: "onWheel",
 	pointer_down: "onPointerDown",
@@ -29893,7 +29893,7 @@ function z_(e, t) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/config/createTLStore.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/config/createTLStore.mjs
 var B_ = (e) => e.props.src, V_ = { currentUser: R("defaultCurrentUser", () => {
 	let e = Jp();
 	return e.id ? ws.create({
@@ -29951,7 +29951,7 @@ function G_(e) {
 	}]));
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/bindings/BindingUtil.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/bindings/BindingUtil.mjs
 var K_ = class {
 	constructor(e) {
 		this.editor = e;
@@ -29962,7 +29962,7 @@ var K_ = class {
 	static type;
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/shared/resizeBox.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/shared/resizeBox.mjs
 function q_(e, t, n = {}) {
 	let { newPoint: r, handle: i, scaleX: a, scaleY: o } = t, { minWidth: s = 1, maxWidth: c = Infinity, minHeight: l = 1, maxHeight: u = Infinity } = n, d = e.props.w * a, f = e.props.h * o, p = new W(0, 0);
 	if (d > 0) {
@@ -30031,7 +30031,7 @@ function q_(e, t, n = {}) {
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/BaseBoxShapeUtil.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/BaseBoxShapeUtil.mjs
 var J_ = class extends am {
 	getGeometry(e) {
 		return new rm({
@@ -30095,7 +30095,7 @@ sa("shapeIndicatorPath", (e, t) => e.getShapeUtil(t).getIndicatorPath(t), { areR
 	return e.props === t.props;
 } });
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/shared/resizeScaled.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/shapes/shared/resizeScaled.mjs
 function X_(e, { initialBounds: t, scaleX: n, scaleY: r, newPoint: i, handle: a }) {
 	let o;
 	switch (a) {
@@ -30125,7 +30125,7 @@ function X_(e, { initialBounds: t, scaleX: n, scaleY: r, newPoint: i, handle: a 
 	};
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/tools/BaseBoxShapeTool/children/Idle.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/tools/BaseBoxShapeTool/children/Idle.mjs
 var Iee = class extends A_ {
 	static id = "idle";
 	onPointerDown(e) {
@@ -30220,7 +30220,7 @@ function Z_(e, t) {
 	return n ? e.clone().snapToGrid(r) : e.clone();
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/editor/tools/BaseBoxShapeTool/BaseBoxShapeTool.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/editor/tools/BaseBoxShapeTool/BaseBoxShapeTool.mjs
 var Ree = class extends A_ {
 	static id = "box";
 	static initial = "idle";
@@ -30229,13 +30229,13 @@ var Ree = class extends A_ {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useColorMode.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useColorMode.mjs
 function Q_() {
 	let e = U(), t = $m();
 	return z("colorMode", () => t ? t.colorMode : e.getColorMode(), [t, e]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useCursor.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useCursor.mjs
 var $_ = "<path d='m19.7432 17.0869-4.072 4.068 2.829 2.828-8.473-.013-.013-8.47 2.841 2.842 4.075-4.068 1.414-1.415-2.844-2.842h8.486v8.484l-2.83-2.827z' fill='%23fff'/><path d='m18.6826 16.7334-4.427 4.424 1.828 1.828-5.056-.016-.014-5.054 1.842 1.841 4.428-4.422 2.474-2.475-1.844-1.843h5.073v5.071l-1.83-1.828z' fill='%23000'/>", ev = "<path d='m9 17.9907v.005l5.997 5.996.001-3.999h1.999 2.02v4l5.98-6.001-5.98-5.999.001 4.019-2.021.002h-2l.001-4.022zm1.411.003 3.587-3.588-.001 2.587h3.5 2.521v-2.585l3.565 3.586-3.564 3.585-.001-2.585h-2.521l-3.499-.001-.001 2.586z' fill='%23fff'/><path d='m17.4971 18.9932h2.521v2.586l3.565-3.586-3.565-3.585v2.605h-2.521-3.5v-2.607l-3.586 3.587 3.586 3.586v-2.587z' fill='%23000'/>", tv = "<path d=\"M22.4789 9.45728L25.9935 12.9942L22.4789 16.5283V14.1032C18.126 14.1502 14.6071 17.6737 14.5675 22.0283H17.05L13.513 25.543L9.97889 22.0283H12.5674C12.6071 16.5691 17.0214 12.1503 22.4789 12.1031L22.4789 9.45728Z\" fill=\"black\"/><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M21.4789 7.03223L27.4035 12.9945L21.4789 18.9521V15.1868C18.4798 15.6549 16.1113 18.0273 15.649 21.0284H19.475L13.5128 26.953L7.55519 21.0284H11.6189C12.1243 15.8155 16.2679 11.6677 21.4789 11.1559L21.4789 7.03223ZM22.4789 12.1031C17.0214 12.1503 12.6071 16.5691 12.5674 22.0284H9.97889L13.513 25.543L17.05 22.0284H14.5675C14.5705 21.6896 14.5947 21.3558 14.6386 21.0284C15.1157 17.4741 17.9266 14.6592 21.4789 14.1761C21.8063 14.1316 22.1401 14.1069 22.4789 14.1032V16.5284L25.9935 12.9942L22.4789 9.45729L22.4789 12.1031Z\" fill=\"white\"/>";
 function nv(e, t, n, r, i, a = 16, o = 16) {
 	let s = (-n - t) * ($u / 180), c = Math.sin(s), l = Math.cos(s);
@@ -30279,7 +30279,7 @@ function Hee() {
 	}, [e, t]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultLoadingScreen.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultLoadingScreen.mjs
 function Uee() {
 	let { Spinner: e } = au();
 	return /* @__PURE__ */ (0, V.jsx)("div", {
@@ -30290,12 +30290,12 @@ function Uee() {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultShapeErrorFallback.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/components/default-components/DefaultShapeErrorFallback.mjs
 var Wee = function() {
 	return /* @__PURE__ */ (0, V.jsx)("div", { className: "tl-shape-error-boundary" });
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useEditorComponents.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useEditorComponents.mjs
 function Gee({ overrides: e = {}, children: t }) {
 	let n = Ep(e), r = (0, _.useMemo)(() => ({
 		Background: Ll,
@@ -30318,7 +30318,7 @@ function Gee({ overrides: e = {}, children: t }) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useGlobalMenuIsOpen.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useGlobalMenuIsOpen.mjs
 function Kee(e, t, n) {
 	let r = (0, _.useRef)(!1), i = (0, _.useCallback)((n) => {
 		r.current = n, n ? Ph.addOpenMenu(e) : Ph.deleteOpenMenu(e), t?.(n);
@@ -30330,13 +30330,13 @@ function Kee(e, t, n) {
 	}), [e, n]), [a, i];
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useIsEditing.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useIsEditing.mjs
 function rv(e) {
 	let t = U();
 	return z("isEditing", () => t.getEditingShapeId() === e, [t, e]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/sync/alerts.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/sync/alerts.mjs
 function qee() {
 	window.alert("Oops! We could not save changes to your browser's storage. We now need to reload the page and try again.\n\nKeep seeing this message?\n• If you're using tldraw in a private or \"incognito\" window, try loading tldraw in a regular window or in a different browser.\n• If your hard disk is full, try clearing up some space and then reload the page.");
 }
@@ -30344,7 +30344,7 @@ function Jee() {
 	window.alert("Oops! We could not access your browser's storage—and the app won't work correctly without that. We now need to reload the page and try again.\n\nKeep seeing this message?\n• If you're using tldraw in a private or \"incognito\" window, try loading tldraw in a regular window or in a different browser.");
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/sync/TLLocalSyncClient.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/sync/TLLocalSyncClient.mjs
 var Yee = 350, Xee = 1e4, iv = /* @__PURE__ */ Symbol("UPDATE_INSTANCE_STATE"), Zee = (e) => e, Qee = class {
 	onmessage;
 	constructor(e) {}
@@ -30492,7 +30492,7 @@ var Yee = 350, Xee = 1e4, iv = /* @__PURE__ */ Symbol("UPDATE_INSTANCE_STATE"), 
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useRefState.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useRefState.mjs
 function av(e) {
 	let t = (0, _.useRef)(e), [n, r] = (0, _.useState)(e);
 	return n !== t.current && r(t.current), [n, (0, _.useCallback)((e) => {
@@ -30500,7 +30500,7 @@ function av(e) {
 	}, [])];
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useLocalStore.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useLocalStore.mjs
 function ov(e) {
 	let [t, n] = av({ status: "loading" });
 	return e = Ep(e), (0, _.useEffect)(() => {
@@ -30548,7 +30548,7 @@ function ov(e) {
 	}, [e, n]), t;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/usePassThroughWheelEvents.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/usePassThroughWheelEvents.mjs
 function sv(e) {
 	return e === "auto" || e === "scroll" || e === "overlay";
 }
@@ -30588,24 +30588,24 @@ function uv(e) {
 	}, [r]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/uniq.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/uniq.mjs
 function dv(e) {
 	return (0, re.default)(e);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/usePeerIds.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/usePeerIds.mjs
 function fv() {
 	let e = U();
 	return z(xr("userIds", () => dv(e.getVisibleCollaborators().map((e) => e.userId)).sort(), { isEqual: (e, t) => e.join(",") === t.join?.(",") }, [e]));
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/usePresence.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/usePresence.mjs
 function pv(e) {
 	let t = U();
 	return z(`latestPresence:${e}`, () => t.getCollaborators().find((t) => t.userId === e), [t, e]) ?? null;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useTLStore.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useTLStore.mjs
 function mv(e) {
 	let [t, n] = (0, _.useState)(() => ({
 		store: W_(e),
@@ -30621,7 +30621,7 @@ function mv(e) {
 	return t.store;
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/licensing.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/licensing.mjs
 function hv(e) {
 	let t = new ArrayBuffer(e.length), n = new Uint8Array(t);
 	for (let t = 0, r = e.length; t < r; t++) n[t] = e.charCodeAt(t);
@@ -30635,7 +30635,7 @@ function gv(e) {
 	}, !0, ["verify"]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/license/LicenseManager.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/license/LicenseManager.mjs
 var _v = 30, vv = {
 	ANNUAL_LICENSE: 1,
 	PERPETUAL_LICENSE: 2,
@@ -30856,7 +30856,7 @@ function Ov(e, t, n) {
 	]), "licensed") : e.isLicensedWithWatermark ? "licensed-with-watermark" : "licensed";
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/license/LicenseProvider.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/license/LicenseProvider.mjs
 var kv = (0, _.createContext)(null);
 function Av() {
 	let e = jv();
@@ -30903,7 +30903,7 @@ function Rv(e) {
 	}
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/license/useLicenseManagerState.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/license/useLicenseManagerState.mjs
 function zv(e) {
 	return z("watermarkState", () => e.state.get(), [e]);
 }
@@ -30911,13 +30911,13 @@ function Bv(e, t) {
 	return z("licenseFeature", () => e ? e.isFeatureEnabled(t) : !1, [e, t]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/geometry-constants.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/geometry-constants.mjs
 var Vv = 20, Hv = 8;
 function Uv(e, t = Vv) {
 	return Math.max(Hv, Math.ceil(e / t));
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/Arc2d.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/primitives/geometry/Arc2d.mjs
 var Wv = class extends ff {
 	_center;
 	_radius;
@@ -31130,7 +31130,7 @@ var Wv = class extends ff {
 	}
 };
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useDarkMode.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useDarkMode.mjs
 function Jv() {
 	let e = U(), t = wu(), n = Q_(), r = z(Vl.forceSrgb);
 	_.useEffect(() => {
@@ -31143,13 +31143,13 @@ function Jv() {
 	]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useForceUpdate.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useForceUpdate.mjs
 function Yv() {
 	let [e, t] = (0, _.useState)(0);
 	(0, _.useEffect)(() => t((e) => e + 1), []);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useStateAttribute.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useStateAttribute.mjs
 function Xv() {
 	let e = U();
 	(0, _.useLayoutEffect)(() => fr("stateAttribute", () => {
@@ -31158,7 +31158,7 @@ function Xv() {
 	}), [e]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/hooks/useZoomCss.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/hooks/useZoomCss.mjs
 function Zv() {
 	let e = U(), t = wu();
 	_.useEffect(() => {
@@ -31169,7 +31169,7 @@ function Zv() {
 	}, [e, t]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/watermarks.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/watermarks.mjs
 var Qv = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"3001\" height=\"1000\" fill=\"none\"><path fill=\"#000\" d=\"M590.656 300.449c0 49.706-40.294 90-90 90-49.705 0-90-40.294-90-90 0-49.705 40.295-90 90-90 49.706 0 90 40.295 90 90M569.431 719.011c-15.247 32.821-56.006 91.589-98.338 91.438-32.004-.115-38.642-30.904-17.414-50.856 17.381-16.337 28.246-48.075 31.995-72.719.415-2.728-1.556-5.197-4.272-5.679-39.666-7.04-70.746-40.877-70.746-83.417 0-48.23 38.983-87.329 87.07-87.329 39.936 0 70.172 22.237 83.369 52.397 18.839 43.055 7.117 115.733-11.664 156.165M2613.29 385.681V239.319c0-11.363 9.22-20.569 20.59-20.569h8.26c11.37 0 20.59 9.206 20.59 20.569v36.911c0 8.629 7 15.625 15.63 15.625h35.25c8.63 0 15.63-6.996 15.63-15.625v-36.911c0-11.363 9.22-20.569 20.59-20.569h8.17c11.37 0 20.59 9.206 20.59 20.569v146.362c0 11.363-9.22 20.569-20.59 20.569h-8.17c-11.37 0-20.59-9.206-20.59-20.569v-36.999c0-8.63-7-15.625-15.63-15.625h-35.25c-8.63 0-15.63 6.995-15.63 15.625v36.999c0 11.363-9.22 20.569-20.59 20.569h-8.26c-11.37 0-20.59-9.206-20.59-20.569M2391.97 239.319v146.362c0 11.348-9.16 20.569-20.49 20.569h-8.2c-11.33 0-20.49-9.221-20.49-20.569V239.319c0-11.348 9.16-20.569 20.49-20.569h8.2c11.33 0 20.49 9.221 20.49 20.569M2098.23 391.43l-42.69-146.361c-3.85-13.171 6.06-26.319 19.79-26.319h10.6c9.59 0 17.93 6.611 20.08 15.952l17.01 73.045c1.48 6.348 10.47 6.478 12.14.176l19.47-73.838c2.38-9.04 10.57-15.335 19.93-15.335h12.1c9.37 0 17.56 6.3 19.94 15.346l19.49 74.067c1.66 6.305 10.65 6.178 12.13-.171l17.09-73.294c2.15-9.339 10.49-15.948 20.08-15.948h10.53c13.72 0 23.63 13.141 19.79 26.31l-42.63 146.361c-2.56 8.789-10.63 14.829-19.79 14.829h-15.68c-9.12 0-17.16-5.98-19.76-14.709l-21.17-71.059c-1.77-5.948-10.19-5.957-11.97-.012l-21.33 71.071c-2.6 8.729-10.64 14.709-19.76 14.709h-15.59c-9.17 0-17.23-6.035-19.8-14.82M2443.23 218.75h118.59c11.38 0 20.62 9.195 20.62 20.557s-9.24 20.556-20.62 20.556h-24.79c-5.53 0-10 4.477-10 10v115.818c0 11.368-9.25 20.569-20.63 20.569h-7.65c-11.39 0-20.63-9.201-20.63-20.569V269.863c0-5.523-4.48-10-10-10h-24.89c-11.37 0-20.61-9.195-20.61-20.556s9.24-20.557 20.61-20.557M1174.15 218.75h24.64c8.35 0 15.88 5.042 19.04 12.764l34.61 83.942c2.13 5.161 9.44 5.155 11.56-.01l34.43-83.932a20.58 20.58 0 0 1 19.04-12.764h24.64c11.37 0 20.58 9.208 20.58 20.569v146.362c0 11.361-9.21 20.569-20.58 20.569h-7.09c-11.36 0-20.58-9.208-20.58-20.569l-.12-50.645c-.01-6.888-9.53-8.688-12.06-2.283l-23.46 59.332a20.57 20.57 0 0 1-19.14 13.009h-3.03a20.57 20.57 0 0 1-19.15-13.046l-23.47-59.68c-2.52-6.416-12.05-4.623-12.06 2.271l-.13 51.042c0 11.361-9.21 20.569-20.57 20.569h-7.1c-11.36 0-20.57-9.208-20.57-20.569V239.319c0-11.361 9.21-20.569 20.57-20.569\"/><path fill=\"#000\" fill-rule=\"evenodd\" d=\"m1449.94 391.836 6.12-19.392a6.255 6.255 0 0 1 5.96-4.369l50.22-.061a6.24 6.24 0 0 1 5.96 4.348l6.23 19.486c2.71 8.581 10.71 14.402 19.74 14.402h9.34c14.13 0 24.15-13.791 19.61-27.151l-49.74-146.361c-2.85-8.37-10.74-13.988-19.61-13.988h-33.16c-8.87 0-16.77 5.618-19.61 13.988l-49.74 146.361c-4.54 13.36 5.48 27.151 19.61 27.151h9.32c9.04 0 17.04-5.827 19.75-14.414m31.1-98.858c1.85-5.807 10.08-5.796 11.91.016l8.83 27.916c1.28 4.028-1.73 8.134-5.96 8.134h-17.74c-4.23 0-7.24-4.119-5.95-8.151zM1681.81 406.25c18.91 0 35.39-3.686 49.36-11.168 13.97-7.544 24.73-18.394 32.24-32.489 7.56-14.105 11.29-30.866 11.29-50.182 0-19.256-3.73-35.957-11.29-50.004-7.57-14.094-18.35-24.912-32.32-32.397-13.91-7.545-30.4-11.26-49.37-11.26h-49.5c-11.38 0-20.63 9.201-20.63 20.569v146.362c0 11.368 9.25 20.569 20.63 20.569zm23.13-47.701c-6.62 3.215-14.85 4.886-24.79 4.886-10.49 0-19-8.507-19-19v-64.34c0-10.149 8.23-18.376 18.38-18.376 10.18 0 18.56 1.703 25.23 4.974 6.59 3.149 11.63 8.315 15.08 15.633 3.45 7.269 5.28 17.268 5.28 30.162 0 12.891-1.82 22.951-5.28 30.347-3.39 7.319-8.36 12.509-14.9 15.714\" clip-rule=\"evenodd\"/><path fill=\"#000\" d=\"M1804.21 385.681V239.319c0-11.361 9.21-20.569 20.58-20.569h91.28c11.36 0 20.57 9.202 20.57 20.557s-9.21 20.556-20.57 20.556h-54.64a7.807 7.807 0 0 0-7.81 7.813v16.366a7.806 7.806 0 0 0 7.81 7.812h48.13c11.37 0 20.58 9.246 20.58 20.602s-9.21 20.601-20.58 20.601h-48.13a7.806 7.806 0 0 0-7.81 7.812v16.455a7.807 7.807 0 0 0 7.81 7.813h54.64c11.36 0 20.57 9.202 20.57 20.556s-9.21 20.557-20.57 20.557h-91.28c-11.37 0-20.58-9.208-20.58-20.569\"/><path fill=\"#000\" fill-rule=\"evenodd\" d=\"M2875.5 68.75h-2750c-31.066 0-56.25 25.184-56.25 56.25v750c0 31.066 25.184 56.25 56.25 56.25h2750c31.07 0 56.25-25.184 56.25-56.25V125c0-31.066-25.18-56.25-56.25-56.25M125.5 0C56.464 0 .5 55.964.5 125v750c0 69.036 55.965 125 125 125h2750c69.04 0 125-55.964 125-125V125c0-69.036-55.96-125-125-125z\" clip-rule=\"evenodd\"/><path fill=\"#000\" d=\"M2476.06 804.813c-10.54 0-19.82-6.947-22.81-17.068L2390.79 575.7c-4.49-15.248 6.92-30.534 22.8-30.534h27.75c11.1 0 20.72 7.686 23.18 18.52L2489 671.402c2.07 9.093 14.93 9.321 17.32.308l28.83-108.844c2.76-10.435 12.19-17.7 22.98-17.7h25.17c10.8 0 20.25 7.293 22.99 17.755l28.27 107.739c2.36 9.001 15.18 8.829 17.3-.232l25.01-106.888c2.51-10.763 12.1-18.374 23.14-18.374h27.87c15.88 0 27.29 15.286 22.8 30.534l-62.46 212.045a23.78 23.78 0 0 1-22.81 17.068h-32.12c-10.39 0-19.58-6.763-22.69-16.696l-32.08-102.694c-2.62-8.397-14.51-8.331-17.04.095l-30.74 102.346c-3.02 10.061-12.27 16.949-22.76 16.949zM1742.44 804.813h-75.81c-13.09 0-23.71-10.656-23.71-23.801V568.967c0-13.145 10.62-23.801 23.71-23.801h74.8c26.6 0 49.59 5.198 68.95 15.594 19.45 10.312 34.44 25.187 44.96 44.627 10.61 19.355 15.91 42.556 15.91 69.602q0 40.57-15.78 69.73c-10.53 19.355-25.43 34.231-44.71 44.627-19.28 10.311-42.05 15.467-68.32 15.467m-29.3-83.642c0 13.145 10.61 23.801 23.71 23.801h3.06c12.8 0 23.7-2.07 32.71-6.212 9.09-4.141 16-11.283 20.71-21.426q7.2-15.213 7.2-42.345 0-27.13-7.32-42.344c-4.8-10.143-11.87-17.285-21.22-21.426-9.26-4.142-20.63-6.212-34.1-6.212h-1.04c-13.1 0-23.71 10.656-23.71 23.801zM1460.86 804.813c-13.12 0-23.76-10.656-23.76-23.801V568.967c0-13.145 10.64-23.801 23.76-23.801h22.84c13.13 0 23.76 10.656 23.76 23.801v155.247c0 13.145 10.64 23.801 23.76 23.801h57.27c13.12 0 23.76 10.656 23.76 23.801v9.196c0 13.145-10.64 23.801-23.76 23.801zM1204.45 601.964c-13.13 0-23.77-10.656-23.77-23.801v-9.196c0-13.145 10.64-23.801 23.77-23.801h177.89c13.13 0 23.78 10.656 23.78 23.801v9.196c0 13.145-10.65 23.801-23.78 23.801h-39.38c-8.21 0-14.86 6.66-14.86 14.875v164.173c0 13.145-10.64 23.801-23.78 23.801h-21.85c-13.13 0-23.78-10.656-23.78-23.801V616.839c0-8.215-6.65-14.875-14.86-14.875z\"/><path fill=\"#000\" fill-rule=\"evenodd\" d=\"M2223.05 787.891c-3.02 10.047-12.27 16.922-22.74 16.922h-25.43c-16.19 0-27.64-15.862-22.57-31.261l69.88-212.045c3.21-9.753 12.31-16.341 22.56-16.341h61.84c10.25 0 19.35 6.588 22.56 16.341l69.87 212.045c5.08 15.399-6.37 31.261-22.56 31.261h-25.43c-10.48 0-19.72-6.875-22.74-16.922l-6.7-22.2a14.84 14.84 0 0 0-14.21-10.576h-63.42c-6.55 0-12.32 4.296-14.22 10.576zm76.13-96.945-14.13-48.436c-2.46-8.451-14.36-8.602-17.04-.217l-15.46 48.436c-1.84 5.759 2.45 11.645 8.48 11.645h29.6c5.94 0 10.22-5.715 8.55-11.428\" clip-rule=\"evenodd\"/><path fill=\"#000\" d=\"M1939.6 804.813c-13.13 0-23.77-10.656-23.77-23.801V568.967c0-13.145 10.64-23.801 23.77-23.801h88.13c19.24 0 36.08 3.508 50.51 10.523s25.65 17.115 33.67 30.3q12.03 19.779 12.03 47.416c0 18.595-4.14 34.273-12.41 47.036-7.64 11.913-18.18 21.101-31.63 27.564-16.98 8.159-36 11.104-54.7 11.104h-43.07c-76.56 0 4.08-135.84 4.08-84.706v7.996c0 12.117 9.81 21.941 21.91 21.941 8.12 0 16.3-.345 24.04-3.043 5.91-2.113 10.43-5.451 13.55-10.015 3.2-4.565 4.81-10.523 4.81-17.877 0-7.437-1.61-13.481-4.81-18.129-3.12-4.733-7.64-8.199-13.55-10.396-7.05-2.766-14.67-3.423-22.18-3.423-13.13 0-23.77 10.656-23.77 23.801v47.71c0 11.825 11.14 16.003 19.91 20.752 12.31 6.671 7.58 25.389-6.42 25.389-7.45 0-13.49 6.048-13.49 13.508v48.395c0 13.145-10.63 23.801-23.76 23.801zm134.89-106.758 5.41 9.95 33.51 61.622c8.62 15.86-2.84 35.186-20.87 35.186h-22.27c-8.74 0-16.77-4.798-20.92-12.496l-35.05-65.04a15.52 15.52 0 0 0-13.66-8.168c-42.24 0 40.62-82.154 73.85-21.054M931.652 0h68.748v1000h-68.748z\"/></svg>", $v = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"1601\" fill=\"none\"><path fill=\"#000\" d=\"M72 1319.8c0-10.73 7.071-20.18 17.372-23.22l215.823-63.62c15.519-4.57 31.078 7.05 31.078 23.22v28.26c0 11.31-7.824 21.1-18.85 23.61l-109.636 24.94c-9.254 2.1-9.487 15.2-.313 17.63l110.784 29.37a24.21 24.21 0 0 1 18.015 23.4v25.64c0 11-7.423 20.62-18.071 23.41l-109.659 28.79c-9.162 2.41-8.986 15.47.236 17.63l108.792 25.46c10.955 2.56 18.702 12.33 18.702 23.57v28.39c0 16.17-15.559 27.79-31.078 23.22l-215.823-63.62c-10.3-3.04-17.372-12.49-17.372-23.22v-32.72c0-10.59 6.883-19.95 16.994-23.11l104.523-32.67c8.547-2.67 8.479-14.79-.096-17.36l-104.17-31.3C79.01 1372.42 72 1363 72 1352.31zM72 572.638V495.43c0-13.336 10.846-24.147 24.225-24.147h215.823c13.379 0 24.225 10.811 24.225 24.147v76.179q0 40.645-15.872 70.228-15.743 29.712-45.422 45.79-29.55 16.206-70.843 16.206-41.292 0-70.971-16.078-29.55-16.077-45.422-45.532Q72 612.767 72 572.638m85.132-29.84c-13.379 0-24.225 10.81-24.225 24.146v3.122q0 19.55 6.323 33.313 6.323 13.89 21.807 21.094 15.485 7.332 43.099 7.331t43.1-7.46q15.484-7.33 21.807-21.608 6.323-14.15 6.323-34.728v-1.064c0-13.336-10.846-24.146-24.225-24.146zM72 285.858c0-13.363 10.846-24.197 24.225-24.197h215.823c13.379 0 24.225 10.834 24.225 24.197v23.27c0 13.364-10.846 24.197-24.225 24.197H154.035c-13.379 0-24.225 10.834-24.225 24.197v58.328c0 13.364-10.846 24.197-24.225 24.197h-9.36C82.845 440.047 72 429.214 72 415.85zM278.463 24.72c0-13.374 10.846-24.216 24.225-24.216h9.36c13.379 0 24.225 10.842 24.225 24.216v181.174c0 13.374-10.846 24.216-24.225 24.216h-9.36c-13.379 0-24.225-10.842-24.225-24.216v-40.108c0-8.359-6.779-15.135-15.141-15.135H96.225c-13.38 0-24.225-10.842-24.225-24.216v-22.256c0-13.374 10.846-24.216 24.225-24.216h167.097c8.362 0 15.141-6.776 15.141-15.135z\"/><path fill=\"#000\" fill-rule=\"evenodd\" d=\"M89.224 1062.13C78.997 1059.04 72 1049.63 72 1038.96v-25.9c0-16.486 16.145-28.147 31.818-22.979l215.823 71.169a24.19 24.19 0 0 1 16.632 22.98v62.97c0 10.45-6.706 19.71-16.632 22.98l-215.823 71.17C88.145 1246.51 72 1234.86 72 1218.37v-25.9c0-10.67 6.997-20.08 17.224-23.17l22.595-6.81a15.13 15.13 0 0 0 10.765-14.48v-64.59a15.13 15.13 0 0 0-10.765-14.48zm98.672 77.53 49.299-14.39c8.601-2.51 8.755-14.62.22-17.35l-49.299-15.75c-5.861-1.88-11.852 2.49-11.852 8.64v30.14c0 6.05 5.817 10.41 11.632 8.71\" clip-rule=\"evenodd\"/><path fill=\"#000\" d=\"M72 773.439c0-13.367 10.846-24.203 24.225-24.203h215.823c13.379 0 24.225 10.836 24.225 24.203v89.762q0 29.395-10.711 51.439-10.71 22.046-30.84 34.293t-48.261 12.248q-28.388 0-47.873-12.635-18.187-11.672-28.056-32.218c-8.303-17.289-11.301-36.661-11.301-55.705v-43.867c0-77.976 138.26 4.16 86.215 4.16h-8.138c-12.334 0-22.332 9.989-22.332 22.311 0 8.269.351 16.6 3.097 24.487q3.225 9.024 10.194 13.794 6.968 4.899 18.194 4.899 11.356 0 18.453-4.899 7.226-4.77 10.581-13.794c2.815-7.188 3.484-14.944 3.484-22.596 0-13.366-10.846-24.202-24.225-24.202h-48.56c-12.036 0-16.288 11.345-21.122 20.272-6.79 12.539-25.841 7.72-25.841-6.536 0-7.586-6.156-13.736-13.749-13.736H96.225C82.845 820.916 72 810.08 72 796.714zm108.66 137.378-10.128 5.511-62.72 34.131C91.67 959.243 72 947.569 72 929.205V906.52a24.2 24.2 0 0 1 12.719-21.299l66.199-35.696a15.82 15.82 0 0 0 8.313-13.921c0-43.012 83.618 41.371 21.429 75.213\"/></svg>", ey = `data:image/svg+xml;utf8,${encodeURIComponent(Qv)}`, ty = `data:image/svg+xml;utf8,${encodeURIComponent($v)}`, ny = (0, _.memo)(function() {
 	let e = Av(), t = U(), n = z("is mobile", () => t.getViewportScreenBounds().width < 700, [t]), r = zv(e);
 	return ["licensed-with-watermark", "unlicensed"].includes(r) ? /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsx)(ay, {}), /* @__PURE__ */ (0, V.jsx)(iy, {
@@ -31629,7 +31629,7 @@ function vy(e) {
 	}, [t, n]);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/EditorAtom.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/EditorAtom.mjs
 var yy = class {
 	constructor(e, t) {
 		this.name = e, this.getInitialState = t;
@@ -31658,7 +31658,7 @@ var yy = class {
 	return t || by(n, Symbol.toStringTag, { value: "Module" }), n;
 };
 //#endregion
-//#region node_modules/orderedmap/dist/index.js
+//#region ../epic-656/node_modules/orderedmap/dist/index.js
 function Sy(e) {
 	this.content = e;
 }
@@ -31724,7 +31724,7 @@ Sy.prototype = {
 	return new Sy(t);
 };
 //#endregion
-//#region node_modules/prosemirror-model/dist/index.js
+//#region ../epic-656/node_modules/prosemirror-model/dist/index.js
 function Cy(e, t, n) {
 	for (let r = 0;; r++) {
 		if (r == e.childCount || r == t.childCount) return e.childCount == t.childCount ? null : n;
@@ -33506,7 +33506,7 @@ function zb(e, t, n, r) {
 	};
 }
 //#endregion
-//#region node_modules/prosemirror-transform/dist/index.js
+//#region ../epic-656/node_modules/prosemirror-transform/dist/index.js
 var Bb = 65535, Vb = 2 ** 16;
 function ste(e, t) {
 	return e + t * Vb;
@@ -35500,7 +35500,7 @@ var QS = ZS(yS, xS, ES), $S = ZS(yS, kS, AS), eC = {
 for (let e in eC) tC[e] = eC[e];
 typeof navigator < "u" ? /Mac|iP(hone|[oa]d)/.test(navigator.platform) : typeof os < "u" && os.platform && os.platform();
 //#endregion
-//#region node_modules/prosemirror-schema-list/dist/index.js
+//#region ../epic-656/node_modules/prosemirror-schema-list/dist/index.js
 function nC(e, t = null) {
 	return function(n, r) {
 		let { $from: i, $to: a } = n.selection, o = i.blockRange(a);
@@ -35570,7 +35570,7 @@ function cC(e) {
 	};
 }
 //#endregion
-//#region node_modules/prosemirror-view/dist/index.js
+//#region ../epic-656/node_modules/prosemirror-view/dist/index.js
 var lC = function(e) {
 	for (var t = 0;; t++) if (e = e.previousSibling, !e) return t;
 }, uC = function(e) {
@@ -38958,7 +38958,7 @@ function Qte(e) {
 	return t == "Esc" && (t = "Escape"), t == "Del" && (t = "Delete"), t == "Left" && (t = "ArrowLeft"), t == "Up" && (t = "ArrowUp"), t == "Right" && (t = "ArrowRight"), t == "Down" && (t = "ArrowDown"), t;
 }
 //#endregion
-//#region node_modules/prosemirror-keymap/dist/index.js
+//#region ../epic-656/node_modules/prosemirror-keymap/dist/index.js
 var $te = typeof navigator < "u" && /Mac|iP(hone|[oa]d)/.test(navigator.platform), ene = typeof navigator < "u" && /Win/.test(navigator.platform);
 function tne(e) {
 	let t = e.split(/-(?!$)/), n = t[t.length - 1];
@@ -39005,7 +39005,7 @@ function tD(e) {
 	};
 }
 //#endregion
-//#region node_modules/@tiptap/core/dist/index.js
+//#region ../epic-656/node_modules/@tiptap/core/dist/index.js
 function nD(e) {
 	let { state: t, transaction: n } = e, { selection: r } = n, { doc: i } = n, { storedMarks: a } = n;
 	return {
@@ -42252,7 +42252,7 @@ function zA(e) {
 	});
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/lib/utils/richText.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/lib/utils/richText.mjs
 var BA = new ve();
 function VA(e) {
 	return BA.get(e, () => EO(e.extensions ?? []));
@@ -42271,10 +42271,10 @@ function HA(e, t, n) {
 	return l(o, n), Array.from(s);
 }
 //#endregion
-//#region node_modules/@tldraw/editor/dist-esm/index.mjs
+//#region ../epic-656/node_modules/@tldraw/editor/dist-esm/index.mjs
 T("@tldraw/editor", "5.3.2", "esm");
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/draw/getPath.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/draw/getPath.mjs
 var UA = (e) => e * .65 + nd(e * $u / 2) * .35, WA = (e) => ({
 	size: e,
 	thinning: .5,
@@ -42363,7 +42363,7 @@ function Mne(e, t, n) {
 	}[e.props.dash];
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
 var ZA = class e {
 	static lineThroughPoints(t, n) {
 		let r = new e();
@@ -42871,7 +42871,7 @@ var ZA = class e {
 	]
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/usePrefersReducedMotion.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/usePrefersReducedMotion.mjs
 function tj() {
 	let e = vu(), t = z("animationSpeed", () => e?.user.getAnimationSpeed(), [e]), [n, r] = (0, _.useState)(!1);
 	return (0, _.useEffect)(() => {
@@ -42888,7 +42888,7 @@ function tj() {
 	}, [t, e]), n;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/selectHelpers.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/selectHelpers.mjs
 function nj(e) {
 	return "richText" in e.props && Co.isValid(e.props.richText);
 }
@@ -42904,7 +42904,7 @@ function rj(e, t, n = {}) {
 	}
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/context/a11y.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/context/a11y.mjs
 var ij = (0, _.createContext)(null);
 function Nne({ children: e }) {
 	let t = br("a11y", {
@@ -42927,7 +42927,7 @@ function aj() {
 	return e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/context/asset-urls.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/context/asset-urls.mjs
 var oj = (0, _.createContext)(null);
 function Pne({ assetUrls: e, children: t }) {
 	return (0, _.useEffect)(() => {
@@ -42951,7 +42951,7 @@ function sj() {
 	return e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useTranslation/defaultTranslation.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useTranslation/defaultTranslation.mjs
 var cj = {
 	"action.toggle-auto-pan": "Auto (trackpad)",
 	"action.toggle-auto-zoom": "Auto (mouse)",
@@ -43525,7 +43525,7 @@ async function Ine(e, t) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useTranslation/useTranslation.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useTranslation/useTranslation.mjs
 var uj = _.createContext(null);
 function Lne() {
 	return _.useContext(uj);
@@ -43883,7 +43883,7 @@ function Xne(e, t) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/default-shape-constants.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/default-shape-constants.mjs
 var Tj = {
 	fontWeight: "normal",
 	fontVariant: "normal",
@@ -44035,7 +44035,7 @@ function Aj(e, t, n) {
 	...Aj("orange", "yellow", "orange")
 });
 //#endregion
-//#region node_modules/@tiptap/extension-code/dist/index.js
+//#region ../epic-656/node_modules/@tiptap/extension-code/dist/index.js
 var tre = (e) => {
 	let t = /`([^`]+)`(?!`)$/.exec(e);
 	return !t || t.index > 0 && e[t.index - 1] === "`" ? null : {
@@ -45213,7 +45213,7 @@ function fP(e, t = null, n = null) {
 	return a;
 }
 //#endregion
-//#region node_modules/@tiptap/extension-link/dist/index.js
+//#region ../epic-656/node_modules/@tiptap/extension-link/dist/index.js
 var pP = "[\0- \xA0 ᠎ -\u2029 　]", mP = new RegExp(pP), hP = RegExp(`${pP}$`), gP = new RegExp(pP, "g");
 function _P(e) {
 	return e.length === 1 ? e[0].isLink : e.length === 3 && e[1].isLink ? ["()", "[]"].includes(e[0].value + e[2].value) : !1;
@@ -46505,7 +46505,7 @@ gA.create({
 	}
 });
 //#endregion
-//#region node_modules/@tiptap/extension-paragraph/dist/index.js
+//#region ../epic-656/node_modules/@tiptap/extension-paragraph/dist/index.js
 var LF = "&nbsp;", RF = "\xA0", zF = RA.create({
 	name: "paragraph",
 	priority: 1e3,
@@ -46661,7 +46661,7 @@ var LF = "&nbsp;", RF = "\xA0", zF = RA.create({
 	}
 });
 //#endregion
-//#region node_modules/prosemirror-dropcursor/dist/index.js
+//#region ../epic-656/node_modules/prosemirror-dropcursor/dist/index.js
 function GF(e = {}) {
 	return new hS({ view(t) {
 		return new KF(t, e);
@@ -46932,7 +46932,7 @@ function rI(e) {
 	return t.className = "ProseMirror-gapcursor", OE.create(e.doc, [TE.widget(e.selection.head, t, { key: "gapcursor" })]);
 }
 //#endregion
-//#region node_modules/rope-sequence/dist/index.js
+//#region ../epic-656/node_modules/rope-sequence/dist/index.js
 var iI = 200, aI = function() {};
 aI.prototype.append = function(e) {
 	return e.length ? (e = aI.from(e), !this.length && e || e.length < iI && this.leafAppend(e) || this.length < iI && e.leafPrepend(this) || this.appendInner(e)) : this;
@@ -47843,7 +47843,7 @@ function nL(e, t) {
 	if (!(`tldraw_${t}` in tL)) return e.fonts[t]?.faces ?? bn;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/text/richText.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/text/richText.mjs
 var rL = gA.create({
 	name: "keyboardShiftEnterHandler",
 	addKeyboardShortcuts() {
@@ -47922,7 +47922,7 @@ function hL(e, t, n) {
 	return a && n(a), t;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/TextHelpers.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/TextHelpers.mjs
 var gL = class e {
 	static fixNewLines = /\r?\n|\r/g;
 	static normalizeText(t) {
@@ -47974,7 +47974,7 @@ function TL(e) {
 	return wL(bL(yL(e)));
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/defaultExternalContentHandlers.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/defaultExternalContentHandlers.mjs
 async function EL(e, { point: t, text: n, html: r }) {
 	let i = t ?? (e.inputs.getShiftKey() ? e.inputs.getCurrentPagePoint() : e.getViewportPageBounds().center), a = e.getShapeUtil("text").getDefaultProps(), o = TL(n), s = r ? mL(e, r) : wo(o), c, l, u, d = "middle", f = lL(e, s), p = s.content.length > 1, m = vL(o);
 	p && (d = p ? m ? "end" : "start" : "middle");
@@ -48011,7 +48011,7 @@ async function EL(e, { point: t, text: n, html: r }) {
 	}]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/export/exportAs.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/export/exportAs.mjs
 async function DL(e, t, n) {
 	let r = n.name;
 	if (!r && (r = `shapes at ${OL()}`, t.length === 1)) {
@@ -48031,7 +48031,7 @@ function kL(e, t) {
 	n.href = r, n.download = e.name, n.click(), URL.revokeObjectURL(r);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/frames/frames.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/frames/frames.mjs
 function AL(e, t) {
 	let n = I(t.map((t) => e.getShape(t)).filter((t) => t && e.isShapeFrameLike(t)));
 	if (!n.length) return;
@@ -48087,7 +48087,7 @@ function ML(e, t, n = {}) {
 	});
 }
 //#endregion
-//#region node_modules/@radix-ui/react-compose-refs/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-compose-refs/dist/index.mjs
 var NL = Object.defineProperty, PL = (e, t) => NL(e, "name", {
 	value: t,
 	configurable: !0
@@ -48117,7 +48117,7 @@ function LL(...e) {
 }
 PL(LL, "useComposedRefs");
 //#endregion
-//#region node_modules/@radix-ui/react-slot/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-slot/dist/index.mjs
 var RL = Object.defineProperty, zL = (e, t) => RL(e, "name", {
 	value: t,
 	configurable: !0
@@ -48233,7 +48233,7 @@ function rR(e, t) {
 }
 tR(rR, "dispatchDiscreteCustomEvent");
 //#endregion
-//#region node_modules/@radix-ui/react-visually-hidden/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-visually-hidden/dist/index.mjs
 var iR = Object.defineProperty, aR = (e, t) => iR(e, "name", {
 	value: t,
 	configurable: !0
@@ -48343,7 +48343,7 @@ function uR(...e) {
 }
 cR(uR, "composeContextScopes");
 //#endregion
-//#region node_modules/@radix-ui/react-collection/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-collection/dist/index.mjs
 var sre = Object.defineProperty, dR = (e, t) => sre(e, "name", {
 	value: t,
 	configurable: !0
@@ -48746,7 +48746,7 @@ function xR(e) {
 }
 dR(xR, "getChildListObserver");
 //#endregion
-//#region node_modules/@radix-ui/primitive/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/primitive/dist/index.mjs
 var lre = Object.defineProperty, SR = (e, t) => lre(e, "name", {
 	value: t,
 	configurable: !0
@@ -48786,7 +48786,7 @@ function ER(e) {
 }
 SR(ER, "isFrame");
 //#endregion
-//#region node_modules/@radix-ui/react-use-layout-effect/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-use-layout-effect/dist/index.mjs
 var DR = globalThis?.document ? _.useLayoutEffect : () => {}, dre = Object.defineProperty, fre = (e, t) => dre(e, "name", {
 	value: t,
 	configurable: !0
@@ -48804,7 +48804,7 @@ function AR(e) {
 }
 fre(AR, "useEffectEvent");
 //#endregion
-//#region node_modules/@radix-ui/react-use-controllable-state/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-use-controllable-state/dist/index.mjs
 var pre = Object.defineProperty, jR = (e, t) => pre(e, "name", {
 	value: t,
 	configurable: !0
@@ -48883,7 +48883,7 @@ function hre(e, t, n, r) {
 }
 jR(hre, "useControllableStateReducer");
 //#endregion
-//#region node_modules/@radix-ui/react-presence/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-presence/dist/index.mjs
 var gre = Object.defineProperty, IR = (e, t) => gre(e, "name", {
 	value: t,
 	configurable: !0
@@ -48977,7 +48977,7 @@ function UR(e) {
 }
 IR(UR, "getElementRef");
 //#endregion
-//#region node_modules/@radix-ui/react-id/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-id/dist/index.mjs
 var _re = Object.defineProperty, vre = (e, t) => _re(e, "name", {
 	value: t,
 	configurable: !0
@@ -48990,7 +48990,7 @@ function WR(e) {
 }
 vre(WR, "useId");
 //#endregion
-//#region node_modules/@radix-ui/react-direction/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-direction/dist/index.mjs
 var xre = Object.defineProperty, Sre = (e, t) => xre(e, "name", {
 	value: t,
 	configurable: !0
@@ -49001,7 +49001,7 @@ function GR(e) {
 }
 Sre(GR, "useDirection");
 //#endregion
-//#region node_modules/@radix-ui/react-use-callback-ref/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-use-callback-ref/dist/index.mjs
 var wre = Object.defineProperty, Tre = (e, t) => wre(e, "name", {
 	value: t,
 	configurable: !0
@@ -49014,7 +49014,7 @@ function KR(e) {
 }
 Tre(KR, "useCallbackRef");
 //#endregion
-//#region node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs
 var Ere = Object.defineProperty, qR = (e, t) => Ere(e, "name", {
 	value: t,
 	configurable: !0
@@ -49338,7 +49338,7 @@ function vz(e) {
 }
 rz(vz, "removeLinks");
 //#endregion
-//#region node_modules/@radix-ui/react-portal/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-portal/dist/index.mjs
 var Pre = Object.defineProperty, yz = /* @__PURE__ */ _.forwardRef(/* @__PURE__ */ ((e, t) => Pre(e, "name", {
 	value: t,
 	configurable: !0
@@ -49377,7 +49377,7 @@ function wz() {
 }
 bz(wz, "createFocusGuard");
 //#endregion
-//#region node_modules/tslib/tslib.es6.mjs
+//#region ../epic-656/node_modules/tslib/tslib.es6.mjs
 var Tz = function() {
 	return Tz = Object.assign || function(e) {
 		for (var t, n = 1, r = arguments.length; n < r; n++) for (var i in t = arguments[n], t) Object.prototype.hasOwnProperty.call(t, i) && (e[i] = t[i]);
@@ -49395,15 +49395,15 @@ function Lre(e, t, n) {
 	return e.concat(a || Array.prototype.slice.call(t));
 }
 //#endregion
-//#region node_modules/react-remove-scroll-bar/dist/es2015/constants.js
+//#region ../epic-656/node_modules/react-remove-scroll-bar/dist/es2015/constants.js
 var Dz = "right-scroll-bar-position", Oz = "width-before-scroll-bar", Rre = "with-scroll-bars-hidden", zre = "--removed-body-scroll-bar-size";
 //#endregion
-//#region node_modules/use-callback-ref/dist/es2015/assignRef.js
+//#region ../epic-656/node_modules/use-callback-ref/dist/es2015/assignRef.js
 function kz(e, t) {
 	return typeof e == "function" ? e(t) : e && (e.current = t), e;
 }
 //#endregion
-//#region node_modules/use-callback-ref/dist/es2015/useRef.js
+//#region ../epic-656/node_modules/use-callback-ref/dist/es2015/useRef.js
 function Bre(e, t) {
 	var n = (0, _.useState)(function() {
 		return {
@@ -49423,7 +49423,7 @@ function Bre(e, t) {
 	return n.callback = t, n.facade;
 }
 //#endregion
-//#region node_modules/use-callback-ref/dist/es2015/useMergeRef.js
+//#region ../epic-656/node_modules/use-callback-ref/dist/es2015/useMergeRef.js
 var Vre = typeof window < "u" ? _.useLayoutEffect : _.useEffect, Az = /* @__PURE__ */ new WeakMap();
 function Hre(e, t) {
 	var n = Bre(t || null, function(t) {
@@ -49445,7 +49445,7 @@ function Hre(e, t) {
 	}, [e]), n;
 }
 //#endregion
-//#region node_modules/use-sidecar/dist/es2015/medium.js
+//#region ../epic-656/node_modules/use-sidecar/dist/es2015/medium.js
 function Ure(e) {
 	return e;
 }
@@ -49512,7 +49512,7 @@ function Gre(e) {
 	}, e), t;
 }
 //#endregion
-//#region node_modules/use-sidecar/dist/es2015/exports.js
+//#region ../epic-656/node_modules/use-sidecar/dist/es2015/exports.js
 var jz = function(e) {
 	var t = e.sideCar, n = Ez(e, ["sideCar"]);
 	if (!t) throw Error("Sidecar: please provide `sideCar` property to import the right car");
@@ -49525,7 +49525,7 @@ function Kre(e, t) {
 	return e.useMedium(t), jz;
 }
 //#endregion
-//#region node_modules/react-remove-scroll/dist/es2015/medium.js
+//#region ../epic-656/node_modules/react-remove-scroll/dist/es2015/medium.js
 var Mz = Gre(), Nz = function() {}, Pz = _.forwardRef(function(e, t) {
 	var n = _.useRef(null), r = _.useState({
 		onScrollCapture: Nz,
@@ -49571,12 +49571,12 @@ Pz.defaultProps = {
 	zeroRight: Dz
 };
 //#endregion
-//#region node_modules/get-nonce/dist/es2015/index.js
+//#region ../epic-656/node_modules/get-nonce/dist/es2015/index.js
 var qre = function() {
 	if (typeof __webpack_nonce__ < "u") return __webpack_nonce__;
 };
 //#endregion
-//#region node_modules/react-style-singleton/dist/es2015/singleton.js
+//#region ../epic-656/node_modules/react-style-singleton/dist/es2015/singleton.js
 function Jre() {
 	if (!document) return null;
 	var e = document.createElement("style");
@@ -49862,7 +49862,7 @@ function mB(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/react-remove-scroll/dist/es2015/sidecar.js
+//#region ../epic-656/node_modules/react-remove-scroll/dist/es2015/sidecar.js
 var hB = Kre(Mz, pB), gB = _.forwardRef(function(e, t) {
 	return _.createElement(Pz, Tz({}, e, {
 		ref: t,
@@ -49871,7 +49871,7 @@ var hB = Kre(Mz, pB), gB = _.forwardRef(function(e, t) {
 });
 gB.classNames = Pz.classNames;
 //#endregion
-//#region node_modules/aria-hidden/dist/es2015/index.js
+//#region ../epic-656/node_modules/aria-hidden/dist/es2015/index.js
 var _B = function(e) {
 	return typeof document > "u" ? null : (Array.isArray(e) ? e[0] : e).ownerDocument.body;
 }, vB = /* @__PURE__ */ new WeakMap(), yB = /* @__PURE__ */ new WeakMap(), bB = {}, xB = 0, SB = function(e) {
@@ -50068,7 +50068,7 @@ function XB(e) {
 }
 DB(XB, "getState");
 //#endregion
-//#region node_modules/@radix-ui/react-use-size/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-use-size/dist/index.mjs
 var ZB = Object.defineProperty, QB = (e, t) => ZB(e, "name", {
 	value: t,
 	configurable: !0
@@ -50100,7 +50100,7 @@ function $B(e) {
 }
 QB($B, "useSize");
 //#endregion
-//#region node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
+//#region ../epic-656/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
 var eV = [
 	"top",
 	"right",
@@ -50204,7 +50204,7 @@ function DV(e) {
 	};
 }
 //#endregion
-//#region node_modules/@floating-ui/core/dist/floating-ui.core.mjs
+//#region ../epic-656/node_modules/@floating-ui/core/dist/floating-ui.core.mjs
 function OV(e, t, n) {
 	let { reference: r, floating: i } = e, a = pV(t), o = mV(t), s = fV(o), c = lV(t), l = a === "y", u = r.x + r.width / 2 - i.width / 2, d = r.y + r.height / 2 - i.height / 2, f = r[s] / 2 - i[s] / 2, p;
 	switch (c) {
@@ -50539,7 +50539,7 @@ var zV = function(e) {
 	};
 };
 //#endregion
-//#region node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
+//#region ../epic-656/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
 function UV() {
 	return typeof window < "u";
 }
@@ -50636,7 +50636,7 @@ function pH(e) {
 	return e.parent && Object.getPrototypeOf(e.parent) ? e.frameElement : null;
 }
 //#endregion
-//#region node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
+//#region ../epic-656/node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
 function mH(e) {
 	let t = cH(e), n = parseFloat(t.width) || 0, r = parseFloat(t.height) || 0, i = YV(e), a = i ? e.offsetWidth : n, o = i ? e.offsetHeight : r, s = rV(n) !== a || rV(r) !== o;
 	return s && (n = a, r = o), {
@@ -52299,7 +52299,7 @@ function NK(e) {
 }
 MK(NK, "usePrevious");
 //#endregion
-//#region node_modules/@radix-ui/number/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/number/dist/index.mjs
 var PK = Object.defineProperty, FK = (e, t) => PK(e, "name", {
 	value: t,
 	configurable: !0
@@ -52309,7 +52309,7 @@ function IK(e, [t, n]) {
 }
 FK(IK, "clamp");
 //#endregion
-//#region node_modules/@radix-ui/react-popover/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-popover/dist/index.mjs
 var LK = Object.defineProperty, RK = (e, t) => LK(e, "name", {
 	value: t,
 	configurable: !0
@@ -52623,7 +52623,7 @@ function kq(e, t) {
 }
 lq(kq, "wrapArray");
 //#endregion
-//#region node_modules/@radix-ui/react-slider/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-slider/dist/index.mjs
 var Aq = Object.defineProperty, jq = (e, t) => Aq(e, "name", {
 	value: t,
 	configurable: !0
@@ -53040,7 +53040,7 @@ function vJ(e) {
 }
 jq(vJ, "isFunction");
 //#endregion
-//#region node_modules/@radix-ui/react-toast/dist/index.mjs
+//#region ../epic-656/node_modules/@radix-ui/react-toast/dist/index.mjs
 var yJ = Object.defineProperty, bJ = (e, t) => yJ(e, "name", {
 	value: t,
 	configurable: !0
@@ -54198,7 +54198,7 @@ var HX = (0, _.forwardRef)(({ children: e, content: t, side: n, sideOffset: r = 
 	}) : s;
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/Button/TldrawUiButtonLabel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/Button/TldrawUiButtonLabel.mjs
 function GX({ children: e }) {
 	return /* @__PURE__ */ (0, V.jsx)("span", {
 		className: "tlui-button__label",
@@ -54206,7 +54206,7 @@ function GX({ children: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiIcon.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiIcon.mjs
 var KX = (0, _.memo)(function({ label: e, small: t, invertIcon: n, icon: r, tiny: i, color: a, className: o, ...s }) {
 	return typeof r == "string" ? /* @__PURE__ */ (0, V.jsx)(qX, {
 		label: e,
@@ -54262,7 +54262,7 @@ function qX({ label: e, small: t, tiny: n, invertIcon: r, icon: i, color: a, cla
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/Button/TldrawUiButtonIcon.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/Button/TldrawUiButtonIcon.mjs
 function JX({ icon: e, small: t, invertIcon: n }) {
 	return /* @__PURE__ */ (0, V.jsx)(KX, {
 		"aria-hidden": "true",
@@ -54274,7 +54274,7 @@ function JX({ icon: e, small: t, invertIcon: n }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiDialog.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiDialog.mjs
 function YX({ className: e, children: t }) {
 	return /* @__PURE__ */ (0, V.jsx)("div", {
 		className: (0, Rl.default)("tlui-dialog__header", e),
@@ -54325,7 +54325,7 @@ function $X({ className: e, children: t }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiInput.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiInput.mjs
 var eZ = _.forwardRef(function({ className: e, label: t, icon: n, iconLeft: r, iconLabel: i, autoSelect: a = !1, autoFocus: o = !1, defaultValue: s, maxLength: c, placeholder: l, onComplete: u, onValueChange: d, onCancel: f, onFocus: p, onBlur: m, shouldManuallyMaintainScrollPositionWhenFocused: h = !1, children: g, value: v, "data-testid": y, disabled: b, "aria-label": x }, S) {
 	let C = vu(), w = _.useRef(null);
 	_.useImperativeHandle(S, () => w.current);
@@ -54416,7 +54416,7 @@ var eZ = _.forwardRef(function({ className: e, label: t, icon: n, iconLeft: r, i
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/EditLinkDialog.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/EditLinkDialog.mjs
 function tZ(e) {
 	return qa.isValid(e) ? {
 		isValid: !0,
@@ -54962,7 +54962,7 @@ function fZ(e) {
 	return "icon" in e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useGetEmbedDefinition.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useGetEmbedDefinition.mjs
 function pZ() {
 	let e = vu();
 	if (e && e.hasShapeUtil("embed")) return e.getShapeUtil("embed");
@@ -54972,13 +54972,13 @@ function mZ() {
 	return (t) => e ? e.getEmbedDefinition(t) : void 0;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useGetEmbedDefinitions.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useGetEmbedDefinitions.mjs
 function hZ() {
 	let e = pZ();
 	return e ? e.getEmbedDefinitions() : [];
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/EmbedDialog.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/EmbedDialog.mjs
 var gZ = yr(function({ onClose: e }) {
 	let t = U(), n = dj(), r = sj(), [i, a] = (0, _.useState)(null), [o, s] = (0, _.useState)(""), [c, l] = (0, _.useState)(null), [u, d] = (0, _.useState)(!1), f = (0, _.useRef)(-1), p = hZ(), m = mZ();
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsxs)(YX, { children: [/* @__PURE__ */ (0, V.jsx)(XX, { children: i ? `${n("embed-dialog.title")} \u2014 ${i.title}` : n("embed-dialog.title") }), /* @__PURE__ */ (0, V.jsx)(ZX, {})] }), i ? /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsxs)(QX, {
@@ -55090,7 +55090,7 @@ function xZ() {
 	return e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuContext.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuContext.mjs
 var SZ = (0, _.createContext)(null);
 function CZ() {
 	let e = (0, _.useContext)(SZ);
@@ -55107,7 +55107,7 @@ function wZ({ type: e, sourceId: t, children: n }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useCollaborationStatus.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useCollaborationStatus.mjs
 function TZ() {
 	return vu()?.store.props.collaboration !== void 0;
 }
@@ -55116,13 +55116,13 @@ function EZ() {
 	return z("sync status", () => e?.store.props.collaboration?.status ? e.store.props.collaboration.status.get() : null, [e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useReadonly.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useReadonly.mjs
 function DZ() {
 	let e = vu();
 	return z("isReadonlyMode", () => !!e?.getIsReadonly(), [e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/kbd-utils.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/kbd-utils.mjs
 var OZ = tu.isDarwin ? "⌘" : "__CTRL__", kZ = tu.isDarwin ? "⌃" : "__CTRL__", AZ = tu.isDarwin ? "⌥" : "__ALT__";
 function jZ(e) {
 	return e === "," ? [","] : e.split(",")[0].split(/(\[\[[^\]]+\]\])/g).map((e) => e.startsWith("[[") ? e.replace(/[[\]]/g, "") : e.replace(/cmd\+/g, OZ).replace(/ctrl\+/g, kZ).replace(/alt\+/g, AZ).replace(/shift\+/g, "⇧").replace(/\$/g, OZ).replace(/\?/g, AZ).replace(/!/g, "⇧").match(/__CTRL__|__ALT__|./g) || []).flat().map((e, t) => {
@@ -55135,7 +55135,7 @@ function MZ(e) {
 	return "— " + jZ(e).join(" ");
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Spinner.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Spinner.mjs
 function NZ(e) {
 	let t = dj();
 	return /* @__PURE__ */ (0, V.jsx)(gp, {
@@ -55144,7 +55144,7 @@ function NZ(e) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/context/events.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/context/events.mjs
 var PZ = () => void 0, FZ = _.createContext(null);
 function IZ({ onEvent: e, children: t }) {
 	return /* @__PURE__ */ (0, V.jsx)(FZ.Provider, {
@@ -55156,7 +55156,7 @@ function LZ() {
 	return _.useContext(FZ) ?? PZ;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useMenuIsOpen.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useMenuIsOpen.mjs
 function RZ(e, t) {
 	let n = vu(), r = (0, _.useCallback)((e) => {
 		e && n?.complete(), t?.(e);
@@ -55169,7 +55169,7 @@ function RZ(e, t) {
 	return Kee(n ? `${e}-${n.contextId}` : e, r, a);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiDropdownMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiDropdownMenu.mjs
 function zZ({ id: e, children: t, modal: n = !1, debugOpen: r = !1 }) {
 	let [i, a] = RZ(e), o = fj();
 	return /* @__PURE__ */ (0, V.jsx)(xK, {
@@ -55287,7 +55287,7 @@ function qZ({ children: e, onSelect: t, ...n }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiKbd.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiKbd.mjs
 function JZ({ children: e, visibleOnMobileLayout: t = !1 }) {
 	let n = xZ();
 	return !t && n < vZ.MOBILE ? null : /* @__PURE__ */ (0, V.jsx)("kbd", {
@@ -55296,7 +55296,7 @@ function JZ({ children: e, visibleOnMobileLayout: t = !1 }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiToolbar.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiToolbar.mjs
 var YZ = {
 	horizontal: NX,
 	vertical: PX,
@@ -55356,7 +55356,7 @@ function $Z({ children: e, className: t, type: n, value: r, tooltip: i, ...a }) 
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuItem.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuItem.mjs
 function eQ({ disabled: e = !1, spinner: t = !1, readonlyOk: n = !1, id: r, kbd: i, label: a, icon: o, iconLeft: s, onSelect: c, noClose: l, isSelected: u, onDragStart: d }) {
 	let { type: f, sourceId: p } = CZ(), m = dj(), h = fj(), [g, v] = (0, _.useState)(!1);
 	if (DZ() && !n) return null;
@@ -55577,7 +55577,7 @@ function nQ({ id: e, labelStr: t, titleStr: n, disabled: r, isSelected: i, icon:
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuActionItem.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuActionItem.mjs
 function $({ actionId: e = "", ...t }) {
 	let n = l6()[e];
 	return n ? /* @__PURE__ */ (0, V.jsx)(eQ, {
@@ -55586,7 +55586,7 @@ function $({ actionId: e = "", ...t }) {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuGroup.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuGroup.mjs
 function rQ({ id: e, label: t, className: n, children: r }) {
 	let i = CZ(), { orientation: a } = MX(), o = dj(), s = fj(), c = d6(t, i.type), l = c ? o(c) : void 0;
 	switch (i.type) {
@@ -55626,7 +55626,7 @@ function rQ({ id: e, label: t, className: n, children: r }) {
 	}
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/context/dialogs.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/context/dialogs.mjs
 var iQ = (0, _.createContext)(null);
 function aQ({ context: e, children: t }) {
 	let n = (0, _.useContext)(iQ), r = LZ(), i = br("dialogs", []), a = (0, _.useMemo)(() => ({
@@ -55673,7 +55673,7 @@ function oQ() {
 	return e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/context/toasts.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/context/toasts.mjs
 var sQ = (0, _.createContext)(null);
 function cQ({ children: e }) {
 	let t = br("toasts", []), n = (0, _.useContext)(sQ), r = (0, _.useMemo)(() => ({
@@ -55703,7 +55703,7 @@ function lQ() {
 	return e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/getLocalFiles.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/getLocalFiles.mjs
 function uQ(e) {
 	return new Promise((t) => {
 		let { allowMultiple: n = !0, mimeTypes: r = [], document: i = Ql() } = e || {}, a = i.createElement("input");
@@ -55727,7 +55727,7 @@ function uQ(e) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/clipboard.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/clipboard.mjs
 var dQ = /* @__PURE__ */ c((/* @__PURE__ */ o(((e, t) => {
 	var n = (function() {
 		var e = String.fromCharCode, t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=", n = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$", r = {};
@@ -55908,7 +55908,7 @@ function vQ(e) {
 	})));
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/clipboard/putPastedContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/clipboard/putPastedContent.mjs
 async function yQ(e, t, n) {
 	let r = n.point ?? ("point" in t ? t.point : void 0);
 	if (e.options.onBeforePasteFromClipboard) {
@@ -55924,7 +55924,7 @@ async function yQ(e, t, n) {
 	return e.putExternalContent(t);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/clipboard/pasteFiles.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/clipboard/pasteFiles.mjs
 async function bQ(e, t, n, r, i = "native-event") {
 	let a = t.map((e) => e instanceof File ? e : new File([e], "tldrawFile", { type: e.type }));
 	e.markHistoryStoppingPoint("paste"), await yQ(e, {
@@ -55938,7 +55938,7 @@ async function bQ(e, t, n, r, i = "native-event") {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/clipboard/pasteUrl.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/clipboard/pasteUrl.mjs
 async function xQ(e, t, n, r, i = "native-event") {
 	return e.markHistoryStoppingPoint("paste"), await yQ(e, {
 		type: "url",
@@ -55951,7 +55951,7 @@ async function xQ(e, t, n, r, i = "native-event") {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useClipboardEvents.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useClipboardEvents.mjs
 var SQ = [
 	fQ,
 	"image/png",
@@ -56465,7 +56465,7 @@ function FQ() {
 	]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/export/export.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/export/export.mjs
 var IQ = {
 	jpeg: "image/jpeg",
 	png: "image/png",
@@ -56480,7 +56480,7 @@ function LQ(e, t, n = {}) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/export/copyAs.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/export/copyAs.mjs
 function RQ(e, t, n) {
 	if (!navigator.clipboard) return Promise.reject(/* @__PURE__ */ Error("Copy not supported"));
 	if (n.format === "json") {
@@ -56509,7 +56509,7 @@ async function zQ(e) {
 	await navigator.clipboard?.writeText?.(await e());
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useCopyAs.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useCopyAs.mjs
 function BQ() {
 	let e = vu(), { addToast: t } = lQ(), n = dj();
 	return (0, _.useCallback)((r, i = "svg") => {
@@ -56528,7 +56528,7 @@ function BQ() {
 	]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useExportAs.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useExportAs.mjs
 function VQ() {
 	let e = vu(), { addToast: t } = lQ(), n = dj();
 	return (0, _.useCallback)((r, i = {}) => {
@@ -56553,7 +56553,7 @@ function VQ() {
 	]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/usePrint.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/usePrint.mjs
 function HQ() {
 	let e = vu(), t = (0, _.useRef)(null), n = (0, _.useRef)(null);
 	return (0, _.useCallback)(async function() {
@@ -56682,7 +56682,7 @@ function HQ() {
 	}, [e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/overrides.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/overrides.mjs
 var UQ = (0, _.createContext)([]);
 function WQ() {
 	let e = vu(), { addToast: t, removeToast: n, clearToasts: r } = lQ(), { addDialog: i, clearDialogs: a, removeDialog: o } = oQ(), s = dj(), c = HQ(), { cut: l, copy: u, paste: d } = PQ(), f = BQ(), p = VQ(), m = mZ(), h = xZ() < vZ.TABLET_SM, g = wp((0, _.useContext)(UQ)), v = (0, _.useCallback)(async () => {
@@ -56796,7 +56796,7 @@ function JQ(e) {
 	return (0, _.useMemo)(() => GQ(n, t), [n, t]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useTools.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useTools.mjs
 var YQ = _.createContext(null);
 function XQ({ overrides: e, children: t }) {
 	let n = vu(), r = LZ(), i = aj(), a = dj(), o = WQ(), s = _.useCallback((e, t, n) => {
@@ -57110,7 +57110,7 @@ function QQ(e, t, n) {
 	}), e.getCurrentTool().setCurrentToolIdMask(n.maskedToolId ?? s.type);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuToolItem.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuToolItem.mjs
 function $Q({ toolId: e = "", ...t }) {
 	let n = ZQ()[e];
 	return n ? /* @__PURE__ */ (0, V.jsx)(eQ, {
@@ -57119,7 +57119,7 @@ function $Q({ toolId: e = "", ...t }) {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/KeyboardShortcutsDialog/DefaultKeyboardShortcutsDialogContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/KeyboardShortcutsDialog/DefaultKeyboardShortcutsDialogContent.mjs
 function e$() {
 	let e = TZ();
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
@@ -57375,7 +57375,7 @@ function e$() {
 	] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/KeyboardShortcutsDialog/DefaultKeyboardShortcutsDialog.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/KeyboardShortcutsDialog/DefaultKeyboardShortcutsDialog.mjs
 var t$ = (0, _.memo)(function({ children: e }) {
 	let t = dj(), n = xZ(), r = e ?? /* @__PURE__ */ (0, V.jsx)(e$, {});
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
@@ -57398,7 +57398,7 @@ var t$ = (0, _.memo)(function({ children: e }) {
 	] });
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useFlatten.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useFlatten.mjs
 async function n$(e, t, n) {
 	let r = I(t.map((t) => {
 		let n = e.getShape(t);
@@ -57500,7 +57500,7 @@ async function n$(e, t, n) {
 	}), o;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiPopover.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/TldrawUiPopover.mjs
 function r$({ id: e, children: t, onOpenChange: n, open: r, className: i }) {
 	let [a, o] = RZ(e, n);
 	return /* @__PURE__ */ (0, V.jsx)(iq, {
@@ -57544,7 +57544,7 @@ function a$({ side: e, children: t, align: n = "center", sideOffset: r = 8, alig
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/shared.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/shared.mjs
 var o$ = 8, s$ = .001;
 function c$(e) {
 	let t = (e) => Math.max(s$, Math.min(.999, e));
@@ -57648,7 +57648,7 @@ function v$(e, t, n, r, i) {
 	t.setTo(f);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/menu-hooks.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/menu-hooks.mjs
 function y$(e) {
 	return e.getSelectedShapeIds().map((t) => e.getShape(t)).filter((t) => {
 		if (!t) return !1;
@@ -57740,7 +57740,7 @@ function N$() {
 	return z("canApplySelectionAction", () => e.isIn("select") && e.getSelectedShapeIds().length > 0, [e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuCheckboxItem.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuCheckboxItem.mjs
 function P$({ id: e, kbd: t, label: n, lang: r, readonlyOk: i, onSelect: a, toggle: o = !1, disabled: s = !1, checked: c = !1 }) {
 	let { type: l, sourceId: u } = CZ(), d = DZ(), f = dj(), p = fj();
 	if (d && !i) return null;
@@ -57796,7 +57796,7 @@ function P$({ id: e, kbd: t, label: n, lang: r, readonlyOk: i, onSelect: a, togg
 	}
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuActionCheckboxItem.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuActionCheckboxItem.mjs
 function F$({ actionId: e = "", ...t }) {
 	let n = l6()[e];
 	return n ? /* @__PURE__ */ (0, V.jsx)(P$, {
@@ -57805,7 +57805,7 @@ function F$({ actionId: e = "", ...t }) {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuSubmenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/menus/TldrawUiMenuSubmenu.mjs
 function I$({ id: e, disabled: t = !1, label: n, size: r = "small", children: i }) {
 	let { type: a, sourceId: o } = CZ(), s = wu(), c = dj(), l = fj(), u = n ? typeof n == "string" ? n : n[a] ?? n.default : void 0, d = u ? c(u) : void 0;
 	switch (a) {
@@ -57861,7 +57861,7 @@ function L$({ id: e, children: t }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/menu-items.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/menu-items.mjs
 function R$() {
 	return D$() ? /* @__PURE__ */ (0, V.jsx)($, { actionId: "toggle-auto-size" }) : null;
 }
@@ -58275,7 +58275,7 @@ function A1() {
 	return z("show cursor chat", () => e.getCurrentToolId() === "select" && !e.getInstanceState().isCoarsePointer, [e]) ? /* @__PURE__ */ (0, V.jsx)($, { actionId: "open-cursor-chat" }) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/ActionsMenu/DefaultActionsMenuContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/ActionsMenu/DefaultActionsMenuContent.mjs
 function j1() {
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
 		/* @__PURE__ */ (0, V.jsx)(M1, {}),
@@ -58405,7 +58405,7 @@ function H1() {
 	return /* @__PURE__ */ (0, V.jsx)($, { actionId: "ungroup" });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/ActionsMenu/DefaultActionsMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/ActionsMenu/DefaultActionsMenu.mjs
 var U1 = (0, _.memo)(function({ children: e }) {
 	let t = dj(), n = xZ(), r = DZ(), { orientation: i } = MX(), a = (0, _.useRef)(null);
 	uv(a);
@@ -58439,7 +58439,7 @@ var U1 = (0, _.memo)(function({ children: e }) {
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenuContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenuContent.mjs
 function W1() {
 	let e = U(), t = TZ(), n = z("isSinglePageMode", () => e.options.maxPages <= 1, [e]);
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
@@ -58462,7 +58462,7 @@ function W1() {
 	] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenu.mjs
 var G1 = (0, _.memo)(function({ children: e, disabled: t = !1 }) {
 	let n = U(), r = dj(), { Canvas: i } = au(), a = z("context menu can open", () => !n.getInstanceState().isCoarsePointer || n.isIn("select"), [n]), o = (0, _.useCallback)((e) => {
 		e.key === "Escape" && (e.stopPropagation(), n.getContainer().focus());
@@ -58636,7 +58636,7 @@ var X1 = ({ chatMessage: e }) => {
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/primitives/Button/TldrawUiButtonCheck.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/primitives/Button/TldrawUiButtonCheck.mjs
 function Q1({ checked: e }) {
 	let t = dj();
 	return /* @__PURE__ */ (0, V.jsx)(KX, {
@@ -58648,7 +58648,7 @@ function Q1({ checked: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/DebugMenu/DefaultDebugMenuContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/DebugMenu/DefaultDebugMenuContent.mjs
 function $1({ customDebugFlags: e, customFeatureFlags: t }) {
 	let n = U(), { addToast: r } = lQ(), { addDialog: i } = oQ(), [a, o] = _.useState(!1);
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsxs)(rQ, {
@@ -58843,7 +58843,7 @@ function a0(e, t) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/DebugMenu/DefaultDebugMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/DebugMenu/DefaultDebugMenu.mjs
 function o0({ children: e }) {
 	let t = U(), n = e ?? /* @__PURE__ */ (0, V.jsx)($1, {});
 	return (0, _.useEffect)(() => {
@@ -58870,7 +58870,7 @@ function o0({ children: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/DefaultDebugPanel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/DefaultDebugPanel.mjs
 var s0 = (0, _.memo)(function() {
 	let { DebugMenu: e } = r6(), t = (0, _.useRef)(null);
 	return uv(t), /* @__PURE__ */ (0, V.jsxs)("footer", {
@@ -58909,7 +58909,7 @@ function l0() {
 	}, [t, e]), t ? /* @__PURE__ */ (0, V.jsx)("div", { ref: n }) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/DefaultFollowingIndicator.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/DefaultFollowingIndicator.mjs
 function u0() {
 	let e = U(), t = z("follow", () => e.getInstanceState().followingUserId, [e]);
 	return t ? /* @__PURE__ */ (0, V.jsx)(d0, { userId: t }) : null;
@@ -58922,7 +58922,7 @@ function d0({ userId: e }) {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/DefaultMenuPanel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/DefaultMenuPanel.mjs
 var f0 = (0, _.memo)(function() {
 	let e = xZ(), t = dj(), n = (0, _.useRef)(null);
 	uv(n);
@@ -58972,19 +58972,19 @@ var f0 = (0, _.memo)(function() {
 	return z("dialogs", () => e.get(), [e]).map((e) => /* @__PURE__ */ (0, V.jsx)(p0, { ...e }, e.id));
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/ExitPenMode.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/ExitPenMode.mjs
 function h0() {
 	let e = U();
 	return z("is pen mode", () => e.getInstanceState().isPenMode, [e]) ? /* @__PURE__ */ (0, V.jsx)($, { actionId: "exit-pen-mode" }) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/StopFollowing.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/StopFollowing.mjs
 function g0() {
 	let e = U(), t = l6();
 	return z("is following user", () => !!e.getInstanceState().followingUserId, [e]) ? /* @__PURE__ */ (0, V.jsx)(eQ, { ...t["stop-following"] }) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/DefaultHelperButtonsContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/DefaultHelperButtonsContent.mjs
 function _0() {
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
 		/* @__PURE__ */ (0, V.jsx)(h0, {}),
@@ -58993,7 +58993,7 @@ function _0() {
 	] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/DefaultHelperButtons.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/DefaultHelperButtons.mjs
 function v0({ children: e }) {
 	return /* @__PURE__ */ (0, V.jsx)("div", {
 		className: "tlui-helper-buttons",
@@ -59005,7 +59005,7 @@ function v0({ children: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/AccessibilityMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/AccessibilityMenu.mjs
 function y0() {
 	return /* @__PURE__ */ (0, V.jsx)(I$, {
 		id: "help menu accessibility",
@@ -59021,7 +59021,7 @@ function y0() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/ColorSchemeMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/ColorSchemeMenu.mjs
 var b0 = [
 	{
 		colorScheme: "light",
@@ -59059,7 +59059,7 @@ function x0() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/LanguageMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/LanguageMenu.mjs
 function S0() {
 	let e = vu(), t = LZ(), n = z("locale", () => e?.user.getLocale(), [e]);
 	return e ? /* @__PURE__ */ (0, V.jsx)(I$, {
@@ -59086,7 +59086,7 @@ function S0() {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/HelpMenu/DefaultHelpMenuContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/HelpMenu/DefaultHelpMenuContent.mjs
 function C0() {
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsx)(S0, {}), /* @__PURE__ */ (0, V.jsx)(w0, {})] });
 }
@@ -59102,7 +59102,7 @@ function w0() {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/InputModeMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/InputModeMenu.mjs
 var T0 = [
 	"auto",
 	"trackpad",
@@ -59142,7 +59142,7 @@ function E0() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/MainMenu/DefaultMainMenuContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/MainMenu/DefaultMainMenuContent.mjs
 function D0() {
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [/* @__PURE__ */ (0, V.jsxs)(rQ, {
 		id: "basic",
@@ -59275,7 +59275,7 @@ function F0() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/MainMenu/DefaultMainMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/MainMenu/DefaultMainMenu.mjs
 var I0 = (0, _.memo)(function({ children: e }) {
 	let t = wu(), [n, r] = RZ("main menu"), i = dj(), a = fj(), o = e ?? /* @__PURE__ */ (0, V.jsx)(D0, {});
 	return /* @__PURE__ */ (0, V.jsxs)(xK, {
@@ -59425,7 +59425,7 @@ var I0 = (0, _.memo)(function({ children: e }) {
 };
 z0([_e], B0.prototype, "close", 1), z0([R], B0.prototype, "getDpr", 1), z0([R], B0.prototype, "getContentPageBounds", 1), z0([R], B0.prototype, "getCanvasSize", 1), z0([R], B0.prototype, "getCanvasPageBounds", 1), z0([R], B0.prototype, "getZoom", 1), z0([R], B0.prototype, "getShapePaths", 1), z0([_e], B0.prototype, "render", 1);
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Minimap/DefaultMinimap.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Minimap/DefaultMinimap.mjs
 var V0 = 4;
 function H0() {
 	let e = U(), t = wu(), n = dj(), r = _.useRef(null), i = _.useRef(!1), a = _.useRef(null), o = _.useRef(new W()), s = _.useRef(void 0);
@@ -59531,7 +59531,7 @@ function H0() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useLocalStorageState.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useLocalStorageState.mjs
 function U0(e, t) {
 	let [n, r] = _.useState(t);
 	return _.useLayoutEffect(() => {
@@ -59549,7 +59549,7 @@ function U0(e, t) {
 	}, [e])];
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/NavigationPanel/DefaultNavigationPanel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/NavigationPanel/DefaultNavigationPanel.mjs
 var W0 = (0, _.memo)(function() {
 	let e = l6(), t = dj(), n = fj(), r = xZ(), i = (0, _.useRef)(null);
 	uv(i);
@@ -59609,7 +59609,7 @@ var W0 = (0, _.memo)(function() {
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/PageMenu/edit-pages-shared.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/PageMenu/edit-pages-shared.mjs
 function G0(e, t, n, r, i) {
 	if (n === r) return;
 	let a, o = e.getPages(), s = n > r ? o[r - 1] : o[r], c = n > r ? o[r] : o[r + 1];
@@ -59619,7 +59619,7 @@ function G0(e, t, n, r, i) {
 	}), i("move-page", { source: "page-menu" }));
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/PageMenu/PageItemInput.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/PageMenu/PageItemInput.mjs
 var K0 = function({ name: e, id: t, isCurrentPage: n, onCancel: r, onComplete: i }) {
 	let a = U(), o = LZ(), s = (0, _.useRef)(null), c = (0, _.useCallback)(() => {
 		s.current = a.markHistoryStoppingPoint("rename page");
@@ -60088,12 +60088,12 @@ var s2 = (0, _.memo)(function() {
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useCommentingEnabled.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useCommentingEnabled.mjs
 function c2() {
 	return Bv(jv(), "commenting");
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/QuickActions/DefaultQuickActionsContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/QuickActions/DefaultQuickActionsContent.mjs
 function l2() {
 	let e = U(), t = DZ(), n = z("should display quick actions", () => e.isInAny("select", "hand", "zoom"), [e]);
 	if (!(t && !n)) return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
@@ -60130,7 +60130,7 @@ function f2() {
 	})] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/QuickActions/DefaultQuickActions.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/QuickActions/DefaultQuickActions.mjs
 var p2 = (0, _.memo)(function({ children: e }) {
 	return /* @__PURE__ */ (0, V.jsx)(wZ, {
 		type: "small-icons",
@@ -60139,7 +60139,7 @@ var p2 = (0, _.memo)(function({ children: e }) {
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/OfflineIndicator/OfflineIndicator.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/OfflineIndicator/OfflineIndicator.mjs
 function m2() {
 	let e = dj();
 	return /* @__PURE__ */ (0, V.jsx)(HX, {
@@ -60155,7 +60155,7 @@ function m2() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuContent.mjs
 function h2({ userIds: e }) {
 	let { PeopleMenuItem: t, UserPresenceEditor: n } = r6();
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [n && /* @__PURE__ */ (0, V.jsx)("div", {
@@ -60167,7 +60167,7 @@ function h2({ userIds: e }) {
 	})] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenu.mjs
 function g2({ children: e }) {
 	let t = dj(), n = fj(), r = wu(), i = U(), a = fv(), o = z("user", () => i.user.getColor(), [i]), s = z("user", () => i.user.getName(), [i]), [c, l] = RZ("people menu"), u = EZ(), { PeopleMenuFacePile: d } = r6();
 	if (u === "offline") return /* @__PURE__ */ (0, V.jsx)(m2, {});
@@ -60205,7 +60205,7 @@ function g2({ children: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuAvatar.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuAvatar.mjs
 function _2({ userId: e }) {
 	let t = pv(e);
 	return t ? /* @__PURE__ */ (0, V.jsx)("div", {
@@ -60215,7 +60215,7 @@ function _2({ userId: e }) {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuFacePile.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuFacePile.mjs
 function v2({ userIds: e, userName: t, userColor: n }) {
 	let { PeopleMenuAvatar: r } = r6(), i = xZ() <= vZ.MOBILE_XS ? 1 : 5;
 	return /* @__PURE__ */ (0, V.jsxs)("div", {
@@ -60235,7 +60235,7 @@ function v2({ userIds: e, userName: t, userColor: n }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuItem.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultPeopleMenuItem.mjs
 var y2 = yr(function({ userId: e }) {
 	let t = U(), n = dj(), r = LZ(), i = pv(e), a = (0, _.useCallback)(() => {
 		t.getInstanceState().followingUserId === e ? (t.stopFollowingUser(), r("stop-following", { source: "people-menu" })) : (t.startFollowingUser(e), r("start-following", { source: "people-menu" }));
@@ -60271,7 +60271,7 @@ var y2 = yr(function({ userId: e }) {
 	}) : null;
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultSharePanel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultSharePanel.mjs
 function b2() {
 	let { PeopleMenu: e } = r6();
 	return e ? /* @__PURE__ */ (0, V.jsx)("div", {
@@ -60281,7 +60281,7 @@ function b2() {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/UserPresenceColorPicker.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/UserPresenceColorPicker.mjs
 var x2 = yr(function() {
 	let e = U(), t = wu(), n = dj(), r = fj(), i = LZ(), a = (0, _.useRef)(!1), [o, s] = (0, _.useState)(!1), c = (0, _.useCallback)((e) => {
 		s(e);
@@ -60355,7 +60355,7 @@ var x2 = yr(function() {
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultUserPresenceEditor.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/SharePanel/DefaultUserPresenceEditor.mjs
 function S2() {
 	let e = U(), t = LZ(), n = z("userName", () => e.user.getName(), []), r = dj(), i = (0, _.useRef)(n), a = (0, _.useRef)(n), [o, s] = (0, _.useState)(!1), c = (0, _.useCallback)(() => {
 		s((e) => !e);
@@ -60402,7 +60402,7 @@ function S2() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useRelevantStyles.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useRelevantStyles.mjs
 var C2 = Object.freeze([
 	zo,
 	Ho,
@@ -60418,7 +60418,7 @@ function w2(e = C2) {
 	}, [t]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/flip.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/flip.mjs
 function T2(e, t) {
 	return {
 		flipX: t.scaleX < 0 !== e.flipX,
@@ -60436,7 +60436,7 @@ function E2(e, t, n) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/geo/getGeoShapePath.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/geo/getGeoShapePath.mjs
 var D2 = {
 	rectangle: {
 		snapType: "polygon",
@@ -60753,7 +60753,7 @@ function z2(e, t, n, r, i, a) {
 	return o.close();
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/styles.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/styles.mjs
 function B2(e) {
 	return typeof e == "object" && !!e && "solid" in e;
 }
@@ -61100,7 +61100,7 @@ function Y2() {
 	return e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelSubheading.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelSubheading.mjs
 function X2({ children: e }) {
 	return /* @__PURE__ */ (0, V.jsx)("h3", {
 		className: "tlui-style-panel__subheading",
@@ -61108,7 +61108,7 @@ function X2({ children: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelButtonPicker.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelButtonPicker.mjs
 function Z2(e) {
 	let { enhancedA11yMode: t } = Y2();
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [t && /* @__PURE__ */ (0, V.jsx)(X2, { children: e.title }), /* @__PURE__ */ (0, V.jsx)(XZ, {
@@ -61184,7 +61184,7 @@ function Q2(e) {
 }
 var $2 = (0, _.memo)(Z2), e4 = (0, _.memo)(Q2);
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelDoubleDropdownPicker.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelDoubleDropdownPicker.mjs
 function t4(e) {
 	let t = dj();
 	return /* @__PURE__ */ (0, V.jsxs)("div", {
@@ -61282,7 +61282,7 @@ function n4(e) {
 }
 var r4 = _.memo(t4), i4 = _.memo(n4);
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelDropdownPicker.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/StylePanelDropdownPicker.mjs
 function a4(e) {
 	let t = dj(), n = e.label ? t(e.label) : t(`style-panel.${e.stylePanelType}`);
 	return /* @__PURE__ */ (0, V.jsx)(XZ, {
@@ -61331,7 +61331,7 @@ function o4(e) {
 }
 var s4 = _.memo(a4), c4 = _.memo(o4);
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/DefaultStylePanelContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/DefaultStylePanelContent.mjs
 function l4() {
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
 		/* @__PURE__ */ (0, V.jsxs)(u4, { children: [/* @__PURE__ */ (0, V.jsx)(d4, {}), /* @__PURE__ */ (0, V.jsx)(p4, {})] }),
@@ -61572,7 +61572,7 @@ function C4() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/DefaultStylePanel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/StylePanel/DefaultStylePanel.mjs
 var w4 = (0, _.memo)(function({ isMobile: e, styles: t, children: n }) {
 	let r = U(), i = z("enhancedA11yMode", () => r.user.getEnhancedA11yMode(), [r]), a = (0, _.useRef)(null);
 	uv(a);
@@ -61820,7 +61820,7 @@ function z4(e) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/AltTextEditor.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/AltTextEditor.mjs
 function B4({ shapeId: e, onClose: t, source: n }) {
 	let r = U(), [i, a] = (0, _.useState)(() => {
 		let t = r.getShape(e);
@@ -61883,7 +61883,7 @@ function B4({ shapeId: e, onClose: t, source: n }) {
 	})] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultImageToolbarContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultImageToolbarContent.mjs
 var V4 = yr(function({ imageShapeId: e, isManipulating: t, onEditAltTextStart: n, onManipulatingStart: r, onManipulatingEnd: i }) {
 	let a = U(), o = LZ(), s = dj(), c = (0, _.useRef)(null), l = a.getIsReadonly(), u = z("crop", () => a.getShape(e).props.crop, [a, e]), d = u ? Math.min(1 - (u.bottomRight.x - u.topLeft.x), 1 - (u.bottomRight.y - u.topLeft.y)) : 0, [f, p] = (0, _.useState)(u ? Math.max(d, 1 - 1 / 3) : 3), m = l6();
 	(0, _.useEffect)(() => {
@@ -62046,7 +62046,7 @@ var V4 = yr(function({ imageShapeId: e, isManipulating: t, onEditAltTextStart: n
 	] });
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultImageToolbar.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultImageToolbar.mjs
 function H4({ children: e }) {
 	let t = U(), n = z("imageShape", () => {
 		let e = t.getOnlySelectedShape();
@@ -62089,7 +62089,7 @@ function U4({ children: e, imageShapeId: t }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultRichTextToolbarContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultRichTextToolbarContent.mjs
 function W4({ textEditor: e, onEditLinkStart: t }) {
 	let n = U(), r = LZ(), i = dj(), [a, o] = (0, _.useState)(0);
 	return (0, _.useEffect)(function() {
@@ -62173,7 +62173,7 @@ function W4({ textEditor: e, onEditLinkStart: t }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/LinkEditor.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/LinkEditor.mjs
 function G4({ textEditor: e, value: t, onClose: n }) {
 	let r = U(), [i, a] = (0, _.useState)(t), o = dj(), s = (0, _.useRef)(null), c = LZ(), l = "rich-text-menu", u = i.startsWith("http") ? i : `https://${i}`, d = (e) => a(e), f = (0, _.useCallback)((t) => {
 		c("rich-text", {
@@ -62257,7 +62257,7 @@ function G4({ textEditor: e, value: t, onClose: n }) {
 	] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultRichTextToolbar.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultRichTextToolbar.mjs
 var K4 = yr(function({ children: e }) {
 	let t = U(), n = z("textEditor", () => t.getRichTextEditor(), [t]);
 	return t.getInstanceState().isCoarsePointer || !n ? null : /* @__PURE__ */ (0, V.jsx)(q4, {
@@ -62376,7 +62376,7 @@ function Y4(e) {
 	}, [e]), t;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/MobileStylePanel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/MobileStylePanel.mjs
 function X4() {
 	let e = U(), t = dj(), { orientation: n } = MX(), r = w2()?.get(zo), i = z("mobile style panel current color", () => {
 		let t = e.getCurrentTheme().colors[e.getColorMode()];
@@ -62402,7 +62402,7 @@ function X4() {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultToolbarContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultToolbarContent.mjs
 function Z4() {
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
 		/* @__PURE__ */ (0, V.jsx)(e3, {}),
@@ -62539,7 +62539,7 @@ function D3() {
 	return /* @__PURE__ */ (0, V.jsx)($4, { tool: "laser" });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useKeyboardShortcuts.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useKeyboardShortcuts.mjs
 var O3 = [
 	"copy",
 	"cut",
@@ -62827,7 +62827,7 @@ function V3(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/OverflowingToolbar.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/OverflowingToolbar.mjs
 var H3 = (0, _.createContext)(!1), U3 = {
 	1: 0,
 	2: 1,
@@ -62968,7 +62968,7 @@ function K3(e, t, n) {
 	e.getAttribute(t) !== n && e.setAttribute(t, n);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/ToggleToolLockedButton.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/ToggleToolLockedButton.mjs
 function q3({ activeToolId: e }) {
 	let t = U(), n = xZ(), r = dj(), i = l6(), a = z("is tool locked", () => t.getInstanceState().isToolLocked, [t]), o = z("current tool", () => t.getCurrentTool(), [t]);
 	if (!e || !o.isLockable) return null;
@@ -62988,7 +62988,7 @@ function q3({ activeToolId: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultToolbar.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/Toolbar/DefaultToolbar.mjs
 var J3 = (0, _.memo)(function({ children: e, orientation: t = "horizontal", minItems: n = 4, minSizePx: r = 310, maxItems: i, maxSizePx: a }) {
 	let o = U(), s = dj(), c = xZ(), l = DZ(), u = z("current tool id", () => o.getCurrentToolId(), [o]), d = (0, _.useRef)(null);
 	uv(d);
@@ -63094,7 +63094,7 @@ function Z3({ children: e, videoShapeId: t }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/ZoomMenu/DefaultZoomMenuContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/ZoomMenu/DefaultZoomMenuContent.mjs
 function Q3() {
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
 		/* @__PURE__ */ (0, V.jsx)($, {
@@ -63111,7 +63111,7 @@ function Q3() {
 	] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/ZoomMenu/DefaultZoomMenu.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/ZoomMenu/DefaultZoomMenu.mjs
 var $3 = (0, _.memo)(function({ children: e }) {
 	let t = wu(), [n, r] = RZ("zoom menu"), i = fj(), a = e ?? /* @__PURE__ */ (0, V.jsx)(Q3, {});
 	return /* @__PURE__ */ (0, V.jsxs)(xK, {
@@ -63206,7 +63206,7 @@ function r6() {
 	return e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/context/actions.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/context/actions.mjs
 var i6 = _.createContext(null);
 function a6(e, t) {
 	return (t.isShapeOfType(e, "image") || t.isShapeOfType(e, "video")) && !!e.props.assetId;
@@ -64662,7 +64662,7 @@ function d6(e, t) {
 	return e ? typeof e == "string" ? e : t ? e[t] ?? e.default : void 0 : void 0;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/BackToContent.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/HelperButtons/BackToContent.mjs
 var f6 = new yy("backToContentSuppressed", () => !1), p6 = new yy("backToContentSuppressTimeout", () => null), m6 = 1e3;
 function h6(e, t) {
 	f6.set(e, !0);
@@ -64698,7 +64698,7 @@ function g6() {
 	}) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/components/A11y.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/components/A11y.mjs
 function _6() {
 	let e = U(), t = dj(), n = (0, _.useRef)(null), r = (0, _.useCallback)((t) => {
 		e.markEventAsHandled(t), n.current?.blur();
@@ -64796,7 +64796,7 @@ function C6(e, t, n) {
 	}), o;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/straight-arrow.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/straight-arrow.mjs
 function w6(e, t, n, r) {
 	let { arrowheadStart: i, arrowheadEnd: a } = t.props, o = m$(e, t, n), s = o.start.clone(), c = o.end.clone(), l = W.Med(s, c);
 	if (W.Equals(s, c)) return {
@@ -64857,7 +64857,7 @@ function T6(e, t, n, r) {
 	e.setTo(d), r.didIntersect = !0;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/curved-arrow.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/curved-arrow.mjs
 function E6(e, t, n, r) {
 	let { arrowheadEnd: i, arrowheadStart: a } = t.props, o = t.props.bend;
 	if (Math.abs(o) > Math.abs(t.props.bend * (10 * t.props.scale))) return w6(e, t, n, r);
@@ -64983,7 +64983,7 @@ function O6(e, t, n, r, i, a, o) {
 	}
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/definitions.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/definitions.mjs
 var k6 = [
 	"right",
 	"bottom",
@@ -65041,7 +65041,7 @@ var k6 = [
 	}
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/range.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/range.mjs
 function P6(e, t) {
 	let n = {
 		min: e.min - t,
@@ -65077,7 +65077,7 @@ function R6(e) {
 	return e.max - e.min;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/routes/ElbowArrowWorkingInfo.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/routes/ElbowArrowWorkingInfo.mjs
 function z6(e) {
 	if (!e) return;
 	let t = e.cross.min;
@@ -65221,7 +65221,7 @@ function Z6(e) {
 	return t;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/routes/elbowArrowRoutes.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/routes/elbowArrowRoutes.mjs
 function Q6(e) {
 	let t = e.A.edges.right, n = e.B.edges.left;
 	if (!t || !n) return null;
@@ -65291,7 +65291,7 @@ function n8(e, t, n) {
 	return e.reset(), a;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/routes/routeArrowWithAutoEdgePicking.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/routes/routeArrowWithAutoEdgePicking.mjs
 function Cie(e, t) {
 	let n = null;
 	if (Math.abs(e.gapX) + 1 > Math.abs(e.gapY) && e.midX !== null) n = e.gapX > 0 ? n8(e, "right", "left") : n8(e, "left", "right");
@@ -65461,7 +65461,7 @@ function r8(e, t) {
 	return n;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/getElbowArrowInfo.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/getElbowArrowInfo.mjs
 function i8(e, t, n, r) {
 	let i = e.getShapeUtil(t.type).options, a = {
 		elbowMidpoint: t.props.elbowMidPoint,
@@ -65796,7 +65796,7 @@ function d8(e, t, n) {
 	return l && d ? p = u > f ? o.hiEdge : o.loEdge : l && !d ? p = o.hiEdge : !l && d && (p = o.loEdge), e.side = p, e;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/getArrowInfo.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/getArrowInfo.mjs
 var Aie = sa("arrow info", (e, t) => {
 	let n = p$(e, t), r = e.getShapeUtil(t), i = "getDisplayValues" in r.options ? C6(r, t).strokeWidth : e.getCurrentTheme().strokeWidth * Ej[t.props.size];
 	if (t.props.kind === "elbow") {
@@ -65831,7 +65831,7 @@ function f8(e, t) {
 	return Aie.get(e, n);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/bindings/arrow/ArrowBindingUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/bindings/arrow/ArrowBindingUtil.mjs
 var p8 = class extends K_ {
 	static type = "arrow";
 	static props = is;
@@ -65975,7 +65975,7 @@ function _8(e, t) {
 	return W.From(W.IsFinite(e) ? e : t);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowTargetState.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowTargetState.mjs
 var Nie = new ve();
 function v8(e) {
 	return Nie.get(e, () => Xn("arrowTarget", null));
@@ -66069,7 +66069,7 @@ sa("arrowHintIndicatorPath", (e, t) => e.getShapeUtil(t).getIndicatorPath(t), { 
 	return e.props === t.props;
 } });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/core.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/core.mjs
 var S8 = .025, C8 = .275, Fie = (e) => e * (2 - e), Iie = (e) => --e * e * e + 1, { min: w8 } = Math, T8 = 256, E8 = new Float64Array(T8), D8 = new Float64Array(T8), O8 = new Float64Array(T8), k8 = new Float64Array(T8), A8 = new Float64Array(T8), j8 = new Float64Array(T8), M8 = new Float64Array(T8), N8 = new Float64Array(T8), P8 = new Float64Array(T8), F8 = 0;
 function Lie(e) {
 	if (!(e <= T8)) {
@@ -66205,7 +66205,7 @@ function zie(e, t, n, r, i, a, o) {
 	o && (m[S - 1] = 1), s[S] = a ? _[i] : h[i], c[S] = a ? v[i] : g[i], l[S] = y[i], u[S] = _[i], d[S] = v[i], f[S] = x[i], p[S] = b[i], m[S] = 1, $8 = S + 1;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/getStrokeOutlinePoints.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/getStrokeOutlinePoints.mjs
 var { PI: Bie } = Math, n5 = Bie + 1e-4, Vie = .05, r5 = 8, Hie = 8, i5 = 13, Uie = 8, Wie = 29, Gie = -.62, a5 = 1024, o5 = new Float64Array(a5), s5 = new Float64Array(a5), c5 = new Float64Array(a5), l5 = new Float64Array(a5), u5 = 0, d5 = 0;
 function Kie() {
 	a5 *= 2;
@@ -66328,12 +66328,12 @@ function qie(e = {}) {
 	return T.concat(g, E, h);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/getStroke.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/getStroke.mjs
 function Jie(e, t = {}) {
 	return V8(e, t), F8 === 0 ? [] : (U8(t), t5(), qie(t));
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/defaultBindingUtils.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/defaultBindingUtils.mjs
 var Yie = [p8], Xie = class extends A_ {
 	static id = "idle";
 	isPrecise = !1;
@@ -66893,7 +66893,7 @@ function tae(e, t, n) {
 	return !t.includes(e.id) && e.parentId === n.parentId;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/geo/toolStates/Idle.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/geo/toolStates/Idle.mjs
 var nae = class extends A_ {
 	static id = "idle";
 	onPointerDown(e) {
@@ -67239,7 +67239,7 @@ function b5(e, t) {
 	}), c;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/note/toolStates/Pointing.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/note/toolStates/Pointing.mjs
 var pae = class extends A_ {
 	static id = "pointing";
 	dragged = !1;
@@ -67332,7 +67332,7 @@ function hae(e, t, n) {
 	}]), e.getShape(t);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/note/NoteShapeTool.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/note/NoteShapeTool.mjs
 var gae = class extends A_ {
 	static id = "note";
 	static initial = "idle";
@@ -67380,7 +67380,7 @@ function T5(e) {
 	C5.get(e)?.cancel();
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/text/toolStates/Idle.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/text/toolStates/Idle.mjs
 var bae = class extends A_ {
 	static id = "idle";
 	onPointerMove(e) {
@@ -67548,7 +67548,7 @@ var bae = class extends A_ {
 	"lined-fill": "linedFill"
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/defaultStyleDefs.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/defaultStyleDefs.mjs
 function D5(e) {
 	return {
 		key: `${Wo.id}:${e}`,
@@ -67738,7 +67738,7 @@ function L5(e) {
 	return e.classList.contains("tl-html-layer") ? e : e.parentElement ? L5(e.parentElement) : null;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/PatternFill.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/PatternFill.mjs
 function R5({ d: e, fillColor: t, patternFillFallbackColor: n, scale: r = 1 }) {
 	let i = U(), a = $m(), o = z("zoomLevel", () => i.getEfficientZoomLevel(), [i]), s = Q_(), c = F5(), l = fu(), u = o * r, d = u <= .18, f = c(u, s);
 	return /* @__PURE__ */ (0, V.jsxs)(V.Fragment, { children: [
@@ -67758,7 +67758,7 @@ function R5({ d: e, fillColor: t, patternFillFallbackColor: n, scale: r = 1 }) {
 	] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/text/RichTextArea.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/text/RichTextArea.mjs
 var kae = _.forwardRef(function({ shapeId: e, isEditing: t, richText: n, handleFocus: r, handleChange: i, handleBlur: a, handleKeyDown: o, handleDoubleClick: s, hasCustomTabBehavior: c, handlePaste: l }, u) {
 	let d = U(), f = fu("tip-tap-editor"), p = d.getTextOptions().tipTapConfig, m = (0, _.useRef)(n), h = (0, _.useRef)(null), g = (0, _.useRef)(null);
 	(0, _.useLayoutEffect)(() => {
@@ -67866,12 +67866,12 @@ function Aae(e, t, n) {
 	c.setSelection(u), c.docChanged && i(c);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/legacyProps.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/legacyProps.mjs
 function z5(e) {
 	return e === "start-legacy" || e === "middle-legacy" || e === "end-legacy";
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/useEditablePlainText.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/useEditablePlainText.mjs
 function jae(e, t, n) {
 	let r = V5(e), i = r.isEditing, a = U(), o = (0, _.useRef)(null), s = (n || "").trim().length === 0;
 	return (0, _.useEffect)(() => {
@@ -67944,7 +67944,7 @@ function V5(e) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/useEditableRichText.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/useEditableRichText.mjs
 function Mae(e, t, n) {
 	let r = V5(e), i = r.isEditing, a = U(), o = (0, _.useRef)(null), s = n && dL(n);
 	return (0, _.useEffect)(() => {
@@ -67972,7 +67972,7 @@ function Mae(e, t, n) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/RichTextLabel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/RichTextLabel.mjs
 var H5 = _.memo(function({ shapeId: e, type: t, richText: n, labelColor: r, fontFamily: i, fontSize: a, lineHeight: o, textAlign: s, verticalAlign: c, wrap: l, isSelected: u, padding: d = 0, onKeyDown: f, classNamePrefix: p, style: m, textWidth: h, textHeight: g, hasCustomTabBehavior: v, showTextOutline: y = !0 }) {
 	let b = U(), x = _.useRef(!1), S = z5(s), { rInput: C, isEmpty: w, isEditing: T, isReadyForEditing: E, ...D } = Mae(e, t, n), O = (0, _.useMemo)(() => {
 		if (n) return cL(b, n);
@@ -68079,13 +68079,13 @@ function U5({ bounds: e, richText: t, fontSize: n, fontFamily: r, lineHeight: i,
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/useEfficientZoomThreshold.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/useEfficientZoomThreshold.mjs
 function W5(e = .25) {
 	let t = U();
 	return z("efficient zoom threshold", () => t.getEfficientZoomLevel() < e, [t, e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
 function Nae(e, t, n) {
 	let r = t === "end" ? e.end.point : e.start.point, i;
 	switch (e.type) {
@@ -68159,7 +68159,7 @@ function G5(e, t, n) {
 	}
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowLabel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowLabel.mjs
 function Vae(e, t) {
 	return C6(e.getShapeUtil("arrow"), t);
 }
@@ -68306,7 +68306,7 @@ function Q5(e, t) {
 	return r && Sd(n, r.vertices);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
 function $5(e) {
 	switch (e.type) {
 		case "straight": return new ZA().moveTo(e.start.point.x, e.start.point.y, {
@@ -68339,7 +68339,7 @@ function Gae(e, t, n) {
 	return $5(t).toSvg(n);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/ElbowArrowDebug.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/ElbowArrowDebug.mjs
 function Kae({ arrow: e }) {
 	let t = U(), n = z("elbow arrow grid", () => {
 		try {
@@ -68594,7 +68594,7 @@ function n7({ box: e, ...t }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/elbowArrowSnapLines.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/elbow/elbowArrowSnapLines.mjs
 var Jae = new ve();
 function Yae(e) {
 	return Jae.get(e, (e) => {
@@ -68641,7 +68641,7 @@ function r7(e, t) {
 	return W.Dpr(e, n);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
 var i7 = {
 	Start: "start",
 	Middle: "middle",
@@ -69260,7 +69260,7 @@ function Zae(e, t, n = 1e-4) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/HyperlinkButton.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/HyperlinkButton.mjs
 var l7 = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' fill='none'%3E%3Cpath stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M13 5H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6M19 5h6m0 0v6m0-6L13 17'/%3E%3C/svg%3E";
 function u7({ url: e }) {
 	let t = U(), n = W5(), r = (0, _.useCallback)((e) => {
@@ -69285,7 +69285,7 @@ function u7({ url: e }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/icons-editor.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/icons-editor.mjs
 var d7 = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' fill='none'%3E%3Cpath stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M13 5H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6M19 5h6m0 0v6m0-6L13 17'/%3E%3C/svg%3E", Qae = [{
 	offsetX: 0,
 	offsetY: 2,
@@ -69306,7 +69306,7 @@ function f7(e) {
 	}).join(", ");
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/bookmark/BookmarkShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/bookmark/BookmarkShapeUtil.mjs
 var $ae = class extends J_ {
 	static type = "bookmark";
 	static props = ec;
@@ -69450,7 +69450,7 @@ function p7({ assetId: e, rotation: t, url: n, h: r, showImageContainer: i = !0 
 	}) });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/getStrokePoints.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/getStrokePoints.mjs
 function m7(e, t = {}) {
 	V8(e, t);
 	let n = F8, r = E8, i = D8, a = O8, o = k8, s = A8, c = j8, l = M8, u = N8, d = Array(n);
@@ -69468,7 +69468,7 @@ function m7(e, t = {}) {
 	return d;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/fmt.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/fmt.mjs
 var h7 = /* @__PURE__ */ new Uint8Array(65536), g7 = 0, eoe = new TextDecoder();
 function _7(e) {
 	if (g7 + e > h7.length) {
@@ -69519,7 +69519,7 @@ function C7(e) {
 	return Math.round(e * 100);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/svg.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/svg.mjs
 function w7(e, t = !1) {
 	let n = e.length;
 	if (n < 2) return "";
@@ -69545,7 +69545,7 @@ function w7(e, t = !1) {
 	return S7();
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/svgInk.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/freehand/svgInk.mjs
 function toe(e, t = {}) {
 	let { start: n = {}, end: r = {} } = t, { cap: i = !0 } = n, { cap: a = !0 } = r;
 	return L(!n.taper && !r.taper, "cap taper not supported here"), L(!n.easing && !r.easing, "cap easing not supported here"), L(i && a, "cap must be true"), V8(e, t), U8(t), v7(), noe(t), S7();
@@ -69626,7 +69626,7 @@ function D7(e, t, n, r) {
 	}
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/interpolate-props.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/interpolate-props.mjs
 function O7(e, t, n) {
 	let r = [], i = [];
 	e.forEach((e) => r.push(...Dc.decodePoints(e.path, e.dim))), t.forEach((e) => i.push(...Dc.decodePoints(e.path, e.dim)));
@@ -69646,7 +69646,7 @@ function O7(e, t, n) {
 	}];
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/draw/DrawShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/draw/DrawShapeUtil.mjs
 var ioe = class extends am {
 	static type = "draw";
 	static props = kc;
@@ -69817,7 +69817,7 @@ function j7({ shape: e, zoomOverride: t, strokeColor: n, strokeWidth: r, fillCol
 	})] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/embeds/embeds.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/embeds/embeds.mjs
 function aoe(e) {
 	if (typeof e != "string") throw TypeError("Expected a string");
 	return e.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&").replace(/-/g, "\\x2d");
@@ -69869,7 +69869,7 @@ function doe({ w: e, h: t, resolvedRatio: n }) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/embed/EmbedShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/embed/EmbedShapeUtil.mjs
 var N7 = (e) => Object.entries(e).filter(([e, t]) => t).map(([e]) => e).join(" "), foe = class e extends J_ {
 	static type = "embed";
 	static props = Pc;
@@ -70112,7 +70112,7 @@ function poe({ id: e, sandbox: t, isInteractive: n, width: r, height: i, style: 
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/createTextJsxFromSpans.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/createTextJsxFromSpans.mjs
 function moe(e) {
 	return e.replace(/\s/g, "\xA0");
 }
@@ -70148,7 +70148,7 @@ function hoe(e, t, n) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/frame/frameHelpers.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/frame/frameHelpers.mjs
 function P7(e, t) {
 	return e.match(/^\s*$/) ? t : e;
 }
@@ -70202,7 +70202,7 @@ function z7(e, t, n) {
 	return a;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/frame/components/FrameLabelInput.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/frame/components/FrameLabelInput.mjs
 var goe = (0, _.forwardRef)(({ id: e, name: t, isEditing: n }, r) => {
 	let i = U(), a = xZ(), o = z("isCoarsePointer", () => i.getInstanceState().isCoarsePointer, [i]), s = a < vZ.TABLET_SM && o, c = (0, _.useRef)(!1), l = dj(), u = (0, _.useCallback)((e) => {
 		n && i.markEventAsHandled(e);
@@ -70487,7 +70487,7 @@ var goe = (0, _.forwardRef)(({ id: e, name: t, isEditing: n }, r) => {
 	}
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/geo/GeoShapeBody.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/geo/GeoShapeBody.mjs
 function B7({ shape: e, shouldScale: t, forceSolid: n, strokeColor: r, strokeWidth: i, fillColor: a, patternFillFallbackColor: o, customGeoTypes: s }) {
 	let c = t ? e.props.scale : 1, l = i * c, { dash: u, fill: d } = e.props, f = A2(e, i, s), p = u === "draw" && !n ? f.toDrawD({
 		strokeWidth: l,
@@ -70516,7 +70516,7 @@ function B7({ shape: e, shouldScale: t, forceSolid: n, strokeColor: r, strokeWid
 	})] });
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/geo/GeoShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/geo/GeoShapeUtil.mjs
 var V7 = Object.freeze({
 	s: 12,
 	m: 14,
@@ -70958,7 +70958,7 @@ function Moe(e, t, n, r, i) {
 	U7(e, s);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/highlight/HighlightShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/highlight/HighlightShapeUtil.mjs
 var Noe = class extends am {
 	static type = "highlight";
 	static props = qc;
@@ -71123,7 +71123,7 @@ function q7(e, t) {
 	return z("forceSolid", () => t / e.getEfficientZoomLevel() < 1.5, [e, t]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/BrokenAssetIcon.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/BrokenAssetIcon.mjs
 function J7() {
 	return /* @__PURE__ */ (0, V.jsxs)("svg", {
 		width: "15",
@@ -71151,7 +71151,7 @@ function J7() {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/shared/useImageOrVideoAsset.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/shared/useImageOrVideoAsset.mjs
 function Y7({ shapeId: e, assetId: t, width: n }) {
 	let r = U(), i = $m(), a = eh(), [o, s] = (0, _.useState)(() => ({
 		asset: t ? r.getAsset(t) ?? null : null,
@@ -71218,7 +71218,7 @@ function X7(e, t, n, r, i) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/image/ImageAlphaCache.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/image/ImageAlphaCache.mjs
 var Z7 = [
 	"image/png",
 	"image/webp",
@@ -71287,7 +71287,7 @@ function Hoe(e, t, n, r = 10) {
 	return e.alphas[a * e.width + i] < r;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/image/ImageAlphaGeometry.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/image/ImageAlphaGeometry.mjs
 function r9(e) {
 	return {
 		alphaDataGetter: e.alphaDataGetter,
@@ -71320,7 +71320,7 @@ var Uoe = class extends rm {
 	}
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/image/ImageShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/image/ImageShapeUtil.mjs
 async function Goe(e) {
 	let t = await (await Se(e)).blob();
 	return we.blobToDataUrl(t);
@@ -71722,7 +71722,7 @@ function s9(e) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/line/LineShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/line/LineShapeUtil.mjs
 var Xoe = new ve(), Zoe = class extends am {
 	static type = "line";
 	static props = tl;
@@ -71972,7 +71972,7 @@ function u9({ shape: e, shouldScale: t = !1, forceSolid: n = !1, strokeColor: r,
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/note/NoteShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/note/NoteShapeUtil.mjs
 var $oe = Object.freeze({
 	start: "start",
 	middle: "center",
@@ -72441,7 +72441,7 @@ function rse(e, t, n) {
 	0px ${48 * n}px ${10 * n}px -${10 * n}px inset rgba(15, 23, 44, ${((.022 + r() * .005) * ((1 + a) / 2)).toFixed(2)})`;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/text/TextShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/text/TextShapeUtil.mjs
 var ise = .3, ase = sa("text size", (e, t) => {
 	e.fonts.trackFontsForShape(t);
 	let n = C6(e.getShapeUtil(t), t);
@@ -72639,7 +72639,7 @@ function sse(e) {
 	}, [t, e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/shapes/video/VideoShapeUtil.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/shapes/video/VideoShapeUtil.mjs
 var cse = new ve(), lse = class extends J_ {
 	static type = "video";
 	static props = dl;
@@ -73493,7 +73493,7 @@ var cse = new ve(), lse = class extends J_ {
 	}
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/selection-logic/getHitShapeOnCanvasPointerDown.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/selection-logic/getHitShapeOnCanvasPointerDown.mjs
 function g9(e, t = !1) {
 	let n = e.inputs.getCurrentPagePoint();
 	return e.getShapeAtPoint(n, {
@@ -73505,7 +73505,7 @@ function g9(e, t = !1) {
 	}) ?? e.getSelectedShapeAtPoint(n);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/selection-logic/updateHoveredOverlayId.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/selection-logic/updateHoveredOverlayId.mjs
 function _9(e) {
 	if (e.isDisposed) return !1;
 	let t = e.inputs.getCurrentPagePoint(), n = e.getHitTestMargin(), r = e.overlays.getOverlayAtPoint(t, n), i = e.overlays.getHoveredOverlayId();
@@ -73523,7 +73523,7 @@ function _9(e) {
 	}), e.overlays.setHoveredOverlay(null), !1;
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Crop/children/crop_helpers.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Crop/children/crop_helpers.mjs
 function v9(e, t, n) {
 	if (!t) throw Error("Needs to translate a cropped shape!");
 	let { crop: r } = t.props;
@@ -73538,7 +73538,7 @@ function v9(e, t, n) {
 	};
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Crop/children/Idle.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Crop/children/Idle.mjs
 var Ese = class extends A_ {
 	static id = "idle";
 	onEnter() {
@@ -73971,12 +73971,12 @@ var Ese = class extends A_ {
 	}
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/shapes/shapes.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/shapes/shapes.mjs
 function y9(e) {
 	return e.isLabel ? [e] : e instanceof mf ? e.children.filter((e) => e.isLabel) : [];
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/EditingShape.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/EditingShape.mjs
 var jse = class extends A_ {
 	static id = "editing_shape";
 	hitLabelOnShapeForPointerUp = null;
@@ -74492,7 +74492,7 @@ function b9(e, t) {
 	return r ? Sd(t, n.corners.map((e) => W.RotWith(e, n.point, r))) : n.containsPoint(t);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/PointingArrowLabel.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/PointingArrowLabel.mjs
 var Pse = class extends A_ {
 	static id = "pointing_arrow_label";
 	shapeId = "";
@@ -74576,7 +74576,7 @@ var Pse = class extends A_ {
 	}
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/selection-logic/selectOnCanvasPointerUp.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/selection-logic/selectOnCanvasPointerUp.mjs
 function x9(e, t) {
 	let n = e.getSelectedShapeIds(), r = e.inputs.getCurrentPagePoint(), { shiftKey: i, altKey: a, accelKey: o } = t, s = i || o, c = e.options.selectLockedShapes, l = e.getShapeAtPoint(r, {
 		hitInside: !1,
@@ -74607,7 +74607,7 @@ function x9(e, t) {
 	}
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/PointingCanvas.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/PointingCanvas.mjs
 var Fse = class extends A_ {
 	static id = "pointing_canvas";
 	onEnter(e) {
@@ -74751,7 +74751,7 @@ function S9(e, t, n, r) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/PointingRotateHandle.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/PointingRotateHandle.mjs
 var Lse = class extends A_ {
 	static id = "pointing_rotate_handle";
 	info = {};
@@ -75245,7 +75245,7 @@ function w9(e, t) {
 	return C9[(C9.indexOf(e) + n) % C9.length];
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Rotating.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Rotating.mjs
 var T9 = Math.PI / 180, Vse = class extends A_ {
 	static id = "rotating";
 	static trackPerformance = !0;
@@ -75529,7 +75529,7 @@ function Jse(e, t, n) {
 	return n.filter((e) => r.canRemoveChildrenOfType(t, e.type));
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Translating.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/childStates/Translating.mjs
 var Yse = Object.defineProperty, Xse = Object.getOwnPropertyDescriptor, Zse = (e, t, n, r) => {
 	for (var i = r > 1 ? void 0 : r ? Xse(t, n) : t, a = e.length - 1, o; a >= 0; a--) (o = e[a]) && (i = (r ? o(t, n, i) : o(i)) || i);
 	return r && i && Yse(t, n, i), i;
@@ -75768,7 +75768,7 @@ function Qse({ editor: e, snapshot: t }) {
 	})));
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/tools/SelectTool/SelectTool.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/tools/SelectTool/SelectTool.mjs
 var $se = class extends A_ {
 	static id = "select";
 	static initial = "idle";
@@ -76097,7 +76097,7 @@ _.memo(function({ shapeId: e, type: t, text: n, labelColor: r, fontFamily: i, fo
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/static-assets/assetUrls.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/static-assets/assetUrls.mjs
 var j9 = { fonts: {
 	tldraw_mono: `${Vh()}/fonts/IBMPlexMono-Medium.woff2`,
 	tldraw_mono_italic: `${Vh()}/fonts/IBMPlexMono-MediumItalic.woff2`,
@@ -76123,7 +76123,7 @@ function ace(e) {
 	} } : j9, [e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/icon-types.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/icon-types.mjs
 var oce = /* @__PURE__ */ "align-bottom.align-center-horizontal.align-center-vertical.align-left.align-right.align-top.alt.arrow-arc.arrow-cycle.arrow-elbow.arrow-left.arrowhead-arrow.arrowhead-bar.arrowhead-diamond.arrowhead-dot.arrowhead-none.arrowhead-square.arrowhead-triangle-inverted.arrowhead-triangle.blob.bold.bookmark.bring-forward.bring-to-front.broken.bulletList.check-circle.check.chevron-down.chevron-left.chevron-right.chevron-up.chevrons-ne.chevrons-sw.clipboard-copied.clipboard-copy.closed.code.color.comment.corners.crop.cross-2.cross-circle.dash-dashed.dash-dotted.dash-draw.dash-solid.disconnected.discord.distribute-horizontal.distribute-vertical.dot.dots-horizontal.dots-vertical.download.drag-handle-dots.duplicate.edit.external-link.fill-fill.fill-lined-fill.fill-none.fill-pattern.fill-semi.fill-solid.follow.following.font-draw.font-mono.font-sans.font-serif.geo-arrow-down.geo-arrow-left.geo-arrow-right.geo-arrow-up.geo-check-box.geo-cloud.geo-diamond.geo-ellipse.geo-heart.geo-hexagon.geo-octagon.geo-oval.geo-pentagon.geo-rectangle.geo-rhombus-2.geo-rhombus.geo-star.geo-trapezoid.geo-triangle.geo-x-box.github.group.heading.help-circle.highlight.horizontal-align-end.horizontal-align-middle.horizontal-align-start.info-circle.italic.leading.link.list.lock.manual.menu.minus.mixed.pack.plus.question-mark-circle.question-mark.redo.reset-zoom.rotate-ccw.rotate-cw.send-backward.send-to-back.share-1.size-extra-large.size-large.size-medium.size-small.spline-cubic.spline-line.stack-horizontal.stack-vertical.status-offline.stretch-horizontal.stretch-vertical.strike.text-align-center.text-align-left.text-align-right.toggle-off.toggle-on.tool-arrow.tool-eraser.tool-frame.tool-hand.tool-highlight.tool-laser.tool-line.tool-media.tool-note.tool-pencil.tool-pointer.tool-screenshot.tool-text.trash.twitter.underline.undo.ungroup.unlock.vertical-align-end.vertical-align-middle.vertical-align-start.warning-triangle.zoom-in.zoom-out".split("."), M9 = {
 	...j9,
 	icons: Object.fromEntries(oce.map((e) => [e, `${Vh()}/icons/icon/0_merged.svg#${e}`])),
@@ -76139,7 +76139,7 @@ function sce(e) {
 	} : M9, [e]);
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/context/TldrawUiContextProvider.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/context/TldrawUiContextProvider.mjs
 var cce = yr(function({ overrides: e, components: t, assetUrls: n, onUiEvent: r, forceMobile: i, mediaMimeTypes: a, children: o }) {
 	let s = vu();
 	return /* @__PURE__ */ (0, V.jsx)(UQ.Provider, {
@@ -76180,7 +76180,7 @@ function lce({ overrides: e, children: t }) {
 	});
 }
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/ui/hooks/useEditorEvents.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/ui/hooks/useEditorEvents.mjs
 function uce() {
 	let e = U(), { addToast: t } = lQ();
 	(0, _.useEffect)(() => {
@@ -76297,7 +76297,7 @@ var dce = _.memo(function({ children: e, hideUi: t, ...n }) {
 });
 [...A9, ...Sae];
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/TldrawImage.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/TldrawImage.mjs
 var N9 = { text: {
 	tipTapConfig: { extensions: aL },
 	addFontsFromNode: hL
@@ -76428,7 +76428,7 @@ var N9 = { text: {
 	});
 });
 //#endregion
-//#region node_modules/tldraw/dist-esm/lib/utils/tldr/buildFromV1Document.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/lib/utils/tldr/buildFromV1Document.mjs
 var P9 = {
 	White: "white",
 	LightGray: "lightGray",
@@ -76463,7 +76463,7 @@ var P9 = {
 	Mono: "mono"
 };
 //#endregion
-//#region node_modules/tldraw/dist-esm/index.mjs
+//#region ../epic-656/node_modules/tldraw/dist-esm/index.mjs
 P9.White, P9.Black, P9.LightGray, P9.Gray, P9.Green, P9.Cyan, P9.Blue, P9.Indigo, P9.Orange, P9.Yellow, P9.Red, P9.Violet, R9.Mono, R9.Sans, R9.Script, R9.Serif, L9.Start, L9.Middle, L9.End, L9.Justify, L9.Start, L9.Middle, L9.End, L9.Justify, F9.Small, F9.Medium, F9.Large, F9.Small, F9.Medium, F9.Large, I9.Solid, I9.Dashed, I9.Dotted, I9.Draw, Na({
 	tldrawFileFormatVersion: Oa,
 	schema: za("schemaVersion", {
@@ -77055,7 +77055,7 @@ var Ice = (e) => {
 	if (typeof t != "object" || !t || Array.isArray(t)) return e.executionId;
 	if (e.type !== "mcp:escalation-answered") return typeof t.nodeId == "string" ? t.nodeId : e.executionId;
 	let n = t.answeredBy;
-	return typeof n != "object" || !n || Array.isArray(n) || n.kind !== "adjudication" || typeof t.modelSlug != "string" || typeof t.prose != "string" || typeof t.answers != "object" || t.answers === null || Array.isArray(t.answers) ? e.executionId : `ADJUDICATION · ${t.modelSlug} · ${JSON.stringify(t.answers)} · ${t.prose}`;
+	return typeof n != "object" || !n || Array.isArray(n) || n.kind !== "adjudication" || typeof t.modelSlug != "string" || typeof t.answers != "object" || t.answers === null || Array.isArray(t.answers) ? e.executionId : `ADJUDICATION · ${t.modelSlug} · ${JSON.stringify(t.answers)}`;
 }, Y9, X9;
 window.heddleLifecycleViewer = {
 	append(e) {

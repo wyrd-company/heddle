@@ -95,11 +95,8 @@ const answerableAttention = () =>
               header: "Batch size",
               id: "batch-size",
               multiSelect: false,
-              options: [
-                { label: "Small", value: "small" },
-                { label: "Large", value: "large" },
-              ],
-              prompt: "Which batch size should be used?",
+              options: [{ label: "Small" }, { label: "Large" }],
+              question: "Which batch size should be used?",
             },
           ],
         },
@@ -410,6 +407,10 @@ describe("console live board polling", () => {
       .attentionElements()
       .find(({ className }) => className === "attention-action")!;
     const initialReplaceCount = harness.attentionList.replaceCount;
+    const reasoning = harness
+      .attentionElements()
+      .find(({ name }) => name === "batch-size:reasoning")!;
+    reasoning.value = "Fits the available ingredients.";
     selected.checked = true;
     harness.replaceAttention([entry, informationalAttention("attention-12")]);
 
@@ -418,11 +419,20 @@ describe("console live board polling", () => {
     await vi.waitFor(() => expect(harness.attention.textContent).toBe("2"));
     expect(harness.attentionList.replaceCount).toBe(initialReplaceCount);
     expect(selected.checked).toBe(true);
+    expect(reasoning.value).toBe("Fits the available ingredients.");
     action.dispatch("click");
     await vi.waitFor(() => expect(harness.attentionRequests).toHaveLength(1));
     expect(
       JSON.parse(String(harness.attentionRequests[0]?.options?.body)),
-    ).toMatchObject({ answers: { "batch-size": "small" } });
+    ).toMatchObject({
+      answers: {
+        "batch-size": {
+          selectedOptions: ["Small"],
+          text: "",
+          reasoning: "Fits the available ingredients.",
+        },
+      },
+    });
   });
 
   it("does not render an old live dependency graph after scope navigation", async () => {

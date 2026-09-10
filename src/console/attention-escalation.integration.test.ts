@@ -9,13 +9,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   cleanupEscalationFixtures,
-  connectEscalationClient,
   createEscalationFixture,
   createEscalationInstance,
   sampleEscalationAnswer,
   sampleEscalationQuestions,
 } from "../mcp-server/escalation-tools.test-support.js";
 import { createConsoleAttention } from "./attention-contract.js";
+import { WorkflowMcpSessionResolver } from "../mcp-server/session-binding.js";
 import { createConsoleServer } from "./server.js";
 import type {
   ConsoleAttention,
@@ -44,33 +44,30 @@ describe("console escalation disposition", () => {
     await cleanupEscalationFixtures();
   });
 
-  it("releases a blocked MCP escalation through its offered console action", async () => {
+  it("answers a harness question through its offered console action", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-sample", [
       {
         sessionKey: "sample-session",
         token: "sample-token",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
-    const client = await connectEscalationClient(
-      subject.url,
-      "sample-token",
-      "sample-client",
-    );
-    const receipt = await client.callTool({
-      arguments: {
+    const receipt = await subject.coordinator.escalate(
+      await new WorkflowMcpSessionResolver(subject.persistence).resolve(
+        "sample-token",
+      ),
+      {
         escalationId: "sample-choice",
         questions: sampleEscalationQuestions,
+        requestId: "request-sample",
+        threadId: "thread-sample",
       },
-      name: "escalate",
-    });
+    );
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
     expect(receipt).toMatchObject({
-      structuredContent: {
-        awaitingAnswer: true,
-        escalationId: "sample-choice",
-      },
+      awaitingAnswer: true,
+      escalationId: "sample-choice",
     });
 
     const raised = subject.attentions[0]!;
@@ -86,16 +83,7 @@ describe("console escalation disposition", () => {
           },
           input: {
             kind: "questions",
-            questions: raised.questions.map((question) => ({
-              id: question.id,
-              multiSelect: false,
-              options: question.options.map((option) => ({
-                description: option.description,
-                label: option.label,
-                value: option.id,
-              })),
-              prompt: question.prompt,
-            })),
+            questions: raised.questions,
           },
           label: "Answer escalation",
         },
@@ -124,7 +112,7 @@ describe("console escalation disposition", () => {
             throw new Error("unexpected console action authority");
           }
           await subject.coordinator.answerAsOperator({
-            answers: answers as Record<string, string>,
+            answers: answers!,
             escalationId: action.contract.escalationId,
             instanceId: action.contract.instanceId,
             ownerSessionKey: action.contract.ownerSessionKey,

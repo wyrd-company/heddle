@@ -41,101 +41,28 @@ const record = (value: unknown, attentionId: string, name: string) => {
   return value as AttentionPayload;
 };
 
-const options = (value: unknown, attentionId: string): AttentionPayload[] => {
-  if (!Array.isArray(value) || value.length < 2) {
-    throw new Error(`Attention '${attentionId}' has malformed options`);
-  }
-  return value.map((item) => record(item, attentionId, "options"));
+const optionalString = (
+  payload: AttentionPayload,
+  field: string,
+  attentionId: string,
+): string | undefined => {
+  if (payload[field] === undefined) return undefined;
+  return requiredAttentionString(payload, field, attentionId);
 };
 
-export const escalationQuestions = (
+const questions = (
   value: unknown,
   attentionId: string,
 ): ConsoleAttentionQuestion[] => {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`Attention '${attentionId}' has no escalation questions`);
+    throw new Error(`Attention '${attentionId}' has no questions`);
   }
   const questionIds = new Set<string>();
   return value.map((item) => {
     const question = record(item, attentionId, "questions");
-    const id = requiredAttentionIdentifier(question, "id", attentionId);
-    if (questionIds.has(id)) {
-      throw new Error(`Attention '${attentionId}' repeats question '${id}'`);
-    }
-    questionIds.add(id);
-    if (question["kind"] === "value") {
-      const validation = record(
-        question["validation"],
-        attentionId,
-        "value validation",
-      );
-      const minLength = validation["minLength"];
-      const maxLength = validation["maxLength"];
-      if (
-        !Number.isSafeInteger(minLength) ||
-        (minLength as number) < 1 ||
-        !Number.isSafeInteger(maxLength) ||
-        (maxLength as number) < (minLength as number)
-      ) {
-        throw new Error(
-          `Attention '${attentionId}' has malformed value validation`,
-        );
-      }
-      return {
-        id,
-        kind: "value",
-        prompt: requiredAttentionString(question, "prompt", attentionId),
-        validation: {
-          maxLength: maxLength as number,
-          minLength: minLength as number,
-        },
-      };
-    }
-    const optionIds = new Set<string>();
-    return {
-      id,
-      kind: "choice" as const,
-      multiSelect: false,
-      options: options(question["options"], attentionId).map((option) => {
-        const optionId = requiredAttentionIdentifier(option, "id", attentionId);
-        if (optionIds.has(optionId)) {
-          throw new Error(
-            `Attention '${attentionId}' repeats option '${optionId}'`,
-          );
-        }
-        optionIds.add(optionId);
-        return {
-          description: requiredAttentionString(
-            option,
-            "description",
-            attentionId,
-          ),
-          label: requiredAttentionString(option, "label", attentionId),
-          value: optionId,
-        };
-      }),
-      prompt: requiredAttentionString(question, "prompt", attentionId),
-    };
-  });
-};
-
-export const t3Questions = (
-  value: unknown,
-  attentionId: string,
-): ConsoleAttentionQuestion[] => {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`Attention '${attentionId}' has no user-input questions`);
-  }
-  const questionIds = new Set<string>();
-  return value.map((item) => {
-    const question = record(item, attentionId, "questions");
-    if (typeof question["multiSelect"] !== "boolean") {
-      throw new Error(`Attention '${attentionId}' has malformed questions`);
-    }
-    const header = question["header"];
     if (
-      header !== undefined &&
-      (typeof header !== "string" || header.trim() === "")
+      question["multiSelect"] !== undefined &&
+      typeof question["multiSelect"] !== "boolean"
     ) {
       throw new Error(`Attention '${attentionId}' has malformed questions`);
     }
@@ -144,12 +71,18 @@ export const t3Questions = (
       throw new Error(`Attention '${attentionId}' repeats question '${id}'`);
     }
     questionIds.add(id);
+    const rawOptions = question["options"];
+    if (!Array.isArray(rawOptions)) {
+      throw new Error(`Attention '${attentionId}' has malformed options`);
+    }
+    const header = optionalString(question, "header", attentionId);
     const optionLabels = new Set<string>();
     return {
       ...(header === undefined ? {} : { header }),
       id,
-      multiSelect: question["multiSelect"],
-      options: options(question["options"], attentionId).map((option) => {
+      multiSelect: (question["multiSelect"] as boolean | undefined) ?? false,
+      options: rawOptions.map((item) => {
+        const option = record(item, attentionId, "options");
         const label = requiredAttentionString(option, "label", attentionId);
         if (optionLabels.has(label)) {
           throw new Error(
@@ -157,20 +90,13 @@ export const t3Questions = (
           );
         }
         optionLabels.add(label);
-        const description = option["description"];
-        if (
-          description !== undefined &&
-          (typeof description !== "string" || description.trim() === "")
-        ) {
-          throw new Error(`Attention '${attentionId}' has malformed options`);
-        }
-        return {
-          ...(description === undefined ? {} : { description }),
-          label,
-          value: label,
-        };
+        const description = optionalString(option, "description", attentionId);
+        return { ...(description === undefined ? {} : { description }), label };
       }),
-      prompt: requiredAttentionString(question, "question", attentionId),
+      question: requiredAttentionString(question, "question", attentionId),
     };
   });
 };
+
+export const escalationQuestions = questions;
+export const t3Questions = questions;

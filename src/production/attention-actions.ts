@@ -16,6 +16,7 @@ import type {
   EscalationAnswers,
   EscalationCoordinator,
 } from "../mcp-server/index.js";
+import { harnessAnswers } from "../mcp-server/escalation-contract.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
 import { schedulerPassAttentionId } from "./scheduler-pass-attention.js";
@@ -51,23 +52,18 @@ const canonicalAnswers = (
 const actionIntent = (
   action: ConsoleAttentionAction,
   answers: ConsoleAttentionActionAnswers | undefined,
-  prose: string | undefined,
 ): JsonValue =>
   JSON.parse(
     JSON.stringify({
       action,
       answers: canonicalAnswers(answers) ?? null,
-      prose: prose ?? null,
     }),
   ) as JsonValue;
 
 const escalationAnswers = (
   answers: ConsoleAttentionActionAnswers | undefined,
 ): EscalationAnswers => {
-  if (
-    answers === undefined ||
-    Object.values(answers).some((answer) => typeof answer !== "string")
-  ) {
+  if (answers === undefined) {
     throw new TypeError("Escalation answers must select one option each");
   }
   return answers as EscalationAnswers;
@@ -104,9 +100,8 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     const validated = {
       ...input,
       ...(request.answers === undefined ? {} : { answers: request.answers }),
-      ...(request.prose === undefined ? {} : { prose: request.prose }),
     };
-    const intent = actionIntent(input.action, request.answers, request.prose);
+    const intent = actionIntent(input.action, request.answers);
     if (!this.#schedulerResolutionIsCurrent(validated)) return;
     const stableId = actionStableId(input.attention.attentionId, input.action);
     this.persistence.recordEffectIntent(effectKind, stableId, intent);
@@ -214,7 +209,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
     return this.observer.userInputResponseRecorded(
       target,
       contract.requestId,
-      input.answers!,
+      harnessAnswers(input.answers!),
     );
   }
 
@@ -279,7 +274,6 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
         escalationId: contract.escalationId,
         instanceId: contract.instanceId,
         ownerSessionKey: contract.ownerSessionKey,
-        ...(input.prose === undefined ? {} : { prose: input.prose }),
       });
       return;
     }
@@ -303,7 +297,7 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
         threadId: contract.threadId,
       },
       contract.requestId,
-      input.answers!,
+      harnessAnswers(input.answers!),
       input.attention.attentionId,
     );
   }

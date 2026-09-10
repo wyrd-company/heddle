@@ -80,7 +80,7 @@ describe("production T3 attention action crash recovery", () => {
           requestId: `${kind}-request`,
           ...(kind === "approval"
             ? { response: "accept" }
-            : { response: { direction: "First" } }),
+            : { response: { direction: ["First"] } }),
         },
       ]);
     },

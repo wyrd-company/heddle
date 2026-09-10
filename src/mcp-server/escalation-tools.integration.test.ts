@@ -22,6 +22,19 @@ import {
 
 afterEach(cleanupEscalationFixtures);
 
+const openQuestion = async (
+  subject: Awaited<ReturnType<typeof createEscalationFixture>>,
+  token: string,
+  input: Omit<
+    Parameters<EscalationCoordinator["escalate"]>[1],
+    "requestId" | "threadId"
+  > & { requestId?: string; threadId?: string },
+) =>
+  subject.coordinator.escalate(
+    await new WorkflowMcpSessionResolver(subject.persistence).resolve(token),
+    { requestId: "request-sample", threadId: "thread-sample", ...input },
+  );
+
 describe("workflow MCP escalation tools", () => {
   it("routes each top-level escalation occurrence to one fresh adjudication session", async () => {
     const starts: Array<{ escalationId: string; sessionKey: string }> = [];
@@ -41,7 +54,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "top",
         token: "token-adjudication",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     const binding = await new WorkflowMcpSessionResolver(
@@ -51,6 +64,8 @@ describe("workflow MCP escalation tools", () => {
     for (const escalationId of ["first-choice", "second-choice"]) {
       await subject.coordinator.escalate(binding, {
         escalationId,
+        requestId: "request-sample",
+        threadId: "thread-sample",
         questions: sampleEscalationQuestions,
       });
     }
@@ -75,7 +90,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "top",
         token: "token-start-failure",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     const binding = await new WorkflowMcpSessionResolver(
@@ -84,12 +99,16 @@ describe("workflow MCP escalation tools", () => {
 
     await subject.coordinator.escalate(binding, {
       escalationId: "start-failure",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.notifications).toHaveLength(1));
 
     expect(subject.attentions[0]).toMatchObject({
       adjudication: { cause: "sample alias exhausted" },
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     expect(subject.notifications).toEqual(subject.attentions);
@@ -104,13 +123,15 @@ describe("workflow MCP escalation tools", () => {
       },
     });
     createEscalationInstance(subject.persistence, "instance-decided", [
-      { sessionKey: "top", token: "token-decided", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-decided", tools: [] },
     ]);
     const stageBinding = await new WorkflowMcpSessionResolver(
       subject.persistence,
     ).resolve("token-decided");
     await subject.coordinator.escalate(stageBinding, {
       escalationId: "decided-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     const pending =
@@ -169,13 +190,15 @@ describe("workflow MCP escalation tools", () => {
       },
     });
     createEscalationInstance(subject.persistence, "instance-declined", [
-      { sessionKey: "top", token: "token-declined", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-declined", tools: [] },
     ]);
     const stageBinding = await new WorkflowMcpSessionResolver(
       subject.persistence,
     ).resolve("token-declined");
     await subject.coordinator.escalate(stageBinding, {
       escalationId: "declined-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     const pending =
@@ -210,6 +233,8 @@ describe("workflow MCP escalation tools", () => {
         modelSlug: "sample-capable-model",
         reasoning: "Both options change an operator-reserved outcome.",
       },
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
   });
@@ -222,12 +247,12 @@ describe("workflow MCP escalation tools", () => {
       },
     });
     createEscalationInstance(subject.persistence, "instance-boundary", [
-      { sessionKey: "top", token: "token-boundary", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-boundary", tools: [] },
       {
         parentSessionKey: "top",
         sessionKey: "child",
         token: "token-child-boundary",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     const stageBinding = await new WorkflowMcpSessionResolver(
@@ -235,6 +260,8 @@ describe("workflow MCP escalation tools", () => {
     ).resolve("token-boundary");
     await subject.coordinator.escalate(stageBinding, {
       escalationId: "bound-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     await subject.coordinator.escalate(
@@ -243,6 +270,8 @@ describe("workflow MCP escalation tools", () => {
       ),
       {
         escalationId: "child-choice",
+        requestId: "request-sample",
+        threadId: "thread-sample",
         questions: sampleEscalationQuestions,
       },
     );
@@ -305,7 +334,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "top",
         token: "token-invalid-choice",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     const stageBinding = await new WorkflowMcpSessionResolver(
@@ -313,6 +342,8 @@ describe("workflow MCP escalation tools", () => {
     ).resolve("token-invalid-choice");
     await subject.coordinator.escalate(stageBinding, {
       escalationId: "invalid-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     const pending = subject.coordinator.pendingEscalations(
@@ -341,7 +372,13 @@ describe("workflow MCP escalation tools", () => {
               : "unreachable",
         },
         {
-          answers: { "delivery-window": "unoffered" },
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Unoffered"],
+              text: "",
+              reasoning: "Sample reason.",
+            },
+          },
           escalationId: pending.escalationId,
           ownerSessionKey: pending.ownerSessionKey,
           prose: "The answer does not name an offered option.",
@@ -355,17 +392,19 @@ describe("workflow MCP escalation tools", () => {
         modelSlug: "sample-capable-model",
       },
       escalationId: "invalid-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
   });
 
-  it("publishes the immediate-return behavior contract with the escalate tool", async () => {
+  it("does not expose an MCP escalate tool", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-description", [
       {
         sessionKey: "top",
         token: "token-description",
-        tools: ["escalate"],
+        tools: ["advance"],
       },
     ]);
     const client = await connectEscalationClient(
@@ -374,12 +413,10 @@ describe("workflow MCP escalation tools", () => {
       "description-client",
     );
 
-    const escalation = (await client.listTools()).tools.find(
-      ({ name }) => name === "escalate",
-    );
-    expect(escalation?.description).toBe(
-      "Record structured questions for asynchronous answer delivery. Do not act on the question's subject until its answer arrives in a later turn. Continue unrelated work when available; otherwise end this turn. Never create a watcher or poll for the answer.",
-    );
+    const catalog = (await client.listTools()).tools;
+    expect(catalog.some(({ name }) => name === "advance")).toBe(true);
+    const escalation = catalog.find(({ name }) => name === "escalate");
+    expect(escalation).toBeUndefined();
   });
 
   it("rejects advance while the session has a pending escalation", async () => {
@@ -388,7 +425,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "top",
         token: "token-advance",
-        tools: ["advance", "escalate"],
+        tools: ["advance"],
       },
     ]);
     const client = await connectEscalationClient(
@@ -396,12 +433,11 @@ describe("workflow MCP escalation tools", () => {
       "token-advance",
       "advance-client",
     );
-    const escalation = await client.callTool({
-      arguments: {
-        escalationId: "advance-choice",
-        questions: sampleEscalationQuestions,
-      },
-      name: "escalate",
+    const escalation = await openQuestion(subject, "token-advance", {
+      escalationId: "advance-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
+      questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
 
@@ -420,10 +456,8 @@ describe("workflow MCP escalation tools", () => {
       ownerSessionKey: "top",
     });
     expect(escalation).toMatchObject({
-      structuredContent: {
-        awaitingAnswer: true,
-        escalationId: "advance-choice",
-      },
+      awaitingAnswer: true,
+      escalationId: "advance-choice",
     });
     await expect(
       client.callTool({
@@ -451,7 +485,7 @@ describe("workflow MCP escalation tools", () => {
         parentSessionKey: "parent",
         sessionKey: "child",
         token: "token-child-advance",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     const parent = await connectEscalationClient(
@@ -459,17 +493,11 @@ describe("workflow MCP escalation tools", () => {
       "token-parent-advance",
       "parent-advance-client",
     );
-    const child = await connectEscalationClient(
-      subject.url,
-      "token-child-advance",
-      "child-advance-client",
-    );
-    const childCall = await child.callTool({
-      arguments: {
-        escalationId: "child-advance-choice",
-        questions: sampleEscalationQuestions,
-      },
-      name: "escalate",
+    const childCall = await openQuestion(subject, "token-child-advance", {
+      escalationId: "child-advance-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
+      questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.parentEscalations).toHaveLength(1));
 
@@ -497,10 +525,8 @@ describe("workflow MCP escalation tools", () => {
       },
     });
     expect(childCall).toMatchObject({
-      structuredContent: {
-        awaitingAnswer: true,
-        escalationId: "child-advance-choice",
-      },
+      awaitingAnswer: true,
+      escalationId: "child-advance-choice",
     });
     await expect(
       parent.callTool({
@@ -519,18 +545,13 @@ describe("workflow MCP escalation tools", () => {
   it("serializes concurrent advance and escalation into one valid outcome", async () => {
     let releaseResume!: () => void;
     let resumeStarted!: () => void;
-    let escalationOpened!: () => void;
     const resumeRelease = new Promise<void>((resolve) => {
       releaseResume = resolve;
     });
     const resumeStart = new Promise<void>((resolve) => {
       resumeStarted = resolve;
     });
-    const opened = new Promise<void>((resolve) => {
-      escalationOpened = resolve;
-    });
     const subject = await createEscalationFixture({
-      attention: async () => escalationOpened(),
       resume: async (input) => {
         resumeStarted();
         await resumeRelease;
@@ -549,7 +570,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "racing-session",
         token: "token-race",
-        tools: ["advance", "escalate"],
+        tools: ["advance"],
       },
     ]);
     const client = await connectEscalationClient(
@@ -563,37 +584,22 @@ describe("workflow MCP escalation tools", () => {
     });
     await resumeStart;
 
-    const escalation = client.callTool({
-      arguments: {
-        escalationId: "race-choice",
-        questions: sampleEscalationQuestions,
-      },
-      name: "escalate",
-    });
-    const outcome = await Promise.race([
-      escalation.then((result) => ({ kind: "result" as const, result })),
-      opened.then(() => ({ kind: "opened" as const })),
-    ]);
-    if (outcome.kind === "opened") {
-      await subject.coordinator.answerAsOperator({
-        answers: sampleEscalationAnswer,
-        escalationId: "race-choice",
-        instanceId: "instance-race",
-        ownerSessionKey: "racing-session",
-      });
-      await escalation;
+    try {
+      await expect(
+        openQuestion(subject, "token-race", {
+          escalationId: "race-choice",
+          questions: sampleEscalationQuestions,
+        }),
+      ).rejects.toThrow("claimed disposition authority");
+    } finally {
+      releaseResume();
     }
-    releaseResume();
 
     await expect(advance).resolves.toMatchObject({
       structuredContent: {
         instanceId: "instance-race",
         status: "completed",
       },
-    });
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: { isError: true },
     });
     expect(
       subject.coordinator.pendingEscalations("instance-race"),
@@ -603,33 +609,27 @@ describe("workflow MCP escalation tools", () => {
   it("returns a durable receipt immediately and delivers the later top-level answer", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-top", [
-      { sessionKey: "top", token: "token-top", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-top", tools: [] },
     ]);
-    const client = await connectEscalationClient(
-      subject.url,
-      "token-top",
-      "top-client",
-    );
 
-    const call = await client.callTool({
-      arguments: {
-        escalationId: "window-choice",
-        questions: sampleEscalationQuestions,
-      },
-      name: "escalate",
+    const call = await openQuestion(subject, "token-top", {
+      escalationId: "window-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
+      questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
 
     expect(call).toMatchObject({
-      structuredContent: {
-        awaitingAnswer: true,
-        escalationId: "window-choice",
-      },
+      awaitingAnswer: true,
+      escalationId: "window-choice",
     });
     expect(subject.attentions[0]).toMatchObject({
       escalationId: "window-choice",
       instanceId: "instance-top",
       ownerSessionKey: "top",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     expect(subject.notifications).toEqual(subject.attentions);
@@ -637,19 +637,16 @@ describe("workflow MCP escalation tools", () => {
       subject.coordinator.requireNoPendingForSession("instance-top", "top"),
     ).toThrow(/pending escalation/);
     await expect(
-      client.callTool({
-        arguments: {
-          escalationId: "window-choice",
-          questions: [
-            {
-              ...sampleEscalationQuestions[0],
-              prompt: "Which later delivery window should be used?",
-            },
-          ],
-        },
-        name: "escalate",
+      openQuestion(subject, "token-top", {
+        escalationId: "window-choice",
+        questions: [
+          {
+            ...sampleEscalationQuestions[0],
+            question: "Which later delivery window should be used?",
+          },
+        ],
       }),
-    ).resolves.toMatchObject({ isError: true });
+    ).rejects.toThrow("retried with different questions");
 
     const operatorAnswer = {
       answers: sampleEscalationAnswer,
@@ -674,7 +671,13 @@ describe("workflow MCP escalation tools", () => {
     await expect(
       subject.coordinator.answerAsOperator({
         ...operatorAnswer,
-        answers: { "delivery-window": "wait" },
+        answers: {
+          "delivery-window": {
+            selectedOptions: ["wait"],
+            text: "",
+            reasoning: "Sample reason.",
+          },
+        },
       }),
     ).rejects.toThrow(/already answered differently/);
     await expect(
@@ -694,29 +697,21 @@ describe("workflow MCP escalation tools", () => {
     ).not.toThrow();
   });
 
-  it("validates and carries a value answer with prose into its delivered turn", async () => {
+  it("requires reasoning and carries a zero-option text answer into its delivered turn", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-value", [
-      { sessionKey: "top", token: "token-value", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-value", tools: [] },
     ]);
-    const client = await connectEscalationClient(
-      subject.url,
-      "token-value",
-      "value-client",
-    );
-    await client.callTool({
-      arguments: {
-        escalationId: "reference-value",
-        questions: [
-          {
-            id: "reference",
-            kind: "value",
-            prompt: "Which sample reference should be used?",
-            validation: { maxLength: 8, minLength: 4 },
-          },
-        ],
-      },
-      name: "escalate",
+    await openQuestion(subject, "token-value", {
+      escalationId: "reference-value",
+      questions: [
+        {
+          id: "reference",
+          multiSelect: false,
+          options: [],
+          question: "Which sample reference should be used?",
+        },
+      ],
     });
 
     const answer = {
@@ -727,17 +722,28 @@ describe("workflow MCP escalation tools", () => {
     await expect(
       subject.coordinator.answerAsOperator({
         ...answer,
-        answers: { reference: "A12" },
+        answers: {
+          reference: { selectedOptions: [], text: "A12", reasoning: "" },
+        },
       }),
-    ).rejects.toThrow(/value validation/);
+    ).rejects.toThrow();
     await subject.coordinator.answerAsOperator({
       ...answer,
-      answers: { reference: "AB12" },
+      answers: {
+        reference: {
+          selectedOptions: [],
+          text: "AB12",
+          reasoning: "Matches the sample label.",
+        },
+      },
       prose: "Use this reference for the current sample.",
     });
 
     expect(subject.deliveredAnswers).toHaveLength(1);
     expect(subject.deliveredAnswers[0]?.message).toContain("Answer: AB12");
+    expect(subject.deliveredAnswers[0]?.message).toContain(
+      "Matches the sample label.",
+    );
     expect(subject.deliveredAnswers[0]?.message).toContain(
       "Additional context: Use this reference for the current sample.",
     );
@@ -751,7 +757,7 @@ describe("workflow MCP escalation tools", () => {
         parentSessionKey: "parent",
         sessionKey: "child",
         token: "token-child",
-        tools: ["escalate"],
+        tools: [],
       },
       { sessionKey: "peer", token: "token-peer", tools: ["answer"] },
     ]);
@@ -760,23 +766,17 @@ describe("workflow MCP escalation tools", () => {
       "token-parent",
       "parent-client",
     );
-    const child = await connectEscalationClient(
-      subject.url,
-      "token-child",
-      "child-client",
-    );
     const peer = await connectEscalationClient(
       subject.url,
       "token-peer",
       "peer-client",
     );
 
-    const childCall = child.callTool({
-      arguments: {
-        escalationId: "child-choice",
-        questions: sampleEscalationQuestions,
-      },
-      name: "escalate",
+    const childCall = openQuestion(subject, "token-child", {
+      escalationId: "child-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
+      questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.parentEscalations).toHaveLength(1));
     expect(subject.parentEscalations[0]).toMatchObject({
@@ -808,10 +808,8 @@ describe("workflow MCP escalation tools", () => {
       structuredContent: { answered: true, escalationId: "child-choice" },
     });
     await expect(childCall).resolves.toMatchObject({
-      structuredContent: {
-        awaitingAnswer: true,
-        escalationId: "child-choice",
-      },
+      awaitingAnswer: true,
+      escalationId: "child-choice",
     });
   });
 
@@ -827,7 +825,7 @@ describe("workflow MCP escalation tools", () => {
         parentSessionKey: "parent",
         sessionKey: "child",
         token: "token-child-delegated",
-        tools: ["escalate"],
+        tools: [],
       },
       {
         sessionKey: "adjudicator",
@@ -835,22 +833,16 @@ describe("workflow MCP escalation tools", () => {
         tools: ["answer"],
       },
     ]);
-    const child = await connectEscalationClient(
-      subject.url,
-      "token-child-delegated",
-      "child-delegated-client",
-    );
     const adjudicator = await connectEscalationClient(
       subject.url,
       "token-adjudicator",
       "adjudicator-client",
     );
-    await child.callTool({
-      arguments: {
-        escalationId: "delegated-choice",
-        questions: sampleEscalationQuestions,
-      },
-      name: "escalate",
+    await openQuestion(subject, "token-child-delegated", {
+      escalationId: "delegated-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
+      questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.parentEscalations).toHaveLength(1));
 
@@ -893,20 +885,14 @@ describe("workflow MCP escalation tools", () => {
         parentSessionKey: "parent",
         sessionKey: "child",
         token: "token-child-handback",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
-    const child = await connectEscalationClient(
-      subject.url,
-      "token-child-handback",
-      "child-handback-client",
-    );
-    await child.callTool({
-      arguments: {
-        escalationId: "handback-choice",
-        questions: sampleEscalationQuestions,
-      },
-      name: "escalate",
+    await openQuestion(subject, "token-child-handback", {
+      escalationId: "handback-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
+      questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.parentEscalations).toHaveLength(1));
 
@@ -930,7 +916,7 @@ describe("workflow MCP escalation tools", () => {
   it("delivers a durably answered escalation exactly once after restart", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-replay", [
-      { sessionKey: "top", token: "token-replay", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-replay", tools: [] },
     ]);
     const binding = await new WorkflowMcpSessionResolver(
       subject.persistence,
@@ -939,6 +925,8 @@ describe("workflow MCP escalation tools", () => {
     await expect(
       subject.coordinator.escalate(binding, {
         escalationId,
+        requestId: "request-sample",
+        threadId: "thread-sample",
         questions: sampleEscalationQuestions,
       }),
     ).resolves.toEqual({ awaitingAnswer: true, escalationId });
@@ -1019,7 +1007,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "top",
         token: "token-decision-retry",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     const binding = await new WorkflowMcpSessionResolver(
@@ -1041,6 +1029,8 @@ describe("workflow MCP escalation tools", () => {
 
     await coordinator.escalate(binding, {
       escalationId: "decision-retry",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     await expect(
@@ -1069,7 +1059,7 @@ describe("workflow MCP escalation tools", () => {
         {
           sessionKey: `session-${instanceId.at(-1)}`,
           token: `token-${instanceId.at(-1)}`,
-          tools: ["escalate"],
+          tools: [],
         },
       ]);
     }
@@ -1104,6 +1094,8 @@ describe("workflow MCP escalation tools", () => {
         ),
         {
           escalationId: "settlement-replay",
+          requestId: "request-sample",
+          threadId: "thread-sample",
           questions: sampleEscalationQuestions,
         },
       );
@@ -1125,8 +1117,8 @@ describe("workflow MCP escalation tools", () => {
   it("uses distinct delivery identities when an escalation ID recurs in a later session", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-recurrence", [
-      { sessionKey: "first", token: "token-first", tools: ["escalate"] },
-      { sessionKey: "second", token: "token-second", tools: ["escalate"] },
+      { sessionKey: "first", token: "token-first", tools: [] },
+      { sessionKey: "second", token: "token-second", tools: [] },
     ]);
     const resolver = new WorkflowMcpSessionResolver(subject.persistence);
     for (const [sessionKey, token] of [
@@ -1135,6 +1127,8 @@ describe("workflow MCP escalation tools", () => {
     ] as const) {
       await subject.coordinator.escalate(await resolver.resolve(token), {
         escalationId: "repeated-choice",
+        requestId: "request-sample",
+        threadId: "thread-sample",
         questions: sampleEscalationQuestions,
       });
       await subject.coordinator.answerAsOperator({
@@ -1163,7 +1157,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "top",
         token: "token-route-rejection",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     const binding = await new WorkflowMcpSessionResolver(
@@ -1175,6 +1169,8 @@ describe("workflow MCP escalation tools", () => {
       await expect(
         subject.coordinator.escalate(binding, {
           escalationId: "route-rejection",
+          requestId: "request-sample",
+          threadId: "thread-sample",
           questions: sampleEscalationQuestions,
         }),
       ).resolves.toEqual({
@@ -1195,7 +1191,7 @@ describe("workflow MCP escalation tools", () => {
   it("replays a retained answer that predates explicit answering authority", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-legacy-answer", [
-      { sessionKey: "top", token: "token-legacy", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-legacy", tools: [] },
     ]);
     subject.persistence.appendEvent(
       "instance-legacy-answer",
@@ -1205,6 +1201,8 @@ describe("workflow MCP escalation tools", () => {
         escalationId: "legacy-choice",
         openedAt: "2026-01-01T00:00:00.000Z",
         ownerSessionKey: "top",
+        requestId: "request-sample",
+        threadId: "thread-sample",
         questions: sampleEscalationQuestions,
         stage: "assess",
       },
@@ -1231,13 +1229,15 @@ describe("workflow MCP escalation tools", () => {
   it("rejects a malformed persisted answer before clearing pending state", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-invalid-answer", [
-      { sessionKey: "top", token: "token-invalid", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-invalid", tools: [] },
     ]);
     const binding = await new WorkflowMcpSessionResolver(
       subject.persistence,
     ).resolve("token-invalid");
     await subject.coordinator.escalate(binding, {
       escalationId: "invalid-choice",
+      requestId: "request-sample",
+      threadId: "thread-sample",
       questions: sampleEscalationQuestions,
     });
     await vi.waitFor(() => expect(subject.attentions).toHaveLength(1));
@@ -1247,7 +1247,13 @@ describe("workflow MCP escalation tools", () => {
       "mcp:escalation-answered",
       {
         answeredBy: { kind: "operator" },
-        answers: { "delivery-window": "unoffered" },
+        answers: {
+          "delivery-window": {
+            selectedOptions: ["Unoffered"],
+            text: "",
+            reasoning: "Sample reason.",
+          },
+        },
         escalationId: "invalid-choice",
         ownerSessionKey: "top",
       },
@@ -1261,7 +1267,7 @@ describe("workflow MCP escalation tools", () => {
   it("rejects an answer event that precedes its open event", async () => {
     const subject = await createEscalationFixture();
     createEscalationInstance(subject.persistence, "instance-answer-first", [
-      { sessionKey: "top", token: "token-answer-first", tools: ["escalate"] },
+      { sessionKey: "top", token: "token-answer-first", tools: [] },
     ]);
     subject.persistence.appendEvent(
       "instance-answer-first",
@@ -1281,6 +1287,8 @@ describe("workflow MCP escalation tools", () => {
         escalationId: "answer-first-choice",
         openedAt: "2026-01-01T00:00:00.000Z",
         ownerSessionKey: "top",
+        requestId: "request-sample",
+        threadId: "thread-sample",
         questions: sampleEscalationQuestions,
         stage: "assess",
       },
@@ -1297,7 +1305,7 @@ describe("workflow MCP escalation tools", () => {
       {
         sessionKey: "top",
         token: "token-answer-conflict",
-        tools: ["escalate"],
+        tools: [],
       },
     ]);
     subject.persistence.appendEvent(
@@ -1308,13 +1316,21 @@ describe("workflow MCP escalation tools", () => {
         escalationId: "answer-conflict-choice",
         openedAt: "2026-01-01T00:00:00.000Z",
         ownerSessionKey: "top",
+        requestId: "request-sample",
+        threadId: "thread-sample",
         questions: sampleEscalationQuestions,
         stage: "assess",
       },
     );
     for (const answers of [
       sampleEscalationAnswer,
-      { "delivery-window": "wait" },
+      {
+        "delivery-window": {
+          selectedOptions: ["wait"],
+          text: "",
+          reasoning: "Sample reason.",
+        },
+      },
     ]) {
       subject.persistence.appendEvent(
         "instance-answer-conflict",

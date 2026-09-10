@@ -238,7 +238,17 @@ if (composition.attention.list().length === 0) {
 const attention = composition.attention.list()[0]!;
 await composition.consoleActions.execute({
   action: attention.actions[0]!,
-  ...(kind === "user-input" ? { answers: { direction: "First" } } : {}),
+  ...(kind === "user-input"
+    ? {
+        answers: {
+          direction: {
+            selectedOptions: ["First"],
+            text: "",
+            reasoning: "The first route fits.",
+          },
+        },
+      }
+    : {}),
   attention,
 });
 process.stdout.write(

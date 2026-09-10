@@ -2,16 +2,8 @@
 // relationships:
 //   verifies: heddle
 // ---
-
-import { readFile } from "node:fs/promises";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import type { WorkflowMcpSessionBinding } from "../mcp-server/index.js";
-import type {
-  JsonValue,
-  ResolvedSessionBinding,
-} from "../persistence/index.js";
+import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
   execute,
@@ -19,363 +11,14 @@ import {
   SyntheticT3,
 } from "./composition.test-support.js";
 
-class TerminalSyntheticT3 extends SyntheticT3 {
-  readonly completedThreads = new Set<string>();
-  failNextThreadCreate = false;
-
-  override async dispatch(
-    command: Parameters<SyntheticT3["dispatch"]>[0],
-    providerContext?: Parameters<SyntheticT3["dispatch"]>[1],
-  ) {
-    if (this.failNextThreadCreate && command.type === "thread.create") {
-      this.failNextThreadCreate = false;
-      throw new Error("Synthetic replacement thread failed");
-    }
-    return super.dispatch(command, providerContext);
-  }
-
-  override async getShell() {
-    const shell = await super.getShell();
-    return {
-      ...shell,
-      threads: shell.threads.map((thread) =>
-        this.completedThreads.has(thread.id)
-          ? {
-              ...thread,
-              latestTurn: { state: "completed" },
-              session: { status: "idle" },
-            }
-          : thread,
-      ),
-    };
-  }
-}
-
-const storedCorrelationToken = (
-  handoffs: JsonValue[],
-  sessionKey: string,
-): string => {
-  const stored = handoffs.find(
-    (value) =>
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      value["kind"] === "stage-handoff" &&
-      value["sessionKey"] === sessionKey,
-  );
-  if (
-    typeof stored !== "object" ||
-    stored === null ||
-    Array.isArray(stored) ||
-    typeof stored["correlationToken"] !== "string"
-  ) {
-    throw new Error("Fixture stage has no correlation token");
-  }
-  return stored["correlationToken"];
-};
-
-const callTool = async (
-  composition: ReturnType<typeof createProductionComposition>,
-  token: string,
-  name: string,
-  arguments_: Record<string, unknown>,
-) => {
-  const response = await composition.mcp.fetch(
-    new globalThis.Request("http://production.invalid/mcp", {
-      body: JSON.stringify({
-        id: globalThis.crypto.randomUUID(),
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: { arguments: arguments_, name },
-      }),
-      headers: {
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
-      method: "POST",
-    }),
-  );
-  expect(response.status).toBe(200);
-  return (await response.json()) as {
-    result?: { isError?: boolean; structuredContent?: unknown };
-  };
-};
-
-const withoutOccurrenceIdentity = (binding: ResolvedSessionBinding) => {
-  const {
-    sessionKey: _sessionKey,
-    threadId: _threadId,
-    ...selection
-  } = binding;
-  void _sessionKey;
-  void _threadId;
-  return selection;
-};
-
-describe("production escalation answer delivery", () => {
-  let cleanup: (() => Promise<void>) | undefined;
-
-  afterEach(async () => cleanup?.());
-
-  it("reactivates an unavailable top-level stage, delivers one answer turn, records the decision, and permits advance", async () => {
-    const fixture = await prepareProductionEpicFixture();
-    cleanup = fixture.cleanup;
-    const t3 = new TerminalSyntheticT3();
-    const composition = createProductionComposition({
-      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration: fixture.configuration,
-      providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
-      },
-      pushoverTransport: { send: vi.fn(async () => undefined) },
-      t3,
-      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
-    });
-    cleanup = async () => {
-      await composition.close();
-      await fixture.cleanup();
-    };
-    await composition.start();
-    const original = composition.persistence.listReconcilerRuntime()[0]!;
-    const originalSession = composition.persistence
-      .listSessionRuntime()
-      .find(({ sessionKey }) => sessionKey === original.sessionKey)!;
-    const instance = composition.persistence.getInstance(original.instanceId)!;
-    const binding: WorkflowMcpSessionBinding = {
-      dispositions: [{ description: "Finish the sample", name: "complete" }],
-      instance,
-      sessionKey: original.sessionKey!,
-      stage: { id: original.stageId!, tools: ["advance", "escalate"] },
-      taskContext: { id: fixture.taskId, title: "Arrange sample items" },
-      token: storedCorrelationToken(
-        instance.state.handoffs,
-        original.sessionKey!,
-      ),
-    };
-
-    await expect(
-      composition.escalation.escalate(binding, {
-        escalationId: "sample-route",
-        questions: [
-          {
-            id: "route",
-            options: [
-              { description: "Use route A", id: "a", label: "Route A" },
-              { description: "Use route B", id: "b", label: "Route B" },
-            ],
-            prompt: "Which route should be used?",
-          },
-        ],
-      }),
-    ).resolves.toEqual({ awaitingAnswer: true, escalationId: "sample-route" });
-    await vi.waitFor(() =>
-      expect(composition.attention.list()).toHaveLength(1),
-    );
-    t3.completedThreads.add(original.threadId!);
-    const changedSelection = {
-      ...fixture.configuration.session.defaultSelection,
-      model: {
-        ...fixture.configuration.session.defaultSelection.model,
-        name: "Changed Sample Model",
-        slug: "changed-sample-model",
-      },
-    };
-    fixture.configuration.session.defaultSelection = changedSelection;
-    fixture.configuration.session.resolvedSelections = [changedSelection];
-
-    const attention = composition.attention.list()[0]!;
-    await composition.consoleActions.execute({
-      action: attention.actions[0]!,
-      answers: { route: "b" },
-      attention,
-      prose: "Use this route for the current sample only.",
-    });
-
-    const replacement = composition.persistence.listReconcilerRuntime()[0]!;
-    expect(replacement.sessionKey).not.toBe(original.sessionKey);
-    expect(replacement.threadId).not.toBe(original.threadId);
-    const replacementSession = composition.persistence
-      .listSessionRuntime()
-      .find(({ sessionKey }) => sessionKey === replacement.sessionKey)!;
-    expect(withoutOccurrenceIdentity(replacementSession.binding)).toEqual(
-      withoutOccurrenceIdentity(originalSession.binding),
-    );
-    const answerTurns = t3.commands.filter(
-      (command) =>
-        command.type === "thread.turn.start" &&
-        command.threadId === replacement.threadId &&
-        typeof command["message"] === "object" &&
-        command["message"] !== null &&
-        typeof (command["message"] as Record<string, unknown>)["text"] ===
-          "string" &&
-        (
-          (command["message"] as Record<string, unknown>)["text"] as string
-        ).includes("Escalation sample-route was answered"),
-    );
-    expect(answerTurns).toHaveLength(1);
-    const commandCount = t3.commands.length;
-    await composition.escalation.replayPendingDeliveries();
-    expect(t3.commands).toHaveLength(commandCount);
-
-    const decisionSources: string[] = [];
-    for (const taskId of [fixture.taskId, fixture.epicId]) {
-      const shown = await execute("kanban-md", [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "show",
-        String(taskId),
-        "--json",
-      ]);
-      const task = JSON.parse(shown.stdout) as { file: string };
-      decisionSources.push(await readFile(task.file, "utf8"));
-    }
-    for (const source of decisionSources) {
-      expect(source).toContain("Question: Which route should be used?");
-      expect(source).toContain("Answer: Route B (b)");
-      expect(source).toContain(
-        "Prose: Use this route for the current sample only.",
-      );
-      expect(source).toContain("Answering authority: operator");
-    }
-
-    const replacementInstance = composition.persistence.getInstance(
-      original.instanceId,
-    )!;
-    const replacementToken = storedCorrelationToken(
-      replacementInstance.state.handoffs,
-      replacement.sessionKey!,
-    );
-    const advanced = await callTool(composition, replacementToken, "advance", {
-      disposition: "complete",
-    });
-    expect(advanced.result?.isError).not.toBe(true);
-    expect(
-      composition.persistence.getInstance(original.instanceId)?.state,
-    ).toMatchObject({
-      flowcraftContext: expect.objectContaining({
-        awaitingNodeIds: ["review"],
-        status: "awaiting",
-      }),
-    });
+describe("production native question answer delivery", () => {
+  const cleanup: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const close of cleanup.splice(0).reverse()) await close();
   });
-
-  it("recovers an interrupted retained-binding reactivation before replaying its answer", async () => {
+  const setup = async () => {
     const fixture = await prepareProductionEpicFixture();
-    cleanup = fixture.cleanup;
-    const t3 = new TerminalSyntheticT3();
-    const composition = createProductionComposition({
-      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-      configuration: fixture.configuration,
-      providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
-      },
-      pushoverTransport: { send: vi.fn(async () => undefined) },
-      t3,
-      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
-    });
-    cleanup = async () => {
-      await composition.close();
-      await fixture.cleanup();
-    };
-    await composition.start();
-    const original = composition.persistence.listReconcilerRuntime()[0]!;
-    const originalSession = composition.persistence
-      .listSessionRuntime()
-      .find(({ sessionKey }) => sessionKey === original.sessionKey)!;
-    const instance = composition.persistence.getInstance(original.instanceId)!;
-    const binding: WorkflowMcpSessionBinding = {
-      dispositions: [{ description: "Finish the sample", name: "complete" }],
-      instance,
-      sessionKey: original.sessionKey!,
-      stage: { id: original.stageId!, tools: ["advance", "escalate"] },
-      taskContext: { id: fixture.taskId, title: "Arrange sample items" },
-      token: storedCorrelationToken(
-        instance.state.handoffs,
-        original.sessionKey!,
-      ),
-    };
-
-    await composition.escalation.escalate(binding, {
-      escalationId: "interrupted-route",
-      questions: [
-        {
-          id: "route",
-          options: [
-            { description: "Use route A", id: "a", label: "Route A" },
-            { description: "Use route B", id: "b", label: "Route B" },
-          ],
-          prompt: "Which route should be used?",
-        },
-      ],
-    });
-    await vi.waitFor(() =>
-      expect(composition.attention.list()).toHaveLength(1),
-    );
-    t3.completedThreads.add(original.threadId!);
-    t3.failNextThreadCreate = true;
-
-    await expect(
-      composition.escalation.answerAsOperator({
-        answers: { route: "a" },
-        escalationId: "interrupted-route",
-        instanceId: original.instanceId,
-        ownerSessionKey: original.sessionKey!,
-        prose: "Resume the retained route.",
-      }),
-    ).rejects.toThrow("Synthetic replacement thread failed");
-
-    const interrupted = composition.persistence.listReconcilerRuntime()[0]!;
-    expect(interrupted).toMatchObject({
-      instanceId: original.instanceId,
-      stageId: original.stageId,
-      state: "starting",
-    });
-    expect(interrupted.sessionKey).not.toBe(original.sessionKey);
-    const interruptedSession = composition.persistence
-      .listSessionRuntime()
-      .find(({ sessionKey }) => sessionKey === interrupted.sessionKey)!;
-    expect(withoutOccurrenceIdentity(interruptedSession.binding)).toEqual(
-      withoutOccurrenceIdentity(originalSession.binding),
-    );
-
-    await composition.scheduler.trigger();
-
-    const recovered = composition.persistence.listReconcilerRuntime()[0]!;
-    expect(recovered).toMatchObject({
-      sessionKey: interrupted.sessionKey,
-      state: "waiting",
-      threadId: interrupted.threadId,
-    });
-    expect(
-      t3.commands.filter(
-        (command) =>
-          command.type === "thread.turn.start" &&
-          command.threadId === recovered.threadId &&
-          typeof command["message"] === "object" &&
-          command["message"] !== null &&
-          typeof (command["message"] as Record<string, unknown>)["text"] ===
-            "string" &&
-          (
-            (command["message"] as Record<string, unknown>)["text"] as string
-          ).includes("Escalation interrupted-route was answered"),
-      ),
-    ).toHaveLength(1);
-    const commandCount = t3.commands.length;
-    await composition.scheduler.trigger();
-    expect(t3.commands).toHaveLength(commandCount);
-  });
-
-  it("suppresses liveness attention and incident admission only while an awaiting session remains reachable", async () => {
-    const fixture = await prepareProductionEpicFixture();
-    cleanup = fixture.cleanup;
-    fixture.configuration.incident.failureThreshold = 1;
-    fixture.configuration.incident.retryDelayMilliseconds = 1;
-    fixture.configuration.observationThresholds = {
-      endedMilliseconds: 1,
-      failedMilliseconds: 1,
-      stalledMilliseconds: 1,
-    };
+    cleanup.push(fixture.cleanup);
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -387,64 +30,146 @@ describe("production escalation answer delivery", () => {
       t3,
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
     });
-    cleanup = async () => {
-      await composition.close();
-      await fixture.cleanup();
-    };
+    cleanup.push(() => composition.close());
     await composition.start();
-    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
-    const instance = composition.persistence.getInstance(runtime.instanceId)!;
-    const binding: WorkflowMcpSessionBinding = {
-      dispositions: [{ description: "Finish the sample", name: "complete" }],
-      instance,
-      sessionKey: runtime.sessionKey!,
-      stage: { id: runtime.stageId!, tools: ["advance", "escalate"] },
-      taskContext: { id: fixture.taskId, title: "Arrange sample items" },
-      token: storedCorrelationToken(
-        instance.state.handoffs,
-        runtime.sessionKey!,
-      ),
-    };
-
+    const runtime = composition.persistence.listSessionRuntime()[0]!;
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(
+      composition.persistence.getInstance(runtime.instanceId)!.state
+        .correlationTokens[runtime.sessionKey]!,
+    );
     await composition.escalation.escalate(binding, {
-      escalationId: "reachable-wait",
+      escalationId: "route-request",
+      requestId: "request-one",
+      threadId: runtime.threadId,
       questions: [
         {
           id: "route",
-          options: [
-            { description: "Use route A", id: "a", label: "Route A" },
-            { description: "Use route B", id: "b", label: "Route B" },
-          ],
-          prompt: "Which route should be used?",
+          question: "Which route?",
+          multiSelect: false,
+          options: [],
         },
       ],
     });
-    await vi.waitFor(() =>
-      expect(composition.attention.list()).toHaveLength(1),
+    const input = {
+      answers: {
+        route: {
+          selectedOptions: [],
+          text: "The shorter route",
+          reasoning: "The ingredients arrive sooner.",
+        },
+      },
+      escalationId: "route-request",
+      instanceId: runtime.instanceId,
+      ownerSessionKey: runtime.sessionKey,
+    };
+    return { fixture, t3, composition, runtime, input };
+  };
+  it("replies once to the original request and records reasoning on task and epic", async () => {
+    const { fixture, t3, composition, runtime, input } = await setup();
+    const creates = t3.commands.filter(
+      (x) => x.type === "thread.create",
+    ).length;
+    await composition.escalation.answerAsOperator(input);
+    await composition.escalation.answerAsOperator(input);
+    await composition.escalation.replayPendingDeliveries();
+    expect(t3.userInputResponses).toEqual([
+      {
+        answers: { route: "The shorter route" },
+        threadId: runtime.threadId,
+        requestId: "request-one",
+        commandId: expect.any(String),
+      },
+    ]);
+    expect(t3.commands.filter((x) => x.type === "thread.create")).toHaveLength(
+      creates,
     );
-    await composition.scheduler.trigger();
-    await composition.scheduler.trigger();
-
+    const task = await composition.board.readTask(fixture.taskId);
+    for (const id of [task.id, task.parent!]) {
+      const result = await execute("kanban-md", [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "show",
+        String(id),
+        "--json",
+      ]);
+      expect(JSON.parse(result.stdout).body).toContain(
+        "Reasoning: The ingredients arrive sooner.",
+      );
+    }
+    expect(() =>
+      composition.escalation.requireNoPendingForSession(
+        runtime.instanceId,
+        runtime.sessionKey,
+      ),
+    ).not.toThrow();
+  });
+  it("reconciles an accepted native reply after a crash before local completion", async () => {
+    const { t3, composition, runtime, input } = await setup();
+    const original = t3.respondToUserInput.bind(t3);
+    let fail = true;
+    t3.respondToUserInput = async (threadId, requestId, answers, commandId) => {
+      const result = await original(threadId, requestId, answers, commandId);
+      t3.threadActivities.set(threadId, [
+        { kind: "user-input.resolved", payload: { requestId, answers } },
+      ]);
+      if (fail) {
+        fail = false;
+        throw new Error("Response receipt interrupted");
+      }
+      return result;
+    };
+    await expect(
+      composition.escalation.answerAsOperator(input),
+    ).rejects.toThrow("Response receipt interrupted");
     expect(
-      composition.attention.list().filter(({ kind }) => kind !== "escalation"),
-    ).toEqual([]);
-    expect(composition.persistence.listIncidentRuntime()).toEqual([]);
-
-    t3.threads.delete(runtime.threadId!);
-    await composition.scheduler.trigger();
-    await composition.scheduler.trigger();
-    expect(composition.attention.list()).toContainEqual(
-      expect.objectContaining({
-        instanceId: runtime.instanceId,
-        kind: "ended",
-      }),
+      composition.persistence
+        .replayEvents(runtime.instanceId)
+        .some((x) => x.type === "mcp:escalation-delivery-completed"),
+    ).toBe(false);
+    await composition.escalation.replayPendingDeliveries();
+    expect(t3.userInputResponses).toHaveLength(1);
+    expect(
+      composition.persistence
+        .replayEvents(runtime.instanceId)
+        .filter((x) => x.type === "mcp:escalation-delivery-completed"),
+    ).toHaveLength(1);
+    expect(
+      composition.persistence
+        .replayEvents(runtime.instanceId)
+        .filter((x) => x.type === "mcp:escalation-decision-recorded"),
+    ).toHaveLength(1);
+  });
+  it("contains unavailable-thread delivery without creating a replacement and recovers the original request", async () => {
+    const { t3, composition, runtime, input } = await setup();
+    const creates = t3.commands.filter(
+      (x) => x.type === "thread.create",
+    ).length;
+    t3.threads.delete(runtime.threadId);
+    await expect(
+      composition.escalation.answerAsOperator(input),
+    ).rejects.toThrow(/unavailable/);
+    await composition.escalation.replayPendingDeliveries();
+    expect(
+      composition.attention
+        .list()
+        .some((x) =>
+          x.attentionId.startsWith("production:escalation-settlement-failed:"),
+        ),
+    ).toBe(true);
+    expect(t3.commands.filter((x) => x.type === "thread.create")).toHaveLength(
+      creates,
     );
-    await composition.scheduler.trigger();
-    expect(composition.persistence.listIncidentRuntime()).toContainEqual(
-      expect.objectContaining({
-        sourceInstanceId: runtime.instanceId,
-        taskId: fixture.taskId,
-      }),
-    );
-  }, 15_000);
+    t3.threads.add(runtime.threadId);
+    await composition.escalation.replayPendingDeliveries();
+    expect(t3.userInputResponses).toHaveLength(1);
+    expect(
+      composition.attention
+        .list()
+        .some((x) =>
+          x.attentionId.startsWith("production:escalation-settlement-failed:"),
+        ),
+    ).toBe(false);
+  });
 });

@@ -57,38 +57,21 @@ export interface ConsoleAttention {
 
 export type ConsoleAttentionScope = "all" | `epic:${number}` | `task:${number}`;
 
-export type ConsoleAttentionChoiceQuestion = {
+export type ConsoleAttentionQuestion = {
   header?: string;
   id: string;
-  kind?: "choice";
   multiSelect: boolean;
   options: Array<{
     description?: string;
     label: string;
-    value: string;
   }>;
-  prompt: string;
+  question: string;
 };
-
-export type ConsoleAttentionValueQuestion = {
-  header?: string;
-  id: string;
-  kind: "value";
-  prompt: string;
-  validation: {
-    maxLength: number;
-    minLength: number;
-  };
-};
-
-export type ConsoleAttentionQuestion =
-  ConsoleAttentionChoiceQuestion | ConsoleAttentionValueQuestion;
 
 export type ConsoleAttentionActionInput =
   | { kind: "none" }
   | {
       kind: "questions";
-      prose?: { label: string; maxLength: number };
       questions: ConsoleAttentionQuestion[];
     };
 
@@ -132,12 +115,14 @@ export type ConsoleAttentionAction = {
   label: string;
 };
 
-export type ConsoleAttentionActionAnswers = Record<string, string | string[]>;
+export type ConsoleAttentionActionAnswers = Record<
+  string,
+  { selectedOptions: string[]; text: string; reasoning: string }
+>;
 
 export type ConsoleAttentionActionRequest = {
   answers?: ConsoleAttentionActionAnswers;
   fingerprint: string;
-  prose?: string;
 };
 
 export interface ConsoleAttentionActionPort {
@@ -145,7 +130,6 @@ export interface ConsoleAttentionActionPort {
     action: ConsoleAttentionAction;
     answers?: ConsoleAttentionActionAnswers;
     attention: ConsoleAttention;
-    prose?: string;
   }): Promise<void>;
 }
 

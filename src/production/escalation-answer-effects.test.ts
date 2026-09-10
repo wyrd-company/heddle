@@ -52,9 +52,10 @@ describe("production escalation answer effects", () => {
         }),
       },
       {} as never,
-      {} as never,
     );
     const opened: PendingEscalation = {
+      threadId: "thread-17",
+      requestId: "request-one",
       answeringAuthority: {
         kind: "session",
         sessionKey: "review-session",
@@ -66,17 +67,23 @@ describe("production escalation answer effects", () => {
       ownerSessionKey: "work-session",
       questions: [
         {
+          options: [],
+          multiSelect: false,
           id: "reference",
-          kind: "value",
-          prompt: "Which sample reference should be used?",
-          validation: { maxLength: 8, minLength: 4 },
+          question: "Which sample reference should be used?",
         },
       ],
       stage: "arrange",
     };
     const answered: AnsweredEscalation = {
       answeredBy: { kind: "session", sessionKey: "review-session" },
-      answers: { reference: "AB12" },
+      answers: {
+        reference: {
+          selectedOptions: ["AB12"],
+          text: "",
+          reasoning: "The selected route fits the requested result.",
+        },
+      },
       escalationId: opened.escalationId,
       ownerSessionKey: opened.ownerSessionKey,
       prose: "Use this reference for the current sample.",
@@ -129,9 +136,10 @@ describe("production escalation answer effects", () => {
         }),
       },
       {} as never,
-      {} as never,
     );
     const opened: PendingEscalation = {
+      threadId: "thread-17",
+      requestId: "request-one",
       answeringAuthority: { kind: "operator" },
       attentionId: `escalation:${"b".repeat(64)}`,
       escalationId: "standalone-choice",
@@ -140,12 +148,13 @@ describe("production escalation answer effects", () => {
       ownerSessionKey: "sample-session",
       questions: [
         {
+          multiSelect: false,
           id: "route",
           options: [
-            { description: "Use route A", id: "a", label: "Route A" },
-            { description: "Use route B", id: "b", label: "Route B" },
+            { description: "Use route A", label: "a" },
+            { description: "Use route B", label: "b" },
           ],
-          prompt: "Which route should be used?",
+          question: "Which route should be used?",
         },
       ],
       stage: "inspect",
@@ -155,7 +164,13 @@ describe("production escalation answer effects", () => {
       effects.record({
         answered: {
           answeredBy: { kind: "operator" },
-          answers: { route: "a" },
+          answers: {
+            route: {
+              selectedOptions: ["a"],
+              text: "",
+              reasoning: "The selected route fits the requested result.",
+            },
+          },
           escalationId: opened.escalationId,
           ownerSessionKey: opened.ownerSessionKey,
         },
@@ -167,7 +182,7 @@ describe("production escalation answer effects", () => {
     expect(appendTaskActivity).toHaveBeenCalledWith(
       31,
       expect.stringContaining(":task:31"),
-      expect.stringContaining("Answer: Route A (a)"),
+      expect.stringContaining("Answer: a"),
     );
     persistence.close();
   });

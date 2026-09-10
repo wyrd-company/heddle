@@ -17,6 +17,7 @@ import {
   T3ControlPlaneClient,
 } from "../control-plane/index.js";
 import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
+import { startQualificationMcpServer } from "../control-plane/fixtures/workflow-mcp-http.js";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
 import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import { isTodoState } from "../todo/index.js";
@@ -31,6 +32,7 @@ import {
   makeQualificationScratch,
   qualificationAliases,
   readyProviderModels,
+  safeT3StartupDiagnostic,
   startIsolatedT3,
 } from "./driver-qualification.test-support.js";
 import {
@@ -47,18 +49,20 @@ const waitForRunningThread = async (
   threadId: string,
 ): Promise<"running"> => {
   let lastPhase: string | undefined;
+  let lastError: string | undefined;
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const thread = (await client.getShell()).threads.find(
       ({ id }) => id === threadId,
     );
     lastPhase =
       thread === undefined ? "absent" : resolveT3AwarenessPhase(thread);
+    lastError = thread?.session?.lastError ?? undefined;
     if (lastPhase === "running") return "running";
     if (lastPhase === "failed" || lastPhase === "completed") break;
     await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
   }
   throw new Error(
-    `Thread '${threadId}' did not remain active for restart pacing; last phase '${lastPhase ?? "unknown"}'`,
+    `Thread '${threadId}' did not remain active for restart pacing; last phase '${lastPhase ?? "unknown"}': ${safeT3StartupDiagnostic(lastError ?? "No provider diagnostic")}`,
   );
 };
 
@@ -162,6 +166,8 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       new ProviderSelectionResolver(providerAliases, client),
     );
 
+    const mcpServer = await startQualificationMcpServer();
+    teardown.push(mcpServer.stop);
     const firstT3 = recordingT3(client);
     const first = createProductionComposition({
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -172,8 +178,10 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       resolveSystemPrompt: async () =>
         "# Restart qualification\n\nWait for a later turn. Do not call tools.",
       t3: firstT3.t3,
-      workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
+      workflowMcpEndpoint: mcpServer.endpoint,
     });
+    mcpServer.use(first.mcp);
+    teardown.push(() => first.close());
     await first.start();
 
     const instanceId = `task-${fixture.taskId}`;
@@ -214,6 +222,8 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       escalationId,
     );
     first.persistence.appendEvent(instanceId, "mcp:escalation-opened", {
+      threadId: "thread-17",
+      requestId: "request-one",
       attentionId,
       escalationId,
       instanceId,
@@ -222,20 +232,19 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       parentSessionKey: parent.sessionKey,
       questions: [
         {
+          multiSelect: false,
           id: "selection",
           options: [
             {
               description: "Use the first sample",
-              id: "first",
-              label: "First",
+              label: "first",
             },
             {
               description: "Use the second sample",
-              id: "second",
-              label: "Second",
+              label: "second",
             },
           ],
-          prompt: "Which sample should be selected?",
+          question: "Which sample should be selected?",
         },
       ],
       stage: child.stage.id,
@@ -305,8 +314,9 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       resolveSystemPrompt: async () =>
         "# Restart qualification\n\nWait for a later turn. Do not call tools.",
       t3: secondT3.t3,
-      workflowMcpEndpoint: `${isolated.baseUrl}/mcp`,
+      workflowMcpEndpoint: mcpServer.endpoint,
     });
+    mcpServer.use(second.mcp);
     teardown.push(() => second.close());
     await second.start();
 
@@ -368,8 +378,9 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
         ({ command }) =>
           command.type === "thread.turn.start" &&
           command["message"] !== undefined &&
-          (command["message"] as { text?: string }).text ===
-            `Child escalation ${attentionId} requires an answer`,
+          (command["message"] as { text?: string }).text?.includes(
+            `Question set ${escalationId}`,
+          ),
       ),
     ).toEqual([
       {
