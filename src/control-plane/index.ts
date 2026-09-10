@@ -104,6 +104,7 @@ export {
 } from "./t3-control-plane-client.js";
 export {
   ProviderSelectionError,
+  ProviderAliasUnusableError,
   ProviderSelectionResolver,
   T3_RUNTIME_MODES,
   type ProviderAliasCatalog,

@@ -1068,6 +1068,88 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("retains catalog exhaustion after the provisional candidate fails to start", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    let catalogFailed = false;
+    vi.spyOn(t3, "getShell").mockImplementation(async () => {
+      if (t3.threads.size > 0 && !catalogFailed) {
+        t3.providerCatalog[0]!.enabled = false;
+        t3.providerCatalog[1]!.models = [];
+        catalogFailed = true;
+      }
+      return {
+        projects: [...t3.projects.values()],
+        threads: [...t3.threads].map((id) => ({
+          id,
+          latestTurn: {
+            requestedAt: "2026-01-01T00:00:00.000Z",
+            startedAt: null,
+            state: "error",
+          },
+          session: {
+            lastError: "Sample candidate could not start",
+            status: "error",
+          },
+        })),
+      };
+    });
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    expect(
+      t3.commands
+        .filter(({ type }) => type === "thread.create")
+        .map(
+          ({ modelSelection }) =>
+            (modelSelection as { instanceId: string }).instanceId,
+        ),
+    ).not.toContain("provider-two");
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(
+      session.binding.skippedCandidates.map(
+        ({ candidatePosition, failure }) => ({
+          candidatePosition,
+          message: failure.message,
+        }),
+      ),
+    ).toEqual([
+      {
+        candidatePosition: 1,
+        message: "Sample candidate could not start",
+      },
+      {
+        candidatePosition: 2,
+        message: expect.stringContaining(
+          "has no model slug 'sample-model-two'",
+        ),
+      },
+    ]);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-alias-exhausted",
+        message: expect.stringMatching(
+          /candidate 1 'Workbench Alpha'.*candidate 2 'Workbench Beta'/,
+        ),
+      }),
+    );
+    await composition.close();
+  });
+
   it("exhausts every candidate after each candidate fails before starting", async () => {
     const fixture = await prepare();
     const t3 = new SyntheticT3();

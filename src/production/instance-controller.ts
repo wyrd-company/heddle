@@ -14,6 +14,7 @@ import {
   HandoffRenderError,
   HandoffTemplateError,
   mechanicalChangeContextKey,
+  ProviderAliasUnusableError,
   SessionStartFailure,
   type SessionT3Client,
   type SessionTemplateAuthority,
@@ -323,22 +324,44 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       interactionMode: session.binding.interactionMode,
       runtimeMode: session.binding.runtimeMode,
     };
-    const candidates =
-      resolver.resolveCandidates === undefined
-        ? [
-            {
-              ...(await resolver.resolve(
-                session.binding.alias,
-                selectionInputs,
-              )),
-              candidatePosition: 1,
-              skippedCandidates: [],
-            },
-          ]
-        : await resolver.resolveCandidates(
-            session.binding.alias,
-            selectionInputs,
-          );
+    let candidates;
+    try {
+      candidates =
+        resolver.resolveCandidates === undefined
+          ? [
+              {
+                ...(await resolver.resolve(
+                  session.binding.alias,
+                  selectionInputs,
+                )),
+                candidatePosition: 1,
+                skippedCandidates: [],
+              },
+            ]
+          : await resolver.resolveCandidates(
+              session.binding.alias,
+              selectionInputs,
+            );
+    } catch (error) {
+      if (!(error instanceof ProviderAliasUnusableError)) throw error;
+      let skipped = [...session.binding.skippedCandidates];
+      if (
+        !skipped.some(
+          ({ candidatePosition }) =>
+            candidatePosition === session.binding.candidatePosition,
+        )
+      ) {
+        skipped.push(
+          skippedProviderCandidate(
+            session.binding,
+            this.#providerFailureDetail(session.instanceId, cause),
+          ),
+        );
+      }
+      skipped = mergeSkippedCandidates(skipped, error.skippedCandidates);
+      await this.#recordProviderExhaustion(task, session, skipped, error);
+      return;
+    }
     const configuredCurrent = candidates.find(
       ({ candidatePosition }) =>
         candidatePosition === session.binding.candidatePosition,
@@ -457,9 +480,18 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         `Session '${session.sessionKey}' has no owning production runtime`,
       );
     }
+    await this.#recordProviderExhaustion(task, session, skipped, cause);
+  }
+
+  async #recordProviderExhaustion(
+    task: BoardTask,
+    session: SessionRuntimeRecord,
+    skipped: readonly SkippedProviderCandidate[],
+    cause: unknown,
+  ): Promise<void> {
     const exhaustedBinding: ResolvedSessionBinding = {
       ...session.binding,
-      skippedCandidates: skipped,
+      skippedCandidates: [...skipped],
     };
     this.persistence.writeSessionRuntime({
       ...session,

@@ -71,6 +71,17 @@ export class ProviderSelectionError extends Error {
   }
 }
 
+export class ProviderAliasUnusableError extends ProviderSelectionError {
+  public constructor(
+    reason: ProviderSelectionReason,
+    message: string,
+    readonly skippedCandidates: readonly SkippedProviderCandidate[],
+  ) {
+    super(reason, message);
+    this.name = "ProviderAliasUnusableError";
+  }
+}
+
 export type ProviderSelectionInputs = {
   readonly interactionMode: string;
   readonly runtimeMode: T3RuntimeMode;
@@ -365,7 +376,7 @@ export class ProviderSelectionResolver {
     const reportedFailure =
       failures.find(({ reason }) => reason === "provider-not-ready") ??
       failures[0]!;
-    throw new ProviderSelectionError(
+    throw new ProviderAliasUnusableError(
       reportedFailure.reason,
       `Provider alias '${alias}' cannot be selected because every candidate is unusable: ${skipped
         .map(
@@ -373,6 +384,7 @@ export class ProviderSelectionResolver {
             `candidate ${candidatePosition} '${providerDisplayName}' model '${modelSlug}': ${failure.message}`,
         )
         .join("; ")}`,
+      skipped,
     );
   }
 
