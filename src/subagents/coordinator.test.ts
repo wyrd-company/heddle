@@ -103,7 +103,10 @@ const binding = (store: MemoryStore): WorkflowMcpSessionBinding => ({
   token: "parent-token",
 });
 
-const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
+const fixture = (
+  configuration = { maxDepth: 2, maxFanOut: 2 },
+  aliasBudget?: { usageLimit: number; used: number },
+) => {
   const store = new MemoryStore();
   const bootstrap = vi.fn(async () => ({
     correlationToken: "child-token",
@@ -147,7 +150,16 @@ const fixture = (configuration = { maxDepth: 2, maxFanOut: 2 }) => {
         subagents: configuration,
         usageWindowHours: 5,
       },
-      { readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }) },
+      {
+        readFiveHourWindow: async () => ({
+          used: aliasBudget?.used ?? 0,
+          windowStartedAt: 0,
+        }),
+      },
+      () => 1_000,
+      aliasBudget === undefined
+        ? {}
+        : { primary: { usageLimit: aliasBudget.usageLimit } },
     ),
     persistence: store,
     providerSelection: {
@@ -323,6 +335,24 @@ describe("SubagentCoordinator", () => {
     });
     expect(test.store.record.state.correlationTokens).toEqual({
       parent: "parent-token",
+    });
+    expect(test.bootstrap).not.toHaveBeenCalled();
+  });
+
+  it("applies the selected alias budget to a delegated provider", async () => {
+    const test = fixture(
+      { maxDepth: 2, maxFanOut: 2 },
+      { usageLimit: 40, used: 40 },
+    );
+
+    await expect(spawn(test.coordinator, test.store)).resolves.toMatchObject({
+      deferral: {
+        limit: 40,
+        provider: "sample-provider",
+        reason: "provider-usage-window",
+        used: 40,
+      },
+      kind: "deferred",
     });
     expect(test.bootstrap).not.toHaveBeenCalled();
   });

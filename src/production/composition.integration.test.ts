@@ -876,6 +876,68 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("applies the selected alias budget to scoped adjudication", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    const t3 = new SyntheticT3();
+    const usageReads: string[] = [];
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async (provider) => {
+          usageReads.push(provider);
+          return {
+            used: usageReads.length === 1 ? 0 : 40,
+            windowStartedAt: Date.now() - 1_000,
+          };
+        },
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+
+    await composition.escalation.escalate(
+      await new WorkflowMcpSessionResolver(composition.persistence).resolve(
+        token,
+      ),
+      {
+        threadId: "thread-17",
+        requestId: "request-one",
+        escalationId: "production-choice",
+        questions: [],
+      },
+    );
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+
+    expect(usageReads).toEqual(["codex", "codex"]);
+    expect(
+      t3.commands.filter(
+        (command) =>
+          command.type === "thread.create" &&
+          String(command.title).endsWith("· adjudication"),
+      ),
+    ).toHaveLength(0);
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause: expect.stringContaining("provider-usage-window"),
+        }),
+        kind: "escalation",
+      }),
+    );
+    await composition.close();
+  });
+
   it("retains startup catalog skips on a production adjudication binding", async () => {
     const fixture = await prepare();
     const t3 = new SyntheticT3();
