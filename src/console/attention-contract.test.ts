@@ -372,6 +372,71 @@ describe("console attention action contract", () => {
     expect(Object.hasOwn(parsed.answers, "__proto__")).toBe(true);
   });
 
+  it("applies one keyed answer to every repeated question occurrence", () => {
+    if (action.input.kind !== "questions")
+      throw new Error("questions expected");
+    const repeatedAction: ConsoleAttentionAction = {
+      ...action,
+      input: {
+        kind: "questions",
+        questions: [
+          {
+            ...action.input.questions[0]!,
+            options: [{ label: "Shared" }, { label: "Shared" }],
+          },
+          {
+            ...action.input.questions[0]!,
+            options: [{ label: "Shared" }, { label: "Different" }],
+          },
+        ],
+      },
+    };
+    const shared = {
+      selectedOptions: ["Shared"],
+      text: "",
+      reasoning: "Fits both occurrences.",
+    };
+
+    expect(
+      parseConsoleAttentionActionRequest(
+        {
+          answers: { "delivery-window": shared },
+          fingerprint: entry().fingerprint,
+        },
+        repeatedAction,
+      ).answers,
+    ).toEqual({ "delivery-window": shared });
+    expect(() =>
+      parseConsoleAttentionActionRequest(
+        {
+          answers: {
+            "delivery-window": {
+              ...shared,
+              selectedOptions: ["Different"],
+            },
+          },
+          fingerprint: entry().fingerprint,
+        },
+        repeatedAction,
+      ),
+    ).toThrow("does not name an offered option");
+    expect(() =>
+      parseConsoleAttentionActionRequest(
+        {
+          answers: {
+            "delivery-window": {
+              selectedOptions: [],
+              text: "A shared route",
+              reasoning: "Fits both occurrences.",
+            },
+          },
+          fingerprint: entry().fingerprint,
+        },
+        repeatedAction,
+      ),
+    ).not.toThrow();
+  });
+
   it.each([
     {},
     { unknown: { selectedOptions: [], text: "sample", reasoning: "Needed." } },

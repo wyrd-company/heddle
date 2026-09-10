@@ -719,7 +719,7 @@ const selectedAnswers = (questions, controls) => {
   const answers = Object.create(null);
   for (const question of questions) {
     const control = controls.find(({ questionId }) => questionId === question.id);
-    const selectedOptions = control.options.filter((input) => input.checked).map((input) => input.value);
+    const selectedOptions = [...new Set(control.options.filter((input) => input.checked).map((input) => input.value))];
     const answerText = control.answerText.value;
     const reasoning = control.reasoning.value;
     if ((selectedOptions.length > 0) === (answerText.trim().length > 0)) {
@@ -788,10 +788,13 @@ const createAttentionAction = (entry, action) => {
         input.name = entry.attentionId + ":" + action.actionId + ":" + question.id;
         input.value = option.label;
         input.addEventListener("change", () => {
-          if (!input.checked) return;
-          answerText.value = "";
-          if (!question.multiSelect) {
+          if (input.checked && !question.multiSelect) {
             for (const other of optionInputs) if (other !== input) other.checked = false;
+          }
+          const selected = new Set(optionInputs.filter((item) => item.checked).map((item) => item.value));
+          for (const peer of controls.filter(({ questionId }) => questionId === question.id)) {
+            peer.answerText.value = "";
+            for (const option of peer.options) option.checked = selected.has(option.value);
           }
         });
         const copy = document.createElement("span");
@@ -802,7 +805,14 @@ const createAttentionAction = (entry, action) => {
         optionInputs.push(input);
       }
       answerText.addEventListener("input", () => {
-        for (const input of optionInputs) input.checked = false;
+        for (const peer of controls.filter(({ questionId }) => questionId === question.id)) {
+          peer.answerText.value = answerText.value;
+          for (const input of peer.options) input.checked = false;
+        }
+      });
+      reasoning.addEventListener("input", () => {
+        for (const peer of controls.filter(({ questionId }) => questionId === question.id))
+          peer.reasoning.value = reasoning.value;
       });
       const textLabel = text("label", question.options.length > 0 ? "Or enter an answer" : "Answer");
       textLabel.append(answerText);

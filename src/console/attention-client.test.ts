@@ -378,6 +378,88 @@ describe("global console attention overlay", () => {
     },
   );
 
+  it("shares one keyed editor state across repeated question IDs", async () => {
+    const entry = createConsoleAttention({
+      actions: [
+        {
+          actionId: "answer",
+          label: "Answer",
+          contract: {
+            kind: "escalation.answer",
+            escalationId: "sample-repeat",
+            instanceId: "instance-11",
+            ownerSessionKey: "sample-session",
+          },
+          input: {
+            kind: "questions",
+            questions: [
+              {
+                id: "route",
+                question: "Choose the first route",
+                multiSelect: false,
+                options: [{ label: "First" }, { label: "Shared" }],
+              },
+              {
+                id: "route",
+                question: "Choose the second route",
+                multiSelect: false,
+                options: [{ label: "Shared" }, { label: "Second" }],
+              },
+            ],
+          },
+        },
+      ],
+      attentionId: "attention-repeat",
+      instanceId: "instance-11",
+      kind: "escalation",
+      message: "Repeated sample input needed",
+      scope: "task:11",
+      taskId: 11,
+    });
+    const harness = await clientHarness(
+      [rootTask, childTask],
+      undefined,
+      undefined,
+      undefined,
+      [entry],
+    );
+    const elements = harness.attentionElements();
+    expect(
+      elements
+        .filter(({ tagName }) => tagName === "legend")
+        .map(({ textContent }) => textContent),
+    ).toEqual(["Choose the first route", "Choose the second route"]);
+    const options = elements.filter(({ tagName }) => tagName === "input");
+    const textEditors = elements.filter(({ name }) => name === "route:text");
+    const reasoningEditors = elements.filter(
+      ({ name }) => name === "route:reasoning",
+    );
+    reasoningEditors[0]!.value = "Fits both occurrences.";
+    reasoningEditors[0]!.dispatch("input");
+    expect(reasoningEditors[1]!.value).toBe("Fits both occurrences.");
+    options[1]!.checked = true;
+    options[1]!.dispatch("change");
+    expect(options[2]!.checked).toBe(true);
+    expect(textEditors.every(({ value }) => value === "")).toBe(true);
+    elements
+      .find(({ className }) => className === "attention-action")!
+      .dispatch("click");
+
+    await vi.waitFor(() => expect(harness.attentionRequests).toHaveLength(1));
+    expect(
+      JSON.parse(String(harness.attentionRequests[0]?.options?.body)),
+    ).toEqual({
+      answers: {
+        route: {
+          selectedOptions: ["Shared"],
+          text: "",
+          reasoning: "Fits both occurrences.",
+        },
+      },
+      fingerprint: entry.fingerprint,
+    });
+  });
+
   it("links an originating production error to its incident lifecycle canvas", async () => {
     const entry = createConsoleAttention({
       actions: [],

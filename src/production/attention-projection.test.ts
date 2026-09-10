@@ -427,6 +427,7 @@ describe("production attention projection", () => {
         record("attention-escalation", {
           escalationId: "choice-one",
           instanceId: "task-41",
+          openedAt: "2030-01-01T00:00:00.000Z",
           ownerSessionKey: "session-one",
           questions: [
             {
@@ -442,7 +443,7 @@ describe("production attention projection", () => {
         }),
         [runtime],
       ),
-    ).toThrow("repeats option 'Same'");
+    ).not.toThrow();
     expect(() =>
       projectProductionAttention(
         record("attention-input", {
@@ -463,7 +464,7 @@ describe("production attention projection", () => {
         }),
         [runtime],
       ),
-    ).toThrow("repeats option 'Same'");
+    ).not.toThrow();
   });
 
   it("links recurring production attention to its latest admitted occurrence", () => {

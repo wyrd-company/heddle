@@ -59,21 +59,26 @@ describe.each([escalationQuestions, t3Questions])(
       ]);
     });
 
-    it("rejects missing options and repeated question IDs", () => {
+    it("rejects missing options", () => {
       expect(() =>
         project(
           [{ id: "reference", question: "Enter a reference" }],
           "sample-attention",
         ),
       ).toThrow("malformed options");
+    });
+
+    it("preserves repeated question IDs and option labels", () => {
       const question = {
-        id: "reference",
-        question: "Enter a reference",
-        options: [],
+        id: "route",
+        question: "Choose a route",
+        options: [{ label: "Shared" }, { label: "Shared" }],
       };
-      expect(() => project([question, question], "sample-attention")).toThrow(
-        "repeats question",
-      );
+
+      expect(project([question, question], "sample-attention")).toEqual([
+        { ...question, multiSelect: false },
+        { ...question, multiSelect: false },
+      ]);
     });
   },
 );

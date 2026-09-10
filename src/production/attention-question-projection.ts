@@ -57,7 +57,6 @@ const questions = (
   if (!Array.isArray(value)) {
     throw new Error(`Attention '${attentionId}' has no questions`);
   }
-  const questionIds = new Set<string>();
   return value.map((item) => {
     const question = record(item, attentionId, "questions");
     if (
@@ -67,16 +66,11 @@ const questions = (
       throw new Error(`Attention '${attentionId}' has malformed questions`);
     }
     const id = requiredAttentionString(question, "id", attentionId);
-    if (questionIds.has(id)) {
-      throw new Error(`Attention '${attentionId}' repeats question '${id}'`);
-    }
-    questionIds.add(id);
     const rawOptions = question["options"];
     if (!Array.isArray(rawOptions)) {
       throw new Error(`Attention '${attentionId}' has malformed options`);
     }
     const header = optionalString(question, "header", attentionId);
-    const optionLabels = new Set<string>();
     return {
       ...(header === undefined ? {} : { header }),
       id,
@@ -84,12 +78,6 @@ const questions = (
       options: rawOptions.map((item) => {
         const option = record(item, attentionId, "options");
         const label = requiredAttentionString(option, "label", attentionId);
-        if (optionLabels.has(label)) {
-          throw new Error(
-            `Attention '${attentionId}' repeats option '${label}'`,
-          );
-        }
-        optionLabels.add(label);
         const description = optionalString(option, "description", attentionId);
         return { ...(description === undefined ? {} : { description }), label };
       }),
