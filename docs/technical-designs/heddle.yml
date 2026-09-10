@@ -511,8 +511,8 @@ proposed-design:
     streamable-HTTP MCP server, the one integration surface every
     agent harness supports through ordinary configuration. The tool
     suite includes `advance` (disposition the current stage),
-    `get_task_context`, `report_blocked`, `escalate` (raise a
-    durable question), follow-up and finding creation, and a todo
+    `get_task_context`, `report_blocked`, `answer` (answer one
+    complete question set), follow-up and finding creation, and a todo
     suite (list, check, add) that replaces each harness's built-in
     todo tools, which are disabled per harness. The tool list is
     per-session: computed at bootstrap from the task and its stage's
@@ -640,17 +640,26 @@ proposed-design:
     second steer. The subagent service supplies this hook to the session observer;
     it does not poll T3 or decide liveness separately.
 
-    Escalation is an asynchronous durable question through the MCP suite's
-    `escalate` tool. It records the wait and returns its escalation identity
-    immediately. Each question is either a closed option set or a validated
-    value request. An answer retains its authoritative option or validated
-    value and may carry additional prose. The tool contract tells the caller
-    not to act on the question's subject until an answer turn arrives, to
-    continue unrelated work when possible, and never to create a watcher or
-    poll.
+    Agents ask through their harness question tool. The harness adapter records
+    each pending request as one durable escalation, preserving its request ID,
+    thread ID and question catalog. Questions carry an ID, prompt, optional
+    header, option labels and descriptions, and an optional multi-select flag
+    defaulting to false. Options have no minimum count. Every question accepts
+    either selected options or a text answer; a question with zero options
+    requires text.
+
+    The answer tool accepts one complete answer set keyed by question
+    ID. Every entry contains selectedOptions, text, and required reasoning.
+    Exactly one of nonempty selectedOptions or nonempty text supplies the
+    answer. Validation rejects missing or unknown question IDs, unknown options,
+    options for a question with none, multiple selections on a single-select
+    question, and absent reasoning. A multi-select question accepts one option.
+    Answerer prompts quote each question's ID, prompt, options, cardinality,
+    text alternative, and the answer tool contract.
 
     Answering authority begins with the parent session for a child escalation.
-    A top-level escalation creates a fresh adjudication session bound to that
+    A top-level escalation creates a fresh adjudication session when configured,
+    and otherwise routes to the operator. Adjudication is bound to that
     one escalation occurrence. It is not a task or lifecycle instance and owns
     no board status. Its provider comes from the operator's adjudication alias;
     its decide-versus-escalate boundary and one-turn limit come from an
@@ -681,9 +690,9 @@ proposed-design:
     response attempt whatever the scheduler cadence. A request still pending
     beyond the configured approval settlement bound, measured from the request
     the control plane recorded rather than from anything Heddle remembers,
-    abandons the adjudication and carries that cause into attention. A pending
-    user-input request suspends the sanctioned path entirely, because an open
-    question to the operator is itself outside the adjudicator's authority.
+    abandons the adjudication and carries that cause into attention. An answerer
+    asking its own question is awaiting that answer; its request follows the
+    same routing rule. Each answer releases one link of the chain.
     Every other approval request fails closed to the operator. An accepted
     answer
     records the selected model and required reasoning and follows the same
@@ -691,7 +700,7 @@ proposed-design:
     moves authority to the operator without trying another model and carries
     its cause and reasoning into attention and notification. Candidate fallback
     applies only while starting the configured alias. Alias exhaustion, invalid
-    answers, another-escalation attempts, input requests, and approval requests
+    answers, another-escalation answer attempts, and approval requests
     outside the sanctioned tool server fail closed to operator authority. A started adjudication remains authoritative
     until it answers or declines through its approved tool. Session failure,
     terminal exit, absence, and stalled execution use the normal session
@@ -704,22 +713,23 @@ proposed-design:
     back to the operator. The same answer predicate accepts an answer only from
     the current authority. Parent session authority receives the question by a
     steered turn; operator authority raises durable attention and Pushover
-    notification. Observation returns authority to the operator when its named
-    session completes without answering, fails, or becomes absent.
+    notification. A session that stops owing an answer receives its questions
+    again while the request remains pending. Its obligation ends when the
+    request is answered, withdrawn, or its asking session is gone. Session
+    errors follow the normal observation and escalation policy.
 
-    An accepted answer is durable before effects. Heddle first dispatches one
-    answer turn to the escalating session, then appends the question, answer,
-    optional prose, answering model when adjudicated, and named authority to the
+    An accepted answer is durable before effects. Heddle replies to the original
+    harness request on its recorded thread, quoting the request through its ID,
+    then appends the question, answer, per-answer reasoning,
+    answering model when adjudicated, and named authority to the
     task and, when present, its epic. The lifecycle console renders adjudicated
     answers with their model, selected values, and reasoning even though no
     operator attention was raised.
-    Stable command and message identities bind delivery to the escalation
+    Stable command identities bind delivery to the escalation
     occurrence. Replay can retry either unfinished effect without creating a
     second delivered turn. A completed delegated child keeps its parentage and
-    receives the answer on its own thread. An absent or failed delegated child
-    fails closed. When a top-level thread is unavailable, Heddle reactivates the
-    same stage occurrence with its stored session binding and dispatches the
-    answer to the replacement thread. Replay contains each settlement failure
+    receives the answer on its own thread. An absent or failed asking thread
+    cannot receive a reply intended for a different thread. Replay contains each settlement failure
     as durable production-error attention so other escalations, incident
     reconciliation, and session observation continue. A successful retry
     resolves that attention. Every driver requires successful workflow MCP
@@ -734,9 +744,9 @@ proposed-design:
     Once disposition is claimed, new escalations owned by that session or
     routed to it fail closed. Concurrent open and advance operations therefore
     produce one valid winner instead of a stopped session with a pending call.
-    Because escalation rides Heddle's MCP surface, it is uniform
-    across providers and independent of any harness's question
-    tool.
+    Answer completion is a durable operation, so observation distinguishes a
+    session that answered from one that still owes an answer. The observer
+    suppresses its direct user-input attention for a request owned by routing.
 
     Top-level routing composes one durable attention adapter and one Pushover
     adapter. Escalations, production failures, and session-observation
@@ -966,16 +976,15 @@ proposed-design:
     restart; the durable attention remains active while earlier passes contain
     the delivery error.
 
-    Harness-native question tools serve assistive tasks, where the
-    operator already works in T3's UI. T3 provider adapters map
+    Harness question tools serve every session. T3 provider adapters map
     those tools to pending-user-input state on the thread shell,
     answerable from the UI or over the dispatch API, and resolution
     is an event in thread history, so every watching client clears
     the prompt regardless of who answered. Question support is a T3 runtime
     capability, not a Heddle provider allowlist or selection precondition.
-    Heddle dispositions any pending
-    question before stopping a session, because a stop settles
-    pending questions with empty answers.
+    Heddle rejects stop while a session owes a pending answer. Adjudication has
+    no execution timeout and stops only after its approved tool completes the
+    adjudication. Session errors use normal escalation policy.
   observation: >
     Two channels report on running work, split by who holds the truth.
     Semantic outcomes — the verdict of a review, the completion of an
@@ -987,12 +996,19 @@ proposed-design:
     has the durable `awaiting_answer` phase. It raises no ended or stalled
     attention and clears earlier liveness attention. An absent or failed thread
     remains genuinely dead and follows the ordinary attention and incident path.
-    A session that ends, fails, or stalls without advancing is a
-    designed-for transition: after its threshold, the instance moves
-    to an attention state and notifies the operator. Pending T3
+    A session that is not turning and has not advanced is poked to finish its
+    work or advance. The phase controls this decision: running and starting
+    sessions are not poked based on the stalled liveness bucket. A session
+    owing answers receives its pending question sets again; an asker waiting
+    on its own question remains blocked until its answer arrives. Pokes have
+    durable occurrence identities and resume after restart without duplication.
+    Configurable liveness thresholds retain the ordinary session-error path.
+    Pending T3
     approvals and user-input requests surface through the same poll. Heddle
     folds request and resolution activities by request ID and creates one
-    durable attention record for each unresolved request. Its actions retain
+    durable attention record for each unresolved approval. Question routing owns
+    each unresolved user-input request and creates attention only at the operator
+    tier. Its actions retain
     the exact T3 request ID. Approval attention uses the optional bounded ACP
     tool title from T3 when present and otherwise keeps the generic message; it
     does not infer display metadata from request details, arguments, command
@@ -1156,10 +1172,12 @@ proposed-design:
 
     Production assembles this overlay from the unresolved durable attention
     queue and canonical reconciler runtime identity. Runtime records provide the
-    task scope. Escalation options retain their recorded IDs. Approval actions
+    task scope. Question options retain their recorded labels. Approval actions
     target the recorded request, session, and thread. User-input questions map
     the recorded T3 question to the console prompt, preserve optional headers and
-    option metadata, and submit option labels. The action port delegates to the
+    option metadata, and submit option labels. Every question offers options and
+    a text box. Typing clears selections and selecting clears text. Submission
+    requires an answer and retains reasoning for every question. The action port delegates to the
     existing escalation coordinator and session observer; the viewer owns no
     disposition or queue state. Pushover task links use the canonical split
     lifecycle route above. Their task target comes from an explicit attention

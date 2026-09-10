@@ -637,7 +637,7 @@ Your todo list is prepopulated. Use the Heddle MCP todo tools as its write path;
 
 Use `advance` to disposition the current stage. The operation is idempotent for this stage, so a retry cannot transition it twice.
 
-Use `escalate` for a question that requires attention outside this session. It returns after Heddle records the wait. Do not act on the question's subject until Heddle dispatches the answer as a later turn. Continue unrelated work when possible; otherwise end the turn. Never create a watcher or poll for the answer.
+Use your harness question tool when you need an answer. Heddle routes the complete question set to your parent, a configured adjudicator, or the operator. Reply to question sets assigned to you through Heddle's `answer` tool, with reasoning for every answer. Finish the work or advance; do not stop while you owe an answer.
 ```
 
 Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
@@ -730,10 +730,9 @@ fails at the T3 boundary.
 
 The workflow MCP handler negotiates protocol 2025-11-25 or older. It advertises
 no Tasks capability and returns ordinary tool results, not
-`InputRequiredResult`. The
-Heddle `escalate` tool remains available through this MCP registration for every
-provider. It is independent from a provider's native question tool, which T3
-owns and records as user-input state.
+`InputRequiredResult`. Agents ask through their harness question tool, which T3
+records as user-input state. Heddle routes each recorded request and exposes one
+`answer` tool for a complete answer set.
 
 The deployed `/api/events` feed is not a durable-state export. It omits the
 payloads of `instance:created` and `instance:updated` records and structurally
@@ -870,8 +869,8 @@ to the operator and includes the original questions, model, cause, and reasoning
 in console attention and Pushover notification.
 
 Provider candidates apply only to session start. If every candidate fails, or
-if the session requests another turn or operator action, answers outside the
-offered values, or attempts another escalation occurrence, Heddle moves
+if the session requests an unauthorized action, submits invalid answers, or
+attempts to answer another escalation occurrence, Heddle moves
 authority to the operator. A started adjudication has no adjudication-specific
 wall-clock timeout. It remains authoritative until it answers or declines
 through its approved tool. Session failure, terminal exit, absence, and stalled
@@ -885,22 +884,22 @@ or authority failure.
 
 Heddle can move authority to another named session or return it to the operator.
 The current authority answers through the same guarded answer contract. A
-question can require one offered option or a value with declared minimum and
-maximum lengths. Optional prose adds context but never replaces the
-authoritative option or validated value. If a named parent authority session
-completes without an answer, fails, or becomes absent, the observation pass
-returns authority to the operator and routes the escalation attention.
+question offers zero or more options and accepts either selected options or
+text. The optional multi-select flag defaults to false. Each answer is keyed by
+question ID and contains selectedOptions, text, and required reasoning. Exactly
+one of selections or text provides the answer. Every question must be answered;
+unknown questions or options and excess single-select answers are rejected.
+An answerer that stops owing an answer receives its questions again. An answerer
+asking its own question waits while the same routing rule handles that question.
 
-Heddle records an accepted answer before effects. It dispatches one answer turn
-to the escalating session with command and message identities derived from the
-escalation occurrence, then appends the question, answer, optional prose, and
+Heddle records an accepted answer before effects. It replies to the original
+T3 request on its recorded thread with a command identity derived from the
+escalation occurrence, then appends the question, answer, per-answer reasoning, and
 named answering authority to the task and, for an epic child, its epic. Restart
 replays either unfinished effect with the same identity and never redelivers a
-completed turn. A completed delegated child receives the answer on its own
-thread. An absent or failed delegated child fails closed without replacing its
-parent's stage. If a top-level thread is absent, completed, or failed, Heddle
-reactivates the same stage occurrence with its stored session binding and
-delivers the answer to the replacement thread.
+completed reply. An absent or failed asking thread cannot receive a reply on a
+replacement thread. Answer obligations clear when the request is answered,
+withdrawn, or its asking session is gone.
 
 One failed answer settlement raises
 `production:escalation-settlement-failed:<escalation-attention-id>` and does not
@@ -911,6 +910,12 @@ A present, nonfailed session thread with a pending escalation has the
 `awaiting_answer` phase. It raises no ended or stalled attention and admits no
 incident while the wait remains. An absent or failed thread is still a genuine
 dead session and follows normal attention and incident admission.
+
+A session that is not turning and has not advanced is poked to finish its work
+or advance. Running and starting phases are not poked based on the stalled
+liveness bucket. A session owing an answer receives the pending question set
+again and cannot advance or stop until its obligation clears. Adjudication has
+no execution timeout and completes through its approved answer or decline tool.
 
 An accepted disposition performs its canonical effect before marking the entry
 resolved. The resolved record remains durable so the same stable ID cannot raise
