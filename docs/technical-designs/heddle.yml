@@ -243,9 +243,10 @@ proposed-design:
     single-object form is a one-candidate list with the same meaning.
     Display-name and model-slug matching are exact and case-sensitive. An
     absent display name, no matching name, more than one matching name, an
-    unavailable or disabled provider, or an absent model makes the configured
-    catalog invalid. Heddle never infers a candidate from driver kind or
-    capability discovery and never selects a provider outside the alias list.
+    unavailable or disabled provider, or an absent model makes that candidate
+    unusable. The alias is unusable only when every configured candidate is
+    unusable. Heddle never infers a candidate from driver kind or capability
+    discovery and never selects a provider outside the alias list.
 
     Heddle reads the authenticated T3 provider catalog through the existing
     `server.getConfig` WebSocket RPC with the `orchestration:read` scope. Using
@@ -272,20 +273,22 @@ proposed-design:
     configuration payloads do not enter the operator-safe selection error.
 
     Configuration syntax is validated before composition. Startup also
-    resolves every candidate of every configured alias, the default alias, and
-    every pacing-budget alias against one catalog snapshot before it binds the
-    server. New stage activations, new delegated sessions, and `list_providers`
-    read a fresh snapshot. A catalog read or selection failure names one safe
-    reason and performs no worktree, registration, thread, or dispatch
+    resolves every configured alias, the default alias, and every pacing-budget
+    alias against one catalog snapshot before it binds the server. Resolution
+    evaluates candidates in declared order, retains each unusable candidate and
+    its safe failure, and selects the first usable candidate. New stage
+    activations, new delegated sessions, and `list_providers` read a fresh
+    snapshot. A catalog read failure or an alias with no usable candidate names
+    safe failures and performs no worktree, registration, thread, or dispatch
     effect.
     The stable selection reasons are `provider-catalog-unavailable`,
     `provider-alias-not-allowed`, `provider-name-not-found`,
     `provider-name-ambiguous`, `provider-not-ready`, `provider-unavailable`, and
     `provider-model-not-found`. A provider is selectable only when T3 reports
     it available, enabled, installed, and `ready`, and the selected model slug
-    is present. Configuration and catalog failures do not advance the candidate
-    list. A first candidate that is permanently misconfigured prevents startup
-    instead of hiding behind a later candidate.
+    is present. A candidate configuration or catalog failure advances the
+    ordered list. An unreadable provider catalog prevents selection because no
+    candidate can be evaluated.
 
     A task's optional `provider-alias` front-matter value is a map from stage ID
     to provider alias. For the current stage, that map's own entry overrides the
@@ -310,11 +313,12 @@ proposed-design:
     blob hash. Initial-route planning, lifecycle execution, and recovery use
     this same snapshot even if the source ref moves. Before the lifecycle
     starts any mechanical effect or external session effect, Heddle durably
-    stores a provisional binding for the first candidate. It contains the
-    session and occurrence identity, alias, candidate position, display-name
-    snapshot, provider instance ID, driver kind, observed provider version,
-    model slug, runtime mode, interaction mode, and structured failure causes
-    for skipped candidates. It contains no credential or provider setting. If
+    stores a provisional binding for the first usable candidate. It contains
+    the session and occurrence identity, alias, candidate position,
+    display-name snapshot, provider instance ID, driver kind, observed provider
+    version, model slug, runtime mode, interaction mode, and structured failure
+    causes for skipped candidates, including catalog-selection failures before
+    the selected position. It contains no credential or provider setting. If
     any valid initial lifecycle landing identifies a wait stage, every valid
     initial landing must identify that same wait stage so the stored occurrence
     is authoritative for execution. Heddle
@@ -355,8 +359,8 @@ proposed-design:
 
     Pacing requests use the provider instance ID of the candidate that actually
     bound. Configuration names pacing budgets by allowed alias for operator
-    readability, then startup applies a budget to every candidate instance and
-    collapses them by instance ID. Aliases for one instance share
+    readability, then startup applies a budget to every usable candidate
+    instance and collapses them by instance ID. Aliases for one instance share
     one budget, and conflicting limits for aliases that resolve to the same
     instance are invalid. An alias cannot create capacity by renaming an
     instance. Provider usage executables receive the provider instance ID, not
