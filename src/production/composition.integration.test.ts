@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   composeSystemPrompt,
+  ProviderSelectionResolver,
   renderStageHandoff,
 } from "../control-plane/index.js";
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
@@ -869,6 +870,59 @@ describe("production composition", () => {
     expect(
       composition.attention.list().filter(({ kind }) => kind === "escalation"),
     ).toHaveLength(1);
+    await composition.close();
+  });
+
+  it("retains startup catalog skips on a production adjudication binding", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    configureAdjudication(fixture);
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const startup = await new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    ).resolveStartup({
+      defaultAlias: fixture.configuration.session.defaultProviderAlias,
+      interactionMode: fixture.configuration.session.interactionMode,
+      providerBudgets: {},
+      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
+    });
+    fixture.configuration.session.defaultSelection = startup.defaultSelection;
+    fixture.configuration.session.resolvedSelections = [
+      ...startup.candidates.values(),
+    ].flat();
+    fixture.configuration.pacing.defaultProvider =
+      startup.defaultSelection.providerInstanceId;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    const { adjudication } = await openProductionEscalation(composition);
+
+    expect(adjudication.binding).toMatchObject({
+      candidatePosition: 2,
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: expect.stringContaining(
+              "not available, enabled, installed, and ready",
+            ),
+          }),
+          providerDisplayName: "Workbench Alpha",
+        }),
+      ],
+    });
     await composition.close();
   });
 
