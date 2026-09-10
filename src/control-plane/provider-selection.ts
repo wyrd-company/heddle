@@ -100,6 +100,7 @@ export type ResolvedProviderSelection = {
 
 export type ResolvedProviderCandidateSelection = ResolvedProviderSelection & {
   readonly candidatePosition: number;
+  readonly catalogFailures: readonly SkippedProviderCandidate[];
   readonly skippedCandidates: readonly SkippedProviderCandidate[];
 };
 
@@ -144,10 +145,12 @@ const providerSelectionOnly = (
 ): ResolvedProviderSelection => {
   const {
     candidatePosition: _candidatePosition,
+    catalogFailures: _catalogFailures,
     skippedCandidates: _skippedCandidates,
     ...selection
   } = candidate;
   void _candidatePosition;
+  void _catalogFailures;
   void _skippedCandidates;
   return selection;
 };
@@ -231,8 +234,14 @@ export class ProviderSelectionResolver {
           `Provider alias '${alias}' has no resolved startup selection`,
         );
       }
+      const configured = this.#aliases.get(alias)![0]!;
       try {
-        const current = this.resolveFromCatalog(catalog, alias, inputs);
+        const current = this.#resolveCandidateFromCatalog(
+          catalog,
+          alias,
+          configured,
+          inputs,
+        );
         return {
           alias,
           driverKind: current.driverKind,
@@ -249,11 +258,32 @@ export class ProviderSelectionResolver {
         ) {
           throw error;
         }
+        const providers = catalog.filter(
+          ({ displayName }) => displayName === configured.providerDisplayName,
+        );
+        const provider = providers.length === 1 ? providers[0] : undefined;
+        const model = provider?.models.find(
+          ({ slug }) => slug === configured.model,
+        );
+        const startupMatchesConfigured =
+          startup.providerDisplayName === configured.providerDisplayName &&
+          startup.model.slug === configured.model;
         return {
           alias,
-          driverKind: startup.driverKind,
-          model: { ...startup.model },
-          providerDisplayName: startup.providerDisplayName,
+          driverKind:
+            provider?.driverKind ??
+            (startupMatchesConfigured ? startup.driverKind : "unknown"),
+          model:
+            model === undefined
+              ? startupMatchesConfigured
+                ? { ...startup.model }
+                : {
+                    isCustom: false,
+                    name: configured.model,
+                    slug: configured.model,
+                  }
+              : { ...model },
+          providerDisplayName: configured.providerDisplayName,
           reason: error.reason,
           selectable: false,
         } satisfies ProviderAliasAvailability;
@@ -296,63 +326,12 @@ export class ProviderSelectionResolver {
       const candidatePosition = index + 1;
       let selection: ResolvedProviderSelection;
       try {
-        const providers = catalog.filter(
-          ({ displayName }) => displayName === configured.providerDisplayName,
-        );
-        if (providers.length === 0) {
-          throw selectionError(
-            "provider-name-not-found",
-            alias,
-            `T3 has no provider named '${configured.providerDisplayName}'`,
-          );
-        }
-        if (providers.length > 1) {
-          throw selectionError(
-            "provider-name-ambiguous",
-            alias,
-            `T3 has more than one provider named '${configured.providerDisplayName}'`,
-          );
-        }
-        const provider = providers[0]!;
-        if (provider.enabled && provider.state === "warning") {
-          throw selectionError(
-            "provider-not-ready",
-            alias,
-            `T3 provider '${configured.providerDisplayName}' has not finished discovery`,
-          );
-        }
-        if (
-          provider.availability !== "available" ||
-          !provider.enabled ||
-          !provider.installed ||
-          provider.state !== "ready"
-        ) {
-          throw selectionError(
-            "provider-unavailable",
-            alias,
-            `T3 provider '${configured.providerDisplayName}' is not available, enabled, installed, and ready`,
-          );
-        }
-        const model = provider.models.find(
-          ({ slug }) => slug === configured.model,
-        );
-        if (model === undefined) {
-          throw selectionError(
-            "provider-model-not-found",
-            alias,
-            `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
-          );
-        }
-        selection = {
+        selection = this.#resolveCandidateFromCatalog(
+          catalog,
           alias,
-          driverKind: provider.driverKind,
-          interactionMode: inputs.interactionMode,
-          model: { ...model },
-          observedCliVersion: provider.observedCliVersion,
-          providerDisplayName: configured.providerDisplayName,
-          providerInstanceId: provider.instanceId,
-          runtimeMode: inputs.runtimeMode,
-        };
+          configured,
+          inputs,
+        );
       } catch (error) {
         if (!(error instanceof ProviderSelectionError)) throw error;
         failures.push(error);
@@ -367,13 +346,22 @@ export class ProviderSelectionResolver {
       resolved.push({
         ...selection,
         candidatePosition,
+        catalogFailures: [],
         skippedCandidates: skipped.map((candidate) => ({
           ...candidate,
           failure: { ...candidate.failure },
         })),
       });
     });
-    if (resolved.length > 0) return resolved;
+    if (resolved.length > 0) {
+      return resolved.map((selection) => ({
+        ...selection,
+        catalogFailures: skipped.map((candidate) => ({
+          ...candidate,
+          failure: { ...candidate.failure },
+        })),
+      }));
+    }
     const reportedFailure =
       failures.find(({ reason }) => reason === "provider-not-ready") ??
       failures[0]!;
@@ -387,6 +375,69 @@ export class ProviderSelectionResolver {
         .join("; ")}`,
       skipped,
     );
+  }
+
+  #resolveCandidateFromCatalog(
+    catalog: T3ProviderCatalog,
+    alias: string,
+    configured: ProviderAliasCandidateConfiguration,
+    inputs: ProviderSelectionInputs,
+  ): ResolvedProviderSelection {
+    const providers = catalog.filter(
+      ({ displayName }) => displayName === configured.providerDisplayName,
+    );
+    if (providers.length === 0) {
+      throw selectionError(
+        "provider-name-not-found",
+        alias,
+        `T3 has no provider named '${configured.providerDisplayName}'`,
+      );
+    }
+    if (providers.length > 1) {
+      throw selectionError(
+        "provider-name-ambiguous",
+        alias,
+        `T3 has more than one provider named '${configured.providerDisplayName}'`,
+      );
+    }
+    const provider = providers[0]!;
+    if (provider.enabled && provider.state === "warning") {
+      throw selectionError(
+        "provider-not-ready",
+        alias,
+        `T3 provider '${configured.providerDisplayName}' has not finished discovery`,
+      );
+    }
+    if (
+      provider.availability !== "available" ||
+      !provider.enabled ||
+      !provider.installed ||
+      provider.state !== "ready"
+    ) {
+      throw selectionError(
+        "provider-unavailable",
+        alias,
+        `T3 provider '${configured.providerDisplayName}' is not available, enabled, installed, and ready`,
+      );
+    }
+    const model = provider.models.find(({ slug }) => slug === configured.model);
+    if (model === undefined) {
+      throw selectionError(
+        "provider-model-not-found",
+        alias,
+        `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
+      );
+    }
+    return {
+      alias,
+      driverKind: provider.driverKind,
+      interactionMode: inputs.interactionMode,
+      model: { ...model },
+      observedCliVersion: provider.observedCliVersion,
+      providerDisplayName: configured.providerDisplayName,
+      providerInstanceId: provider.instanceId,
+      runtimeMode: inputs.runtimeMode,
+    };
   }
 
   public async resolveStartup(
@@ -416,15 +467,28 @@ export class ProviderSelectionResolver {
       const selections =
         candidates.get(alias) ??
         this.resolveCandidatesFromCatalog(catalog, alias, inputs);
-      for (const selection of selections) {
-        const prior = providerBudgets.get(selection.providerInstanceId);
+      const configuredCandidates = this.#aliases.get(alias);
+      if (configuredCandidates === undefined) {
+        this.resolveCandidatesFromCatalog(catalog, alias, inputs);
+        throw new Error("unreachable");
+      }
+      const candidateProviderInstanceIds = new Set([
+        ...selections.map(({ providerInstanceId }) => providerInstanceId),
+        ...configuredCandidates.flatMap(({ providerDisplayName }) =>
+          catalog
+            .filter(({ displayName }) => displayName === providerDisplayName)
+            .map(({ instanceId }) => instanceId),
+        ),
+      ]);
+      for (const providerInstanceId of candidateProviderInstanceIds) {
+        const prior = providerBudgets.get(providerInstanceId);
         if (prior !== undefined && prior.usageLimit !== budget.usageLimit) {
           throw new TypeError(
-            `Provider aliases '${budgetAliases.get(selection.providerInstanceId)}' and '${alias}' select provider instance '${selection.providerInstanceId}' with conflicting pacing limits`,
+            `Provider aliases '${budgetAliases.get(providerInstanceId)}' and '${alias}' select provider instance '${providerInstanceId}' with conflicting pacing limits`,
           );
         }
-        providerBudgets.set(selection.providerInstanceId, { ...budget });
-        budgetAliases.set(selection.providerInstanceId, alias);
+        providerBudgets.set(providerInstanceId, { ...budget });
+        budgetAliases.set(providerInstanceId, alias);
       }
     }
     return {

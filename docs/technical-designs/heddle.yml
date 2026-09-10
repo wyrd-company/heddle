@@ -278,7 +278,9 @@ proposed-design:
     evaluates candidates in declared order, retains each unusable candidate and
     its safe failure, and selects the first usable candidate. New stage
     activations, new delegated sessions, and `list_providers` read a fresh
-    snapshot. A catalog read failure or an alias with no usable candidate names
+    snapshot. `list_providers` continues to project the first configured
+    candidate and reports its current safe failure instead of projecting a
+    fallback candidate. A catalog read failure or an alias with no usable candidate names
     safe failures and performs no worktree, registration, thread, or dispatch
     effect.
     The stable selection reasons are `provider-catalog-unavailable`,
@@ -361,15 +363,16 @@ proposed-design:
     instance ID of its current first usable candidate. Configuration names
     pacing budgets by allowed alias for operator readability. Startup retains
     each alias budget independently of candidate usability and also collapses
-    currently usable candidates by provider instance ID. A fresh catalog read
+    every configured candidate present in the catalog by provider instance ID.
+    A fresh catalog read
     can therefore recover a candidate without creating unbudgeted capacity: the
     alias supplies the configured limit and the provider usage executable reads
     the recovered provider instance. Heddle refuses dispatch when the selection
     changes between pacing and binding so an unpaced candidate cannot be
-    substituted. Aliases for one startup-resolved instance share one budget,
-    and conflicting limits for aliases that resolve to that instance are
-    invalid. Provider usage executables receive the provider instance ID, not
-    an alias, display name, or driver kind.
+    substituted. Aliases whose candidates overlap on one catalog instance
+    share one budget, and conflicting limits are invalid even when the shared
+    instance is unavailable at startup. Provider usage executables receive the
+    provider instance ID, not an alias, display name, or driver kind.
   agent-names: >
     Agent names are organization blueprint data. YAML artifacts under the
     organization repository's `themes/` directory use their filename stem as

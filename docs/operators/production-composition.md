@@ -261,9 +261,10 @@ fresh catalog snapshot. Selection failures use one of these safe reasons:
 `provider-catalog-unavailable`, `provider-alias-not-allowed`,
 `provider-name-not-found`, `provider-name-ambiguous`,
 `provider-not-ready`, `provider-unavailable`, or `provider-model-not-found`.
-These candidate configuration and catalog failures advance to the next
-candidate in declared order. An unreadable catalog prevents selection because
-no candidate can be evaluated.
+For new session selection, these candidate configuration and catalog failures
+advance to the next candidate in declared order. `list_providers` reports the
+first configured candidate's failure without advancing its projection. An
+unreadable catalog prevents selection because no candidate can be evaluated.
 
 Fallback also continues when T3 or its harness fails before the initial turn
 starts. A candidate that passes catalog validation starts on a distinct thread.
@@ -552,10 +553,11 @@ provider instance. The provider-usage source reads the actual provider
 instance, while the alias supplies its configured limit. A catalog change
 between pacing and session binding cannot substitute an unpaced provider; the
 dispatch stops with task-reconciliation attention. All aliases for one instance
-consume the same usage and concurrent-session capacity. If two aliases whose startup-usable candidate
-lists overlap on one instance declare different limits, configuration is
-invalid. Omitting a second alias does not give that alias an unbudgeted route to
-an instance that received a startup-resolved budget.
+consume the same usage and concurrent-session capacity. If two aliases whose
+candidate lists overlap on one catalog instance declare different limits,
+configuration is invalid even when that instance is unavailable at startup.
+Omitting a second alias does not give that alias an unbudgeted route to the
+instance.
 
 An in-progress epic gets one T3 project titled
 `{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares

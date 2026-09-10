@@ -78,6 +78,7 @@ export const resolveStageSessionCandidates = async (
           {
             ...(await resolver.resolve(alias, inputs)),
             candidatePosition: 1,
+            catalogFailures: [],
             skippedCandidates: [],
           },
         ]
@@ -126,6 +127,7 @@ export class StartupProviderSelectionResolver implements StageProviderSelectionR
         {
           ...(await this.resolve(alias, inputs)),
           candidatePosition: 1,
+          catalogFailures: [],
           skippedCandidates: [],
         },
       ];
@@ -137,6 +139,7 @@ export class StartupProviderSelectionResolver implements StageProviderSelectionR
         ...selection,
         ...inputs,
         candidatePosition: candidate.candidatePosition ?? index + 1,
+        catalogFailures: candidate.catalogFailures ?? [],
         skippedCandidates: candidate.skippedCandidates ?? [],
       };
     });
