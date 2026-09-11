@@ -158,9 +158,11 @@ const fixture = (
   let successorUsed = fallbackSuccessorUsed;
   const onProviderExhaustion = vi.fn(async () => undefined);
   const prepareSession = vi.fn(
-    async ({ identity, model, resolvedBinding }: Parameters<
-      SubagentCoordinatorOptions["prepareSession"]
-    >[0]) => ({
+    async ({
+      identity,
+      model,
+      resolvedBinding,
+    }: Parameters<SubagentCoordinatorOptions["prepareSession"]>[0]) => ({
       binding:
         resolvedBinding ??
         resolvedSessionBindingFixture({
@@ -627,10 +629,7 @@ describe("SubagentCoordinator", () => {
     );
     expect(
       test.bootstrap.mock.calls.map(([call]) => call.modelSelection.model),
-    ).toEqual([
-      "sample-model-one",
-      "sample-model-two",
-    ]);
+    ).toEqual(["sample-model-one", "sample-model-two"]);
   });
 
   it("returns structured delegated exhaustion after every start candidate fails", async () => {

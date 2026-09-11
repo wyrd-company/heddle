@@ -410,7 +410,6 @@ describe("renderStageHandoff", () => {
       ),
     ).toThrow("Handoff template body contains the correlation token");
   });
-
 });
 
 describe("GitHandoffTemplateStore", () => {

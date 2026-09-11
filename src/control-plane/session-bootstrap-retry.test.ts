@@ -799,9 +799,7 @@ describe("stage session cold retry guards", () => {
     await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
       /stop after durable render/,
     );
-    const stored = globalThis.structuredClone(
-      memory.record.state.handoffs[0]!,
-    );
+    const stored = globalThis.structuredClone(memory.record.state.handoffs[0]!);
     const token = memory.record.state.correlationTokens[input.sessionKey];
 
     const replay = await bootstrapStageSession(
@@ -893,9 +891,9 @@ describe("stage session cold retry guards", () => {
         dependencies,
       ),
     ).resolves.toMatchObject({ renderedHandoff: expect.any(String) });
-    expect(memory.record.state.handoffs[0]).toMatchObject(
-      { renderedHandoffAuthentication: legacyAuthentication },
-    );
+    expect(memory.record.state.handoffs[0]).toMatchObject({
+      renderedHandoffAuthentication: legacyAuthentication,
+    });
   });
 
   it("assembles the handoff from the todo state committed at its CAS version", async () => {
