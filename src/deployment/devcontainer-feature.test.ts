@@ -303,6 +303,34 @@ describe("Heddle devcontainer feature", () => {
       validate(configuration),
       `deployment qualification config violates the production schema: ${JSON.stringify(validate.errors)}`,
     ).toBe(true);
+
+    const themeFixture = qualification.match(
+      /cat >"\$\{config_directory\}\/blueprints\/themes\/sample-team\.yml" <<'EOF'\n(?<yaml>[\s\S]*?)\nEOF/u,
+    )?.groups?.["yaml"];
+    expect(
+      themeFixture,
+      "deployment qualification agent-name theme fixture is missing",
+    ).toBeDefined();
+    const themeSchema = JSON.parse(
+      await readFile("schemas/agent-name-theme.json", "utf8"),
+    );
+    const validateTheme = new Ajv2020({
+      allErrors: true,
+      strict: false,
+    }).compile(themeSchema);
+    expect(
+      validateTheme(parse(themeFixture!)),
+      `deployment qualification theme violates the agent-name theme schema: ${JSON.stringify(validateTheme.errors)}`,
+    ).toBe(true);
+
+    const fixturePreflight = qualification.indexOf(
+      "await themeCatalog.validateCurrent();",
+    );
+    const packageGate = qualification.indexOf(
+      'task -d "${repository}" deployment:package',
+    );
+    expect(fixturePreflight).toBeGreaterThan(-1);
+    expect(fixturePreflight).toBeLessThan(packageGate);
   });
 
   it("routes every qualification container removal through verified identity", async () => {

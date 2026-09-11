@@ -133,9 +133,21 @@ git -C "${config_directory}/blueprints" remote set-url origin ../blueprints-orig
 git -C "${config_directory}/blueprints" config user.name "Qualification Fixture"
 git -C "${config_directory}/blueprints" config user.email "fixture@example.invalid"
 install -d -m 0755 "${config_directory}/blueprints/blueprints"
+install -d -m 0755 "${config_directory}/blueprints/themes"
 printf '# Qualification blueprint repository\n' \
     >"${config_directory}/blueprints/README.md"
-git -C "${config_directory}/blueprints" add -- README.md
+cat >"${config_directory}/blueprints/themes/sample-team.yml" <<'EOF'
+$schema: https://wyrd.company/heddle/agent-name-theme.schema.json
+relationships:
+  implements: heddle
+kind: team
+leader: sample-lead
+companions: [sample-companion]
+allies: [sample-ally]
+antagonists: [sample-antagonist]
+neutrals: [sample-neutral]
+EOF
+git -C "${config_directory}/blueprints" add -- README.md themes
 git -C "${config_directory}/blueprints" commit -m "Initialize qualification repository" >/dev/null
 git -C "${config_directory}/blueprints" push --set-upstream origin main >/dev/null
 
@@ -209,6 +221,16 @@ t3:
 EOF
 sed -i "s/T3_MOCK_PORT/${t3_mock_port}/" "${config_directory}/config.yml"
 chmod 0600 "${config_directory}/config.yml"
+node --input-type=module - "${config_directory}" <<'EOF'
+import { GitAgentNameThemeCatalog } from "./dist/agent-names/index.js";
+import { loadDeploymentConfiguration } from "./dist/deployment/configuration.js";
+
+const loaded = await loadDeploymentConfiguration(process.argv[2]);
+const themeCatalog = new GitAgentNameThemeCatalog(
+  loaded.blueprintsRepositoryRoot,
+);
+await themeCatalog.validateCurrent();
+EOF
 
 assert_head() {
     local observed
