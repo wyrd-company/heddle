@@ -18,7 +18,9 @@ import { join } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
+import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 const featureDirectory = ".devcontainer/features/heddle";
 const execute = promisify(execFile);
@@ -270,6 +272,37 @@ describe("Heddle devcontainer feature", () => {
     expect(qualification).toContain(
       "dist/control-plane/t3-control-plane-client.js",
     );
+  });
+
+  it("keeps the deployment qualification fixture aligned with the production schema", async () => {
+    const qualification = await readFile(
+      "scripts/deployment/qualify-feature.sh",
+      "utf8",
+    );
+    const fixture = qualification.match(
+      /cat >"\$\{config_directory\}\/config\.yml" <<'EOF'\n(?<yaml>[\s\S]*?)\nEOF/u,
+    )?.groups?.["yaml"];
+    expect(
+      fixture,
+      "deployment qualification config fixture is missing",
+    ).toBeDefined();
+
+    const configuration = parse(
+      fixture!.replace("T3_MOCK_PORT", "3999"),
+    ) as object;
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+
+    expect(
+      validate(configuration),
+      `deployment qualification config violates the production schema: ${JSON.stringify(validate.errors)}`,
+    ).toBe(true);
   });
 
   it("routes every qualification container removal through verified identity", async () => {

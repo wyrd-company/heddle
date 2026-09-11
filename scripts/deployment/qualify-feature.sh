@@ -158,6 +158,13 @@ adHocProject:
   workspaceRoot: /workspaces/heddle
 boardDirectory: /workspaces/kanban
 cadenceMilliseconds: 60000
+incident:
+  approvalSeverityThreshold: high
+  failureThreshold: 3
+  githubIssueRepository: sample-owner/sample-repository
+  immediateEscalationCodes: []
+  retryDelayMilliseconds: 60000
+  workspaceRoot: /workspaces/heddle
 observationThresholds:
   endedMilliseconds: 60000
   failedMilliseconds: 60000
