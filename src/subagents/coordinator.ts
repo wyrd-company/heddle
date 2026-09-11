@@ -121,7 +121,6 @@ export type SubagentCoordinatorOptions = {
     binding: WorkflowMcpSessionBinding;
     error: DelegatedProviderExhaustionError;
     operationId: string;
-    sessionKey: string;
   }): Promise<void>;
   providerFailureDetail?(
     error: unknown,
@@ -226,7 +225,6 @@ export class SubagentCoordinator {
   async #providerExhaustion(
     binding: WorkflowMcpSessionBinding,
     input: SpawnSubagentInput,
-    sessionKey: string,
     skippedCandidates: readonly SkippedProviderCandidate[],
     cause: unknown,
   ): Promise<DelegatedProviderExhaustionError> {
@@ -239,7 +237,6 @@ export class SubagentCoordinator {
       binding,
       error,
       operationId: input.operationId,
-      sessionKey,
     });
     return error;
   }
@@ -270,7 +267,6 @@ export class SubagentCoordinator {
       throw await this.#providerExhaustion(
         binding,
         input,
-        sessionKey,
         error.skippedCandidates,
         error,
       );
@@ -308,6 +304,7 @@ export class SubagentCoordinator {
       );
     }
     let assignment = existing;
+    let replaceStoredHandoffAuthentication = false;
     let preparation: SubagentSessionPreparation;
     let providerCandidates:
       | readonly {
@@ -413,16 +410,8 @@ export class SubagentCoordinator {
         if (decision.kind === "defer") {
           return { deferral: decision.deferral, kind: "deferred" };
         }
-        assignment = mutateTodoAssignment(
-          this.options.persistence,
-          binding.instance.instanceId,
-          assignment.sessionKey,
-          (current) => {
-            const { providerFallback: _providerFallback, ...ready } = current;
-            void _providerFallback;
-            return ready;
-          },
-        );
+        replaceStoredHandoffAuthentication =
+          assignment.providerFallback.replaceStoredHandoffAuthentication;
       }
       preparation = await this.options.prepareSession({
         binding,
@@ -444,7 +433,11 @@ export class SubagentCoordinator {
         binding,
         assignment,
         bootstrapPreparation,
+        replaceStoredHandoffAuthentication,
       );
+      if (assignment.providerFallback !== undefined) {
+        assignment = this.#clearProviderFallback(binding, assignment);
+      }
     } catch (error) {
       await this.options.onBootstrapFailure?.({
         error,
@@ -457,6 +450,9 @@ export class SubagentCoordinator {
         this.options.providerSelection.resolveCandidates === undefined
       ) {
         throw error;
+      }
+      if (assignment.providerFallback !== undefined) {
+        assignment = this.#clearProviderFallback(binding, assignment);
       }
       let lastFailure: unknown = error;
       let skipped = this.#mergeSkippedCandidates(
@@ -512,7 +508,10 @@ export class SubagentCoordinator {
               },
               model: candidateBinding.modelSlug,
               provider: candidateBinding.providerInstanceId,
-              providerFallback: { status: "pacing-deferred" },
+              providerFallback: {
+                replaceStoredHandoffAuthentication: true,
+                status: "pacing-deferred",
+              },
               threadId: candidateBinding.threadId,
             },
           );
@@ -595,12 +594,27 @@ export class SubagentCoordinator {
       throw await this.#providerExhaustion(
         binding,
         input,
-        assignment.sessionKey,
         skipped,
         lastFailure,
       );
     }
     return { assignment, kind: "spawned" };
+  }
+
+  #clearProviderFallback(
+    binding: WorkflowMcpSessionBinding,
+    assignment: TodoAssignment,
+  ): TodoAssignment {
+    return mutateTodoAssignment(
+      this.options.persistence,
+      binding.instance.instanceId,
+      assignment.sessionKey,
+      (current) => {
+        const { providerFallback: _providerFallback, ...ready } = current;
+        void _providerFallback;
+        return ready;
+      },
+    );
   }
 
   async #bootstrapAssignment(

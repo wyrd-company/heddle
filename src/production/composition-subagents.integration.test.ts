@@ -955,7 +955,7 @@ describe("production subagent composition", () => {
     const secondarySelections = [
       {
         alias: "secondary",
-        driverKind: "sample-driver",
+        driverKind: "codex",
         interactionMode: "default",
         model: {
           isCustom: false,
@@ -969,7 +969,7 @@ describe("production subagent composition", () => {
       },
       {
         alias: "secondary",
-        driverKind: "sample-driver",
+        driverKind: "cursor",
         interactionMode: "default",
         model: {
           isCustom: false,
@@ -990,7 +990,7 @@ describe("production subagent composition", () => {
       {
         availability: "available",
         displayName: "Workbench Beta",
-        driverKind: "sample-driver",
+        driverKind: "codex",
         enabled: true,
         installed: true,
         instanceId: "provider-beta",
@@ -1001,7 +1001,7 @@ describe("production subagent composition", () => {
       {
         availability: "available",
         displayName: "Workbench Gamma",
-        driverKind: "sample-driver",
+        driverKind: "cursor",
         enabled: true,
         installed: true,
         instanceId: "provider-gamma",
@@ -1022,13 +1022,17 @@ describe("production subagent composition", () => {
       return dispatch(command, context);
     });
     const usageReads: string[] = [];
+    let successorUsed = 0;
     const composition = createProductionComposition({
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
       configuration: fixture.configuration,
       providerUsage: {
         readFiveHourWindow: async (provider) => {
           usageReads.push(provider);
-          return { used: 0, windowStartedAt: 0 };
+          return {
+            used: provider === "provider-gamma" ? successorUsed : 0,
+            windowStartedAt: Date.now(),
+          };
         },
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
@@ -1073,6 +1077,62 @@ describe("production subagent composition", () => {
     });
     expect(attemptedProviders).toEqual(["provider-beta", "provider-gamma"]);
     expect(usageReads).toEqual(["provider-beta", "provider-gamma"]);
+
+    if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    t3.threads.delete(spawned.assignment.threadId);
+    await composition.scheduler.trigger();
+    attemptedProviders.length = 0;
+    usageReads.length = 0;
+    successorUsed = 100;
+
+    await expect(
+      composition.subagents.spawn(parent, {
+        operationId: "delegated-heterogeneous-replay",
+        providerAlias: "secondary",
+        rootItemId: "deliver",
+      }),
+    ).resolves.toMatchObject({
+      deferral: { provider: "provider-gamma" },
+      kind: "deferred",
+    });
+    const deferredRecord = composition.persistence.getInstance(
+      record.instanceId,
+    )!;
+    expect(isTodoState(deferredRecord.state.todoState)).toBe(true);
+    if (!isTodoState(deferredRecord.state.todoState)) {
+      throw new Error("Todo state is absent");
+    }
+    expect(
+      deferredRecord.state.todoState.lists
+        .flatMap((list) => list.assignments ?? [])
+        .find(
+          ({ operationId }) => operationId === "delegated-heterogeneous-replay",
+        ),
+    ).toMatchObject({
+      binding: { candidatePosition: 2, driverKind: "cursor" },
+      providerFallback: {
+        replaceStoredHandoffAuthentication: true,
+        status: "pacing-deferred",
+      },
+    });
+    expect(attemptedProviders).toEqual(["provider-beta"]);
+
+    successorUsed = 0;
+    const replayed = await composition.subagents.spawn(parent, {
+      operationId: "delegated-heterogeneous-replay",
+      providerAlias: "secondary",
+      rootItemId: "deliver",
+    });
+    expect(replayed).toMatchObject({
+      assignment: {
+        binding: { candidatePosition: 2, driverKind: "cursor" },
+      },
+      kind: "spawned",
+    });
+    expect(
+      replayed.kind === "spawned" && replayed.assignment.providerFallback,
+    ).toBe(undefined);
+    expect(attemptedProviders).toEqual(["provider-beta", "provider-gamma"]);
     await composition.close();
   });
 
@@ -1182,6 +1242,45 @@ describe("production subagent composition", () => {
         expect.objectContaining({ candidatePosition: 2 }),
       ],
     });
+    const firstCatalogAttention = composition.persistence
+      .listAttention()
+      .find(
+        ({ payload }) =>
+          typeof payload === "object" &&
+          payload !== null &&
+          !Array.isArray(payload) &&
+          payload["code"] === "provider-alias-exhausted",
+      );
+    expect(firstCatalogAttention).toBeDefined();
+    if (firstCatalogAttention === undefined) {
+      throw new Error("Provider exhaustion attention was not raised");
+    }
+    expect(
+      composition.attention.resolve(firstCatalogAttention.attentionId),
+    ).toBe(true);
+    const catalogReplayFailure = await composition.subagents
+      .spawn(parent, {
+        operationId: "delegated-catalog-exhaustion",
+        providerAlias: "secondary",
+        rootItemId: "deliver",
+      })
+      .catch((error: unknown) => error);
+    expect(catalogReplayFailure).toBeInstanceOf(
+      DelegatedProviderExhaustionError,
+    );
+    const replayedCatalogAttention = composition.persistence
+      .listAttention()
+      .filter(
+        ({ payload }) =>
+          typeof payload === "object" &&
+          payload !== null &&
+          !Array.isArray(payload) &&
+          payload["code"] === "provider-alias-exhausted",
+      );
+    expect(replayedCatalogAttention).toHaveLength(1);
+    expect(replayedCatalogAttention[0]?.attentionId).toBe(
+      firstCatalogAttention.attentionId,
+    );
 
     for (const provider of t3.providerCatalog.filter(({ instanceId }) =>
       ["provider-beta", "provider-gamma"].includes(instanceId),
@@ -1247,6 +1346,7 @@ describe("production subagent composition", () => {
         "sample-access-token",
       );
       expect(JSON.stringify(attention.payload)).not.toContain("actor:password");
+      expect(JSON.stringify(attention.payload)).not.toContain("undefined:");
     }
     expect(JSON.stringify(exhaustedAttention)).toContain(
       "Sample provider-beta start failed",

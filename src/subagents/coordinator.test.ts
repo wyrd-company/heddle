@@ -523,7 +523,10 @@ describe("SubagentCoordinator", () => {
         ],
       },
       provider: "sample-provider-two",
-      providerFallback: { status: "pacing-deferred" },
+      providerFallback: {
+        replaceStoredHandoffAuthentication: true,
+        status: "pacing-deferred",
+      },
       threadId: "child-thread-two",
     });
 
@@ -534,6 +537,16 @@ describe("SubagentCoordinator", () => {
     expect(test.bootstrap).toHaveBeenCalledTimes(1);
 
     test.setFallbackSuccessorUsed(0);
+    test.bootstrap.mockImplementationOnce(async () => {
+      expect(
+        assignmentForChild(test.store.record, "child-session").assignment
+          .providerFallback,
+      ).toEqual({
+        replaceStoredHandoffAuthentication: true,
+        status: "pacing-deferred",
+      });
+      return {} as never;
+    });
     const admitted = await spawn(test.coordinator, test.store);
     expect(admitted).toMatchObject({
       assignment: { binding: { candidatePosition: 2 } },
@@ -545,6 +558,9 @@ describe("SubagentCoordinator", () => {
     expect(
       test.bootstrap.mock.calls.map(([call]) => call.modelSelection.model),
     ).toEqual(["sample-model-one", "sample-model-two"]);
+    expect(test.bootstrap.mock.calls[1]?.[0]).toMatchObject({
+      replaceStoredHandoffAuthentication: true,
+    });
   });
 
   it("returns structured delegated exhaustion after every start candidate fails", async () => {

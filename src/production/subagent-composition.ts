@@ -59,7 +59,7 @@ const describeDelegatedExhaustion = (
   error.skippedCandidates
     .map(
       ({ candidatePosition, failure, modelSlug, providerDisplayName }) =>
-        `candidate ${candidatePosition} (${providerDisplayName}/${modelSlug}): ${failure.reason}: ${failure.message}`,
+        `candidate ${candidatePosition} (${providerDisplayName}/${modelSlug}): ${failure.name}: ${failure.message}`,
     )
     .join("; ");
 
@@ -309,12 +309,7 @@ export const createProductionSubagentCoordinator = (options: {
         });
       }
     },
-    onProviderExhaustion: async ({
-      binding,
-      error,
-      operationId,
-      sessionKey,
-    }) => {
+    onProviderExhaustion: async ({ binding, error, operationId }) => {
       const taskId = persistence
         .listReconcilerRuntime()
         .find(
@@ -322,7 +317,7 @@ export const createProductionSubagentCoordinator = (options: {
         )?.taskId;
       const exhausted = createProductionErrorAttention({
         attentionId: `production:provider-alias-exhausted:subagent:${stableUuid(
-          `${binding.instance.instanceId}:${sessionKey}:${operationId}`,
+          `${binding.instance.instanceId}:${binding.sessionKey}:${operationId}`,
         )}`,
         code: error.reason,
         error,

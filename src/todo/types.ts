@@ -34,6 +34,7 @@ export type TodoAssignment = Record<string, JsonValue> & {
   parentSessionKey: string;
   parentThreadId: string;
   providerFallback?: {
+    replaceStoredHandoffAuthentication: true;
     status: "pacing-deferred";
   };
   provider: string;
