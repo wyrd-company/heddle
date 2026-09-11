@@ -228,6 +228,7 @@ import { loadDeploymentConfiguration } from "./dist/deployment/configuration.js"
 const loaded = await loadDeploymentConfiguration(process.argv[2]);
 const themeCatalog = new GitAgentNameThemeCatalog(
   loaded.blueprintsRepositoryRoot,
+  "HEAD",
 );
 await themeCatalog.validateCurrent();
 EOF

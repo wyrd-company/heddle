@@ -331,6 +331,9 @@ describe("Heddle devcontainer feature", () => {
     );
     expect(fixturePreflight).toBeGreaterThan(-1);
     expect(fixturePreflight).toBeLessThan(packageGate);
+    expect(qualification).toContain(
+      'loaded.blueprintsRepositoryRoot,\n  "HEAD",',
+    );
   });
 
   it("routes every qualification container removal through verified identity", async () => {
