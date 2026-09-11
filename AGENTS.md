@@ -195,6 +195,13 @@ We record here _non-obvious_ repeated failure modes specific to this repo.
    shell out to it. It resolves under your interactive shell and can be absent
    from the environment the service actually runs under.
 
+7. **Reading the T3 pin as a deployment requirement.**
+   `deployment/supported-versions.json` names the T3 release the qualification
+   suites run against. It does not constrain the T3 an operator deploys. Never
+   align a deployment or a UAT environment to it, and never propose a Heddle
+   redeploy because T3 moved. A deployed T3 that differs from the pin is
+   normal, not drift.
+
 ## Testing
 
 | Command                         | Purpose                                               |
@@ -224,12 +231,16 @@ orchestrating agents.
 
 ## Environment
 
-Pinned dependencies that the service checks or assumes:
+Pinned dependencies:
 
 - **`wyrd-company/kanban-md`** at `0.37.0-fork+b9fc380`, which preserves
   unrecognized front-matter properties through every task mutation. The service
   verifies this at startup and refuses to run against another build.
-- **Wyrd Company T3Code fork `0.0.38-wyrd.2`**, against which the control-plane integration is qualified from its public release tarball.
+- **Wyrd Company T3Code fork `0.0.38-wyrd.2`** is a qualification pin, not a
+  deployment requirement. The qualification suites install this exact public
+  release tarball so that test evidence names one T3 build. The service does
+  not check the T3 version. The operator upgrades T3 independently, and Heddle
+  is not redeployed because T3 moved.
 - **Provider CLI versions** are discovered and enforced by T3. Heddle records
   the observed version as diagnostic and qualification evidence and keeps no
   driver-name or CLI-version allowlist.
