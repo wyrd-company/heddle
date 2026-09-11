@@ -256,8 +256,10 @@ selected. Duplicate display names are ambiguous. Startup fails before the
 server binds when an alias has no usable candidate or the catalog cannot be
 read.
 
-New stage occurrences, new subagent assignments, and `list_providers` use a
-fresh catalog snapshot. Selection failures use one of these safe reasons:
+New stage occurrences, new subagent assignments, eligible adjudication starts
+or replays, and `list_providers` use a fresh catalog snapshot. A confirmed
+adjudication replay retains its stored binding. Selection failures use one of
+these safe reasons:
 `provider-catalog-unavailable`, `provider-alias-not-allowed`,
 `provider-alias-exhausted`, `provider-name-not-found`, `provider-name-ambiguous`,
 `provider-not-ready`, `provider-unavailable`, or `provider-model-not-found`.

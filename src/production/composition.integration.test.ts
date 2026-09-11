@@ -25,9 +25,16 @@ import {
   type EscalationQuestion,
   WorkflowMcpSessionResolver,
 } from "../mcp-server/index.js";
-import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
+import {
+  adjudicationSessionKey,
+  escalationAttentionId,
+} from "../mcp-server/escalation-contract.js";
+import { DispatchPacingGate } from "../pacing/index.js";
 import { createProductionComposition } from "./composition.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
+import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
+import { bindResolvedSession } from "./session-binding.js";
+import { stableUuid } from "./stable-uuid.js";
 import {
   execute,
   prepareProductionEpicFixture,
@@ -954,27 +961,12 @@ describe("production composition", () => {
     await composition.close();
   });
 
-  it("retains startup catalog skips on a production adjudication binding", async () => {
+  it("retains current catalog skips on a production adjudication binding", async () => {
     const fixture = await prepare();
     const t3 = new SyntheticT3();
     configureProviderCandidates(fixture, t3);
     configureAdjudication(fixture);
     t3.providerCatalog[0]!.availability = "unavailable";
-    const startup = await new ProviderSelectionResolver(
-      fixture.configuration.providerAliases,
-      t3,
-    ).resolveStartup({
-      defaultAlias: fixture.configuration.session.defaultProviderAlias,
-      interactionMode: fixture.configuration.session.interactionMode,
-      providerBudgets: {},
-      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
-    });
-    fixture.configuration.session.defaultSelection = startup.defaultSelection;
-    fixture.configuration.session.resolvedSelections = [
-      ...startup.candidates.values(),
-    ].flat();
-    fixture.configuration.pacing.defaultProvider =
-      startup.defaultSelection.providerInstanceId;
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -1004,6 +996,208 @@ describe("production composition", () => {
         }),
       ],
     });
+    await composition.close();
+  });
+
+  it("selects a recovered first adjudication candidate from the current catalog", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    configureAdjudication(fixture);
+    const recoveredProviderInstanceId =
+      fixture.configuration.session.defaultSelection.providerInstanceId;
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const startup = await new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    ).resolveStartup({
+      defaultAlias: fixture.configuration.session.defaultProviderAlias,
+      interactionMode: fixture.configuration.session.interactionMode,
+      providerBudgets: {},
+      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
+    });
+    fixture.configuration.session.defaultSelection = startup.defaultSelection;
+    fixture.configuration.session.resolvedSelections = [
+      ...startup.candidates.values(),
+    ].flat();
+    fixture.configuration.pacing.defaultProvider =
+      startup.defaultSelection.providerInstanceId;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    t3.providerCatalog[0]!.availability = "available";
+    t3.providerCatalog[1]!.availability = "unavailable";
+    const { adjudication } = await openProductionEscalation(composition);
+
+    expect(adjudication.binding).toMatchObject({
+      candidatePosition: 1,
+      providerInstanceId: recoveredProviderInstanceId,
+      skippedCandidates: [],
+    });
+    await composition.close();
+  });
+
+  it("replays a persisted later adjudication candidate through a recovered earlier candidate", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    configureAdjudication(fixture);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 80 },
+    };
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const providerResolver = new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    );
+    const startup = await providerResolver.resolveStartup({
+      defaultAlias: fixture.configuration.session.defaultProviderAlias,
+      interactionMode: fixture.configuration.session.interactionMode,
+      providerBudgets: {},
+      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
+    });
+    fixture.configuration.session.defaultSelection = startup.defaultSelection;
+    fixture.configuration.session.resolvedSelections = [
+      ...startup.candidates.values(),
+    ].flat();
+    fixture.configuration.pacing.defaultProvider =
+      startup.defaultSelection.providerInstanceId;
+    const usageReads: string[] = [];
+    const providerUsage = {
+      readFiveHourWindow: async (provider: string) => {
+        usageReads.push(provider);
+        return { used: 0, windowStartedAt: 0 };
+      },
+    };
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerResolver,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    usageReads.length = 0;
+
+    const owner = composition.persistence
+      .listReconcilerRuntime()
+      .find(({ state }) => state === "waiting")!;
+    const ownerSession = composition.persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === owner.sessionKey)!;
+    const attentionId = escalationAttentionId(
+      owner.instanceId,
+      owner.sessionKey!,
+      "catalog-reversal",
+    );
+    const sessionKey = adjudicationSessionKey(attentionId);
+    const laterSelection = startup.candidates.get("primary")![0]!;
+    const laterThreadId = stableUuid(
+      `${sessionKey}:candidate:${laterSelection.candidatePosition}:thread`,
+    );
+    composition.persistence.writeSessionRuntime({
+      activation:
+        Number.parseInt(
+          attentionId.slice("escalation:".length).slice(0, 12),
+          16,
+        ) + 1,
+      binding: bindResolvedSession(
+        laterSelection,
+        sessionKey,
+        laterThreadId,
+        laterSelection.candidatePosition,
+      ),
+      bindingState: "provisional",
+      instanceId: owner.instanceId,
+      projectId: ownerSession.projectId,
+      repositoryName: ownerSession.repositoryName,
+      sessionKey,
+      stageId: "adjudication",
+      threadId: laterThreadId,
+    });
+
+    t3.providerCatalog[0]!.availability = "available";
+    t3.providerCatalog[1]!.availability = "unavailable";
+    const catalogReads = vi.spyOn(t3, "readProviderCatalog");
+    const adjudication = new ProductionScopedAdjudication({
+      board: composition.board,
+      blueprintRepository: {
+        repositoryRoot: fixture.blueprintsRepositoryRoot,
+        sourceRef: "@{upstream}",
+      },
+      configuration: fixture.configuration,
+      pacing: new DispatchPacingGate(
+        fixture.configuration.pacing,
+        providerUsage,
+        Date.now,
+        fixture.configuration.providerAliasBudgets,
+      ),
+      persistence: composition.persistence,
+      providerResolver,
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    const opened = {
+      answeringAuthority: { kind: "adjudication", sessionKey } as const,
+      attentionId,
+      escalationId: "catalog-reversal",
+      instanceId: owner.instanceId,
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: owner.sessionKey!,
+      questions: [],
+      requestId: "request-reversal",
+      stage: owner.stageId!,
+      threadId: owner.threadId!,
+    };
+
+    const first = await adjudication.start(opened);
+    const replay = await adjudication.start(opened);
+    const recovered = composition.persistence
+      .listSessionRuntime()
+      .find((runtime) => runtime.sessionKey === sessionKey)!;
+
+    expect(first).toEqual(replay);
+    expect(recovered).toMatchObject({
+      binding: {
+        candidatePosition: 1,
+        providerInstanceId: t3.providerCatalog[0]!.instanceId,
+        skippedCandidates: [
+          expect.objectContaining({
+            candidatePosition: 2,
+            failure: expect.objectContaining({
+              message: "The candidate did not start",
+            }),
+          }),
+        ],
+      },
+      threadId: stableUuid(`${sessionKey}:candidate:1:thread`),
+    });
+    expect(recovered.bindingState).toBeUndefined();
+    expect(catalogReads).toHaveBeenCalledTimes(1);
+    expect(usageReads).toEqual([t3.providerCatalog[0]!.instanceId]);
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.create" && threadId === recovered.threadId,
+      ),
+    ).toHaveLength(1);
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.create" && threadId === laterThreadId,
+      ),
+    ).toHaveLength(0);
     await composition.close();
   });
 

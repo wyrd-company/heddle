@@ -696,7 +696,14 @@ proposed-design:
     and otherwise routes to the operator. Adjudication is bound to that
     one escalation occurrence. It is not a task or lifecycle instance and owns
     no board status. Its provider comes from the operator's adjudication alias;
-    its decide-versus-escalate boundary comes from an
+    every eligible start or replay resolves that alias from the current catalog
+    in configured order. A persisted provisional candidate that did not start
+    remains failed evidence but does not prevent an earlier configured
+    candidate that recovered in the current catalog from being selected. A
+    confirmed adjudication replay retains its stored binding. Each newly
+    selected candidate is paced against the alias budget and its actual
+    provider instance before dispatch. Its decide-versus-escalate boundary
+    comes from an
     organization blueprint repository policy pinned by Git blob at activation.
     The session receives a constructed, token-free view of the current epic and
     child statuses, escalating instance and stage, prior stage outputs, and

@@ -6,6 +6,7 @@
 import type { BoardTask, KanbanBoardAdapter } from "../board-adapter/index.js";
 import { EscalationHistory } from "../mcp-server/escalation-history.js";
 import { ensureCorrelationToken } from "../control-plane/correlation-token.js";
+import { ProviderAliasUnusableError } from "../control-plane/provider-selection.js";
 import { pendingRequestActivitiesFor } from "../control-plane/session-observation-attention.js";
 import type { T3ThreadActivity } from "../control-plane/t3-control-plane-client.js";
 import { resolveT3AwarenessPhase } from "../control-plane/t3-agent-awareness.js";
@@ -38,7 +39,7 @@ import {
   modelSelectionFromBinding,
   providerContextFromBinding,
 } from "./session-binding.js";
-import { StartupProviderSelectionResolver } from "./stage-session-selection.js";
+import type { StageProviderSelectionResolver } from "./stage-session-selection.js";
 import { stableUuid } from "./stable-uuid.js";
 import { productionActiveSessions } from "./subagent-composition.js";
 import {
@@ -168,6 +169,24 @@ const failureDetail = (
     secrets,
   ) as ProviderCandidateFailureDetail;
 
+const startedCandidateFailure = (
+  candidate: SkippedProviderCandidate,
+): boolean => candidate.failure.name !== "ProviderSelectionError";
+
+const mergeSkippedCandidates = (
+  ...groups: readonly (readonly SkippedProviderCandidate[])[]
+): SkippedProviderCandidate[] => {
+  const byPosition = new Map<number, SkippedProviderCandidate>();
+  for (const group of groups) {
+    for (const candidate of group) {
+      byPosition.set(candidate.candidatePosition, candidate);
+    }
+  }
+  return [...byPosition.values()].sort(
+    (left, right) => left.candidatePosition - right.candidatePosition,
+  );
+};
+
 export class ProductionScopedAdjudication implements AdjudicationEscalationRouter {
   public constructor(
     private readonly options: {
@@ -176,6 +195,9 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       configuration: ResolvedProductionConfiguration;
       pacing: DispatchPacingEvaluator;
       persistence: SqlitePersistence;
+      providerResolver: Required<
+        Pick<StageProviderSelectionResolver, "resolveCandidates">
+      >;
       t3: ProductionT3Client;
       workflowMcpEndpoint: string;
       now?: () => number;
@@ -202,46 +224,55 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       opened.instanceId,
       opened.answeringAuthority.sessionKey,
     );
-    const configuredCandidates = await new StartupProviderSelectionResolver(
-      this.options.configuration.session.resolvedSelections,
-    ).resolveCandidates(configuration.providerAlias, {
-      interactionMode: this.options.configuration.session.interactionMode,
-      runtimeMode: "approval-required",
-    });
-    const skipped: SkippedProviderCandidate[] = [
-      ...(existing?.binding.skippedCandidates ?? []),
-    ];
-    const priorCandidatePosition = existing?.binding.candidatePosition ?? 0;
+    let skipped = (existing?.binding.skippedCandidates ?? []).filter(
+      startedCandidateFailure,
+    );
+    const attemptedCandidatePositions = new Set(
+      skipped.map(({ candidatePosition }) => candidatePosition),
+    );
     if (existing !== undefined) {
       const recovered = await this.#recoverStarted(existing);
       if (recovered) return { modelSlug: existing.binding.modelSlug };
-      if (
-        !skipped.some(
-          ({ candidatePosition }) =>
-            candidatePosition === priorCandidatePosition,
-        )
-      ) {
-        skipped.push(
-          this.#skipped(
-            existing.binding,
-            new Error("The candidate did not start"),
-          ),
+      attemptedCandidatePositions.add(existing.binding.candidatePosition);
+      skipped = mergeSkippedCandidates(skipped, [
+        this.#skipped(
+          existing.binding,
+          new Error("The candidate did not start"),
+        ),
+      ]);
+    }
+    let configuredCandidates;
+    try {
+      configuredCandidates =
+        await this.options.providerResolver.resolveCandidates(
+          configuration.providerAlias,
+          {
+            interactionMode: this.options.configuration.session.interactionMode,
+            runtimeMode: "approval-required",
+          },
         );
+    } catch (error) {
+      if (!(error instanceof ProviderAliasUnusableError)) throw error;
+      skipped = mergeSkippedCandidates(error.skippedCandidates, skipped);
+      if (existing !== undefined) {
+        this.options.persistence.writeSessionRuntime({
+          ...existing,
+          binding: {
+            ...existing.binding,
+            skippedCandidates: skipped,
+          },
+        });
       }
+      throw new Error(
+        `Adjudication provider alias '${configuration.providerAlias}' exhausted every candidate: ${skipped.map(({ failure }) => failure.message).join("; ")}`,
+        { cause: error },
+      );
     }
     for (const selection of configuredCandidates.filter(
-      ({ candidatePosition }) => candidatePosition > priorCandidatePosition,
+      ({ candidatePosition }) =>
+        !attemptedCandidatePositions.has(candidatePosition),
     )) {
-      for (const catalogFailure of selection.skippedCandidates) {
-        if (
-          !skipped.some(
-            ({ candidatePosition }) =>
-              candidatePosition === catalogFailure.candidatePosition,
-          )
-        ) {
-          skipped.push(catalogFailure);
-        }
-      }
+      skipped = mergeSkippedCandidates(selection.skippedCandidates, skipped);
       const candidatePosition = selection.candidatePosition;
       const threadId = stableUuid(
         `${opened.answeringAuthority.sessionKey}:candidate:${candidatePosition}:thread`,
@@ -330,7 +361,10 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         );
         return { modelSlug: binding.modelSlug };
       } catch (error) {
-        skipped.push(this.#skipped(binding, error));
+        attemptedCandidatePositions.add(candidatePosition);
+        skipped = mergeSkippedCandidates(skipped, [
+          this.#skipped(binding, error),
+        ]);
         this.options.persistence.writeSessionRuntime({
           ...runtime,
           binding: {
@@ -343,19 +377,10 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         });
       }
     }
-    const catalogFailures = configuredCandidates.flatMap(
-      ({ catalogFailures: failures }) => failures,
+    skipped = mergeSkippedCandidates(
+      configuredCandidates.flatMap(({ catalogFailures: failures }) => failures),
+      skipped,
     );
-    for (const catalogFailure of catalogFailures) {
-      if (
-        !skipped.some(
-          ({ candidatePosition }) =>
-            candidatePosition === catalogFailure.candidatePosition,
-        )
-      ) {
-        skipped.push(catalogFailure);
-      }
-    }
     const exhausted = this.#runtime(opened.answeringAuthority.sessionKey);
     if (exhausted !== undefined) {
       this.options.persistence.writeSessionRuntime({

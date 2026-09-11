@@ -373,6 +373,7 @@ export const createProductionComposition = (
             configuration,
             pacing,
             persistence,
+            providerResolver,
             t3,
             workflowMcpEndpoint: options.workflowMcpEndpoint,
           });
