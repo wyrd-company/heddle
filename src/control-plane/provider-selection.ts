@@ -312,14 +312,7 @@ export class ProviderSelectionResolver {
     alias: string,
     inputs: ProviderSelectionInputs,
   ): readonly ResolvedProviderCandidateSelection[] {
-    const configuredCandidates = this.#aliases.get(alias);
-    if (configuredCandidates === undefined) {
-      throw selectionError(
-        "provider-alias-not-allowed",
-        alias,
-        "the alias is not configured",
-      );
-    }
+    const configuredCandidates = this.#configuredCandidates(alias);
     const resolved: ResolvedProviderCandidateSelection[] = [];
     const skipped: SkippedProviderCandidate[] = [];
     const failures: ProviderSelectionError[] = [];
@@ -376,6 +369,20 @@ export class ProviderSelectionResolver {
         .join("; ")}`,
       skipped,
     );
+  }
+
+  #configuredCandidates(
+    alias: string,
+  ): readonly ProviderAliasCandidateConfiguration[] {
+    const configuredCandidates = this.#aliases.get(alias);
+    if (configuredCandidates === undefined) {
+      throw selectionError(
+        "provider-alias-not-allowed",
+        alias,
+        "the alias is not configured",
+      );
+    }
+    return configuredCandidates;
   }
 
   #resolveCandidateFromCatalog(
@@ -465,14 +472,10 @@ export class ProviderSelectionResolver {
     const providerBudgets = new Map<string, ProviderUsageBudget>();
     const budgetAliases = new Map<string, string>();
     for (const [alias, budget] of Object.entries(inputs.providerBudgets)) {
+      const configuredCandidates = this.#configuredCandidates(alias);
       const selections =
         candidates.get(alias) ??
         this.resolveCandidatesFromCatalog(catalog, alias, inputs);
-      const configuredCandidates = this.#aliases.get(alias);
-      if (configuredCandidates === undefined) {
-        this.resolveCandidatesFromCatalog(catalog, alias, inputs);
-        throw new Error("unreachable");
-      }
       const candidateProviderInstanceIds = new Set([
         ...selections.map(({ providerInstanceId }) => providerInstanceId),
         ...configuredCandidates.flatMap(({ providerDisplayName }) =>

@@ -409,6 +409,26 @@ describe("ProviderSelectionResolver", () => {
     expect(Object.hasOwn(resolved.providerBudgets, "constructor")).toBe(true);
   });
 
+  it("rejects an unconfigured startup budget through the alias guard", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: aliases.primary },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    await expect(
+      resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: { missing: { usageLimit: 50 } },
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({
+      message:
+        "Provider alias 'missing' cannot be selected: the alias is not configured",
+      reason: "provider-alias-not-allowed",
+    });
+  });
+
   it.each([
     {
       aliases,

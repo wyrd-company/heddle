@@ -1724,9 +1724,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           modelSelection: modelSelectionFromBinding(binding),
           projectId,
           providerContext: providerContextFromBinding(binding),
-          replaceStoredHandoffAuthentication:
-            sessionRuntime.bindingState === "provisional" &&
-            binding.candidatePosition > 1,
           runtimeMode: binding.runtimeMode,
           sessionKey,
           task: task.frontMatter,

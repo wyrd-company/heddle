@@ -199,7 +199,6 @@ export const isTodoState = (value: JsonValue): value is TodoState => {
       if (
         providerFallback !== undefined &&
         (!isObject(providerFallback) ||
-          providerFallback["replaceStoredHandoffAuthentication"] !== true ||
           providerFallback["status"] !== "pacing-deferred" ||
           assignment["status"] !== "active")
       ) {

@@ -360,14 +360,15 @@ proposed-design:
     interaction mode.
 
     A delegated start failure advances its durable assignment to the next
-    candidate before pacing deferral returns. The assignment marks that
-    successor as pacing-deferred and retains the requirement to replace the
-    failed candidate's stored handoff authentication. Replay evaluates the
-    successor again and cannot bootstrap it until pacing admits the exact
-    alias and provider instance. Admission carries that replacement requirement
-    into the start and clears the marker only after bootstrap confirms. A crash
-    before confirmation therefore replays the replacement instead of exposing
-    the failed candidate's authentication to a heterogeneous successor. Exhaustion from
+    candidate before pacing deferral returns or bootstrap starts. A deferred
+    assignment marks that successor as pacing-deferred. Replay evaluates the
+    successor again and cannot bootstrap it until pacing admits the exact alias
+    and provider instance. Admission clears the pacing marker only after the
+    start confirms. An already admitted assignment needs no marker: a crash
+    before confirmation replays the same durable successor and reuses the same
+    rendered workflow handoff and Workflow-MCP correlation authorization even
+    when its T3 driver differs. Heddle stores no provider authentication
+    metadata. Exhaustion from
     catalog validation or session start returns the same
     `provider-alias-exhausted` selection reason and raises durable attention
     that names every candidate and safe cause.

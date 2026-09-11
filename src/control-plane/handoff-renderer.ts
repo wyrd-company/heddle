@@ -25,7 +25,6 @@ export class HandoffRenderError extends Error {
 
 export type HandoffRenderInput = {
   correlationToken: string;
-  driver: string;
   handoff: string;
   instanceId: string;
   sessionKey: string;
@@ -34,65 +33,6 @@ export type HandoffRenderInput = {
   taskId: number;
   template: PinnedHandoffTemplate;
 };
-
-export type HandoffDriver = string;
-
-export type HandoffAuthenticationBinding = {
-  driver: HandoffDriver;
-  format: "heddle.handoff-authentication-binding";
-  policy: "external-provider-session-v1";
-  version: 1;
-};
-
-export const isHandoffAuthenticationBinding = (
-  value: JsonValue | undefined,
-): value is HandoffAuthenticationBinding =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  Object.keys(value).length === 4 &&
-  typeof value["driver"] === "string" &&
-  value["driver"].trim() !== "" &&
-  value["format"] === "heddle.handoff-authentication-binding" &&
-  value["policy"] === "external-provider-session-v1" &&
-  value["version"] === 1;
-
-export const resolveHandoffAuthenticationBinding = (
-  driver: string,
-): HandoffAuthenticationBinding => {
-  if (driver.trim() === "") {
-    throw new HandoffRenderError("T3 driver kind must not be empty");
-  }
-  return {
-    driver,
-    format: "heddle.handoff-authentication-binding",
-    policy: "external-provider-session-v1",
-    version: 1,
-  };
-};
-
-export const resolveEffectiveHandoffDriver = (
-  modelSelectionInstanceId: string,
-  providerContextDriver: string,
-  providerContextInstanceId: string,
-): HandoffDriver => {
-  if (modelSelectionInstanceId !== providerContextInstanceId) {
-    throw new HandoffRenderError(
-      "T3 model selection and provider context must name the same provider instance",
-    );
-  }
-  return resolveHandoffAuthenticationBinding(providerContextDriver).driver;
-};
-
-export const handoffAuthenticationBindingsAgree = (
-  stored: JsonValue | undefined,
-  current: HandoffAuthenticationBinding,
-): stored is HandoffAuthenticationBinding =>
-  isHandoffAuthenticationBinding(stored) &&
-  stored.driver === current.driver &&
-  stored.format === current.format &&
-  stored.policy === current.policy &&
-  stored.version === current.version;
 
 export const composeSystemPrompt = (
   systemPrompt: string,
@@ -264,7 +204,6 @@ const parseHandoff = (serialized: string): Record<string, JsonValue> => {
 };
 
 const identityFrontMatter = (input: HandoffRenderInput): string => {
-  resolveHandoffAuthenticationBinding(input.driver);
   const strings = [input.instanceId, input.sessionKey, input.stage];
   if (
     strings.some((value) => value.trim() === "") ||

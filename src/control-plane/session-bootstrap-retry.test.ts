@@ -158,7 +158,7 @@ const expectParentRejected = async (
 };
 
 describe("stage session cold retry guards", () => {
-  it("rejects mismatched T3 driver identities before any bootstrap effect", async () => {
+  it("rejects mismatched T3 provider-instance identities before any bootstrap effect", async () => {
     const memory = memoryStore();
     const ensureWorktree = vi.fn(async ({ branch }) => ({
       branch,
@@ -660,17 +660,12 @@ describe("stage session cold retry guards", () => {
       (turnCommands[1]?.["message"] as { text: string }).text,
     );
     expect(memory.record.state.handoffs).toHaveLength(1);
-    expect(memory.record.state.handoffs[0]).toMatchObject({
-      renderedHandoffAuthentication: {
-        driver: "cursor",
-        format: "heddle.handoff-authentication-binding",
-        policy: "external-provider-session-v1",
-        version: 1,
-      },
-    });
+    expect(memory.record.state.handoffs[0]).not.toHaveProperty(
+      "renderedHandoffAuthentication",
+    );
   });
 
-  it("rejects a cold retry whose selected T3 driver changes before any second bootstrap effect", async () => {
+  it("rejects a cold retry whose provider-instance inputs disagree before any second bootstrap effect", async () => {
     const memory = memoryStore();
     const ensureWorktree = vi.fn(async ({ branch }) => ({
       branch,
@@ -700,9 +695,6 @@ describe("stage session cold retry guards", () => {
     await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
       /stop after durable render/,
     );
-    expect(memory.record.state.handoffs[0]).toMatchObject({
-      renderedHandoffAuthentication: { driver: "cursor" },
-    });
     const persistedVersion = memory.record.version;
     const worktreeCount = ensureWorktree.mock.calls.length;
     const mintCount = mintCorrelationToken.mock.calls.length;
@@ -774,62 +766,79 @@ describe("stage session cold retry guards", () => {
     expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
   });
 
-  it.each(["claudeAgent", "sample-driver"])(
-    "rejects a cold retry under changed driver %s before T3 dispatch",
-    async (driver) => {
-      const memory = memoryStore();
-      const dispatch = vi.fn(async () => {
-        throw new Error("stop after durable render");
-      });
-      const dependencies: SessionBootstrapDependencies = {
-        persistence: memory.store,
-        instantiateTodoList,
-        templateAuthority: sampleTemplateAuthority,
-        resolveWorkflowMcpStageContract,
-        workflowMcpEndpoint,
-        t3: {
-          registerWorkflowMcpProviderSession,
-          dispatch,
-        },
-        ensureWorktree: async ({ branch }) => ({
-          branch,
-          created: false,
-          path: "/workspaces/worktrees/sample-repository/task-prepare",
-        }),
-        mintCorrelationToken: () => "correlation-token",
-        nextId: () => "stable-id",
-      };
-
-      await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
-        /stop after durable render/,
-      );
-      expect(memory.record.state.handoffs[0]).toMatchObject({
-        renderedHandoffAuthentication: { driver: "cursor" },
-      });
-      const dispatchCount = dispatch.mock.calls.length;
-
-      await expect(
-        bootstrapStageSession(
-          {
-            ...input,
-            modelSelection: { ...input.modelSelection, instanceId: driver },
-            providerContext: {
-              ...input.providerContext,
-              driver,
-              providerInstanceId: driver,
-            },
-          },
-          dependencies,
-        ),
-      ).rejects.toThrow(/authentication binding is incompatible/);
-      expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
-    },
-  );
-
-  it("rejects a cold retry when the stored authentication policy differs before T3 dispatch", async () => {
+  it("reuses the stored handoff and correlation authorization when the T3 driver changes", async () => {
     const memory = memoryStore();
+    let failFirstDispatch = true;
     const dispatch = vi.fn(async () => {
-      throw new Error("stop after durable render");
+      if (failFirstDispatch) {
+        failFirstDispatch = false;
+        throw new Error("stop after durable render");
+      }
+      return { sequence: 1 };
+    });
+    const register = vi.fn(async () => undefined);
+    const dependencies: SessionBootstrapDependencies = {
+      persistence: memory.store,
+      instantiateTodoList,
+      templateAuthority: sampleTemplateAuthority,
+      resolveWorkflowMcpStageContract,
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession: register,
+        dispatch,
+      },
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: false,
+        path: "/workspaces/worktrees/sample-repository/task-prepare",
+      }),
+      mintCorrelationToken: () => "correlation-token",
+      nextId: () => "stable-id",
+    };
+
+    await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
+      /stop after durable render/,
+    );
+    const stored = globalThis.structuredClone(
+      memory.record.state.handoffs[0]!,
+    );
+    const token = memory.record.state.correlationTokens[input.sessionKey];
+
+    const replay = await bootstrapStageSession(
+      {
+        ...input,
+        providerContext: {
+          ...input.providerContext,
+          driver: "sample-driver-two",
+        },
+      },
+      dependencies,
+    );
+
+    expect(replay.renderedHandoff).toBe(
+      (stored as { renderedHandoff: string }).renderedHandoff,
+    );
+    expect(memory.record.state.handoffs).toEqual([stored]);
+    expect(memory.record.state.handoffs[0]).not.toHaveProperty(
+      "renderedHandoffAuthentication",
+    );
+    expect(memory.record.state.correlationTokens[input.sessionKey]).toBe(token);
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(register.mock.calls.map(([registration]) => registration)).toEqual([
+      expect.objectContaining({ authorizationHeader: `Bearer ${token}` }),
+      expect.objectContaining({ authorizationHeader: `Bearer ${token}` }),
+    ]);
+  });
+
+  it("tolerates a legacy handoff authentication field without authoring a migration", async () => {
+    const memory = memoryStore();
+    let failFirstDispatch = true;
+    const dispatch = vi.fn(async () => {
+      if (failFirstDispatch) {
+        failFirstDispatch = false;
+        throw new Error("stop after durable render");
+      }
+      return { sequence: 1 };
     });
     const dependencies: SessionBootstrapDependencies = {
       persistence: memory.store,
@@ -854,6 +863,12 @@ describe("stage session cold retry guards", () => {
       /stop after durable render/,
     );
     const persisted = memory.record;
+    const legacyAuthentication = {
+      driver: "sample-driver-one",
+      format: "heddle.handoff-authentication-binding",
+      policy: "external-provider-session-v1",
+      version: 1,
+    };
     memory.store.compareAndSwapInstance(
       persisted.instanceId,
       persisted.version,
@@ -861,21 +876,26 @@ describe("stage session cold retry guards", () => {
         ...persisted.state,
         handoffs: persisted.state.handoffs.map((handoff) => ({
           ...(handoff as Record<string, unknown>),
-          renderedHandoffAuthentication: {
-            driver: "cursor",
-            format: "heddle.handoff-authentication-binding",
-            policy: "correlation-token-header-v1",
-            version: 1,
-          },
+          renderedHandoffAuthentication: legacyAuthentication,
         })),
       },
     );
-    const dispatchCount = dispatch.mock.calls.length;
 
-    await expect(bootstrapStageSession(input, dependencies)).rejects.toThrow(
-      /no valid authentication binding/,
+    await expect(
+      bootstrapStageSession(
+        {
+          ...input,
+          providerContext: {
+            ...input.providerContext,
+            driver: "sample-driver-two",
+          },
+        },
+        dependencies,
+      ),
+    ).resolves.toMatchObject({ renderedHandoff: expect.any(String) });
+    expect(memory.record.state.handoffs[0]).toMatchObject(
+      { renderedHandoffAuthentication: legacyAuthentication },
     );
-    expect(dispatch).toHaveBeenCalledTimes(dispatchCount);
   });
 
   it("assembles the handoff from the todo state committed at its CAS version", async () => {

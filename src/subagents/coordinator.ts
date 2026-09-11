@@ -304,7 +304,6 @@ export class SubagentCoordinator {
       );
     }
     let assignment = existing;
-    let replaceStoredHandoffAuthentication = false;
     let preparation: SubagentSessionPreparation;
     let providerCandidates:
       | readonly {
@@ -410,8 +409,6 @@ export class SubagentCoordinator {
         if (decision.kind === "defer") {
           return { deferral: decision.deferral, kind: "deferred" };
         }
-        replaceStoredHandoffAuthentication =
-          assignment.providerFallback.replaceStoredHandoffAuthentication;
       }
       preparation = await this.options.prepareSession({
         binding,
@@ -433,7 +430,6 @@ export class SubagentCoordinator {
         binding,
         assignment,
         bootstrapPreparation,
-        replaceStoredHandoffAuthentication,
       );
       if (assignment.providerFallback !== undefined) {
         assignment = this.#clearProviderFallback(binding, assignment);
@@ -509,7 +505,6 @@ export class SubagentCoordinator {
               model: candidateBinding.modelSlug,
               provider: candidateBinding.providerInstanceId,
               providerFallback: {
-                replaceStoredHandoffAuthentication: true,
                 status: "pacing-deferred",
               },
               threadId: candidateBinding.threadId,
@@ -550,7 +545,6 @@ export class SubagentCoordinator {
             binding,
             assignment,
             nextBootstrapPreparation,
-            true,
           );
           return { assignment, kind: "spawned" };
         } catch (nextError) {
@@ -621,7 +615,6 @@ export class SubagentCoordinator {
     parent: WorkflowMcpSessionBinding,
     assignment: TodoAssignment,
     preparation: Omit<SubagentSessionPreparation, "binding">,
-    replaceStoredHandoffAuthentication: boolean = false,
   ): Promise<void> {
     await this.#bootstrap(
       {
@@ -639,7 +632,6 @@ export class SubagentCoordinator {
         },
         instanceId: parent.instance.instanceId,
         parentSessionKey: parent.sessionKey,
-        replaceStoredHandoffAuthentication,
         sessionKey: assignment.sessionKey,
         createdAt: assignment.bootstrap.createdAt,
         threadCreateCommandId: assignment.bootstrap.createCommandId,

@@ -1098,9 +1098,8 @@ describe("production composition", () => {
       composition.persistence
         .getInstance(session.instanceId)
         ?.state.handoffs.filter(isStoredHandoff)
-        .find(({ sessionKey }) => sessionKey === session.sessionKey)
-        ?.renderedHandoffAuthentication,
-    ).toMatchObject({ driver: "sample-driver-two" });
+        .find(({ sessionKey }) => sessionKey === session.sessionKey),
+    ).not.toHaveProperty("renderedHandoffAuthentication");
     expect(
       composition.persistence.listAttention().map(({ payload }) => payload),
     ).toContainEqual(
@@ -2763,7 +2762,6 @@ describe("production composition", () => {
     const task = await composition.board.readTask(fixture.taskId);
     const expectedHandoff = renderStageHandoff({
       correlationToken: stored.correlationToken,
-      driver: "codex",
       handoff: stored.handoff,
       instanceId,
       sessionKey: stored.sessionKey,

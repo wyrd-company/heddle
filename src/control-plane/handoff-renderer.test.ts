@@ -90,7 +90,6 @@ const input = (
   overrides: Partial<HandoffRenderInput> = {},
 ): HandoffRenderInput => ({
   correlationToken: "opaque-fallback-token",
-  driver: "codex",
   handoff: assembleStageHandoff({
     correlationToken: "opaque-fallback-token",
     skillPointer: "skill://arrange",
@@ -412,17 +411,6 @@ describe("renderStageHandoff", () => {
     ).toThrow("Handoff template body contains the correlation token");
   });
 
-  it("binds an open driver kind without exposing the registration token", () => {
-    const rendered = renderStageHandoff(input({ driver: "sample-driver" }));
-
-    expect(rendered).not.toContain("opaque-fallback-token");
-  });
-
-  it("rejects an empty driver kind", () => {
-    expect(() => renderStageHandoff(input({ driver: "" }))).toThrow(
-      "T3 driver kind must not be empty",
-    );
-  });
 });
 
 describe("GitHandoffTemplateStore", () => {

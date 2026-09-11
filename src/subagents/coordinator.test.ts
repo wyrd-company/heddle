@@ -28,6 +28,7 @@ import { stopTodoAssignmentTree } from "./delegation-teardown.js";
 import {
   DelegatedProviderExhaustionError,
   SubagentCoordinator,
+  type SubagentCoordinatorOptions,
 } from "./coordinator.js";
 
 const temporaryDirectories: string[] = [];
@@ -156,6 +157,39 @@ const fixture = (
   ];
   let successorUsed = fallbackSuccessorUsed;
   const onProviderExhaustion = vi.fn(async () => undefined);
+  const prepareSession = vi.fn(
+    async ({ identity, model, resolvedBinding }: Parameters<
+      SubagentCoordinatorOptions["prepareSession"]
+    >[0]) => ({
+      binding:
+        resolvedBinding ??
+        resolvedSessionBindingFixture({
+          modelSlug: model,
+          sessionKey: identity.sessionKey,
+          threadId: identity.threadId,
+        }),
+      interactionMode: "default",
+      modelSelection: { instanceId: "sample-driver", model },
+      projectId: "sample-project",
+      providerContext: {
+        cliVersion: "sample-version",
+        driver: "sample-driver",
+        lifecycle: "independent" as const,
+        providerInstanceId: "sample-provider",
+      },
+      runtimeMode: "default",
+      task: {},
+      taskId: 1,
+      title: "Child sample",
+      worktree: {
+        baseRef: "main",
+        branch: `sample/${identity.sessionKey}`,
+        repositoryName: "sample-repository",
+        repositoryRoot: "/workspaces/sample-repository",
+        worktreeName: identity.sessionKey,
+      },
+    }),
+  );
   const coordinator = new SubagentCoordinator({
     activeSessions: async () => [
       { depth: 0, provider: "sample-provider", sessionId: "parent" },
@@ -229,6 +263,7 @@ const fixture = (
                   binding: resolvedSessionBindingFixture({
                     alias,
                     candidatePosition: 1,
+                    driverKind: "sample-driver-one",
                     modelSlug: "sample-model-one",
                     providerDisplayName: "Workbench One",
                     providerInstanceId: "sample-provider-one",
@@ -242,6 +277,7 @@ const fixture = (
                   binding: resolvedSessionBindingFixture({
                     alias,
                     candidatePosition: 2,
+                    driverKind: "sample-driver-two",
                     modelSlug: "sample-model-two",
                     providerDisplayName: "Workbench Two",
                     providerInstanceId: "sample-provider-two",
@@ -266,33 +302,7 @@ const fixture = (
         }),
       runtimeModeFor: async () => "approval-required",
     },
-    prepareSession: async ({ identity, model, resolvedBinding }) => ({
-      binding:
-        resolvedBinding ??
-        resolvedSessionBindingFixture({
-          modelSlug: model,
-          sessionKey: identity.sessionKey,
-          threadId: identity.threadId,
-        }),
-      interactionMode: "default",
-      modelSelection: { instanceId: "sample-driver", model },
-      projectId: "sample-project",
-      providerContext: {
-        cliVersion: "sample-version",
-        driver: "sample-driver",
-        lifecycle: "independent",
-        providerInstanceId: "sample-provider",
-      },
-      runtimeMode: "default",
-      title: "Child sample",
-      worktree: {
-        baseRef: "main",
-        branch: `sample/${identity.sessionKey}`,
-        repositoryName: "sample-repository",
-        repositoryRoot: "/workspaces/sample-repository",
-        worktreeName: identity.sessionKey,
-      },
-    }),
+    prepareSession,
     sessionTargetFor: () => ({
       instanceId: "instance",
       sessionKey: "parent",
@@ -304,6 +314,7 @@ const fixture = (
     bootstrap,
     coordinator,
     onProviderExhaustion,
+    prepareSession,
     setObservedPhase(phase: "failed" | "running") {
       observedPhase = phase;
     },
@@ -482,9 +493,11 @@ describe("SubagentCoordinator", () => {
         instanceId: "sample-driver",
         model: "sample-model-two",
       },
-      replaceStoredHandoffAuthentication: true,
       threadId: "child-thread-two",
     });
+    expect(test.bootstrap.mock.calls[1]?.[0]).not.toHaveProperty(
+      "replaceStoredHandoffAuthentication",
+    );
   });
 
   it("replays a pacing-deferred delegated successor without restarting its failed predecessor", async () => {
@@ -524,7 +537,6 @@ describe("SubagentCoordinator", () => {
       },
       provider: "sample-provider-two",
       providerFallback: {
-        replaceStoredHandoffAuthentication: true,
         status: "pacing-deferred",
       },
       threadId: "child-thread-two",
@@ -542,7 +554,6 @@ describe("SubagentCoordinator", () => {
         assignmentForChild(test.store.record, "child-session").assignment
           .providerFallback,
       ).toEqual({
-        replaceStoredHandoffAuthentication: true,
         status: "pacing-deferred",
       });
       return {} as never;
@@ -558,9 +569,68 @@ describe("SubagentCoordinator", () => {
     expect(
       test.bootstrap.mock.calls.map(([call]) => call.modelSelection.model),
     ).toEqual(["sample-model-one", "sample-model-two"]);
-    expect(test.bootstrap.mock.calls[1]?.[0]).toMatchObject({
-      replaceStoredHandoffAuthentication: true,
+    expect(test.bootstrap.mock.calls[1]?.[0]).not.toHaveProperty(
+      "replaceStoredHandoffAuthentication",
+    );
+  });
+
+  it("replays an admitted heterogeneous successor after a pre-bootstrap crash", async () => {
+    const test = fixture({ maxDepth: 2, maxFanOut: 2 }, undefined, true);
+    const prepareSession = test.prepareSession.getMockImplementation();
+    if (prepareSession === undefined) {
+      throw new Error("Session preparation fixture is absent");
+    }
+    test.prepareSession
+      .mockImplementationOnce(prepareSession)
+      .mockImplementationOnce(async () => {
+        expect(
+          assignmentForChild(test.store.record, "child-session").assignment,
+        ).toMatchObject({
+          binding: {
+            candidatePosition: 2,
+            driverKind: "sample-driver-two",
+          },
+        });
+        expect(
+          assignmentForChild(test.store.record, "child-session").assignment
+            .providerFallback,
+        ).toBeUndefined();
+        throw new Error("Sample process stopped before bootstrap");
+      });
+
+    await expect(spawn(test.coordinator, test.store)).rejects.toThrow(
+      /stopped before bootstrap/,
+    );
+    expect(
+      assignmentForChild(test.store.record, "child-session").assignment,
+    ).toMatchObject({
+      binding: { candidatePosition: 2, driverKind: "sample-driver-two" },
     });
+    expect(
+      assignmentForChild(test.store.record, "child-session").assignment
+        .providerFallback,
+    ).toBeUndefined();
+
+    const replay = await spawn(test.coordinator, test.store);
+
+    expect(replay).toMatchObject({
+      assignment: {
+        binding: { candidatePosition: 2, driverKind: "sample-driver-two" },
+      },
+      kind: "spawned",
+    });
+    if (replay.kind !== "spawned") throw new Error("Successor was deferred");
+    expect(replay.assignment.providerFallback).toBeUndefined();
+    expect(test.bootstrap).toHaveBeenCalledTimes(2);
+    expect(test.bootstrap.mock.calls[1]?.[0]).not.toHaveProperty(
+      "replaceStoredHandoffAuthentication",
+    );
+    expect(
+      test.bootstrap.mock.calls.map(([call]) => call.modelSelection.model),
+    ).toEqual([
+      "sample-model-one",
+      "sample-model-two",
+    ]);
   });
 
   it("returns structured delegated exhaustion after every start candidate fails", async () => {
@@ -588,6 +658,10 @@ describe("SubagentCoordinator", () => {
     expect(test.onProviderExhaustion).toHaveBeenCalledWith(
       expect.objectContaining({ error: failure, operationId: "spawn-one" }),
     );
+    expect(
+      assignmentForChild(test.store.record, "child-session").assignment
+        .providerFallback,
+    ).toBeUndefined();
   });
 
   it("normalizes all-catalog-unusable delegated exhaustion through the same boundary", async () => {

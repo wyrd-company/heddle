@@ -275,14 +275,15 @@ earlier catalog, collision, and start-failure causes in the session binding.
 Treat the unresolved attention as a standing degradation condition: repair or
 reorder the alias before new sessions repeatedly take the same fallback.
 
-When a delegated successor is over budget, its assignment remains marked as
-pacing-deferred together with its stored-handoff authentication replacement
-requirement. Replaying the spawn operation evaluates that successor again; it
-does not retry the failed predecessor or create the successor thread before
-admission. After admission, it replaces the failed candidate's authentication
-before starting a successor that uses another driver. The durable marker remains
-until that bootstrap confirms, so a crash before confirmation safely repeats
-the replacement. Delegated catalog exhaustion and start exhaustion both return the
+Before pacing deferral returns, the delegated successor assignment is marked as
+pacing-deferred. Replaying the spawn operation evaluates that successor again;
+it does not retry the failed predecessor or create the successor thread before
+admission. The marker remains until bootstrap confirms. An already admitted
+successor needs no marker: a crash before confirmation replays the same durable
+candidate. A successor that uses another T3 driver reuses the same rendered
+workflow handoff and Workflow-MCP correlation authorization; Heddle stores no
+provider authentication metadata.
+Delegated catalog exhaustion and start exhaustion both return the
 `provider-alias-exhausted` selection reason and raise the same durable attention
 boundary.
 

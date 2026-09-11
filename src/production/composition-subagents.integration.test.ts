@@ -1084,6 +1084,7 @@ describe("production subagent composition", () => {
     attemptedProviders.length = 0;
     usageReads.length = 0;
     successorUsed = 100;
+    const registrationCount = t3.mcpRegistrations.length;
 
     await expect(
       composition.subagents.spawn(parent, {
@@ -1102,20 +1103,33 @@ describe("production subagent composition", () => {
     if (!isTodoState(deferredRecord.state.todoState)) {
       throw new Error("Todo state is absent");
     }
-    expect(
-      deferredRecord.state.todoState.lists
-        .flatMap((list) => list.assignments ?? [])
-        .find(
-          ({ operationId }) => operationId === "delegated-heterogeneous-replay",
-        ),
-    ).toMatchObject({
+    const deferredAssignment = deferredRecord.state.todoState.lists
+      .flatMap((list) => list.assignments ?? [])
+      .find(
+        ({ operationId }) => operationId === "delegated-heterogeneous-replay",
+      );
+    expect(deferredAssignment).toMatchObject({
       binding: { candidatePosition: 2, driverKind: "cursor" },
       providerFallback: {
-        replaceStoredHandoffAuthentication: true,
         status: "pacing-deferred",
       },
     });
+    if (deferredAssignment === undefined) {
+      throw new Error("Deferred assignment is absent");
+    }
+    const storedBeforeReplay = deferredRecord.state.handoffs.find(
+      (candidate) =>
+        typeof candidate === "object" &&
+        candidate !== null &&
+        !Array.isArray(candidate) &&
+        candidate["sessionKey"] === deferredAssignment.sessionKey,
+    );
+    expect(storedBeforeReplay).toBeDefined();
+    expect(storedBeforeReplay).not.toHaveProperty(
+      "renderedHandoffAuthentication",
+    );
     expect(attemptedProviders).toEqual(["provider-beta"]);
+    expect(t3.mcpRegistrations).toHaveLength(registrationCount + 1);
 
     successorUsed = 0;
     const replayed = await composition.subagents.spawn(parent, {
@@ -1133,6 +1147,27 @@ describe("production subagent composition", () => {
       replayed.kind === "spawned" && replayed.assignment.providerFallback,
     ).toBe(undefined);
     expect(attemptedProviders).toEqual(["provider-beta", "provider-gamma"]);
+    const replayedRecord = composition.persistence.getInstance(
+      record.instanceId,
+    )!;
+    expect(
+      replayedRecord.state.handoffs.find(
+        (candidate) =>
+          typeof candidate === "object" &&
+          candidate !== null &&
+          !Array.isArray(candidate) &&
+          candidate["sessionKey"] === deferredAssignment.sessionKey,
+      ),
+    ).toEqual(storedBeforeReplay);
+    expect(t3.mcpRegistrations).toHaveLength(registrationCount + 2);
+    expect(
+      t3.mcpRegistrations
+        .slice(registrationCount)
+        .map(({ authorizationHeader }) => authorizationHeader),
+    ).toEqual([
+      `Bearer ${deferredAssignment.correlationToken}`,
+      `Bearer ${deferredAssignment.correlationToken}`,
+    ]);
     await composition.close();
   });
 

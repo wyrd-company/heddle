@@ -30,13 +30,8 @@ import {
 import {
   assertComposedSystemPrompt,
   composeSystemPrompt,
-  handoffAuthenticationBindingsAgree,
   HandoffRenderError,
-  isHandoffAuthenticationBinding,
   renderStageHandoff,
-  resolveEffectiveHandoffDriver,
-  resolveHandoffAuthenticationBinding,
-  type HandoffDriver,
 } from "./handoff-renderer.js";
 import {
   type PinnedHandoffTemplate,
@@ -86,7 +81,6 @@ export type SessionBootstrapInput = {
   parentSessionKey?: string;
   projectId: string;
   providerContext: T3ProviderDispatchContext;
-  replaceStoredHandoffAuthentication?: boolean;
   runtimeMode: string;
   sessionKey: string;
   task: JsonValue;
@@ -330,7 +324,6 @@ const ensureStoredHandoff = async (
   resolveStageContract: WorkflowMcpStageContractResolver,
   instantiate: typeof instantiateTodoList,
   templateAuthority: SessionTemplateAuthority,
-  effectiveDriver: HandoffDriver,
   resolveSystemPrompt: SystemPromptResolver,
 ): Promise<{
   handoff: string;
@@ -413,39 +406,6 @@ const ensureStoredHandoff = async (
         existing.renderedHandoff,
         correlationToken,
       );
-      const currentAuthentication =
-        resolveHandoffAuthenticationBinding(effectiveDriver);
-      if (
-        !isHandoffAuthenticationBinding(existing.renderedHandoffAuthentication)
-      ) {
-        throw new HandoffRenderError(
-          `Stored handoff has no valid authentication binding for '${input.sessionKey}'`,
-        );
-      }
-      if (
-        !handoffAuthenticationBindingsAgree(
-          existing.renderedHandoffAuthentication,
-          currentAuthentication,
-        )
-      ) {
-        if (input.replaceStoredHandoffAuthentication === true) {
-          const replaced = store.compareAndSwapInstance(
-            input.instanceId,
-            current.version,
-            {
-              ...current.state,
-              handoffs: current.state.handoffs.filter(
-                (candidate) => candidate !== existing,
-              ),
-            },
-          );
-          if (replaced !== undefined) continue;
-          continue;
-        }
-        throw new HandoffRenderError(
-          `Stored handoff authentication binding is incompatible for '${input.sessionKey}'`,
-        );
-      }
       return {
         handoff: existing.handoff,
         renderedHandoff: existing.renderedHandoff,
@@ -551,7 +511,6 @@ const ensureStoredHandoff = async (
     );
     const renderedStageHandoff = renderStageHandoff({
       correlationToken,
-      driver: effectiveDriver,
       handoff,
       instanceId: input.instanceId,
       sessionKey: input.sessionKey,
@@ -566,14 +525,11 @@ const ensureStoredHandoff = async (
       renderedStageHandoff,
       correlationToken,
     );
-    const renderedHandoffAuthentication =
-      resolveHandoffAuthenticationBinding(effectiveDriver);
     const stored: StoredStageHandoffCandidate = {
       correlationToken,
       handoff,
       kind: "stage-handoff",
       renderedHandoff,
-      renderedHandoffAuthentication,
       systemPrompt: resolvedSystemPrompt,
       ...(input.parentSessionKey === undefined
         ? {}
@@ -606,11 +562,16 @@ export const bootstrapStageSession = async (
   input: SessionBootstrapInput,
   dependencies: SessionBootstrapDependencies,
 ): Promise<SessionBootstrapResult> => {
-  const effectiveDriver = resolveEffectiveHandoffDriver(
-    input.modelSelection.instanceId,
-    input.providerContext.driver,
-    input.providerContext.providerInstanceId,
-  );
+  if (
+    input.modelSelection.instanceId !== input.providerContext.providerInstanceId
+  ) {
+    throw new HandoffRenderError(
+      "T3 model selection and provider context must name the same provider instance",
+    );
+  }
+  if (input.providerContext.driver.trim() === "") {
+    throw new HandoffRenderError("T3 driver kind must not be empty");
+  }
   const workflowMcpEndpoint = requireWorkflowMcpEndpoint(
     dependencies.workflowMcpEndpoint,
   );
@@ -651,7 +612,6 @@ export const bootstrapStageSession = async (
         )),
     dependencies.instantiateTodoList ?? instantiateTodoList,
     templateAuthority,
-    effectiveDriver,
     dependencies.resolveSystemPrompt ?? resolveBuiltInSystemPrompt,
   );
   const threadId = input.threadId ?? nextId();
