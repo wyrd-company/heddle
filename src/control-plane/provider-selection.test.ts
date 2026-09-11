@@ -3,6 +3,8 @@
 //   verifies: heddle
 // ---
 
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -427,6 +429,21 @@ describe("ProviderSelectionResolver", () => {
         "Provider alias 'missing' cannot be selected: the alias is not configured",
       reason: "provider-alias-not-allowed",
     });
+  });
+
+  it("uses the populated startup candidates without a second resolution path", async () => {
+    const source = await readFile(
+      new URL("./provider-selection.ts", import.meta.url),
+      "utf8",
+    );
+    const budgetLoop = source
+      .split(
+        "for (const [alias, budget] of Object.entries(inputs.providerBudgets)) {",
+      )[1]!
+      .split("    return {")[0]!;
+
+    expect(budgetLoop).toContain("const selections = candidates.get(alias)!;");
+    expect(budgetLoop).not.toContain("resolveCandidatesFromCatalog");
   });
 
   it.each([

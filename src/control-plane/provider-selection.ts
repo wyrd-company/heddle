@@ -473,9 +473,7 @@ export class ProviderSelectionResolver {
     const budgetAliases = new Map<string, string>();
     for (const [alias, budget] of Object.entries(inputs.providerBudgets)) {
       const configuredCandidates = this.#configuredCandidates(alias);
-      const selections =
-        candidates.get(alias) ??
-        this.resolveCandidatesFromCatalog(catalog, alias, inputs);
+      const selections = candidates.get(alias)!;
       const candidateProviderInstanceIds = new Set([
         ...selections.map(({ providerInstanceId }) => providerInstanceId),
         ...configuredCandidates.flatMap(({ providerDisplayName }) =>
