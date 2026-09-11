@@ -1188,15 +1188,10 @@ describe("production composition", () => {
       binding: {
         candidatePosition: 1,
         providerInstanceId: t3.providerCatalog[0]!.instanceId,
-        skippedCandidates: [
-          expect.objectContaining({
-            candidatePosition: 2,
-            failure: exactLaterFailure.failure,
-          }),
-        ],
       },
       threadId: stableUuid(`${sessionKey}:candidate:1:thread`),
     });
+    expect(recovered.binding.skippedCandidates).toEqual([exactLaterFailure]);
     expect(recovered.bindingState).toBeUndefined();
     expect(catalogReads).toHaveBeenCalledTimes(1);
     expect(usageReads).toEqual([t3.providerCatalog[0]!.instanceId]);
