@@ -1106,6 +1106,21 @@ describe("production composition", () => {
     const laterThreadId = stableUuid(
       `${sessionKey}:candidate:${laterSelection.candidatePosition}:thread`,
     );
+    const exactLaterFailure = {
+      candidatePosition: laterSelection.candidatePosition,
+      failure: {
+        cause: {
+          cause: null,
+          message: "Exact sample harness failure",
+          name: "Error",
+        },
+        message:
+          "Session start failed during thread-create: Exact sample harness failure",
+        name: "SessionStartFailure",
+      },
+      modelSlug: laterSelection.model.slug,
+      providerDisplayName: laterSelection.providerDisplayName,
+    };
     composition.persistence.writeSessionRuntime({
       activation:
         Number.parseInt(
@@ -1117,6 +1132,7 @@ describe("production composition", () => {
         sessionKey,
         laterThreadId,
         laterSelection.candidatePosition,
+        [...laterSelection.skippedCandidates, exactLaterFailure],
       ),
       bindingState: "provisional",
       instanceId: owner.instanceId,
@@ -1175,9 +1191,7 @@ describe("production composition", () => {
         skippedCandidates: [
           expect.objectContaining({
             candidatePosition: 2,
-            failure: expect.objectContaining({
-              message: "The candidate did not start",
-            }),
+            failure: exactLaterFailure.failure,
           }),
         ],
       },

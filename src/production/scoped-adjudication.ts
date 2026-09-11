@@ -233,13 +233,18 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     if (existing !== undefined) {
       const recovered = await this.#recoverStarted(existing);
       if (recovered) return { modelSlug: existing.binding.modelSlug };
+      const persistedStartFailure = attemptedCandidatePositions.has(
+        existing.binding.candidatePosition,
+      );
       attemptedCandidatePositions.add(existing.binding.candidatePosition);
-      skipped = mergeSkippedCandidates(skipped, [
-        this.#skipped(
-          existing.binding,
-          new Error("The candidate did not start"),
-        ),
-      ]);
+      if (!persistedStartFailure) {
+        skipped = mergeSkippedCandidates(skipped, [
+          this.#skipped(
+            existing.binding,
+            new Error("The candidate did not start"),
+          ),
+        ]);
+      }
     }
     let configuredCandidates;
     try {
