@@ -18,6 +18,55 @@ const featureDirectory = ".devcontainer/features/heddle";
 const publishedReference = "ghcr.io/wyrd-company/heddle/heddle:0";
 
 describe("Heddle devcontainer feature publication", () => {
+  it("assigns package and Feature versions to independent release units", async () => {
+    const config = parse(await readFile(".intentional/config.yml", "utf8")) as {
+      discovery: {
+        "managed-paths": Array<Record<string, string>>;
+      };
+      "release-units": Record<
+        string,
+        {
+          projections: Array<Record<string, string>>;
+          tags: { primary: Record<string, string> };
+        }
+      >;
+      settings: { "pre-1-0-bump-mapping": string };
+    };
+
+    expect(config.settings["pre-1-0-bump-mapping"]).toBe("component");
+    expect(config.discovery["managed-paths"]).toEqual(
+      expect.arrayContaining([
+        {
+          detector: "npm-package",
+          path: "package.json",
+          "release-unit": "heddle",
+        },
+        {
+          detector: "devcontainer-feature",
+          path: ".devcontainer/features/heddle/devcontainer-feature.json",
+          "release-unit": "heddle-feature",
+        },
+      ]),
+    );
+    expect(config["release-units"].heddle?.projections).toEqual([
+      { adapter: "npm", file: "package.json", mode: "committed" },
+    ]);
+    expect(config["release-units"]["heddle-feature"]?.projections).toEqual([
+      {
+        adapter: "json",
+        file: ".devcontainer/features/heddle/devcontainer-feature.json",
+        mode: "committed",
+        pointer: "/version",
+      },
+    ]);
+    expect(config["release-units"].heddle?.tags.primary.template).toBe(
+      "{id}@{version}",
+    );
+    expect(
+      config["release-units"]["heddle-feature"]?.tags.primary.template,
+    ).toBe("{id}@{version}");
+  });
+
   it("keeps viewer libraries out of the eight runtime dependencies", async () => {
     const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
       dependencies: Record<string, string>;
