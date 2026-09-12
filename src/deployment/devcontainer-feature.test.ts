@@ -89,9 +89,12 @@ describe("Heddle devcontainer feature", () => {
       "No matching better-sqlite3 prebuild exists for platform",
     );
     expect(installer).toContain("Node ABI ${node_abi}");
-    expect(installer.indexOf("packageSha256")).toBeLessThan(
-      installer.indexOf("/etc/s6-overlay/s6-rc.d/heddle"),
+    const digestGuard = installer.indexOf("packageSha256");
+    const serviceRegistration = installer.indexOf(
+      "/etc/s6-overlay/s6-rc.d/heddle",
     );
+    expect(digestGuard).toBeGreaterThan(-1);
+    expect(serviceRegistration).toBeGreaterThan(digestGuard);
     expect(installer).toContain(
       [
         "/usr/local/bin/heddle-server \\",
