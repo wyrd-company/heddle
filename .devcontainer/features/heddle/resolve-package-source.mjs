@@ -21,11 +21,11 @@ if (packageSource !== "") {
 }
 
 const semver =
-  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 
 try {
   if (requestedVersion.toLowerCase() !== "latest") {
-    if (!semver.test(requestedVersion)) {
+    if (parseSemVer(requestedVersion) === undefined) {
       fail(
         `Heddle package version is not valid SemVer: ${JSON.stringify(requestedVersion)}.`,
       );
@@ -35,19 +35,32 @@ try {
   }
 
   const releases = await listReleases(apiBase);
-  const release = releases.find(
-    (candidate) =>
-      typeof candidate === "object" &&
-      candidate !== null &&
-      typeof candidate.tag_name === "string" &&
-      candidate.tag_name.startsWith("heddle@") &&
-      semver.test(candidate.tag_name.slice("heddle@".length)),
+  const matchingReleases = releases.flatMap((candidate) => {
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      typeof candidate.tag_name !== "string" ||
+      !candidate.tag_name.startsWith("heddle@") ||
+      candidate.prerelease === true
+    ) {
+      return [];
+    }
+    const version = candidate.tag_name.slice("heddle@".length);
+    const parsedVersion = parseSemVer(version);
+    if (parsedVersion === undefined || parsedVersion.prerelease !== undefined) {
+      return [];
+    }
+    return [{ parsedVersion, release: candidate, version }];
+  });
+  matchingReleases.sort((left, right) =>
+    compareStableSemVer(right.parsedVersion, left.parsedVersion),
   );
-  if (release === undefined) {
+  const selected = matchingReleases[0];
+  if (selected === undefined) {
     fail("No Heddle package releases exist in the heddle@* tag namespace.");
   }
 
-  const version = release.tag_name.slice("heddle@".length);
+  const { release, version } = selected;
   const assetName = `heddle-${version}.tgz`;
   const asset = Array.isArray(release.assets)
     ? release.assets.find((candidate) => candidate?.name === assetName)
@@ -66,6 +79,25 @@ try {
 
 function releaseAssetUrl(version) {
   return `https://github.com/wyrd-company/heddle/releases/download/heddle@${version}/heddle-${version}.tgz`;
+}
+
+function parseSemVer(value) {
+  const match = semver.exec(value);
+  if (match === null) return undefined;
+  return {
+    major: BigInt(match[1]),
+    minor: BigInt(match[2]),
+    patch: BigInt(match[3]),
+    prerelease: match[4],
+  };
+}
+
+function compareStableSemVer(left, right) {
+  for (const part of ["major", "minor", "patch"]) {
+    if (left[part] < right[part]) return -1;
+    if (left[part] > right[part]) return 1;
+  }
+  return 0;
 }
 
 async function listReleases(base) {

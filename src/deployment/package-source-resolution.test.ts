@@ -57,9 +57,18 @@ describe("Heddle package source resolution", () => {
     });
   });
 
-  it("selects the newest heddle release and ignores the Feature release unit", async () => {
+  it("selects the highest SemVer release independent of GitHub list order", async () => {
     const api = await releaseApi([
-      { assets: [], tag_name: "heddle-feature@9.0.0" },
+      {
+        assets: [
+          {
+            browser_download_url:
+              "https://packages.example.invalid/heddle-1.9.9.tgz",
+            name: "heddle-1.9.9.tgz",
+          },
+        ],
+        tag_name: "heddle@1.9.9",
+      },
       {
         assets: [
           {
@@ -70,6 +79,7 @@ describe("Heddle package source resolution", () => {
         ],
         tag_name: "heddle@2.0.0",
       },
+      { assets: [], tag_name: "heddle-feature@9.0.0" },
       {
         assets: [
           {
@@ -79,6 +89,48 @@ describe("Heddle package source resolution", () => {
           },
         ],
         tag_name: "heddle@1.0.0",
+      },
+    ]);
+
+    await expect(execute(resolver, ["", "latest", api])).resolves.toMatchObject(
+      { stdout: "https://packages.example.invalid/heddle-2.0.0.tgz\n" },
+    );
+  });
+
+  it("excludes GitHub and SemVer prereleases from latest resolution", async () => {
+    const api = await releaseApi([
+      {
+        assets: [
+          {
+            browser_download_url:
+              "https://packages.example.invalid/heddle-4.0.0.tgz",
+            name: "heddle-4.0.0.tgz",
+          },
+        ],
+        prerelease: true,
+        tag_name: "heddle@4.0.0",
+      },
+      {
+        assets: [
+          {
+            browser_download_url:
+              "https://packages.example.invalid/heddle-3.0.0-rc.1.tgz",
+            name: "heddle-3.0.0-rc.1.tgz",
+          },
+        ],
+        prerelease: false,
+        tag_name: "heddle@3.0.0-rc.1",
+      },
+      {
+        assets: [
+          {
+            browser_download_url:
+              "https://packages.example.invalid/heddle-2.0.0.tgz",
+            name: "heddle-2.0.0.tgz",
+          },
+        ],
+        prerelease: false,
+        tag_name: "heddle@2.0.0",
       },
     ]);
 
