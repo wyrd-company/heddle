@@ -315,7 +315,9 @@ package_path="${publication_directory}/heddle-${package_version}.tgz"
     echo "npm pack did not produce ${package_path}." >&2
     exit 1
 }
-tar -tf "${package_path}" | grep -qx package/assets/console-viewer/lifecycle.js || {
+package_contents="${publication_directory}/package-contents.txt"
+tar -tf "${package_path}" >"${package_contents}"
+grep -qx package/assets/console-viewer/lifecycle.js "${package_contents}" || {
     echo "The qualification package is missing assets/console-viewer/lifecycle.js." >&2
     exit 1
 }
@@ -414,8 +416,7 @@ test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { pri
 test "$(kanban-md --version)" = "kanban-md version 0.37.0-fork+b9fc380"
 ! command -v python3 >/dev/null 2>&1
 test -f /usr/local/lib/node_modules/heddle/assets/console-viewer/lifecycle.js
-node -e '''
-const expected = [
+jq -e '\''(.dependencies | keys | sort) == [
   "@flowcraft/sqlite-history",
   "@modelcontextprotocol/server",
   "ajv",
@@ -423,14 +424,8 @@ const expected = [
   "flowcraft",
   "nunjucks",
   "yaml",
-  "zod",
-];
-const manifest = require("/usr/local/lib/node_modules/heddle/package.json");
-const observed = Object.keys(manifest.dependencies).sort();
-if (JSON.stringify(observed) !== JSON.stringify(expected)) {
-  throw new Error(`Unexpected runtime dependencies: ${observed.join(", ")}`);
-}
-'''
+  "zod"
+]\'' /usr/local/lib/node_modules/heddle/package.json >/dev/null
 for attempt in $(seq 1 100); do
     if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1
