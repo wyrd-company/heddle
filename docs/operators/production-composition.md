@@ -25,19 +25,30 @@ namespace follows the source repository identity, and `heddle` is the Feature
 ID. The major-version reference accepts compatible Feature updates while the
 Feature manifest retains the complete semantic version.
 
-The repository source at the publishing head is the Heddle installation source
-of truth. Publication stages the tracked package, TypeScript, viewer, binary,
-and schema inputs inside the Feature. `install.sh` installs locked development
-dependencies, builds those inputs, and creates the private npm package locally
-inside the Feature installation. It does not download a Heddle npm package or
-release archive. The public GHCR Feature and public npm dependencies need no
-application credential. The repository workflow alone receives package-write
-access through its scoped `GITHUB_TOKEN` to publish the Feature.
+The Feature and Heddle package are independent release units. The Feature's
+`version` option selects a Heddle package version and defaults to the newest
+GitHub release whose tag matches `heddle@*`; `heddle-feature@*` tags are not
+package releases. An exact version resolves the corresponding
+`heddle-<version>.tgz` release asset. An https URL or absolute path in
+`packageSource` overrides that resolution. `packageSha256` optionally binds the
+downloaded tarball to a lowercase SHA-256 digest.
 
-`task deployment:qualification` dry-publishes the same staged collection to an
-isolated local OCI registry and replaces only the registry portion of the
-checked-in remote reference. The Dev Container CLI then resolves and installs
-that reference in a clean container. `task deployment:package` checks the OCI
+The published Feature contains no Heddle source and no Heddle package tarball.
+The package release workflow builds the repository tree once, including
+`assets/console-viewer/lifecycle.js`, packs it, and uploads it to the existing
+`heddle@*` GitHub release. It does not publish to an npm registry. Feature
+installation downloads that artifact and installs only its runtime
+dependencies. Resolution, download, digest, and native-prebuild failures stop
+before service registration and name the cause. The target gets no compiler or
+source-build fallback.
+
+`task deployment:qualification` packs the built tree, places the tarball in an
+isolated base image, dry-publishes the source-free Feature collection to an
+isolated local OCI registry, and replaces only the registry portion of the
+checked-in remote reference. The Dev Container CLI supplies the tarball through
+`packageSource`, then resolves and installs the Feature in a clean container.
+The qualification proves that Python is absent and that the installed service
+answers its configured endpoint. `task deployment:package` checks the OCI
 Feature archive without exercising registry resolution; it is not the remote
 installation proof.
 

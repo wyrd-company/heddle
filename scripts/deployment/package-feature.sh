@@ -34,17 +34,11 @@ for path in \
     ./devcontainer-feature.json \
     ./install.sh \
     ./verify-feature-source.sh \
-    ./heddle-source/package.json \
-    ./heddle-source/package-lock.json \
-    ./heddle-source/src/deployment/server.ts \
-    ./heddle-source/bin/heddle-server.mjs \
-    ./heddle-source/schemas/lifecycle-blueprint.json \
-    ./heddle-source/spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/runtime/ExecutionBridge.tsx \
-    ./heddle-source/spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/shapes/types.ts; do
+    ./resolve-package-source.mjs; do
     grep -qx "${path}" "${contents}"
 done
-if grep -Eq '^\./heddle-[^/]*\.tgz$' "${contents}"; then
-    echo "The published Feature contains a pre-packaged Heddle tarball." >&2
+if grep -Eq '^\./heddle-source(/|$)|^\./heddle-[^/]*\.tgz$' "${contents}"; then
+    echo "The published Feature contains Heddle source or a Heddle package tarball." >&2
     exit 1
 fi
 

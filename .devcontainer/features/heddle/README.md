@@ -12,19 +12,27 @@ set, add the Wyrd Company Caddy Feature to the same devcontainer.
 
 The supported Feature reference is
 `ghcr.io/wyrd-company/heddle/heddle:1`. The published Feature contains the
-tracked Heddle source for the same version and builds it during installation.
-It does not fetch a separately published Heddle package and does not use the
-private npm registry; `package.json` stays private. Installation fetches the
-Feature from public GHCR and its public npm dependencies without an application
-credential.
+installer but no Heddle source or package tarball. The installer downloads the
+prebuilt `npm pack` tarball from the selected `heddle@*` GitHub release, verifies
+the optional digest, and installs its runtime dependencies. It does not use an
+npm registry for Heddle; `package.json` stays private. The Feature version and
+the installed Heddle package version are independent release units.
+
+Installation fails before service registration when package resolution,
+download, digest verification, or the required `better-sqlite3` prebuild fails.
+The native-dependency error names the platform and Node ABI. The Feature does
+not install a compiler or fall back to a source build.
 
 ## Options
 
-| Option            | Type   | Default                | Description                                                         |
-| ----------------- | ------ | ---------------------- | ------------------------------------------------------------------- |
-| `configDirectory` | string | `/home/vscode/.heddle` | Operator-owned directory containing required `config.yml`.          |
-| `dnsName`         | string | `""`                   | Optional fully qualified workspace DNS name served through Caddy.   |
-| `serviceUser`     | string | `automatic`            | User that runs Heddle; automatic selection prefers the remote user. |
+| Option            | Type   | Default                | Description                                                                                |
+| ----------------- | ------ | ---------------------- | ------------------------------------------------------------------------------------------ |
+| `version`         | string | `latest`               | Heddle package version. `latest` selects the newest `heddle@*` release, not a Feature tag. |
+| `packageSource`   | string | `""`                   | Optional https URL or absolute tarball path that overrides `version`.                      |
+| `packageSha256`   | string | `""`                   | Optional lowercase SHA-256 digest verified before installation.                            |
+| `configDirectory` | string | `/home/vscode/.heddle` | Operator-owned directory containing required `config.yml`.                                 |
+| `dnsName`         | string | `""`                   | Optional fully qualified workspace DNS name served through Caddy.                          |
+| `serviceUser`     | string | `automatic`            | User that runs Heddle; automatic selection prefers the remote user.                        |
 
 ## Workspace configuration and persistence
 
@@ -101,7 +109,10 @@ qualification at one repository head:
 task deployment:qualification
 ```
 
-This gate stages the tracked source, dry-publishes the Feature to an isolated
-local OCI registry, and installs it through a versioned remote reference. It
-does not use the local-path Feature form. `task deployment:package` separately
-checks the distribution archive without starting a container or registry.
+This gate packs the built repository tree, places that tarball in an isolated
+base image, stages the source-free Feature, dry-publishes it to an isolated
+local OCI registry, and supplies the tarball through `packageSource`. It then
+installs the published Feature through a versioned remote reference and proves
+the service endpoint. It does not use the local-path Feature form.
+`task deployment:package` separately checks the distribution archive without
+starting a container or registry.

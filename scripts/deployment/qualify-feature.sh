@@ -21,6 +21,7 @@ config_directory=""
 publication_directory=""
 container_id=""
 registry_container_id=""
+qualification_base_image=""
 t3_mock_error=""
 t3_mock_log=""
 t3_mock_pid=""
@@ -79,6 +80,16 @@ cleanup() {
             "${registry_container_id}" \
             heddle.dry-publish \
             || cleanup_failed=1
+    fi
+    if [ -n "${qualification_base_image}" ] \
+        && docker image inspect "${qualification_base_image}" >/dev/null 2>&1; then
+        base_label="$(docker image inspect --format '{{index .Config.Labels "heddle.qualification"}}' "${qualification_base_image}")"
+        if [ "${base_label}" != "${qualification_label}" ]; then
+            echo "Refusing to remove image ${qualification_base_image}: heddle.qualification does not match ${qualification_label}." >&2
+            cleanup_failed=1
+        else
+            docker image rm "${qualification_base_image}" >/dev/null || cleanup_failed=1
+        fi
     fi
     [ -z "${state_directory}" ] || rm -rf "${state_directory}"
     [ -z "${board_directory}" ] || rm -rf "${board_directory}"
@@ -295,6 +306,32 @@ assert_head
 task -d "${repository}" deployment:package
 assert_head
 
+package_version="$(jq -er '.version' "${repository}/package.json")"
+npm pack --silent \
+    --pack-destination "${publication_directory}" \
+    "${repository}" >/dev/null
+package_path="${publication_directory}/heddle-${package_version}.tgz"
+[ -f "${package_path}" ] || {
+    echo "npm pack did not produce ${package_path}." >&2
+    exit 1
+}
+tar -tf "${package_path}" | grep -qx package/assets/console-viewer/lifecycle.js || {
+    echo "The qualification package is missing assets/console-viewer/lifecycle.js." >&2
+    exit 1
+}
+package_digest="$(sha256sum "${package_path}" | cut -d ' ' -f 1)"
+base_context="${publication_directory}/base-image"
+install -d -m 0755 "${base_context}"
+cp -- "${package_path}" "${base_context}/heddle-package.tgz"
+base_source="$(jq -er '.image' "${source_configuration}")"
+cat >"${base_context}/Dockerfile" <<EOF
+FROM ${base_source}
+COPY heddle-package.tgz /opt/heddle-package.tgz
+LABEL heddle.qualification=${qualification_label}
+EOF
+qualification_base_image="heddle-qualification-base:${accepted_head}-$$"
+docker build --tag "${qualification_base_image}" "${base_context}" >/dev/null
+
 docker_config="${publication_directory}/docker-config"
 install -d -m 0700 "${docker_config}"
 if ! docker image inspect "${registry_image}" >/dev/null 2>&1; then
@@ -347,9 +384,19 @@ jq -e --arg reference "${published_feature_reference}" \
 jq \
     --arg published "${published_feature_reference}" \
     --arg dry_published "${dry_published_reference}" \
-    '.features |= with_entries(
-      if .key == $published then .key = $dry_published else . end
-    )' \
+    --arg base_image "${qualification_base_image}" \
+    --arg package_digest "${package_digest}" \
+    '.image = $base_image |
+     .features |= with_entries(
+       if .key == $published then
+         .key = $dry_published |
+         .value += {
+           packageSource: "/opt/heddle-package.tgz",
+           packageSha256: $package_digest,
+           version: "latest"
+         }
+       else . end
+     )' \
     "${source_configuration}" >"${configuration}"
 jq -e --arg reference "${dry_published_reference}" \
     '[.features | keys[] | select(. == $reference)] | length == 1' \
@@ -365,6 +412,25 @@ inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
 set -euo pipefail
 test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
 test "$(kanban-md --version)" = "kanban-md version 0.37.0-fork+b9fc380"
+! command -v python3 >/dev/null 2>&1
+test -f /usr/local/lib/node_modules/heddle/assets/console-viewer/lifecycle.js
+node -e '''
+const expected = [
+  "@flowcraft/sqlite-history",
+  "@modelcontextprotocol/server",
+  "ajv",
+  "better-sqlite3",
+  "flowcraft",
+  "nunjucks",
+  "yaml",
+  "zod",
+];
+const manifest = require("/usr/local/lib/node_modules/heddle/package.json");
+const observed = Object.keys(manifest.dependencies).sort();
+if (JSON.stringify(observed) !== JSON.stringify(expected)) {
+  throw new Error(`Unexpected runtime dependencies: ${observed.join(", ")}`);
+}
+'''
 for attempt in $(seq 1 100); do
     if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1

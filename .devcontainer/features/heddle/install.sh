@@ -14,7 +14,7 @@ source "$(dirname "$0")/common.sh"
 require_root
 check_debian_family
 ensure_s6_overlay
-ensure_apt_packages build-essential ca-certificates jq python3
+ensure_apt_packages ca-certificates curl jq
 
 [[ "${CONFIGDIRECTORY}" = /* ]] \
     || err "configDirectory must be an absolute path."
@@ -43,36 +43,73 @@ service_group="$(id -gn "${service_user}")"
 install -d -m 0750 -o "${service_user}" -g "${service_group}" "${CONFIGDIRECTORY}"
 
 "$(dirname "$0")/verify-feature-source.sh" "$(dirname "$0")"
-source_directory="$(dirname "$0")/heddle-source"
-built_package_directory="$(mktemp -d)"
+package_directory="$(mktemp -d)"
 cleanup_package() {
-    rm -rf "${built_package_directory}"
+    rm -rf "${package_directory}"
 }
 trap cleanup_package EXIT
+package_path="${package_directory}/heddle-package.tgz"
+package_source="$(node "$(dirname "$0")/resolve-package-source.mjs" \
+    "${PACKAGESOURCE}" "${VERSION}")" \
+    || err "Heddle package source resolution failed."
 
-log "Building Heddle from the published Feature source"
-env \
+case "${package_source}" in
+    https://*)
+        log "Downloading the Heddle package from ${package_source}"
+        curl --fail --location --silent --show-error \
+            --output "${package_path}" "${package_source}" \
+            || err "Failed to download the Heddle package from ${package_source}."
+        ;;
+    /*)
+        [ -f "${package_source}" ] \
+            || err "Heddle package source does not exist: ${package_source}."
+        cp -- "${package_source}" "${package_path}" \
+            || err "Failed to copy the Heddle package from ${package_source}."
+        ;;
+    *) err "Resolved Heddle package source is neither an https URL nor an absolute path: ${package_source}." ;;
+esac
+
+if [ -n "${PACKAGESHA256}" ]; then
+    [[ "${PACKAGESHA256}" =~ ^[0-9a-f]{64}$ ]] \
+        || err "packageSha256 must be a lowercase 64-character SHA-256 digest."
+    observed_digest="$(sha256sum "${package_path}" | cut -d ' ' -f 1)"
+    [ "${observed_digest}" = "${PACKAGESHA256}" ] \
+        || err "Heddle package SHA-256 mismatch: expected ${PACKAGESHA256}, observed ${observed_digest}."
+fi
+
+install_log="${package_directory}/npm-install.log"
+preflight_prefix="${package_directory}/preflight"
+if ! env \
     NPM_CONFIG_ENGINE_STRICT=true \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
-    npm ci --prefix "${source_directory}" --ignore-scripts --no-audit --no-fund
-npm run --prefix "${source_directory}" build
-npm pack --silent \
-    --pack-destination "${built_package_directory}" \
-    "${source_directory}" >/dev/null
+    npm install --global --prefix "${preflight_prefix}" --ignore-scripts \
+        --no-audit --no-fund "${package_path}" >"${install_log}" 2>&1; then
+    cat "${install_log}" >&2
+    err "Heddle package dependency installation failed for ${package_source}."
+fi
+better_sqlite_directory="${preflight_prefix}/lib/node_modules/heddle/node_modules/better-sqlite3"
+prebuild_install="${preflight_prefix}/lib/node_modules/heddle/node_modules/.bin/prebuild-install"
+[ -x "${prebuild_install}" ] && [ -d "${better_sqlite_directory}" ] \
+    || err "The Heddle package does not contain the expected better-sqlite3 prebuild installer."
+if ! "${prebuild_install}" --path "${better_sqlite_directory}" \
+    >"${install_log}" 2>&1; then
+    cat "${install_log}" >&2
+    platform="$(node -p '`${process.platform}-${process.arch}`')"
+    node_abi="$(node -p 'process.versions.modules')"
+    err "No matching better-sqlite3 prebuild exists for platform ${platform} and Node ABI ${node_abi}."
+fi
 
-shopt -s nullglob
-built_packages=("${built_package_directory}"/heddle-*.tgz)
-shopt -u nullglob
-[ "${#built_packages[@]}" -eq 1 ] \
-    || err "The Feature build must produce exactly one Heddle package."
-
-log "Installing the Heddle package built from Feature source"
-env \
+log "Installing the prebuilt Heddle package"
+if ! env \
     NPM_CONFIG_ENGINE_STRICT=true \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     npm install --global --prefix /usr/local \
         --allow-scripts=better-sqlite3 \
-        "${built_packages[0]}"
+        --no-audit --no-fund \
+        "${package_path}" >"${install_log}" 2>&1; then
+    cat "${install_log}" >&2
+    err "Heddle package installation failed for ${package_source}."
+fi
 [ -x /usr/local/bin/heddle-server ] \
     || err "Heddle was not installed at /usr/local/bin/heddle-server."
 

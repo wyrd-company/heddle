@@ -14,19 +14,15 @@ fail() {
     exit 1
 }
 
-shopt -s nullglob
-legacy_packages=("${feature_directory}"/heddle-*.tgz)
-shopt -u nullglob
-[ "${#legacy_packages[@]}" -eq 0 ] \
-    || fail "Pre-packaged Heddle tarballs are not a supported Feature source."
-
 feature_manifest="${feature_directory}/devcontainer-feature.json"
-source_manifest="${feature_directory}/heddle-source/package.json"
-[ -f "${source_manifest}" ] \
-    || fail "The published Feature does not contain the Heddle source."
+jq -e '.id == "heddle" and (.version | type == "string" and length > 0)' \
+    "${feature_manifest}" >/dev/null \
+    || fail "The published Feature manifest identity is invalid."
 
-feature_version="$(jq -er '.version' "${feature_manifest}")"
-source_identity="$(jq -er '[.name, .version, .private] | @tsv' "${source_manifest}")"
-expected_identity="$(printf 'heddle\t%s\ttrue' "${feature_version}")"
-[ "${source_identity}" = "${expected_identity}" ] \
-    || fail "The Feature and Heddle source identities do not agree."
+[ ! -e "${feature_directory}/heddle-source" ] \
+    || fail "The published Feature must not contain a Heddle source tree."
+
+if find "${feature_directory}" -maxdepth 1 -type f -name 'heddle-*.tgz' -print -quit \
+    | grep -q .; then
+    fail "The published Feature must not contain a Heddle package tarball."
+fi

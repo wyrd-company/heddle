@@ -41,7 +41,7 @@ describe("Heddle devcontainer feature", () => {
       expect(document.match(/0\.0\.\d+-wyrd\.\d+/g)).toEqual([versions.t3]);
     },
   );
-  it("declares only the configuration-directory and Caddy routing options", async () => {
+  it("declares independent package resolution and service options", async () => {
     const manifest = JSON.parse(
       await readFile(`${featureDirectory}/devcontainer-feature.json`, "utf8"),
     ) as {
@@ -50,6 +50,9 @@ describe("Heddle devcontainer feature", () => {
     };
 
     expect(manifest.options).toMatchObject({
+      version: { default: "latest" },
+      packageSource: { default: "" },
+      packageSha256: { default: "" },
       configDirectory: { default: "/home/vscode/.heddle" },
       dnsName: { default: "" },
     });
@@ -66,19 +69,24 @@ describe("Heddle devcontainer feature", () => {
     const installer = await readFile(`${featureDirectory}/install.sh`, "utf8");
 
     expect(common).toContain("apt-get install -y --no-install-recommends");
-    expect(installer).toContain(
-      "ensure_apt_packages build-essential ca-certificates jq python3",
-    );
+    expect(installer).toContain("ensure_apt_packages ca-certificates curl jq");
+    expect(installer).not.toMatch(/\b(?:build-essential|python3)\b/u);
     expect(installer).toContain(
       '"$(dirname "$0")/verify-feature-source.sh" "$(dirname "$0")"',
     );
-    expect(installer).toContain(
-      'source_directory="$(dirname "$0")/heddle-source"',
-    );
+    expect(installer).not.toContain("heddle-source");
+    expect(installer).not.toMatch(/npm (?:ci|run|pack)\b/u);
     expect(installer).not.toContain(
       'packages=("$(dirname "$0")"/heddle-*.tgz)',
     );
     expect(installer).toContain("--allow-scripts=better-sqlite3");
+    expect(installer).toContain(
+      "No matching better-sqlite3 prebuild exists for platform",
+    );
+    expect(installer).toContain("Node ABI ${node_abi}");
+    expect(installer.indexOf("packageSha256")).toBeLessThan(
+      installer.indexOf("/etc/s6-overlay/s6-rc.d/heddle"),
+    );
     expect(installer).toContain(
       [
         "/usr/local/bin/heddle-server \\",
@@ -240,6 +248,14 @@ describe("Heddle devcontainer feature", () => {
     expect(featureQualification).toContain("--namespace wyrd-company/heddle");
     expect(featureQualification).toContain(
       'dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:1"',
+    );
+    expect(featureQualification).toContain(
+      'packageSource: "/opt/heddle-package.tgz"',
+    );
+    expect(featureQualification).toContain("packageSha256: $package_digest");
+    expect(featureQualification).toContain("! command -v python3");
+    expect(featureQualification).toContain(
+      "package/assets/console-viewer/lifecycle.js",
     );
     expect(featureQualification).toContain(
       'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',
