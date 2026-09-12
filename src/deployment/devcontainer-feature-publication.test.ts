@@ -37,6 +37,7 @@ describe("Heddle devcontainer feature publication", () => {
       "zod",
     ]);
     expect(manifest.devDependencies).toMatchObject({
+      "@tldraw/validate": "5.3.2",
       react: expect.any(String),
       "react-dom": expect.any(String),
       tldraw: expect.any(String),
