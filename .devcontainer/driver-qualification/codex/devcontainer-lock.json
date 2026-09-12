@@ -1,0 +1,15 @@
+{
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "2.1.0",
+      "resolved": "ghcr.io/devcontainers/features/node@sha256:586c9a6f7dd40bd3ba2cd41e7f2f88dcc31fbe5d1442afcbf07ffbc66b686857",
+      "integrity": "sha256:586c9a6f7dd40bd3ba2cd41e7f2f88dcc31fbe5d1442afcbf07ffbc66b686857"
+    },
+    "ghcr.io/wyrd-company/devcontainers/codex-cli:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/wyrd-company/devcontainers/codex-cli@sha256:223b5a6e3f9870594ef15c3b01d006d568905daa5dcb6e07b8f9af3f36fbf378",
+      "integrity": "sha256:223b5a6e3f9870594ef15c3b01d006d568905daa5dcb6e07b8f9af3f36fbf378",
+      "dependsOn": ["ghcr.io/devcontainers/features/node:2"]
+    }
+  }
+}

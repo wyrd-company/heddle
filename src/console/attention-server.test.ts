@@ -1,0 +1,292 @@
+// ---
+// relationships:
+//   validates: heddle
+// ---
+
+import type { AddressInfo } from "node:net";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { createConsoleAttention } from "./attention-contract.js";
+import { createConsoleServer } from "./server.js";
+import type {
+  ConsoleAttention,
+  ConsoleAttentionActionPort,
+  ConsoleBoard,
+  ConsoleStateSource,
+} from "./types.js";
+
+const board: ConsoleBoard = {
+  readBoard: async () => [],
+  readBoardStatuses: async () => [],
+  setEpicInProgress: async () => undefined,
+};
+
+const actionable = (message = "A delivery choice is required") =>
+  createConsoleAttention({
+    actions: [
+      {
+        actionId: "answer",
+        contract: {
+          escalationId: "sample-choice",
+          instanceId: "instance-12",
+          kind: "escalation.answer" as const,
+          ownerSessionKey: "session-12",
+        },
+        input: {
+          kind: "questions" as const,
+          questions: [
+            {
+              id: "delivery-window",
+              multiSelect: false,
+              options: [{ label: "Continue" }, { label: "Wait" }],
+              question: "Which delivery window should be used?",
+            },
+          ],
+        },
+        label: "Answer escalation",
+      },
+    ],
+    attentionId: "attention-12",
+    instanceId: "instance-12",
+    kind: "escalation",
+    message,
+    scope: "task:12" as const,
+    taskId: 12,
+  });
+
+const state = (
+  read: () => ConsoleAttention[],
+  correlationTokens: string[] = [],
+): ConsoleStateSource => ({
+  listAttention: async () => read(),
+  listCorrelationTokens: async () => correlationTokens,
+  listEvents: async () => [],
+  listInstances: async () => [],
+  readLifecycle: async () => {
+    throw new Error("unexpected lifecycle read");
+  },
+});
+
+describe("console attention action endpoint", () => {
+  let server: ReturnType<typeof createConsoleServer> | undefined;
+
+  afterEach(async () => {
+    if (server === undefined) return;
+    await new Promise<void>((resolve, reject) =>
+      server!.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      ),
+    );
+  });
+
+  const start = async (
+    attention: () => ConsoleAttention[],
+    actions?: ConsoleAttentionActionPort,
+    correlationTokens: string[] = [],
+  ): Promise<string> => {
+    server = createConsoleServer({
+      ...(actions === undefined ? {} : { actions }),
+      board,
+      state: state(attention, correlationTokens),
+    });
+    await new Promise<void>((resolve) =>
+      server!.listen(0, "127.0.0.1", resolve),
+    );
+    return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  };
+
+  it("re-reads the current offer and delegates its exact authority target", async () => {
+    const current = actionable();
+    const execute = vi.fn<ConsoleAttentionActionPort["execute"]>(
+      async () => undefined,
+    );
+    const baseUrl = await start(() => [current], { execute });
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/attention/attention-12/actions/answer`,
+      {
+        body: JSON.stringify({
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
+          fingerprint: current.fingerprint,
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(execute).toHaveBeenCalledWith({
+      action: current.actions[0],
+      answers: {
+        "delivery-window": {
+          selectedOptions: ["Continue"],
+          text: "",
+          reasoning: "Fits the sample schedule.",
+        },
+      },
+      attention: current,
+    });
+  });
+
+  it("rejects a stale fingerprint before calling the action port", async () => {
+    const shown = actionable();
+    const current = actionable("A superseding delivery choice is required");
+    const execute = vi.fn<ConsoleAttentionActionPort["execute"]>(
+      async () => undefined,
+    );
+    const baseUrl = await start(() => [current], { execute });
+
+    const response = await globalThis.fetch(
+      `${baseUrl}/api/attention/attention-12/actions/answer`,
+      {
+        body: JSON.stringify({
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
+          fingerprint: shown.fingerprint,
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(409);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unoffered action and answer before calling the action port", async () => {
+    const current = actionable();
+    const execute = vi.fn<ConsoleAttentionActionPort["execute"]>(
+      async () => undefined,
+    );
+    const baseUrl = await start(() => [current], { execute });
+    const request = (actionId: string, answer: string) =>
+      globalThis.fetch(
+        `${baseUrl}/api/attention/attention-12/actions/${actionId}`,
+        {
+          body: JSON.stringify({
+            answers: {
+              "delivery-window": {
+                selectedOptions: [answer],
+                text: "",
+                reasoning: "Fits the sample schedule.",
+              },
+            },
+            fingerprint: current.fingerprint,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        },
+      );
+
+    await expect(request("dismiss", "continue")).resolves.toMatchObject({
+      status: 409,
+    });
+    await expect(request("answer", "later")).resolves.toMatchObject({
+      status: 400,
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("applies the console attention identity bound to action paths", async () => {
+    const acceptedId = "a".repeat(128);
+    const offer = actionable();
+    const current = createConsoleAttention({
+      actions: offer.actions,
+      attentionId: acceptedId,
+      instanceId: offer.instanceId,
+      kind: offer.kind,
+      message: offer.message,
+      scope: offer.scope,
+      taskId: offer.taskId,
+    });
+    const execute = vi.fn<ConsoleAttentionActionPort["execute"]>(
+      async () => undefined,
+    );
+    const baseUrl = await start(() => [current], { execute });
+    const request = (attentionId: string) =>
+      globalThis.fetch(
+        `${baseUrl}/api/attention/${attentionId}/actions/answer`,
+        {
+          body: JSON.stringify({
+            answers: {
+              "delivery-window": {
+                selectedOptions: ["Continue"],
+                text: "",
+                reasoning: "Fits the sample schedule.",
+              },
+            },
+            fingerprint: current.fingerprint,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        },
+      );
+
+    await expect(request(acceptedId)).resolves.toMatchObject({ status: 204 });
+    const rejected = await request("a".repeat(129));
+    await expect(rejected.json()).resolves.toEqual({
+      error:
+        "attention id must be a non-empty string of at most 128 characters",
+    });
+    expect(rejected.status).toBe(400);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expose actionable attention without an injected action port", async () => {
+    const baseUrl = await start(() => [actionable()]);
+
+    await expect(
+      globalThis.fetch(`${baseUrl}/api/attention`),
+    ).resolves.toMatchObject({
+      status: 503,
+    });
+  });
+
+  it("gates attention text that contains a correlation token before read or action", async () => {
+    const correlationToken = "attention-fixture-credential";
+    const current = actionable(`Blocked by ${correlationToken}`);
+    const execute = vi.fn<ConsoleAttentionActionPort["execute"]>(
+      async () => undefined,
+    );
+    const baseUrl = await start(() => [current], { execute }, [
+      correlationToken,
+    ]);
+
+    const read = await globalThis.fetch(`${baseUrl}/api/attention`);
+    const serialized = await read.text();
+    const action = await globalThis.fetch(
+      `${baseUrl}/api/attention/attention-12/actions/answer`,
+      {
+        body: JSON.stringify({
+          answers: {
+            "delivery-window": {
+              selectedOptions: ["Continue"],
+              text: "",
+              reasoning: "Fits the sample schedule.",
+            },
+          },
+          fingerprint: current.fingerprint,
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(read.status).toBe(503);
+    expect(serialized).not.toContain(correlationToken);
+    expect(action.status).toBe(503);
+    expect(execute).not.toHaveBeenCalled();
+  });
+});

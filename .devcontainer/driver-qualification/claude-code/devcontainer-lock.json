@@ -1,0 +1,14 @@
+{
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "2.1.0",
+      "resolved": "ghcr.io/devcontainers/features/node@sha256:586c9a6f7dd40bd3ba2cd41e7f2f88dcc31fbe5d1442afcbf07ffbc66b686857",
+      "integrity": "sha256:586c9a6f7dd40bd3ba2cd41e7f2f88dcc31fbe5d1442afcbf07ffbc66b686857"
+    },
+    "ghcr.io/wyrd-company/devcontainers/claude-code-cli:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/wyrd-company/devcontainers/claude-code-cli@sha256:160a910a27f95f84bf567f09ffaba9930dd68a0f650ed3c536f27a5fe65301d7",
+      "integrity": "sha256:160a910a27f95f84bf567f09ffaba9930dd68a0f650ed3c536f27a5fe65301d7"
+    }
+  }
+}

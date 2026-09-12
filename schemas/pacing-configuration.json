@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wyrd.company/heddle/pacing-configuration.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "title": "Heddle pacing configuration",
+  "description": "Workspace dispatch capacity shared by lifecycle and subagent sessions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "relationships",
+    "defaultProvider",
+    "maxConcurrentSessions",
+    "providerBudgets",
+    "subagents",
+    "usageWindowHours"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://wyrd.company/heddle/pacing-configuration.schema.json"
+    },
+    "relationships": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implements"],
+      "properties": {
+        "implements": {
+          "const": "heddle"
+        }
+      }
+    },
+    "defaultProvider": {
+      "description": "Provider used when a task or stage does not select one.",
+      "type": "string",
+      "pattern": ".*\\S.*"
+    },
+    "maxConcurrentSessions": {
+      "description": "Maximum total active lifecycle and subagent sessions in the workspace.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "providerBudgets": {
+      "description": "Provider usage limits keyed by provider identifier. Missing providers have no usage limit.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/provider-budget"
+      },
+      "propertyNames": {
+        "pattern": ".*\\S.*"
+      }
+    },
+    "subagents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxDepth", "maxFanOut"],
+      "properties": {
+        "maxDepth": {
+          "description": "Maximum subagent nesting depth. Top-level sessions have depth zero.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxFanOut": {
+          "description": "Maximum active child sessions for one parent session.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "usageWindowHours": {
+      "description": "Provider usage window length. Heddle v1 uses five-hour windows.",
+      "const": 5
+    }
+  },
+  "$defs": {
+    "provider-budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usageLimit"],
+      "properties": {
+        "usageLimit": {
+          "description": "Maximum usage in the units reported by the provider usage source.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

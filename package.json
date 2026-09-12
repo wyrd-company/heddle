@@ -1,27 +1,68 @@
 {
-  "name": "spike-flowcraft-gate",
-  "version": "1.0.0",
-  "description": "Orchestration service",
-  "main": "index.js",
+  "name": "heddle",
+  "version": "0.0.0",
+  "description": "Workflow service for software delivery tasks",
+  "private": true,
+  "bin": {
+    "heddle-cursor-agent": "bin/heddle-cursor-agent.mjs",
+    "heddle-server": "bin/heddle-server.mjs"
+  },
+  "files": [
+    "assets",
+    "bin",
+    "dist",
+    "schemas"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "browser:qualification": "node scripts/browser/qualify-console.mjs",
+    "blueprints:validate": "node scripts/validate-blueprints.mjs",
+    "build": "tsc --project tsconfig.json && tsc --project tsconfig.viewer.json && vite build",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "eslint src bin scripts/deployment scripts/browser eslint.config.js && prettier --check README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer .github scripts/deployment scripts/browser",
+    "format": "prettier --write README.md package.json Taskfile.yml tsconfig.json tsconfig.viewer.json eslint.config.js vitest.config.ts vite.config.ts src bin deployment .devcontainer .github scripts/deployment scripts/browser"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "type": "module",
-  "dependencies": {
-    "@flowcraft/sqlite-history": "^1.0.0-alpha.1",
-    "flowcraft": "^2.10.1",
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.13.3",
+    "@types/nunjucks": "3.2.6",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "@typescript-eslint/parser": "^8.41.0",
+    "@tldraw/validate": "5.3.2",
+    "@vitejs/plugin-react": "^6.1.1",
+    "agent-browser": "0.34.0",
+    "eslint": "^9.34.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tldraw": "^5.3.2"
+    "tldraw": "^5.3.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vite": "^8.2.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@flowcraft/sqlite-history": "^1.0.0-beta.1",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "ajv": "^8.20.0",
+    "better-sqlite3": "^12.11.1",
+    "flowcraft": "2.10.1",
+    "nunjucks": "3.2.4",
+    "yaml": "2.8.1",
+    "zod": "^4.2.1"
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
-    "vite": "^8.2.2"
   }
 }

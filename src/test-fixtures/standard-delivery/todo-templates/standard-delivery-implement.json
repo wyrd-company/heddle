@@ -1,0 +1,24 @@
+{
+  "$schema": "https://wyrd.company/heddle/todo-template.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "items": [
+    {
+      "id": "orient",
+      "text": "Orient on the contract for {{task.title}}"
+    },
+    {
+      "id": "implement",
+      "text": "Implement {{task.title}}"
+    },
+    {
+      "id": "validate",
+      "text": "Validate the implemented behavior"
+    },
+    {
+      "id": "handoff",
+      "text": "Prepare the implementation handoff"
+    }
+  ]
+}

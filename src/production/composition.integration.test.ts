@@ -1,0 +1,3674 @@
+// ---
+// relationships:
+//   verifies: heddle
+// ---
+
+import { access, copyFile, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { cwd } from "node:process";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  composeSystemPrompt,
+  ProviderSelectionResolver,
+  renderStageHandoff,
+} from "../control-plane/index.js";
+import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
+import {
+  readLifecycleContext,
+  type LifecycleBlueprint,
+} from "../engine/index.js";
+import { writeDeliveryBlueprintFixture } from "../engine/lifecycle-blueprint.test-support.js";
+import {
+  isWorkflowMcpStageContract,
+  type EscalationQuestion,
+  WorkflowMcpSessionResolver,
+} from "../mcp-server/index.js";
+import {
+  adjudicationSessionKey,
+  escalationAttentionId,
+} from "../mcp-server/escalation-contract.js";
+import { DispatchPacingGate } from "../pacing/index.js";
+import { createProductionComposition } from "./composition.js";
+import { createProductionErrorAttention } from "./error-visibility.js";
+import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
+import { bindResolvedSession } from "./session-binding.js";
+import { stableUuid } from "./stable-uuid.js";
+import {
+  execute,
+  prepareProductionEpicFixture,
+  prepareProductionFixture,
+  SyntheticT3,
+} from "./composition.test-support.js";
+
+const fetchedAttentionIds = (
+  calls: readonly (readonly unknown[])[],
+): Array<string | null> =>
+  calls.map((call) => {
+    const body = (call[1] as Parameters<typeof globalThis.fetch>[1])?.body;
+    const target = new globalThis.URLSearchParams(String(body)).get("url");
+    return target === null
+      ? null
+      : new globalThis.URL(target).searchParams.get("attention");
+  });
+
+describe("production composition", () => {
+  let cleanup: (() => Promise<void>) | undefined;
+
+  afterEach(async () => {
+    await cleanup?.();
+  });
+
+  const prepare = async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    return fixture;
+  };
+
+  const configureProviderCandidates = (
+    fixture: Awaited<ReturnType<typeof prepare>>,
+    t3: SyntheticT3,
+  ) => {
+    const secondSelection = {
+      ...fixture.configuration.session.defaultSelection,
+      driverKind: "sample-driver-two",
+      model: {
+        isCustom: false,
+        name: "Sample Model Two",
+        slug: "sample-model-two",
+      },
+      observedCliVersion: "2.0.0",
+      providerDisplayName: "Workbench Beta",
+      providerInstanceId: "provider-two",
+    };
+    t3.providerCatalog.push({
+      availability: "available",
+      displayName: "Workbench Beta",
+      driverKind: "sample-driver-two",
+      enabled: true,
+      installed: true,
+      instanceId: "provider-two",
+      models: [secondSelection.model],
+      observedCliVersion: "2.0.0",
+      state: "ready",
+    });
+    fixture.configuration.providerAliases = {
+      primary: [
+        {
+          model: "sample-model",
+          providerDisplayName: "Workbench Alpha",
+        },
+        {
+          model: "sample-model-two",
+          providerDisplayName: "Workbench Beta",
+        },
+      ],
+    };
+    fixture.configuration.session.resolvedSelections = [
+      fixture.configuration.session.defaultSelection,
+      secondSelection,
+    ];
+  };
+
+  const configureAdjudication = (
+    fixture: Awaited<ReturnType<typeof prepare>>,
+  ) => {
+    fixture.configuration.adjudication = {
+      policyPath: "adjudication/policy.json",
+      providerAlias: "primary",
+    };
+  };
+
+  const openProductionEscalation = async (
+    composition: ReturnType<typeof createProductionComposition>,
+    questions: EscalationQuestion[] = [
+      {
+        multiSelect: false,
+        id: "selection",
+        options: [
+          {
+            description: "Use the first generic option",
+            label: "first",
+          },
+          {
+            description: "Use the second generic option",
+            label: "second",
+          },
+        ],
+        question: "Which generic option should be selected?",
+      },
+    ],
+  ) => {
+    const runtime = composition.persistence
+      .listReconcilerRuntime()
+      .find(({ state }) => state === "waiting")!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(token);
+    await composition.escalation.escalate(binding, {
+      threadId: runtime.threadId!,
+      requestId: "request-one",
+      escalationId: "production-choice",
+      questions,
+    });
+    await vi.waitFor(() =>
+      expect(
+        composition.persistence
+          .listSessionRuntime()
+          .filter(({ stageId }) => stageId === "adjudication"),
+      ).toHaveLength(1),
+    );
+    return {
+      adjudication: composition.persistence
+        .listSessionRuntime()
+        .find(({ stageId }) => stageId === "adjudication")!,
+      runtime,
+    };
+  };
+
+  it("starts a fresh production adjudication and delivers its scoped answer", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    const owner = composition.persistence
+      .listReconcilerRuntime()
+      .find(({ state }) => state === "waiting")!;
+    const ownerToken = composition.persistence.getInstance(owner.instanceId)!
+      .state.correlationTokens[owner.sessionKey!]!;
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--title",
+        `Sample ${ownerToken} ${fixture.configuration.t3.accessToken} ${fixture.configuration.pushover.applicationToken}`,
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    const handoff = composition.persistence
+      .getInstance(runtime.instanceId)!
+      .state.handoffs.find(
+        (candidate) =>
+          typeof candidate === "object" &&
+          candidate !== null &&
+          !Array.isArray(candidate) &&
+          candidate["kind"] === "adjudication-handoff",
+      ) as Record<string, unknown>;
+    const prompt = t3.commands.find(
+      ({ threadId, type }) =>
+        type === "thread.turn.start" && threadId === adjudication.threadId,
+    )?.message as { text: string };
+    expect(adjudication.binding).toMatchObject({
+      alias: "primary",
+      modelSlug: "sample-model",
+      runtimeMode: "approval-required",
+    });
+    expect(JSON.parse(handoff["handoff"] as string)).toMatchObject({
+      format: "heddle.adjudication-handoff",
+      policy: {
+        blobHash: expect.stringMatching(/^[0-9a-f]{40}$/),
+        path: "adjudication/policy.json",
+      },
+    });
+    expect(handoff).not.toHaveProperty("timeoutMilliseconds");
+    expect(
+      (JSON.parse(handoff["handoff"] as string) as { policy: object }).policy,
+    ).not.toHaveProperty("timeoutMilliseconds");
+    expect(prompt.text).toContain("Which generic option should be selected?");
+    expect(prompt.text).toContain(`"id": ${fixture.taskId}`);
+    expect(prompt.text).not.toContain(
+      composition.persistence.getInstance(runtime.instanceId)!.state
+        .correlationTokens[adjudication.sessionKey]!,
+    );
+    expect(prompt.text).not.toContain(fixture.configuration.t3.accessToken);
+    expect(prompt.text).not.toContain(
+      fixture.configuration.pushover.applicationToken,
+    );
+    const createsBeforeReplay = t3.commands.filter(
+      ({ threadId, type }) =>
+        type === "thread.create" && threadId === adjudication.threadId,
+    );
+    await composition.escalation.replayPendingRoutes();
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.create" && threadId === adjudication.threadId,
+      ),
+    ).toEqual(createsBeforeReplay);
+
+    const adjudicationToken = composition.persistence.getInstance(
+      runtime.instanceId,
+    )!.state.correlationTokens[adjudication.sessionKey]!;
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(adjudicationToken);
+    expect(binding.stage.tools).toEqual(["answer", "decline"]);
+    await composition.escalation.answerAsSession(binding, {
+      answers: {
+        selection: {
+          selectedOptions: ["first"],
+          text: "",
+          reasoning: "The selected route fits the requested result.",
+        },
+      },
+      escalationId: "production-choice",
+      ownerSessionKey: runtime.sessionKey!,
+      prose: "The first option is reversible within the current epic.",
+    });
+
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toEqual([]);
+    expect(
+      composition.persistence
+        .replayEvents(runtime.instanceId)
+        .find(({ type }) => type === "mcp:escalation-answered"),
+    ).toMatchObject({
+      payload: {
+        answeredBy: {
+          kind: "adjudication",
+          sessionKey: adjudication.sessionKey,
+        },
+        modelSlug: "sample-model",
+        prose: "The first option is reversible within the current epic.",
+      },
+    });
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.session.stop" && threadId === adjudication.threadId,
+      ),
+    ).toHaveLength(1);
+    await composition.close();
+  });
+
+  it("routes an empty production adjudication decline to operator attention without replaying its notification", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } = await openProductionEscalation(
+      composition,
+      [],
+    );
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[adjudication.sessionKey]!;
+    await composition.escalation.declineAdjudication(
+      await new WorkflowMcpSessionResolver(composition.persistence).resolve(
+        token,
+      ),
+      {
+        reason: "The choice changes committed product intent.",
+        reasoning: "The options have materially different outward behavior.",
+      },
+    );
+
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: {
+          cause: "The choice changes committed product intent.",
+          modelSlug: "sample-model",
+          reasoning: "The options have materially different outward behavior.",
+        },
+        kind: "escalation",
+      }),
+    );
+    expect(
+      t3.commands.filter(
+        ({ title, type }) =>
+          type === "thread.create" &&
+          title === `task-${fixture.taskId} · adjudication`,
+      ),
+    ).toHaveLength(1);
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "No questions were supplied.",
+    );
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "The choice changes committed product intent.",
+    );
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "The options have materially different outward behavior.",
+    );
+    await composition.escalation.replayPendingRoutes();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "escalation"),
+    ).toHaveLength(1);
+    await composition.close();
+  });
+
+  it("fails an out-of-authority adjudication closed", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause:
+            "Adjudication attempted operator interaction outside its authority",
+        }),
+        kind: "escalation",
+      }),
+    );
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "approval"),
+    ).toEqual([]);
+    await composition.close();
+  });
+
+  it("approves the adjudicator's own sanctioned tool request", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        createdAt: new Date().toISOString(),
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId: "request-sanctioned",
+          requestKind: "mcp-elicitation",
+        },
+      },
+    ]);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(t3.approvalResponses).toHaveLength(1));
+    expect(t3.approvalResponses[0]).toEqual(
+      expect.objectContaining({
+        decision: "accept",
+        requestId: "request-sanctioned",
+        threadId: adjudication.threadId,
+      }),
+    );
+    expect(
+      composition.attention
+        .list()
+        .filter(({ kind }) => kind === "approval" || kind === "escalation"),
+    ).toEqual([]);
+    expect(notify).not.toHaveBeenCalled();
+    await composition.close();
+  });
+
+  it("fails closed on an approval that is not a sanctioned tool request", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        createdAt: new Date().toISOString(),
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: "Allow the edit?",
+          requestId: "request-unsanctioned",
+          requestKind: "file-change",
+        },
+      },
+    ]);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause:
+            "Adjudication attempted operator interaction outside its authority",
+        }),
+        kind: "escalation",
+      }),
+    );
+    expect(t3.approvalResponses).toEqual([]);
+    await composition.close();
+  });
+
+  it("resolves every pending sanctioned approval rather than only the latest", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(
+      adjudication.threadId,
+      ["request-older", "request-newer"].map((requestId) => ({
+        createdAt: new Date().toISOString(),
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId,
+          requestKind: "mcp-elicitation",
+        },
+      })),
+    );
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(t3.approvalResponses).toHaveLength(2));
+    expect(t3.approvalResponses.map(({ requestId }) => requestId)).toEqual([
+      "request-older",
+      "request-newer",
+    ]);
+    expect(
+      t3.approvalResponses.every(({ decision }) => decision === "accept"),
+    ).toBe(true);
+    await composition.close();
+  });
+
+  it("fails closed instead of suppressing observation when no approval can be accepted", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const { adjudication, runtime } =
+      await openProductionEscalation(composition);
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        createdAt: new Date().toISOString(),
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId: "request-stale",
+          requestKind: "mcp-elicitation",
+        },
+      },
+    ]);
+    // The control plane refuses a request that is no longer the latest one.
+    vi.spyOn(t3, "respondToApproval").mockImplementation(async () => {
+      const error = new Error("pending request does not exist on thread");
+      error.name = "T3PreconditionError";
+      throw error;
+    });
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause:
+            "Adjudication attempted operator interaction outside its authority",
+        }),
+        kind: "escalation",
+      }),
+    );
+    await composition.close();
+  });
+
+  it("observes failed, ended, and timestamp-free stalled adjudications through normal session policy", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    fixture.configuration.pacing.maxConcurrentSessions = 6;
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+    const binding = await new WorkflowMcpSessionResolver(
+      composition.persistence,
+    ).resolve(token);
+    for (const escalationId of ["failed", "ended", "stalled"]) {
+      await composition.escalation.escalate(binding, {
+        threadId: "thread-17",
+        requestId: "request-one",
+        escalationId,
+        questions: [
+          {
+            multiSelect: false,
+            id: "selection",
+            options: [
+              { description: "Use first", label: "first" },
+              { description: "Use second", label: "second" },
+            ],
+            question: `Which option applies to ${escalationId}?`,
+          },
+        ],
+      });
+    }
+    await vi.waitFor(() =>
+      expect(
+        composition.persistence
+          .listSessionRuntime()
+          .filter(({ stageId }) => stageId === "adjudication"),
+      ).toHaveLength(3),
+    );
+    const adjudications = composition.persistence
+      .listSessionRuntime()
+      .filter(({ stageId }) => stageId === "adjudication");
+    expect(
+      new Set(adjudications.map(({ sessionKey }) => sessionKey)),
+    ).toHaveLength(3);
+    expect(new Set(adjudications.map(({ threadId }) => threadId))).toHaveLength(
+      3,
+    );
+    const adjudicationFor = (escalationId: string) => {
+      const pending = composition.escalation
+        .pendingEscalations(runtime.instanceId)
+        .find((candidate) => candidate.escalationId === escalationId)!;
+      if (pending.answeringAuthority.kind !== "adjudication") {
+        throw new Error("Escalation has no adjudication authority");
+      }
+      return adjudications.find(
+        ({ sessionKey }) =>
+          sessionKey === pending.answeringAuthority.sessionKey,
+      )!;
+    };
+    const failed = adjudicationFor("failed");
+    const ended = adjudicationFor("ended");
+    const stalled = adjudicationFor("stalled");
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          id: failed!.threadId,
+          latestTurn: { state: "error" },
+          session: { status: "error" },
+        },
+        {
+          id: ended!.threadId,
+          latestTurn: { state: "completed" },
+          session: { status: "idle" },
+        },
+        {
+          id: stalled!.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await composition.scheduler.trigger();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(2));
+    expect(
+      composition.attention
+        .list()
+        .filter(({ kind }) => ["ended", "failed", "stalled"].includes(kind))
+        .map(({ kind }) => kind),
+    ).toEqual(expect.arrayContaining(["failed", "stalled"]));
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "ended"),
+    ).toEqual([]);
+    expect(
+      t3.commands.some(
+        (command) =>
+          command.type === "thread.turn.start" &&
+          command.threadId === ended!.threadId &&
+          JSON.stringify(command).includes("Question ID"),
+      ),
+    ).toBe(true);
+    expect(
+      composition.escalation
+        .pendingEscalations(runtime.instanceId)
+        .map(({ answeringAuthority }) => answeringAuthority.kind),
+    ).toEqual(["adjudication", "adjudication", "adjudication"]);
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "escalation"),
+    ).toEqual([]);
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.session.stop" &&
+          adjudications.some((candidate) => candidate.threadId === threadId),
+      ),
+    ).toEqual([]);
+    expect(notify.mock.calls.map(([input]) => input.message)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("is failed without lifecycle advance"),
+        expect.stringContaining("is stalled without lifecycle advance"),
+      ]),
+    );
+    await composition.close();
+  });
+
+  it("fails an exhausted empty production adjudication start closed to operator without replaying its notification", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const dispatch = t3.dispatch.bind(t3);
+    vi.spyOn(t3, "dispatch").mockImplementation(async (command, context) => {
+      if (
+        command.type === "thread.create" &&
+        String(command.title).endsWith("· adjudication")
+      ) {
+        throw new Error("Sample adjudication harness did not start");
+      }
+      return dispatch(command, context);
+    });
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+    await composition.escalation.escalate(
+      await new WorkflowMcpSessionResolver(composition.persistence).resolve(
+        token,
+      ),
+      {
+        threadId: "thread-17",
+        requestId: "request-one",
+        escalationId: "production-choice",
+        questions: [],
+      },
+    );
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause: expect.stringContaining("exhausted every candidate"),
+        }),
+        kind: "escalation",
+      }),
+    );
+    const failedAdjudication = composition.persistence
+      .listSessionRuntime()
+      .find(({ stageId }) => stageId === "adjudication")!;
+    expect(failedAdjudication.binding.skippedCandidates.at(-1)).toMatchObject({
+      failure: {
+        message: expect.stringContaining(
+          "Sample adjudication harness did not start",
+        ),
+      },
+    });
+    const exhaustedBinding = failedAdjudication.binding;
+    expect(notify.mock.calls[0]?.[0].message).toContain(
+      "No questions were supplied.",
+    );
+    await composition.escalation.replayPendingRoutes();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(
+      composition.attention.list().filter(({ kind }) => kind === "escalation"),
+    ).toHaveLength(1);
+    expect(
+      composition.persistence
+        .listSessionRuntime()
+        .find(({ stageId }) => stageId === "adjudication")?.binding,
+    ).toEqual(exhaustedBinding);
+    await composition.close();
+  });
+
+  it("applies the selected alias budget to scoped adjudication", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    const t3 = new SyntheticT3();
+    const usageReads: string[] = [];
+    const notify = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async (provider) => {
+          usageReads.push(provider);
+          return {
+            used: usageReads.length === 1 ? 0 : 40,
+            windowStartedAt: Date.now() - 1_000,
+          };
+        },
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const token = composition.persistence.getInstance(runtime.instanceId)!.state
+      .correlationTokens[runtime.sessionKey!]!;
+
+    await composition.escalation.escalate(
+      await new WorkflowMcpSessionResolver(composition.persistence).resolve(
+        token,
+      ),
+      {
+        threadId: "thread-17",
+        requestId: "request-one",
+        escalationId: "production-choice",
+        questions: [],
+      },
+    );
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+
+    expect(usageReads).toEqual(["codex", "codex"]);
+    expect(
+      t3.commands.filter(
+        (command) =>
+          command.type === "thread.create" &&
+          String(command.title).endsWith("· adjudication"),
+      ),
+    ).toHaveLength(0);
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause: expect.stringContaining("provider-usage-window"),
+        }),
+        kind: "escalation",
+      }),
+    );
+    await composition.close();
+  });
+
+  it("retains current catalog skips on a production adjudication binding", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    configureAdjudication(fixture);
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    const { adjudication } = await openProductionEscalation(composition);
+
+    expect(adjudication.binding).toMatchObject({
+      candidatePosition: 2,
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: expect.stringContaining(
+              "not available, enabled, installed, and ready",
+            ),
+          }),
+          providerDisplayName: "Workbench Alpha",
+        }),
+      ],
+    });
+    await composition.close();
+  });
+
+  it("selects a recovered first adjudication candidate from the current catalog", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    configureAdjudication(fixture);
+    const recoveredProviderInstanceId =
+      fixture.configuration.session.defaultSelection.providerInstanceId;
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const startup = await new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    ).resolveStartup({
+      defaultAlias: fixture.configuration.session.defaultProviderAlias,
+      interactionMode: fixture.configuration.session.interactionMode,
+      providerBudgets: {},
+      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
+    });
+    fixture.configuration.session.defaultSelection = startup.defaultSelection;
+    fixture.configuration.session.resolvedSelections = [
+      ...startup.candidates.values(),
+    ].flat();
+    fixture.configuration.pacing.defaultProvider =
+      startup.defaultSelection.providerInstanceId;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    t3.providerCatalog[0]!.availability = "available";
+    t3.providerCatalog[1]!.availability = "unavailable";
+    const { adjudication } = await openProductionEscalation(composition);
+
+    expect(adjudication.binding).toMatchObject({
+      candidatePosition: 1,
+      providerInstanceId: recoveredProviderInstanceId,
+      skippedCandidates: [],
+    });
+    await composition.close();
+  });
+
+  it("replays a persisted later adjudication candidate through a recovered earlier candidate", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    configureAdjudication(fixture);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 80 },
+    };
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const providerResolver = new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    );
+    const startup = await providerResolver.resolveStartup({
+      defaultAlias: fixture.configuration.session.defaultProviderAlias,
+      interactionMode: fixture.configuration.session.interactionMode,
+      providerBudgets: {},
+      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
+    });
+    fixture.configuration.session.defaultSelection = startup.defaultSelection;
+    fixture.configuration.session.resolvedSelections = [
+      ...startup.candidates.values(),
+    ].flat();
+    fixture.configuration.pacing.defaultProvider =
+      startup.defaultSelection.providerInstanceId;
+    const usageReads: string[] = [];
+    const providerUsage = {
+      readFiveHourWindow: async (provider: string) => {
+        usageReads.push(provider);
+        return { used: 0, windowStartedAt: 0 };
+      },
+    };
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerResolver,
+      providerUsage,
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    usageReads.length = 0;
+
+    const owner = composition.persistence
+      .listReconcilerRuntime()
+      .find(({ state }) => state === "waiting")!;
+    const ownerSession = composition.persistence
+      .listSessionRuntime()
+      .find(({ sessionKey }) => sessionKey === owner.sessionKey)!;
+    const attentionId = escalationAttentionId(
+      owner.instanceId,
+      owner.sessionKey!,
+      "catalog-reversal",
+    );
+    const sessionKey = adjudicationSessionKey(attentionId);
+    const laterSelection = startup.candidates.get("primary")![0]!;
+    const laterThreadId = stableUuid(
+      `${sessionKey}:candidate:${laterSelection.candidatePosition}:thread`,
+    );
+    const exactLaterFailure = {
+      candidatePosition: laterSelection.candidatePosition,
+      failure: {
+        cause: {
+          cause: null,
+          message: "Exact sample harness failure",
+          name: "Error",
+        },
+        message:
+          "Session start failed during thread-create: Exact sample harness failure",
+        name: "SessionStartFailure",
+      },
+      modelSlug: laterSelection.model.slug,
+      providerDisplayName: laterSelection.providerDisplayName,
+    };
+    composition.persistence.writeSessionRuntime({
+      activation:
+        Number.parseInt(
+          attentionId.slice("escalation:".length).slice(0, 12),
+          16,
+        ) + 1,
+      binding: bindResolvedSession(
+        laterSelection,
+        sessionKey,
+        laterThreadId,
+        laterSelection.candidatePosition,
+        [...laterSelection.skippedCandidates, exactLaterFailure],
+      ),
+      bindingState: "provisional",
+      instanceId: owner.instanceId,
+      projectId: ownerSession.projectId,
+      repositoryName: ownerSession.repositoryName,
+      sessionKey,
+      stageId: "adjudication",
+      threadId: laterThreadId,
+    });
+
+    t3.providerCatalog[0]!.availability = "available";
+    t3.providerCatalog[1]!.availability = "unavailable";
+    const catalogReads = vi.spyOn(t3, "readProviderCatalog");
+    const adjudication = new ProductionScopedAdjudication({
+      board: composition.board,
+      blueprintRepository: {
+        repositoryRoot: fixture.blueprintsRepositoryRoot,
+        sourceRef: "@{upstream}",
+      },
+      configuration: fixture.configuration,
+      pacing: new DispatchPacingGate(
+        fixture.configuration.pacing,
+        providerUsage,
+        Date.now,
+        fixture.configuration.providerAliasBudgets,
+      ),
+      persistence: composition.persistence,
+      providerResolver,
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    const opened = {
+      answeringAuthority: { kind: "adjudication", sessionKey } as const,
+      attentionId,
+      escalationId: "catalog-reversal",
+      instanceId: owner.instanceId,
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: owner.sessionKey!,
+      questions: [],
+      requestId: "request-reversal",
+      stage: owner.stageId!,
+      threadId: owner.threadId!,
+    };
+
+    const first = await adjudication.start(opened);
+    const replay = await adjudication.start(opened);
+    const recovered = composition.persistence
+      .listSessionRuntime()
+      .find((runtime) => runtime.sessionKey === sessionKey)!;
+
+    expect(first).toEqual(replay);
+    expect(recovered).toMatchObject({
+      binding: {
+        candidatePosition: 1,
+        providerInstanceId: t3.providerCatalog[0]!.instanceId,
+      },
+      threadId: stableUuid(`${sessionKey}:candidate:1:thread`),
+    });
+    expect(recovered.binding.skippedCandidates).toEqual([exactLaterFailure]);
+    expect(recovered.bindingState).toBeUndefined();
+    expect(catalogReads).toHaveBeenCalledTimes(1);
+    expect(usageReads).toEqual([t3.providerCatalog[0]!.instanceId]);
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.create" && threadId === recovered.threadId,
+      ),
+    ).toHaveLength(1);
+    expect(
+      t3.commands.filter(
+        ({ threadId, type }) =>
+          type === "thread.create" && threadId === laterThreadId,
+      ),
+    ).toHaveLength(0);
+    await composition.close();
+  });
+
+  it("runs a production stage on the second candidate and records visible degradation", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    const getShell = vi.spyOn(t3, "getShell").mockImplementation(async () => {
+      const providersByThread = new Map(
+        t3.commands
+          .filter(
+            (command) =>
+              command.type === "thread.create" &&
+              typeof command.threadId === "string",
+          )
+          .map((command) => [
+            command.threadId!,
+            (command.modelSelection as { instanceId: string }).instanceId,
+          ]),
+      );
+      return {
+        projects: [...t3.projects.values()],
+        threads: [...t3.threads].map((id) =>
+          providersByThread.get(id) === "codex"
+            ? {
+                id,
+                latestTurn: {
+                  requestedAt: "2026-01-01T00:00:00.000Z",
+                  startedAt: null,
+                  state: "error",
+                },
+                session: {
+                  lastError: "Sample harness could not start",
+                  status: "ready",
+                },
+              }
+            : {
+                id,
+                latestTurn: {
+                  requestedAt: "2026-01-01T00:00:00.000Z",
+                  startedAt: "2026-01-01T00:00:01.000Z",
+                  state: "running",
+                },
+                session: { status: "running" },
+              },
+        ),
+      };
+    });
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    const creates = t3.commands.filter(({ type }) => type === "thread.create");
+    const attemptedProviders = creates.map(
+      (command) =>
+        (command.modelSelection as { instanceId: string }).instanceId,
+    );
+    expect(attemptedProviders[0]).toBe("codex");
+    expect(attemptedProviders.slice(1)).not.toHaveLength(0);
+    expect(new Set(attemptedProviders.slice(1))).toEqual(
+      new Set(["provider-two"]),
+    );
+    expect(new Set(creates.map(({ threadId }) => threadId)).size).toBe(2);
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(session).not.toHaveProperty("bindingState");
+    expect(session.binding).toMatchObject({
+      alias: "primary",
+      candidatePosition: 2,
+      modelSlug: "sample-model-two",
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: "Sample harness could not start",
+          }),
+          providerDisplayName: "Workbench Alpha",
+        }),
+      ],
+    });
+    expect(
+      composition.persistence
+        .getInstance(session.instanceId)
+        ?.state.handoffs.filter(isStoredHandoff)
+        .find(({ sessionKey }) => sessionKey === session.sessionKey),
+    ).not.toHaveProperty("renderedHandoffAuthentication");
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-fallback-active",
+        message: expect.stringContaining("Workbench Beta"),
+      }),
+    );
+    expect(getShell).toHaveBeenCalled();
+    await composition.close();
+  });
+
+  it("starts through a catalog-invalid first candidate and records the catalog failure", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    const creates = t3.commands.filter(({ type }) => type === "thread.create");
+    expect(creates).toHaveLength(1);
+    expect(creates[0]!.modelSelection).toEqual({
+      instanceId: "provider-two",
+      model: "sample-model-two",
+    });
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(session).not.toHaveProperty("bindingState");
+    expect(session.binding).toMatchObject({
+      alias: "primary",
+      candidatePosition: 2,
+      providerDisplayName: "Workbench Beta",
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: expect.stringContaining(
+              "not available, enabled, installed, and ready",
+            ),
+          }),
+          modelSlug: "sample-model",
+          providerDisplayName: "Workbench Alpha",
+        }),
+      ],
+    });
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-fallback-active",
+        message: expect.stringContaining("candidate 1 'Workbench Alpha'"),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("paces a candidate that recovers after startup with its alias budget", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    t3.providerCatalog[0]!.availability = "unavailable";
+    const resolver = new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    );
+    const startup = await resolver.resolveStartup({
+      defaultAlias: fixture.configuration.session.defaultProviderAlias,
+      interactionMode: fixture.configuration.session.interactionMode,
+      providerBudgets: { primary: { usageLimit: 40 } },
+      runtimeMode: fixture.configuration.session.defaultRuntimeMode,
+    });
+    fixture.configuration.pacing.defaultProvider =
+      startup.defaultSelection.providerInstanceId;
+    fixture.configuration.pacing.providerBudgets = startup.providerBudgets;
+    fixture.configuration.providerAliasBudgets = startup.providerAliasBudgets;
+    fixture.configuration.session.defaultSelection = startup.defaultSelection;
+    fixture.configuration.session.resolvedSelections = [
+      ...startup.candidates.values(),
+    ].flat();
+    t3.providerCatalog[0]!.availability = "available";
+    const usageReads: string[] = [];
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerResolver: resolver,
+      providerUsage: {
+        readFiveHourWindow: async (provider) => {
+          usageReads.push(provider);
+          return {
+            used: provider === "codex" ? 40 : 0,
+            windowStartedAt: Date.now() - 1_000,
+          };
+        },
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(usageReads).toEqual(["codex"]);
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    const planned = composition.persistence.getInstance(
+      `task-${fixture.taskId}`,
+    );
+    expect(planned).toBeDefined();
+    expect(readLifecycleContext(planned!).pendingTransition).toMatchObject({
+      initialContext: null,
+      kind: "start",
+    });
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === fixture.taskId),
+    ).toMatchObject({
+      deferral: expect.objectContaining({
+        provider: "codex",
+        reason: "provider-usage-window",
+      }),
+      provider: "codex",
+      state: "deferred",
+    });
+    await composition.close();
+  });
+
+  it("paces a successor candidate after the first candidate fails to start", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    const dispatch = t3.dispatch.bind(t3);
+    vi.spyOn(t3, "dispatch").mockImplementation(async (command, context) => {
+      if (
+        command.type === "thread.create" &&
+        command.modelSelection?.instanceId === "codex"
+      ) {
+        throw new Error("Sample primary candidate did not start");
+      }
+      return dispatch(command, context);
+    });
+    const usageReads: string[] = [];
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async (provider) => {
+          usageReads.push(provider);
+          return {
+            used: provider === "provider-two" ? 40 : 0,
+            windowStartedAt: Date.now() - 1_000,
+          };
+        },
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(usageReads[0]).toBe("codex");
+    expect(usageReads.slice(1)).toEqual(
+      expect.arrayContaining(["provider-two"]),
+    );
+    expect(
+      t3.commands.filter(
+        ({ modelSelection, type }) =>
+          type === "thread.create" &&
+          modelSelection?.instanceId === "provider-two",
+      ),
+    ).toEqual([]);
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === fixture.taskId),
+    ).toMatchObject({
+      deferral: expect.objectContaining({
+        provider: "provider-two",
+        reason: "provider-usage-window",
+      }),
+      provider: "provider-two",
+      state: "deferred",
+    });
+    expect(
+      composition.persistence.listSessionRuntime()[0]?.binding,
+    ).toMatchObject({
+      candidatePosition: 2,
+      providerInstanceId: "provider-two",
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          failure: expect.objectContaining({
+            message: expect.stringContaining(
+              "Sample primary candidate did not start",
+            ),
+          }),
+        }),
+      ],
+    });
+    await composition.close();
+  });
+
+  it("refuses an unpaced candidate when the catalog changes after pacing", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    const resolver = new ProviderSelectionResolver(
+      fixture.configuration.providerAliases,
+      t3,
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerResolver: resolver,
+      providerUsage: {
+        readFiveHourWindow: async () => {
+          t3.providerCatalog[0]!.availability = "unavailable";
+          return { used: 0, windowStartedAt: 0 };
+        },
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "task-reconciliation-failed",
+        message: expect.stringContaining(
+          "Paced provider selection changed before session binding",
+        ),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("surfaces every catalog failure when no candidate can dispatch", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    t3.providerCatalog[0]!.enabled = false;
+    t3.providerCatalog[1]!.models = [];
+    fixture.configuration.providerAliasBudgets = {
+      primary: { usageLimit: 40 },
+    };
+    fixture.configuration.pacing.providerBudgets = {
+      codex: { usageLimit: 40 },
+    };
+    const usage = vi.fn(async () => ({ used: 0, windowStartedAt: 0 }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: usage,
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "task-reconciliation-failed",
+        message: expect.stringMatching(
+          /candidate 1 'Workbench Alpha'.*candidate 2 'Workbench Beta'/,
+        ),
+      }),
+    );
+    expect(usage).not.toHaveBeenCalled();
+    await composition.close();
+  });
+
+  it("retains catalog exhaustion after the provisional candidate fails to start", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    let catalogFailed = false;
+    vi.spyOn(t3, "getShell").mockImplementation(async () => {
+      if (t3.threads.size > 0 && !catalogFailed) {
+        t3.providerCatalog[0]!.enabled = false;
+        t3.providerCatalog[1]!.models = [];
+        catalogFailed = true;
+      }
+      return {
+        projects: [...t3.projects.values()],
+        threads: [...t3.threads].map((id) => ({
+          id,
+          latestTurn: {
+            requestedAt: "2026-01-01T00:00:00.000Z",
+            startedAt: null,
+            state: "error",
+          },
+          session: {
+            lastError: "Sample candidate could not start",
+            status: "error",
+          },
+        })),
+      };
+    });
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    expect(
+      t3.commands
+        .filter(({ type }) => type === "thread.create")
+        .map(
+          ({ modelSelection }) =>
+            (modelSelection as { instanceId: string }).instanceId,
+        ),
+    ).not.toContain("provider-two");
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(
+      session.binding.skippedCandidates.map(
+        ({ candidatePosition, failure }) => ({
+          candidatePosition,
+          message: failure.message,
+        }),
+      ),
+    ).toEqual([
+      {
+        candidatePosition: 1,
+        message: "Sample candidate could not start",
+      },
+      {
+        candidatePosition: 2,
+        message: expect.stringContaining(
+          "has no model slug 'sample-model-two'",
+        ),
+      },
+    ]);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-alias-exhausted",
+        message: expect.stringMatching(
+          /candidate 1 'Workbench Alpha'.*candidate 2 'Workbench Beta'/,
+        ),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("retains trailing catalog failures when the last usable candidate fails to start", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.providerAliases.primary = [
+      ...fixture.configuration.providerAliases.primary,
+      {
+        model: "sample-model-three",
+        providerDisplayName: "Workbench Gamma",
+      },
+    ];
+    t3.providerCatalog[0]!.availability = "unavailable";
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [...t3.threads].map((id) => ({
+        id,
+        latestTurn: {
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: null,
+          state: "error",
+        },
+        session: {
+          lastError: "Sample middle candidate could not start",
+          status: "error",
+        },
+      })),
+    }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(
+      session.binding.skippedCandidates.map(
+        ({ candidatePosition, failure }) => ({
+          candidatePosition,
+          message: failure.message,
+        }),
+      ),
+    ).toEqual([
+      {
+        candidatePosition: 1,
+        message: expect.stringContaining("not available"),
+      },
+      {
+        candidatePosition: 2,
+        message: "Sample middle candidate could not start",
+      },
+      {
+        candidatePosition: 3,
+        message: expect.stringContaining(
+          "has no provider named 'Workbench Gamma'",
+        ),
+      },
+    ]);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-alias-exhausted",
+        message: expect.stringMatching(
+          /candidate 1 'Workbench Alpha'.*candidate 2 'Workbench Beta'.*candidate 3 'Workbench Gamma'/,
+        ),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("exhausts every candidate after each candidate fails before starting", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [...t3.threads].map((id) => ({
+        id,
+        latestTurn: {
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: null,
+          state: "error",
+        },
+        session: {
+          lastError: `Candidate ${id} could not start`,
+          status: "error",
+        },
+      })),
+    }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await composition.scheduler.trigger();
+
+    const creates = t3.commands.filter(({ type }) => type === "thread.create");
+    expect(
+      new Set(
+        creates.map(
+          ({ modelSelection }) =>
+            (modelSelection as { instanceId: string }).instanceId,
+        ),
+      ),
+    ).toEqual(new Set(["codex", "provider-two"]));
+    expect(new Set(creates.map(({ threadId }) => threadId))).toHaveLength(2);
+    const session = composition.persistence.listSessionRuntime()[0]!;
+    expect(session.binding.skippedCandidates).toHaveLength(2);
+    expect(
+      session.binding.skippedCandidates.map(
+        ({ candidatePosition }) => candidatePosition,
+      ),
+    ).toEqual([1, 2]);
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider-alias-exhausted",
+        message: expect.stringContaining("exhausted every candidate"),
+      }),
+    );
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === fixture.taskId),
+    ).toMatchObject({ state: "waiting" });
+    await composition.scheduler.trigger();
+    expect(
+      composition.persistence.listSessionRuntime()[0]!.binding
+        .skippedCandidates,
+    ).toHaveLength(2);
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(creates.length);
+    await composition.close();
+  });
+
+  it("keeps a started-turn failure on the normal observation path", async () => {
+    const fixture = await prepare();
+    const t3 = new SyntheticT3();
+    configureProviderCandidates(fixture, t3);
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [...t3.threads].map((id) => ({
+        id,
+        latestTurn: {
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: "2026-01-01T00:00:01.000Z",
+          state: "error",
+        },
+        session: { lastError: "Turn failed", status: "error" },
+      })),
+    }));
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(1);
+    expect(composition.persistence.listSessionRuntime()[0]).not.toHaveProperty(
+      "bindingState",
+    );
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({ kind: "failed" }),
+    );
+    expect(
+      composition.persistence.listAttention().map(({ payload }) => payload),
+    ).not.toContainEqual(
+      expect.objectContaining({
+        code: expect.stringMatching(/^provider-(fallback|alias)/),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("pages one stalled-session attention through the durable production route", async () => {
+    const fixture = await prepare();
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    const deliveries = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: deliveries },
+      t3: new SyntheticT3(),
+    });
+
+    await composition.start();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
+    await composition.scheduler.trigger();
+
+    expect(deliveries).toHaveBeenCalledTimes(1);
+    expect(deliveries.mock.calls[0]?.[0]).toMatchObject({
+      message: expect.stringContaining("is stalled without lifecycle advance"),
+      stableId: expect.any(String),
+    });
+    const stableId = deliveries.mock.calls[0]?.[0].stableId;
+    if (typeof stableId !== "string") throw new Error("Page has no stable ID");
+    expect(composition.persistence.effectCompleted("pushover", stableId)).toBe(
+      true,
+    );
+    await composition.close();
+  });
+
+  it("fails startup before dispatch when the full theme catalog is invalid", async () => {
+    const fixture = await prepare();
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--status",
+        "done",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const soloistPath = join(
+      fixture.blueprintsRepositoryRoot,
+      "themes",
+      "sample-soloist.yml",
+    );
+    await writeFile(
+      soloistPath,
+      (await readFile(soloistPath, "utf8")).replace(
+        "sample-hero",
+        "sample-ally",
+      ),
+    );
+    await execute("git", ["add", "themes/sample-soloist.yml"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Invalidate theme catalog",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet", "origin", "main"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await expect(composition.start()).rejects.toThrow(
+      'Agent name "sample-ally" is repeated',
+    );
+    expect(
+      t3.commands.filter(({ type }) => type.startsWith("thread.")),
+    ).toEqual([]);
+    await composition.close();
+  });
+
+  it("contains a permanent escalation notification until exact operator retry after credential repair", async () => {
+    const fixture = await prepare();
+    let accepted = false;
+    const fetch = vi.fn(async () =>
+      accepted
+        ? new globalThis.Response(JSON.stringify({ status: 1 }), {
+            status: 200,
+          })
+        : new globalThis.Response(
+            JSON.stringify({
+              errors: ["provider detail must remain private"],
+              status: 0,
+              token: "invalid",
+            }),
+            { status: 400 },
+          ),
+    );
+    const t3 = new SyntheticT3();
+    const first = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3,
+    });
+    await first.start();
+    const runtime = first.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "sample-choice";
+    const attentionId = escalationAttentionId(
+      runtime.instanceId,
+      runtime.sessionKey!,
+      escalationId,
+    );
+    first.persistence.appendEvent(runtime.instanceId, "mcp:escalation-opened", {
+      threadId: "thread-17",
+      requestId: "request-one",
+      attentionId,
+      escalationId,
+      instanceId: runtime.instanceId,
+      openedAt: "2026-01-01T00:00:00.000Z",
+      ownerSessionKey: runtime.sessionKey!,
+      questions: [
+        {
+          multiSelect: false,
+          id: "selection",
+          options: [
+            {
+              description: "Use the first sample",
+              label: "first",
+            },
+            {
+              description: "Use the second sample",
+              label: "second",
+            },
+          ],
+          question: "Which sample should be selected?",
+        },
+      ],
+      stage: runtime.stageId!,
+    });
+
+    await expect(first.scheduler.trigger()).resolves.toBeUndefined();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
+    expect(
+      first.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    expect(first.persistence.listAttention()).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "notification-delivery-rejected",
+          notificationCategory: "application-credential-rejected",
+          notificationOccurrence: 1,
+          notificationStableId: attentionId,
+        }),
+      }),
+    );
+    expect(JSON.stringify(first.persistence.listAttention())).not.toContain(
+      "provider detail must remain private",
+    );
+    await first.close();
+
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Later Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const laterTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+    accepted = true;
+    fixture.configuration.pushover.applicationToken =
+      "replacement-application-token";
+    const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3,
+    });
+
+    await restarted.start();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
+    expect(
+      restarted.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === laterTaskId),
+    ).toMatchObject({ state: "waiting" });
+    const rejected = restarted.attention
+      .list()
+      .find(({ actions }) =>
+        actions.some(({ actionId }) => actionId === "notification.retry"),
+      );
+    if (rejected === undefined) {
+      throw new Error("Missing rejected notification attention");
+    }
+    expect(rejected.notificationVerification).toEqual({
+      message: `Heddle escalation in ${runtime.stageId}`,
+      recipientLabel: "Primary operator",
+    });
+    expect(JSON.stringify(rejected)).not.toContain(attentionId);
+    const retry = rejected.actions.find(
+      ({ actionId }) => actionId === "notification.retry",
+    )!;
+    await restarted.consoleActions.execute({
+      action: retry,
+      attention: rejected,
+    });
+    await restarted.scheduler.trigger();
+
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(2);
+    expect(
+      new globalThis.URLSearchParams(
+        String(
+          fetch.mock.calls
+            .filter((call) => fetchedAttentionIds([call])[0] === attentionId)
+            .at(-1)?.[1]?.body,
+        ),
+      ).get("token"),
+    ).toBe("replacement-application-token");
+    expect(restarted.persistence.effectCompleted("pushover", attentionId)).toBe(
+      true,
+    );
+    expect(
+      restarted.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    expect(restarted.attention.list()).toContainEqual(
+      expect.objectContaining({
+        actions: [expect.objectContaining({ actionId: "escalation.answer" })],
+        attentionId,
+      }),
+    );
+    expect(
+      restarted.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        ),
+    ).not.toContainEqual(expect.objectContaining({ kind: "production-error" }));
+    await restarted.close();
+  });
+
+  it("contains sub-five-second cadence retries until the provider boundary", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 1_000;
+    let now = 10_000;
+    let available = false;
+    const fetch = vi.fn(
+      async () =>
+        new globalThis.Response(JSON.stringify({ status: available ? 1 : 0 }), {
+          status: available ? 200 : 503,
+        }),
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      notificationNow: () => now,
+      pushoverFetch: fetch,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "retryable-choice";
+    const attentionId = escalationAttentionId(
+      runtime.instanceId,
+      runtime.sessionKey!,
+      escalationId,
+    );
+    composition.persistence.appendEvent(
+      runtime.instanceId,
+      "mcp:escalation-opened",
+      {
+        threadId: "thread-17",
+        requestId: "request-one",
+        attentionId,
+        escalationId,
+        instanceId: runtime.instanceId,
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: runtime.sessionKey!,
+        questions: [
+          {
+            multiSelect: false,
+            id: "selection",
+            options: [
+              {
+                description: "Use the first sample",
+                label: "first",
+              },
+              {
+                description: "Use the second sample",
+                label: "second",
+              },
+            ],
+            question: "Which sample should be selected?",
+          },
+        ],
+        stage: runtime.stageId!,
+      },
+    );
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Independent Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+
+    await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
+    expect(composition.persistence.notificationRetry(attentionId)).toEqual({
+      category: "provider-unavailable",
+      retryNotBefore: 15_000,
+      stableId: attentionId,
+    });
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining("provider-unavailable"),
+      }),
+    );
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === independentTaskId),
+    ).toMatchObject({ state: "waiting" });
+
+    available = true;
+    for (now = 11_000; now < 15_000; now += 1_000) {
+      await composition.scheduler.trigger();
+    }
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining("provider-unavailable"),
+      }),
+    );
+
+    now = 15_000;
+    await composition.scheduler.trigger();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(2);
+    expect(
+      composition.persistence.effectCompleted("pushover", attentionId),
+    ).toBe(true);
+    expect(
+      composition.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        ),
+    ).not.toContainEqual(expect.objectContaining({ kind: "production-error" }));
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    await composition.close();
+    // Real subprocess work under a virtual clock: the assertions are on
+    // cadence, not wall time, so the default budget is incidental and this
+    // test sits marginally inside it under a full parallel suite.
+  }, 20_000);
+
+  it("requires an exact recovery action before adopting an unverifiable legacy notification route", async () => {
+    const fixture = await prepare();
+    const fetch = vi.fn(
+      async () =>
+        new globalThis.Response(JSON.stringify({ status: 1 }), { status: 200 }),
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const runtime = composition.persistence.listReconcilerRuntime()[0]!;
+    const escalationId = "legacy-choice";
+    const attentionId = escalationAttentionId(
+      runtime.instanceId,
+      runtime.sessionKey!,
+      escalationId,
+    );
+    composition.persistence.appendEvent(
+      runtime.instanceId,
+      "mcp:escalation-opened",
+      {
+        threadId: "thread-17",
+        requestId: "request-one",
+        attentionId,
+        escalationId,
+        instanceId: runtime.instanceId,
+        openedAt: "2026-01-01T00:00:00.000Z",
+        ownerSessionKey: runtime.sessionKey!,
+        questions: [
+          {
+            multiSelect: false,
+            id: "selection",
+            options: [
+              {
+                description: "Use the first sample",
+                label: "first",
+              },
+              {
+                description: "Use the second sample",
+                label: "second",
+              },
+            ],
+            question: "Which sample should be selected?",
+          },
+        ],
+        stage: runtime.stageId!,
+      },
+    );
+    composition.persistence.recordEffectIntent("pushover", attentionId, {
+      messageFingerprint: "a".repeat(64),
+    });
+
+    await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(0);
+    const recovery = composition.attention
+      .list()
+      .find(({ message }) => message.includes("legacy-intent-unverifiable"));
+    if (recovery === undefined) {
+      throw new Error("Missing legacy notification recovery attention");
+    }
+    expect(recovery).toMatchObject({
+      actions: [
+        expect.objectContaining({
+          actionId: "notification.retry",
+          contract: expect.objectContaining({
+            occurrence: 1,
+          }),
+        }),
+        expect.objectContaining({ actionId: "attention.resolve" }),
+      ],
+      kind: "production-error",
+      notificationVerification: {
+        message: `Heddle escalation in ${runtime.stageId}`,
+        recipientLabel: "Primary operator",
+      },
+    });
+    expect(JSON.stringify(recovery)).not.toContain(attentionId);
+
+    await composition.consoleActions.execute({
+      action: recovery.actions[0]!,
+      attention: recovery,
+    });
+    await composition.scheduler.trigger();
+    expect(
+      fetchedAttentionIds(fetch.mock.calls).filter((id) => id === attentionId),
+    ).toHaveLength(1);
+    expect(
+      composition.persistence.effectCompleted("pushover", attentionId),
+    ).toBe(true);
+    expect(
+      composition.escalation.pendingEscalations(runtime.instanceId),
+    ).toMatchObject([{ attentionId, escalationId }]);
+    await composition.close();
+  });
+
+  it("releases composition resources when scheduler draining times out", async () => {
+    const fixture = await prepare();
+    fixture.configuration.stopTimeoutMilliseconds = 1;
+    let signalDispatch!: () => void;
+    const dispatchStarted = new Promise<void>((resolve) => {
+      signalDispatch = resolve;
+    });
+    class HangingDispatchT3 extends SyntheticT3 {
+      override async dispatch(
+        command: Parameters<SyntheticT3["dispatch"]>[0],
+      ): Promise<{ sequence: number }> {
+        if (command.type === "project.create") return super.dispatch(command);
+        signalDispatch();
+        return new Promise(() => undefined);
+      }
+    }
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new HangingDispatchT3(),
+    });
+
+    void composition.start().catch(() => undefined);
+    await dispatchStarted;
+
+    await expect(composition.close()).rejects.toThrow(
+      "Timed out draining the reconciliation pass",
+    );
+    const replacement = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await replacement.close();
+  });
+
+  it("reports a session-observation rejection without a page-delivery failure", async () => {
+    const fixture = await prepare();
+    class ObservationFailureT3 extends SyntheticT3 {
+      reads = 0;
+
+      override async getShell() {
+        this.reads += 1;
+        if (this.reads === 1) return super.getShell();
+        throw new Error("synthetic observation rejection");
+      }
+    }
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new ObservationFailureT3(),
+    });
+
+    await composition.start();
+
+    expect(composition.persistence.listAttention()).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "session-observation-failed",
+          kind: "production-error",
+          message: expect.stringContaining("observation failed"),
+          taskId: fixture.taskId,
+        }),
+      }),
+    ]);
+    expect(composition.persistence.listAttention()).not.toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "session-page-delivery-failed",
+        }),
+      }),
+    );
+    await composition.close();
+  });
+
+  it("retries a classified session page delivery without relabeling it as observation failure", async () => {
+    const fixture = await prepare();
+    fixture.configuration.observationThresholds = {
+      endedMilliseconds: 1,
+      failedMilliseconds: 1,
+      stalledMilliseconds: 1,
+    };
+    class AbsentSessionT3 extends SyntheticT3 {
+      override async getShell() {
+        return { projects: [...this.projects.values()], threads: [] };
+      }
+    }
+    let now = 10_000;
+    let rejectTransport = true;
+    const deliveries = vi.fn(async () => {
+      if (rejectTransport) {
+        throw new Error("synthetic page delivery rejection");
+      }
+    });
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      notificationNow: () => now,
+      pushoverTransport: { send: deliveries },
+      t3: new AbsentSessionT3(),
+    });
+
+    await composition.start();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+    await composition.scheduler.trigger();
+
+    const pageable = composition.attention
+      .list()
+      .find(({ kind }) => kind === "ended");
+    if (pageable === undefined) throw new Error("Missing pageable attention");
+    expect(
+      composition.persistence.effectIntentRecorded(
+        "pushover",
+        pageable.attentionId,
+      ),
+    ).toBe(true);
+    expect(
+      composition.persistence.effectCompleted("pushover", pageable.attentionId),
+    ).toBe(false);
+    expect(composition.persistence.listAttention()).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "notification-delivery-retryable",
+          kind: "production-error",
+          message: expect.stringContaining("transport-failure"),
+          taskId: fixture.taskId,
+        }),
+      }),
+    );
+    expect(composition.persistence.listAttention()).not.toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "session-observation-failed",
+        }),
+      }),
+    );
+
+    rejectTransport = false;
+    now = 15_000;
+    await composition.scheduler.trigger();
+    const pageableDeliveries = deliveries.mock.calls.filter(
+      ([message]) => message.stableId === pageable.attentionId,
+    );
+    expect(pageableDeliveries).toHaveLength(2);
+    expect(pageableDeliveries[1]?.[0]).toEqual(pageableDeliveries[0]?.[0]);
+    expect(
+      composition.persistence.effectCompleted("pushover", pageable.attentionId),
+    ).toBe(true);
+    expect(composition.persistence.listAttention()).not.toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "notification-delivery-retryable",
+        }),
+      }),
+    );
+    await composition.scheduler.trigger();
+    expect(
+      deliveries.mock.calls.filter(
+        ([message]) => message.stableId === pageable.attentionId,
+      ),
+    ).toHaveLength(2);
+    await composition.close();
+  });
+
+  it("replays a retryable production-error page after its deadline and restart", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 60_000;
+    let now = 10_000;
+    let available = false;
+    const attention = createProductionErrorAttention({
+      attentionId: `production:task-reconciliation-failed:task:${fixture.taskId}`,
+      code: "task-reconciliation-failed",
+      error: new Error("Synthetic task failure"),
+      message: "Task reconciliation failed",
+      taskId: fixture.taskId,
+    });
+    const deliveries = vi.fn(async (message: { stableId: string }) => {
+      if (message.stableId === attention.attentionId && !available) {
+        throw new Error("Synthetic page transport failure");
+      }
+    });
+    const options = {
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      notificationNow: () => now,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: deliveries },
+      t3: new SyntheticT3(),
+    };
+    const targetAttempts = () =>
+      deliveries.mock.calls.filter(
+        ([message]) => message.stableId === attention.attentionId,
+      );
+
+    const first = createProductionComposition(options);
+    await first.start();
+    await first.attention.raise(attention);
+    expect(targetAttempts()).toHaveLength(1);
+    expect(await first.attention.has(attention.attentionId)).toBe(true);
+    expect(
+      first.persistence.effectIntentRecorded(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    expect(
+      first.persistence.effectCompleted(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(false);
+    await first.close();
+
+    now += 4_999;
+    available = true;
+    const restarted = createProductionComposition(options);
+    await restarted.start();
+    expect(targetAttempts()).toHaveLength(1);
+    now += 1;
+    await restarted.scheduler.trigger();
+
+    expect(targetAttempts()).toHaveLength(2);
+    expect(
+      restarted.persistence.effectCompleted(
+        "production-error-pushover",
+        attention.attentionId,
+      ),
+    ).toBe(true);
+    expect(
+      restarted.persistence.effectCompleted("pushover", attention.attentionId),
+    ).toBe(true);
+    await restarted.close();
+  });
+
+  it("recovers a permanently rejected production-error page after repair restart and operator retry", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 60_000;
+    let accepted = false;
+    const fetch = vi.fn(async () =>
+      accepted
+        ? new globalThis.Response(JSON.stringify({ status: 1 }), {
+            status: 200,
+          })
+        : new globalThis.Response(
+            JSON.stringify({ status: 0, token: "invalid" }),
+            { status: 400 },
+          ),
+    );
+    const attention = createProductionErrorAttention({
+      attentionId: `production:task-reconciliation-failed:task:${fixture.taskId}`,
+      code: "task-reconciliation-failed",
+      error: new Error("Synthetic task failure"),
+      message: "Task reconciliation failed",
+      taskId: fixture.taskId,
+    });
+    const options = {
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverFetch: fetch,
+      t3: new SyntheticT3(),
+    };
+    const targetAttempts = () =>
+      fetch.mock.calls.filter(
+        (call) => fetchedAttentionIds([call])[0] === attention.attentionId,
+      );
+    const currentRecovery = (
+      composition: ReturnType<typeof createProductionComposition>,
+    ) =>
+      composition.attention
+        .list()
+        .find(
+          ({ actions, notificationVerification }) =>
+            actions.some(({ actionId }) => actionId === "notification.retry") &&
+            notificationVerification?.message === attention.message,
+        );
+    const activeNotificationFailures = (
+      composition: ReturnType<typeof createProductionComposition>,
+    ) =>
+      composition.persistence.listAttention().filter(({ payload }) => {
+        if (
+          typeof payload !== "object" ||
+          payload === null ||
+          Array.isArray(payload)
+        ) {
+          return false;
+        }
+        return String(payload["code"]).startsWith("notification-delivery-");
+      });
+
+    const first = createProductionComposition(options);
+    await first.start();
+    await first.attention.raise(attention);
+
+    expect(targetAttempts()).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(currentRecovery(first)).toMatchObject({
+      actions: [
+        expect.objectContaining({ actionId: "notification.retry" }),
+        expect.objectContaining({ actionId: "attention.resolve" }),
+      ],
+      notificationVerification: {
+        message: attention.message,
+        recipientLabel: "Primary operator",
+      },
+    });
+    await first.scheduler.trigger();
+    await first.scheduler.trigger();
+    expect(targetAttempts()).toHaveLength(1);
+    expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(activeNotificationFailures(first)).toHaveLength(1);
+    await first.close();
+
+    accepted = true;
+    fixture.configuration.pushover.applicationToken =
+      "replacement-application-token";
+    const restarted = createProductionComposition(options);
+    await restarted.start();
+
+    expect(targetAttempts()).toHaveLength(1);
+    const recovery = currentRecovery(restarted);
+    if (recovery === undefined) {
+      throw new Error("Missing production-error page recovery attention");
+    }
+    const retry = recovery.actions.find(
+      ({ actionId }) => actionId === "notification.retry",
+    )!;
+    await restarted.consoleActions.execute({
+      action: retry,
+      attention: recovery,
+    });
+    await restarted.scheduler.trigger();
+
+    expect(targetAttempts()).toHaveLength(2);
+    expect(
+      new globalThis.URLSearchParams(
+        String(targetAttempts()[1]?.[1]?.body),
+      ).get("token"),
+    ).toBe("replacement-application-token");
+    expect(
+      restarted.persistence.effectCompleted("pushover", attention.attentionId),
+    ).toBe(true);
+    expect(currentRecovery(restarted)).toBeUndefined();
+    await restarted.close();
+
+    const confirmed = createProductionComposition(options);
+    await confirmed.start();
+    expect(targetAttempts()).toHaveLength(2);
+    expect(currentRecovery(confirmed)).toBeUndefined();
+    await confirmed.close();
+  });
+
+  it("activates standard delivery from the organization template authority without product templates", async () => {
+    const fixture = await prepare();
+    const artifactPaths = [
+      "handoff-templates/remediation.md",
+      "handoff-templates/standard.md",
+      "todo-templates/standard-delivery-implement.json",
+      "todo-templates/standard-delivery-remediate.json",
+      "todo-templates/standard-delivery-retrospective.json",
+      "todo-templates/standard-delivery-review.json",
+    ];
+    for (const path of artifactPaths) {
+      await copyFile(
+        join(cwd(), "src/test-fixtures/standard-delivery", path),
+        join(fixture.blueprintsRepositoryRoot, path),
+      );
+    }
+    await execute("git", ["add", ...artifactPaths], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add standard delivery templates",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    const templateCommitSha = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: fixture.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    const blueprintPath = await writeDeliveryBlueprintFixture(
+      fixture.blueprintsRepositoryRoot,
+      "standard-delivery",
+    );
+    const absoluteBlueprintPath = join(
+      fixture.blueprintsRepositoryRoot,
+      blueprintPath,
+    );
+    const blueprint = JSON.parse(
+      await readFile(absoluteBlueprintPath, "utf8"),
+    ) as LifecycleBlueprint;
+    for (const node of blueprint.nodes) {
+      if (node["handoff-template"] !== undefined) {
+        node["handoff-template"].commitSha = templateCommitSha;
+      }
+    }
+    blueprint.nodes.find(({ id }) => id === "implement")!["assign-agent-name"] =
+      "allies";
+    await writeFile(
+      absoluteBlueprintPath,
+      `${JSON.stringify(blueprint, null, 2)}\n`,
+    );
+    await execute("git", ["add", blueprintPath], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add standard delivery blueprint",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet", "origin", "main"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--remove-tag",
+        "lifecycle:sample",
+        "--add-tag",
+        "lifecycle:standard-delivery",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    await expect(
+      access(join(fixture.repositoryRoot, "handoff-templates")),
+    ).rejects.toThrow();
+    await expect(
+      access(join(fixture.repositoryRoot, "todo-templates")),
+    ).rejects.toThrow();
+
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+
+    const instanceId = `task-${fixture.taskId}`;
+    const record = composition.persistence.getInstance(instanceId)!;
+    expect(record.state.agentNames).toMatchObject({
+      assignments: { allies: "sample-ally" },
+      kind: "team",
+      themeId: "sample-team",
+    });
+    const stored = record.state.handoffs.find(isStoredHandoff);
+    if (
+      stored === undefined ||
+      typeof stored.systemPrompt !== "string" ||
+      !isWorkflowMcpStageContract(stored.workflowMcp)
+    ) {
+      throw new Error("Standard delivery activation has no stored handoff");
+    }
+    expect(JSON.parse(stored.handoff)).toMatchObject({
+      stage: { agentName: "sample-ally", name: "implement" },
+    });
+    const pinnedTemplate = await execute(
+      "git",
+      [
+        "cat-file",
+        "-p",
+        `${stored.workflowMcp.handoffTemplate.commitSha}:${stored.workflowMcp.handoffTemplate.path}`,
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    const expectedTemplateBytes = await readFile(
+      join(
+        cwd(),
+        "src/test-fixtures/standard-delivery/handoff-templates/standard.md",
+      ),
+      "utf8",
+    );
+    expect(pinnedTemplate.stdout).toBe(expectedTemplateBytes);
+    const bodyBoundary = expectedTemplateBytes.indexOf("\n---\n", 4);
+    expect(bodyBoundary).toBeGreaterThan(0);
+    const template = {
+      ...stored.workflowMcp.handoffTemplate,
+      body: expectedTemplateBytes.slice(bodyBoundary + "\n---\n".length),
+      includes: {},
+      skills: {},
+      kind: "standard" as const,
+    };
+    const task = await composition.board.readTask(fixture.taskId);
+    const expectedHandoff = renderStageHandoff({
+      correlationToken: stored.correlationToken,
+      handoff: stored.handoff,
+      instanceId,
+      sessionKey: stored.sessionKey,
+      stage: "implement",
+      task: task.frontMatter,
+      taskId: fixture.taskId,
+      template,
+    });
+    const turn = t3.commands.find(({ type }) => type === "thread.turn.start");
+    expect((turn?.["message"] as { text?: string }).text).toBe(
+      composeSystemPrompt(
+        stored.systemPrompt,
+        expectedHandoff,
+        stored.correlationToken,
+      ),
+    );
+    await expect(
+      execute(
+        "git",
+        ["cat-file", "-e", stored.workflowMcp.handoffTemplate.commitSha],
+        { cwd: fixture.repositoryRoot },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      execute(
+        "git",
+        [
+          "rev-parse",
+          `refs/heddle/handoff-templates/${stored.workflowMcp.handoffTemplate.commitSha}`,
+        ],
+        { cwd: fixture.blueprintsRepositoryRoot },
+      ),
+    ).resolves.toMatchObject({
+      stdout: `${stored.workflowMcp.handoffTemplate.commitSha}\n`,
+    });
+    const productRefs = await execute(
+      "git",
+      ["for-each-ref", "--format=%(refname)", "refs/heddle/"],
+      { cwd: fixture.repositoryRoot },
+    );
+    expect(productRefs.stdout).toBe("");
+    expect(composition.persistence.listReconcilerRuntime()).toContainEqual(
+      expect.objectContaining({
+        instanceId,
+        stageId: "implement",
+        state: "waiting",
+      }),
+    );
+    await composition.close();
+  });
+
+  it("assigns an epic child the soloist name required by its blueprint", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const templatePath = join(
+      fixture.blueprintsRepositoryRoot,
+      "handoff-templates",
+      "standard.md",
+    );
+    await writeFile(
+      templatePath,
+      `${await readFile(templatePath, "utf8")}\nAgent: {{ handoff.stage.agentName }}\n`,
+    );
+    await execute("git", ["add", "handoff-templates/standard.md"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Render assigned name",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    const templateCommitSha = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: fixture.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
+    const blueprintPath = join(
+      fixture.blueprintsRepositoryRoot,
+      "blueprints",
+      "sample.json",
+    );
+    const blueprint = JSON.parse(
+      await readFile(blueprintPath, "utf8"),
+    ) as LifecycleBlueprint;
+    const implement = blueprint.nodes.find(({ id }) => id === "implement")!;
+    implement["assign-agent-name"] = "heroes";
+    implement["handoff-template"]!.commitSha = templateCommitSha;
+    await writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Assign team ally",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet", "origin", "main"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    const record = composition.persistence.getInstance(
+      `task-${fixture.taskId}`,
+    )!;
+    expect(record.state.agentNames).toEqual({
+      assignments: { heroes: "sample-hero" },
+      catalogCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
+      kind: "soloist",
+      themeId: "sample-soloist",
+    });
+    const stored = record.state.handoffs.find(isStoredHandoff)!;
+    expect(JSON.parse(stored.handoff)).toMatchObject({
+      stage: { agentName: "sample-hero", name: "implement" },
+    });
+    expect(stored.renderedHandoff).toContain("Agent: sample-hero");
+    await composition.close();
+  });
+
+  it("releases a full production WIP gate on a later serialized pass", async () => {
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    configuration.pacing.maxConcurrentSessions = 1;
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    composition.persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "task-999",
+      provider: "codex",
+      state: "running",
+      taskId: 999,
+    });
+    await composition.start();
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId: value }) => value === taskId),
+    ).toMatchObject({
+      deferral: { reason: "work-in-progress-limit" },
+      state: "deferred",
+    });
+    expect(
+      t3.commands.filter(({ type }) => type !== "project.create"),
+    ).toHaveLength(0);
+    expect(
+      composition.attention
+        .list()
+        .filter(({ taskId: value }) => value === taskId),
+    ).toEqual([]);
+
+    const instanceId = `task-${taskId}`;
+    const absenceAttentionId = `production:lifecycle-instance-absent:task:${taskId}:${instanceId}`;
+    await composition.attention.raise(
+      createProductionErrorAttention({
+        attentionId: absenceAttentionId,
+        code: "lifecycle-instance-absent",
+        error: new Error("Synthetic stale lifecycle absence"),
+        instanceId,
+        message: "Synthetic stale lifecycle absence",
+        taskId,
+      }),
+    );
+    const unrelatedAttentionId = `production:task-reconciliation-failed:task:${taskId}:${instanceId}`;
+    await composition.attention.raise(
+      createProductionErrorAttention({
+        attentionId: unrelatedAttentionId,
+        code: "task-reconciliation-failed",
+        error: new Error("Synthetic unrelated condition"),
+        instanceId,
+        message: "Synthetic unrelated condition",
+        taskId,
+      }),
+    );
+
+    composition.persistence.writeReconcilerRuntime({
+      boardStatus: "done",
+      instanceId: "task-999",
+      provider: "codex",
+      state: "done",
+      taskId: 999,
+    });
+    await composition.scheduler.trigger();
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId: value }) => value === taskId),
+    ).toMatchObject({ state: "waiting" });
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(1);
+    expect(
+      composition.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        )
+        .filter(({ taskId: value }) => value === taskId)
+        .map(({ attentionId }) => attentionId),
+    ).toEqual([unrelatedAttentionId]);
+    await composition.close();
+  });
+
+  it("reports a scheduler-owned board failure as durable global attention", async () => {
+    const fixture = await prepare();
+    const onSchedulerError = vi.fn(async () => undefined);
+    const pages = vi.fn(async () => undefined);
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      onSchedulerError,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: pages },
+      t3,
+    });
+    await rm(fixture.configuration.boardDirectory, {
+      force: true,
+      recursive: true,
+    });
+
+    await expect(composition.start()).rejects.toThrow();
+
+    expect(onSchedulerError).toHaveBeenCalledOnce();
+    expect(t3.commands.filter(({ type }) => type !== "project.create")).toEqual(
+      [],
+    );
+    expect(pages).toHaveBeenCalledOnce();
+    expect(pages.mock.calls[0]?.[0]).toMatchObject({
+      level: "critical",
+      stableId: expect.stringContaining("production:scheduler-pass-failed"),
+    });
+    expect(composition.attention.list()).toEqual([
+      expect.objectContaining({
+        actions: [expect.objectContaining({ actionId: "attention.resolve" })],
+        kind: "production-error",
+        message: expect.stringContaining("Operator action is required"),
+        scope: "all",
+      }),
+    ]);
+    await composition.close().catch(() => undefined);
+  });
+
+  it("attempts the catalog floor page when persistence is closed before start", async () => {
+    const fixture = await prepare();
+    const pages = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: pages },
+      t3: new SyntheticT3(),
+    });
+    composition.persistence.close();
+
+    await expect(composition.start()).rejects.toThrow();
+
+    expect(pages).toHaveBeenCalledOnce();
+    expect(pages.mock.calls[0]?.[0]).toMatchObject({
+      level: "critical",
+      stableId: "production:dynamic-task-authority-failed:global:catalog",
+    });
+    await composition.close().catch(() => undefined);
+  });
+
+  it("attempts the scheduler floor page after persistence becomes unavailable", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 2_000;
+    const pages = vi.fn(async () => undefined);
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: pages },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    composition.persistence.close();
+
+    try {
+      await vi.waitFor(
+        () =>
+          expect(
+            pages.mock.calls.filter(([page]) =>
+              page.stableId.includes("production:scheduler-pass-failed"),
+            ),
+          ).toHaveLength(1),
+        { timeout: 4_000 },
+      );
+    } finally {
+      await composition.close().catch(() => undefined);
+    }
+  }, 10_000);
+
+  it("keeps scheduler dispatch moving after one task activation fails", async () => {
+    const fixture = await prepare();
+    const created = await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "create",
+        "Secondary Item",
+        "--status",
+        "todo",
+        "--tags",
+        "lifecycle:sample",
+        "--json",
+      ],
+      { cwd: fixture.root },
+    );
+    const secondTaskId = (JSON.parse(created.stdout) as { id: number }).id;
+    class FirstTaskFailureT3 extends SyntheticT3 {
+      override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
+        if (
+          command.type === "thread.create" &&
+          command.title === `task-${fixture.taskId} · implement-1`
+        ) {
+          throw new Error("Injected first-task activation failure");
+        }
+        return super.dispatch(command);
+      }
+    }
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new FirstTaskFailureT3(),
+    });
+
+    await composition.start();
+
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId }) => taskId === secondTaskId),
+    ).toMatchObject({ state: "waiting" });
+    expect(
+      composition.attention
+        .list()
+        .filter(
+          ({ attentionId }) =>
+            !attentionId.includes(":incident-execution-failed:"),
+        ),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "production-error",
+        message: expect.stringContaining(
+          "Injected first-task activation failure",
+        ),
+        scope: `task:${fixture.taskId}`,
+        taskId: fixture.taskId,
+      }),
+    ]);
+    await composition.close();
+  });
+
+  it("raises attention when a board task with a live instance disappears", async () => {
+    const fixture = await prepare();
+    fixture.configuration.cadenceMilliseconds = 750;
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    await composition.attention.raise(
+      createProductionErrorAttention({
+        attentionId: `production:incident-execution-failed:task:${fixture.taskId}`,
+        code: "incident-execution-failed",
+        error: new Error("Synthetic neighboring condition"),
+        instanceId: `task-${fixture.taskId}`,
+        message: "Synthetic neighboring condition",
+        taskId: fixture.taskId,
+      }),
+    );
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "delete",
+        String(fixture.taskId),
+        "--yes",
+      ],
+      { cwd: fixture.root },
+    );
+
+    const disappearanceAttentionId = `production:board-task-absent:task:${fixture.taskId}:task-${fixture.taskId}`;
+    const disappearanceAttention = () =>
+      composition.attention
+        .list()
+        .filter(({ attentionId }) => attentionId === disappearanceAttentionId);
+
+    await vi.waitFor(
+      () => {
+        expect(disappearanceAttention()).toHaveLength(1);
+      },
+      { timeout: 3_000 },
+    );
+
+    expect(disappearanceAttention()).toEqual([
+      expect.objectContaining({
+        attentionId: disappearanceAttentionId,
+        instanceId: `task-${fixture.taskId}`,
+        kind: "production-error",
+        taskId: fixture.taskId,
+      }),
+    ]);
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        attentionId: `production:incident-execution-failed:task:${fixture.taskId}`,
+        taskId: fixture.taskId,
+      }),
+    );
+    await composition.close();
+  });
+
+  it("releases a closed provider window on a later serialized pass", async () => {
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    configuration.pacing.providerBudgets = { codex: { usageLimit: 1 } };
+    let used = 1;
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used, windowStartedAt: Date.now() }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await composition.start();
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId: value }) => value === taskId),
+    ).toMatchObject({
+      deferral: { reason: "provider-usage-window" },
+      state: "deferred",
+    });
+    used = 0;
+    await composition.scheduler.trigger();
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .find(({ taskId: value }) => value === taskId),
+    ).toMatchObject({ state: "waiting" });
+    await composition.close();
+  });
+
+  it("persists configured over-threshold attention", async () => {
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    const runtime = composition.persistence
+      .listReconcilerRuntime()
+      .find(({ taskId: value }) => value === taskId)!;
+    composition.persistence.writeReconcilerRuntime({
+      ...runtime,
+      stageEnteredAt: Date.now() - 120_000,
+    });
+    await composition.scheduler.trigger();
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        instanceId: `task-${taskId}`,
+        kind: "stale-instance",
+        taskId,
+      }),
+    );
+    await composition.close();
+
+    const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    expect(restarted.attention.list()).toHaveLength(1);
+    await restarted.close();
+  });
+
+  it("preserves epic, blocked, absent-dependency, standalone, and write boundaries", async () => {
+    const { blueprintsRepositoryRoot, configuration, root } = await prepare();
+    configuration.pacing.maxConcurrentSessions = 10;
+    const create = async (arguments_: string[]): Promise<number> => {
+      const result = await execute(
+        "kanban-md",
+        [
+          "--dir",
+          configuration.boardDirectory,
+          "create",
+          ...arguments_,
+          "--json",
+        ],
+        { cwd: root },
+      );
+      return (JSON.parse(result.stdout) as { id: number }).id;
+    };
+    const epicId = await create([
+      "Sample Epic",
+      "--status",
+      "in-progress",
+      "--tags",
+      "type:epic",
+    ]);
+    await create([
+      "Completed Child",
+      "--status",
+      "done",
+      "--parent",
+      String(epicId),
+    ]);
+    const uatId = await create([
+      "Acceptance Child",
+      "--status",
+      "backlog",
+      "--parent",
+      String(epicId),
+      "--tags",
+      "uat",
+    ]);
+    const pausedEpicId = await create([
+      "Paused Epic",
+      "--status",
+      "todo",
+      "--tags",
+      "type:epic",
+    ]);
+    const pausedChildId = await create([
+      "Paused Child",
+      "--status",
+      "backlog",
+      "--parent",
+      String(pausedEpicId),
+    ]);
+    const blockedId = await create([
+      "Blocked Item",
+      "--status",
+      "todo",
+      "--tags",
+      "lifecycle:sample",
+    ]);
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        configuration.boardDirectory,
+        "edit",
+        String(blockedId),
+        "--block",
+        "Explicit fixture block",
+      ],
+      { cwd: root },
+    );
+    const missingDependencyId = await create([
+      "Removed Dependency",
+      "--status",
+      "done",
+    ]);
+    const absentDependencyId = await create([
+      "Independent Item",
+      "--status",
+      "todo",
+      "--depends-on",
+      String(missingDependencyId),
+      "--tags",
+      "lifecycle:sample",
+    ]);
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        configuration.boardDirectory,
+        "delete",
+        String(missingDependencyId),
+        "--yes",
+      ],
+      { cwd: root },
+    );
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await composition.start();
+    let board = await composition.board.readBoard();
+    expect(board.find(({ id }) => id === epicId)?.status).toBe("uat");
+    expect(board.find(({ id }) => id === uatId)?.status).toBe("todo");
+    expect(board.find(({ id }) => id === pausedChildId)?.status).toBe(
+      "backlog",
+    );
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .some(({ taskId }) => taskId === blockedId),
+    ).toBe(false);
+    expect(
+      composition.persistence
+        .listReconcilerRuntime()
+        .some(({ taskId }) => taskId === absentDependencyId),
+    ).toBe(true);
+    await expect(
+      composition.board.mirrorTaskStatus(epicId, "done"),
+    ).rejects.toThrow(`task ${epicId} is an epic task`);
+    await expect(
+      composition.board.transitionEpicStatus(absentDependencyId, "done"),
+    ).rejects.toThrow(`task ${absentDependencyId} is not an epic task`);
+
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        configuration.boardDirectory,
+        "edit",
+        String(uatId),
+        "--status",
+        "done",
+      ],
+      { cwd: root },
+    );
+    composition.persistence.writeReconcilerRuntime({
+      boardStatus: "done",
+      instanceId: `task-${uatId}`,
+      state: "done",
+      taskId: uatId,
+    });
+    await composition.scheduler.trigger();
+    board = await composition.board.readBoard();
+    expect(board.find(({ id }) => id === epicId)?.status).toBe("done");
+    await composition.close();
+  });
+});

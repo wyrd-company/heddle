@@ -1,0 +1,44 @@
+{
+  "name": "Heddle feature qualification",
+  "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
+    "ghcr.io/wyrd-company/heddle/heddle:0": {
+      "configDirectory": "/home/vscode/.heddle",
+      "dnsName": "heddle.localhost"
+    }
+  },
+  "mounts": [
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_STATE}",
+      "target": "/var/lib/heddle",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_BOARD}",
+      "target": "/workspaces/kanban",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_KANBAN}",
+      "target": "/usr/local/bin/kanban-md",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_CONFIG}",
+      "target": "/home/vscode/.heddle",
+      "type": "bind"
+    }
+  ],
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/heddle",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind",
+  "runArgs": [
+    "--add-host",
+    "heddle.localhost:127.0.0.1",
+    "--add-host",
+    "t3.qualification:host-gateway"
+  ],
+  "overrideCommand": false,
+  "shutdownAction": "none"
+}

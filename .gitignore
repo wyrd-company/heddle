@@ -39,6 +39,7 @@ build/Release
 
 # Dependency directories
 node_modules/
+/.devcontainer/publish/
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -61,6 +62,7 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+.devcontainer/qualification/devcontainer-lock.json
 
 # Yarn Integrity file
 .yarn-integrity

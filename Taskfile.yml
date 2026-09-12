@@ -1,0 +1,69 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build the service and console viewer
+    cmds:
+      - npm run build
+
+  test:unit:
+    desc: Run the unit and integration tests
+    deps: [build]
+    cmds:
+      - npm test
+
+  browser:qualification:
+    desc: Qualify console accessibility in a real browser
+    deps: [build]
+    cmds:
+      - npm run browser:qualification
+
+  blueprints:validate:
+    desc: Validate one organization blueprint repository with the Heddle schema and interpreter
+    deps: [build]
+    requires:
+      vars: [BLUEPRINTS_REPOSITORY_ROOT]
+    cmds:
+      - npm run blueprints:validate -- "{{.BLUEPRINTS_REPOSITORY_ROOT}}"
+
+  test:
+    desc: Run the repository test path
+    deps: [build]
+    cmds:
+      - npm test
+      - npm run browser:qualification
+
+  test:pinned-t3:
+    desc: Run the complete pinned-T3 integration gate with bounded parallelism
+    cmds:
+      - scripts/deployment/qualify-pinned-t3.sh
+
+  lint:
+    desc: Check source and artifact formatting
+    cmds:
+      - npm run lint
+
+  ci:
+    desc: Run the continuous integration gate
+    cmds:
+      - task: test
+      - task: lint
+
+  deployment:package:
+    desc: Qualify the packaged deployment artifact
+    deps: [build]
+    cmds:
+      - scripts/deployment/package-feature.sh
+
+  deployment:stage-feature:
+    desc: Stage the distributable Dev Container Feature collection
+    requires:
+      vars: [FEATURE_COLLECTION_PATH]
+    cmds:
+      - scripts/deployment/stage-feature.sh "{{.FEATURE_COLLECTION_PATH}}"
+
+  deployment:qualification:
+    desc: Qualify the deployment feature
+    deps: [build]
+    cmds:
+      - scripts/deployment/qualify-feature.sh

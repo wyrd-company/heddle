@@ -1,0 +1,652 @@
+// ---
+// relationships:
+//   implements: heddle
+// ---
+
+import { createHash } from "node:crypto";
+
+import type { BoardTask } from "../board-adapter/index.js";
+import {
+  readLifecycleContext,
+  type LifecycleContextRecord,
+  type LifecycleSnapshot,
+} from "../engine/index.js";
+import type {
+  IncidentRuntimeRecord,
+  JsonValue,
+  SqlitePersistence,
+} from "../persistence/index.js";
+import type { DurableAttentionQueue } from "./durable-adapters.js";
+import {
+  createProductionErrorAttention,
+  productionErrorIncidentEligible,
+  productionErrorIncidentId,
+  type ProductionErrorAttention,
+} from "./error-visibility.js";
+import type { ProductionInstanceController } from "./instance-controller.js";
+import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
+import { sanitizeIncidentValue } from "./incident-redaction.js";
+import {
+  incidentProductionMutationApproval,
+  incidentProductionMutationApproved,
+  incidentProductionMutationRequiresApproval,
+  incidentProposalDigest,
+  incidentProposedActionKinds,
+} from "./incident-approval.js";
+import type { IncidentSeverity } from "./configuration.js";
+
+export { sanitizeIncidentValue } from "./incident-redaction.js";
+
+export type IncidentAdmissionPolicy = {
+  cooldownMilliseconds: number;
+  failureThreshold: number;
+  maximumConcurrent: number;
+  maximumReviewRejections: number;
+  retryDelayMilliseconds: number;
+};
+
+export const incidentAdmissionPolicy: IncidentAdmissionPolicy = {
+  cooldownMilliseconds: 60_000,
+  failureThreshold: 3,
+  maximumConcurrent: 3,
+  maximumReviewRejections: 3,
+  retryDelayMilliseconds: 60_000,
+};
+
+const incidentBlueprintPath = "blueprints/incident.json";
+const finalizeEffect = "incident-finalize";
+const productionMutationEffect = "incident-production-mutation";
+
+type RecordValue = Record<string, JsonValue>;
+
+const asRecord = (value: JsonValue | undefined): RecordValue | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value
+    : undefined;
+
+const productionError = (
+  value: JsonValue,
+): ProductionErrorAttention | undefined => {
+  const payload = asRecord(value);
+  const code = payload?.["code"];
+  if (
+    payload?.["kind"] !== "production-error" ||
+    typeof code !== "string" ||
+    code.trim() === ""
+  ) {
+    return undefined;
+  }
+  return payload as ProductionErrorAttention;
+};
+
+type IncidentSourceIndex = {
+  readonly incidentById: ReadonlyMap<string, IncidentRuntimeRecord>;
+  readonly latestIncidentByAttentionId: ReadonlyMap<
+    string,
+    IncidentRuntimeRecord
+  >;
+  readonly taskIdByInstanceId: ReadonlyMap<string, number>;
+};
+
+const incidentSource = (
+  index: IncidentSourceIndex,
+  value: JsonValue,
+): ProductionErrorAttention | undefined => {
+  const declared = productionError(value);
+  if (declared !== undefined) return declared;
+  const payload = asRecord(value);
+  const attentionId = payload?.["attentionId"];
+  const instanceId = payload?.["instanceId"];
+  const kind = payload?.["kind"];
+  const message = payload?.["message"];
+  if (
+    typeof attentionId !== "string" ||
+    typeof instanceId !== "string" ||
+    typeof kind !== "string" ||
+    typeof message !== "string" ||
+    !new Set(["ended", "failed", "stalled"]).has(kind)
+  ) {
+    return undefined;
+  }
+  const incident = index.incidentById.get(instanceId);
+  const taskId = index.taskIdByInstanceId.get(instanceId) ?? incident?.taskId;
+  if (taskId === undefined) return undefined;
+  return createProductionErrorAttention({
+    attentionId,
+    code:
+      incident === undefined ? `session-${kind}` : "incident-execution-failed",
+    error: new Error(message),
+    instanceId,
+    message,
+    taskId,
+  });
+};
+
+const sourceTaskContract = (
+  persistence: SqlitePersistence,
+  sourceInstanceId: string | undefined,
+): Partial<BoardTask> | undefined => {
+  if (sourceInstanceId === undefined) return undefined;
+  const instance = persistence.getInstance(sourceInstanceId);
+  if (instance === undefined) return undefined;
+  const serialized = readLifecycleContext(instance).serializedContext;
+  if (serialized === null) return undefined;
+  const context = JSON.parse(serialized) as Record<string, unknown>;
+  const candidate = context["taskContract"];
+  return typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+    ? (candidate as Partial<BoardTask>)
+    : undefined;
+};
+
+const taskForIncident = (
+  persistence: SqlitePersistence,
+  boardTasks: readonly BoardTask[],
+  attention: ProductionErrorAttention,
+  incident: JsonValue,
+): BoardTask => {
+  const boardTask = boardTasks.find(({ id }) => id === attention.taskId);
+  const retained =
+    boardTask === undefined
+      ? sourceTaskContract(persistence, attention.instanceId ?? undefined)
+      : undefined;
+  const taskId = attention.taskId;
+  if (taskId === null) throw new Error("Incident attention has no task ID");
+  const base: BoardTask = boardTask ?? {
+    blocked: retained?.blocked ?? false,
+    dependencies: retained?.dependencies ?? [],
+    frontMatter: {},
+    id: taskId,
+    priority: retained?.priority ?? "medium",
+    status: retained?.status ?? "in-progress",
+    tags: retained?.tags ?? [],
+    title: retained?.title ?? `Production incident for task ${taskId}`,
+    ...(retained?.lifecycle === undefined
+      ? {}
+      : { lifecycle: retained.lifecycle }),
+    ...(retained?.parent === undefined ? {} : { parent: retained.parent }),
+    ...(retained?.providerAlias === undefined
+      ? {}
+      : { providerAlias: retained.providerAlias }),
+    ...(retained?.product === undefined ? {} : { product: retained.product }),
+    ...(retained?.repos === undefined ? {} : { repos: retained.repos }),
+  };
+  return { ...base, frontMatter: {}, incident } as BoardTask;
+};
+
+export class ProductionIncidentCoordinator {
+  public constructor(
+    private readonly persistence: SqlitePersistence,
+    private readonly attention: DurableAttentionQueue,
+    private readonly lifecycle: ProductionLifecycleRouter,
+    private readonly instances: ProductionInstanceController,
+    private readonly options: {
+      admissionPolicy?: IncidentAdmissionPolicy;
+      approvalSeverityThreshold?: IncidentSeverity;
+      authority?: Record<string, JsonValue>;
+      immediateEscalationCodes?: ReadonlySet<string>;
+      now?: () => number;
+      secrets?: readonly string[];
+    } = {},
+  ) {}
+
+  async reconcile(tasks: readonly BoardTask[]): Promise<void> {
+    const taskIds = new Set(tasks.map(({ id }) => id));
+    const sourceIndex = this.#sourceIndex();
+    const activeAttention = this.persistence.listAttention();
+    const activeAttentionById = new Map(
+      activeAttention.map((record) => [record.attentionId, record]),
+    );
+    for (const record of activeAttention) {
+      const source = incidentSource(sourceIndex, record.payload);
+      if (source === undefined) continue;
+      if (!productionErrorIncidentEligible(source.code)) continue;
+      if (source.taskId === null) continue;
+      if (
+        source.instanceId !== null &&
+        sourceIndex.incidentById.has(source.instanceId)
+      ) {
+        continue;
+      }
+      const policy = this.options.admissionPolicy ?? incidentAdmissionPolicy;
+      const observation = this.persistence.observeIncidentFailure({
+        attentionId: source.attentionId,
+        code: source.code,
+        failureThreshold: policy.failureThreshold,
+        observedAt: this.options.now?.() ?? Date.now(),
+        retryDelayMilliseconds: policy.retryDelayMilliseconds,
+        shortCircuit: this.options.immediateEscalationCodes?.has(source.code),
+      });
+      if (observation.kind !== "breaker-open") continue;
+      const latest = sourceIndex.latestIncidentByAttentionId.get(
+        source.attentionId,
+      );
+      const occurrence =
+        latest === undefined
+          ? 1
+          : latest.state === "starting" || latest.state === "waiting"
+            ? latest.occurrence
+            : latest.occurrence + 1;
+      const incidentId = productionErrorIncidentId(
+        source.attentionId,
+        occurrence,
+      );
+      const admission = this.persistence.admitIncident({
+        attentionId: source.attentionId,
+        code: source.code,
+        cooldownMilliseconds: policy.cooldownMilliseconds,
+        createdAt: this.options.now?.() ?? Date.now(),
+        incidentId,
+        maximumConcurrent: policy.maximumConcurrent,
+        occurrence,
+        ...(source.instanceId === null
+          ? {}
+          : { sourceInstanceId: source.instanceId }),
+        taskId: source.taskId,
+      });
+      if (
+        admission.kind === "suppressed" ||
+        admission.runtime.state === "done" ||
+        admission.runtime.state === "failed"
+      ) {
+        continue;
+      }
+      await this.#synchronize(
+        admission.runtime,
+        tasks,
+        taskIds.has(source.taskId),
+        source,
+      );
+    }
+    for (const runtime of this.persistence.listIncidentRuntime()) {
+      if (runtime.state === "done" || runtime.state === "failed") continue;
+      if (activeAttentionById.has(runtime.attentionId)) {
+        const record = activeAttentionById.get(runtime.attentionId);
+        const source =
+          record === undefined
+            ? undefined
+            : incidentSource(sourceIndex, record.payload);
+        await this.#synchronize(
+          runtime,
+          tasks,
+          taskIds.has(runtime.taskId),
+          source,
+        );
+      }
+    }
+  }
+
+  async resume(input: {
+    disposition: string;
+    instanceId: string;
+    operationId: string;
+    output?: Record<string, JsonValue>;
+  }): Promise<LifecycleSnapshot> {
+    const runtime = this.persistence
+      .listIncidentRuntime()
+      .find(({ incidentId }) => incidentId === input.instanceId);
+    if (runtime === undefined) return this.lifecycle.resume(input);
+    let intended = runtime;
+    if (runtime.stageId === "review" && input.disposition === "reject") {
+      const rejections = new Set(runtime.rejectionOperationIds);
+      rejections.add(input.operationId);
+      if (rejections.size > incidentAdmissionPolicy.maximumReviewRejections) {
+        await this.#fail(
+          runtime,
+          new Error("Incident review rejection bound exhausted"),
+        );
+        throw new Error(
+          `Incident review rejection bound of ${incidentAdmissionPolicy.maximumReviewRejections} is exhausted`,
+        );
+      }
+      intended = {
+        ...runtime,
+        rejectionOperationIds: [...rejections],
+      };
+    }
+    if (runtime.stageId === "finalize" && input.disposition === "complete") {
+      this.#assertFinalizationAuthorized(runtime);
+      await this.#recordFinalizationResult(runtime, input.output);
+    }
+    if (runtime.stageId === "implement" && input.disposition === "diagnosed") {
+      intended = { ...intended, diagnosis: input.output ?? {} };
+    }
+    if (runtime.stageId === "review" && input.disposition === "approve") {
+      intended = { ...intended, accepted: true };
+    }
+    this.persistence.writeIncidentRuntime(intended);
+    const snapshot = await this.lifecycle.resume(input);
+    const next = this.persistence
+      .listIncidentRuntime()
+      .find(({ incidentId }) => incidentId === runtime.incidentId)!;
+    try {
+      await this.#synchronizeSnapshot(next, snapshot, []);
+    } catch (error) {
+      await this.#fail(next, error);
+    }
+    return snapshot;
+  }
+
+  async #synchronize(
+    runtime: IncidentRuntimeRecord,
+    tasks: readonly BoardTask[],
+    taskOnBoard: boolean,
+    knownSource?: ProductionErrorAttention,
+  ): Promise<void> {
+    try {
+      const record = this.persistence.getInstance(runtime.incidentId);
+      if (record === undefined) {
+        const stageId = await this.lifecycle.plannedStartStage({
+          blueprintPath: incidentBlueprintPath,
+          instanceId: runtime.incidentId,
+        });
+        if (stageId === undefined) {
+          throw new Error("Incident lifecycle has no initial agent stage");
+        }
+        const source = knownSource ?? this.#sourceAttention(runtime);
+        const incident = this.#incidentContext(runtime, source, taskOnBoard);
+        const task = taskForIncident(this.persistence, tasks, source, incident);
+        runtime = await this.instances.prepareIncidentStart(
+          runtime,
+          stageId,
+          task,
+        );
+        const snapshot = await this.lifecycle.start({
+          blueprintPath: incidentBlueprintPath,
+          initialContext: { incident },
+          instanceId: runtime.incidentId,
+        });
+        await this.#synchronizeSnapshot(runtime, snapshot, tasks, source);
+        return;
+      }
+      const context = readLifecycleContext(record);
+      let snapshot: Pick<LifecycleContextRecord, "awaitingNodeIds" | "status"> =
+        context;
+      if (context.pendingTransition !== null) {
+        const pending = context.pendingTransition;
+        snapshot =
+          pending.kind === "start"
+            ? await this.lifecycle.start({
+                blueprintPath: context.blueprintPath,
+                instanceId: runtime.incidentId,
+              })
+            : await this.lifecycle.resume({
+                disposition: pending.disposition!,
+                instanceId: runtime.incidentId,
+                operationId: pending.operationId!,
+                ...(pending.output === null ? {} : { output: pending.output }),
+              });
+      }
+      await this.#synchronizeSnapshot(runtime, snapshot, tasks, knownSource);
+    } catch (error) {
+      await this.#fail(runtime, error);
+    }
+  }
+
+  async #synchronizeSnapshot(
+    runtime: IncidentRuntimeRecord,
+    snapshot: Pick<LifecycleContextRecord, "awaitingNodeIds" | "status">,
+    tasks: readonly BoardTask[],
+    knownSource?: ProductionErrorAttention,
+  ): Promise<void> {
+    const stageId = snapshot.awaitingNodeIds[0];
+    if (stageId === undefined) {
+      if (snapshot.status !== "completed") {
+        throw new Error("Incident lifecycle stopped without completion");
+      }
+      const stableId = `${runtime.incidentId}:resolve`;
+      this.persistence.recordEffectIntent(finalizeEffect, stableId, {
+        attentionId: runtime.attentionId,
+        incidentId: runtime.incidentId,
+      });
+      this.persistence.resolveAttention(
+        runtime.attentionId,
+        runtime.incidentId,
+      );
+      this.persistence.recordEffectCompleted(finalizeEffect, stableId);
+      this.persistence.writeIncidentRuntime({ ...runtime, state: "done" });
+      return;
+    }
+    if (runtime.stageId === stageId && runtime.state === "waiting") return;
+    if (stageId === "finalize") {
+      if (!runtime.accepted) {
+        throw new Error("Incident finalization requires accepted diagnosis");
+      }
+      if (
+        incidentProposedActionKinds(runtime).has("production-mutation") &&
+        incidentProductionMutationRequiresApproval(
+          runtime,
+          this.options.approvalSeverityThreshold ?? "low",
+        ) &&
+        !incidentProductionMutationApproved(this.persistence, runtime)
+      ) {
+        const approval = incidentProductionMutationApproval(runtime);
+        if (!(await this.attention.has(approval.attentionId))) {
+          await this.attention.raise(approval);
+        } else {
+          this.attention.reopen(approval.attentionId);
+        }
+        return;
+      }
+    }
+    const source = knownSource ?? this.#sourceAttention(runtime);
+    const incident = this.#incidentContext(
+      runtime,
+      source,
+      tasks.some(({ id }) => id === runtime.taskId),
+    );
+    const task = taskForIncident(this.persistence, tasks, source, incident);
+    const productionMutation =
+      stageId === "finalize" &&
+      incidentProposedActionKinds(runtime).has("production-mutation");
+    const productionMutationStableId = `${runtime.incidentId}:${incidentProposalDigest(runtime)}`;
+    if (productionMutation) {
+      this.persistence.recordEffectIntent(
+        productionMutationEffect,
+        productionMutationStableId,
+        {
+          diagnosis: runtime.diagnosis ?? null,
+          incidentId: runtime.incidentId,
+        },
+      );
+    }
+    const starting =
+      runtime.stageId === stageId && runtime.state === "starting"
+        ? runtime
+        : await this.instances.prepareIncidentStart(
+            {
+              ...runtime,
+              provider: undefined,
+              sessionKey: undefined,
+              stageEnteredAt: undefined,
+              stageId: undefined,
+              state: "starting",
+              threadId: undefined,
+            },
+            stageId,
+            task,
+          );
+    await this.instances.activateIncident(task, starting, stageId);
+    if (
+      productionMutation &&
+      !this.persistence.recordEffectCompleted(
+        productionMutationEffect,
+        productionMutationStableId,
+      ) &&
+      !this.persistence.effectCompleted(
+        productionMutationEffect,
+        productionMutationStableId,
+      )
+    ) {
+      throw new Error(
+        "Incident production mutation completion lost its intent",
+      );
+    }
+  }
+
+  #assertFinalizationAuthorized(runtime: IncidentRuntimeRecord): void {
+    if (!runtime.accepted) {
+      throw new Error("Incident finalization requires accepted diagnosis");
+    }
+    if (!incidentProposedActionKinds(runtime).has("production-mutation"))
+      return;
+    if (
+      !incidentProductionMutationRequiresApproval(
+        runtime,
+        this.options.approvalSeverityThreshold ?? "low",
+      )
+    ) {
+      return;
+    }
+    if (!incidentProductionMutationApproved(this.persistence, runtime)) {
+      throw new Error(
+        "Incident production mutation requires accepted operator approval",
+      );
+    }
+  }
+
+  async #recordFinalizationResult(
+    runtime: IncidentRuntimeRecord,
+    output: Record<string, JsonValue> | undefined,
+  ): Promise<void> {
+    if (output?.["conditionState"] !== "cleared") {
+      throw new Error(
+        "Incident finalization requires observed conditionState 'cleared'",
+      );
+    }
+    if (!incidentProposedActionKinds(runtime).has("github-issue")) return;
+    const report = asRecord(output["outwardReport"]);
+    if (report?.["status"] === "delivered") return;
+    if (report?.["status"] !== "undelivered") {
+      throw new Error(
+        "Incident finalization requires outward report delivery evidence",
+      );
+    }
+    const failure = createProductionErrorAttention({
+      attentionId: `production:incident-report-undelivered:${createHash(
+        "sha256",
+      )
+        .update(runtime.incidentId)
+        .digest("hex")}`,
+      code: "incident-report-undelivered",
+      error: new Error(
+        typeof report["safeReason"] === "string"
+          ? report["safeReason"]
+          : "Outward incident report was not delivered",
+      ),
+      instanceId: runtime.incidentId,
+      message: `Incident ${runtime.incidentId} could not deliver its outward report`,
+      taskId: runtime.taskId,
+    });
+    if (!(await this.attention.has(failure.attentionId))) {
+      await this.attention.raise(failure);
+    }
+  }
+
+  #sourceAttention(runtime: IncidentRuntimeRecord): ProductionErrorAttention {
+    const record = this.persistence.getAttention(runtime.attentionId);
+    const source =
+      record === undefined
+        ? undefined
+        : incidentSource(this.#sourceIndex(), record.payload);
+    if (source === undefined) {
+      throw new Error(
+        `Incident source attention is unavailable: ${runtime.attentionId}`,
+      );
+    }
+    return source;
+  }
+
+  #sourceIndex(): IncidentSourceIndex {
+    const incidents = this.persistence.listIncidentRuntime();
+    const latestIncidentByAttentionId = new Map<
+      string,
+      IncidentRuntimeRecord
+    >();
+    for (const runtime of incidents) {
+      const latest = latestIncidentByAttentionId.get(runtime.attentionId);
+      if (latest === undefined || runtime.occurrence > latest.occurrence) {
+        latestIncidentByAttentionId.set(runtime.attentionId, runtime);
+      }
+    }
+    return {
+      incidentById: new Map(
+        incidents.map((runtime) => [runtime.incidentId, runtime]),
+      ),
+      latestIncidentByAttentionId,
+      taskIdByInstanceId: new Map(
+        this.persistence
+          .listReconcilerRuntime()
+          .map((runtime) => [runtime.instanceId, runtime.taskId]),
+      ),
+    };
+  }
+
+  #incidentContext(
+    runtime: IncidentRuntimeRecord,
+    source: ProductionErrorAttention,
+    taskOnBoard: boolean,
+  ): JsonValue {
+    const correlationTokens = this.persistence
+      .listInstances()
+      .flatMap(({ state }) => Object.values(state.correlationTokens));
+    const observations = { ...source } as Record<string, JsonValue>;
+    for (const key of [
+      "attentionId",
+      "code",
+      "error",
+      "incidentId",
+      "instanceId",
+      "kind",
+      "message",
+      "taskId",
+    ]) {
+      delete observations[key];
+    }
+    return sanitizeIncidentValue(
+      {
+        attentionId: source.attentionId,
+        code: source.code,
+        error: source.error,
+        incidentId: runtime.incidentId,
+        occurrence: runtime.occurrence,
+        message: source.message,
+        observations: {
+          ...observations,
+          sourceInstanceId: source.instanceId,
+          taskOnBoard,
+        },
+        authority: this.options.authority ?? {},
+        approvalSeverityThreshold:
+          this.options.approvalSeverityThreshold ?? "low",
+        prohibitions: [
+          "suppress-condition-detection",
+          "read-move-or-write-secrets",
+          "push-real-remote-or-write-default-branch",
+          "degrade-attention-incident-or-notification-machinery",
+          "perform-unobservable-effect",
+        ],
+        recheck: {
+          instruction: "Observe the source condition again before diagnosis",
+        },
+      },
+      [...(this.options.secrets ?? []), ...correlationTokens],
+    );
+  }
+
+  async #fail(runtime: IncidentRuntimeRecord, error: unknown): Promise<void> {
+    this.persistence.writeIncidentRuntime({ ...runtime, state: "failed" });
+    const failure = createProductionErrorAttention({
+      attentionId: `production:incident-execution-failed:task:${runtime.taskId}:${runtime.incidentId}`,
+      code: "incident-execution-failed",
+      error,
+      instanceId: runtime.incidentId,
+      message: `Incident ${runtime.incidentId} failed`,
+      taskId: runtime.taskId,
+    });
+    if (!(await this.attention.has(failure.attentionId))) {
+      await this.attention.raise(failure);
+    }
+  }
+}

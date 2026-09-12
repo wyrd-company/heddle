@@ -1,0 +1,48 @@
+{
+  "id": "heddle",
+  "version": "0.0.0",
+  "name": "Heddle",
+  "description": "Installs Heddle and configures one s6-supervised workflow service for the workspace.",
+  "documentationURL": "https://github.com/wyrd-company/heddle/tree/main/.devcontainer/features/heddle",
+  "options": {
+    "version": {
+      "type": "string",
+      "default": "latest",
+      "description": "Heddle package version to install. `latest` selects the newest GitHub release in the heddle@* tag namespace. This is independent of the Feature version."
+    },
+    "packageSource": {
+      "type": "string",
+      "default": "",
+      "description": "Optional Heddle package tarball source. An https URL or absolute path overrides version resolution."
+    },
+    "packageSha256": {
+      "type": "string",
+      "default": "",
+      "description": "Optional hexadecimal SHA-256 digest required for the resolved Heddle package tarball."
+    },
+    "configDirectory": {
+      "type": "string",
+      "default": "/home/vscode/.heddle",
+      "description": "Absolute operator-owned directory containing required config.yml."
+    },
+    "dnsName": {
+      "type": "string",
+      "default": "",
+      "description": "Optional fully qualified workspace DNS name exposed through the Caddy Feature."
+    },
+    "serviceUser": {
+      "type": "string",
+      "default": "automatic",
+      "description": "User account that runs Heddle. Automatic selection prefers the remote user, container user, vscode, then root."
+    }
+  },
+  "dependsOn": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24"
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils",
+    "ghcr.io/wyrd-company/devcontainers/caddy"
+  ]
+}

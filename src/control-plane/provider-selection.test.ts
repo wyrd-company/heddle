@@ -1,0 +1,807 @@
+// ---
+// relationships:
+//   verifies: heddle
+// ---
+
+import { readFile } from "node:fs/promises";
+import { URL } from "node:url";
+
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  ProviderSelectionError,
+  ProviderSelectionResolver,
+  type T3ProviderCatalog,
+} from "./provider-selection.js";
+
+const catalog = (): T3ProviderCatalog => [
+  {
+    availability: "available",
+    displayName: "Workbench Alpha",
+    driverKind: "sample-driver",
+    enabled: true,
+    installed: true,
+    instanceId: "instance-alpha",
+    models: [
+      { isCustom: false, name: "Model Alpha", slug: "model-alpha" },
+      { isCustom: true, name: "Custom Model", slug: "custom-model" },
+    ],
+    observedCliVersion: "1.2.3",
+    state: "ready",
+  },
+  {
+    availability: "available",
+    displayName: "Workbench Beta",
+    driverKind: "sample-driver",
+    enabled: true,
+    installed: true,
+    instanceId: "instance-beta",
+    models: [{ isCustom: false, name: "Model Beta", slug: "model-beta" }],
+    observedCliVersion: null,
+    state: "ready",
+  },
+];
+
+const aliases = {
+  primary: {
+    model: "model-alpha",
+    providerDisplayName: "Workbench Alpha",
+  },
+  specialist: {
+    model: "custom-model",
+    providerDisplayName: "Workbench Alpha",
+  },
+  reviewer: {
+    model: "model-beta",
+    providerDisplayName: "Workbench Beta",
+  },
+};
+
+const startupSelections = async () => {
+  const resolver = new ProviderSelectionResolver(aliases, {
+    readProviderCatalog: async () => catalog(),
+  });
+  return [
+    ...(
+      await resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: {},
+        runtimeMode: "auto",
+      })
+    ).aliases.values(),
+  ];
+};
+
+describe("ProviderSelectionResolver", () => {
+  it("keeps provider instance identity separate from a shared driver kind", async () => {
+    const readProviderCatalog = vi.fn(async () => catalog());
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog,
+    });
+
+    await expect(
+      resolver.resolve("primary", {
+        interactionMode: "default",
+        runtimeMode: "full-access",
+      }),
+    ).resolves.toEqual({
+      alias: "primary",
+      driverKind: "sample-driver",
+      interactionMode: "default",
+      model: {
+        isCustom: false,
+        name: "Model Alpha",
+        slug: "model-alpha",
+      },
+      observedCliVersion: "1.2.3",
+      providerDisplayName: "Workbench Alpha",
+      providerInstanceId: "instance-alpha",
+      runtimeMode: "full-access",
+    });
+    await expect(
+      resolver.resolve("reviewer", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).resolves.toMatchObject({
+      driverKind: "sample-driver",
+      observedCliVersion: null,
+      providerInstanceId: "instance-beta",
+    });
+    expect(readProviderCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves all aliases and collapses equal budgets for aliases on one instance", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => catalog(),
+    });
+
+    const resolved = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: {
+        primary: { usageLimit: 50 },
+        specialist: { usageLimit: 50 },
+      },
+      runtimeMode: "auto",
+    });
+
+    expect([...resolved.aliases]).toEqual([
+      [
+        "primary",
+        expect.objectContaining({ providerInstanceId: "instance-alpha" }),
+      ],
+      [
+        "reviewer",
+        expect.objectContaining({ providerInstanceId: "instance-beta" }),
+      ],
+      [
+        "specialist",
+        expect.objectContaining({ providerInstanceId: "instance-alpha" }),
+      ],
+    ]);
+    expect(resolved.defaultSelection.alias).toBe("primary");
+    expect(resolved.providerBudgets).toEqual({
+      "instance-alpha": { usageLimit: 50 },
+    });
+  });
+
+  it("resolves ordered candidates and applies an alias budget to every candidate instance", async () => {
+    const resolver = new ProviderSelectionResolver(
+      {
+        primary: [aliases.primary, aliases.reviewer],
+      },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    const resolved = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: { primary: { usageLimit: 50 } },
+      runtimeMode: "auto",
+    });
+
+    expect(resolved.candidates.get("primary")).toEqual([
+      expect.objectContaining({ providerInstanceId: "instance-alpha" }),
+      expect.objectContaining({ providerInstanceId: "instance-beta" }),
+    ]);
+    expect(resolved.aliases.get("primary")?.providerInstanceId).toBe(
+      "instance-alpha",
+    );
+    expect(resolved.providerBudgets).toEqual({
+      "instance-alpha": { usageLimit: 50 },
+      "instance-beta": { usageLimit: 50 },
+    });
+  });
+
+  it("skips catalog-invalid candidates while preserving their declared positions and failures", async () => {
+    const resolver = new ProviderSelectionResolver(
+      {
+        primary: [
+          aliases.primary,
+          {
+            model: "missing-model",
+            providerDisplayName: "Workbench Missing",
+          },
+          aliases.reviewer,
+        ],
+      },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, availability: "unavailable" },
+          catalog()[1]!,
+        ],
+      },
+    );
+
+    const startup = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: { primary: { usageLimit: 40 } },
+      runtimeMode: "auto",
+    });
+    const resolved = startup.candidates.get("primary");
+
+    expect(resolved).toEqual([
+      expect.objectContaining({
+        candidatePosition: 3,
+        providerInstanceId: "instance-beta",
+        skippedCandidates: [
+          expect.objectContaining({
+            candidatePosition: 1,
+            failure: expect.objectContaining({
+              message: expect.stringContaining("not available"),
+            }),
+            modelSlug: "model-alpha",
+            providerDisplayName: "Workbench Alpha",
+          }),
+          expect.objectContaining({
+            candidatePosition: 2,
+            failure: expect.objectContaining({
+              message: expect.stringContaining(
+                "has no provider named 'Workbench Missing'",
+              ),
+            }),
+            modelSlug: "missing-model",
+            providerDisplayName: "Workbench Missing",
+          }),
+        ],
+      }),
+    ]);
+    expect(startup.aliases.get("primary")).toMatchObject({
+      providerInstanceId: "instance-beta",
+    });
+    expect(startup.defaultSelection).toMatchObject({
+      providerInstanceId: "instance-beta",
+    });
+    expect(startup.providerAliasBudgets).toEqual({
+      primary: { usageLimit: 40 },
+    });
+    expect(startup.providerBudgets).toEqual({
+      "instance-alpha": { usageLimit: 40 },
+      "instance-beta": { usageLimit: 40 },
+    });
+  });
+
+  it("retains catalog failures after a usable candidate for later exhaustion", async () => {
+    const resolver = new ProviderSelectionResolver(
+      {
+        primary: [
+          { model: "missing-a", providerDisplayName: "Missing Alpha" },
+          aliases.reviewer,
+          { model: "missing-c", providerDisplayName: "Missing Gamma" },
+        ],
+      },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    const [selection] = await resolver.resolveCandidates("primary", {
+      interactionMode: "default",
+      runtimeMode: "auto",
+    });
+
+    expect(selection?.candidatePosition).toBe(2);
+    expect(
+      selection?.skippedCandidates.map(
+        ({ candidatePosition }) => candidatePosition,
+      ),
+    ).toEqual([1]);
+    expect(
+      selection?.catalogFailures.map(
+        ({ candidatePosition }) => candidatePosition,
+      ),
+    ).toEqual([1, 3]);
+  });
+
+  it("names every configured candidate failure when an alias is unusable", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: [aliases.primary, aliases.reviewer] },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, enabled: false },
+          { ...catalog()[1]!, models: [] },
+        ],
+      },
+    );
+
+    const error = await resolver
+      .resolveCandidates("primary", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      })
+      .catch((candidate: unknown) => candidate);
+
+    expect(error).toBeInstanceOf(ProviderSelectionError);
+    expect(error).toMatchObject({ reason: "provider-unavailable" });
+    expect(String(error)).toContain("every candidate is unusable");
+    expect(String(error)).toContain("candidate 1 'Workbench Alpha'");
+    expect(String(error)).toContain("candidate 2 'Workbench Beta'");
+    expect(String(error)).toContain(
+      "not available, enabled, installed, and ready",
+    );
+    expect(String(error)).toContain("no model slug 'model-beta'");
+  });
+
+  it("keeps startup retryable while any unusable candidate is still discovering", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: [aliases.primary, aliases.reviewer] },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, enabled: false },
+          {
+            ...catalog()[1]!,
+            installed: false,
+            state: "warning",
+          },
+        ],
+      },
+    );
+
+    await expect(
+      resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: {},
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-not-ready" });
+  });
+
+  it("rejects conflicting budgets for aliases on one provider instance", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => catalog(),
+    });
+
+    await expect(
+      resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: {
+          primary: { usageLimit: 50 },
+          specialist: { usageLimit: 60 },
+        },
+        runtimeMode: "auto",
+      }),
+    ).rejects.toThrow(
+      "Provider aliases 'primary' and 'specialist' select provider instance 'instance-alpha' with conflicting pacing limits",
+    );
+  });
+
+  it("rejects conflicting budgets for aliases that may recover to one unavailable instance", async () => {
+    const gamma = {
+      ...catalog()[1]!,
+      displayName: "Workbench Gamma",
+      instanceId: "instance-gamma",
+    };
+    const resolver = new ProviderSelectionResolver(
+      {
+        primary: [aliases.primary, aliases.reviewer],
+        specialist: [
+          aliases.primary,
+          {
+            model: "model-beta",
+            providerDisplayName: "Workbench Gamma",
+          },
+        ],
+      },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, availability: "unavailable" },
+          catalog()[1]!,
+          gamma,
+        ],
+      },
+    );
+
+    await expect(
+      resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: {
+          primary: { usageLimit: 10 },
+          specialist: { usageLimit: 100 },
+        },
+        runtimeMode: "auto",
+      }),
+    ).rejects.toThrow(
+      "Provider aliases 'primary' and 'specialist' select provider instance 'instance-alpha' with conflicting pacing limits",
+    );
+  });
+
+  it("keys provider budgets by an own provider-instance property", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: aliases.primary },
+      {
+        readProviderCatalog: async () => [
+          { ...catalog()[0]!, instanceId: "constructor" },
+        ],
+      },
+    );
+
+    const resolved = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: { primary: { usageLimit: 50 } },
+      runtimeMode: "auto",
+    });
+
+    expect(resolved.providerBudgets).toEqual({
+      constructor: { usageLimit: 50 },
+    });
+    expect(Object.hasOwn(resolved.providerBudgets, "constructor")).toBe(true);
+  });
+
+  it("rejects an unconfigured startup budget through the alias guard", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: aliases.primary },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    await expect(
+      resolver.resolveStartup({
+        defaultAlias: "primary",
+        interactionMode: "default",
+        providerBudgets: { missing: { usageLimit: 50 } },
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({
+      message:
+        "Provider alias 'missing' cannot be selected: the alias is not configured",
+      reason: "provider-alias-not-allowed",
+    });
+  });
+
+  it("uses the populated startup candidates without a second resolution path", async () => {
+    const source = await readFile(
+      new URL("./provider-selection.ts", import.meta.url),
+      "utf8",
+    );
+    const budgetLoop = source
+      .split(
+        "for (const [alias, budget] of Object.entries(inputs.providerBudgets)) {",
+      )[1]!
+      .split("    return {")[0]!;
+
+    expect(budgetLoop).toContain("const selections = candidates.get(alias)!;");
+    expect(budgetLoop).not.toContain("resolveCandidatesFromCatalog");
+  });
+
+  it.each([
+    {
+      aliases,
+      alias: "missing",
+      expected: "provider-alias-not-allowed",
+    },
+    {
+      aliases: {
+        absent: {
+          model: "model-alpha",
+          providerDisplayName: "Workbench Missing",
+        },
+      },
+      alias: "absent",
+      expected: "provider-name-not-found",
+    },
+    {
+      aliases: {
+        primary: {
+          model: "missing-model",
+          providerDisplayName: "Workbench Alpha",
+        },
+      },
+      alias: "primary",
+      expected: "provider-model-not-found",
+    },
+  ])("reports $expected without selecting a fallback", async (testCase) => {
+    const resolver = new ProviderSelectionResolver(testCase.aliases, {
+      readProviderCatalog: async () => catalog(),
+    });
+
+    const error = await resolver
+      .resolve(testCase.alias, {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      })
+      .catch((candidate: unknown) => candidate);
+
+    expect(error).toBeInstanceOf(ProviderSelectionError);
+    expect((error as ProviderSelectionError).reason).toBe(testCase.expected);
+  });
+
+  it("treats a schema-valid inherited prototype alias as not allowed", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => catalog(),
+    });
+
+    await expect(
+      resolver.resolve("constructor", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-alias-not-allowed" });
+  });
+
+  it("rejects ambiguous names before provider availability or model checks", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => [
+        catalog()[0]!,
+        { ...catalog()[0]!, instanceId: "instance-duplicate" },
+      ],
+    });
+
+    await expect(
+      resolver.resolve("primary", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-name-ambiguous" });
+  });
+
+  it("matches provider display names and model slugs case-sensitively", async () => {
+    const resolver = new ProviderSelectionResolver(
+      {
+        "wrong-name-case": {
+          model: "model-alpha",
+          providerDisplayName: "workbench alpha",
+        },
+        "wrong-model-case": {
+          model: "MODEL-ALPHA",
+          providerDisplayName: "Workbench Alpha",
+        },
+      },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    await expect(
+      resolver.resolve("wrong-name-case", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-name-not-found" });
+    await expect(
+      resolver.resolve("wrong-model-case", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-model-not-found" });
+  });
+
+  it.each([
+    { field: "availability", value: "unavailable" },
+    { field: "enabled", value: false },
+    { field: "installed", value: false },
+  ] as const)(
+    "rejects a provider whose $field is not selectable",
+    async ({ field, value }) => {
+      const provider = { ...catalog()[0]!, [field]: value };
+      const resolver = new ProviderSelectionResolver(aliases, {
+        readProviderCatalog: async () => [provider],
+      });
+
+      await expect(
+        resolver.resolve("primary", {
+          interactionMode: "default",
+          runtimeMode: "auto",
+        }),
+      ).rejects.toMatchObject({ reason: "provider-unavailable" });
+    },
+  );
+
+  it("classifies an enabled warning provider as discovery not ready", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => [
+        { ...catalog()[0]!, installed: false, state: "warning" },
+      ],
+    });
+
+    await expect(
+      resolver.resolve("primary", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      }),
+    ).rejects.toMatchObject({ reason: "provider-not-ready" });
+  });
+
+  it("normalizes transport failure to the safe catalog-unavailable reason", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => {
+        throw new Error("transport included sensitive detail");
+      },
+    });
+
+    const error = await resolver
+      .resolve("primary", {
+        interactionMode: "default",
+        runtimeMode: "auto",
+      })
+      .catch((candidate: unknown) => candidate);
+
+    expect(error).toMatchObject({
+      message: "T3 provider catalog is unavailable",
+      reason: "provider-catalog-unavailable",
+    });
+    expect(String(error)).not.toContain("sensitive detail");
+  });
+
+  it("lists only configured aliases in alias order without provider instance data", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => [
+        ...catalog(),
+        {
+          ...catalog()[0]!,
+          displayName: "Unconfigured Workbench",
+          instanceId: "unconfigured-instance",
+        },
+      ],
+    });
+
+    const listing = await resolver.listAllowed(
+      { interactionMode: "default", runtimeMode: "auto" },
+      await startupSelections(),
+    );
+
+    expect(listing).toEqual({
+      aliases: [
+        {
+          alias: "primary",
+          driverKind: "sample-driver",
+          model: {
+            isCustom: false,
+            name: "Model Alpha",
+            slug: "model-alpha",
+          },
+          providerDisplayName: "Workbench Alpha",
+          reason: null,
+          selectable: true,
+        },
+        {
+          alias: "reviewer",
+          driverKind: "sample-driver",
+          model: {
+            isCustom: false,
+            name: "Model Beta",
+            slug: "model-beta",
+          },
+          providerDisplayName: "Workbench Beta",
+          reason: null,
+          selectable: true,
+        },
+        {
+          alias: "specialist",
+          driverKind: "sample-driver",
+          model: {
+            isCustom: true,
+            name: "Custom Model",
+            slug: "custom-model",
+          },
+          providerDisplayName: "Workbench Alpha",
+          reason: null,
+          selectable: true,
+        },
+      ],
+      runtimeModes: [
+        "approval-required",
+        "auto-accept-edits",
+        "auto",
+        "full-access",
+      ],
+      version: 1,
+    });
+    expect(JSON.stringify(listing)).not.toMatch(
+      /instance-alpha|instance-beta|unconfigured-instance|observedCliVersion/,
+    );
+  });
+
+  it("lists the first candidate when an alias has an ordered startup list", async () => {
+    const resolver = new ProviderSelectionResolver(
+      { primary: [aliases.primary, aliases.reviewer] },
+      { readProviderCatalog: async () => catalog() },
+    );
+    const startup = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: {},
+      runtimeMode: "auto",
+    });
+
+    const listing = await resolver.listAllowed(
+      { interactionMode: "default", runtimeMode: "auto" },
+      [...startup.candidates.values()].flat(),
+    );
+
+    expect(listing.aliases).toEqual([
+      expect.objectContaining({
+        alias: "primary",
+        model: expect.objectContaining({ slug: "model-alpha" }),
+        providerDisplayName: "Workbench Alpha",
+      }),
+    ]);
+  });
+
+  it("lists an unusable first configured candidate instead of its usable fallback", async () => {
+    const unavailableCatalog = [
+      { ...catalog()[0]!, availability: "unavailable" as const },
+      catalog()[1]!,
+    ];
+    const resolver = new ProviderSelectionResolver(
+      { primary: [aliases.primary, aliases.reviewer] },
+      { readProviderCatalog: async () => unavailableCatalog },
+    );
+    const startup = await resolver.resolveStartup({
+      defaultAlias: "primary",
+      interactionMode: "default",
+      providerBudgets: {},
+      runtimeMode: "auto",
+    });
+
+    const listing = await resolver.listAllowed(
+      { interactionMode: "default", runtimeMode: "auto" },
+      [...startup.candidates.values()].flat(),
+    );
+
+    expect(listing.aliases).toEqual([
+      {
+        alias: "primary",
+        driverKind: "sample-driver",
+        model: {
+          isCustom: false,
+          name: "Model Alpha",
+          slug: "model-alpha",
+        },
+        providerDisplayName: "Workbench Alpha",
+        reason: "provider-unavailable",
+        selectable: false,
+      },
+    ]);
+  });
+
+  it.each([
+    {
+      catalog: () =>
+        catalog().filter(
+          ({ displayName }) => displayName !== "Workbench Alpha",
+        ),
+      reason: "provider-name-not-found",
+    },
+    {
+      catalog: () => [
+        catalog()[0]!,
+        { ...catalog()[0]!, instanceId: "instance-duplicate" },
+        catalog()[1]!,
+      ],
+      reason: "provider-name-ambiguous",
+    },
+    {
+      catalog: () => [{ ...catalog()[0]!, enabled: false }, catalog()[1]!],
+      reason: "provider-unavailable",
+    },
+    {
+      catalog: () => [{ ...catalog()[0]!, models: [] }, catalog()[1]!],
+      reason: "provider-model-not-found",
+    },
+  ] as const)(
+    "retains a nonselectable configured alias with $reason",
+    async (testCase) => {
+      const resolver = new ProviderSelectionResolver(aliases, {
+        readProviderCatalog: async () => testCase.catalog(),
+      });
+
+      const listing = await resolver.listAllowed(
+        { interactionMode: "default", runtimeMode: "auto" },
+        await startupSelections(),
+      );
+
+      expect(listing.aliases.find(({ alias }) => alias === "primary")).toEqual({
+        alias: "primary",
+        driverKind: "sample-driver",
+        model: {
+          isCustom: false,
+          name: "Model Alpha",
+          slug: "model-alpha",
+        },
+        providerDisplayName: "Workbench Alpha",
+        reason: testCase.reason,
+        selectable: false,
+      });
+    },
+  );
+
+  it("fails listing with the same safe catalog error used by selection", async () => {
+    const resolver = new ProviderSelectionResolver(aliases, {
+      readProviderCatalog: async () => {
+        throw new Error("credential-shaped catalog failure");
+      },
+    });
+
+    await expect(
+      resolver.listAllowed(
+        { interactionMode: "default", runtimeMode: "auto" },
+        await startupSelections(),
+      ),
+    ).rejects.toMatchObject({
+      message: "T3 provider catalog is unavailable",
+      reason: "provider-catalog-unavailable",
+    });
+  });
+});

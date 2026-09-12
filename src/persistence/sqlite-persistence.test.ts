@@ -1,0 +1,1327 @@
+// ---
+// relationships:
+//   verifies: heddle
+// ---
+
+import { once } from "node:events";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
+import { createInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
+import { spawn } from "node:child_process";
+
+import Database from "better-sqlite3";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { SqlitePersistence } from "./sqlite-persistence.js";
+import { resolvedSessionBindingFixture } from "./resolved-session-binding.test-support.js";
+import type { InstanceState, ResolvedSessionBinding } from "./types.js";
+
+const temporaryDirectories: string[] = [];
+
+const makeStateDirectory = async (): Promise<string> => {
+  const directory = await mkdtemp(join(tmpdir(), "sqlite-persistence-"));
+  temporaryDirectories.push(directory);
+  return directory;
+};
+
+const initialState: InstanceState = {
+  correlationTokens: { primary: "token-a" },
+  flowcraftContext: { active: "step-a", values: [1] },
+  handoffs: [{ text: "first" }],
+  todoState: [{ complete: false, text: "item-a" }],
+};
+
+const adversarialFlowcraftIndex = "idx_events_execution_timestamp_id_desc";
+const equalTimestamp = "2026-01-01 00:00:00";
+
+const addAdversarialFlowcraftIndex = (database: Database.Database): void => {
+  database.exec(`
+    CREATE INDEX ${adversarialFlowcraftIndex}
+    ON events(execution_id, timestamp, id DESC)
+  `);
+};
+
+const insertFlowcraftEvent = (
+  database: Database.Database,
+  executionId: string,
+  value: number,
+): void => {
+  database
+    .prepare(
+      `INSERT INTO events
+         (execution_id, event_type, event_payload, timestamp, created_at)
+       VALUES (?, 'sample:observed', ?, ?, ?)`,
+    )
+    .run(
+      executionId,
+      JSON.stringify({ value }),
+      equalTimestamp,
+      equalTimestamp,
+    );
+};
+
+const payloadValues = (
+  events: Awaited<ReturnType<SqlitePersistence["flowcraftHistory"]["replay"]>>,
+): number[] =>
+  events.map(({ payload }) => (payload as { value: number }).value);
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
+});
+
+describe("SqlitePersistence", () => {
+  it("normalizes a prior resolved binding to the single-candidate contract on restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const first = new SqlitePersistence({ stateDirectory });
+    const current = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+    first.writeSessionRuntime({
+      activation: 1,
+      binding: current,
+      instanceId: "instance-one",
+      sessionKey: current.sessionKey,
+      stageId: "implement",
+      threadId: current.threadId,
+    });
+    first.close();
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    const legacy = Object.fromEntries(
+      Object.entries(current).filter(
+        ([key]) => key !== "candidatePosition" && key !== "skippedCandidates",
+      ),
+    );
+    database
+      .prepare(
+        "UPDATE heddle_session_runtime SET binding_json = ? WHERE session_key = ?",
+      )
+      .run(JSON.stringify(legacy), current.sessionKey);
+    database.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    expect(restarted.listSessionRuntime()[0]?.binding).toEqual(current);
+    restarted.writeSessionRuntime({
+      activation: 1,
+      binding: current,
+      instanceId: "instance-one",
+      sessionKey: current.sessionKey,
+      stageId: "implement",
+      threadId: current.threadId,
+    });
+    restarted.close();
+  });
+
+  it("permits candidate replacement only while a binding is provisional", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const first = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+    const second = resolvedSessionBindingFixture({
+      candidatePosition: 2,
+      providerDisplayName: "Sample Workbench Two",
+      providerInstanceId: "sample-provider-two",
+      sessionKey: "session-one",
+      threadId: "thread-two",
+    });
+    const runtime = {
+      activation: 1,
+      bindingState: "provisional" as const,
+      instanceId: "instance-one",
+      sessionKey: "session-one",
+      stageId: "implement",
+    };
+    persistence.writeSessionRuntime({
+      ...runtime,
+      binding: first,
+      threadId: "thread-one",
+    });
+    persistence.writeSessionRuntime({
+      ...runtime,
+      binding: second,
+      threadId: "thread-two",
+    });
+    persistence.confirmSessionBindingStarted("session-one", "thread-two");
+
+    expect(persistence.listSessionRuntime()).toContainEqual(
+      expect.objectContaining({ binding: second, threadId: "thread-two" }),
+    );
+    expect(() =>
+      persistence.writeSessionRuntime({
+        ...runtime,
+        binding: first,
+        threadId: "thread-one",
+      }),
+    ).toThrow("changed durable identity");
+    persistence.close();
+  });
+
+  it("rejects a starting binding that identifies a different occurrence", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const binding = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+
+    expect(() =>
+      persistence.writeStartingSessionRuntime(
+        {
+          boardStatus: "todo",
+          instanceId: "instance-one",
+          provider: binding.providerInstanceId,
+          sessionKey: "session-other",
+          stageId: "implement",
+          state: "starting",
+          taskId: 1,
+          threadId: "thread-one",
+        },
+        {
+          activation: 1,
+          binding,
+          instanceId: "instance-one",
+          sessionKey: "session-one",
+          stageId: "implement",
+          threadId: "thread-one",
+        },
+      ),
+    ).toThrow("identify different occurrences");
+    expect(persistence.listReconcilerRuntime()).toEqual([]);
+    expect(persistence.listSessionRuntime()).toEqual([]);
+    persistence.close();
+  });
+
+  it("rolls back a starting binding when its runtime record conflicts", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.writeReconcilerRuntime({
+      boardStatus: "todo",
+      instanceId: "instance-existing",
+      state: "starting",
+      taskId: 1,
+    });
+    const binding = resolvedSessionBindingFixture({
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+
+    expect(() =>
+      persistence.writeStartingSessionRuntime(
+        {
+          boardStatus: "todo",
+          instanceId: "instance-one",
+          provider: binding.providerInstanceId,
+          sessionKey: "session-one",
+          stageId: "implement",
+          state: "starting",
+          taskId: 1,
+          threadId: "thread-one",
+        },
+        {
+          activation: 1,
+          binding,
+          instanceId: "instance-one",
+          sessionKey: "session-one",
+          stageId: "implement",
+          threadId: "thread-one",
+        },
+      ),
+    ).toThrow();
+    expect(persistence.listReconcilerRuntime()).toEqual([
+      expect.objectContaining({ instanceId: "instance-existing" }),
+    ]);
+    expect(persistence.listSessionRuntime()).toEqual([]);
+    persistence.close();
+  });
+
+  it("retains one complete non-secret session binding across restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const binding = resolvedSessionBindingFixture({
+      alias: "secondary-selection",
+      driverKind: "cursor",
+      interactionMode: "plan",
+      modelSlug: "sample-secondary-model",
+      observedCliVersion: null,
+      providerDisplayName: "Sample Secondary Workbench",
+      providerInstanceId: "provider-secondary",
+      runtimeMode: "approval-required",
+      sessionKey: "session-one",
+      threadId: "thread-one",
+    });
+    const first = new SqlitePersistence({ stateDirectory });
+
+    first.writeSessionRuntime({
+      activation: 1,
+      binding,
+      instanceId: "instance-one",
+      projectId: "project-one",
+      repositoryName: "sample-repository",
+      sessionKey: "session-one",
+      stageId: "implement",
+      threadId: "thread-one",
+    });
+    first.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    expect(restarted.listSessionRuntime()).toEqual([
+      {
+        activation: 1,
+        binding,
+        instanceId: "instance-one",
+        projectId: "project-one",
+        repositoryName: "sample-repository",
+        sessionKey: "session-one",
+        stageId: "implement",
+        threadId: "thread-one",
+      },
+    ]);
+    expect(() =>
+      restarted.writeSessionRuntime({
+        activation: 1,
+        binding: { ...binding, alias: "changed-selection" },
+        instanceId: "instance-one",
+        projectId: "project-one",
+        repositoryName: "sample-repository",
+        sessionKey: "session-one",
+        stageId: "implement",
+        threadId: "thread-one",
+      }),
+    ).toThrow("changed durable identity");
+    expect(() =>
+      restarted.writeSessionRuntime({
+        activation: 2,
+        binding: {
+          ...resolvedSessionBindingFixture({
+            sessionKey: "session-two",
+            threadId: "thread-two",
+          }),
+          accessToken: "must-not-persist",
+        } as ResolvedSessionBinding,
+        instanceId: "instance-one",
+        sessionKey: "session-two",
+        stageId: "verify",
+        threadId: "thread-two",
+      }),
+    ).toThrow("invalid non-secret field set");
+    restarted.close();
+  });
+
+  it("fails closed when pre-release session rows have no resolved binding", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    database.exec(`
+      CREATE TABLE heddle_session_runtime (
+        session_key TEXT PRIMARY KEY,
+        activation INTEGER NOT NULL,
+        instance_id TEXT NOT NULL,
+        project_id TEXT,
+        repository_name TEXT,
+        stage_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL UNIQUE
+      );
+      INSERT INTO heddle_session_runtime
+        (session_key, activation, instance_id, stage_id, thread_id)
+      VALUES ('legacy-session', 1, 'instance-one', 'implement', 'legacy-thread');
+    `);
+    database.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+    expect(() => persistence.listSessionRuntime()).toThrow(
+      "clear the pre-release state directory before restart",
+    );
+    persistence.close();
+  });
+
+  it("retains immutable scheduler failure and recovery episodes across restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const first = new SqlitePersistence({ stateDirectory });
+    const firstFailure = first.recordSchedulerPassFailure({
+      message: "First sample failure",
+      name: "Error",
+    });
+    const secondFailure = first.recordSchedulerPassFailure({
+      message: "Second sample failure",
+      name: "TypeError",
+    });
+    first.raiseAttention("production:scheduler-pass-failed:legacy", {
+      attentionId: "production:scheduler-pass-failed:legacy",
+      code: "scheduler-pass-failed",
+      kind: "production-error",
+    });
+    expect(() => first.recoverSchedulerPass([" "])).toThrow(
+      "attentionId must not be empty",
+    );
+
+    expect(firstFailure).toMatchObject({ episode: 1, type: "failure" });
+    expect(secondFailure).toMatchObject({
+      episode: 1,
+      episodeFirstError: {
+        message: "First sample failure",
+        name: "Error",
+      },
+      type: "failure",
+    });
+    first.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    const repeatedAfterRestart = restarted.recordSchedulerPassFailure({
+      message: "First sample failure",
+      name: "Error",
+    });
+    expect(repeatedAfterRestart).toMatchObject({
+      episode: 1,
+      episodeFirstError: {
+        message: "First sample failure",
+        name: "Error",
+      },
+      type: "failure",
+    });
+    expect(restarted.currentSchedulerPassFailureSequence()).toBe(3);
+    expect(
+      restarted.recoverSchedulerPass([
+        "production:scheduler-pass-failed:legacy",
+      ]),
+    ).toMatchObject({ episode: 1, error: null, type: "recovery" });
+    expect(
+      restarted.recoverSchedulerPass([
+        "production:scheduler-pass-failed:legacy",
+      ]),
+    ).toBeUndefined();
+    expect(restarted.currentSchedulerPassFailureSequence()).toBeUndefined();
+    expect(restarted.listAttention()).toEqual([]);
+    const recurrence = restarted.recordSchedulerPassFailure({
+      message: "First sample failure",
+      name: "Error",
+    });
+    expect(recurrence).toMatchObject({ episode: 2, type: "failure" });
+    expect(restarted.currentSchedulerPassFailureSequence()).toBe(5);
+    restarted.close();
+
+    const recovered = new SqlitePersistence({ stateDirectory });
+    expect(recovered.listSchedulerPassHistory()).toMatchObject([
+      { episode: 1, sequence: 1, type: "failure" },
+      { episode: 1, sequence: 2, type: "failure" },
+      { episode: 1, sequence: 3, type: "failure" },
+      expect.objectContaining({
+        episode: 1,
+        error: null,
+        sequence: 4,
+        type: "recovery",
+      }),
+      {
+        episode: 2,
+        error: { message: "First sample failure", name: "Error" },
+        sequence: 5,
+        type: "failure",
+      },
+    ]);
+    const database = new Database(recovered.databasePath);
+    const rollbackAttentionId =
+      "production:scheduler-pass-failed:rollback-sample";
+    recovered.raiseAttention(rollbackAttentionId, {
+      code: "scheduler-pass-failed",
+      kind: "production-error",
+    });
+    const insertHistory = database.prepare(
+      `INSERT INTO heddle_scheduler_pass_history
+         (episode, type, error_json, recorded_at)
+       VALUES (?, ?, ?, ?)`,
+    );
+    insertHistory.run(2, "recovery", null, "2026-01-01T00:00:00.000Z");
+    insertHistory.run(2, "failure", "{}", "2026-01-01T00:00:01.000Z");
+    expect(() => recovered.recoverSchedulerPass([rollbackAttentionId])).toThrow(
+      /UNIQUE constraint failed/,
+    );
+    expect(recovered.listAttention()).toMatchObject([
+      { attentionId: rollbackAttentionId },
+    ]);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(1, "recovery", null, "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/UNIQUE constraint failed/);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(0, "failure", "{}", "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(3, "sample", "{}", "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(3, "failure", null, "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO heddle_scheduler_pass_history
+             (episode, type, error_json, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(3, "recovery", "{}", "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/);
+    expect(() =>
+      database.exec(
+        "UPDATE heddle_scheduler_pass_history SET episode = episode + 1",
+      ),
+    ).toThrow(/append-only/);
+    expect(() =>
+      database.exec("DELETE FROM heddle_scheduler_pass_history"),
+    ).toThrow(/append-only/);
+    database.close();
+    recovered.close();
+  });
+
+  it("persists and exactly replays one dynamic task intent across restart", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const operationDigest = "a".repeat(64);
+    const input = {
+      kind: "follow-up" as const,
+      lifecycle: "sample-delivery",
+      operationDigest,
+      parentEpicId: 10,
+      recordDigest: "b".repeat(64),
+      request: {
+        body: "Check another independent sample.",
+        dependsOn: [13],
+        priority: "high",
+        status: "backlog",
+        title: "Check another sample",
+      },
+      sourceInstanceId: "task-12",
+      sourceSessionKey: "task-12:review:1",
+      sourceTaskId: 12,
+    };
+    const first = new SqlitePersistence({ stateDirectory });
+
+    expect(first.recordDynamicTaskIntent(input)).toMatchObject({
+      record: { ...input, state: "pending" },
+      replayed: false,
+    });
+    expect(first.recordDynamicTaskIntent(input)).toMatchObject({
+      record: { state: "pending" },
+      replayed: true,
+    });
+    expect(() =>
+      first.recordDynamicTaskIntent({
+        ...input,
+        recordDigest: "c".repeat(64),
+        request: { ...input.request, title: "Changed sample" },
+      }),
+    ).toThrow("changed durable identity");
+    expect(first.completeDynamicTaskIntent(operationDigest, 21)).toMatchObject({
+      state: "completed",
+      taskId: 21,
+    });
+    expect(first.completeDynamicTaskIntent(operationDigest, 21)).toMatchObject({
+      state: "completed",
+      taskId: 21,
+    });
+    expect(() => first.completeDynamicTaskIntent(operationDigest, 22)).toThrow(
+      "changed task identity",
+    );
+    first.close();
+
+    const recovered = new SqlitePersistence({ stateDirectory });
+    expect(recovered.listDynamicTaskIntents()).toMatchObject([
+      { ...input, state: "completed", taskId: 21 },
+    ]);
+    expect(
+      recovered.replayDynamicTaskIntentEvents(operationDigest),
+    ).toMatchObject([
+      { operationDigest, type: "pending" },
+      { operationDigest, payload: { taskId: 21 }, type: "completed" },
+    ]);
+    expect(recovered.recordDynamicTaskIntent(input)).toMatchObject({
+      record: { state: "completed", taskId: 21 },
+      replayed: true,
+    });
+    recovered.close();
+  });
+
+  it("protects dynamic task intent lifecycle evidence from mutation", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.recordDynamicTaskIntent({
+      kind: "finding",
+      lifecycle: "sample-delivery",
+      operationDigest: "d".repeat(64),
+      parentEpicId: 10,
+      recordDigest: "e".repeat(64),
+      request: {
+        body: "Inspect an independent sample.",
+        title: "Inspect sample",
+      },
+      sourceInstanceId: "task-12",
+      sourceSessionKey: "task-12:review:1",
+      sourceTaskId: 12,
+    });
+    const database = new Database(persistence.databasePath);
+
+    expect(() =>
+      database.exec(
+        "UPDATE heddle_dynamic_task_intent_events SET type = 'completed'",
+      ),
+    ).toThrow(/append-only/);
+    expect(() =>
+      database.exec("DELETE FROM heddle_dynamic_task_intent_events"),
+    ).toThrow(/append-only/);
+
+    database.close();
+    persistence.close();
+  });
+
+  it("migrates legacy epic projects to durable tombstone storage", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_epic_projects (
+        epic_id INTEGER PRIMARY KEY,
+        product_name TEXT NOT NULL,
+        project_id TEXT NOT NULL UNIQUE,
+        state TEXT NOT NULL CHECK (state IN ('creating', 'active', 'deleting')),
+        create_command_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        delete_command_id TEXT NOT NULL UNIQUE
+      );
+      INSERT INTO heddle_epic_projects VALUES
+        (101, 'Sample product', 'sample-project', 'active',
+         'sample-create', '2026-01-01T00:00:00.000Z', 'sample-delete');
+    `);
+    legacy.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+    expect(persistence.getEpicProject(101)).toMatchObject({
+      epicId: 101,
+      projectId: "sample-project",
+      state: "active",
+    });
+    const migrated = new Database(databasePath, { readonly: true });
+    expect(
+      (
+        migrated
+          .prepare("PRAGMA table_info(heddle_epic_projects)")
+          .all() as Array<{ name: string }>
+      ).map(({ name }) => name),
+    ).toContain("deleted");
+    migrated.close();
+    persistence.close();
+  });
+
+  it("persists one immutable shared-project identity while its state advances", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const record = {
+      createCommandId: "create-shared-records",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: "shared-records",
+      projectName: "Shared records",
+      state: "creating" as const,
+      workspaceRoot: "/workspaces/sample-records",
+    };
+
+    persistence.writeSharedProject(record);
+    persistence.writeSharedProject({ ...record, state: "active" });
+    expect(persistence.getSharedProject()).toEqual({
+      ...record,
+      state: "active",
+    });
+    expect(() =>
+      persistence.writeSharedProject({
+        ...record,
+        projectId: "changed-shared-records",
+      }),
+    ).toThrow("The shared project changed durable identity");
+    expect(persistence.getSharedProject()).toEqual({
+      ...record,
+      state: "active",
+    });
+    const database = new Database(persistence.databasePath);
+    expect(() =>
+      database
+        .prepare("UPDATE heddle_shared_project SET state = 'invalid'")
+        .run(),
+    ).toThrow(/CHECK constraint failed/);
+    database.close();
+    persistence.close();
+  });
+
+  it("migrates legacy page admissions as already attempted", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_production_error_page_attempts (
+        code TEXT NOT NULL,
+        attention_id TEXT NOT NULL,
+        attempted_at INTEGER NOT NULL CHECK (attempted_at >= 0),
+        PRIMARY KEY (code, attention_id)
+      );
+      INSERT INTO heddle_production_error_page_attempts VALUES
+        ('scheduler-pass-failed', 'production:legacy-page', 0);
+    `);
+    legacy.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+
+    expect(
+      persistence.claimProductionErrorPageDelivery(
+        "scheduler-pass-failed",
+        "production:legacy-page",
+      ),
+    ).toBe(false);
+    expect(
+      persistence.admitProductionErrorPage({
+        attentionId: "production:new-page",
+        attemptedAt: 60_000,
+        code: "scheduler-pass-failed",
+        cooldownMilliseconds: 60_000,
+        maximumPagesPerWindow: 3,
+        windowMilliseconds: 300_000,
+      }),
+    ).toBe(true);
+    expect(
+      persistence.claimProductionErrorPageDelivery(
+        "scheduler-pass-failed",
+        "production:new-page",
+      ),
+    ).toBe(true);
+    expect(
+      persistence.claimProductionErrorPageDelivery(
+        "scheduler-pass-failed",
+        "production:new-page",
+      ),
+    ).toBe(false);
+    persistence.close();
+  });
+
+  it("keeps legacy notification failures unverifiable until details are reconstructed", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_notification_failures (
+        stable_id TEXT PRIMARY KEY,
+        occurrence INTEGER NOT NULL CHECK (occurrence > 0),
+        category TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('rejected', 'retry-authorized')),
+        recorded_at TEXT NOT NULL
+      );
+      INSERT INTO heddle_notification_failures VALUES
+        ('sample-notification', 1, 'request-rejected', 'rejected',
+         '2026-01-01T00:00:00.000Z');
+    `);
+    legacy.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+    expect(persistence.notificationFailure("sample-notification")).toEqual({
+      category: "request-rejected",
+      message: null,
+      occurrence: 1,
+      recipientLabel: null,
+      stableId: "sample-notification",
+      state: "rejected",
+    });
+    const migrated = new Database(databasePath, { readonly: true });
+    expect(
+      (
+        migrated
+          .prepare("PRAGMA table_info(heddle_notification_failures)")
+          .all() as Array<{ name: string }>
+      ).map(({ name }) => name),
+    ).toEqual(expect.arrayContaining(["recipient_label", "message"]));
+    migrated.close();
+    persistence.close();
+  });
+
+  it("keeps the first verification snapshot for one rejected occurrence", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+
+    persistence.recordNotificationFailure(
+      "sample-notification",
+      "request-rejected",
+      {
+        message: "A sample needs attention",
+        recipientLabel: "First recipient",
+      },
+    );
+    const repeated = persistence.recordNotificationFailure(
+      "sample-notification",
+      "recipient-rejected",
+      {
+        message: "A different sample",
+        recipientLabel: "Second recipient",
+      },
+    );
+
+    expect(repeated).toMatchObject({
+      category: "recipient-rejected",
+      message: "A sample needs attention",
+      occurrence: 1,
+      recipientLabel: "First recipient",
+      state: "rejected",
+    });
+    persistence.close();
+  });
+
+  it("creates, reads, updates, lists, and deletes instances", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+
+    expect(persistence.createInstance("record-a", initialState)).toEqual({
+      instanceId: "record-a",
+      state: initialState,
+      version: 1,
+    });
+
+    const nextState: InstanceState = {
+      ...initialState,
+      todoState: [{ complete: true, text: "item-a" }],
+    };
+    expect(persistence.updateInstance("record-a", nextState)).toEqual({
+      instanceId: "record-a",
+      state: nextState,
+      version: 2,
+    });
+    expect(persistence.getInstance("record-a")?.state).toEqual(nextState);
+    expect(
+      persistence.listInstances().map(({ instanceId }) => instanceId),
+    ).toEqual(["record-a"]);
+
+    persistence.deleteInstance("record-a");
+    expect(persistence.getInstance("record-a")).toBeUndefined();
+    persistence.close();
+  });
+
+  it("places its database in the configured state directory", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.close();
+
+    expect(
+      await readFile(join(stateDirectory, "heddle-state.sqlite")),
+    ).not.toHaveLength(0);
+    expect(() => new SqlitePersistence({ stateDirectory: " " })).toThrow(
+      /stateDirectory/,
+    );
+  });
+
+  it("rejects invalid instance writes", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+
+    expect(() => persistence.createInstance(" ", initialState)).toThrow(
+      /instanceId/,
+    );
+    expect(() => persistence.createInstance("record-a", initialState)).toThrow(
+      /already exists/,
+    );
+    expect(() => persistence.updateInstance("missing", initialState)).toThrow(
+      /does not exist/,
+    );
+    expect(() => persistence.deleteInstance("missing")).toThrow(
+      /does not exist/,
+    );
+    expect(persistence.replayEvents("record-a")).toHaveLength(1);
+    persistence.close();
+  });
+
+  it("claims an instance update only at the expected version", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+    const winnerState: InstanceState = {
+      ...initialState,
+      todoState: [{ complete: true, text: "item-a" }],
+    };
+    const loserState: InstanceState = {
+      ...initialState,
+      todoState: [{ complete: false, text: "item-b" }],
+    };
+
+    expect(
+      persistence.compareAndSwapInstance("record-a", 1, winnerState),
+    ).toMatchObject({ state: winnerState, version: 2 });
+    expect(
+      persistence.compareAndSwapInstance("record-a", 1, loserState),
+    ).toBeUndefined();
+    expect(persistence.getInstance("record-a")).toMatchObject({
+      state: winnerState,
+      version: 2,
+    });
+    expect(
+      persistence
+        .replayEvents("record-a")
+        .filter(({ type }) => type === "instance:updated"),
+    ).toHaveLength(1);
+    persistence.close();
+  });
+
+  it("serializes one correlation token across two synchronized worker claims and reload", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const setup = new SqlitePersistence({ stateDirectory });
+    const emptyTokens = { ...initialState, correlationTokens: {} };
+    setup.createInstance("record-a", emptyTokens);
+    setup.createInstance("record-b", emptyTokens);
+    setup.close();
+    const moduleUrl = pathToFileURL(
+      join(process.cwd(), "src/persistence/sqlite-persistence.ts"),
+    ).href;
+    const workerScript = `
+      import { SqlitePersistence } from ${JSON.stringify(moduleUrl)};
+      const [stateDirectory, instanceId] = process.argv.slice(1);
+      const persistence = new SqlitePersistence({ stateDirectory });
+      const current = persistence.getInstance(instanceId);
+      process.stdout.write("ready\\n");
+      for await (const chunk of process.stdin) {
+        if (!chunk.toString().includes("go")) continue;
+        try {
+          const claimed = persistence.compareAndSwapInstance(
+            instanceId,
+            current.version,
+            {
+              ...current.state,
+              correlationTokens: {
+                ...current.state.correlationTokens,
+                child: "shared-token",
+              },
+            },
+          );
+          process.stdout.write(JSON.stringify({ claimed: claimed !== undefined }) + "\\n");
+        } catch (error) {
+          process.stdout.write(JSON.stringify({ claimed: false, error: error.code ?? error.name }) + "\\n");
+        }
+        persistence.close();
+        break;
+      }
+    `;
+    const startWorker = (instanceId: string) =>
+      spawn(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "--eval",
+          workerScript,
+          stateDirectory,
+          instanceId,
+        ],
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+    const workers: Array<ReturnType<typeof startWorker>> = [];
+    const exits: Array<ReturnType<typeof once>> = [];
+    const outputs: AsyncIterableIterator<string>[] = [];
+    for (const instanceId of ["record-a", "record-b"]) {
+      const worker = startWorker(instanceId);
+      const output = createInterface({
+        input: worker.stdout!,
+      })[Symbol.asyncIterator]();
+      workers.push(worker);
+      exits.push(once(worker, "exit"));
+      outputs.push(output);
+      await expect(output.next()).resolves.toMatchObject({
+        done: false,
+        value: "ready",
+      });
+    }
+    for (const worker of workers) worker.stdin!.end("go\n");
+    const parsed = await Promise.all(
+      outputs.map(async (output) => {
+        const line = await output.next();
+        return JSON.parse(line.value) as {
+          claimed: boolean;
+          error?: string;
+        };
+      }),
+    );
+    await Promise.all(exits);
+
+    expect(parsed.filter(({ claimed }) => claimed)).toHaveLength(1);
+    expect(
+      parsed.filter(({ error }) => error?.includes("CONSTRAINT")),
+    ).toHaveLength(1);
+    const staleProjection = new Database(
+      join(stateDirectory, "heddle-state.sqlite"),
+    );
+    staleProjection.prepare("DELETE FROM heddle_correlation_tokens").run();
+    staleProjection.close();
+    const reloaded = new SqlitePersistence({ stateDirectory });
+    const records = reloaded.listInstances();
+    expect(
+      records.filter(
+        ({ state }) => state.correlationTokens.child === "shared-token",
+      ),
+    ).toHaveLength(1);
+    expect(records.map(({ version }) => version).sort()).toEqual([1, 2]);
+    const loser = records.find(
+      ({ state }) => state.correlationTokens.child === undefined,
+    )!;
+    expect(() =>
+      reloaded.updateInstance(loser.instanceId, {
+        ...loser.state,
+        correlationTokens: {
+          ...loser.state.correlationTokens,
+          child: "shared-token",
+        },
+      }),
+    ).toThrow(/UNIQUE constraint failed|SQLITE_CONSTRAINT/);
+    reloaded.close();
+  }, 15_000);
+
+  it("fails recovery closed when event history contains duplicate correlation tokens", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.createInstance("record-a", {
+      ...initialState,
+      correlationTokens: { primary: "token-a" },
+    });
+    persistence.createInstance("record-b", {
+      ...initialState,
+      correlationTokens: { primary: "token-b" },
+    });
+    persistence.close();
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    database
+      .prepare(
+        `INSERT INTO heddle_instance_events
+          (instance_id, type, payload_json, recorded_at)
+         VALUES (?, 'instance:updated', ?, ?)`,
+      )
+      .run(
+        "record-b",
+        JSON.stringify({
+          ...initialState,
+          correlationTokens: { primary: "token-a" },
+        }),
+        new Date(0).toISOString(),
+      );
+    database.close();
+
+    expect(() => new SqlitePersistence({ stateDirectory })).toThrow(
+      /UNIQUE constraint failed|SQLITE_CONSTRAINT/,
+    );
+  });
+
+  it("claims an instance update and external event at one version", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+    const winnerState: InstanceState = {
+      ...initialState,
+      todoState: [{ complete: true, text: "item-a" }],
+    };
+
+    expect(
+      persistence.compareAndSwapInstanceWithEvent(
+        "record-a",
+        1,
+        winnerState,
+        "sample:claimed",
+        { value: "winner" },
+      ),
+    ).toMatchObject({
+      event: { payload: { value: "winner" }, type: "sample:claimed" },
+      record: { state: winnerState, version: 2 },
+    });
+    expect(
+      persistence.compareAndSwapInstanceWithEvent(
+        "record-a",
+        1,
+        initialState,
+        "sample:claimed",
+        { value: "loser" },
+      ),
+    ).toBeUndefined();
+    expect(
+      persistence
+        .replayEvents("record-a")
+        .filter(({ type }) => type === "sample:claimed")
+        .map(({ payload }) => payload),
+    ).toEqual([{ value: "winner" }]);
+    persistence.close();
+  });
+
+  it("rejects invalid external events without changing history", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+
+    expect(() =>
+      persistence.appendEvent("missing", "sample:observed", null),
+    ).toThrow(/does not exist/);
+    expect(() => persistence.appendEvent("record-a", " ", null)).toThrow(
+      /must not be empty/,
+    );
+    expect(() =>
+      persistence.appendEvent("record-a", "instance:updated", initialState),
+    ).toThrow(/reserved/);
+    expect(persistence.replayEvents("record-a")).toHaveLength(1);
+    persistence.close();
+  });
+
+  it("appends and replays events in insertion order", async () => {
+    const persistence = new SqlitePersistence({
+      stateDirectory: await makeStateDirectory(),
+    });
+    persistence.createInstance("record-a", initialState);
+
+    const first = persistence.appendEvent("record-a", "sample:observed", {
+      value: 1,
+    });
+    const second = persistence.appendEvent("record-a", "sample:observed", {
+      value: 2,
+    });
+
+    expect(second.sequence).toBeGreaterThan(first.sequence);
+    expect(
+      persistence
+        .replayEvents("record-a")
+        .filter(({ type }) => type === "sample:observed")
+        .map(({ payload }) => payload),
+    ).toEqual([{ value: 1 }, { value: 2 }]);
+    persistence.close();
+  });
+
+  it("enforces append-only history in SQLite", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.createInstance("record-a", initialState);
+    persistence.close();
+
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    expect(() =>
+      database.exec("UPDATE heddle_instance_events SET type = 'changed'"),
+    ).toThrow(/append-only/);
+    expect(() => database.exec("DELETE FROM heddle_instance_events")).toThrow(
+      /append-only/,
+    );
+    database.close();
+  });
+
+  it("reconstructs identical state after the writer process is killed", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const moduleUrl = pathToFileURL(
+      join(process.cwd(), "src/persistence/sqlite-persistence.ts"),
+    ).href;
+    const expectedState: InstanceState = {
+      ...initialState,
+      flowcraftContext: { active: "step-b", values: [1, 2] },
+      handoffs: [...initialState.handoffs, { text: "second" }],
+    };
+    const childScript = `
+      import { SqlitePersistence } from ${JSON.stringify(moduleUrl)};
+      const persistence = new SqlitePersistence({ stateDirectory: process.argv[1] });
+      persistence.createInstance("record-a", ${JSON.stringify(initialState)});
+      persistence.updateInstance("record-a", ${JSON.stringify(expectedState)});
+      process.stdout.write("ready\\n");
+      setInterval(() => {}, 1_000);
+    `;
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "--eval",
+        childScript,
+        stateDirectory,
+      ],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    await once(child.stdout!, "data");
+    child.kill("SIGKILL");
+    await once(child, "exit");
+
+    const interruptedProjection = new Database(
+      join(stateDirectory, "heddle-state.sqlite"),
+    );
+    interruptedProjection.exec("DELETE FROM heddle_instances");
+    interruptedProjection.close();
+
+    const recovered = new SqlitePersistence({ stateDirectory });
+    expect(recovered.getInstance("record-a")).toEqual({
+      instanceId: "record-a",
+      state: expectedState,
+      version: 2,
+    });
+    expect(recovered.recoverInstances()).toEqual([
+      { instanceId: "record-a", state: expectedState, version: 2 },
+    ]);
+    recovered.close();
+  });
+
+  it("does not resurrect a deleted instance during replay", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const writer = new SqlitePersistence({ stateDirectory });
+    writer.createInstance("record-a", initialState);
+    writer.deleteInstance("record-a");
+    writer.close();
+
+    const recovered = new SqlitePersistence({ stateDirectory });
+    expect(recovered.getInstance("record-a")).toBeUndefined();
+    expect(recovered.replayEvents("record-a")).toHaveLength(2);
+    recovered.close();
+  });
+
+  it("provides append-only Flowcraft history on the configured database", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+
+    expect(Object.isFrozen(persistence.flowcraftHistory)).toBe(true);
+    expect("clear" in persistence.flowcraftHistory).toBe(false);
+
+    await persistence.flowcraftHistory.append(
+      {
+        type: "workflow:start",
+        payload: { blueprintId: "sample", executionId: "execution-a" },
+      },
+      "execution-a",
+    );
+
+    expect(await persistence.flowcraftHistory.replay("execution-a")).toEqual([
+      {
+        type: "workflow:start",
+        payload: { blueprintId: "sample", executionId: "execution-a" },
+      },
+    ]);
+    persistence.close();
+
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    expect(
+      database.prepare("SELECT COUNT(*) AS count FROM events").get(),
+    ).toEqual({ count: 1 });
+    expect(() =>
+      database.exec("UPDATE events SET event_type = 'changed'"),
+    ).toThrow(/append-only/);
+    expect(() => database.exec("DELETE FROM events")).toThrow(/append-only/);
+    database.close();
+  });
+
+  it("replays equal-timestamp Flowcraft events in durable append order", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const database = new Database(persistence.databasePath);
+    addAdversarialFlowcraftIndex(database);
+    insertFlowcraftEvent(database, "group-a", 1);
+    insertFlowcraftEvent(database, "group-a", 2);
+
+    const legacyQuery = `
+      SELECT event_type, event_payload
+      FROM events
+      WHERE execution_id = ?
+      ORDER BY timestamp ASC
+    `;
+    const plan = database
+      .prepare(`EXPLAIN QUERY PLAN ${legacyQuery}`)
+      .all("group-a") as Array<{ detail: string }>;
+    expect(plan.map(({ detail }) => detail).join(" ")).toContain(
+      adversarialFlowcraftIndex,
+    );
+    const incidentalOrder = database
+      .prepare(legacyQuery)
+      .all("group-a") as Array<{
+      event_payload: string;
+    }>;
+    expect(
+      incidentalOrder.map(
+        ({ event_payload }) =>
+          (JSON.parse(event_payload) as { value: number }).value,
+      ),
+    ).toEqual([2, 1]);
+
+    expect(
+      payloadValues(await persistence.flowcraftHistory.replay("group-a")),
+    ).toEqual([1, 2]);
+    database.close();
+    persistence.close();
+  });
+
+  it("replays multiple equal-timestamp Flowcraft executions in durable append order", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const database = new Database(persistence.databasePath);
+    addAdversarialFlowcraftIndex(database);
+    insertFlowcraftEvent(database, "group-b", 1);
+    insertFlowcraftEvent(database, "group-a", 1);
+    insertFlowcraftEvent(database, "group-b", 2);
+    insertFlowcraftEvent(database, "group-a", 2);
+
+    const legacyQuery = `
+      SELECT execution_id, event_type, event_payload
+      FROM events
+      WHERE execution_id IN (?, ?)
+      ORDER BY execution_id, timestamp ASC
+    `;
+    const plan = database
+      .prepare(`EXPLAIN QUERY PLAN ${legacyQuery}`)
+      .all("group-a", "group-b") as Array<{ detail: string }>;
+    expect(plan.map(({ detail }) => detail).join(" ")).toContain(
+      adversarialFlowcraftIndex,
+    );
+    const incidentalOrder = database
+      .prepare(legacyQuery)
+      .all("group-a", "group-b") as Array<{
+      event_payload: string;
+      execution_id: string;
+    }>;
+    expect(
+      incidentalOrder.map(({ event_payload, execution_id }) => [
+        execution_id,
+        (JSON.parse(event_payload) as { value: number }).value,
+      ]),
+    ).toEqual([
+      ["group-a", 2],
+      ["group-a", 1],
+      ["group-b", 2],
+      ["group-b", 1],
+    ]);
+
+    const replayed = await persistence.flowcraftHistory.replayMultiple([
+      "group-a",
+      "group-b",
+    ]);
+    expect(payloadValues(replayed.get("group-a") ?? [])).toEqual([1, 2]);
+    expect(payloadValues(replayed.get("group-b") ?? [])).toEqual([1, 2]);
+    database.close();
+    persistence.close();
+  });
+});

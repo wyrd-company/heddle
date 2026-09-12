@@ -1,0 +1,94 @@
+name: CD - Heddle artifacts
+
+on:
+  push:
+    tags:
+      - "heddle@*"
+      - "heddle-feature@*"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: cd-features-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish-package-asset:
+    name: Publish Heddle package release asset
+    # A baseline tag records release authority; it does not represent a release.
+    if: >-
+      ${{
+        github.event_name == 'push' &&
+        startsWith(github.ref, 'refs/tags/heddle@') &&
+        github.ref != 'refs/tags/heddle@0.0.0'
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build the package tree
+        run: npm run build
+      - name: Upload the package release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          package_version="$(node -p 'require("./package.json").version')"
+          expected_tag="heddle@${package_version}"
+          [ "${GITHUB_REF_NAME}" = "${expected_tag}" ] || {
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${package_version}." >&2
+            exit 1
+          }
+          test -f assets/console-viewer/lifecycle.js || {
+            echo "Built package is missing assets/console-viewer/lifecycle.js." >&2
+            exit 1
+          }
+          package_directory="$(mktemp -d)"
+          npm pack --silent --pack-destination "${package_directory}" >/dev/null
+          package_path="${package_directory}/heddle-${package_version}.tgz"
+          test -f "${package_path}" || {
+            echo "npm pack did not produce ${package_path}." >&2
+            exit 1
+          }
+          gh release upload "${GITHUB_REF_NAME}" "${package_path}"
+
+  publish-features:
+    name: Publish Dev Container Features
+    # A baseline tag records release authority; it does not represent a release.
+    if: >-
+      ${{
+        (github.event_name == 'push' &&
+          startsWith(github.ref, 'refs/tags/heddle-feature@') &&
+          github.ref != 'refs/tags/heddle-feature@0.0.0') ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Check out the accepted source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
+      - name: Stage the Feature collection
+        run: task deployment:stage-feature FEATURE_COLLECTION_PATH=.devcontainer/publish/features
+      - name: Publish the Feature collection
+        uses: devcontainers/action@1082abd5d2bf3a11abccba70eef98df068277772 # v1
+        with:
+          publish-features: "true"
+          base-path-to-features: "./.devcontainer/publish/features"
+          devcontainer-cli-version: "0.88.0"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

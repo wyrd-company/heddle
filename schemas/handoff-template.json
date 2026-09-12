@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wyrd.company/heddle/handoff-template.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "title": "Heddle stage handoff template",
+  "description": "Front matter for a pinned Markdown template rendered when a stage session activates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "relationships", "format", "version", "kind"],
+  "properties": {
+    "$schema": {
+      "const": "https://wyrd.company/heddle/handoff-template.schema.json"
+    },
+    "relationships": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implements"],
+      "properties": {
+        "implements": {
+          "const": "heddle"
+        }
+      }
+    },
+    "format": {
+      "const": "heddle.handoff-template"
+    },
+    "version": {
+      "const": 1
+    },
+    "kind": {
+      "enum": ["standard", "remediation"]
+    }
+  }
+}

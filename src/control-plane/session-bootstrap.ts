@@ -1,0 +1,715 @@
+// ---
+// relationships:
+//   implements: heddle
+//   references: t3-headless
+// ---
+
+import type { InstanceRecord, JsonValue } from "../persistence/index.js";
+import { GitBlueprintStore } from "../engine/index.js";
+import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
+import {
+  isWorkflowMcpStageContract,
+  removedHandoffTemplateBlobHashDiagnostic,
+} from "../mcp-server/stage-contract.js";
+import { isAuthorityValidStoredStageHandoff } from "../mcp-server/session-binding.js";
+import { assignmentForChild } from "../subagents/delegation-state.js";
+import {
+  ensureStageTodoList,
+  instantiateTodoList,
+  projectTodoList,
+  stageTodoStateForHandoff,
+} from "../todo/index.js";
+import {
+  ensureCorrelationToken,
+  type InstanceStateStore,
+} from "./correlation-token.js";
+import {
+  assembleStageHandoff,
+  type StageHandoffInput,
+} from "./handoff-assembler.js";
+import {
+  assertComposedSystemPrompt,
+  composeSystemPrompt,
+  HandoffRenderError,
+  renderStageHandoff,
+} from "./handoff-renderer.js";
+import {
+  type PinnedHandoffTemplate,
+  type PinnedHandoffTemplateReference,
+} from "./handoff-template-store.js";
+import {
+  resolveBuiltInSystemPrompt,
+  type SystemPromptResolver,
+} from "./system-prompt.js";
+import {
+  assertParentSession,
+  isStoredHandoff,
+  type StoredStageHandoffCandidate,
+} from "./stored-stage-handoff.js";
+import {
+  recordSessionActivation,
+  type SessionActivationEventStore,
+} from "./session-activation.js";
+import { requireWorkflowMcpEndpoint } from "./workflow-mcp-endpoint.js";
+import type {
+  T3DispatchCommand,
+  T3ProviderDispatchContext,
+  T3WorkflowMcpProviderSession,
+} from "./t3-control-plane-client.js";
+import {
+  ensureWorktree,
+  type PreparedWorktree,
+  type WorktreeInput,
+} from "./worktree-creator.js";
+
+export interface SessionT3Client {
+  dispatch(
+    command: T3DispatchCommand,
+    providerContext?: T3ProviderDispatchContext,
+  ): Promise<{ sequence: number }>;
+  registerWorkflowMcpProviderSession(
+    registration: T3WorkflowMcpProviderSession,
+  ): Promise<void>;
+}
+
+export type SessionBootstrapInput = {
+  createdAt?: string;
+  handoff: Omit<StageHandoffInput, "correlationToken" | "todoList">;
+  instanceId: string;
+  interactionMode: string;
+  modelSelection: { instanceId: string; model: string };
+  parentSessionKey?: string;
+  projectId: string;
+  providerContext: T3ProviderDispatchContext;
+  runtimeMode: string;
+  sessionKey: string;
+  task: JsonValue;
+  taskId: number;
+  title: string;
+  threadCreateCommandId?: string;
+  threadId?: string;
+  todoAssignment?: {
+    listSessionKey: string;
+    rootItemId: string;
+  };
+  turnCommandId?: string;
+  turnMessageId?: string;
+  worktree: WorktreeInput;
+};
+
+export type SessionBootstrapResult = {
+  correlationToken: string;
+  harnessConfiguration: HarnessConfiguration;
+  handoff: string;
+  renderedHandoff: string;
+  systemPrompt: string;
+  threadId: string;
+  worktree: PreparedWorktree;
+};
+
+export type HarnessConfiguration = {
+  claudeCode: {
+    permissions: { deny: ["TodoWrite"] };
+  };
+  codex: {
+    tools: { update_plan: { enabled: false } };
+  };
+};
+
+export type SessionStartFailurePhase =
+  | "harness-preparation"
+  | "workflow-mcp-registration"
+  | "thread-create"
+  | "turn-start";
+
+export class SessionStartFailure extends Error {
+  public constructor(
+    readonly phase: SessionStartFailurePhase,
+    cause: unknown,
+  ) {
+    super(
+      `Session start failed during ${phase}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = "SessionStartFailure";
+  }
+}
+
+export const harnessConfiguration = (): HarnessConfiguration => ({
+  claudeCode: { permissions: { deny: ["TodoWrite"] } },
+  codex: { tools: { update_plan: { enabled: false } } },
+});
+
+export type SessionBootstrapDependencies = {
+  activationEvents?: SessionActivationEventStore;
+  ensureWorktree?: (input: WorktreeInput) => Promise<PreparedWorktree>;
+  instantiateTodoList?: typeof instantiateTodoList;
+  mintCorrelationToken?: () => string;
+  nextId?: () => string;
+  now?: () => string;
+  persistence: InstanceStateStore;
+  resolveWorkflowMcpStageContract?: WorkflowMcpStageContractResolver;
+  resolveSystemPrompt?: SystemPromptResolver;
+  t3: SessionT3Client;
+  templateAuthority?: SessionTemplateAuthority;
+  workflowMcpEndpoint: string;
+};
+
+export type HandoffTemplateResolver = (
+  reference: PinnedHandoffTemplateReference,
+  skillNames: readonly string[],
+  input: SessionBootstrapInput,
+) => Promise<PinnedHandoffTemplate>;
+
+export type SessionTemplateAuthority = {
+  readHandoffTemplate: HandoffTemplateResolver;
+  repositoryRoot: string;
+};
+
+export type WorkflowMcpStageContractResolver = (
+  input: SessionBootstrapInput,
+  record: InstanceRecord,
+) => Promise<WorkflowMcpStageContract>;
+
+export type SessionSteeringInput = {
+  commandId?: string;
+  createdAt?: string;
+  interactionMode: string;
+  message: string;
+  messageId?: string;
+  providerContext: T3ProviderDispatchContext;
+  runtimeMode: string;
+  threadId: string;
+};
+
+export type SessionSteeringDependencies = {
+  nextId?: () => string;
+  now?: () => string;
+  t3: SessionT3Client;
+};
+
+const storedStageSkills = (serialized: string): string[] => {
+  let value: unknown;
+  try {
+    value = JSON.parse(serialized) as unknown;
+  } catch (error) {
+    throw new HandoffRenderError("Stored handoff is not valid JSON", error);
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof (value as Record<string, unknown>)["stage"] !== "object" ||
+    (value as Record<string, unknown>)["stage"] === null ||
+    Array.isArray((value as Record<string, unknown>)["stage"])
+  ) {
+    throw new HandoffRenderError("Stored handoff has no valid stage skills");
+  }
+  const skills = (
+    (value as Record<string, unknown>)["stage"] as Record<string, unknown>
+  )["skills"];
+  if (
+    !Array.isArray(skills) ||
+    skills.some((skill) => typeof skill !== "string")
+  ) {
+    throw new HandoffRenderError("Stored handoff has no valid stage skills");
+  }
+  return skills as string[];
+};
+
+const resolveWorkflowMcpStageContract = async (
+  input: SessionBootstrapInput,
+  record: InstanceRecord,
+  repositoryRoot: string,
+): Promise<WorkflowMcpStageContract> => {
+  const context = record.state.flowcraftContext;
+  if (
+    typeof context !== "object" ||
+    context === null ||
+    Array.isArray(context) ||
+    typeof context["blueprintBlobHash"] !== "string" ||
+    typeof context["blueprintPath"] !== "string" ||
+    !Array.isArray(context["awaitingNodeIds"]) ||
+    context["awaitingNodeIds"].length !== 1 ||
+    context["awaitingNodeIds"][0] !== input.handoff.stage.name
+  ) {
+    throw new Error(
+      "Stage session bootstrap does not match the awaiting lifecycle stage",
+    );
+  }
+  const blueprint = await new GitBlueprintStore(repositoryRoot).read(
+    context["blueprintBlobHash"],
+    context["blueprintPath"],
+  );
+  const stage = blueprint.nodes.find(
+    ({ id }) => id === input.handoff.stage.name,
+  );
+  const handoffTemplate = stage?.["handoff-template"] as
+    Record<string, unknown> | undefined;
+  if (
+    handoffTemplate !== undefined &&
+    Object.hasOwn(handoffTemplate, "blobHash")
+  ) {
+    throw new Error(
+      "Stage session bootstrap rejects removed handoff template field 'blobHash'; use 'commitSha'",
+    );
+  }
+  if (
+    stage?.uses !== "wait" ||
+    stage.handoff !== input.handoff.stage.kind ||
+    !Array.isArray(stage.tools) ||
+    typeof stage["todo-template"] !== "string" ||
+    typeof stage["handoff-template"] !== "object" ||
+    stage["handoff-template"] === null ||
+    Array.isArray(stage["handoff-template"]) ||
+    typeof stage["handoff-template"]["commitSha"] !== "string" ||
+    typeof stage["handoff-template"]["path"] !== "string"
+  ) {
+    throw new Error(
+      "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
+    );
+  }
+  const dispositions = blueprint.edges
+    .filter(
+      ({ disposition, source }) =>
+        source === stage.id && disposition !== undefined,
+    )
+    .map((edge) => {
+      const { description, disposition, target } = edge;
+      if (
+        disposition === undefined ||
+        description === undefined ||
+        description.trim() === ""
+      ) {
+        throw new Error(
+          "Stage session bootstrap requires a description for every disposition",
+        );
+      }
+      const targetNode = blueprint.nodes.find(({ id }) => id === target);
+      if (targetNode === undefined) {
+        throw new Error(
+          `Stage disposition ${JSON.stringify(disposition)} has no target node`,
+        );
+      }
+      return {
+        description,
+        name: disposition,
+        outputContract:
+          edge["output-contract"] ??
+          (targetNode.handoff === "remediation"
+            ? ("review-findings" as const)
+            : ("optional" as const)),
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+  return {
+    blueprintBlobHash: context["blueprintBlobHash"],
+    blueprintPath: context["blueprintPath"],
+    dispositions,
+    handoffTemplate: {
+      commitSha: stage["handoff-template"]["commitSha"],
+      path: stage["handoff-template"]["path"],
+    },
+    skills: [...(stage.skills ?? [])],
+    stage: stage.id,
+    todoTemplate: stage["todo-template"],
+    tools: [...stage.tools],
+  };
+};
+
+const ensureStoredHandoff = async (
+  store: InstanceStateStore,
+  input: SessionBootstrapInput,
+  correlationToken: string,
+  resolveStageContract: WorkflowMcpStageContractResolver,
+  instantiate: typeof instantiateTodoList,
+  templateAuthority: SessionTemplateAuthority,
+  resolveSystemPrompt: SystemPromptResolver,
+): Promise<{
+  handoff: string;
+  renderedHandoff: string;
+  systemPrompt: string;
+}> => {
+  let resolvedSystemPrompt: string | undefined;
+  while (true) {
+    const current = store.getInstance(input.instanceId);
+    if (current === undefined) {
+      throw new Error(`Instance does not exist: ${input.instanceId}`);
+    }
+    assertParentSession(store, current, input);
+    const existing = current.state.handoffs
+      .filter(isStoredHandoff)
+      .find(({ sessionKey }) => sessionKey === input.sessionKey);
+    if (existing !== undefined) {
+      if (existing.correlationToken !== correlationToken) {
+        throw new Error(
+          `Stored handoff and correlation token disagree for '${input.sessionKey}'`,
+        );
+      }
+      if (existing.parentSessionKey !== input.parentSessionKey) {
+        throw new Error(
+          `Stored handoff and parent session disagree for '${input.sessionKey}'`,
+        );
+      }
+      if (
+        existing.todoAssignment?.listSessionKey !==
+          input.todoAssignment?.listSessionKey ||
+        existing.todoAssignment?.rootItemId !== input.todoAssignment?.rootItemId
+      ) {
+        throw new Error(
+          `Stored handoff and todo assignment disagree for '${input.sessionKey}'`,
+        );
+      }
+      const workflowMcp = existing["workflowMcp"];
+      const removedFieldDiagnostic =
+        workflowMcp === undefined
+          ? undefined
+          : removedHandoffTemplateBlobHashDiagnostic(workflowMcp);
+      if (removedFieldDiagnostic !== undefined) {
+        throw new Error(
+          `Stored handoff workflow MCP contract for '${input.sessionKey}' is invalid: ${removedFieldDiagnostic}`,
+        );
+      }
+      if (
+        workflowMcp === undefined ||
+        !isWorkflowMcpStageContract(workflowMcp)
+      ) {
+        throw new Error(
+          `Stored handoff has no valid workflow MCP contract for '${input.sessionKey}'`,
+        );
+      }
+      if (workflowMcp.stage !== input.handoff.stage.name) {
+        throw new Error(
+          `Stored handoff and workflow MCP stage disagree for '${input.sessionKey}'`,
+        );
+      }
+      if (
+        JSON.stringify(storedStageSkills(existing.handoff)) !==
+        JSON.stringify(workflowMcp.skills)
+      ) {
+        throw new HandoffRenderError(
+          `Stored handoff and workflow MCP skills disagree for '${input.sessionKey}'`,
+        );
+      }
+      if (typeof existing.renderedHandoff !== "string") {
+        throw new Error(
+          `Stored handoff has no rendered payload for '${input.sessionKey}'`,
+        );
+      }
+      if (typeof existing.systemPrompt !== "string") {
+        throw new HandoffRenderError(
+          `Stored handoff has no system prompt for '${input.sessionKey}'`,
+        );
+      }
+      assertComposedSystemPrompt(
+        existing.systemPrompt,
+        existing.renderedHandoff,
+        correlationToken,
+      );
+      return {
+        handoff: existing.handoff,
+        renderedHandoff: existing.renderedHandoff,
+        systemPrompt: existing.systemPrompt,
+      };
+    }
+
+    const templateContract = await resolveStageContract(input, current);
+    if (
+      JSON.stringify(input.handoff.stage.skills ?? []) !==
+      JSON.stringify(templateContract.skills)
+    ) {
+      throw new Error(
+        `Stage handoff skills do not match the pinned blueprint contract for '${input.sessionKey}'`,
+      );
+    }
+    if (input.todoAssignment === undefined) {
+      await ensureStageTodoList(
+        store,
+        {
+          instanceId: input.instanceId,
+          repositoryRoot: templateAuthority.repositoryRoot,
+          sessionKey: input.sessionKey,
+          stage: templateContract.stage,
+          taskContract: input.handoff.taskContract,
+          templateId: templateContract.todoTemplate,
+        },
+        instantiate,
+      );
+    }
+    const refreshed = store.getInstance(input.instanceId);
+    if (refreshed === undefined) {
+      throw new Error(`Instance does not exist: ${input.instanceId}`);
+    }
+    if (
+      refreshed.state.handoffs
+        .filter(isStoredHandoff)
+        .some(({ sessionKey }) => sessionKey === input.sessionKey)
+    ) {
+      continue;
+    }
+    const workflowMcp = await resolveStageContract(input, refreshed);
+    if (
+      JSON.stringify(input.handoff.stage.skills ?? []) !==
+      JSON.stringify(workflowMcp.skills)
+    ) {
+      throw new Error(
+        `Stage handoff skills do not match the pinned blueprint contract for '${input.sessionKey}'`,
+      );
+    }
+    const assignment =
+      input.todoAssignment === undefined
+        ? undefined
+        : assignmentForChild(refreshed, input.sessionKey);
+    if (
+      assignment !== undefined &&
+      (assignment.list.sessionKey !== input.todoAssignment?.listSessionKey ||
+        assignment.assignment.rootItemId !== input.todoAssignment.rootItemId ||
+        assignment.assignment.status !== "active" ||
+        assignment.assignment.correlationToken !== correlationToken)
+    ) {
+      throw new Error(
+        `Stored todo assignment does not match child session '${input.sessionKey}'`,
+      );
+    }
+    const { list: todoList, state: todoState } =
+      assignment === undefined
+        ? stageTodoStateForHandoff(
+            refreshed,
+            input.sessionKey,
+            workflowMcp.stage,
+            refreshed.state.handoffs
+              .filter(isAuthorityValidStoredStageHandoff)
+              .map(({ sessionKey }) => sessionKey),
+          )
+        : {
+            list: assignment.list,
+            state: {
+              format: "heddle.todo-state" as const,
+              lists: [
+                projectTodoList(
+                  assignment.list,
+                  assignment.assignment.rootItemId,
+                ),
+              ],
+              version: 1 as const,
+            },
+          };
+    if (todoList.template !== workflowMcp.todoTemplate) {
+      throw new Error(
+        `Stored todo list does not match stage contract for '${input.sessionKey}'`,
+      );
+    }
+    const handoff = assembleStageHandoff({
+      ...input.handoff,
+      correlationToken,
+      todoList: todoState,
+    });
+    const template = await templateAuthority.readHandoffTemplate(
+      workflowMcp.handoffTemplate,
+      workflowMcp.skills,
+      input,
+    );
+    const renderedStageHandoff = renderStageHandoff({
+      correlationToken,
+      handoff,
+      instanceId: input.instanceId,
+      sessionKey: input.sessionKey,
+      stage: input.handoff.stage.name,
+      task: input.task,
+      taskId: input.taskId,
+      template,
+    });
+    resolvedSystemPrompt ??= await resolveSystemPrompt();
+    const renderedHandoff = composeSystemPrompt(
+      resolvedSystemPrompt,
+      renderedStageHandoff,
+      correlationToken,
+    );
+    const stored: StoredStageHandoffCandidate = {
+      correlationToken,
+      handoff,
+      kind: "stage-handoff",
+      renderedHandoff,
+      systemPrompt: resolvedSystemPrompt,
+      ...(input.parentSessionKey === undefined
+        ? {}
+        : { parentSessionKey: input.parentSessionKey }),
+      sessionKey: input.sessionKey,
+      ...(input.todoAssignment === undefined
+        ? {}
+        : { todoAssignment: input.todoAssignment }),
+      workflowMcp,
+    };
+    const claimed = store.compareAndSwapInstance(
+      input.instanceId,
+      refreshed.version,
+      {
+        ...refreshed.state,
+        handoffs: [...refreshed.state.handoffs, stored],
+      },
+    );
+    if (claimed !== undefined) {
+      return {
+        handoff,
+        renderedHandoff,
+        systemPrompt: resolvedSystemPrompt,
+      };
+    }
+  }
+};
+
+export const bootstrapStageSession = async (
+  input: SessionBootstrapInput,
+  dependencies: SessionBootstrapDependencies,
+): Promise<SessionBootstrapResult> => {
+  if (
+    input.modelSelection.instanceId !== input.providerContext.providerInstanceId
+  ) {
+    throw new HandoffRenderError(
+      "T3 model selection and provider context must name the same provider instance",
+    );
+  }
+  if (input.providerContext.driver.trim() === "") {
+    throw new HandoffRenderError("T3 driver kind must not be empty");
+  }
+  const workflowMcpEndpoint = requireWorkflowMcpEndpoint(
+    dependencies.workflowMcpEndpoint,
+  );
+  const templateAuthority = dependencies.templateAuthority;
+  if (
+    templateAuthority === undefined ||
+    templateAuthority.repositoryRoot.trim() === ""
+  ) {
+    throw new Error(
+      "Stage session bootstrap requires one organization template authority",
+    );
+  }
+  const prepareWorktree = dependencies.ensureWorktree ?? ensureWorktree;
+  const nextId = dependencies.nextId ?? (() => globalThis.crypto.randomUUID());
+  const now = dependencies.now ?? (() => new Date().toISOString());
+  const worktree = await prepareWorktree(input.worktree);
+  const initial = dependencies.persistence.getInstance(input.instanceId);
+  if (initial === undefined) {
+    throw new Error(`Instance does not exist: ${input.instanceId}`);
+  }
+  assertParentSession(dependencies.persistence, initial, input);
+  const { token: correlationToken } = ensureCorrelationToken(
+    dependencies.persistence,
+    input.instanceId,
+    input.sessionKey,
+    dependencies.mintCorrelationToken,
+  );
+  const { handoff, renderedHandoff, systemPrompt } = await ensureStoredHandoff(
+    dependencies.persistence,
+    input,
+    correlationToken,
+    dependencies.resolveWorkflowMcpStageContract ??
+      ((value, record) =>
+        resolveWorkflowMcpStageContract(
+          value,
+          record,
+          templateAuthority.repositoryRoot,
+        )),
+    dependencies.instantiateTodoList ?? instantiateTodoList,
+    templateAuthority,
+    dependencies.resolveSystemPrompt ?? resolveBuiltInSystemPrompt,
+  );
+  const threadId = input.threadId ?? nextId();
+  try {
+    await dependencies.t3.registerWorkflowMcpProviderSession({
+      authorizationHeader: `Bearer ${correlationToken}`,
+      endpoint: workflowMcpEndpoint,
+      threadId,
+    });
+  } catch (error) {
+    throw new SessionStartFailure("workflow-mcp-registration", error);
+  }
+
+  try {
+    await dependencies.t3.dispatch({
+      type: "thread.create",
+      commandId: input.threadCreateCommandId ?? nextId(),
+      threadId,
+      projectId: input.projectId,
+      title: input.title,
+      modelSelection: input.modelSelection,
+      runtimeMode: input.runtimeMode,
+      interactionMode: input.interactionMode,
+      branch: worktree.branch,
+      worktreePath: worktree.path,
+      createdAt: input.createdAt ?? now(),
+    });
+  } catch (error) {
+    throw new SessionStartFailure("thread-create", error);
+  }
+  try {
+    await dependencies.t3.dispatch(
+      {
+        type: "thread.turn.start",
+        commandId: input.turnCommandId ?? nextId(),
+        threadId,
+        message: {
+          messageId: input.turnMessageId ?? nextId(),
+          role: "user",
+          text: renderedHandoff,
+          attachments: [],
+        },
+        modelSelection: input.modelSelection,
+        runtimeMode: input.runtimeMode,
+        interactionMode: input.interactionMode,
+        createdAt: input.createdAt ?? now(),
+      },
+      input.providerContext,
+    );
+  } catch (error) {
+    throw new SessionStartFailure("turn-start", error);
+  }
+  if (dependencies.activationEvents !== undefined) {
+    recordSessionActivation(dependencies.activationEvents, {
+      format: "heddle.session-activation",
+      instanceId: input.instanceId,
+      renderedDocument: renderedHandoff,
+      sessionKey: input.sessionKey,
+      stage: input.handoff.stage.name,
+      systemPrompt,
+      taskId: input.taskId,
+      threadId,
+      version: 1,
+    });
+  }
+
+  return {
+    correlationToken,
+    handoff,
+    renderedHandoff,
+    systemPrompt,
+    harnessConfiguration: harnessConfiguration(),
+    threadId,
+    worktree,
+  };
+};
+
+export const steerStageSession = async (
+  input: SessionSteeringInput,
+  dependencies: SessionSteeringDependencies,
+): Promise<{ sequence: number }> => {
+  const nextId = dependencies.nextId ?? (() => globalThis.crypto.randomUUID());
+  const now = dependencies.now ?? (() => new Date().toISOString());
+  return dependencies.t3.dispatch(
+    {
+      type: "thread.turn.start",
+      commandId: input.commandId ?? nextId(),
+      threadId: input.threadId,
+      message: {
+        messageId: input.messageId ?? nextId(),
+        role: "user",
+        text: input.message,
+        attachments: [],
+      },
+      runtimeMode: input.runtimeMode,
+      interactionMode: input.interactionMode,
+      createdAt: input.createdAt ?? now(),
+    },
+    input.providerContext,
+  );
+};

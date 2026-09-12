@@ -1,0 +1,21 @@
+{
+  "name": "Heddle driver qualification",
+  "image": "ghcr.io/wyrd-company/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/wyrd-company/devcontainers/claude-code-cli:1": {},
+    "ghcr.io/wyrd-company/devcontainers/codex-cli:1": {},
+    "ghcr.io/wyrd-company/devcontainers/cursor-agent-cli:1": {},
+    "ghcr.io/wyrd-company/devcontainers/grok-cli:1": {},
+    "ghcr.io/wyrd-company/devcontainers/opencode-cli:1": {}
+  },
+  "mounts": [
+    {
+      "source": "${localEnv:HEDDLE_DRIVER_KANBAN}",
+      "target": "/usr/local/bin/kanban-md",
+      "type": "bind"
+    }
+  ],
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/heddle",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/heddle,type=bind"
+}

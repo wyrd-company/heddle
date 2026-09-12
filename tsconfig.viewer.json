@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": false,
+    "outDir": null,
+    "rootDir": null,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/console/lifecycle-canvas-projection.tsx",
+    "src/console/lifecycle-viewer.tsx",
+    "spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/blueprint-to-canvas.ts",
+    "spikes/flowcraft-gate/viewer/vendor/flowcraft-tldraw/sync/canvas-to-blueprint.ts"
+  ]
+}

@@ -1,0 +1,235 @@
+import { describe, expect, it } from "vitest";
+
+import type { BoardTask } from "../board-adapter/index.js";
+import {
+  buildKanbanProjection,
+  parseConsoleScope,
+  serializeConsoleScope,
+} from "./projection.js";
+
+const boardTask = (
+  id: number,
+  title: string,
+  status: string,
+  overrides: Partial<BoardTask> = {},
+): BoardTask => ({
+  blocked: false,
+  dependencies: [],
+  frontMatter: {},
+  id,
+  priority: "medium",
+  status,
+  tags: [],
+  title,
+  ...overrides,
+});
+
+describe("kanban console projection", () => {
+  const tasks = [
+    boardTask(41, "Seasonal display", "in-progress", {
+      tags: ["type:epic"],
+    }),
+    boardTask(42, "Count storage crates", "in-progress", { parent: 41 }),
+    boardTask(43, "Prepare shelf labels", "todo", { parent: 41 }),
+    boardTask(90, "Repair reading-room lamp", "done"),
+  ];
+
+  it("does not expose raw task front matter through the console projection", () => {
+    const projection = buildKanbanProjection({
+      instances: [],
+      now: 0,
+      scope: { kind: "all" },
+      statuses: ["todo"],
+      tasks: [
+        boardTask(17, "Arrange a sample", "todo", {
+          frontMatter: {
+            display: "template-only",
+            nested: { value: "not-console-data" },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.columns[0]?.tasks).toEqual([
+      {
+        blocked: false,
+        dependencies: [],
+        id: 17,
+        priority: "medium",
+        status: "todo",
+        tags: [],
+        title: "Arrange a sample",
+      },
+    ]);
+    expect(JSON.stringify(projection)).not.toContain("template-only");
+    expect(JSON.stringify(projection)).not.toContain("not-console-data");
+  });
+
+  it("enriches only in-progress cards with lifecycle stage and dwell", () => {
+    const projection = buildKanbanProjection({
+      instances: [
+        {
+          instanceId: "instance-42",
+          stageEnteredAt: 1_000,
+          stageId: "inspect",
+          taskId: 42,
+        },
+        {
+          instanceId: "instance-90",
+          stageEnteredAt: 200_000,
+          stageId: "archive",
+          taskId: 90,
+        },
+      ],
+      now: 121_000,
+      scope: { kind: "all" },
+      statuses: ["todo", "in-progress", "done"],
+      tasks,
+    });
+
+    expect(projection.columns.map(({ status }) => status)).toEqual([
+      "todo",
+      "in-progress",
+      "done",
+    ]);
+    expect(projection.columns[1]?.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dwellMilliseconds: 120_000,
+          instanceId: "instance-42",
+          stageId: "inspect",
+          title: "Count storage crates",
+        }),
+      ]),
+    );
+    expect(projection.columns[2]?.tasks[0]).not.toHaveProperty("stageId");
+
+    const futureStage = buildKanbanProjection({
+      instances: [
+        {
+          instanceId: "instance-42",
+          stageEnteredAt: 200_000,
+          stageId: "inspect",
+          taskId: 42,
+        },
+      ],
+      now: 121_000,
+      scope: { kind: "all" },
+      statuses: ["todo", "in-progress", "done"],
+      tasks,
+    });
+    expect(
+      futureStage.columns[1]?.tasks.find(({ id }) => id === 42),
+    ).toMatchObject({
+      dwellMilliseconds: 0,
+    });
+  });
+
+  it("projects a structured pacing deferral without moving the ready card", () => {
+    const projection = buildKanbanProjection({
+      instances: [
+        {
+          deferral: {
+            activeSessions: 2,
+            limit: 2,
+            reason: "work-in-progress-limit",
+          },
+          instanceId: "instance-43",
+          taskId: 43,
+        },
+      ],
+      now: 121_000,
+      scope: { kind: "all" },
+      statuses: ["todo", "in-progress", "done"],
+      tasks,
+    });
+
+    expect(projection.columns[0]?.tasks.find(({ id }) => id === 43)).toEqual(
+      expect.objectContaining({
+        deferral: {
+          activeSessions: 2,
+          limit: 2,
+          reason: "work-in-progress-limit",
+        },
+        instanceId: "instance-43",
+        status: "todo",
+      }),
+    );
+    expect(projection.columns[1]?.tasks).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 43 })]),
+    );
+  });
+
+  it("filters all and epic scopes without changing board columns", () => {
+    const project = (scope: ReturnType<typeof parseConsoleScope>) =>
+      buildKanbanProjection({
+        instances: [],
+        now: 0,
+        scope,
+        statuses: ["todo", "in-progress", "done"],
+        tasks,
+      });
+    const ids = (scope: ReturnType<typeof parseConsoleScope>) =>
+      project(scope).columns.flatMap(({ tasks: items }) =>
+        items.map(({ id }) => id),
+      );
+
+    expect(ids(parseConsoleScope("all"))).toEqual([43, 41, 42, 90]);
+    expect(ids(parseConsoleScope("epic:41"))).toEqual([43, 41, 42]);
+    expect(serializeConsoleScope(parseConsoleScope("epic:41"))).toBe("epic:41");
+    expect(() => parseConsoleScope("epic:0")).toThrow(
+      "scope must be all or epic:<id>",
+    );
+    expect(() => parseConsoleScope("epic:99999999999999999")).toThrow(
+      "scope id must be a safe integer",
+    );
+    expect(() => parseConsoleScope("task:42")).toThrow(
+      "scope must be all or epic:<id>",
+    );
+  });
+
+  it("rejects scopes that do not name an existing task of the requested kind", () => {
+    const project = (scope: ReturnType<typeof parseConsoleScope>) =>
+      buildKanbanProjection({
+        instances: [],
+        now: 0,
+        scope,
+        statuses: ["todo", "in-progress", "done"],
+        tasks,
+      });
+
+    expect(() => project(parseConsoleScope("epic:42"))).toThrow(
+      "epic scope 42 must name a root type:epic task",
+    );
+    expect(() => project(parseConsoleScope("epic:90"))).toThrow(
+      "epic scope 90 must name a root type:epic task",
+    );
+    expect(() => project(parseConsoleScope("epic:999"))).toThrow(
+      "epic scope 999 does not name an existing task",
+    );
+  });
+
+  it("rejects agreements that would silently hide cards or instances", () => {
+    expect(() =>
+      buildKanbanProjection({
+        instances: [],
+        now: 0,
+        scope: { kind: "all" },
+        statuses: ["todo"],
+        tasks,
+      }),
+    ).toThrow("uses unconfigured board status");
+    expect(() =>
+      buildKanbanProjection({
+        instances: [
+          { instanceId: "instance-a", taskId: 42 },
+          { instanceId: "instance-b", taskId: 42 },
+        ],
+        now: 0,
+        scope: { kind: "all" },
+        statuses: ["todo", "in-progress", "done"],
+        tasks,
+      }),
+    ).toThrow("more than one instance exists for task 42");
+  });
+});

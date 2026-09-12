@@ -1,0 +1,37 @@
+{
+  "$id": "https://wyrd.company/heddle/adjudication-policy.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "relationships": { "implements": "heddle" },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "relationships", "decision-boundary"],
+  "properties": {
+    "$schema": {
+      "const": "https://wyrd.company/heddle/adjudication-policy.schema.json"
+    },
+    "relationships": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implements"],
+      "properties": { "implements": { "const": "heddle" } }
+    },
+    "decision-boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decide", "escalate", "test"],
+      "properties": {
+        "decide": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        },
+        "escalate": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        },
+        "test": { "type": "string", "minLength": 1, "pattern": "\\S" }
+      }
+    }
+  }
+}

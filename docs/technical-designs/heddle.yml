@@ -3,6 +3,7 @@ relationships:
   references:
     - flowcraft-gate
     - t3-headless
+    - t3-session-visibility
 objective: >
   Heddle is a workflow service that runs software tasks through their
   delivery lifecycle. Deterministic machinery performs every mechanical
@@ -35,7 +36,11 @@ proposed-design:
     declare `joinStrategy: any` so loops such as review → remediate →
     review traverse repeatedly. After every resume, Heddle asserts that
     the instance landed in an expected state and raises attention when
-    it did not. Node execution is at-least-once, so every node effect
+    it did not. The lifecycle attention event preserves the Flowcraft error and
+    its cause chain as JSON data, and the production bridge projects it into one
+    durable task attention entry per transition. The entry remains open while
+    that transition is pending and resolves only after the same transition
+    lands successfully. Node execution is at-least-once, so every node effect
     is idempotent.
 
     Each task names its lifecycle: a `lifecycle` property on the
@@ -47,104 +52,597 @@ proposed-design:
     is implement → review → remediate loop → merge → retrospective →
     finalize; other lifecycles are shorter or different blueprints
     (a trivial lifecycle omits retrospective). Blueprints are schema'd
-    artifacts in this repository. An instance records the git blob hash
-    of the blueprint it started from and runs that version to
-    completion. The operator can rebase a running instance onto a newer
-    blueprint version at a named state; the rebase validates that the
-    target state exists and raises attention when it does not.
+    artifacts in one organization repository cloned at
+    `<HEDDLE_CONFIG>/blueprints`; Heddle retains the schema and interpreter
+    validation authority. Each blueprint maps every mechanical node `uses`
+    value to the board status that the completed stage mirrors. Heddle rejects
+    missing or unknown mechanical uses and statuses absent from the live board
+    configuration before an effect or board write. An agent-only lifecycle may
+    declare the known `prepare-worktree` and `finalize` mappings without those
+    mechanical nodes. Heddle uses them as the initial and terminal task-status
+    boundaries without executing either mechanical effect. Each reconciliation pass fetches `origin` without
+    changing the clone's branch, working tree, or held refs. New instances and
+    explicit rebases resolve artifacts from the fetched upstream commit. An
+    instance records the Git blob hash of the blueprint it started from, holds
+    that blob under a Heddle ref, and runs that version to completion. The
+    lifecycle viewer reports upstream comparison as one of three explicit
+    states. `current` means the inspected upstream artifact is the pinned blob.
+    `available` means the inspected upstream artifact is a different blob;
+    while the instance is awaiting, the viewer identifies that blob and offers
+    only its named wait states. `upstream-target-unavailable` means the upstream
+    source or artifact path cannot be inspected; the viewer keeps the pinned
+    blueprint, identity, and history visible, reports the unavailable target,
+    and offers no rebase action. Failure to read the pinned artifact,
+    persistence, identity, or history remains a lifecycle read error. The
+    operator selects a state and explicitly rebases the instance. The action
+    endpoint re-reads the task, instance, pinned blob, and upstream target blob
+    before delegating to the production lifecycle router. A successful action
+    replaces the viewer with the rebased snapshot and reports the selected
+    state and target blob. Fetch alone only changes rebase availability; an
+    instance that is not explicitly rebased stays pinned. The rebase validates
+    that the target state exists and raises attention when it does not.
   epic-reconciliation: >
     The reconciler is a control loop over the kanban board. Each pass
     it computes the delta between board state and instance state and
     acts on it: a ready task with satisfied dependencies and no
-    instance gets one started; an instance past its stage's staleness
-    threshold raises attention; when every non-UAT child of an epic is
+    instance gets one started; an instance past its configured stage staleness
+    threshold raises attention. A stage absent from that configuration has no
+    reconciler staleness deadline. When every non-UAT child of an epic is
     done, the epic's UAT stage opens. Task dependency edges gate
     readiness, so the epic's dependency graph is an input to
     scheduling, not only a view.
 
-    The epic task's own status is the operator's control lever. Moving
-    an epic to `in-progress` starts it: the reconciler promotes the
-    epic's children from `backlog` to `todo` — including children
-    added later — and dispatches them as readiness allows, with
-    sequencing carried by dependency edges. Moving an epic out of
-    `in-progress` pauses it: no new dispatches for its children, while
-    in-flight instances run to their next wait state and hold. The
+    The epic task's own status is the operator's control lever. The Console's
+    generic lifecycle control maps `backlog` and `todo` to Start, which moves
+    the epic to `in-progress`; maps `in-progress` and `uat` to Pause, which
+    moves the epic to `todo`; and offers no action for `done` or an unknown
+    status. For each generic control request, the board authority validates the
+    current status before applying the requested transition, so stale requests
+    and unknown statuses fail closed. Moving an epic to `in-progress` starts
+    delivery: the reconciler
+    promotes its non-UAT children from `backlog` to `todo` — including children
+    added later — and dispatches them as readiness allows, with sequencing
+    carried by dependency edges. It also prepares each declared
+    repository at `/workspaces/worktrees/{epic-id}/{repository}` on the
+    `epic/{epic-id}` branch and creates a T3 project titled
+    `{product} - epic-{epic-id}` with `/workspaces/worktrees/{epic-id}` as
+    its workspace root. An epic in `backlog` or `todo` is paused: no new child
+    dispatch starts, while in-flight instances run to their next wait state and
+    hold. An epic in `uat` is not paused; it admits UAT child dispatch and only
+    the exact late delivery work described below. A `done` epic is terminal,
+    and an epic with an unknown status dispatches nothing. Paused, UAT, and
+    completed epics retain their project so archived stage threads remain
+    available for inspection. The durable `active` project
+    state means that the T3 project exists; it does not authorize child task
+    execution. The epic's board status remains dispatch authority, and a done
+    epic cannot dispatch a child. Project deletion is a separate explicit
+    cleanup policy. A durable deleting or deleted record remains non-active
+    and cannot be reseeded or restored as an available project. The
     reconciler advances the epic itself to `uat` when its last non-UAT
-    child completes and to `done` when UAT is accepted.
+    child completes and to `done` when UAT is accepted. An epic in `uat` must
+    have at least one child tagged `uat`. When none exists, reconciliation
+    raises one stable durable epic-scoped attention and leaves acceptance
+    blocked; Heddle does not author an acceptance task. The operator adds the
+    intended UAT child. Reconciliation then resolves the current missing-child
+    attention without deleting its stable durable identity, and ordinary
+    promotion, dispatch, and epic completion continue. If the UAT child is
+    removed while the epic remains in `uat`, reconciliation makes the same
+    durable attention identity current again. An incomplete non-UAT child can
+    run while the epic remains in `uat` only when its live task exactly matches
+    one completed Heddle-owned dynamic-task intent. Board identity tags are
+    evidence, not authority. Admission waits quietly while any UAT child remains
+    active. A done UAT child proves terminal only when exactly one retained
+    top-level runtime has both runtime state and mirrored board status `done`,
+    and no delegated instance for that task is nonterminal. A done board card
+    without this proof raises one stable `uat-terminal-unverified` attention and
+    admits no dynamic work. Missing or conflicting authority raises the stable
+    delivery-child attention, leaves that child unchanged, and does not prevent
+    another exactly trusted child from running. The reconciler owns recovery
+    for untrusted late delivery: it raises attention, and the operator either
+    deliberately moves the epic from `uat` to `in-progress` through the board
+    authority or removes or re-parents work that is not part of the epic. The
+    Console's generic Start control cannot perform this recovery transition.
+    Every child remains a completion gate. When they are all done, Heddle
+    completes the epic without starting another UAT instance.
+
+    Production configuration declares a complete product inventory. Each
+    product owns one or more named repositories and may carry the durable T3
+    identity of its active epic project. One separately named ad-hoc project
+    supplies the shared project ID and workspace root for tasks outside an
+    epic. Heddle owns that project's existence exactly as it owns an epic
+    project's: at startup it reconciles the configured shared project against
+    the control plane, creating it under a deterministic command identifier
+    when absent and recording it durably, so a replay neither duplicates the
+    project nor dispatches a second creation. A shared project that cannot be
+    reconciled fails startup closed and names the project, rather than
+    surfacing as a dispatch rejection at the first session. A task or epic may
+    narrow its repository set in board front matter. Child tasks inherit their
+    epic's product and repository declarations. Heddle never infers repository
+    authority from a diff, branch, session, or filesystem scan. An unknown
+    product, a repository outside the product, or a stage `repo` outside the
+    task declaration raises attention before lifecycle dispatch.
 
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else
-    moves those cards.
-    Agents create follow-up tasks and findings through MCP tools;
-    Heddle applies the writes, so new child tasks are visible to the
-    reconciler the moment they exist. The reconciler also enforces
-    pacing gates: work-in-progress limits and provider usage-window
-    budgets are dispatch preconditions, so sessions start only when
-    capacity exists.
+    moves those cards. The board configuration is the authority for
+    available columns. The pinned lifecycle blueprint selects among those
+    columns for each mechanical stage, and production reads the live board
+    declaration before every mechanical status mirror. Fetching a changed map
+    affects new instances and explicit rebases only.
+    Agents create follow-up tasks and findings through MCP tools. Heddle
+    records the bound source task, instance, and session plus the kind,
+    parent epic, lifecycle, operation digest, record digest, and complete
+    request as a durable pending intent before it applies the board write.
+    It binds the returned task ID and completes the intent after the board
+    effect. New child tasks are visible to the reconciler the moment they
+    exist, but board identity tags are evidence and never creation authority.
+    The reconciler also enforces
+    pacing gates through one shared evaluator. Workspace configuration
+    declares a default provider alias, a total active-session limit, provider
+    budgets over fixed five-hour usage windows, and subagent fan-out and
+    nesting-depth limits. A provider usage source supplies observations
+    without coupling the evaluator to one provider mechanism. Lifecycle
+    and subagent sessions draw from the same active-session and provider
+    budgets.
+
+    A denied dispatch does not cancel or fail work. The task remains
+    ready, and its instance state records a structured deferral with the
+    applicable limit, observed usage or occupancy, and the next provider
+    window time when one applies. An unchanged deferral converges without
+    another write. Each reconciliation pass evaluates deferred work
+    again, so released capacity starts it on a later pass. A deferred runtime
+    and an in-flight start reservation may intentionally precede
+    lifecycle-state creation and do not raise missing-instance attention. A
+    retained `starting` runtime with no lifecycle activation raises
+    `instance-start-incomplete` and enters the ordinary later-pass retry policy.
+    Synchronization resolves the matching stale entry after lifecycle state
+    appears; other runtime records with no lifecycle state remain
+    operator-visible failures.
+
+    One production composition owns reconciliation for a workspace. A shared
+    per-epic operation coordinator orders dynamic-task creation and recovery,
+    trusted admission, Console status controls, the durable starting-runtime
+    reservation, and final completion. Preparation, start reservation, and
+    completion are separate ordered decisions and each re-reads live board and
+    runtime state. A Console pause before preparation prevents promotion. A
+    pause queued after promotion runs before start reservation and prevents
+    dispatch. Once the durable reservation wins, the instance follows ordinary
+    in-flight pause behavior. Direct `kanban-md` writes do not enter this
+    coordinator because the board has no compare-and-set operation. They are
+    observed on a later read and can lose one race to an admission decision that
+    already reserved a start.
+
+    The composition
+    constructs the real board adapter, SQLite-backed instance controller,
+    lifecycle resolver and engine, session bootstrap, observation channel,
+    durable attention queue, Pushover notifier, pacing evaluator, and stage
+    thresholds. A serialized scheduler coalesces ticks while one pass runs.
+    Startup recovers pending dynamic-task intents before the first
+    reconciliation pass; start then performs an immediate pass and stop
+    cancels its timer and drains the
+    current pass within a configured bound. Task, epic-project, instance, and
+    session operations are isolated inside the pass. A failure raises one stable,
+    task-scoped attention entry and does not prevent later work in the pass. This
+    includes an unrouted epic, a live instance whose board task disappeared,
+    lifecycle activation, and session bootstrap or observation. A pass-wide
+    failure raises global durable attention and is written to the service error
+    log by the deployed entry point. Active delegated sessions join the
+    same persisted session inventory, shell-derived pacing view, and observation
+    pass. The production MCP handler supplies the accepted subagent coordinator
+    with the same SQLite store, global correlation-token catalog, stage
+    bootstrap, pacing evaluator, and T3 boundary. Runtime scheduling and adapter
+    completion records persist intent and replay position only. Lifecycle,
+    pacing, attention meaning, escalation identity, and session liveness remain
+    authoritative in their existing components. Every admitted lifecycle or
+    delegated session carries one resolved provider-instance identity through
+    the shared pacing and T3 boundaries.
+  provider-selection: >
+    Production configuration owns a provider-alias allowlist. Each lower-kebab
+    alias maps to a non-empty ordered candidate list. Each candidate names one
+    operator-visible T3 provider display name and one T3 model slug. The legacy
+    single-object form is a one-candidate list with the same meaning.
+    Display-name and model-slug matching are exact and case-sensitive. An
+    absent display name, no matching name, more than one matching name, an
+    unavailable or disabled provider, or an absent model makes that candidate
+    unusable. The alias is unusable only when every configured candidate is
+    unusable. Heddle never infers a candidate from driver kind or capability
+    discovery and never selects a provider outside the alias list.
+
+    Heddle reads the authenticated T3 provider catalog through the existing
+    `server.getConfig` WebSocket RPC with the `orchestration:read` scope. Using
+    the configured bearer token, it requests a ticket from
+    `POST /api/auth/websocket-ticket`, connects to `/ws?wsTicket=<ticket>`,
+    performs one bounded RPC, and closes the connection. The WebSocket ticket
+    is short-lived. T3 accepts ticket reuse until expiry or parent-session
+    revocation. Heddle never reuses the ticket and never persists or logs it.
+    The catalog reader consumes only `ServerConfig.providers`. Each provider
+    snapshot keeps four distinct values: `displayName` is the operator-facing
+    configuration name,
+    `instanceId` is the stable T3 routing key, open `driver` is capability
+    metadata, and a selected model's `slug` is the dispatch
+    model identity. The observed provider CLI `version` is diagnostic and
+    qualification evidence; it is not a Heddle allowlist. T3 owns provider
+    discovery, driver support, CLI authentication, CLI compatibility, and
+    provider launch wrappers. Browser and desktop provider show/hide preferences
+    are client-local and never enter Heddle selection. The deployed T3
+    application remains separately pinned as a Heddle dependency.
+
+    The reader rejects a missing or malformed ticket, a failed or malformed RPC,
+    and a response without a provider catalog. The resolver maps every such
+    failure to `provider-catalog-unavailable`; transport details and returned
+    configuration payloads do not enter the operator-safe selection error.
+
+    Configuration syntax is validated before composition. Startup also
+    resolves every configured alias, the default alias, and every pacing-budget
+    alias against one catalog snapshot before it binds the server. Resolution
+    evaluates candidates in declared order, retains each unusable candidate and
+    its safe failure, and selects the first usable candidate. New stage
+    activations, new delegated sessions, and `list_providers` read a fresh
+    snapshot. `list_providers` continues to project the first configured
+    candidate and reports its current safe failure instead of projecting a
+    fallback candidate. A catalog read failure or an alias with no usable
+    candidate names safe failures and performs no worktree, registration,
+    thread, or dispatch effect.
+    The stable selection reasons are `provider-catalog-unavailable`,
+    `provider-alias-exhausted`, `provider-alias-not-allowed`, `provider-name-not-found`,
+    `provider-name-ambiguous`, `provider-not-ready`, `provider-unavailable`, and
+    `provider-model-not-found`. A provider is selectable only when T3 reports
+    it available, enabled, installed, and `ready`, and the selected model slug
+    is present. A candidate configuration or catalog failure advances the
+    ordered list. An unreadable provider catalog prevents selection because no
+    candidate can be evaluated.
+
+    A task's optional `provider-alias` front-matter value is a map from stage ID
+    to provider alias. For the current stage, that map's own entry overrides the
+    wait node's optional `provider-alias`, which overrides
+    `session.defaultProviderAlias`. Only absence of the current stage's map
+    entry falls through. A present scalar or a present empty, null, non-string,
+    malformed, or unknown alias value fails closed without fallback. After
+    Heddle pins the resolved blueprint, it validates every map key against that
+    exact snapshot before any provider dispatch or session effect. An unknown
+    key or a key for a non-wait node fails with
+    `provider-alias-not-allowed`; task maps cannot grant provider selection to
+    mechanical nodes. Runtime mode is a separate T3 concept with the exact
+    vocabulary `approval-required`, `auto-accept-edits`, `auto`, and
+    `full-access`. A wait node's optional `runtime-mode` overrides
+    `session.defaultRuntimeMode`; tasks have no runtime override. `full-access`
+    is valid for every provider and is forwarded unchanged, but the operator
+    chooses the default. Provider selection never infers a runtime mode from
+    the driver or model.
+
+    Before session binding resolution, Heddle pins the lifecycle blueprint
+    source ref and durably stores a pending start with the blueprint path and
+    blob hash. Initial-route planning, lifecycle execution, and recovery use
+    this same snapshot even if the source ref moves. Before the lifecycle
+    starts any mechanical effect or external session effect, Heddle durably
+    stores a provisional binding for the first usable candidate. It contains
+    the session and occurrence identity, alias, candidate position,
+    display-name snapshot, provider instance ID, driver kind, observed provider
+    version, model slug, runtime mode, interaction mode, and structured failure
+    causes for skipped candidates, including catalog-selection failures before
+    the selected position. It contains no credential or provider setting. If
+    any valid initial lifecycle landing identifies a wait stage, every valid
+    initial landing must identify that same wait stage so the stored occurrence
+    is authoritative for execution. Heddle
+    rejects a different wait stage or terminal alternative before it runs the
+    selecting effect. An initial route with only terminal landings needs no
+    session binding. The instance ID routes T3 requests; the alias explains
+    authorization, and the display name and driver kind support diagnostics.
+
+    A T3 session whose latest turn has no start timestamp and whose session or
+    turn enters the error state has failed at session start. A synchronous
+    workflow-MCP-registration, thread-creation, or initial-turn rejection has
+    the same meaning. Heddle records that candidate and cause, then attempts the
+    next candidate in declared order on a distinct thread. Exhaustion raises
+    durable `provider-alias-exhausted` attention that names every candidate and
+    cause. Starting a candidate after the first raises durable
+    `provider-fallback-active` attention. The unresolved entry is a standing
+    operator-visible degradation condition.
+
+    A candidate may not bind when another started session under a different
+    alias in the same lifecycle instance already holds that provider instance.
+    Heddle records the collision as a skipped cause and continues in order.
+    Another occurrence of the same alias may reuse the provider. Separate
+    lifecycle instances do not collide.
+
+    T3 confirms a start when the session or turn is running, ready, idle, or
+    completed, or when the turn has a start timestamp. Heddle then confirms the
+    provisional binding. The binding and thread identity are immutable after
+    that point. Observation, steering, stop, retry, restart, replay, and a cold
+    replacement use the confirmed binding. A failed turn, poor result, rejected
+    review, failed gate, or agent behavior never advances the candidate list.
+    If the bound provider or model is no longer usable, the occurrence fails
+    visibly rather than moving. A new
+    stage occurrence or new subagent assignment resolves current authority and
+    receives a new binding. Recipient-targeted channels reuse a read-only
+    projection of this binding keyed by trusted session or thread identity:
+    thread ID, provider instance ID, driver kind, model slug, runtime mode, and
+    interaction mode.
+
+    A delegated start failure advances its durable assignment to the next
+    candidate before pacing deferral returns or bootstrap starts. A deferred
+    assignment marks that successor as pacing-deferred. Replay evaluates the
+    successor again and cannot bootstrap it until pacing admits the exact alias
+    and provider instance. Admission clears the pacing marker only after the
+    start confirms. An already admitted assignment needs no marker: a crash
+    before confirmation replays the same durable successor and reuses the same
+    rendered workflow handoff and Workflow-MCP correlation authorization even
+    when its T3 driver differs. Heddle stores no provider authentication
+    metadata. Exhaustion from
+    catalog validation or session start returns the same
+    `provider-alias-exhausted` selection reason and raises durable attention
+    that names every candidate and safe cause.
+
+    Pacing requests carry both the alias selected for the stage and the provider
+    instance ID of its current first usable candidate. Configuration names
+    pacing budgets by allowed alias for operator readability. Startup retains
+    each alias budget independently of candidate usability and also collapses
+    every configured candidate present in the catalog by provider instance ID.
+    A fresh catalog read
+    can therefore recover a candidate without creating unbudgeted capacity: the
+    alias supplies the configured limit and the provider usage executable reads
+    the recovered provider instance. Heddle refuses dispatch when the selection
+    changes between pacing and binding so an unpaced candidate cannot be
+    substituted. Aliases whose candidates overlap on one catalog instance
+    share one budget, and conflicting limits are invalid even when the shared
+    instance is unavailable at startup. Provider usage executables receive the
+    provider instance ID, not an alias, display name, or driver kind.
+  agent-names: >
+    Agent names are organization blueprint data. YAML artifacts under the
+    organization repository's `themes/` directory use their filename stem as
+    the theme identity and declare either `kind: team` or `kind: soloist`. A
+    team theme contains one `leader` name and non-empty `companions`, `allies`,
+    `antagonists`, and `neutrals` lists. A soloist theme contains non-empty
+    `heroes`, `villains`, and `bystanders` lists. Names and theme identities are
+    canonical lower-kebab values. The complete catalog contains at least one
+    theme, no more than one soloist theme, and no name repeated in any field,
+    list, theme, or shape. Heddle validates the complete catalog after the
+    organization repository is synchronized during startup and every
+    reconciliation pass. A task's first start validates it again and records
+    the exact fetched commit used for selection. Before Heddle persists that
+    task selection or dispatches a session, it retains the validated selected
+    commit under `refs/heddle/agent-name-themes/<sha>`. The commit identity in
+    task state identifies the selected catalog snapshot; the Git ref preserves
+    that object's reachability for every later lifecycle stage.
+
+    Each wait node can declare `assign-agent-name` with one theme list name.
+    Mechanical nodes cannot declare it. The lists requested by the complete
+    blueprint determine its required theme kind: `leader`, `companions`,
+    `allies`, `antagonists`, and `neutrals` require a team theme; `heroes`,
+    `villains`, and `bystanders` require a soloist theme. One blueprint cannot
+    request lists from both kinds. Repository validation rejects a blueprint
+    when no catalog theme of its required kind provides every requested list.
+    Allocation considers only themes that satisfy the blueprint and rotates
+    through those themes in canonical theme-ID order. The task keeps the
+    selected theme and catalog commit for its whole lifecycle. A stage list
+    absent from the selected theme fails before dispatch.
+
+    An allocation is keyed by lifecycle instance and list name. Re-entering a
+    stage or entering another stage with the same `assign-agent-name` value
+    returns the recorded name. A different list allocates independently from
+    the selected pinned theme. Allocation rotates through the list and skips
+    every name held by a non-done task or incident instance, across all themes.
+    Selection and persistence execute within one serialized service boundary,
+    so concurrent stage activations cannot claim the same name. The recorded
+    assignment remains in instance state for recovery and history, while the
+    lock is released when the owning task or incident reaches done. The
+    canonical handoff `stage` object carries the assigned name as `agentName`;
+    the standard, remediation, and incident templates render it.
   agent-sessions: >
     Sessions run on T3 Code, driven headlessly over plain HTTP:
     `POST /api/orchestration/dispatch` carries every command, and
     bearer tokens come from T3's pairing and RFC 8693 token exchange.
     Heddle prepares each session itself: it creates the git worktree
-    under `/workspaces/worktrees/{repository}/{worktree}`, creates the
-    thread, and sends a bare `thread.turn.start` — three deterministic
-    steps it owns end to end. Provider, model, and runtime mode are
-    per-stage configuration; Heddle pins runtime modes known to work
-    with each driver and CLI version and verifies them as dispatch
-    preconditions. Mid-turn steering is a second `thread.turn.start`
-    on the same thread.
+    under `/workspaces/worktrees/{task-id}/{repository}`, creates the
+    thread, and sends one rendered Markdown handoff with the first
+    `thread.turn.start` — three deterministic steps it owns end to end.
+    The resolved session binding supplies the provider instance, model slug,
+    and runtime mode. Mid-turn steering is a second `thread.turn.start` on the
+    same bound thread and does not perform provider selection again.
+
+    A child task thread uses its epic project's durable ID. An ad-hoc task uses
+    the configured shared project. A delegated subagent inherits its parent's
+    project, repository, branch, and worktree. Its bounded deterministic title
+    is `task-{id} · {stage-occurrence}`: it contains the complete task identity
+    and a stable occurrence discriminator, with no service marker or epic
+    prefix. Each
+    wait-stage occurrence has one durable session and thread identity; a stage
+    reached again through a lifecycle loop receives a new occurrence identity,
+    while restart resumes an incomplete occurrence. Stage-scoped sessions for
+    one task share its task-scoped branch and worktree so each stage receives
+    the delivery state produced by prior stages. First-turn dispatch omits
+    `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived seed.
+
+    Qualification against isolated pinned Wyrd Company T3 fork 0.0.38-wyrd.2 creates a project and a
+    thread whose worktree is a sibling of, and therefore outside, the project
+    workspace root. T3 accepts the command and reports the thread through its
+    authenticated shell. A thread's worktree is its working directory; the
+    project workspace root is only its fallback. This permits one epic project
+    root with task worktrees located under their own task-first roots.
 
     Sessions are short and stage-scoped. Nothing carries between
-    stages except the handoff: a deterministically assembled bootstrap
-    containing the task contract, the outputs of prior stages (a
-    remediation session receives the review's findings, never the
-    review session's transcript), the stage's instantiated todo list,
-    and a pointer to the stage's skill. Because the handoff is data on
-    the instance, retrying a stage cold means replaying the same
-    bootstrap into a fresh session.
+    stages except the handoff. Every session opens with one stable system
+    prompt that describes the Heddle session and its workflow tool contract.
+    Heddle bundles the built-in Markdown prompt into the compiled service. The
+    configured service reads `heddle.md` from the configuration directory as a
+    wholesale operator override; a missing file selects the built-in prompt.
+    The resolver receives no task or stage input, reads at most once while a
+    new durable handoff is created, and is not consulted during retry. Heddle
+    stores the effective prompt with the exact composed document. It never
+    creates, rewrites, or migrates the override. The prompt contains no
+    correlation token, task content, stage content, source path, or source
+    provenance marker.
+
+    Heddle first assembles a canonical JSON
+    projection containing the task contract, the outputs of prior stages (a
+    remediation session receives either the current review's findings or a
+    typed current-transition review integration cause, never the review
+    session's transcript), the stage's instantiated todo list,
+    and a pointer to the stage's skill. It then renders that projection and
+    the board task's raw front matter through a schema'd, strict Nunjucks
+    Markdown template. Normalized task-contract data remains the machine
+    authority; raw front matter is display input only. Undefined values,
+    disabled nondeterministic filters, invalid identity, template and stage
+    disagreement, or unequal repeated renders fail before MCP registration,
+    thread creation, or first-turn dispatch. The failure raises one durable,
+    stable lifecycle-resolution attention entry.
+
+    Every agent wait node declares explicit
+    `handoff` metadata as `standard` or `remediation`; missing, invalid, or
+    non-wait metadata fails closed. It also declares a `handoff-template`
+    path and exact Git commit SHA. Heddle reads the entry file and every file
+    under `handoff-templates/includes/` from that commit in the organization
+    blueprint repository and retains the commit under
+    `refs/heddle/handoff-templates/<commit-sha>`. Include directives use the
+    full repository-relative form
+    `handoff-templates/includes/<path>`. Paths outside that directory and the
+    Nunjucks `extends` and `import` directives fail closed. Heddle verifies the
+    entry schema and declared handoff kind and never substitutes mutable
+    working-tree content. A wait node can declare a unique, non-empty array of
+    kebab-case `skills` names no longer than 64 characters. Each name resolves from
+    `skills/<name>/SKILL.md` at the handoff template's pinned commit. The skill
+    must have YAML front matter whose `name` equals its folder and whose
+    `description` contains 1 to 1,024 characters. Known optional Agent Skills
+    fields are validated when present: `license` and `allowed-tools` are
+    non-empty strings, `compatibility` contains 1 to 500 characters, and
+    `metadata` maps string keys to string values. Other valid YAML fields,
+    including top-level artifact `relationships`, do not prevent loading and
+    remain outside the template projection. The handoff stage carries the names, and the
+    Nunjucks `skill(name)` global returns only `name`, the repository-relative
+    `path`, and `description`. A missing or malformed pinned skill fails with
+    the same stable lifecycle-resolution attention before any T3 effect.
+    Task front-matter `skills` remains a per-task display override; blueprint
+    stage skills provide the generic journey declaration. Standard handoffs receive completed
+    wait-stage outputs reconstructed in recorded lifecycle execution order.
+    Remediation receives the latest canonical review output through the
+    handoff assembler, which retains findings and excludes transcript data.
+    When the current transition's merge node detects review-basis drift or a
+    reviewed source that does not contain its target, the assembler selects
+    that validated mechanical cause instead. The cause distinguishes those
+    conditions and names the snapshot, source and target branches, reviewed
+    source and base heads, and current source and target heads. Selection reads
+    only the execution that entered the current remediation occurrence, so an
+    earlier loop's mechanical output cannot replace later review findings.
+    The source-behind cause is valid only while current heads equal the reviewed
+    heads; movement during classification becomes review-basis drift.
+    The rendered document is stored with the session handoff before any T3
+    effect. Retry and restart replay those exact bytes. After T3 accepts the
+    first turn, Heddle appends a `session:activated` event containing the exact
+    task, instance, session, stage, thread, effective-system-prompt, and
+    rendered-document payload.
+    Reconciliation accepts an existing event only when every payload value is
+    equal and never appends a second event for the same session.
   workflow-mcp: >
     Heddle exposes its actions to agents as a stateless
     streamable-HTTP MCP server, the one integration surface every
     agent harness supports through ordinary configuration. The tool
     suite includes `advance` (disposition the current stage),
-    `get_task_context`, `report_blocked`, `escalate` (raise a
-    blocking question), follow-up and finding creation, and a todo
+    `get_task_context`, `report_blocked`, `answer` (answer one
+    complete question set), follow-up and finding creation, and a todo
     suite (list, check, add) that replaces each harness's built-in
     todo tools, which are disabled per harness. The tool list is
     per-session: computed at bootstrap from the task and its stage's
     blueprint declaration, and tools a task type does not use are
     omitted rather than offered and denied. Because sessions are
     stage-scoped, the list holds static for a session's life and no
-    harness needs dynamic tool updates. `advance` presents only the dispositions valid for
+    harness needs dynamic tool updates. Production startup validates every
+    wait-node tool against the composed registry. An unresolved name fails
+    startup and identifies its blueprint, node, and tool; request-time
+    composition applies the same refusal to stored contracts.
+
+    `create_follow_up` and `create_finding` accept an operation ID, title,
+    body, lifecycle, and optional priority and dependency task IDs. Heddle
+    derives the parent from the bound task: the task must be a direct child of
+    an epic, and every dependency must be another child of that epic. Both
+    tools create a `backlog` task tagged with its lifecycle and respectively
+    `type:follow-up` or `type:finding`. The result contains the task ID, kind,
+    parent, status, and whether the call replayed an existing write. An
+    operation ID is unique to one tool call in one stage occurrence. Heddle
+    stores hashed operation and request identities as board tags and anchors
+    both in its SQLite creation registry. An exact replay requires the same
+    durable source and request identity and returns the completed registry
+    row's exact-identity live board task. Reusing the operation ID with different input
+    fails before another board write. A pending intent with no board match is a
+    quiet recoverable state. Startup binds one board task only when its kind,
+    parent, lifecycle, operation digest, and record digest match, and the
+    registry request reproduces both digests. Multiple, conflicting, malformed,
+    or failed recovery raises
+    stable authority attention and remains pending.
+
+    `advance` presents only the dispositions valid for
     the instance's current state, generated from the blueprint's
     outgoing edges with per-disposition descriptions — the tool schema
     itself guides the agent to a legal transition. Every session's
-    bootstrap carries a correlation token minted by the reconciler,
-    binding the session to its instance so a caller can advance only
-    its own work, and `advance` is idempotent per instance and stage,
-    so a retried call cannot double-transition.
+    stored contract classifies each disposition's output as `optional` or
+    `review-findings`. A disposition whose edge targets a remediation handoff
+    requires a non-empty `output.findings` array; the MCP boundary validates
+    this schema before recording the lifecycle transition. Every other
+    disposition accepts an omitted output or a JSON object. A stored contract
+    without an output classification remains replayable as `optional`.
+    A validated review integration cause satisfies remediation input without
+    inventing reviewer findings. When remediation receives neither that cause
+    nor a completed stage output with `findings`, it
+    raises one durable attention entry keyed by the remediation session and
+    missing field, renders an empty findings list, and continues activation.
+    This keeps legacy or malformed output visible without blocking activation.
+    A standard handoff also carries persisted outputs from completed mechanical
+    nodes between the preceding wait stage and the activating wait stage. The
+    review handoff therefore names the exact review snapshot created for it.
+    Every session's
+    bootstrap binds the session to its instance with a correlation token minted
+    by the reconciler, so a caller can advance only its own work, and `advance`
+    is idempotent per instance and stage, so a retried call cannot
+    double-transition.
+
+    Heddle uses every selectable driver reported by the pinned Wyrd Company T3
+    fork. Before thread
+    creation, Heddle registers the configured workflow MCP HTTP endpoint and the
+    session's bearer correlation token through T3's authenticated
+    `/api/mcp/provider-session` route. T3 supplies the registration to the
+    selected adapter through its native MCP path. Heddle does not maintain a driver
+    roster or write driver-specific MCP configuration files. The rendered
+    Markdown identity, canonical JSON projection, and Markdown body contain no
+    token. An unsupported driver or MCP path fails at the T3 boundary with its
+    structured error.
 
     Todo lists are instantiated from templates. A todo template is a
-    schema'd artifact in this repository: the checklist for one stage
-    of one task type, with placeholders for task context. Each
+    schema'd artifact in the organization blueprint repository: the checklist
+    for one stage of one task type, with placeholders for task context. Each
     blueprint stage that starts an agent session names its template;
-    at bootstrap, Heddle fills the template from the task contract
+    at bootstrap, Heddle resolves that repository as the sole todo-template and
+    pinned handoff-template and stage-skill authority and fills the template from the task contract
     and stores the resulting list on the instance. The instantiated
     list belongs to the stage's agent, which can add, edit, and
     reorder items; the template itself never changes. The todo tools
     read and write that stored list, so progress persists across
-    session retries, appears in the console, and rides the handoff
-    into the next stage.
+    session retries and appears in the console. Each activation list
+    remains on the instance as history. A handoff carries its current
+    activation list and prior lists whose activations own valid stored
+    handoffs; all other historical lists are excluded.
   subagents: >
     Delegation is a Heddle capability rather than a harness feature.
     The MCP suite includes subagent tools: spawn starts an
     asynchronous child T3 session, prepared the same way as a stage
-    session and configured with any provider and model, so a parent
+    session and configured with any allowed provider alias, so a parent
     on one harness delegates to models its harness does not support.
+    The child inherits its parent session's resolved T3 runtime mode.
     Spawn assigns the child a todo subtree — a node and its children
     — and mints a correlation token scoped to that assignment, so the
     child's writes land only inside its subtree. A node has one
     active assignee, so two agents never race on the same work.
+    Todo items carry optional parent links that form an acyclic durable
+    tree. The parent list owns each assignment as one compare-and-swap
+    record containing the subtree root, correlation token, child session
+    and thread identity, parent identity, resolved session binding, and nesting
+    depth. Authorization resolves ancestry from that stored tree and
+    fails closed for missing, cyclic, foreign, inactive, or overlapping
+    nodes. Assignment and correlation-token publication are one state
+    replacement. SQLite maintains a global unique correlation-token catalog
+    in the same transaction as every instance-state replacement and rebuilds
+    it from event history on recovery; duplicate history fails recovery.
+    Agent-facing todo and handoff projections omit the assignment catalog,
+    so bearer tokens and assignment metadata remain inside the authorization
+    boundary.
 
     The shared todo list is the progress channel: the parent reads
     the child's subtree to check progress, and a liveness tool
@@ -156,29 +654,392 @@ proposed-design:
     depth are dispatch preconditions alongside the reconciler's
     other pacing gates, so delegation draws from the same capacity
     budget as all other sessions.
+    The observation loop records a stopped assignment and a deterministic
+    parent-steer intent before it dispatches the steering turn. Replay uses
+    the same command identity, message identity, terminal phase, and exact
+    message payload, and completion is recorded on the canonical assignment.
+    Stopping an assignment atomically stops every active assignment descendant
+    in deterministic assignment order. Active authorization requires an
+    unbroken active lineage, so an inactive ancestor cannot leave an orphaned
+    writer. A concurrent descendant observation that loses its teardown claim
+    to an ancestor recognizes the stored ancestor stop and returns without a
+    second steer. The subagent service supplies this hook to the session observer;
+    it does not poll T3 or decide liveness separately.
 
-    Escalation is a blocking question through the MCP suite's
-    `escalate` tool: structured questions with options, the call
-    held open until answered, the answer returned as the tool
-    result. Heddle routes by parentage: a subagent's escalation is
-    steered to its parent, which answers through an answer tool
-    scoped by correlation token to its own children; a top-level
-    session's escalation enters the attention queue with a pushover
-    notification, and the operator answers from the console.
-    Because escalation rides Heddle's MCP surface, it is uniform
-    across providers and independent of any harness's question
-    tool.
+    Agents ask through their harness question tool. The harness adapter records
+    each pending request as one durable escalation, preserving its request ID,
+    thread ID and question catalog. Questions carry an ID, prompt, optional
+    header, option labels and descriptions, and an optional multi-select flag
+    defaulting to false. Options have no minimum count. Every question accepts
+    either selected options or a text answer; a question with zero options
+    requires text.
 
-    Harness-native question tools serve assistive tasks, where the
-    operator already works in T3's UI. The provider adapters map
+    The answer tool accepts one complete answer set keyed by question
+    ID. A native question set has no count limit and may be empty. An empty
+    request remains pending until its current authority explicitly supplies
+    an empty keyed answer set; Heddle does not automatically settle it.
+    Every entry contains selectedOptions, text, and required reasoning.
+    Exactly one of nonempty selectedOptions or nonempty text supplies the
+    answer. Validation rejects missing or unknown question IDs, unknown options,
+    options for a question with none, multiple selections on a single-select
+    question, and absent reasoning. A multi-select question accepts one option.
+    Repeated question IDs share one keyed answer, which must satisfy every
+    occurrence. Repeated option labels identify the same selectable value.
+    Incompatible selections remain pending; a shared text answer is valid for
+    every occurrence. The console retains each occurrence's question and
+    options while sharing its keyed answer controls.
+    Answerer prompts quote each question's ID, prompt, options, cardinality,
+    text alternative, and the answer tool contract.
+
+    Answering authority begins with the parent session for a child escalation.
+    A top-level escalation creates a fresh adjudication session when configured,
+    and otherwise routes to the operator. Adjudication is bound to that
+    one escalation occurrence. It is not a task or lifecycle instance and owns
+    no board status. Its provider comes from the operator's adjudication alias;
+    every eligible start or replay resolves that alias from the current catalog
+    in configured order. A persisted provisional candidate that did not start
+    remains failed evidence but does not prevent an earlier configured
+    candidate that recovered in the current catalog from being selected. A
+    confirmed adjudication replay retains its stored binding. Each newly
+    selected candidate is paced against the alias budget and its actual
+    provider instance before dispatch. Its decide-versus-escalate boundary
+    comes from an
+    organization blueprint repository policy pinned by Git blob at activation.
+    The session receives a constructed, token-free view of the current epic and
+    child statuses, escalating instance and stage, prior stage outputs, and
+    offered questions. It counts against both the session concurrency limit and
+    its selected provider's usage budget.
+
+    Adjudication authority can only answer its bound escalation or decline it.
+    Its MCP binding exposes only those two actions and grants no repository or
+    configuration write authority. Approval-required mode raises an approval
+    request before every tool call, so Heddle approves, under its own
+    authority, every pending MCP-elicitation approval that reports the tool
+    server Heddle registered for that session. Containment comes from that
+    per-session tool registration, which exposes only the two sanctioned
+    actions, not from the request text, and it applies only to a session
+    carrying the adjudication handoff Heddle wrote when it started that
+    session, never to a lifecycle stage that merely shares the name. Answering
+    is asynchronous: the control plane accepts the response and a separate
+    reactor delivers it to the provider, so the request is normally still
+    pending when the dispatch returns and the recorded resolution appears only
+    on a later read. A pass therefore ends after answering and a later pass
+    reads whether the request cleared, rather than waiting inside the pass and
+    stalling every remaining session in the walk. Answering again is harmless
+    because the command identity is derived from the request. Every request is
+    answered before the bound is weighed, so no request is abandoned without a
+    response attempt whatever the scheduler cadence. A request still pending
+    beyond the configured approval settlement bound, measured from the request
+    the control plane recorded rather than from anything Heddle remembers,
+    abandons the adjudication and carries that cause into attention. An answerer
+    asking its own question is awaiting that answer; its request follows the
+    same routing rule. Each answer releases one link of the chain.
+    Every other approval request fails closed to the operator. An accepted
+    answer
+    records the selected model and required reasoning and follows the same
+    durable delivery and decision-log path as an operator answer. A decline
+    moves authority to the operator without trying another model and carries
+    its cause and reasoning into attention and notification. Candidate fallback
+    applies only while starting the configured alias. Alias exhaustion, invalid
+    answers, another-escalation answer attempts, and approval requests
+    outside the sanctioned tool server fail closed to operator authority. A started adjudication remains authoritative
+    until it answers or declines through its approved tool. Session failure,
+    terminal exit, absence, and stalled execution use the normal session
+    observation and escalation policy without settling the adjudication or
+    stopping its thread. Stable occurrence-derived session, thread, command,
+    and message identities make start, restart, and replay idempotent. The
+    session stops only after an accepted answer, decline, authority failure, or
+    durable cancellation of its question. Native withdrawal or disappearance of
+    the asking session cancels the occurrence without synthesizing an answer or
+    decline. Replay completes cancellation cleanup after any in-flight start and
+    records its completion. Other pending questions still prevent stopping.
+
+    Heddle can otherwise move answering authority to another named session or
+    back to the operator. The same answer predicate accepts an answer only from
+    the current authority. Parent session authority receives the question by a
+    steered turn; operator authority raises durable attention and Pushover
+    notification. A session that stops owing an answer receives its questions
+    again while the request remains pending. For parent or delegated session
+    authority, a failed or absent answerer returns its owed questions to operator
+    authority without answering or cancelling them. Delegated sessions with
+    pending asking or answering obligations remain observation targets even when
+    their assignment is terminal. Unrelated terminal assignments do not remain
+    targets. The question remains pending until it is answered, withdrawn, or
+    its asking session is gone. Session
+    errors follow the normal observation and escalation policy.
+
+    An accepted answer is durable before effects. Heddle replies to the original
+    harness request on its recorded thread, quoting the request through its ID,
+    with a string for a single selected option and an array for a multi-select
+    answer. Text answers remain strings. Repeated question IDs share an answer
+    validated against every occurrence; the last occurrence determines native
+    wire cardinality, matching the T3 client.
+    Heddle then appends the question, answer, per-answer reasoning,
+    answering model when adjudicated, and named authority to the
+    task and, when present, its epic. The lifecycle console renders adjudicated
+    answers with their model, selected values, and reasoning even though no
+    operator attention was raised.
+    Stable command identities bind delivery to the escalation
+    occurrence. Replay can retry either unfinished effect without creating a
+    second delivered turn. A completed delegated child keeps its parentage and
+    receives the answer on its own thread. An absent or failed asking thread
+    cannot receive a reply intended for a different thread. Replay contains each settlement failure
+    as durable production-error attention so other escalations, incident
+    reconciliation, and session observation continue. A successful retry
+    resolves that attention. Every driver requires successful workflow MCP
+    provider-session registration before thread creation. The
+    workflow MCP handler negotiates no protocol newer than 2025-11-25, advertises
+    no Tasks capability, and returns ordinary tool results rather than
+    `InputRequiredResult`.
+    Escalation opening and session disposition share the durable instance
+    claim boundary: opening atomically advances the instance version with
+    its event, while advance claims disposition authority only when neither
+    the session nor a child awaiting its answer has a pending escalation.
+    Once disposition is claimed, new escalations owned by that session or
+    routed to it fail closed. Concurrent open and advance operations therefore
+    produce one valid winner instead of a stopped session with a pending call.
+    Answer completion is a durable operation, so observation distinguishes a
+    session that answered from one that still owes an answer. The observer
+    suppresses its direct user-input attention for a request owned by routing.
+
+    Top-level routing composes one durable attention adapter and one Pushover
+    adapter. Escalations, production failures, and session-observation
+    attention of kind `ended`, `failed`, or `stalled` enter durable attention;
+    `ended` and `failed` are dead-session conditions. Incident admission does
+    not consume a catalog of predicted failure codes. Every task-scoped
+    production failure and dead or stalled session is eligible by default.
+    Scheduler-pass, durable-catalog, and incident-execution failures form the
+    explicit operator-only floor because the incident machinery cannot safely
+    handle its own loss. Floor failures page at the critical level, carry no
+    incident identity, and state that an incident cannot run. Configuration
+    validation fails before production composition exists and therefore cannot
+    raise an incident or production-error attention.
+
+    One durable retry and circuit-breaker record governs each stable failure
+    condition. A failed effect records the first attempt and a deadline. A
+    later reconciliation pass may raise a new idempotent effect after that
+    deadline; no retry holds a request open, sleeps a pass, polls, or replays a
+    recorded occurrence. The failure count changes only at this later-pass
+    boundary. The breaker opens at the configured threshold and its opening,
+    not a permanent-or-transient classification, admits incident judgment. An
+    open breaker retains a durable next-probe deadline. Synchronization may
+    retry at that deadline and a still-live condition rearms the deadline, so
+    an admission suppressed by cooldown or concurrency and an incident that
+    ends failed cannot strand later condition resolution.
+    Operator configuration may short-circuit a known failure code or change its
+    threshold as an optimization. Absence from that configuration never
+    prevents admission. A task start that throws, a retained `starting` runtime
+    with no activation, and a session observed dead without lifecycle advance
+    all enter this policy. A successful retry resolves the condition attention
+    and atomically removes its admission record. The retained attention row is
+    audit history; recurrence reopens it as a fresh retry episode instead
+    of inheriting the prior failure count or open breaker. If that episode
+    opens the breaker, it receives a fresh incident occurrence rather than a
+    terminal incident runtime from an earlier episode.
+
+    While SQLite is available, production-error pages retain their durable
+    one-minute per-code cooldown and cap of three attempts in five minutes, so
+    varying error text cannot bypass notification storm containment. This page
+    policy is independent of incident admission. If a floor failure makes
+    SQLite unavailable, an in-memory window applies the same page bound within
+    that process and resets when Heddle restarts. Approval, user-input,
+    stale-instance, lifecycle, repository, and epic-acceptance attention remain
+    in the console without a page. Every durable attention ID fits the
+    128-character console attention identity bound. A top-level escalation
+    derives its external attention ID as `escalation:` plus the SHA-256 digest
+    of the lossless instance, owner-session, and escalation tuple.
+
+    Each stable condition owns a positive sequence of incident occurrences. The
+    first occurrence uses the deterministic digest of the source attention
+    identity. Each later occurrence uses a deterministic digest of that
+    identity and its occurrence number. The incident runtime persists the
+    number and admits at most one nonterminal occurrence for a condition.
+    Reconciliation and restart reuse that nonterminal occurrence. A `done` or
+    `failed` runtime remains immutable audit history; a later breaker allocates
+    the next number and a distinct lifecycle, session, action, effect, and
+    report identity. At most three incidents are active and the per-code
+    cooldown contains correlated storms; suppression never resolves or
+    replaces source attention. Dead and stalled session cards offer an operator
+    Resolve fallback and link to the most recently admitted incident
+    occurrence. An incident execution failure stays on the operator-only floor
+    and cannot recursively admit another incident.
+
+    The incident blueprint has implement, review, and finalize wait stages and
+    no board-status map or board-writing mechanical node. Its handoff carries
+    the operator-configured workspace root, organization blueprint repository,
+    board and Heddle state locations, T3 endpoint, GitHub issue sink, approval
+    threshold, and the observed source condition. The agent may change any
+    blueprint, Heddle or T3 configuration, Heddle or T3 data, provider enablement,
+    installed component version, or service process whose resulting condition
+    it can observe before closure. A component-version change is a permitted
+    production workaround; repository version strings record qualification and
+    do not pin production.
+
+    The authority is bounded by prohibitions rather than an allowlist. The
+    incident agent must not suppress its own condition detection, read, move, or
+    write credentials or secret-bearing material, push a real remote or write a
+    default branch, degrade attention, incident, or notification machinery, or
+    take an effect it cannot observe before closure. Implement rechecks the
+    condition as `live`, `cleared`, or `undetermined`, records a root-cause
+    analysis, and proposes GitHub issue, operator escalation, or production
+    mutation actions with severity. Review accepts the diagnosis or returns
+    findings to implement. Exhausting three rejected reviews raises floor
+    attention and leaves the source condition unresolved.
+
+    Every incident stage uses the ordinary pinned stage-session binding,
+    durable occurrence identity, bootstrap, and T3 dispatch path. Finalize
+    starts only for an accepted diagnosis. A production mutation at or above
+    the configured `low`, `moderate`, `high`, or `critical` threshold requires
+    proposal-digest-bound operator approval before the action-capable session
+    starts. A lower-severity mutation proceeds unattended; a missing or unknown
+    severity fails closed to approval. Heddle records mutation intent before
+    activation and completion afterward, so restart retains one occurrence.
+
+    Code changes to Heddle or the T3 fork are reportable but not executable by
+    an incident. They take effect only after a build and deployment the running
+    service cannot observe. The accepted GitHub `owner/name` sink is
+    operator-owned configuration. The finalizer includes the incident identity,
+    checks for an existing identity before creation, and records delivery in its
+    durable local result. If outward delivery fails, finalization retains a
+    task-scoped `incident-report-undelivered` attention and sends it through the
+    existing durable notification route; the repaired incident does not fail
+    and the report is not dropped.
+
+    Finalization requires a fresh observed `conditionState: cleared` result
+    before it resolves the source attention with the incident identity as
+    justification. The resolved row and terminal incident occurrence remain
+    durable. A configuration workaround alongside a code fix is applied and
+    verified before the code finding is reported. With no observable
+    workaround, the incident reports and escalates, and the task remains
+    blocked. Known correlation tokens, configured secrets, and
+    credential-bearing URLs are redacted before persistence and handoff
+    assembly. The Console links the source condition to its most recently
+    admitted incident occurrence.
+
+    Scheduler-pass health is one durable failure episode at a time. A failed
+    pass with no unrecovered scheduler episode opens the next positive episode
+    and uses `production:scheduler-pass-failed:global:episode:<number>` as its
+    stable attention ID. Every failed pass in that episode appends its exact
+    structured error to immutable scheduler-pass history. The active card
+    retains the episode's first diagnostic, so differing error details do not
+    create additional active cards; the active scheduler-pass bound is one.
+    Resolve acknowledges that card through the standard production-error
+    action. Its replay boundary is the latest durable failed-pass sequence. A
+    later failed pass in the same episode reopens the card and advances that
+    boundary. Replay of a completed Resolve from an earlier sequence is a
+    no-op; a Resolve projected for the current sequence can acknowledge the
+    card, so resolution cannot mask a recurring fault. Only completion of the
+    whole production pass appends the episode's recovery event and resolves
+    every active scheduler-pass card.
+    This also retires a legacy error-fingerprint card. A later failure opens a
+    new numbered episode and attention ID. Prior attention rows remain durable;
+    ordered failure and recovery events remain inspectable and immutable across
+    recurrence and restart.
+
+    Adapter persistence rejects a different logical recipient or message
+    fingerprint under the same stable ID. It keeps the application credential
+    in a separate attempt fingerprint. That attempt fingerprint can change only
+    after an exact rejection occurrence receives the operator's Retry
+    notification disposition. Attention insertion is idempotent. Pushover delivery is
+    at-least-once: the provider has no idempotency or outcome-reconciliation
+    key, so pending intent is retried after restart. A process stop after
+    provider acceptance but before local completion can produce one duplicate
+    per ambiguous attempt.
+    The stable attention ID is local outbox and deep-link identity, not provider
+    deduplication. The escalation remains pending and answerable until the
+    accepted answer event is recorded. A pending escalation retains the
+    attention ID recorded by its open event; replay never remaps or deletes that
+    identity. If a persisted identity is outside the console bound, routing
+    fails with the bound diagnostic while the pending escalation remains durable
+    for explicit state repair. An accepted console disposition invokes the
+    canonical escalation or T3 action
+    before recording the attention entry as resolved. The production adapter
+    records the exact action and answers as durable intent. Request responses use
+    the attention ID as the T3 command identity; escalation answer delivery uses
+    identities derived from its occurrence. The adapter reconciles pending local intent against the
+    exact request and outcome in authoritative T3 resolved activity history. A
+    matching approval decision or user-input answer completes locally without a
+    second response; a mismatch fails closed. Heddle approval reject maps to T3
+    provider decision decline. The adapter records completion after accepted
+    effect success and then resolves the queue entry. A failed effect remains
+    unresolved; a changed pending action fails closed. Resolved entries leave
+    the current console catalog but retain their stable identity for restart
+    deduplication.
+
+    Pushover completion requires HTTP 200 and provider status 1. Network,
+    redirect, server, and non-4xx malformed-response failures are retryable.
+    HTTP 4xx and a parsed HTTP 2xx response without provider status 1 are
+    permanent for unchanged input. Permanent provider categories are allowlisted
+    as application credential rejected, recipient rejected, quota exceeded, or
+    request rejected. Classification uses only HTTP status and documented field
+    presence; raw response bodies, provider request identifiers, credentials,
+    devices, and error text are never persisted or emitted. Each classified
+    failure raises task-scoped production-error attention and is contained at
+    its notification route, so later pending routes and instance reconciliation
+    continue in the same pass. Retryable failures retain pending intent and a
+    durable retry deadline at least five seconds after the failed attempt
+    completes. Earlier passes preserve scoped visibility without another
+    provider call. Permanent failures retain their safe category and
+    occurrence and make no further transport call until the exact Retry
+    notification action authorizes recovery of that occurrence. Another
+    permanent response creates a new occurrence; a retryable response follows
+    the durable deadline without another action. A newly raised delivery-failure
+    entry is the current projection for its stable notification and resolves
+    only older notification-delivery entries for that stable ID. A permanent
+    rejection therefore leaves no earlier automatic-retry guidance visible;
+    failures for other notifications and the original escalation or pageable
+    attention remain unresolved. Neither failure state nor recovery changes or
+    answers the original escalation attention.
+
+    An optional non-secret Pushover recipient label lets Heddle persist the
+    human-readable recipient and exact intended message with each rejected
+    occurrence. The attention API exposes those verification details before
+    offering Retry notification, while keeping the notification stable ID and
+    provider credentials private. A rejected occurrence without both details,
+    including a row that cannot be reconstructed after upgrade, explains that
+    verification is unavailable and offers no Retry action. The occurrence,
+    persisted details, attention fingerprint, and action contract bind the
+    displayed values to the exact recovery action; stale actions remain
+    rejected.
+
+    A legacy pending combined fingerprint upgrades when it exactly matches the
+    current combined message. A mismatch is not assumed to be credential-only:
+    it makes no transport call and raises an exact legacy-intent-unverifiable
+    recovery occurrence. Its Retry notification disposition explicitly adopts
+    the current secure route while retaining the original stable attention ID.
+    A pending two-fingerprint intent from the preceding level-less message
+    shape upgrades in place only when both prior fingerprints match the current
+    message without its level. A pending two-fingerprint task notification whose
+    route is the exact legacy `scope=task:<id>` form also upgrades to the
+    canonical split lifecycle route when its task identity, stable attention
+    identity, and every other fingerprint field match. The current level and
+    canonical route then become part of both new fingerprints; any other
+    disagreement remains rejected.
+
+    Session observation and session page delivery fail independently. An
+    observer rejection raises the stable task-scoped production error
+    `session-observation-failed`. A failed Pushover effect after successful
+    observation raises the distinct stable task-scoped production error
+    `session-page-delivery-failed`. Classified notification failures instead use
+    the notification-delivery production-error and recovery contract above. All
+    delivery failures leave the original Pushover intent pending under its
+    pageable attention ID; none relabels a notification transport failure as a
+    T3 observation failure.
+    A pending production-error page is replayed before each scheduler pass.
+    Retryable transport failures honor their durable retry deadline across
+    restart; the durable attention remains active while earlier passes contain
+    the delivery error.
+
+    Harness question tools serve every session. T3 provider adapters map
     those tools to pending-user-input state on the thread shell,
     answerable from the UI or over the dispatch API, and resolution
     is an event in thread history, so every watching client clears
-    the prompt regardless of who answered. Assistive task types run
-    only on harnesses that provide a question tool, verified as a
-    dispatch precondition, and Heddle dispositions any pending
-    question before stopping a session, because a stop settles
-    pending questions with empty answers.
+    the prompt regardless of who answered. Question support is a T3 runtime
+    capability, not a Heddle provider allowlist or selection precondition.
+    Heddle rejects stop while a session owes a pending answer. Adjudication has
+    no execution timeout. Its approved tool completes adjudication; durable
+    native withdrawal or loss of the asking session cancels the occurrence
+    without an answer or decline. Session errors use normal escalation policy.
   observation: >
     Two channels report on running work, split by who holds the truth.
     Semantic outcomes — the verdict of a review, the completion of an
@@ -186,26 +1047,92 @@ proposed-design:
     from polling T3's `GET /api/orchestration/shell` snapshot and
     deriving each thread's phase (running, completed, waiting for
     approval, failed) with the same derivation T3's own clients use.
-    A session that ends, fails, or stalls without advancing is a
-    designed-for transition: after its threshold, the instance moves
-    to an attention state and notifies the operator. Pending T3
-    approvals and user-input requests surface through the same poll
-    into the attention queue. Interrupts Heddle issues are recorded as
-    facts on the instance at the moment of issue, so instance state
-    never depends on reconstructing intent from session state.
+    A present, nonfailed thread whose session owns a pending Heddle escalation
+    has the durable `awaiting_answer` phase. It raises no ended or stalled
+    attention and clears earlier liveness attention. An absent or failed thread
+    remains genuinely dead and follows the ordinary attention and incident path.
+    A session that is not turning and has not advanced is poked to finish its
+    work or advance. The phase controls this decision: running and starting
+    sessions are not poked based on the stalled liveness bucket. A session
+    owing answers receives its pending question sets again; an asker waiting
+    on its own question remains blocked until its answer arrives. Pokes have
+    durable occurrence identities and resume after restart without duplication.
+    Configurable liveness thresholds retain the ordinary session-error path.
+    Pending T3
+    approvals and user-input requests surface through the same poll. Heddle
+    folds request and resolution activities by request ID and creates one
+    durable attention record for each unresolved approval. Question routing owns
+    each unresolved user-input request and creates attention only at the operator
+    tier. Its actions retain
+    the exact T3 request ID. Approval attention uses the optional bounded ACP
+    tool title from T3 when present and otherwise keeps the generic message; it
+    does not infer display metadata from request details, arguments, command
+    text, or raw payload. A user-input attention record carries the exact typed
+    question catalog from the T3 request activity; consumers do not reconstruct
+    prompts, options, or answer cardinality from thread messages or shell
+    flags. Heddle dispositions every pending approval and user-input
+    request before stopping a session, because stop settles unanswered
+    questions with empty answers. Any request that is currently pending may be
+    responded to, not only the most recent one of its kind, because requests
+    stack up when a provider forgets an earlier one and responding to that
+    request is what clears it. Interrupt, question-disposition, stop,
+    and archive commands use replayable event-before-effect records;
+    intent is durable before dispatch and a completed effect is not
+    dispatched again.
+
+    Every stage thread remains in T3's normal shell while its recorded
+    lifecycle stage is active or operator participation remains. T3
+    completion never authorizes a semantic transition or cleanup. Heddle
+    dispatches `thread.archive` only when the stage's recorded `advance`
+    operation is complete, the T3 thread has no foreground or background
+    liveness, and no queued turn, actionable proposed plan, approval,
+    user-input request, Heddle escalation, or canonical child conversational
+    handoff remains. Queued-turn evidence is a latest user-message timestamp
+    newer than every recorded timestamp on the latest turn; unmatched or
+    malformed evidence fails closed. The recorded `threadId` and archive facts
+    make this cleanup idempotent. Heddle does not snooze, settle, pin, or
+    reorder active or operator-blocked work.
+
+    The production scheduler invokes this observer for each persisted session
+    occurrence after reconciliation. This retains observation history when the
+    accepted lifecycle enters another wait stage. Observation thresholds and
+    reconciler stage thresholds come from the workspace configuration and
+    survive restart.
   mechanical-nodes: >
     Every step with a single correct outcome executes as a
     deterministic blueprint node running real code: creating the
-    worktree and branch, taking the gitpr review snapshot, merging to
-    the epic branch on approval, deleting merged branches and
+    worktree and branch, creating the gitpr review record and persisting its
+    exact source/base basis, integrating with
+    the epic branch on approval, deleting integrated branches and
     worktrees, mirroring board status, and filing records. The merge
-    node enforces the review contract mechanically: snapshots are
-    immutable and verdicts binary, an approved snapshot merges from
-    its exact head without a merge commit, and any drift between
-    snapshot and branch head routes the instance back to remediation.
-    A mechanical node that cannot complete — a merge conflict, a dirty
-    worktree — moves the instance to attention rather than retrying an
-    agent into the failure.
+    node is reachable only from the review wait stage's approve disposition.
+    Each mechanical effect resolves its mirror status from the running
+    instance's pinned blueprint and validates the complete declared map against
+    the live board configuration before it performs the effect.
+    It records an accepted gitpr schema-2 review event for the persisted exact
+    source/base basis and verifies that exact event. When the accepted source
+    and base heads are equal, it closes the gitpr record as integrated with the
+    base branch and exact head as closure evidence without invoking merge.
+    Otherwise it asks gitpr to merge the accepted source.
+    A merged record is accepted only when its merged event is accepted for that
+    same basis and the base contains the exact source head. A closed record is
+    accepted only for the equal-head case when its latest event is accepted for
+    that same basis and its integrated closure names the exact base branch and
+    head; the live base must still equal that reviewed head on replay and
+    cleanup. Review events are immutable and verdicts binary. Any source or
+    base drift, or a snapshot whose
+    reviewed source does not contain its reviewed target, routes the instance
+    back to remediation with a distinct typed cause and the exact reviewed and
+    current basis. The latter requires a common history; unrelated histories
+    remain a visible mechanical failure. The pinned remediation handoff directs
+    the agent to rebase the source onto that exact current target without a
+    merge commit, validate, commit only task-scoped changes, and prove target
+    ancestry and a clean worktree before advancing. A later target movement
+    repeats the drift loop under the same exact-basis checks. Reviewed history
+    must contain no merge commit.
+    A mechanical failure with no valid integration cause — an unrelated
+    history, a dirty worktree, or a command failure — moves the instance to
+    attention rather than retrying an agent into the failure.
   human-console: >
     The console presents three views of the same state, at three
     altitudes. A kanban projection answers where everything stands:
@@ -222,34 +1149,114 @@ proposed-design:
     with the reconciler as their single writer. Task authoring and
     editing remain in kanban-md.
 
-    A workspace can host several epics and standalone tasks at once,
-    so every view carries a scope filter: all work, one epic (its
-    children and its own lifecycle), or one task. The filter is part
-    of the console URL, so a pushover deep link lands already scoped
-    to the entry that raised it.
+    A workspace can host several epics and standalone tasks at once.
+    The board and dependency graph share one URL scope filter: all work
+    or one root epic with its children. The scope control lists only
+    those choices. A lifecycle route identifies its positive task ID in
+    a separate URL parameter while retaining the current board scope.
+    New task-scoped attention links use
+    `?view=lifecycle&task=<id>&scope=all&attention=<attention-id>`: the
+    lifecycle target is separate from the all-work board scope and the stable
+    attention identity remains the deep-link focus. All-work and epic attention
+    links retain their scope-shaped routes. Production link generators do not
+    emit a task-shaped scope.
+    Its BOARD and DEPENDENCIES links omit the lifecycle target, so either
+    projection is identical before and after the lifecycle detour. A URL
+    with a positive task-shaped scope is normalized to the lifecycle for
+    that task with all-work board scope. The board and dependency
+    projections poll their existing read endpoints every second without
+    changing the current scope or viewport position. The header reports
+    LIVE BOARD while updates arrive and BOARD STALE when no update arrives
+    within two polling intervals.
+
+    The lifecycle view consumes one canonical read model assembled
+    outside the viewer from the production composition's durable reconciler
+    runtime, persisted instance, pinned Git blueprint blob, lifecycle execution
+    ID sequence, and Flowcraft histories. It identifies the persisted instance
+    and carries the raw flowcraft events grouped in recorded execution order
+    behind one monotonic cursor. An initial
+    read replays the complete persisted history; later reads contain
+    only a contiguous tail. The view fails closed on cursor gaps,
+    overlaps, instance or blueprint identity drift, and events that name
+    nodes outside the pinned blueprint. It renders the current stage,
+    repeated node traversals, and the same ordered events in an adjacent
+    history panel without becoming an authority for blueprint or event
+    state. Deployments without a composed lifecycle reader return an
+    unavailable response instead of substituting partial state.
+
+    Durable instance events remain the exact recovery authority and may
+    contain correlation tokens. The production console source supplies the
+    current durable token catalog only to the HTTP projection boundary. The
+    console and deployed event feed omit complete `instance:created` and
+    `instance:updated` state payloads. For `session:activated`, the projection
+    validates the activation identity and token-free canonical Markdown identity
+    front matter while preserving the system prompt and handoff body. Invalid,
+    inconsistent, duplicated, or
+    unrecognized activation structure yields only a fixed unavailable marker.
+    Every projected event is then checked structurally against the token
+    catalog. A token in any other event payload makes the complete read
+    unavailable. The same structural check gates the complete attention and
+    lifecycle reads because session-authored messages, questions, and
+    lifecycle outputs can repeat a token. A gated read returns a fixed error
+    with no protected value. These checks never mutate the durable event,
+    attention, lifecycle history, or bytes used for restart replay.
 
     An attention queue overlays every view and lists each instance
     awaiting a human: adjudications, escalations, stale work, UAT,
     and pending T3 approvals. Each entry offers the dispositions
     valid for its state, and the buttons call the same actions the
     MCP tools call — humans and agents disposition through one
-    contract. Pushover notifications deep-link to the entry. The
+    contract. Each card heading combines its human-readable attention kind
+    with its all-work, epic, or task scope. Stable attention, notification,
+    fingerprint, and session identifiers remain action and deep-link data and
+    never become card headings. Each projected entry has a stable identity, an explicit
+    authority and target for every offered action, and a deterministic
+    fingerprint of its current state and actions. The action endpoint
+    re-reads the canonical unresolved entry and accepts only the offered
+    action and matching fingerprint before it delegates through an injected
+    action port. A deployment without that port fails closed for actionable
+    entries. Every production error offers Resolve through this port. The port
+    records and completes one replay-safe durable intent before it resolves the
+    entry; resolution retains the durable record and removes it from the active
+    catalog. Other informational attention has no invented disposition. Pushover
+    notifications preserve scope and deep-link focus to the stable entry. The
     operator can equally disposition conversationally: any agent
     session configured with Heddle's MCP server can act on their
     behalf. T3's own UI remains the surface for conversational
     participation in live sessions.
+
+    Production assembles this overlay from the unresolved durable attention
+    queue and canonical reconciler runtime identity. Runtime records provide the
+    task scope. Question options retain their recorded labels. Approval actions
+    target the recorded request, session, and thread. User-input questions map
+    the recorded T3 question to the console prompt, preserve optional headers and
+    option metadata, and submit option labels. Every question offers options and
+    a text box. Typing clears selections and selecting clears text. Submission
+    requires an answer and retains reasoning for every question. The action port delegates to the
+    existing escalation coordinator and session observer; the viewer owns no
+    disposition or queue state. Pushover task links use the canonical split
+    lifecycle route above. Their task target comes from an explicit attention
+    scope or the same runtime-derived task scope instead of parsing instance
+    identity.
   viewer: >
     The canvas is built from the vendored `@flowcraft/tldraw`
     primitives — `EventBus`, `useExecutionBridge`, `FlowcraftSync`,
     `blueprintToCanvas` — fed by Heddle's event stream rather than an
     in-tab runtime. Replaying an instance's persisted event log
     renders its exact history; tailing the log renders it live. The
+    console serves its generated React and tldraw bundle from the
+    installed package and does not depend on a workspace-only
+    `@flowcraft/tldraw` registry package. The console canvas is
+    read-only and hides editing controls. Its content security policy
+    keeps scripts and style elements self-hosted; tldraw's generated
+    geometry requires inline style attributes, while object content,
+    base remapping, and framing remain denied.
     same components edit blueprints: canvas changes round-trip to the
     blueprint JSON, so the diagram the operator edits is the artifact
     the interpreter runs.
   persistence-and-recovery: >
     Instance state (serialized flowcraft context, handoffs, todo
-    state, correlation tokens) and the append-only event history live
+    state, correlation tokens, pinned agent-name theme, and name assignments) and the append-only event history live
     in SQLite on a workspace bind mount. Advancing an instance loads
     its context, resumes, asserts the post-state, and persists — each
     step is an ordinary process invocation, so the service holds no
@@ -257,13 +1264,112 @@ proposed-design:
     rebuild, startup replays event history to reconstruct instances,
     and the reconciler compares recovered instances against live T3
     threads: a stage whose session no longer exists is retried cold by
-    replaying its bootstrap.
+    replaying its stored bootstrap and resolved session binding. Recovery never
+    retargets an existing occurrence through current provider configuration.
+
+    A top-level stage-session runtime row owns its immutable resolved binding.
+    A delegated todo assignment owns the same binding shape for its child.
+    Runtime instance projection joins both stores by the owning lifecycle
+    instance and exposes only the binding's non-secret identity fields. A
+    pre-release stage-session row without a resolved binding fails recovery
+    with an explicit state-directory reset instruction; Heddle does not infer
+    the missing authority from current configuration.
+
+    The same database stores canonical scheduling intent, dynamic-task creation
+    intents and their append-only pending/completed evidence, durable attention
+    entries with their unresolved or resolved queue lifecycle, and stable-ID
+    adapter intent and completion. Dynamic-task rows survive restart and are
+    the only authority that a board task was created by Heddle; their board
+    tags are only exact-match evidence. These records make instance start,
+    session activation, dynamic-task creation, attention routing, action
+    replay, and completed-notification replay idempotent without introducing
+    another lifecycle or attention authority. A pending Pushover notification
+    is retried at-least-once.
   deployment: >
     Heddle installs as a devcontainer feature in each workspace
-    container, following the t3code-server pattern: an s6-supervised
-    service, a caddy route with a workspace DNS name serving the
+    container as an s6-supervised service with a caddy route serving the
     console and the MCP endpoint, and its state directory bind-mounted
     from a workspace-specific host path so state outlives rebuilds.
+    The Feature and Heddle package are independent release units. The
+    source-free Feature installs a prebuilt npm-pack tarball from a
+    heddle@* GitHub release selected by its version option, or from an
+    operator-supplied https URL or absolute path. An optional SHA-256
+    digest binds that artifact before installation. Resolution, download,
+    digest, and native-prebuild failures stop before service registration;
+    the Feature installs no compiler and provides no source-build fallback.
     One Heddle instance serves one workspace — its board, its
     worktrees, its T3 server — and each workspace container is a
     complete, self-contained installation.
+
+    The deployed entry point reads required `config.yml` from the
+    operator-owned configuration directory selected by `--config`, then
+    `HEDDLE_CONFIG`, then `/home/vscode/.heddle`. That file is the only
+    authority for board, state, server, T3, Pushover, pacing, session,
+    threshold, product, project, and secret settings. Other `HEDDLE_*`
+    values do not affect deployed configuration. Invalid configuration fails
+    before composition or network bind and reports a secret-redacted first
+    validation failure. The fixed loopback server port is restricted to 1
+    through 65535 so the same value can be projected into Caddy. The operator
+    owns the file with mode `0600`; Heddle never writes or reformats it.
+
+    The configuration directory also contains the organization blueprint clone
+    at the hard-coded `blueprints` subdirectory. It is not a `config.yml` field.
+    Startup requires an exact Git worktree whose current branch tracks
+    `origin`. Fetch updates remote-tracking refs only. A dirty, unpushed,
+    behind, or diverged branch raises durable repository attention; Heddle
+    never merges, rebases, or resets it automatically. That attention names the
+    local and origin commits and takes its stable identity from the repository
+    condition code and a digest of the condition code, local commit, and origin
+    commit. One unchanged condition keeps one identity across passes, and the
+    repository attention identity stays inside the 128-character console
+    attention identity bound. Each successful pass replaces every other
+    repository attention, including a stale identity outside the bound. The
+    deployed server returns 503 while the first pass runs and serves console
+    reads only after that pass completes. A repository state read that throws
+    leaves existing repository attention untouched; on the first pass, this
+    failure prevents Heddle from starting.
+
+    The root s6 launcher validates the same file, derives only its nonsecret
+    state mount target and loopback host and port, writes the Caddy snippet,
+    completes a bounded Caddy reload handshake, and then starts Heddle as the
+    service user from the same directory. The handshake removes the startup
+    race between snippet creation and watcher registration; the Caddy watcher
+    owns later reloads. Configuration changes require restart. The Feature
+    exposes no second board, state, or port option.
+
+    Configured provider usage is a separate bounded non-shell executable with
+    a closed versioned five-hour-window JSON protocol. It is required exactly
+    when provider budgets are nonempty; an empty budget catalog uses a
+    throw-if-called source. Each request identifies the resolved T3 provider
+    instance while the pacing request retains its selected alias, so a candidate
+    that recovers after startup still receives the alias's configured limit.
+    Usage-service authentication belongs to the executable and never enters
+    Heddle arguments or output. Provider CLI authentication belongs to T3.
+
+    The installation uses one configured shared T3 project for ad-hoc tasks
+    and one Heddle-managed T3 project per started epic. Managed projects remain
+    available after epic completion so their archived stage threads can be
+    inspected. The product inventory is the repository and project-routing
+    authority. Existing repo-first worktrees remain usable; Heddle does not
+    move or rewrite them.
+
+    The deployment server accepts the canonical production composition and
+    shares its board, persistence, console state, console action port,
+    repository blueprint editor, MCP handler, scheduler, and shutdown lifetime.
+    The deployed service reserves the configured loopback endpoint before it
+    constructs or starts that composition. The bound endpoint remains unready
+    with a 503 response until composition startup succeeds. A bind failure
+    therefore cannot mutate the board, create production persistence, or
+    contact T3 or Pushover.
+    The editor uses the same organization blueprint repository and mechanical
+    effect registry as the lifecycle engine. A validated replace, exact-path
+    commit, and push execute under the repository writer lease. The service-user
+    SSH agent or scoped deploy key supplies Git credentials outside Heddle
+    configuration. The supported service-user SSH-agent path is qualified by a
+    successful dry-run push to a unique scratch ref that leaves no durable
+    remote ref. A failed push retains the local commit and raises durable
+    attention identifying that commit. Supplying separate board, console state,
+    console action, or blueprint-editor authorities with a production
+    composition is rejected. Its lifecycle reader projects the canonical
+    instance, pinned blueprint, and Flowcraft histories; it does not own a
+    parallel blueprint or event store.

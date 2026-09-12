@@ -1,0 +1,24 @@
+{
+  "$schema": "https://wyrd.company/heddle/todo-template.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "items": [
+    {
+      "id": "orient",
+      "text": "Orient on the review contract for {{task.title}}"
+    },
+    {
+      "id": "inspect",
+      "text": "Inspect the reviewed change"
+    },
+    {
+      "id": "validate",
+      "text": "Validate the reviewed behavior"
+    },
+    {
+      "id": "disposition",
+      "text": "Record findings or approve the change"
+    }
+  ]
+}
