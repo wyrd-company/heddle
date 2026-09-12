@@ -10,7 +10,10 @@ set -euo pipefail
 repository="$(git rev-parse --show-toplevel)"
 accepted_head="$(git rev-parse HEAD)"
 source_configuration="${repository}/.devcontainer/qualification/devcontainer.json"
-published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:1"
+feature_version="$(jq -r '.version' "${repository}/.devcontainer/features/heddle/devcontainer-feature.json")"
+feature_major="${feature_version%%.*}"
+feature_minor="${feature_version%.*}"
+published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:${feature_major}"
 registry_image="registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
 configuration=""
 scratch_root="${HEDDLE_QUALIFICATION_SCRATCH_ROOT:-/workspaces/mnt}"
@@ -460,12 +463,15 @@ fi
 cat "${publication_log}"
 publication_result="$(tail -n 1 "${publication_log}")"
 jq -e \
-    '.heddle.version == "1.0.0" and
-     .heddle.publishedTags == ["1", "1.0", "1.0.0", "latest"] and
+    --arg version "${feature_version}" \
+    --arg major "${feature_major}" \
+    --arg minor "${feature_minor}" \
+    '.heddle.version == $version and
+     .heddle.publishedTags == [$major, $minor, $version, "latest"] and
      (.heddle.digest | test("^sha256:[0-9a-f]{64}$"))' \
     <<<"${publication_result}" >/dev/null
 
-dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:1"
+dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:${feature_major}"
 jq -e --arg reference "${published_feature_reference}" \
     '[.features | keys[] | select(. == $reference)] | length == 1' \
     "${source_configuration}" >/dev/null

@@ -2,12 +2,12 @@ $schema: https://intentional.foo/schemas/config.yml
 contract: contract-1
 settings:
   internal-dependency-bump: patch
-  pre-1-0-bump-mapping: compatibility
+  pre-1-0-bump-mapping: component
 discovery:
   managed-paths:
     - detector: devcontainer-feature
       path: .devcontainer/features/heddle/devcontainer-feature.json
-      release-unit: heddle
+      release-unit: heddle-feature
     - detector: npm-package
       path: package.json
       release-unit: heddle
@@ -22,6 +22,13 @@ release-units:
       - adapter: npm
         file: package.json
         mode: committed
+    tags:
+      primary:
+        role: primary
+        template: "{id}@{version}"
+  heddle-feature:
+    path: .
+    projections:
       - adapter: json
         file: .devcontainer/features/heddle/devcontainer-feature.json
         mode: committed

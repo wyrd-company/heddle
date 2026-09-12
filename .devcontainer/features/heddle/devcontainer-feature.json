@@ -1,6 +1,6 @@
 {
   "id": "heddle",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "name": "Heddle",
   "description": "Installs Heddle and configures one s6-supervised workflow service for the workspace.",
   "documentationURL": "https://github.com/wyrd-company/heddle/tree/main/.devcontainer/features/heddle",

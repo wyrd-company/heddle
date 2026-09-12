@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
 const featureDirectory = ".devcontainer/features/heddle";
-const publishedReference = "ghcr.io/wyrd-company/heddle/heddle:1";
+const publishedReference = "ghcr.io/wyrd-company/heddle/heddle:0";
 
 describe("Heddle devcontainer feature publication", () => {
   it("keeps viewer libraries out of the eight runtime dependencies", async () => {
@@ -63,7 +63,7 @@ describe("Heddle devcontainer feature publication", () => {
           "utf8",
         ),
       ) as { id: string; version: string };
-      expect(manifest).toMatchObject({ id: "heddle", version: "1.0.0" });
+      expect(manifest).toMatchObject({ id: "heddle", version: "0.0.0" });
       await expect(
         readFile(join(collection, "sibling-feature"), "utf8"),
       ).resolves.toBe("preserve me");
@@ -217,7 +217,7 @@ describe("Heddle devcontainer feature publication", () => {
       documentationURL:
         "https://github.com/wyrd-company/heddle/tree/main/.devcontainer/features/heddle",
       id: "heddle",
-      version: "1.0.0",
+      version: "0.0.0",
     });
     expect(configuration.features).toHaveProperty(publishedReference);
     expect(configuration.features).not.toHaveProperty("../features/heddle");
@@ -225,7 +225,7 @@ describe("Heddle devcontainer feature publication", () => {
     expect(operatorGuide).toContain(`\`${publishedReference}\``);
   });
 
-  it("publishes Features after main CI and package assets only for heddle tags", async () => {
+  it("publishes each release unit only from its own tag namespace", async () => {
     const workflow = parse(
       await readFile(".github/workflows/cd.yml", "utf8"),
     ) as {
@@ -244,29 +244,23 @@ describe("Heddle devcontainer feature publication", () => {
       on: {
         push: { tags: string[] };
         workflow_dispatch: unknown;
-        workflow_run: {
-          branches: string[];
-          types: string[];
-          workflows: string[];
-        };
+        workflow_run?: unknown;
       };
       permissions: Record<string, never>;
     };
 
     expect(workflow.permissions).toEqual({});
     expect(workflow.on.workflow_dispatch).toBeDefined();
-    expect(workflow.on.workflow_run).toEqual({
-      branches: ["main"],
-      types: ["completed"],
-      workflows: ["CI"],
-    });
-    expect(workflow.on.push.tags).toEqual(["heddle@*"]);
+    expect(workflow.on.workflow_run).toBeUndefined();
+    expect(workflow.on.push.tags).toEqual(["heddle@*", "heddle-feature@*"]);
 
     const publish = workflow.jobs["publish-features"];
-    expect(publish?.if).toContain("github.event.workflow_run.event == 'push'");
-    expect(publish?.if).toContain(
-      "github.event.workflow_run.head_repository.full_name == github.repository",
-    );
+    expect(publish?.if).toContain("github.event_name == 'push'");
+    expect(publish?.if).toContain("refs/tags/heddle-feature@");
+    expect(publish?.if).toContain("github.event_name == 'workflow_dispatch'");
+    expect(publish?.if).toContain("github.ref == 'refs/heads/main'");
+    expect(publish?.if).not.toContain("workflow_run");
+    expect(publish?.if).not.toContain("refs/tags/heddle@'");
     expect(publish?.permissions).toMatchObject({
       contents: "write",
       packages: "write",
@@ -285,6 +279,7 @@ describe("Heddle devcontainer feature publication", () => {
 
     const packageAsset = workflow.jobs["publish-package-asset"];
     expect(packageAsset?.if).toContain("refs/tags/heddle@");
+    expect(packageAsset?.if).not.toContain("heddle-feature@");
     expect(packageAsset?.permissions).toEqual({ contents: "write" });
     expect(packageAsset?.steps).toContainEqual(
       expect.objectContaining({ run: "npm run build" }),

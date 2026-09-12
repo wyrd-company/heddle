@@ -251,12 +251,18 @@ describe("Heddle devcontainer feature", () => {
       'chmod 0600 "${config_directory}/config.yml"',
     );
     expect(featureQualification).toContain(
-      'published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:1"',
+      'feature_version="$(jq -r \'.version\' "${repository}/.devcontainer/features/heddle/devcontainer-feature.json")"',
+    );
+    expect(featureQualification).toContain(
+      'feature_major="${feature_version%%.*}"',
+    );
+    expect(featureQualification).toContain(
+      'published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:${feature_major}"',
     );
     expect(featureQualification).toContain("devcontainer features publish");
     expect(featureQualification).toContain("--namespace wyrd-company/heddle");
     expect(featureQualification).toContain(
-      'dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:1"',
+      'dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:${feature_major}"',
     );
     expect(featureQualification).toContain(
       '    "/opt/heddle-package.tgz" \\\n    "${package_digest}"',

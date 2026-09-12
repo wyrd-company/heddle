@@ -20,7 +20,7 @@ rejects a second live composition for the same board directory.
 ## Dev Container Feature distribution
 
 Install the service with the versioned Feature reference
-`ghcr.io/wyrd-company/heddle/heddle:1`. The `wyrd-company/heddle` collection
+`ghcr.io/wyrd-company/heddle/heddle:0`. The `wyrd-company/heddle` collection
 namespace follows the source repository identity, and `heddle` is the Feature
 ID. The major-version reference accepts compatible Feature updates while the
 Feature manifest retains the complete semantic version.

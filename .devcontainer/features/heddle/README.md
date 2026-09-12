@@ -11,7 +11,7 @@ version is recorded in `deployment/supported-versions.json`. When `dnsName` is
 set, add the Wyrd Company Caddy Feature to the same devcontainer.
 
 The supported Feature reference is
-`ghcr.io/wyrd-company/heddle/heddle:1`. The published Feature contains the
+`ghcr.io/wyrd-company/heddle/heddle:0`. The published Feature contains the
 installer but no Heddle source or package tarball. The installer downloads the
 prebuilt `npm pack` tarball from the selected `heddle@*` GitHub release, verifies
 the optional digest, and installs its runtime dependencies. It does not use an
@@ -56,7 +56,7 @@ without replacing SQLite history:
 {
   "features": {
     "ghcr.io/wyrd-company/devcontainers/caddy:1": {},
-    "ghcr.io/wyrd-company/heddle/heddle:1": {
+    "ghcr.io/wyrd-company/heddle/heddle:0": {
       "configDirectory": "/home/vscode/.heddle",
       "dnsName": "heddle.workspace.example.test"
     }

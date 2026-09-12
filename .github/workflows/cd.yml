@@ -4,16 +4,13 @@ on:
   push:
     tags:
       - "heddle@*"
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+      - "heddle-feature@*"
   workflow_dispatch: {}
 
 permissions: {}
 
 concurrency:
-  group: cd-features-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: cd-features-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -67,10 +64,8 @@ jobs:
     name: Publish Dev Container Features
     if: >-
       ${{
-        (github.event_name == 'workflow_run' &&
-          github.event.workflow_run.conclusion == 'success' &&
-          github.event.workflow_run.event == 'push' &&
-          github.event.workflow_run.head_repository.full_name == github.repository) ||
+        (github.event_name == 'push' &&
+          startsWith(github.ref, 'refs/tags/heddle-feature@')) ||
         (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
       }}
     runs-on: ubuntu-latest
@@ -81,8 +76,6 @@ jobs:
     steps:
       - name: Check out the accepted source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Install Task
         uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
       - name: Stage the Feature collection
