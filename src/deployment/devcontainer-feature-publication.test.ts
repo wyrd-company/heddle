@@ -5,7 +5,7 @@
 
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -115,19 +115,15 @@ describe("Heddle devcontainer feature publication", () => {
 
   it("rejects a staged Heddle source tree", async () => {
     const directory = await mkdtemp(join(tmpdir(), "heddle-feature-source-"));
-    const collection = join(directory, "features");
+    const fixtureFeature = join(directory, "heddle");
 
     try {
-      await execute("bash", [
-        "scripts/deployment/stage-feature.sh",
-        collection,
-      ]);
-      const stagedFeature = join(collection, "heddle");
-      await mkdir(join(stagedFeature, "heddle-source"));
+      await cp(featureDirectory, fixtureFeature, { recursive: true });
+      await mkdir(join(fixtureFeature, "heddle-source"));
 
       await expect(
-        execute(join(stagedFeature, "verify-feature-source.sh"), [
-          stagedFeature,
+        execute(join(featureDirectory, "verify-feature-source.sh"), [
+          fixtureFeature,
         ]),
       ).rejects.toMatchObject({
         code: 1,
