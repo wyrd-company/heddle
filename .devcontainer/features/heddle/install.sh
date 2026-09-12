@@ -91,7 +91,7 @@ better_sqlite_directory="${preflight_prefix}/lib/node_modules/heddle/node_module
 prebuild_install="${preflight_prefix}/lib/node_modules/heddle/node_modules/.bin/prebuild-install"
 [ -x "${prebuild_install}" ] && [ -d "${better_sqlite_directory}" ] \
     || err "The Heddle package does not contain the expected better-sqlite3 prebuild installer."
-if ! "${prebuild_install}" --path "${better_sqlite_directory}" \
+if ! (cd "${better_sqlite_directory}" && "${prebuild_install}") \
     >"${install_log}" 2>&1; then
     cat "${install_log}" >&2
     platform="$(node -p '`${process.platform}-${process.arch}`')"
