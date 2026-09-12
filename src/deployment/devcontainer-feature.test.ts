@@ -89,6 +89,7 @@ describe("Heddle devcontainer feature", () => {
       "No matching better-sqlite3 prebuild exists for platform",
     );
     expect(installer).toContain("Node ABI ${node_abi}");
+    expect(installer).toContain('log "Registering the Heddle service"');
     const digestGuard = installer.indexOf("packageSha256");
     const serviceRegistration = installer.indexOf(
       "/etc/s6-overlay/s6-rc.d/heddle",
@@ -258,7 +259,7 @@ describe("Heddle devcontainer feature", () => {
       'dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:1"',
     );
     expect(featureQualification).toContain(
-      'packageSource: "/opt/heddle-package.tgz"',
+      '    "/opt/heddle-package.tgz" \\\n    "${package_digest}"',
     );
     expect(featureQualification).toContain("packageSha256: $package_digest");
     expect(featureQualification).toContain("! command -v python3");
@@ -270,7 +271,16 @@ describe("Heddle devcontainer feature", () => {
     );
     expect(
       featureQualification.match(/DOCKER_CONFIG="\$\{docker_config\}"/g),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
+    expect(featureQualification).toContain(
+      "expect_feature_install_failure \\\n    download-failure",
+    );
+    expect(featureQualification).toContain(
+      "expect_feature_install_failure \\\n    digest-mismatch",
+    );
+    expect(featureQualification).toContain(
+      "expect_feature_install_failure \\\n    missing-native-prebuild",
+    );
     expect(featureQualification).toContain("remove_owned_container() {");
     expect(featureQualification).toContain(
       "Refusing to remove container ${full_id}",

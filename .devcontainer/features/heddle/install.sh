@@ -119,6 +119,7 @@ fi
 [ -x /usr/local/bin/heddle-server ] \
     || err "Heddle was not installed at /usr/local/bin/heddle-server."
 
+log "Registering the Heddle service"
 printf -v quoted_config '%q' "${CONFIGDIRECTORY}"
 printf -v quoted_dns '%q' "${DNSNAME}"
 printf -v quoted_user '%q' "${service_user}"

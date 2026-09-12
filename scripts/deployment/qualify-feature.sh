@@ -22,6 +22,7 @@ publication_directory=""
 container_id=""
 registry_container_id=""
 qualification_base_image=""
+missing_prebuild_base_image=""
 t3_mock_error=""
 t3_mock_log=""
 t3_mock_pid=""
@@ -56,6 +57,23 @@ remove_owned_container() {
     docker rm --force "${full_id}" >/dev/null
 }
 
+remove_owned_image() {
+    local image_reference="$1"
+    local label_value
+
+    docker image inspect "${image_reference}" >/dev/null 2>&1 || return 0
+    label_value="$(
+        docker image inspect \
+            --format '{{index .Config.Labels "heddle.qualification"}}' \
+            "${image_reference}"
+    )"
+    if [ "${label_value}" != "${qualification_label}" ]; then
+        echo "Refusing to remove image ${image_reference}: heddle.qualification does not match ${qualification_label}." >&2
+        return 1
+    fi
+    docker image rm "${image_reference}" >/dev/null
+}
+
 cleanup() {
     local cleanup_failed=0
     local scratch_container
@@ -81,16 +99,12 @@ cleanup() {
             heddle.dry-publish \
             || cleanup_failed=1
     fi
-    if [ -n "${qualification_base_image}" ] \
-        && docker image inspect "${qualification_base_image}" >/dev/null 2>&1; then
-        base_label="$(docker image inspect --format '{{index .Config.Labels "heddle.qualification"}}' "${qualification_base_image}")"
-        if [ "${base_label}" != "${qualification_label}" ]; then
-            echo "Refusing to remove image ${qualification_base_image}: heddle.qualification does not match ${qualification_label}." >&2
-            cleanup_failed=1
-        else
-            docker image rm "${qualification_base_image}" >/dev/null || cleanup_failed=1
-        fi
-    fi
+    [ -z "${missing_prebuild_base_image}" ] \
+        || remove_owned_image "${missing_prebuild_base_image}" \
+        || cleanup_failed=1
+    [ -z "${qualification_base_image}" ] \
+        || remove_owned_image "${qualification_base_image}" \
+        || cleanup_failed=1
     [ -z "${state_directory}" ] || rm -rf "${state_directory}"
     [ -z "${board_directory}" ] || rm -rf "${board_directory}"
     [ -z "${tools_directory}" ] || rm -rf "${tools_directory}"
@@ -302,6 +316,67 @@ inside() {
         "$@"
 }
 
+write_configuration() {
+    local base_image="$1"
+    local package_source="$2"
+    local package_digest="$3"
+    local dns_name="$4"
+    local output="$5"
+
+    jq \
+        --arg published "${published_feature_reference}" \
+        --arg dry_published "${dry_published_reference}" \
+        --arg base_image "${base_image}" \
+        --arg package_source "${package_source}" \
+        --arg package_digest "${package_digest}" \
+        --arg dns_name "${dns_name}" \
+        '.image = $base_image |
+         .features |= with_entries(
+           if .key == $published then
+             .key = $dry_published |
+             .value += {
+               dnsName: $dns_name,
+               packageSource: $package_source,
+               packageSha256: $package_digest,
+               version: "latest"
+             }
+           else . end
+         )' \
+        "${source_configuration}" >"${output}"
+}
+
+expect_feature_install_failure() {
+    local name="$1"
+    local expected_cause="$2"
+    local log_file="${publication_directory}/${name}.log"
+
+    if HEDDLE_QUALIFICATION_STATE="${state_directory}" \
+        HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+        HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
+        HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
+        DOCKER_CONFIG="${docker_config}" \
+        devcontainer up \
+        --workspace-folder "${repository}" \
+        --config "${configuration}" \
+        --id-label "heddle.qualification=${qualification_label}" \
+        --log-level info >"${log_file}" 2>&1; then
+        echo "The ${name} installer qualification unexpectedly succeeded." >&2
+        return 1
+    fi
+    grep -Eq "${expected_cause}" "${log_file}" || {
+        echo "The ${name} installer failure did not name its cause." >&2
+        tail -n 100 "${log_file}" >&2
+        return 1
+    }
+    if grep -Fq "[heddle] Registering the Heddle service" "${log_file}"; then
+        echo "The ${name} installer failure occurred after service registration began." >&2
+        return 1
+    fi
+    printf 'Observed %s before service registration: %s\n' \
+        "${name}" \
+        "$(grep -E "${expected_cause}" "${log_file}" | tail -n 1 | sed 's/^[[:space:]]*//')"
+}
+
 assert_head
 task -d "${repository}" deployment:package
 assert_head
@@ -322,6 +397,8 @@ grep -qx package/assets/console-viewer/lifecycle.js "${package_contents}" || {
     exit 1
 }
 package_digest="$(sha256sum "${package_path}" | cut -d ' ' -f 1)"
+feature_collection="${publication_directory}/features"
+"${repository}/scripts/deployment/stage-feature.sh" "${feature_collection}"
 base_context="${publication_directory}/base-image"
 install -d -m 0755 "${base_context}"
 cp -- "${package_path}" "${base_context}/heddle-package.tgz"
@@ -333,6 +410,17 @@ LABEL heddle.qualification=${qualification_label}
 EOF
 qualification_base_image="heddle-qualification-base:${accepted_head}-$$"
 docker build --tag "${qualification_base_image}" "${base_context}" >/dev/null
+missing_prebuild_context="${publication_directory}/missing-prebuild-base-image"
+install -d -m 0755 "${missing_prebuild_context}"
+cat >"${missing_prebuild_context}/Dockerfile" <<EOF
+FROM ${qualification_base_image}
+ENV npm_config_download=https://github.com/WiseLibs/better-sqlite3/releases/download/v0.0.0/missing-{abi}.tgz
+LABEL heddle.qualification=${qualification_label}
+EOF
+missing_prebuild_base_image="heddle-qualification-missing-prebuild:${accepted_head}-$$"
+docker build \
+    --tag "${missing_prebuild_base_image}" \
+    "${missing_prebuild_context}" >/dev/null
 
 docker_config="${publication_directory}/docker-config"
 install -d -m 0700 "${docker_config}"
@@ -361,8 +449,6 @@ for attempt in $(seq 1 100); do
     sleep 0.1
 done
 
-feature_collection="${publication_directory}/features"
-"${repository}/scripts/deployment/stage-feature.sh" "${feature_collection}"
 publication_log="${publication_directory}/publish.log"
 if ! devcontainer features publish \
     --registry "localhost:${registry_port}" \
@@ -383,23 +469,42 @@ dry_published_reference="localhost:${registry_port}/wyrd-company/heddle/heddle:1
 jq -e --arg reference "${published_feature_reference}" \
     '[.features | keys[] | select(. == $reference)] | length == 1' \
     "${source_configuration}" >/dev/null
-jq \
-    --arg published "${published_feature_reference}" \
-    --arg dry_published "${dry_published_reference}" \
-    --arg base_image "${qualification_base_image}" \
-    --arg package_digest "${package_digest}" \
-    '.image = $base_image |
-     .features |= with_entries(
-       if .key == $published then
-         .key = $dry_published |
-         .value += {
-           packageSource: "/opt/heddle-package.tgz",
-           packageSha256: $package_digest,
-           version: "latest"
-         }
-       else . end
-     )' \
-    "${source_configuration}" >"${configuration}"
+write_configuration \
+    "${qualification_base_image}" \
+    "https://127.0.0.1:1/missing.tgz" \
+    "" \
+    "" \
+    "${configuration}"
+expect_feature_install_failure \
+    download-failure \
+    '\[heddle\] ERROR: Failed to download the resolved Heddle package\.'
+
+write_configuration \
+    "${qualification_base_image}" \
+    "/opt/heddle-package.tgz" \
+    "$(printf '0%.0s' {1..64})" \
+    "" \
+    "${configuration}"
+expect_feature_install_failure \
+    digest-mismatch \
+    '\[heddle\] ERROR: Heddle package SHA-256 mismatch: expected [0-9a-f]{64}, observed [0-9a-f]{64}\.'
+
+write_configuration \
+    "${missing_prebuild_base_image}" \
+    "/opt/heddle-package.tgz" \
+    "${package_digest}" \
+    "" \
+    "${configuration}"
+expect_feature_install_failure \
+    missing-native-prebuild \
+    '\[heddle\] ERROR: No matching better-sqlite3 prebuild exists for platform [^ ]+ and Node ABI [0-9]+\.'
+
+write_configuration \
+    "${qualification_base_image}" \
+    "/opt/heddle-package.tgz" \
+    "${package_digest}" \
+    "heddle.localhost" \
+    "${configuration}"
 jq -e --arg reference "${dry_published_reference}" \
     '[.features | keys[] | select(. == $reference)] | length == 1' \
     "${configuration}" >/dev/null
