@@ -55,10 +55,10 @@ package_source="$(node "$(dirname "$0")/resolve-package-source.mjs" \
 
 case "${package_source}" in
     https://*)
-        log "Downloading the Heddle package from ${package_source}"
+        log "Downloading the resolved Heddle package"
         curl --fail --location --silent --show-error \
             --output "${package_path}" "${package_source}" \
-            || err "Failed to download the Heddle package from ${package_source}."
+            || err "Failed to download the resolved Heddle package."
         ;;
     /*)
         [ -f "${package_source}" ] \
@@ -70,11 +70,12 @@ case "${package_source}" in
 esac
 
 if [ -n "${PACKAGESHA256}" ]; then
-    [[ "${PACKAGESHA256}" =~ ^[0-9a-f]{64}$ ]] \
-        || err "packageSha256 must be a lowercase 64-character SHA-256 digest."
+    [[ "${PACKAGESHA256}" =~ ^[0-9A-Fa-f]{64}$ ]] \
+        || err "packageSha256 must be a 64-character hexadecimal SHA-256 digest."
+    expected_digest="${PACKAGESHA256,,}"
     observed_digest="$(sha256sum "${package_path}" | cut -d ' ' -f 1)"
-    [ "${observed_digest}" = "${PACKAGESHA256}" ] \
-        || err "Heddle package SHA-256 mismatch: expected ${PACKAGESHA256}, observed ${observed_digest}."
+    [ "${observed_digest}" = "${expected_digest}" ] \
+        || err "Heddle package SHA-256 mismatch: expected ${expected_digest}, observed ${observed_digest}."
 fi
 
 install_log="${package_directory}/npm-install.log"
@@ -101,6 +102,8 @@ fi
 
 log "Installing the prebuilt Heddle package"
 if ! env \
+    CC=/bin/false \
+    CXX=/bin/false \
     NPM_CONFIG_ENGINE_STRICT=true \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     npm install --global --prefix /usr/local \

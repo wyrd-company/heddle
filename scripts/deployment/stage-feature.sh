@@ -27,4 +27,4 @@ git -C "${repository}" archive "${accepted_head}" -- .devcontainer/features/hedd
     | tar -C "${staged_feature}" --strip-components=3 -xf -
 
 "${staged_feature}/verify-feature-source.sh" "${staged_feature}"
-printf 'Staged Heddle Feature source at %s\n' "${staged_feature}"
+printf 'Staged source-free Heddle Feature at %s\n' "${staged_feature}"

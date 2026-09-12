@@ -31,7 +31,7 @@ GitHub release whose tag matches `heddle@*`; `heddle-feature@*` tags are not
 package releases. An exact version resolves the corresponding
 `heddle-<version>.tgz` release asset. An https URL or absolute path in
 `packageSource` overrides that resolution. `packageSha256` optionally binds the
-downloaded tarball to a lowercase SHA-256 digest.
+downloaded tarball to a hexadecimal SHA-256 digest.
 
 The published Feature contains no Heddle source and no Heddle package tarball.
 The package release workflow builds the repository tree once, including

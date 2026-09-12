@@ -29,7 +29,7 @@ not install a compiler or fall back to a source build.
 | ----------------- | ------ | ---------------------- | ------------------------------------------------------------------------------------------ |
 | `version`         | string | `latest`               | Heddle package version. `latest` selects the newest `heddle@*` release, not a Feature tag. |
 | `packageSource`   | string | `""`                   | Optional https URL or absolute tarball path that overrides `version`.                      |
-| `packageSha256`   | string | `""`                   | Optional lowercase SHA-256 digest verified before installation.                            |
+| `packageSha256`   | string | `""`                   | Optional hexadecimal SHA-256 digest verified before installation.                          |
 | `configDirectory` | string | `/home/vscode/.heddle` | Operator-owned directory containing required `config.yml`.                                 |
 | `dnsName`         | string | `""`                   | Optional fully qualified workspace DNS name served through Caddy.                          |
 | `serviceUser`     | string | `automatic`            | User that runs Heddle; automatic selection prefers the remote user.                        |
