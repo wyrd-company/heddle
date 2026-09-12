@@ -410,13 +410,7 @@ printf 'Dry-published %s as %s (%s)\n' \
     "$(jq -r '.heddle.digest' <<<"${publication_result}")"
 up
 
-inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
-set -euo pipefail
-test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
-test "$(kanban-md --version)" = "kanban-md version 0.37.0-fork+b9fc380"
-! command -v python3 >/dev/null 2>&1
-test -f /usr/local/lib/node_modules/heddle/assets/console-viewer/lifecycle.js
-jq -e '\''(.dependencies | keys | sort) == [
+inside jq -e '(.dependencies | keys | sort) == [
   "@flowcraft/sqlite-history",
   "@modelcontextprotocol/server",
   "ajv",
@@ -425,7 +419,14 @@ jq -e '\''(.dependencies | keys | sort) == [
   "nunjucks",
   "yaml",
   "zod"
-]\'' /usr/local/lib/node_modules/heddle/package.json >/dev/null
+]' /usr/local/lib/node_modules/heddle/package.json >/dev/null
+
+inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
+set -euo pipefail
+test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
+test "$(kanban-md --version)" = "kanban-md version 0.37.0-fork+b9fc380"
+! command -v python3 >/dev/null 2>&1
+test -f /usr/local/lib/node_modules/heddle/assets/console-viewer/lifecycle.js
 for attempt in $(seq 1 100); do
     if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1
