@@ -333,6 +333,46 @@ describe("Heddle devcontainer feature publication", () => {
     expect(packageAsset?.steps).toContainEqual(
       expect.objectContaining({ run: "npm run build" }),
     );
+
+    const pushGuard = (condition: string | undefined) => {
+      const namespaces = [
+        ...(condition ?? "").matchAll(/startsWith\(github\.ref, '([^']+)'\)/g),
+      ].map((match) => match[1]);
+      const exclusions = [
+        ...(condition ?? "").matchAll(/github\.ref != '([^']+)'/g),
+      ].map((match) => match[1]);
+      expect(namespaces).toHaveLength(1);
+      expect(exclusions).toHaveLength(1);
+      return (reference: string) =>
+        reference.startsWith(namespaces[0] ?? "") &&
+        reference !== exclusions[0];
+    };
+    const publishesPackageAsset = pushGuard(packageAsset?.if);
+    const publishesFeature = pushGuard(publish?.if);
+
+    expect([
+      {
+        asset: publishesPackageAsset("refs/tags/heddle@0.0.0"),
+        feature: publishesFeature("refs/tags/heddle@0.0.0"),
+      },
+      {
+        asset: publishesPackageAsset("refs/tags/heddle-feature@0.0.0"),
+        feature: publishesFeature("refs/tags/heddle-feature@0.0.0"),
+      },
+      {
+        asset: publishesPackageAsset("refs/tags/heddle@0.1.0"),
+        feature: publishesFeature("refs/tags/heddle@0.1.0"),
+      },
+      {
+        asset: publishesPackageAsset("refs/tags/heddle-feature@0.1.0"),
+        feature: publishesFeature("refs/tags/heddle-feature@0.1.0"),
+      },
+    ]).toEqual([
+      { asset: false, feature: false },
+      { asset: false, feature: false },
+      { asset: true, feature: false },
+      { asset: false, feature: true },
+    ]);
     expect(packageAsset?.steps).toContainEqual(
       expect.objectContaining({
         run: expect.stringContaining('gh release upload "${GITHUB_REF_NAME}"'),

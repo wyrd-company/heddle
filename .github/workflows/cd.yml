@@ -16,10 +16,12 @@ concurrency:
 jobs:
   publish-package-asset:
     name: Publish Heddle package release asset
+    # A baseline tag records release authority; it does not represent a release.
     if: >-
       ${{
         github.event_name == 'push' &&
-        startsWith(github.ref, 'refs/tags/heddle@')
+        startsWith(github.ref, 'refs/tags/heddle@') &&
+        github.ref != 'refs/tags/heddle@0.0.0'
       }}
     runs-on: ubuntu-latest
     permissions:
@@ -62,10 +64,12 @@ jobs:
 
   publish-features:
     name: Publish Dev Container Features
+    # A baseline tag records release authority; it does not represent a release.
     if: >-
       ${{
         (github.event_name == 'push' &&
-          startsWith(github.ref, 'refs/tags/heddle-feature@')) ||
+          startsWith(github.ref, 'refs/tags/heddle-feature@') &&
+          github.ref != 'refs/tags/heddle-feature@0.0.0') ||
         (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
       }}
     runs-on: ubuntu-latest
