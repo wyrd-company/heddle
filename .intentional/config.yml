@@ -27,10 +27,10 @@ release-units:
         role: primary
         template: "{id}@{version}"
   heddle-feature:
-    path: .
+    path: .devcontainer/features/heddle
     projections:
       - adapter: json
-        file: .devcontainer/features/heddle/devcontainer-feature.json
+        file: devcontainer-feature.json
         mode: committed
         pointer: /version
     tags:
