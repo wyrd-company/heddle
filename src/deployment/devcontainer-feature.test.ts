@@ -437,4 +437,33 @@ describe("Heddle devcontainer feature", () => {
     expect(artifactDirectory).toBeGreaterThan(clone);
     expect(artifactDirectory).toBeLessThan(packageGate);
   });
+  it("keeps the version option intact across the distribution check", async () => {
+    // /etc/os-release defines VERSION, and so does the Feature's version
+    // option. A distribution check that sources it in the caller's shell
+    // destroys the option, which made the published Feature reject
+    // "24.04.4 LTS (Noble Numbat)" as invalid SemVer.
+    const script = [
+      "set -euo pipefail",
+      'VERSION="0.1.0"',
+      `source ${featureDirectory}/common.sh`,
+      "check_debian_family",
+      'printf "%s" "${VERSION}"',
+    ].join("\n");
+
+    const { stdout } = await execute("bash", ["-c", script]);
+
+    expect(stdout).toBe("0.1.0");
+  });
+
+  it("snapshots the version option before sourcing any helper", async () => {
+    const installer = await readFile(`${featureDirectory}/install.sh`, "utf8");
+    const snapshot = installer.indexOf('heddle_option_version="${VERSION:-}"');
+    const sourced = installer.indexOf('source "$(dirname "$0")/common.sh"');
+    const resolution = installer.indexOf('"${heddle_option_version}")"');
+
+    expect(snapshot).toBeGreaterThan(-1);
+    expect(snapshot).toBeLessThan(sourced);
+    expect(resolution).toBeGreaterThan(sourced);
+    expect(installer).not.toContain('"${PACKAGESOURCE}" "${VERSION}"');
+  });
 });

@@ -5,6 +5,7 @@
 
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -17,6 +18,14 @@ const execute = promisify(execFile);
 const featureDirectory = ".devcontainer/features/heddle";
 const publishedReference = "ghcr.io/wyrd-company/heddle/heddle:0";
 
+// The Feature's own manifest is its version authority, so assertions follow a
+// release instead of pinning the version a release moves.
+const featureVersion = (
+  JSON.parse(
+    readFileSync(`${featureDirectory}/devcontainer-feature.json`, "utf8"),
+  ) as { version: string }
+).version;
+
 describe("Heddle devcontainer feature publication", () => {
   it("assigns package and Feature versions to independent release units", async () => {
     const config = parse(await readFile(".intentional/config.yml", "utf8")) as {
@@ -26,6 +35,7 @@ describe("Heddle devcontainer feature publication", () => {
       "release-units": Record<
         string,
         {
+          path: string;
           projections: Array<Record<string, string>>;
           tags: { primary: Record<string, string> };
         }
@@ -51,10 +61,13 @@ describe("Heddle devcontainer feature publication", () => {
     expect(config["release-units"].heddle?.projections).toEqual([
       { adapter: "npm", file: "package.json", mode: "committed" },
     ]);
+    expect(config["release-units"]["heddle-feature"]?.path).toBe(
+      ".devcontainer/features/heddle",
+    );
     expect(config["release-units"]["heddle-feature"]?.projections).toEqual([
       {
         adapter: "json",
-        file: ".devcontainer/features/heddle/devcontainer-feature.json",
+        file: "devcontainer-feature.json",
         mode: "committed",
         pointer: "/version",
       },
@@ -112,7 +125,7 @@ describe("Heddle devcontainer feature publication", () => {
           "utf8",
         ),
       ) as { id: string; version: string };
-      expect(manifest).toMatchObject({ id: "heddle", version: "0.0.0" });
+      expect(manifest).toMatchObject({ id: "heddle", version: featureVersion });
       await expect(
         readFile(join(collection, "sibling-feature"), "utf8"),
       ).resolves.toBe("preserve me");
@@ -266,7 +279,7 @@ describe("Heddle devcontainer feature publication", () => {
       documentationURL:
         "https://github.com/wyrd-company/heddle/tree/main/.devcontainer/features/heddle",
       id: "heddle",
-      version: "0.0.0",
+      version: featureVersion,
     });
     expect(configuration.features).toHaveProperty(publishedReference);
     expect(configuration.features).not.toHaveProperty("../features/heddle");

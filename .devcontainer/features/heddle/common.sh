@@ -20,9 +20,13 @@ require_root() {
 
 check_debian_family() {
     [ -r /etc/os-release ] || err "Unable to detect Linux distribution."
+    local identity
+    # Read the identity in a subshell. /etc/os-release defines VERSION, which
+    # is also a Feature option name, so sourcing it here would overwrite the
+    # caller's option values.
     # shellcheck disable=SC1091
-    . /etc/os-release
-    case "${ID:-} ${ID_LIKE:-}" in
+    identity="$(. /etc/os-release; printf '%s %s' "${ID:-}" "${ID_LIKE:-}")"
+    case "${identity}" in
         *debian*|*ubuntu*) ;;
         *) err "This Feature supports Debian/Ubuntu-based images." ;;
     esac

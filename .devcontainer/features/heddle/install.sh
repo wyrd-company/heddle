@@ -8,6 +8,11 @@ set -euo pipefail
 #   references: t3-headless
 # ---
 
+# Dev Container option values arrive as environment variables named after the
+# option, and /etc/os-release also defines VERSION. Snapshot the option before
+# sourcing any helper so no distribution metadata can overwrite it.
+heddle_option_version="${VERSION:-}"
+
 # shellcheck disable=SC1091
 source "$(dirname "$0")/common.sh"
 
@@ -50,7 +55,7 @@ cleanup_package() {
 trap cleanup_package EXIT
 package_path="${package_directory}/heddle-package.tgz"
 package_source="$(node "$(dirname "$0")/resolve-package-source.mjs" \
-    "${PACKAGESOURCE}" "${VERSION}")" \
+    "${PACKAGESOURCE}" "${heddle_option_version}")" \
     || err "Heddle package source resolution failed."
 
 case "${package_source}" in
