@@ -88,19 +88,18 @@ describe("Heddle devcontainer feature publication", () => {
 
   it("rejects a pre-placed Heddle tarball", async () => {
     const directory = await mkdtemp(join(tmpdir(), "heddle-feature-legacy-"));
-    const collection = join(directory, "features");
+    const fixtureFeature = join(directory, "heddle");
 
     try {
-      await execute("bash", [
-        "scripts/deployment/stage-feature.sh",
-        collection,
-      ]);
-      const stagedFeature = join(collection, "heddle");
-      await writeFile(join(stagedFeature, "heddle-stale.tgz"), "not a package");
+      await cp(featureDirectory, fixtureFeature, { recursive: true });
+      await writeFile(
+        join(fixtureFeature, "heddle-stale.tgz"),
+        "not a package",
+      );
 
       await expect(
-        execute(join(stagedFeature, "verify-feature-source.sh"), [
-          stagedFeature,
+        execute(join(featureDirectory, "verify-feature-source.sh"), [
+          fixtureFeature,
         ]),
       ).rejects.toMatchObject({
         code: 1,
