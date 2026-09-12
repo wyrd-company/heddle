@@ -86,7 +86,7 @@ if ! env \
     npm install --global --prefix "${preflight_prefix}" --ignore-scripts \
         --no-audit --no-fund "${package_path}" >"${install_log}" 2>&1; then
     cat "${install_log}" >&2
-    err "Heddle package dependency installation failed for ${package_source}."
+    err "Heddle package dependency installation failed."
 fi
 better_sqlite_directory="${preflight_prefix}/lib/node_modules/heddle/node_modules/better-sqlite3"
 prebuild_install="${preflight_prefix}/lib/node_modules/heddle/node_modules/.bin/prebuild-install"
@@ -97,7 +97,10 @@ if ! (cd "${better_sqlite_directory}" && "${prebuild_install}") \
     cat "${install_log}" >&2
     platform="$(node -p '`${process.platform}-${process.arch}`')"
     node_abi="$(node -p 'process.versions.modules')"
-    err "No matching better-sqlite3 prebuild exists for platform ${platform} and Node ABI ${node_abi}."
+    if grep -q "No prebuilt binaries found" "${install_log}"; then
+        err "No matching better-sqlite3 prebuild exists for platform ${platform} and Node ABI ${node_abi}."
+    fi
+    err "Unable to resolve the better-sqlite3 prebuild for platform ${platform} and Node ABI ${node_abi}."
 fi
 
 log "Installing the prebuilt Heddle package"
@@ -111,7 +114,7 @@ if ! env \
         --no-audit --no-fund \
         "${package_path}" >"${install_log}" 2>&1; then
     cat "${install_log}" >&2
-    err "Heddle package installation failed for ${package_source}."
+    err "Heddle package installation failed."
 fi
 [ -x /usr/local/bin/heddle-server ] \
     || err "Heddle was not installed at /usr/local/bin/heddle-server."

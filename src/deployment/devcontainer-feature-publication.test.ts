@@ -299,6 +299,9 @@ describe("Heddle devcontainer feature publication", () => {
         run: expect.stringContaining('gh release upload "${GITHUB_REF_NAME}"'),
       }),
     );
+    expect(await readFile(".github/workflows/cd.yml", "utf8")).not.toContain(
+      "npm publish",
+    );
 
     const ci = parse(await readFile(".github/workflows/ci.yml", "utf8")) as {
       on: { pull_request: unknown; push: { branches: string[] } };

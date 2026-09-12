@@ -80,8 +80,11 @@ describe("Heddle devcontainer feature", () => {
       'packages=("$(dirname "$0")"/heddle-*.tgz)',
     );
     expect(installer).toContain("--allow-scripts=better-sqlite3");
-    expect(installer).toContain("CC=/bin/false");
-    expect(installer).toContain("CXX=/bin/false");
+    const finalInstall = installer.slice(
+      installer.indexOf('log "Installing the prebuilt Heddle package"'),
+    );
+    expect(finalInstall).toContain("CC=/bin/false");
+    expect(finalInstall).toContain("CXX=/bin/false");
     expect(installer).toContain(
       "No matching better-sqlite3 prebuild exists for platform",
     );
