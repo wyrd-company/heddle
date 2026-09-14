@@ -91,6 +91,19 @@ describe("TaskRepositoryRouter", () => {
     );
   });
 
+  it("rejects repository inheritance from a parent that is not an epic", () => {
+    const router = new TaskRepositoryRouter("/workspaces");
+    const parent = task({ id: 106, repos: ["sample-alpha"] });
+    const child = task({ id: 107, parent: parent.id });
+    router.update([parent, child]);
+
+    expect(() => router.route(child)).toThrow(
+      expect.objectContaining<TaskRoutingAttentionError>({
+        code: "epic-repository-scope-unavailable",
+      }),
+    );
+  });
+
   it("resolves all repositories by default and one declared repository when requested", () => {
     const router = new TaskRepositoryRouter("/workspaces");
     const selected = task({
