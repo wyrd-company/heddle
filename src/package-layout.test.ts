@@ -24,7 +24,10 @@ describe("package separation", () => {
       await readFile("package-lock.json", "utf8"),
     ) as PackageLock;
 
-    expect(production).toMatchObject({ name: "heddle", license: "Apache-2.0" });
+    expect(production).toMatchObject({
+      name: "@wyrd-company/heddle",
+      license: "Apache-2.0",
+    });
     expect(lock.packages[""]).toMatchObject({
       dependencies: { flowcraft: "2.10.1" },
       name: production.name,
