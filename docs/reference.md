@@ -151,7 +151,8 @@ condition, or exactly one carries none and always fires.
 ## Guards
 
 A condition is JSONata evaluated over the node's result and the lifecycle
-projection:
+projection. Evaluation runs to completion with no time or depth bound: a
+condition is pinned repository content the catalog reviews, like a template.
 
 - `result.output` is the source node's output — for a wait stage the `advance`
   output with `dispositions`, for a question the answer, for a merge the merge
