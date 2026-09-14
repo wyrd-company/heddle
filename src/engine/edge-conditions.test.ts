@@ -205,6 +205,56 @@ describe("edge conditions", () => {
     fixture.persistence.close();
   });
 
+  it("routes hyphenated and keyword-shaped dispositions through the default guard", async () => {
+    // `send-back` is not a JSONata path segment and `in` is a JSONata keyword;
+    // the default guard looks both up by quoted name.
+    const blueprint = sampleBlueprint();
+    for (const edge of blueprint.edges) {
+      delete edge.condition;
+      if (edge.disposition === "adjust") edge.disposition = "send-back";
+      if (edge.disposition === "accept") edge.disposition = "in";
+    }
+    const fixture = await makeFixture(blueprint);
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "quoted",
+    });
+    const adjusted = await fixture.engine.resume({
+      disposition: "send-back",
+      instanceId: "quoted",
+      operationId: "round-1",
+    });
+    expect(adjusted).toMatchObject({
+      awaitingNodeIds: ["taste"],
+      validDispositions: ["in", "send-back"],
+    });
+    const served = await fixture.engine.resume({
+      disposition: "in",
+      instanceId: "quoted",
+      operationId: "round-2",
+    });
+    expect(served).toMatchObject({ awaitingNodeIds: [], status: "completed" });
+    expect(fixture.invocations.map(({ effect }) => effect)).toEqual([
+      "mix",
+      "season",
+      "serve",
+    ]);
+    fixture.persistence.close();
+  });
+
+  it("rejects only a blank disposition", async () => {
+    const blueprint = sampleBlueprint();
+    blueprint.edges[1]!.disposition = " ";
+    const fixture = await makeFixture(blueprint);
+    await expect(
+      fixture.engine.start({
+        blueprintPath: fixture.blueprintPath,
+        instanceId: "blank",
+      }),
+    ).rejects.toThrow('Node "taste" has an invalid disposition');
+    fixture.persistence.close();
+  });
+
   it("fails closed with attention when a disposition matches no edge", async () => {
     const fixture = await makeFixture(
       guardedAdjust(

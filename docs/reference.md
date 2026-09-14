@@ -137,13 +137,13 @@ outputs fail the merge by name.
 
 ## Edge fields
 
-| Field              | Meaning                                                                                                                                                                    |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source`, `target` | Node ids                                                                                                                                                                   |
-| `disposition`      | The name a `wait` session gives `advance` to take this edge. Identifier-shaped (`^[A-Za-z_][A-Za-z0-9_]*$`) because it is a JSONata path segment and a tool-schema literal |
-| `description`      | Required with `disposition`; shown in the `advance` tool schema                                                                                                            |
-| `output-contract`  | Requires `disposition`. Names `output-contracts/<id>.json`, a JSON Schema the session's output must satisfy                                                                |
-| `condition`        | A JSONata guard. Optional on a disposition edge; required on every other edge out of a node that has more than one                                                         |
+| Field              | Meaning                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `source`, `target` | Node ids                                                                                                                                   |
+| `disposition`      | The name a `wait` session gives `advance` to take this edge. Any non-empty string; `send-back` and `in progress` are as valid as `approve` |
+| `description`      | Required with `disposition`; shown in the `advance` tool schema                                                                            |
+| `output-contract`  | Requires `disposition`. Names `output-contracts/<id>.json`, a JSON Schema the session's output must satisfy                                |
+| `condition`        | A JSONata guard. Optional on a disposition edge; required on every other edge out of a node that has more than one                         |
 
 Edges out of a `question` node carry no disposition: every one carries a
 condition, or exactly one carries none and always fires.
@@ -158,9 +158,15 @@ projection:
   result.
 - `lifecycle` is the projection below.
 
-A disposition edge without a condition guards `result.output.dispositions.<name>`.
-Several edges may share one disposition; they must agree on description and
-output contract, and at most one may omit its condition. When a node finishes,
+A disposition edge without a condition guards
+`$lookup(result.output.dispositions, "<name>")`, so a name such as `send-back`
+needs no quoting from the author. A guard written by hand reaches a
+non-identifier name the same way, or through a backtick segment:
+`` result.output.dispositions.`send-back` ``. Several edges may share one
+disposition; they must agree on description and output contract, and at most
+one may omit its condition. An edge that omits its condition while a sibling of
+the same disposition carries one is the else branch: it fires when the
+disposition is chosen and no conditioned sibling is true. When a node finishes,
 exactly one edge out of it must fire; none or several is a routing failure that
 raises attention and stops the instance. A guard that does not compile fails
 validation; one that throws at runtime fails the transition by edge name.
@@ -220,8 +226,8 @@ The interpreter refuses, naming the node or edge:
 - a duplicate node id, or a node that declares no `uses`
 - a `uses` value with no implementation
 - a wait node without disposition edges, or with an action edge
-- a disposition that is not identifier-shaped, or whose edges disagree on
-  description or output contract, or that has more than one unconditioned edge
+- a blank disposition, or one whose edges disagree on description or output
+  contract, or that has more than one unconditioned edge
 - a node that mixes disposition edges with ordinary edges, or conditional edges
   with unconditional ones
 - a question node without params, with an unknown role, without questions, or

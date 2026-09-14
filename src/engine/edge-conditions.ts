@@ -26,8 +26,13 @@ export const edgeLabel = (edge: LifecycleEdge): string =>
     ? `${edge.source}->${edge.target}`
     : `${edge.source}->${edge.target} (${edge.disposition})`;
 
+/**
+ * The guard a disposition edge gets when it declares none. The name is a
+ * JSON-encoded string literal, so any disposition, hyphenated, spaced, or
+ * spelled like a JSONata keyword, is looked up rather than parsed as a path.
+ */
 export const defaultDispositionCondition = (disposition: string): string =>
-  `result.output.dispositions.${disposition}`;
+  `$lookup(result.output.dispositions, ${JSON.stringify(disposition)})`;
 
 const sourceUses = (
   blueprint: LifecycleBlueprint,

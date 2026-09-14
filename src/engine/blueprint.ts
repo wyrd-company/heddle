@@ -45,7 +45,6 @@ import type {
 import { mechanicalNodeUses } from "./types.js";
 
 export const internalNodeIdParameter = "__heddleNodeId";
-const dispositionPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const placeholderNode: NodeFunction = async () => ({ output: null });
 const mechanicalNodeUseSet = new Set<string>(mechanicalNodeUses);
 const agentNameListNameSet = new Set<string>(agentNameListNames);
@@ -339,7 +338,9 @@ export const validateBlueprint = (
         );
       }
       const disposition = edge.disposition;
-      if (disposition === undefined || !dispositionPattern.test(disposition)) {
+      // Any non-empty string is a disposition: the default guard quotes it
+      // and the advance tool takes it as a literal.
+      if (disposition === undefined || disposition.trim() === "") {
         throw new BlueprintValidationError(
           `Node ${JSON.stringify(node.id)} has an invalid disposition`,
         );

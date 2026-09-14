@@ -35,6 +35,8 @@ afterEach(async () => {
  */
 type Spelling = {
   artifact: string;
+  /** Explicit `condition` on every disposition edge, or the default guard. */
+  guards: "explicit" | "default";
   dispositions: {
     approve: string;
     complete: string;
@@ -55,6 +57,7 @@ type Spelling = {
 
 const familiar: Spelling = {
   artifact: "familiar-delivery",
+  guards: "explicit",
   dispositions: {
     approve: "approve",
     complete: "complete",
@@ -73,13 +76,16 @@ const familiar: Spelling = {
   },
 };
 
+// Board-status vocabulary and hyphens: names JSONata cannot take as bare
+// path segments, routed through the default guard and the `advance` literal.
 const kitchen: Spelling = {
   artifact: "kitchen-service",
+  guards: "default",
   dispositions: {
     approve: "ship",
-    complete: "ready",
-    reject: "sendBack",
-    wrap: "closeKitchen",
+    complete: "in-progress",
+    reject: "send-back",
+    wrap: "close-kitchen",
   },
   nodes: {
     finalize: "wipe-down",
@@ -137,13 +143,20 @@ const spell = (spelling: Spelling, templateCommitSha: string) => {
   });
   const edges = source.edges.map((edge) => {
     const name = disposition(edge);
+    // The fixture's disposition edges carry explicit guards over the familiar
+    // names; the default-guard spelling drops them so Heddle supplies its own.
+    const { condition: fixtureCondition, ...rest } = edge;
     return {
-      ...edge,
+      ...rest,
       ...(name === undefined
-        ? {}
+        ? fixtureCondition === undefined
+          ? {}
+          : { condition: fixtureCondition }
         : {
-            condition: `result.output.dispositions.${name}`,
             disposition: name,
+            ...(spelling.guards === "explicit"
+              ? { condition: `result.output.dispositions.${name}` }
+              : {}),
           }),
       source: nodeId[edge.source]!,
       target: nodeId[edge.target]!,
@@ -254,6 +267,58 @@ const statusOf = async (fixture: ProductionFixture): Promise<string> => {
 
 type Composition = ReturnType<typeof compose>;
 
+const correlationTokenFor = (
+  composition: Composition,
+  instanceId: string,
+  sessionKey: string,
+): string => {
+  const stored = composition.persistence
+    .getInstance(instanceId)!
+    .state.handoffs.find(
+      (handoff): handoff is StoredStageHandoff =>
+        typeof handoff === "object" &&
+        handoff !== null &&
+        !Array.isArray(handoff) &&
+        handoff["kind"] === "stage-handoff" &&
+        handoff["sessionKey"] === sessionKey,
+    );
+  if (stored === undefined) throw new Error(`No handoff for ${sessionKey}`);
+  return stored.correlationToken;
+};
+
+/** Calls a workflow MCP tool the way a session does, over the composition's own endpoint. */
+const callMcpTool = async (
+  composition: Composition,
+  token: string,
+  name: string,
+  arguments_: Record<string, unknown>,
+) => {
+  const response = await composition.mcp.fetch(
+    new globalThis.Request("http://production.invalid/mcp", {
+      body: JSON.stringify({
+        id: globalThis.crypto.randomUUID(),
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { arguments: arguments_, name },
+      }),
+      headers: {
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    }),
+  );
+  expect(response.status).toBe(200);
+  return (await response.json()) as {
+    result?: {
+      content?: Array<{ text?: string }>;
+      isError?: boolean;
+      structuredContent?: unknown;
+    };
+  };
+};
+
 const activations = (composition: Composition, instanceId: string) =>
   composition.persistence
     .replayEvents(instanceId)
@@ -333,11 +398,21 @@ describe("production delivery under two spellings", () => {
         session(nodes.review, 1),
       ]);
 
-      await composition.lifecycle.resume({
-        disposition: dispositions.reject,
+      // The reviewer rejects through the MCP `advance` tool: the disposition
+      // is the tool-schema literal, whatever characters it carries.
+      const rejected = await callMcpTool(
+        composition,
+        correlationTokenFor(composition, instanceId, session(nodes.review, 1)),
+        "advance",
+        {
+          disposition: dispositions.reject,
+          output: { findings: [{ summary: "Season to taste" }] },
+        },
+      );
+      expect(rejected.result?.isError).not.toBe(true);
+      expect(rejected.result?.structuredContent).toMatchObject({
         instanceId,
-        operationId: advanceOperationId(session(nodes.review, 1)),
-        output: { findings: [{ summary: "Season to taste" }] },
+        status: "awaiting",
       });
       await composition.scheduler.trigger();
       expect(activations(composition, instanceId)).toEqual([
