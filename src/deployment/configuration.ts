@@ -321,6 +321,13 @@ const secretReferencePointers = [
 
 type SecretReference = { file: string };
 
+type SecretFileFailure =
+  | "is missing"
+  | "cannot be read"
+  | "is not a regular file"
+  | "is readable by group or world"
+  | "is empty";
+
 const valueAtConfigurationPointer = (
   root: unknown,
   pointer: string,
@@ -354,32 +361,58 @@ const isSecretReference = (value: unknown): value is SecretReference =>
   !Array.isArray(value) &&
   typeof (value as Record<string, unknown>)["file"] === "string";
 
-const readSecretReference = async (
+export const resolveSecretReferencePath = (
   field: string,
   reference: string,
-  source: string,
+  layered: Pick<
+    ReturnType<typeof layerConfiguration>,
+    "clearedBy" | "provenance"
+  >,
+): string => {
+  if (isAbsolute(reference)) return reference;
+  const source = sourceForConfigurationPointer(`${field}/file`, layered);
+  return resolve(dirname(source), reference);
+};
+
+const readSecretReference = async (
+  field: string,
+  path: string,
 ): Promise<string> => {
-  const path = isAbsolute(reference)
-    ? reference
-    : resolve(dirname(source), reference);
+  const failure = (reason: SecretFileFailure): TypeError =>
+    new TypeError(`field '${field}' secret file '${path}' ${reason}`);
+  let file;
   try {
-    const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
-    try {
-      const metadata = await file.stat();
-      if (!metadata.isFile()) throw new Error("not a file");
-      if ((metadata.mode & (constants.S_IRGRP | constants.S_IROTH)) !== 0) {
-        throw new Error("readable by group or world");
-      }
-      const value = await file.readFile({ encoding: "utf8" });
-      if (value.trim() === "") throw new Error("empty");
-      return value;
-    } finally {
-      await file.close();
+    file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      (error as { code?: unknown }).code === "ENOENT"
+    ) {
+      throw failure("is missing");
     }
-  } catch {
-    throw new TypeError(
-      `field '${field}' secret file '${path}' must be a readable, non-empty regular file that is not readable by group or world`,
-    );
+    throw failure("cannot be read");
+  }
+  try {
+    const metadata = await file.stat();
+    if (!metadata.isFile()) throw failure("is not a regular file");
+    if ((metadata.mode & (constants.S_IRGRP | constants.S_IROTH)) !== 0) {
+      throw failure("is readable by group or world");
+    }
+    let value: string;
+    try {
+      value = await file.readFile({ encoding: "utf8" });
+    } catch {
+      throw failure("cannot be read");
+    }
+    value = value.replace(/\r?\n$/, "");
+    if (value === "") throw failure("is empty");
+    return value;
+  } catch (error) {
+    if (error instanceof TypeError) throw error;
+    throw failure("cannot be read");
+  } finally {
+    await file.close();
   }
 };
 
@@ -395,8 +428,8 @@ const resolveSecretReferences = async (
   for (const pointer of secretReferencePointers) {
     const candidate = valueAtConfigurationPointer(resolved, pointer);
     if (!isSecretReference(candidate)) continue;
-    const source = sourceForConfigurationPointer(pointer, layered);
-    const secret = await readSecretReference(pointer, candidate.file, source);
+    const path = resolveSecretReferencePath(pointer, candidate.file, layered);
+    const secret = await readSecretReference(pointer, path);
     setConfigurationPointer(resolved, pointer, secret);
     secrets.push(secret);
   }

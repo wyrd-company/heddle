@@ -1380,11 +1380,12 @@ proposed-design:
     Each T3 and Pushover secret field accepts either an inline non-empty string
     or a `{ file: path }` reference. A relative secret-file reference resolves
     against the directory containing the configuration source that supplied the
-    effective field; an absolute reference remains absolute. The referenced
-    file is read once during configuration loading, must be a non-empty regular
-    file, and must not be readable by group or world. Per-field source
-    provenance survives layering so secret resolution does not depend on which
-    layer supplied neighboring values.
+    `file` leaf; an absolute reference remains absolute. The referenced file is
+    read once during configuration loading, has exactly one terminal LF or CRLF
+    removed, must then be non-empty and regular, and must not be readable by
+    group or world. A failure names the field, path, and distinct cause without
+    exposing content. Per-field source provenance survives layering so secret
+    resolution does not depend on which layer supplied neighboring values.
 
     The configuration directory also contains an organization blueprint clone
     at the hard-coded `blueprints` subdirectory. It is shared read-only

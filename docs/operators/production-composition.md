@@ -163,9 +163,12 @@ pushover:
 ```
 
 The path is relative to the `config.yml` or `worker.yml` file that supplies the
-field, unless it is absolute. The file must be a non-empty regular file that is
-not readable by group or world. Heddle reads it once while loading configuration
-and keeps only the resolved value; it does not read it again during service use.
+`file` value, unless it is absolute. The file must be a non-empty regular file
+that is not readable by group or world. Heddle removes one terminal LF or CRLF
+from its content, reads it once while loading configuration, and keeps only the
+resolved value; it does not read it again during service use. A load failure
+names the field, path, and cause — missing, unreadable, not regular, unsafe
+mode, or empty — without disclosing content.
 
 The loopback server port must be from 1 through 65535; an ephemeral port cannot
 be projected into the fixed Caddy upstream.
