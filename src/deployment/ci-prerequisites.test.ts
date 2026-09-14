@@ -52,9 +52,9 @@ describe("hosted CI command prerequisites", () => {
       await readFile("deployment/supported-versions.json", "utf8"),
     ) as { kanbanMd: string };
 
-    expect(installer).toContain('kanban_branch="source/0.37.0-fork-b9fc380"');
+    expect(installer).toContain('kanban_branch="source/0.38.0-fork-794efef"');
     expect(installer).toContain(
-      'kanban_commit="b9fc380c3f97f41c9aa11077b858c75dad6ec0ee"',
+      'kanban_commit="794efef4be7287bcb117059813679d145b9fd388"',
     );
     expect(installer).toContain(
       `kanban_version="${supportedVersions.kanbanMd}"`,

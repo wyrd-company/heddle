@@ -225,7 +225,11 @@ next_id: 1
   });
 
   it("reads typed repository scope while retaining raw front matter", async () => {
-    const taskId = await createTask("Arrange sample items");
+    const taskId = await createTask(
+      "Arrange sample items",
+      "--repos",
+      "sample-alpha,sample-beta",
+    );
     const task = JSON.parse(
       await runKanban([
         "--dir",
@@ -240,21 +244,11 @@ next_id: 1
       task.file,
       source.replace(
         "class: standard\n---",
-        "class: standard\nproduct: sample-product\nrepos:\n  - sample-alpha\n  - sample-beta\n---",
+        "class: standard\nproduct: sample-product\n---",
       ),
     );
 
-    const typedAdapter = new KanbanBoardAdapter(
-      boardDirectory,
-      async (arguments_) => {
-        const output = await runKanban(arguments_);
-        const value = JSON.parse(output) as Record<string, unknown>;
-        value.repos = ["sample-alpha", "sample-beta"];
-        return JSON.stringify(value);
-      },
-    );
-
-    await expect(typedAdapter.readTask(taskId)).resolves.toMatchObject({
+    await expect(adapter.readTask(taskId)).resolves.toMatchObject({
       frontMatter: {
         id: taskId,
         product: "sample-product",
@@ -265,6 +259,36 @@ next_id: 1
       repos: ["sample-alpha", "sample-beta"],
     });
   });
+
+  it.each([
+    ["omits", undefined],
+    ["changes", ["sample-beta"]],
+  ])(
+    "rejects a typed repository scope that %s declared front matter",
+    async (_, typedRepos) => {
+      const taskId = await createTask(
+        "Arrange sample items",
+        "--repos",
+        "sample-alpha",
+      );
+      const disagreeingAdapter = new KanbanBoardAdapter(
+        boardDirectory,
+        async (arguments_) => {
+          const value = JSON.parse(await runKanban(arguments_)) as Record<
+            string,
+            unknown
+          >;
+          if (typedRepos === undefined) delete value["repos"];
+          else value["repos"] = typedRepos;
+          return JSON.stringify(value);
+        },
+      );
+
+      await expect(disagreeingAdapter.readTask(taskId)).rejects.toThrow(
+        `kanban-md typed repository scope disagrees with task ${taskId} front matter`,
+      );
+    },
+  );
 
   it("normalizes and preserves a stage provider-alias map through supported board mutations", async () => {
     const taskId = await createTask("Arrange sample items");
@@ -617,37 +641,7 @@ next_id: 1
       "--tags",
       "type:epic",
     );
-    const typedCommands: string[][] = [];
-    const typedAdapter = new KanbanBoardAdapter(
-      boardDirectory,
-      async (arguments_) => {
-        typedCommands.push(arguments_);
-        const reposIndex = arguments_.indexOf("--repos");
-        if (reposIndex === -1) return runKanban(arguments_);
-
-        const repositoryValue = arguments_[reposIndex + 1]!;
-        const forwarded = arguments_.filter(
-          (_, index) => index !== reposIndex && index !== reposIndex + 1,
-        );
-        const output = await runKanban(forwarded);
-        const value = JSON.parse(output) as Record<string, unknown> & {
-          file: string;
-        };
-        const repos = repositoryValue.split(",");
-        value.repos = repos;
-        const source = await readFile(value.file, "utf8");
-        await writeFile(
-          value.file,
-          source.replace(
-            "class: standard\n---",
-            `class: standard\nrepos:\n${repos.map((repo) => `  - ${repo}`).join("\n")}\n---`,
-          ),
-        );
-        return JSON.stringify(value);
-      },
-    );
-
-    const result = await typedAdapter.createRecord({
+    const result = await adapter.createRecord({
       body: "Record the selected storage locations.",
       kind: "finding",
       lifecycle: "inspection-response",
@@ -659,14 +653,10 @@ next_id: 1
     });
 
     expect(result.task.repos).toEqual(["sample-alpha", "sample-beta"]);
-    expect(typedCommands).toContainEqual(
-      expect.arrayContaining([
-        "create",
-        "Record storage locations",
-        "--repos",
-        "sample-alpha,sample-beta",
-      ]),
-    );
+    await expect(adapter.readTask(result.task.id)).resolves.toMatchObject({
+      frontMatter: { repos: ["sample-alpha", "sample-beta"] },
+      repos: ["sample-alpha", "sample-beta"],
+    });
   });
 
   it.each([

@@ -160,7 +160,7 @@ set -euo pipefail
 
 config_directory=${quoted_config}
 dns_name=${quoted_dns}
-expected_kanban_version=0.37.0-fork+b9fc380
+expected_kanban_version=0.38.0-fork+794efef
 /usr/local/libexec/heddle/check-kanban-version "\${expected_kanban_version}"
 launch_settings="\$(s6-setuidgid ${quoted_user} \
     /usr/local/bin/heddle-server \

@@ -9,9 +9,9 @@ set -euo pipefail
 
 destination="${1:?usage: install-prerequisites.sh DESTINATION}"
 kanban_repository="https://github.com/wyrd-company/kanban-md.git"
-kanban_branch="source/0.37.0-fork-b9fc380"
-kanban_commit="b9fc380c3f97f41c9aa11077b858c75dad6ec0ee"
-kanban_version="0.37.0-fork+b9fc380"
+kanban_branch="source/0.38.0-fork-794efef"
+kanban_commit="794efef4be7287bcb117059813679d145b9fd388"
+kanban_version="0.38.0-fork+794efef"
 gitpr_version="0.4.0"
 gitpr_archive="gitpr_${gitpr_version}_linux_x86_64.tar.gz"
 gitpr_checksum="a92933afd9459074cdffb217cd02f87b29105d4ba45557290fdcd71d340cbd1a"

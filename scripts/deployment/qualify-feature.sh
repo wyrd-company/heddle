@@ -605,7 +605,7 @@ inside jq -e '(.dependencies | keys | sort) == [
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
 set -euo pipefail
 test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
-test "$(kanban-md --version)" = "kanban-md version 0.37.0-fork+b9fc380"
+test "$(kanban-md --version)" = "kanban-md version 0.38.0-fork+794efef"
 ! command -v python3 >/dev/null 2>&1
 test -f /usr/local/lib/node_modules/@wyrd-company/heddle/assets/console-viewer/lifecycle.js
 for attempt in $(seq 1 100); do

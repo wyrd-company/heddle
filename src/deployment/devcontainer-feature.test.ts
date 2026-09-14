@@ -124,7 +124,7 @@ describe("Heddle devcontainer feature", () => {
     expect(installer).toContain(
       'port="\\$(jq -er \'.port\' <<<"\\${launch_settings}")"',
     );
-    expect(installer).toContain("expected_kanban_version=0.37.0-fork+b9fc380");
+    expect(installer).toContain("expected_kanban_version=0.38.0-fork+794efef");
     expect(installer).toContain(
       '/usr/local/libexec/heddle/check-kanban-version "\\${expected_kanban_version}"',
     );
@@ -171,20 +171,20 @@ describe("Heddle devcontainer feature", () => {
 
     try {
       await expect(
-        execute(check, ["0.37.0-fork+b9fc380"], {
+        execute(check, ["0.38.0-fork+794efef"], {
           env: {
             ...environment,
-            KANBAN_VERSION_OUTPUT: "kanban-md version 0.37.0-fork+b9fc380",
+            KANBAN_VERSION_OUTPUT: "kanban-md version 0.38.0-fork+794efef",
           },
         }),
       ).resolves.toMatchObject({ stderr: "" });
       for (const output of [
-        "wrapper kanban-md version 0.37.0-fork+b9fc380",
-        "kanban-md version 0.37.0-fork+b9fc380-extra",
-        "kanban-md version 0.37.0-fork+b9fc380 wrapped",
+        "wrapper kanban-md version 0.38.0-fork+794efef",
+        "kanban-md version 0.38.0-fork+794efef-extra",
+        "kanban-md version 0.38.0-fork+794efef wrapped",
       ]) {
         await expect(
-          execute(check, ["0.37.0-fork+b9fc380"], {
+          execute(check, ["0.38.0-fork+794efef"], {
             env: { ...environment, KANBAN_VERSION_OUTPUT: output },
           }),
         ).rejects.toMatchObject({ code: 1 });
@@ -235,7 +235,7 @@ describe("Heddle devcontainer feature", () => {
     expect(versions.t3PackageSource).toBe(
       "https://github.com/wyrd-company/t3code/releases/download/server/0.0.38-wyrd.2/t3-0.0.38-wyrd.2.tgz",
     );
-    expect(versions.kanbanMd).toBe("0.37.0-fork+b9fc380");
+    expect(versions.kanbanMd).toBe("0.38.0-fork+794efef");
     expect(readme).toContain(
       `supports the Wyrd Company T3 fork \`${versions.t3}\``,
     );

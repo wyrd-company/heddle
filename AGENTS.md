@@ -233,9 +233,10 @@ orchestrating agents.
 
 Pinned dependencies:
 
-- **`wyrd-company/kanban-md`** at `0.37.0-fork+b9fc380`, which preserves
-  unrecognized front-matter properties through every task mutation. The service
-  verifies this at startup and refuses to run against another build.
+- **`wyrd-company/kanban-md`** at `0.38.0-fork+794efef`, which preserves
+  supported extra front-matter properties through every task mutation and
+  provides typed repository scope. The service verifies this at startup and
+  refuses to run against another build.
 - **Wyrd Company T3Code fork `0.0.38-wyrd.2`** is a qualification pin, not a
   deployment requirement. The qualification suites install this exact public
   release tarball so that test evidence names one T3 build. The service does

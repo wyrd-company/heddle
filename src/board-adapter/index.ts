@@ -119,17 +119,18 @@ const requireTask = (value: unknown): KanbanTaskJson => {
   return value as KanbanTaskJson;
 };
 
+export const isRepositoryScope = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (repository): repository is string =>
+      typeof repository === "string" && repositoryIdentifier.test(repository),
+  ) &&
+  new Set(value).size === value.length;
+
 const requireRepositories = (value: unknown): string[] | undefined => {
   if (value === undefined) return undefined;
-  if (
-    !Array.isArray(value) ||
-    value.length === 0 ||
-    !value.every(
-      (repository): repository is string =>
-        typeof repository === "string" && repositoryIdentifier.test(repository),
-    ) ||
-    new Set(value).size !== value.length
-  ) {
+  if (!isRepositoryScope(value)) {
     throw new Error("kanban-md returned an invalid task repository scope");
   }
   return value;
@@ -284,6 +285,8 @@ export const boardTaskMatchesRecord = (
   task.tags.includes(`type:${record.kind}`) &&
   task.tags.includes(operationTag(identity.operationDigest)) &&
   task.tags.includes(recordTag(identity.recordDigest)) &&
+  // The digest binds declared repos, while this ordered check also rejects a
+  // scoped board task when an older durable record declared no scope.
   (task.repos ?? []).length === (record.repos ?? []).length &&
   (task.repos ?? []).every(
     (repository, index) => repository === (record.repos ?? [])[index],
@@ -506,7 +509,20 @@ export class KanbanBoardAdapter {
     if (product !== undefined && product.trim() === "") {
       throw new Error("task product declaration must not be empty");
     }
+    const declaredRepos = requireRepositories(
+      (parsedFrontMatter as Record<string, JsonValue>)["repos"],
+    );
     const repos = task.repos;
+    if (
+      (declaredRepos ?? []).length !== (repos ?? []).length ||
+      !(declaredRepos ?? []).every(
+        (repository, index) => repository === (repos ?? [])[index],
+      )
+    ) {
+      throw new Error(
+        `kanban-md typed repository scope disagrees with task ${task.id} front matter`,
+      );
+    }
     return {
       blocked: task.blocked ?? false,
       frontMatter: parsedFrontMatter,
