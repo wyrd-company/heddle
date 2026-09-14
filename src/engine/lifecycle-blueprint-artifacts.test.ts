@@ -681,11 +681,32 @@ describe("organization lifecycle blueprint artifacts", () => {
   });
 
   it.each(["standard-delivery", "trivial"] as const)(
-    "rejects a %s merge reached by the reject disposition",
+    "accepts a %s merge reached by a disposition of the author's naming",
+    async (artifactId) => {
+      const renamed = deliveryArtifact(artifactId);
+      const approve = renamed.edges.find(
+        ({ disposition }) => disposition === "approve",
+      )!;
+      approve.disposition = "ship";
+      approve.condition = "result.output.dispositions.ship";
+      const blueprint = { ...renamed, id: artifactId } as LifecycleBlueprint;
+      const effects = Object.fromEntries(
+        blueprint.nodes
+          .filter(({ uses }) => uses !== "wait")
+          .map(({ uses }) => [uses, async () => ({})]),
+      ) as Record<string, LifecycleEffect>;
+
+      expect(() => validateBlueprint(blueprint, effects)).not.toThrow();
+    },
+  );
+
+  it.each(["standard-delivery", "trivial"] as const)(
+    "rejects a %s merge reached by a wait node with no review snapshot before it",
     async (artifactId) => {
       const invalid = deliveryArtifact(artifactId);
       invalid.edges.find(
-        ({ disposition }) => disposition === "reject",
+        ({ disposition, source }) =>
+          source === "remediate" && disposition === "complete",
       )!.target = "merge";
       const blueprint = { ...invalid, id: artifactId } as LifecycleBlueprint;
       const effects = Object.fromEntries(
@@ -695,7 +716,7 @@ describe("organization lifecycle blueprint artifacts", () => {
       ) as Record<string, LifecycleEffect>;
 
       expect(() => validateBlueprint(blueprint, effects)).toThrow(
-        'Merge node "merge" must be reached only from a review wait node approve disposition',
+        'Merge node "merge" must be reached only by a disposition of a wait node that follows a review-snapshot node',
       );
     },
   );
@@ -715,7 +736,7 @@ describe("organization lifecycle blueprint artifacts", () => {
       ) as Record<string, LifecycleEffect>;
 
       expect(() => validateBlueprint(blueprint, effects)).toThrow(
-        'Merge node "merge" must be reached only from a review wait node approve disposition',
+        'Merge node "merge" must be reached only by a disposition of a wait node that follows a review-snapshot node',
       );
     },
   );

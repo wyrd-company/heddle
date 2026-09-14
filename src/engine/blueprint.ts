@@ -172,6 +172,9 @@ export const validateBlueprint = (
   }
 
   const nodesById = new Map(blueprint.nodes.map((node) => [node.id, node]));
+  // A merge lands the head a reviewer judged, so every path into it runs
+  // through a review-snapshot node and then the wait node that judged it.
+  // The disposition that reaches the merge is the author's to name.
   for (const node of blueprint.nodes.filter(({ uses }) => uses === "merge")) {
     const inbound = blueprint.edges.filter(({ target }) => target === node.id);
     if (
@@ -179,7 +182,7 @@ export const validateBlueprint = (
       inbound.some(
         (edge) =>
           nodesById.get(edge.source)?.uses !== "wait" ||
-          edge.disposition !== "approve" ||
+          edge.disposition === undefined ||
           !blueprint.edges.some(
             (candidate) =>
               candidate.target === edge.source &&
@@ -188,7 +191,7 @@ export const validateBlueprint = (
       )
     ) {
       throw new BlueprintValidationError(
-        `Merge node ${JSON.stringify(node.id)} must be reached only from a review wait node approve disposition`,
+        `Merge node ${JSON.stringify(node.id)} must be reached only by a disposition of a wait node that follows a review-snapshot node`,
       );
     }
   }
