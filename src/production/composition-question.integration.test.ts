@@ -327,8 +327,7 @@ describe("production question node", () => {
       .listSessionRuntime()
       .find(
         (session) =>
-          session.instanceId === instanceId &&
-          session.kind === "adjudication",
+          session.instanceId === instanceId && session.kind === "adjudication",
       );
     expect(adjudication).toBeDefined();
     const binding = await new WorkflowMcpSessionResolver(
