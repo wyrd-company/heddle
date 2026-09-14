@@ -130,10 +130,6 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
 
     const baseConfiguration = {
       ...fixture.configuration,
-      adHocProject: {
-        ...fixture.configuration.adHocProject,
-        workspaceRoot: fixture.repositoryRoot,
-      },
       pacing: {
         ...fixture.configuration.pacing,
         maxConcurrentSessions: 4,

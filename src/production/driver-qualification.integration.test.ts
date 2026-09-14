@@ -264,10 +264,6 @@ describe.skipIf(!t3Binary)(
       const configuration = await resolveProductionConfiguration(
         {
           ...fixture.configuration,
-          adHocProject: {
-            ...fixture.configuration.adHocProject,
-            workspaceRoot: fixture.repositoryRoot,
-          },
           pacing: {
             ...fixture.configuration.pacing,
             providerBudgets: {
