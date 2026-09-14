@@ -49,7 +49,7 @@ describe("lifecycle blueprint handoff metadata", () => {
 
   it("rejects invalid handoff metadata", () => {
     const value = blueprint();
-    value.nodes[0]!.handoff = "private" as "standard";
+    value.nodes[0]!.handoff = "Private Handoff";
 
     expect(() => validate(value)).toThrow(
       'Node "prepare" has invalid handoff metadata',
