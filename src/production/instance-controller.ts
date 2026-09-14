@@ -28,6 +28,7 @@ import {
   type LifecycleContextRecord,
   type LifecycleSnapshot,
   type MechanicalNodeUse,
+  questionNodeUse,
 } from "../engine/index.js";
 import type {
   DispatchPacingEvaluator,
@@ -67,6 +68,7 @@ import {
   providerContextFromBinding,
 } from "./session-binding.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
+import type { LifecycleQuestionCoordinator } from "./lifecycle-questions.js";
 import {
   resolveStageSessionSelection,
   StartupProviderSelectionResolver,
@@ -196,6 +198,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       TaskLifecycleResolver,
       "resolve" | "validateTaskProviderAliases"
     >,
+    private readonly questions?: LifecycleQuestionCoordinator,
     private readonly fallbackPacing?: {
       activeSessions(): Promise<readonly PacingSession[]>;
       evaluator: DispatchPacingEvaluator;
@@ -1605,6 +1608,23 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       this.persistence.writeReconcilerRuntime(runtime),
     replacementBinding?: ResolvedSessionBinding,
   ): Promise<void> {
+    // A question node waits on a role, not a session: ask, then wait.
+    const awaited = await this.lifecycle.awaitingNode(instanceId);
+    if (awaited?.uses === questionNodeUse) {
+      if (this.questions === undefined) {
+        throw new Error("Lifecycle questions are not configured");
+      }
+      await this.questions.ask({ instanceId, node: awaited, task });
+      writeRuntime({
+        ...starting,
+        boardStatus,
+        stageEnteredAt: this.now(),
+        stageId,
+        state: "waiting",
+      });
+      if (mirrorBoardStatus) await this.mirrorBoardStatus(task.id, boardStatus);
+      return;
+    }
     const retryingIntent =
       starting.state === "starting" &&
       starting.stageId === stageId &&

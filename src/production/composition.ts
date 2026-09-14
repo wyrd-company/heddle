@@ -84,6 +84,7 @@ import { renderQuestionSet } from "../mcp-server/escalation-contract.js";
 import { stableUuid } from "./stable-uuid.js";
 import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
+import { LifecycleQuestionCoordinator } from "./lifecycle-questions.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { LifecycleAttentionBridge } from "./lifecycle-attention-bridge.js";
 import {
@@ -338,11 +339,13 @@ export const createProductionComposition = (
       providerResolver,
       agentNames,
       lifecycleResolver,
+      new LifecycleQuestionCoordinator(persistence, () => escalation),
       {
         activeSessions: () => productionActiveSessions(persistence!, t3),
         evaluator: pacing,
       },
     );
+    let escalation!: EscalationCoordinator;
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(
       persistence,
       attention,
@@ -368,6 +371,7 @@ export const createProductionComposition = (
       persistence,
       board,
       t3,
+      lifecycle,
     );
     const scopedAdjudication =
       configuration.adjudication === undefined
@@ -387,7 +391,7 @@ export const createProductionComposition = (
           });
     const escalationSettlementAttentionId = (attentionId: string): string =>
       `production:escalation-settlement-failed:${attentionId}`;
-    const escalation = new EscalationCoordinator({
+    escalation = new EscalationCoordinator({
       ...(scopedAdjudication === undefined
         ? {}
         : { adjudication: scopedAdjudication }),

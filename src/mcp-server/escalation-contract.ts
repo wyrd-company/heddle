@@ -122,6 +122,12 @@ export type EscalationAnsweringAuthority = z.infer<
   typeof escalationAnsweringAuthoritySchema
 >;
 
+/** The blueprint question node occurrence a lifecycle question was asked for. */
+export type LifecycleQuestionOccurrence = {
+  nodeId: string;
+  visit: number;
+};
+
 export type EscalationAttention = {
   attentionId: string;
   escalationId: string;
@@ -133,6 +139,8 @@ export type EscalationAttention = {
   questions: EscalationQuestion[];
   stage: string;
   adjudication?: z.infer<typeof adjudicationEvidenceSchema>;
+  /** Present when a blueprint question node asked, not a session. */
+  question?: LifecycleQuestionOccurrence;
 };
 
 export type PendingEscalation = EscalationAttention & {

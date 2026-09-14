@@ -49,6 +49,10 @@ import {
   type PinnedAdjudicationPolicy,
 } from "./adjudication-policy.js";
 import { readProductionHandoffStage } from "./stage-handoff.js";
+import {
+  lifecycleProjectionOf,
+  readLifecycleContext,
+} from "../engine/index.js";
 
 type AdjudicationAuthority = Extract<
   PendingEscalation["answeringAuthority"],
@@ -711,9 +715,17 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     task: BoardTask;
     worktreePath: string;
   }> {
-    const owner = this.options.persistence
-      .listSessionRuntime()
-      .find(({ sessionKey }) => sessionKey === opened.ownerSessionKey);
+    const sessions = this.options.persistence.listSessionRuntime();
+    // A lifecycle question has no owning session; the adjudicator works
+    // where the instance's most recent stage session worked.
+    const owner =
+      opened.question === undefined
+        ? sessions.find(
+            ({ sessionKey }) => sessionKey === opened.ownerSessionKey,
+          )
+        : sessions
+            .filter(({ instanceId }) => instanceId === opened.instanceId)
+            .sort((left, right) => right.activation - left.activation)[0];
     const runtime = this.options.persistence
       .listReconcilerRuntime()
       .find(({ instanceId }) => instanceId === opened.instanceId);
@@ -747,12 +759,23 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     const epic = board.find(({ id }) => id === epicId);
     if (epic === undefined)
       throw new Error("Escalation epic is absent from the board");
-    const prior = await readProductionHandoffStage({
-      instanceId: opened.instanceId,
-      persistence: this.options.persistence,
-      repositoryRoot: this.options.blueprintRepository.repositoryRoot,
-      stageId: opened.stage,
-    });
+    const priorStageOutputs =
+      opened.question === undefined
+        ? (
+            await readProductionHandoffStage({
+              instanceId: opened.instanceId,
+              persistence: this.options.persistence,
+              repositoryRoot: this.options.blueprintRepository.repositoryRoot,
+              stageId: opened.stage,
+            })
+          ).handoff.priorStageOutputs
+        : Object.values(
+            lifecycleProjectionOf(
+              readLifecycleContext(
+                this.options.persistence.getInstance(opened.instanceId)!,
+              ),
+            ).outputs,
+          );
     const context: JsonValue = {
       epic: taskSummary(epic),
       children: board
@@ -767,7 +790,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         stage: opened.stage,
       },
       policy: { blobHash: policy.blobHash, path: policy.path },
-      priorStageOutputs: prior.handoff.priorStageOutputs,
+      priorStageOutputs,
     };
     return sanitizeIncidentValue(context, this.#secrets()) as JsonValue;
   }

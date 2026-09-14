@@ -17,6 +17,7 @@ import {
   type EscalationResult,
   type PendingEscalation,
   type SessionEscalation,
+  type LifecycleQuestionOccurrence,
 } from "./escalation-contract.js";
 import {
   EscalationHistory,
@@ -146,14 +147,25 @@ export class EscalationCoordinator {
       "instance" | "sessionKey" | "parentSessionKey" | "stage"
     >,
     input: EscalationInput,
+    options: {
+      /**
+       * The role a blueprint question node asks. `adjudication` needs an
+       * adjudication router; without one the operator answers, as for any
+       * escalation Heddle cannot adjudicate.
+       */
+      answeringAuthority?: "adjudication" | "operator";
+      question?: LifecycleQuestionOccurrence;
+    } = {},
   ): Promise<EscalationResult> {
+    const adjudicate =
+      this.#adjudication !== undefined &&
+      options.answeringAuthority !== "operator";
     const history = this.#history.open(
       binding,
       input,
       this.#now(),
-      this.#adjudication === undefined
-        ? { kind: "operator" }
-        : {
+      adjudicate
+        ? {
             kind: "adjudication",
             sessionKey: adjudicationSessionKey(
               escalationAttentionId(
@@ -162,7 +174,9 @@ export class EscalationCoordinator {
                 input.escalationId,
               ),
             ),
-          },
+          }
+        : { kind: "operator" },
+      options.question,
     );
     if (
       this.#history.find(
@@ -715,6 +729,7 @@ export {
   type EscalationInput,
   type EscalationQuestion,
   type EscalationResult,
+  type LifecycleQuestionOccurrence,
   type ParentEscalation,
   type PendingEscalation,
   type SessionEscalation,

@@ -19,6 +19,7 @@ import {
   type EscalationInput,
   type PendingEscalation,
   validateAnswers,
+  type LifecycleQuestionOccurrence,
 } from "./escalation-contract.js";
 import type {
   WorkflowMcpPersistence,
@@ -63,6 +64,25 @@ const eventPayload = (event: PersistedEvent): Record<string, JsonValue> => {
   return event.payload;
 };
 
+const lifecycleQuestionFrom = (
+  value: JsonValue | undefined,
+  sequence: number,
+): LifecycleQuestionOccurrence | undefined => {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof value["nodeId"] !== "string" ||
+    typeof value["visit"] !== "number"
+  ) {
+    throw new Error(
+      `Escalation event ${sequence} has an invalid lifecycle question`,
+    );
+  }
+  return { nodeId: value["nodeId"], visit: value["visit"] };
+};
+
 const openedFrom = (event: PersistedEvent): PendingEscalation => {
   const value = eventPayload(event);
   const parsed = escalationInputSchema.parse({
@@ -83,6 +103,7 @@ const openedFrom = (event: PersistedEvent): PendingEscalation => {
       `Escalation event ${event.sequence} has an invalid payload`,
     );
   }
+  const question = lifecycleQuestionFrom(value["question"], event.sequence);
   return {
     answeringAuthority:
       value["answeringAuthority"] === undefined
@@ -102,6 +123,7 @@ const openedFrom = (event: PersistedEvent): PendingEscalation => {
     requestId: parsed.requestId,
     threadId: parsed.threadId,
     stage: value["stage"],
+    ...(question === undefined ? {} : { question }),
   };
 };
 
@@ -137,6 +159,7 @@ export class EscalationHistory {
     input: EscalationInput,
     openedAt: string,
     topLevelAuthority: EscalationAnsweringAuthority = { kind: "operator" },
+    question?: LifecycleQuestionOccurrence,
   ): {
     answered?: AnsweredEscalation;
     opened: PendingEscalation;
@@ -163,6 +186,7 @@ export class EscalationHistory {
         binding.parentSessionKey === undefined
           ? topLevelAuthority
           : { kind: "session", sessionKey: binding.parentSessionKey },
+      ...(question === undefined ? {} : { question }),
     };
     while (true) {
       const prior = this.find(

@@ -15,6 +15,12 @@ import type { KanbanBoardAdapter } from "../board-adapter/index.js";
 import { harnessAnswers } from "../mcp-server/escalation-contract.js";
 import { userInputResponseRecorded } from "../control-plane/session-response-reconciliation.js";
 import type { ProductionT3Client } from "./composition.js";
+import {
+  answeredDisposition,
+  questionAnswerOutput,
+  questionOperationId,
+} from "./lifecycle-questions.js";
+import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { productionSessionBindingFor } from "./subagent-composition.js";
 
 const answerLines = (
@@ -61,6 +67,7 @@ export class ProductionEscalationAnswerEffects
       "appendTaskActivity" | "readTask"
     >,
     private readonly t3: ProductionT3Client,
+    private readonly lifecycle?: Pick<ProductionLifecycleRouter, "resume">,
   ) {}
 
   async record(input: {
@@ -93,6 +100,23 @@ export class ProductionEscalationAnswerEffects
     commandId: string;
     opened: PendingEscalation;
   }): Promise<void> {
+    // A blueprint question node has no session to reply to; its answer
+    // resumes the lifecycle as the node's output.
+    if (input.opened.question !== undefined) {
+      if (this.lifecycle === undefined) {
+        throw new Error("Lifecycle question delivery is not configured");
+      }
+      await this.lifecycle.resume({
+        disposition: answeredDisposition,
+        instanceId: input.opened.instanceId,
+        operationId: questionOperationId(
+          input.opened.question.nodeId,
+          input.opened.question.visit,
+        ),
+        output: questionAnswerOutput(input.opened, input.answered),
+      });
+      return;
+    }
     const binding = this.#currentDeliveryBinding(input.opened);
     if (binding.threadId !== input.opened.threadId) {
       throw new Error("Question reply cannot target a replacement thread");
