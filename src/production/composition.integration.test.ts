@@ -16,6 +16,7 @@ import {
 } from "../control-plane/index.js";
 import { isStoredHandoff } from "../control-plane/stored-stage-handoff.js";
 import {
+  lifecycleProjectionOf,
   readLifecycleContext,
   type LifecycleBlueprint,
 } from "../engine/index.js";
@@ -3206,6 +3207,9 @@ describe("production composition", () => {
       correlationToken: stored.correlationToken,
       handoff: stored.handoff,
       instanceId,
+      lifecycle: lifecycleProjectionOf(
+        readLifecycleContext(composition.persistence.getInstance(instanceId)!),
+      ),
       sessionKey: stored.sessionKey,
       stage: "implement",
       task: task.frontMatter,

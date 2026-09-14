@@ -5,7 +5,7 @@
 // ---
 
 import type { InstanceRecord, JsonValue } from "../persistence/index.js";
-import { GitBlueprintStore } from "../engine/index.js";
+import { GitBlueprintStore, lifecycleProjectionOf } from "../engine/index.js";
 import type { WorkflowMcpStageContract } from "../mcp-server/types.js";
 import {
   isWorkflowMcpStageContract,
@@ -160,6 +160,23 @@ export type HandoffTemplateResolver = (
   skillNames: readonly string[],
   input: SessionBootstrapInput,
 ) => Promise<PinnedHandoffTemplate>;
+
+/**
+ * What the graph has done so far, for the template. Read from the persisted
+ * Flowcraft context the same way the bootstrap reads `awaitingNodeIds`: by
+ * shape, so a record that has not run yet renders an empty projection.
+ */
+const lifecycleProjection = (record: InstanceRecord) => {
+  const context = record.state.flowcraftContext;
+  const serializedContext =
+    typeof context === "object" &&
+    context !== null &&
+    !Array.isArray(context) &&
+    typeof context["serializedContext"] === "string"
+      ? context["serializedContext"]
+      : null;
+  return lifecycleProjectionOf({ serializedContext });
+};
 
 export type SessionTemplateAuthority = {
   readHandoffTemplate: HandoffTemplateResolver;
@@ -519,6 +536,7 @@ const ensureStoredHandoff = async (
       correlationToken,
       handoff,
       instanceId: input.instanceId,
+      lifecycle: lifecycleProjection(refreshed),
       sessionKey: input.sessionKey,
       stage: input.handoff.stage.name,
       task: input.task,

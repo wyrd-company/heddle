@@ -27,6 +27,8 @@ export type HandoffRenderInput = {
   correlationToken: string;
   handoff: string;
   instanceId: string;
+  /** What the graph has done so far; see engine/lifecycle-projection. */
+  lifecycle: JsonValue;
   sessionKey: string;
   stage: string;
   task: JsonValue;
@@ -255,7 +257,7 @@ export const renderStageHandoff = (input: HandoffRenderInput): string => {
   let second: string;
   try {
     assertSupportedTemplateSyntax(input.template.body, input.template.path);
-    const context = { handoff, task: input.task };
+    const context = { handoff, lifecycle: input.lifecycle, task: input.task };
     first = new nunjucks.Template(
       input.template.body,
       renderer,

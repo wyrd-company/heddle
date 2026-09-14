@@ -38,6 +38,11 @@ export {
 export { LifecycleResolver } from "./lifecycle-resolver.js";
 export { readLifecycleContext } from "./lifecycle-state.js";
 export {
+  lifecycleContextKey,
+  lifecycleProjectionOf,
+  type LifecycleProjection,
+} from "./lifecycle-projection.js";
+export {
   readCompletedStageOutputs,
   type CompletedStageOperation,
   type CompletedStageOutput,

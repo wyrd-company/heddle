@@ -6,6 +6,7 @@
 import jsonata from "jsonata";
 
 import { BlueprintValidationError } from "./errors.js";
+import { recordNodeFinish } from "./lifecycle-projection.js";
 import type { LifecycleBlueprint, LifecycleEdge } from "./types.js";
 
 /**
@@ -174,7 +175,11 @@ export const routeResume = async (
   disposition: string,
   output: Record<string, unknown>,
 ): Promise<string> => {
-  const context = JSON.parse(serializedContext) as Record<string, unknown>;
+  const context = recordNodeFinish(
+    JSON.parse(serializedContext) as Record<string, unknown>,
+    waitNodeId,
+    output,
+  );
   const routing = await evaluateOutgoingConditions(blueprint, waitNodeId, {
     ...context,
     result: { output },

@@ -21,6 +21,10 @@ import { errorDetail } from "../error-details.js";
 import { createHash } from "node:crypto";
 import { routeResume } from "./edge-conditions.js";
 import {
+  initialProjection,
+  lifecycleContextKey,
+} from "./lifecycle-projection.js";
+import {
   BlueprintValidationError,
   InvalidDispositionError,
   TransitionConflictError,
@@ -397,9 +401,11 @@ export class LifecycleEngine {
     const runtimeBlueprint = prepareRuntimeBlueprint(blueprint);
     let result: WorkflowResult;
     if (pending.kind === "start") {
+      const initialContext = pending.initialContext ?? {};
       result = await runtime.run(runtimeBlueprint, {
-        ...(pending.initialContext ?? {}),
+        ...initialContext,
         _heddleInstanceId: record.instanceId,
+        [lifecycleContextKey]: initialProjection(blueprint, initialContext),
       });
     } else {
       if (lifecycleContext.serializedContext === null) {

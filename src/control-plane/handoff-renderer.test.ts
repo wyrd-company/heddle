@@ -116,6 +116,13 @@ const input = (
     },
   }),
   instanceId: "instance-17",
+  lifecycle: {
+    blueprint: { metadata: {} },
+    current: { node: "prepare", visit: 1 },
+    outputs: { prepare: { count: 2 } },
+    task: { id: 17, title: "Arrange a sample" },
+    visits: { prepare: 1 },
+  },
   sessionKey: "session-1",
   stage: "arrange",
   task: { id: 17, title: "Arrange a sample" },
@@ -930,5 +937,19 @@ describe("GitHandoffTemplateStore", () => {
     ).rejects.toThrow(
       `Pinned handoff template commit is unavailable: ${blobHash}`,
     );
+  });
+});
+
+describe("lifecycle data in templates", () => {
+  it("renders what the graph has done so far from the lifecycle projection", () => {
+    const rendered = renderStageHandoff(
+      input({
+        template: {
+          ...input().template,
+          body: "visits={{ lifecycle.visits.prepare }} count={{ lifecycle.outputs.prepare.count }} node={{ lifecycle.current.node }}",
+        },
+      }),
+    );
+    expect(rendered).toContain("visits=1 count=2 node=prepare");
   });
 });

@@ -22,6 +22,10 @@ import {
   routedBlueprint,
 } from "./edge-conditions.js";
 import { BlueprintValidationError } from "./errors.js";
+import {
+  lifecycleContextKey,
+  recordNodeFinish,
+} from "./lifecycle-projection.js";
 import type {
   ExpectedLandings,
   LifecycleBlueprint,
@@ -199,7 +203,12 @@ export const createLifecycleRuntime = (
           if (error !== undefined || result === undefined) return;
           if (blueprint.nodes.find(({ id }) => id === nodeId)?.uses === "wait")
             return;
-          const data = await context.toJSON();
+          const data = recordNodeFinish(
+            await context.toJSON(),
+            nodeId,
+            result.output,
+          );
+          await context.set(lifecycleContextKey, data[lifecycleContextKey]);
           const routing = await evaluateOutgoingConditions(blueprint, nodeId, {
             ...data,
             result,
