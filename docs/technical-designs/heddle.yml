@@ -113,12 +113,12 @@ proposed-design:
     dispatch starts, while in-flight instances run to their next wait state and
     hold. An epic in `uat` is not paused; it admits UAT child dispatch and only
     the exact late delivery work described below. A `done` epic is terminal,
-    and an epic with an unknown status dispatches nothing. Paused, UAT, and
-    An epic title change records a durable title revision before an idempotent
+    and an epic with an unknown status dispatches nothing. An epic title change
+    records a durable title revision before an idempotent
     T3 metadata update and does not change the project UUID. Fresh Heddle state
     fails closed when another T3 project already owns the epic workspace root.
-    Paused, UAT, and completed epics retain their project so archived stage threads remain
-    available for inspection. The durable `active` project
+    Paused, UAT, and completed epics retain their project so archived stage
+    threads remain available for inspection. The durable `active` project
     state means that the T3 project exists; it does not authorize child task
     execution. The epic's board status remains dispatch authority, and a done
     epic cannot dispatch a child. Project deletion is a separate explicit
@@ -1423,11 +1423,12 @@ proposed-design:
     The installation uses one Heddle-managed shared T3 project for ad-hoc tasks
     and one Heddle-managed T3 project per started epic. Project UUIDs are
     generated and persisted before creation. Optional labels and epic title
-    changes update only the T3 project title through durable revisions. Managed projects remain
-    available after epic completion so their archived stage threads can be
-    inspected. Repository scope comes from the top-level task or epic and is
-    visible in every agent handoff, including inherited child scope. Existing
-    repo-first worktrees remain usable; Heddle does not move or rewrite them.
+    changes update only the T3 project title through durable revisions. Managed
+    projects remain available after epic completion so their archived stage
+    threads can be inspected. Repository scope comes from the top-level task or
+    epic and is visible in every agent handoff, including inherited child scope.
+    Existing repo-first worktrees remain usable; Heddle does not move or rewrite
+    them.
 
     The deployment server accepts the canonical production composition and
     shares its board, persistence, console state, console action port,
