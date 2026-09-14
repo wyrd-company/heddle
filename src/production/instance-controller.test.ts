@@ -65,7 +65,10 @@ describe("production instance controller", () => {
     const controller = new ProductionInstanceController(
       {} as ProductionConfiguration,
       persistence,
-      {} as ProductionLifecycleRouter,
+      {
+        awaitingNode: async () => undefined,
+        endedInFailure: async () => false,
+      } as unknown as ProductionLifecycleRouter,
       {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       new DurableAttentionQueue(persistence),
@@ -196,7 +199,10 @@ describe("production instance controller", () => {
         t3: { accessToken: "sample-access-token" },
       } as never,
       persistence,
-      {} as ProductionLifecycleRouter,
+      {
+        awaitingNode: async () => undefined,
+        endedInFailure: async () => false,
+      } as unknown as ProductionLifecycleRouter,
       {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       attention,
@@ -324,7 +330,10 @@ describe("production instance controller", () => {
     const controller = new ProductionInstanceController(
       { session: {} } as never,
       persistence,
-      {} as ProductionLifecycleRouter,
+      {
+        awaitingNode: async () => undefined,
+        endedInFailure: async () => false,
+      } as unknown as ProductionLifecycleRouter,
       {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       new DurableAttentionQueue(persistence),
@@ -435,7 +444,10 @@ describe("production instance controller", () => {
     const controller = new ProductionInstanceController(
       {} as never,
       persistence,
-      {} as ProductionLifecycleRouter,
+      {
+        awaitingNode: async () => undefined,
+        endedInFailure: async () => false,
+      } as unknown as ProductionLifecycleRouter,
       {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       new DurableAttentionQueue(persistence),
@@ -490,7 +502,10 @@ describe("production instance controller", () => {
     const controller = new ProductionInstanceController(
       {} as ProductionConfiguration,
       persistence,
-      {} as ProductionLifecycleRouter,
+      {
+        awaitingNode: async () => undefined,
+        endedInFailure: async () => false,
+      } as unknown as ProductionLifecycleRouter,
       {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       attention,
@@ -602,6 +617,8 @@ describe("production instance controller", () => {
       status: "completed" as const,
     }));
     const lifecycle = {
+      awaitingNode: vi.fn(async () => undefined),
+      endedInFailure: vi.fn(async () => false),
       plannedStartStage: vi.fn(async () => undefined),
       start,
       validateTaskProviderAliases: vi.fn(async () => undefined),
@@ -762,7 +779,10 @@ describe("production instance controller", () => {
     const controller = new ProductionInstanceController(
       {} as ProductionConfiguration,
       persistence,
-      {} as ProductionLifecycleRouter,
+      {
+        awaitingNode: async () => undefined,
+        endedInFailure: async () => false,
+      } as unknown as ProductionLifecycleRouter,
       {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       attention,
@@ -886,7 +906,10 @@ describe("production instance controller", () => {
       const controller = new ProductionInstanceController(
         {} as ProductionConfiguration,
         persistence,
-        {} as ProductionLifecycleRouter,
+        {
+          awaitingNode: async () => undefined,
+          endedInFailure: async () => false,
+        } as unknown as ProductionLifecycleRouter,
         {} as TaskRepositoryRouter,
         {} as EpicProjectCoordinator,
         attention,
@@ -959,6 +982,8 @@ describe("production instance controller", () => {
     });
     const replay = vi.fn<() => Promise<LifecycleSnapshot>>();
     const lifecycle = {
+      awaitingNode: vi.fn(async () => undefined),
+      endedInFailure: vi.fn(async () => false),
       isTransitionActive: vi.fn(() => true),
       resume: replay,
       start: replay,

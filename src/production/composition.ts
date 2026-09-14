@@ -84,6 +84,7 @@ import { renderQuestionSet } from "../mcp-server/escalation-contract.js";
 import { stableUuid } from "./stable-uuid.js";
 import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
+import { createLifecyclePrimitiveEffects } from "./lifecycle-primitives.js";
 import { LifecycleQuestionCoordinator } from "./lifecycle-questions.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import { LifecycleAttentionBridge } from "./lifecycle-attention-bridge.js";
@@ -272,8 +273,10 @@ export const createProductionComposition = (
       await pushover.send(page);
       attention.resolveNotificationFailures(page.attentionId);
     };
-    const effects: Record<string, LifecycleEffect> =
-      createMechanicalNodeEffects({ board, statuses: boardStatuses });
+    const effects: Record<string, LifecycleEffect> = {
+      ...createMechanicalNodeEffects({ board, statuses: boardStatuses }),
+      ...createLifecyclePrimitiveEffects({ attention, persistence }),
+    };
     effects["complete"] = async () => ({});
     const routing = new TaskRepositoryRouter(
       configuration.adHocProject.workspaceRoot,
@@ -339,11 +342,11 @@ export const createProductionComposition = (
       providerResolver,
       agentNames,
       lifecycleResolver,
-      new LifecycleQuestionCoordinator(persistence, () => escalation),
       {
         activeSessions: () => productionActiveSessions(persistence!, t3),
         evaluator: pacing,
       },
+      new LifecycleQuestionCoordinator(persistence, () => escalation),
     );
     let escalation!: EscalationCoordinator;
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(

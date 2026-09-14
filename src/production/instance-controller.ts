@@ -198,11 +198,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       TaskLifecycleResolver,
       "resolve" | "validateTaskProviderAliases"
     >,
-    private readonly questions?: LifecycleQuestionCoordinator,
     private readonly fallbackPacing?: {
       activeSessions(): Promise<readonly PacingSession[]>;
       evaluator: DispatchPacingEvaluator;
     },
+    private readonly questions?: LifecycleQuestionCoordinator,
   ) {}
 
   private sessionSelectionResolver(): StageProviderSelectionResolver {
@@ -929,11 +929,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     if (stageId === undefined) {
       this.persistence.writeReconcilerRuntime({
         ...starting,
-        boardStatus:
-          snapshot.status === "completed"
-            ? ((await this.boardStatusFor(input.instanceId, "finalize")) ??
-              starting.boardStatus)
-            : starting.boardStatus,
+        boardStatus: await this.#completedBoardStatus(
+          input.instanceId,
+          snapshot.status,
+          starting.boardStatus,
+        ),
         state: snapshot.status === "completed" ? "done" : "running",
       });
       return;
@@ -1505,11 +1505,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     if (stageId === undefined) {
       this.persistence.writeReconcilerRuntime({
         ...runtime,
-        boardStatus:
-          snapshot.status === "completed"
-            ? ((await this.boardStatusFor(runtime.instanceId, "finalize")) ??
-              runtime.boardStatus)
-            : runtime.boardStatus,
+        boardStatus: await this.#completedBoardStatus(
+          runtime.instanceId,
+          snapshot.status,
+          runtime.boardStatus,
+        ),
         state: snapshot.status === "completed" ? "done" : "running",
       });
       return;
@@ -1554,6 +1554,20 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       boardStatus,
       restoreInitialBoardStatus,
     );
+  }
+
+  /**
+   * A lifecycle that completed by reaching a `fail` node keeps the task where
+   * it was; only a lifecycle that ended normally mirrors the terminal status.
+   */
+  async #completedBoardStatus(
+    instanceId: string,
+    status: LifecycleContextRecord["status"],
+    current: string,
+  ): Promise<string> {
+    if (status !== "completed") return current;
+    if (await this.lifecycle.endedInFailure(instanceId)) return current;
+    return (await this.boardStatusFor(instanceId, "finalize")) ?? current;
   }
 
   async #raiseSynchronizationError(
@@ -1608,8 +1622,12 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       this.persistence.writeReconcilerRuntime(runtime),
     replacementBinding?: ResolvedSessionBinding,
   ): Promise<void> {
-    // A question node waits on a role, not a session: ask, then wait.
-    const awaited = await this.lifecycle.awaitingNode(instanceId);
+    // A question node waits on a role, not a session: ask, then wait. An
+    // activation prepared before the lifecycle exists has nothing awaited.
+    const awaited =
+      this.persistence.getInstance(instanceId) === undefined
+        ? undefined
+        : await this.lifecycle.awaitingNode(instanceId);
     if (awaited?.uses === questionNodeUse) {
       if (this.questions === undefined) {
         throw new Error("Lifecycle questions are not configured");
