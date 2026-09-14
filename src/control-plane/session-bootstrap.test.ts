@@ -831,4 +831,94 @@ describe("stage session bootstrap", () => {
     ]);
     persistence.close();
   });
+
+  it("renders the lifecycle projection persisted with the instance", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "heddle-bootstrap-"));
+    scratchDirectories.push(stateDirectory);
+    const persistence = new SqlitePersistence({ stateDirectory });
+    persistence.createInstance("instance-projected", {
+      ...initialState(),
+      flowcraftContext: {
+        awaitingNodeIds: ["prepare"],
+        serializedContext: JSON.stringify({
+          _awaitingNodeIds: ["prepare"],
+          lifecycle: {
+            blueprint: { metadata: { limit: 2 } },
+            current: { node: "mix", visit: 1 },
+            outputs: { mix: { effect: "mix" } },
+            task: { id: 1 },
+            visits: { mix: 1, prepare: 2 },
+          },
+        }),
+      },
+    });
+    const dependencies: SessionBootstrapDependencies = {
+      activationEvents: persistence,
+      persistence,
+      instantiateTodoList,
+      templateAuthority: {
+        ...sampleTemplateAuthority,
+        readHandoffTemplate: async (reference, _skillNames, input) => ({
+          ...reference,
+          body: "visits={{ lifecycle.visits.prepare }} limit={{ lifecycle.blueprint.metadata.limit }} mix={{ lifecycle.outputs.mix.effect }}\n",
+          includes: {},
+          kind: input.handoff.stage.kind,
+          skills: {},
+        }),
+      },
+      resolveWorkflowMcpStageContract,
+      workflowMcpEndpoint,
+      t3: {
+        registerWorkflowMcpProviderSession: async () => undefined,
+        dispatch: async () => ({ sequence: 1 }),
+      },
+      ensureWorktree: async ({ branch }) => ({
+        branch,
+        created: true,
+        path: "/workspaces/worktrees/sample-repository/task-prepare",
+      }),
+      mintCorrelationToken: () => "correlation-token",
+      nextId: vi
+        .fn()
+        .mockReturnValueOnce("thread-1")
+        .mockReturnValueOnce("create-1")
+        .mockReturnValueOnce("turn-1")
+        .mockReturnValueOnce("message-1"),
+    };
+
+    const result = await bootstrapStageSession(
+      {
+        handoff: {
+          skillPointer: "skill://prepare",
+          stage: { kind: "standard", name: "prepare", priorStageOutputs: [] },
+          taskContract: { title: "Prepare inventory" },
+        },
+        instanceId: "instance-projected",
+        interactionMode: "default",
+        modelSelection: { instanceId: "cursor", model: "default" },
+        projectId: "project-1",
+        providerContext: {
+          cliVersion: "2026.08.11-e8db854",
+          driver: "cursor",
+          lifecycle: "independent",
+          providerInstanceId: "cursor",
+        },
+        runtimeMode: "auto",
+        sessionKey: "prepare-1",
+        task: { id: 1, title: "Prepare inventory" },
+        taskId: 1,
+        title: "Prepare inventory",
+        worktree: {
+          baseRef: "main",
+          branch: "task/prepare",
+          repositoryName: "sample-repository",
+          repositoryRoot: "/workspaces/sample-repository",
+          worktreeName: "task-prepare",
+        },
+      },
+      dependencies,
+    );
+    expect(result.renderedHandoff).toContain("visits=2 limit=2 mix=mix");
+    persistence.close();
+  });
 });
