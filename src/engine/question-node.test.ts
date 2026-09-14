@@ -129,6 +129,68 @@ describe("question node", () => {
     fixture.persistence.close();
   });
 
+  it("asks at each of two question nodes and binds each answer to its own node", async () => {
+    const run: string[] = [];
+    const blueprint = questionBlueprint();
+    const second = structuredClone(
+      blueprint.nodes.find(({ id }) => id === "ask")!,
+    );
+    second.id = "ask-again";
+    blueprint.nodes.push(second);
+    blueprint.edges = [
+      { source: "mix", target: "ask" },
+      {
+        condition: "result.output.selected.confirm.yes",
+        source: "ask",
+        target: "ask-again",
+      },
+      {
+        condition: "result.output.selected.confirm.no",
+        source: "ask",
+        target: "discard",
+      },
+      {
+        condition: "result.output.selected.confirm.yes",
+        source: "ask-again",
+        target: "serve",
+      },
+      {
+        condition: "result.output.selected.confirm.no",
+        source: "ask-again",
+        target: "discard",
+      },
+    ];
+    const fixture = await makeFixture(blueprint, effects(run));
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "twice",
+    });
+    await expect(fixture.engine.awaitingNode("twice")).resolves.toMatchObject({
+      id: "ask",
+    });
+    await fixture.engine.resume({
+      disposition: "answered",
+      instanceId: "twice",
+      operationId: "ask:1",
+      output: answer("yes"),
+    });
+    await expect(fixture.engine.awaitingNode("twice")).resolves.toMatchObject({
+      id: "ask-again",
+    });
+    const completed = await fixture.engine.resume({
+      disposition: "answered",
+      instanceId: "twice",
+      operationId: "ask-again:1",
+      output: answer("no"),
+    });
+    expect(completed).toMatchObject({
+      awaitingNodeIds: [],
+      status: "completed",
+    });
+    expect(run).toEqual(["mix", "discard"]);
+    fixture.persistence.close();
+  });
+
   it("accepts only the answered disposition", async () => {
     const fixture = await makeFixture(questionBlueprint(), effects([]));
     await fixture.engine.start({

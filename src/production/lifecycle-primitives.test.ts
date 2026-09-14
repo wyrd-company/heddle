@@ -118,6 +118,34 @@ describe("fail primitive", () => {
     persistence.close();
   });
 
+  it("raises a fresh attention when the node recurs on a later visit", async () => {
+    const { effects, persistence } = await harness();
+    persistence.writeReconcilerRuntime({
+      boardStatus: "in-progress",
+      instanceId: "instance-f",
+      state: "running",
+      taskId: 17,
+    });
+    // The projection counts finished visits; the running visit is the next.
+    const visit = (n: number) => ({
+      _heddleInstanceId: "instance-f",
+      lifecycle: { task: { id: 17 }, visits: { stop: n - 1 } },
+    });
+    const params = { __heddleNodeId: "stop", message: "Stopped" };
+    await run(effects.fail, visit(1), params);
+    // At-least-once execution of the same visit raises nothing new...
+    await run(effects.fail, visit(1), params);
+    // ...and the next visit of the same node is its own occurrence.
+    await run(effects.fail, visit(2), params);
+    expect(
+      persistence.listAttention().map(({ attentionId }) => attentionId),
+    ).toEqual([
+      "lifecycle:failed:instance-f:stop:1",
+      "lifecycle:failed:instance-f:stop:2",
+    ]);
+    persistence.close();
+  });
+
   it("requires a message and fails closed on data the graph lacks", async () => {
     const { effects, persistence } = await harness();
     await expect(
@@ -166,6 +194,52 @@ describe("resolve-attention primitive", () => {
     await expect(run(effects["resolve-attention"], data)).resolves.toEqual({
       attentionId: "production:sample-condition",
       resolved: false,
+    });
+    persistence.close();
+  });
+
+  it("resolves a reopened attention again for the occurrence that owns it", async () => {
+    const { attention, effects, persistence } = await harness();
+    await attention.raise({
+      attentionId: "production:sample-condition",
+      code: "sample-condition",
+      error: { cause: null, message: "sample", name: "Error" },
+      incidentId: "instance-r",
+      instanceId: null,
+      kind: "production-error",
+      message: "A sample condition",
+      taskId: 17,
+    });
+    const data = (instanceId: string) => ({
+      _heddleInstanceId: instanceId,
+      _heddleSourceAttentionId: "production:sample-condition",
+    });
+    await run(effects["resolve-attention"], data("instance-r"));
+    // The condition recurs: the operator or a later episode reopens it and a
+    // second incident occurrence resolves it under its own justification.
+    expect(attention.reopen("production:sample-condition")).toBe(true);
+    await expect(
+      run(effects["resolve-attention"], data("instance-r-2")),
+    ).resolves.toEqual({
+      attentionId: "production:sample-condition",
+      resolved: true,
+    });
+    expect(
+      persistence.getAttention("production:sample-condition"),
+    ).toMatchObject({
+      resolutionJustification: "instance-r-2",
+    });
+    // The first occurrence's replay is inert against the new resolution.
+    await expect(
+      run(effects["resolve-attention"], data("instance-r")),
+    ).resolves.toEqual({
+      attentionId: "production:sample-condition",
+      resolved: false,
+    });
+    expect(
+      persistence.getAttention("production:sample-condition"),
+    ).toMatchObject({
+      resolutionJustification: "instance-r-2",
     });
     persistence.close();
   });

@@ -217,16 +217,18 @@ const raiseIncident = async () => {
   // Synthetic threads stay active, so the WIP limit must admit every stage.
   fixture.configuration.pacing.maxConcurrentSessions = 10;
   await installIncidentBlueprint(fixture);
-  const composition = createProductionComposition({
-    blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
-    configuration: fixture.configuration,
-    providerUsage: {
-      readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
-    },
-    pushoverTransport: { send: vi.fn(async () => undefined) },
-    t3: new SyntheticT3(),
-    workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
-  });
+  const compose = () =>
+    createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+  const composition = compose();
   await composition.start();
   // A code no reconciler pass resolves on its own, so only the blueprint's
   // resolve-attention node can close it.
@@ -283,6 +285,7 @@ const raiseIncident = async () => {
   });
   return {
     advance,
+    compose,
     composition,
     diagnosis,
     fixture,
@@ -402,6 +405,49 @@ describe("production incident lifecycle", () => {
       ]),
     );
     await composition.close();
+  });
+
+  it("finishes an incident after a restart between its resolution and its synchronization", async () => {
+    const {
+      advance,
+      compose,
+      composition,
+      diagnosis,
+      incident,
+      runtime,
+      source,
+    } = await raiseIncident();
+    await advance("diagnosed", diagnosis());
+    await advance("approve");
+    expect(runtime()).toMatchObject({ stageId: "act", state: "waiting" });
+    // The lifecycle completes — the resolve node closes the source — but the
+    // process dies before the incident runtime is synchronized.
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId: incident.incidentId,
+      operationId: `${incident.incidentId}:act:1:advance`,
+      output: { conditionState: "cleared" },
+    });
+    expect(
+      composition.persistence.getAttention(source.attentionId),
+    ).toMatchObject({
+      resolutionJustification: incident.incidentId,
+    });
+    expect(runtime()).toMatchObject({ stageId: "act", state: "waiting" });
+    await composition.close();
+
+    const restarted = compose();
+    await restarted.start();
+    expect(restarted.persistence.listIncidentRuntime()[0]).toMatchObject({
+      incidentId: incident.incidentId,
+      state: "done",
+    });
+    expect(
+      restarted.attention
+        .list()
+        .filter(({ taskId }) => taskId === incident.taskId),
+    ).toEqual([]);
+    await restarted.close();
   });
 
   it("acts without asking when the mutation is below the threshold", async () => {
