@@ -6,6 +6,7 @@
 import {
   boardRecordIdentity,
   boardTaskMatchesRecord,
+  isRepositoryScope,
   type BoardTask,
   type CreateBoardRecord,
 } from "../board-adapter/index.js";
@@ -19,20 +20,27 @@ type StoredDynamicTaskRequest = {
   dependsOn: number[];
   operationKey: string;
   priority: string | null;
+  repos?: string[] | null;
   status: string | null;
   title: string;
 };
 
 export const dynamicTaskIntentRequest = (
   record: CreateBoardRecord,
-): StoredDynamicTaskRequest => ({
-  body: record.body,
-  dependsOn: record.dependsOn ?? [],
-  operationKey: record.operationKey,
-  priority: record.priority ?? null,
-  status: record.status ?? null,
-  title: record.title,
-});
+): StoredDynamicTaskRequest => {
+  if (record.repos !== undefined && !isRepositoryScope(record.repos)) {
+    throw new Error("Dynamic task repository scope is malformed");
+  }
+  return {
+    body: record.body,
+    dependsOn: record.dependsOn ?? [],
+    operationKey: record.operationKey,
+    priority: record.priority ?? null,
+    repos: record.repos ?? null,
+    status: record.status ?? null,
+    title: record.title,
+  };
+};
 
 const requireStoredRequest = (value: JsonValue): StoredDynamicTaskRequest => {
   if (
@@ -49,6 +57,9 @@ const requireStoredRequest = (value: JsonValue): StoredDynamicTaskRequest => {
     (value["priority"] !== null &&
       (typeof value["priority"] !== "string" ||
         value["priority"].trim() === "")) ||
+    (value["repos"] !== undefined &&
+      value["repos"] !== null &&
+      !isRepositoryScope(value["repos"])) ||
     (value["status"] !== null &&
       (typeof value["status"] !== "string" || value["status"].trim() === "")) ||
     typeof value["title"] !== "string" ||
@@ -71,6 +82,11 @@ const recordFromIntent = (
     operationKey: request.operationKey,
     parent: intent.parentEpicId,
     ...(request.priority === null ? {} : { priority: request.priority }),
+    // Persisted requests written before repository scope omit repos. They are
+    // explicitly reconstructed as repository-free records.
+    ...(request.repos === undefined || request.repos === null
+      ? {}
+      : { repos: request.repos }),
     ...(request.status === null ? {} : { status: request.status }),
     title: request.title,
   };

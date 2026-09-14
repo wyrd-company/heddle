@@ -16,6 +16,7 @@ import {
 } from "../board-adapter/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { DynamicTaskAuthority } from "./dynamic-task-authority.js";
+import { dynamicTaskMatchesIntent } from "./dynamic-task-authority-identity.js";
 import type { ProductionErrorAttention } from "./error-visibility.js";
 
 const temporaryDirectories: string[] = [];
@@ -57,27 +58,36 @@ const record: CreateBoardRecord = {
   title: "Inspect another sample",
 };
 
+const scopedRecord: CreateBoardRecord = {
+  ...record,
+  repos: ["sample-alpha", "sample-beta"],
+};
+
 const source = {
   instanceId: "task-12",
   sessionKey: "task-12:review:1",
   taskId: 12,
 };
 
-const boardTask = (id = 21): BoardTask => {
-  const identity = boardRecordIdentity(record);
+const boardTask = (
+  id = 21,
+  taskRecord: CreateBoardRecord = record,
+): BoardTask => {
+  const identity = boardRecordIdentity(taskRecord);
   return task(id, {
-    dependencies: record.dependsOn,
-    lifecycle: record.lifecycle,
-    parent: record.parent,
-    priority: record.priority,
-    status: record.status,
+    dependencies: taskRecord.dependsOn,
+    lifecycle: taskRecord.lifecycle,
+    parent: taskRecord.parent,
+    priority: taskRecord.priority,
+    repos: taskRecord.repos,
+    status: taskRecord.status,
     tags: [
-      `type:${record.kind}`,
-      `lifecycle:${record.lifecycle}`,
+      `type:${taskRecord.kind}`,
+      `lifecycle:${taskRecord.lifecycle}`,
       `heddle-operation:${identity.operationDigest}`,
       `heddle-record:${identity.recordDigest}`,
     ],
-    title: record.title,
+    title: taskRecord.title,
   });
 };
 
@@ -332,6 +342,113 @@ describe("DynamicTaskAuthority", () => {
     ).rejects.toThrow("source identity does not match its operation");
     expect(createRecord).toHaveBeenCalledTimes(1);
     expect(persistence.listDynamicTaskIntents()).toHaveLength(1);
+    persistence.close();
+  });
+
+  it("reconstructs the prior repository-free stored request shape", async () => {
+    const persistence = await makePersistence();
+    const intent = pendingIntent(persistence);
+
+    expect(intent.request).not.toHaveProperty("repos");
+    expect(dynamicTaskMatchesIntent(boardTask(), intent)).toBe(true);
+    persistence.close();
+  });
+
+  it("recovers a repository-scoped intent after a board-effect crash", async () => {
+    const persistence = await makePersistence();
+    const tasks = [
+      task(10, { tags: ["type:epic"] }),
+      task(12, { parent: 10 }),
+      task(13, { parent: 10 }),
+    ];
+    const created = boardTask(21, scopedRecord);
+    const firstAuthority = new DynamicTaskAuthority(
+      persistence,
+      {
+        createRecord: async () => ({ replayed: false, task: created }),
+        readBoard: async () => tasks,
+        readTask: async (id: number) => tasks.find((value) => value.id === id)!,
+      },
+      attentionFixture().attention,
+      {
+        afterBoardEffect: () => {
+          throw new Error("Simulated crash after board effect");
+        },
+      },
+    );
+
+    await expect(
+      firstAuthority.createRecord(scopedRecord, source),
+    ).rejects.toThrow("Simulated crash after board effect");
+    expect(persistence.listDynamicTaskIntents("pending")).toMatchObject([
+      { request: { repos: ["sample-alpha", "sample-beta"] } },
+    ]);
+
+    const restartedAuthority = new DynamicTaskAuthority(
+      persistence,
+      {
+        createRecord: vi.fn(),
+        readBoard: async () => [created],
+        readTask: vi.fn(),
+      },
+      attentionFixture().attention,
+    );
+    await restartedAuthority.recoverPending();
+
+    expect(persistence.listDynamicTaskIntents("completed")).toMatchObject([
+      { state: "completed", taskId: created.id },
+    ]);
+    expect(restartedAuthority.verifyTask(created)).toMatchObject({
+      taskId: created.id,
+    });
+    persistence.close();
+  });
+
+  it("rejects invalid repository scope before recording dynamic intent", async () => {
+    const persistence = await makePersistence();
+    const tasks = [
+      task(10, { tags: ["type:epic"] }),
+      task(12, { parent: 10 }),
+      task(13, { parent: 10 }),
+    ];
+    const createRecord = vi.fn();
+    const authority = new DynamicTaskAuthority(
+      persistence,
+      {
+        createRecord,
+        readBoard: async () => tasks,
+        readTask: async (id: number) => tasks.find((value) => value.id === id)!,
+      },
+      attentionFixture().attention,
+    );
+
+    await expect(
+      authority.createRecord({ ...record, repos: [] }, source),
+    ).rejects.toThrow("Dynamic task repository scope is malformed");
+    expect(persistence.listDynamicTaskIntents()).toEqual([]);
+    expect(createRecord).not.toHaveBeenCalled();
+    persistence.close();
+  });
+
+  it.each([
+    ["empty", []],
+    ["duplicate", ["sample-alpha", "sample-alpha"]],
+    ["invalid identifier", ["../outside"]],
+  ])("rejects a stored %s repository scope", async (_, repos) => {
+    const persistence = await makePersistence();
+    const intent = pendingIntent(persistence, {
+      body: record.body,
+      dependsOn: record.dependsOn,
+      operationKey: record.operationKey,
+      priority: record.priority,
+      repos,
+      status: record.status,
+      title: record.title,
+    });
+
+    expect(() => dynamicTaskMatchesIntent(boardTask(), intent)).toThrow(
+      "Dynamic task intent request is malformed",
+    );
     persistence.close();
   });
 
