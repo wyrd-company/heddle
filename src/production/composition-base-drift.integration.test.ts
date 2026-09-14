@@ -28,8 +28,7 @@ describe("production concurrent review landing", () => {
   it("activates exact drift remediation after another task moves the epic base", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
-    const repositoryRoot =
-      fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
+    const repositoryRoot = fixture.repositoryRoot;
     const templateRoot = fixture.blueprintsRepositoryRoot;
     const templateCommitSha = await git(templateRoot, "rev-parse", "HEAD");
     const blueprint = deliveryBlueprintFixture("trivial");
@@ -237,8 +236,7 @@ describe("production concurrent review landing", () => {
   it("persists and renders remediation when the source is behind at review snapshot", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
-    const repositoryRoot =
-      fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
+    const repositoryRoot = fixture.repositoryRoot;
     const templateRoot = fixture.blueprintsRepositoryRoot;
     const templateCommitSha = await git(templateRoot, "rev-parse", "HEAD");
     const blueprint = deliveryBlueprintFixture("trivial");

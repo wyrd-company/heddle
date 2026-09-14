@@ -143,6 +143,8 @@ next_id: 1
         "Example Item",
         "--status",
         "in-progress",
+        "--repos",
+        fixture.change.repositoryName,
         "--tags",
         "lifecycle:sample",
         "--json",
@@ -241,17 +243,6 @@ next_id: 1
           providerDisplayName: "Workbench Alpha",
         },
       },
-      products: [
-        {
-          name: "Sample product",
-          repos: [
-            {
-              name: fixture.change.repositoryName,
-              repositoryRoot: fixture.repositoryRoot,
-            },
-          ],
-        },
-      ],
       pushover: {
         apiUrl: "https://notify.invalid/messages",
         applicationToken: "application-token",
@@ -330,7 +321,7 @@ next_id: 1
 
   it("rejects restart recovery before a mirror when the pinned prepare-worktree status was removed after the crash, then converges after repair", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-process-restart-"));
-    const repositoryRoot = join(root, "sample-repository");
+    const repositoryRoot = join(root, "tools", "sample-repository");
     const blueprintsRepositoryRoot = join(root, "blueprint-repository");
     const blueprintsRemote = join(root, "blueprint-origin.git");
     const boardDirectory = join(root, "board");
@@ -515,6 +506,8 @@ next_id: 1
         "todo",
         "--priority",
         "medium",
+        "--repos",
+        "sample-repository",
         "--tags",
         "lifecycle:sample",
         "--json",
@@ -555,12 +548,6 @@ next_id: 1
           providerDisplayName: "Workbench Alpha",
         },
       },
-      products: [
-        {
-          name: "Sample product",
-          repos: [{ name: "sample-repository", repositoryRoot }],
-        },
-      ],
       pushover: {
         apiUrl: "https://notify.invalid/messages",
         applicationToken: "application-token",

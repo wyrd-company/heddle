@@ -4,6 +4,7 @@
 // ---
 
 import {
+  ensureWorktree,
   HandoffRenderError,
   HandoffTemplateError,
   type ProviderSelectionResolver,
@@ -30,6 +31,7 @@ import {
 import { isTodoState, type TodoAssignment } from "../todo/index.js";
 import { EscalationHistory } from "../mcp-server/escalation-history.js";
 import { errorDetail } from "../error-details.js";
+import { readLifecycleContext } from "../engine/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 import type { KanbanBoardAdapter } from "../board-adapter/index.js";
@@ -38,6 +40,8 @@ import { heddleSessionTitle } from "./session-title.js";
 import { sanitizeIncidentValue } from "./incident-redaction.js";
 import { stableUuid } from "./stable-uuid.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
+import type { TaskRepositoryRouter } from "./repository-routing.js";
+import { requireRetainedTaskRepositoryScope } from "./task-repository-scope.js";
 import {
   bindResolvedSession,
   modelSelectionFromBinding,
@@ -66,7 +70,7 @@ const describeDelegatedExhaustion = (
 const parentSessionRoute = (
   persistence: SqlitePersistence,
   sessionKey: string,
-): { projectId: string; repositoryName: string } => {
+): { projectId: string } => {
   const sessions = new Map(
     persistence
       .listSessionRuntime()
@@ -84,16 +88,10 @@ const parentSessionRoute = (
     visited.add(current);
     const session = sessions.get(current);
     if (session !== undefined) {
-      if (
-        session.projectId === undefined ||
-        session.repositoryName === undefined
-      ) {
+      if (session.projectId === undefined) {
         throw new Error("Subagent parent has no durable production route");
       }
-      return {
-        projectId: session.projectId,
-        repositoryName: session.repositoryName,
-      };
+      return { projectId: session.projectId };
     }
     const assignment = delegated.get(current);
     if (assignment === undefined) break;
@@ -237,6 +235,7 @@ export const createProductionSubagentCoordinator = (options: {
   persistence: SqlitePersistence;
   providerResolver: ProviderSelectionResolver;
   resolveSystemPrompt: SystemPromptResolver;
+  routing: TaskRepositoryRouter;
   t3: ProductionT3Client;
   templateAuthority: SessionTemplateAuthority;
   workflowMcpEndpoint: string;
@@ -250,6 +249,7 @@ export const createProductionSubagentCoordinator = (options: {
     persistence,
     providerResolver,
     resolveSystemPrompt,
+    routing,
     t3,
     templateAuthority,
     workflowMcpEndpoint,
@@ -389,12 +389,32 @@ export const createProductionSubagentCoordinator = (options: {
         identity.threadId,
       );
       const route = parentSessionRoute(persistence, binding.sessionKey);
-      const repository = configuration.products
-        .flatMap(({ repos }) => repos)
-        .find(({ name }) => name === route.repositoryName);
-      if (repository === undefined) {
-        throw new Error("Subagent parent repository is not configured");
+      const lifecycleRecord = persistence.getInstance(
+        binding.instance.instanceId,
+      );
+      if (lifecycleRecord === undefined) {
+        throw new Error("Subagent parent has no retained lifecycle context");
       }
+      const repositoryNames = requireRetainedTaskRepositoryScope(
+        readLifecycleContext(lifecycleRecord).serializedContext,
+        task.id,
+      );
+      const repositories = routing.repositoriesForNames(
+        task.id,
+        repositoryNames,
+      );
+      const worktrees = repositories.map((candidate) => ({
+        baseRef:
+          task.parent === undefined ? session.baseRef : `epic/${task.parent}`,
+        branch: `heddle/task-${taskId}`,
+        repositoryName: candidate.name,
+        repositoryRoot: candidate.repositoryRoot,
+        worktreeName: String(taskId),
+        ...(session.worktreesRoot === undefined
+          ? {}
+          : { worktreesRoot: session.worktreesRoot }),
+      }));
+      for (const worktree of worktrees) await ensureWorktree(worktree);
       return {
         binding: sessionBinding,
         interactionMode: sessionBinding.interactionMode,
@@ -402,22 +422,20 @@ export const createProductionSubagentCoordinator = (options: {
         projectId: route.projectId,
         providerContext: providerContextFromBinding(sessionBinding),
         runtimeMode: sessionBinding.runtimeMode,
-        task: task.frontMatter,
+        task: {
+          ...(typeof task.frontMatter === "object" &&
+          task.frontMatter !== null &&
+          !Array.isArray(task.frontMatter)
+            ? task.frontMatter
+            : {}),
+          repos: [...repositoryNames],
+        },
         taskId,
         title: heddleSessionTitle(
           taskId,
           `${binding.stage.id}-subagent-${identity.sessionKey.slice(0, 8)}`,
         ),
-        worktree: {
-          baseRef: session.baseRef,
-          branch: `heddle/task-${taskId}`,
-          repositoryName: repository.name,
-          repositoryRoot: repository.repositoryRoot,
-          worktreeName: String(taskId),
-          ...(session.worktreesRoot === undefined
-            ? {}
-            : { worktreesRoot: session.worktreesRoot }),
-        },
+        worktree: worktrees[0]!,
       };
     },
     sessionTargetFor: (binding) => {

@@ -176,8 +176,7 @@ describe("production mechanical worktree preparation", () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
     await useMechanicalLifecycle(fixture);
-    const repositoryRoot =
-      fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
+    const repositoryRoot = fixture.repositoryRoot;
     await git(
       repositoryRoot,
       "switch",
@@ -318,8 +317,7 @@ describe("production mechanical worktree preparation", () => {
     await installStandardDelivery(fixture);
     const composition = compose(fixture, new SyntheticT3());
     const instanceId = `task-${fixture.taskId}`;
-    const repositoryRoot =
-      fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
+    const repositoryRoot = fixture.repositoryRoot;
     const baseBranch = `epic/${fixture.epicId}`;
     const taskBranch = `heddle/task-${fixture.taskId}`;
     const worktree = join(
@@ -477,8 +475,7 @@ describe("production mechanical worktree preparation", () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     await useMechanicalLifecycle(fixture);
-    const repositoryRoot =
-      fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
+    const repositoryRoot = fixture.repositoryRoot;
     const t3 = new SyntheticT3();
     const composition = compose(fixture, t3);
 
@@ -616,46 +613,160 @@ describe("production mechanical worktree preparation", () => {
     await restarted.close();
   });
 
-  it("raises routing attention and runs no mechanical node when a task targets more than one repository", async () => {
+  it("delivers every activation-scoped repository after a parentless task declaration changes", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
-    await useMechanicalLifecycle(fixture);
-    const repositoryRoot =
-      fixture.configuration.products[0]!.repos[0]!.repositoryRoot;
-    fixture.configuration.products[0]!.repos.push({
-      name: "second-repository",
-      repositoryRoot,
+    await installStandardDelivery(fixture);
+    const secondRepositoryRoot = join(
+      fixture.root,
+      "tools",
+      "second-repository",
+    );
+    await mkdir(secondRepositoryRoot, { recursive: true });
+    await writeFile(
+      join(secondRepositoryRoot, "README.md"),
+      "# Second sample\n",
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: secondRepositoryRoot,
     });
+    await execute("git", ["add", "README.md"], { cwd: secondRepositoryRoot });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add second sample",
+      ],
+      { cwd: secondRepositoryRoot },
+    );
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--repos",
+        "sample-repository,second-repository",
+      ],
+      { cwd: fixture.root },
+    );
     const t3 = new SyntheticT3();
     const composition = compose(fixture, t3);
 
     await composition.start();
 
-    expect(composition.attention.list()).toMatchObject([
-      {
-        kind: "lifecycle-resolution",
-        message: `Task ${fixture.taskId} targets more than one repository but its stage declares none`,
-        taskId: fixture.taskId,
-      },
-    ]);
-    expect(
-      composition.persistence
-        .listReconcilerRuntime()
-        .find(({ taskId }) => taskId === fixture.taskId),
-    ).toBeUndefined();
+    const taskWorktreesRoot = join(
+      fixture.configuration.session.worktreesRoot!,
+      String(fixture.taskId),
+    );
+    const repositories = [
+      ["sample-repository", fixture.repositoryRoot],
+      ["second-repository", secondRepositoryRoot],
+    ] as const;
+    for (const [repositoryName] of repositories) {
+      const worktree = join(taskWorktreesRoot, repositoryName);
+      await expect(stat(join(worktree, ".git"))).resolves.toBeDefined();
+      expect(await git(worktree, "symbolic-ref", "--short", "HEAD")).toBe(
+        `heddle/task-${fixture.taskId}`,
+      );
+      await writeFile(join(worktree, "delivery.txt"), `${repositoryName}\n`);
+      await execute("git", ["add", "delivery.txt"], { cwd: worktree });
+      await execute(
+        "git",
+        [
+          "-c",
+          "user.name=Fixture User",
+          "-c",
+          "user.email=fixture@example.invalid",
+          "commit",
+          "--quiet",
+          "-m",
+          "Complete sample delivery",
+        ],
+        { cwd: worktree },
+      );
+    }
+    expect(composition.attention.list()).toEqual([]);
     expect(
       t3.commands.filter(({ type }) => type === "thread.create"),
-    ).toHaveLength(0);
-    await expect(
-      stat(
-        join(
-          fixture.configuration.session.worktreesRoot!,
-          String(fixture.taskId),
+    ).toHaveLength(1);
+    const firstTurn = t3.commands.find(
+      ({ type }) => type === "thread.turn.start",
+    );
+    const firstTurnText = (firstTurn?.["message"] as { text?: string })?.text;
+    expect(firstTurnText).toContain("Repositories:");
+    expect(firstTurnText).toContain('"sample-repository"');
+    expect(firstTurnText).toContain('"second-repository"');
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--repos",
+        "second-repository",
+      ],
+      { cwd: fixture.root },
+    );
+
+    const instanceId = `task-${fixture.taskId}`;
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:implement:1`),
+    });
+    await composition.scheduler.trigger();
+    const reviewTurn = t3.commands.filter(
+      ({ type }) => type === "thread.turn.start",
+    )[1];
+    expect(reviewTurn).toBeDefined();
+    const reviewTurnText = (reviewTurn?.["message"] as { text?: string })?.text;
+    expect(reviewTurnText).toContain('"sample-repository"');
+    expect(reviewTurnText).toContain('"second-repository"');
+    await composition.lifecycle.resume({
+      disposition: "approve",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:review:1`),
+    });
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:retrospective:1`),
+    });
+    await composition.scheduler.trigger();
+
+    for (const [repositoryName, repositoryRoot] of repositories) {
+      expect(await readFile(join(repositoryRoot, "delivery.txt"), "utf8")).toBe(
+        `${repositoryName}\n`,
+      );
+      await expect(
+        stat(join(taskWorktreesRoot, repositoryName)),
+      ).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(
+        execute(
+          "git",
+          [
+            "show-ref",
+            "--verify",
+            "--quiet",
+            `refs/heads/heddle/task-${fixture.taskId}`,
+          ],
+          { cwd: repositoryRoot },
         ),
-      ),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+      ).rejects.toThrow();
+    }
     await composition.close();
-  });
+  }, 20_000);
 
   it("resolves only the recovered mechanical transition failure after its successful retry", async () => {
     const fixture = await prepareProductionFixture();

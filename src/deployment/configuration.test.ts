@@ -69,17 +69,6 @@ const fixture = (root: string): ProductionConfiguration => ({
       providerDisplayName: "Workbench Alpha",
     },
   },
-  products: [
-    {
-      name: "Sample collection",
-      repos: [
-        {
-          name: "sample-repository",
-          repositoryRoot: join(root, "repository"),
-        },
-      ],
-    },
-  ],
   pushover: {
     apiUrl: "https://notify.invalid/messages",
     applicationToken: "application-secret-value",
@@ -812,11 +801,6 @@ describe("deployed configuration directory", () => {
     await writeFile(path, stringify(withoutBoardDirectory));
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
       `field '/boardDirectory' from '${path}'`,
-    );
-
-    await writeFile(path, stringify({ ...fixture(root), products: [] }));
-    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `field '/products' from '${path}': /products must NOT have fewer than 1 items`,
     );
 
     await rm(path);

@@ -12,11 +12,11 @@ import {
   type LifecycleResolution,
 } from "../engine/index.js";
 import type { TaskProviderAliasMap } from "../provider-alias.js";
-import {
-  ProductRoutingCatalog,
-  TaskRoutingAttentionError,
-} from "./product-routing.js";
 import type { OrganizationBlueprintRepository } from "./blueprint-repository.js";
+import {
+  TaskRepositoryRouter,
+  TaskRoutingAttentionError,
+} from "./repository-routing.js";
 
 const routingAttention = (
   task: BoardTask,
@@ -30,12 +30,12 @@ const routingAttention = (
   kind: "attention-required",
 });
 
-export class ProductLifecycleResolver {
+export class TaskLifecycleResolver {
   private readonly blueprintStore: GitBlueprintStore;
   private readonly lifecycleResolver: LifecycleResolver;
 
   constructor(
-    private readonly routing: ProductRoutingCatalog,
+    private readonly routing: TaskRepositoryRouter,
     repository: OrganizationBlueprintRepository,
   ) {
     this.blueprintStore = new GitBlueprintStore(repository.repositoryRoot, {
@@ -66,7 +66,7 @@ export class ProductLifecycleResolver {
       for (const node of pinned.blueprint.nodes.filter(({ uses }) =>
         repositoryBoundUses.has(uses),
       )) {
-        this.routing.repositoryForStage(task, node.repo);
+        this.routing.repositoriesForStage(task, node.repo);
       }
     } catch (error) {
       if (error instanceof TaskRoutingAttentionError) {

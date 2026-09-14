@@ -3,12 +3,14 @@
 //   verifies: heddle
 // ---
 
-import { stat } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { advanceOperationId } from "../mcp-server/operations.js";
+import { SqlitePersistence } from "../persistence/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
   execute,
@@ -47,6 +49,46 @@ describe("production project routing", () => {
   it("provisions an epic project and routes its child through the task-first worktree", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
+    const secondRepositoryRoot = join(
+      fixture.root,
+      "tools",
+      "second-repository",
+    );
+    await mkdir(secondRepositoryRoot, { recursive: true });
+    await writeFile(
+      join(secondRepositoryRoot, "README.md"),
+      "# Second sample\n",
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: secondRepositoryRoot,
+    });
+    await execute("git", ["add", "README.md"], { cwd: secondRepositoryRoot });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add second sample",
+      ],
+      { cwd: secondRepositoryRoot },
+    );
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.epicId),
+        "--repos",
+        "sample-repository,second-repository",
+      ],
+      { cwd: fixture.root },
+    );
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -72,7 +114,7 @@ describe("production project routing", () => {
         command.title === `task-${fixture.taskId} · implement-1`,
     );
     expect(project).toMatchObject({
-      title: `Sample product - epic-${fixture.epicId}`,
+      title: `Sample Delivery - epic-${fixture.epicId}`,
       type: "project.create",
       workspaceRoot: `${fixture.configuration.session.worktreesRoot}/${fixture.epicId}`,
     });
@@ -82,16 +124,48 @@ describe("production project routing", () => {
       worktreePath: `${fixture.configuration.session.worktreesRoot}/${fixture.taskId}/sample-repository`,
     });
     expect(thread).not.toHaveProperty("titleSeed");
-    await expect(
-      stat(
-        join(
-          fixture.configuration.session.worktreesRoot!,
-          String(fixture.epicId),
-          "sample-repository",
-          ".git",
+    const firstTurn = t3.commands.find(
+      ({ type }) => type === "thread.turn.start",
+    );
+    const firstTurnText = (firstTurn?.["message"] as { text?: string })?.text;
+    expect(firstTurnText).toContain('"sample-repository"');
+    expect(firstTurnText).toContain('"second-repository"');
+    for (const [repositoryName, repositoryRoot] of [
+      ["sample-repository", fixture.repositoryRoot],
+      ["second-repository", secondRepositoryRoot],
+    ] as const) {
+      await expect(
+        stat(
+          join(
+            fixture.configuration.session.worktreesRoot!,
+            String(fixture.epicId),
+            repositoryName,
+            ".git",
+          ),
         ),
-      ),
-    ).resolves.toBeDefined();
+      ).resolves.toBeDefined();
+      await expect(
+        stat(
+          join(
+            fixture.configuration.session.worktreesRoot!,
+            String(fixture.taskId),
+            repositoryName,
+            ".git",
+          ),
+        ),
+      ).resolves.toBeDefined();
+      const epicHead = (
+        await execute("git", ["rev-parse", `epic/${fixture.epicId}`], {
+          cwd: repositoryRoot,
+        })
+      ).stdout.trim();
+      const taskHead = (
+        await execute("git", ["rev-parse", `heddle/task-${fixture.taskId}`], {
+          cwd: repositoryRoot,
+        })
+      ).stdout.trim();
+      expect(taskHead).toBe(epicHead);
+    }
     await composition.close();
   });
 
@@ -209,18 +283,194 @@ describe("production project routing", () => {
     await restarted.close();
   }, 20_000);
 
+  it("recovers an epic after preparation stops between two repositories", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const secondRepositoryRoot = join(
+      fixture.root,
+      "tools",
+      "second-repository",
+    );
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.epicId),
+        "--repos",
+        "sample-repository,second-repository",
+      ],
+      { cwd: fixture.root },
+    );
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    const firstEpicWorktree = join(
+      fixture.configuration.session.worktreesRoot!,
+      String(fixture.epicId),
+      "sample-repository",
+    );
+    await expect(stat(join(firstEpicWorktree, ".git"))).resolves.toBeDefined();
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          `Repository 'second-repository' resolved to unavailable path '${secondRepositoryRoot}'`,
+        ),
+        taskId: fixture.epicId,
+      }),
+    );
+    expect(
+      composition.persistence.getEpicProject(fixture.epicId),
+    ).toMatchObject({ state: "creating" });
+    await composition.close();
+
+    await mkdir(secondRepositoryRoot, { recursive: true });
+    await writeFile(
+      join(secondRepositoryRoot, "README.md"),
+      "# Second sample\n",
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: secondRepositoryRoot,
+    });
+    await execute("git", ["add", "README.md"], { cwd: secondRepositoryRoot });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add second sample",
+      ],
+      { cwd: secondRepositoryRoot },
+    );
+
+    const restarted = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+    await restarted.start();
+
+    for (const repositoryName of ["sample-repository", "second-repository"]) {
+      await expect(
+        stat(
+          join(
+            fixture.configuration.session.worktreesRoot!,
+            String(fixture.epicId),
+            repositoryName,
+            ".git",
+          ),
+        ),
+      ).resolves.toBeDefined();
+      await expect(
+        stat(
+          join(
+            fixture.configuration.session.worktreesRoot!,
+            String(fixture.taskId),
+            repositoryName,
+            ".git",
+          ),
+        ),
+      ).resolves.toBeDefined();
+    }
+    expect(restarted.persistence.getEpicProject(fixture.epicId)).toMatchObject({
+      state: "active",
+    });
+    expect(
+      restarted.attention
+        .list()
+        .filter(({ taskId }) => taskId === fixture.epicId),
+    ).toEqual([]);
+    await restarted.close();
+  });
+
+  it("raises concrete recovery attention for an active legacy epic without durable repository scope", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const persistence = new SqlitePersistence({
+      stateDirectory: fixture.configuration.stateDirectory,
+    });
+    persistence.writeEpicProject({
+      createCommandId: "create-retained-project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      deleteCommandId: "delete-retained-project",
+      epicId: fixture.epicId,
+      productName: "Retained sample",
+      projectId: "retained-project",
+      repositoryNames: ["sample-repository"],
+      state: "active",
+    });
+    const database = new Database(persistence.databasePath);
+    database
+      .prepare(
+        "UPDATE heddle_epic_projects SET repository_names_json = NULL WHERE epic_id = ?",
+      )
+      .run(fixture.epicId);
+    database.close();
+    persistence.close();
+    const t3 = new SyntheticT3();
+    const composition = createProductionComposition({
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+    });
+
+    await composition.start();
+
+    expect(composition.attention.list()).toContainEqual(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          `Epic ${fixture.epicId} has no durable repository scope; operator recovery is required`,
+        ),
+        taskId: fixture.epicId,
+      }),
+    );
+    expect(
+      t3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    await composition.close();
+  });
+
   it("turns an unrouted epic into attention without freezing the scheduler", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
-    fixture.configuration.products.push({
-      name: "Secondary product",
-      repos: [
-        {
-          name: "secondary-repository",
-          repositoryRoot: fixture.blueprintsRepositoryRoot,
-        },
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.epicId),
+        "--clear-repos",
       ],
-    });
+      { cwd: fixture.root },
+    );
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -239,7 +489,7 @@ describe("production project routing", () => {
       expect.objectContaining({
         kind: "production-error",
         message: expect.stringContaining(
-          `Task ${fixture.epicId} does not identify one configured product`,
+          `Task ${fixture.epicId} does not declare repository scope in repos`,
         ),
         scope: `task:${fixture.epicId}`,
         taskId: fixture.epicId,

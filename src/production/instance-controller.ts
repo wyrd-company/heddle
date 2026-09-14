@@ -11,6 +11,7 @@ import { AttentionVisibleError } from "../attention-visible-error.js";
 import { describeError, errorDetail } from "../error-details.js";
 import {
   bootstrapStageSession,
+  ensureWorktree,
   HandoffRenderError,
   HandoffTemplateError,
   mechanicalChangeContextKey,
@@ -51,7 +52,7 @@ import {
   type ReconcilerInstanceController,
   type StartReconcilerInstanceInput,
 } from "../reconciler/index.js";
-import type { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
+import type { TaskLifecycleResolver } from "./task-lifecycle-resolver.js";
 import { isTodoState } from "../todo/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import { sanitizeIncidentValue } from "./incident-redaction.js";
@@ -75,17 +76,16 @@ import type { EpicProjectCoordinator } from "./epic-projects.js";
 import type { ProductionLifecycleRouter } from "./lifecycle-router.js";
 import {
   TaskRoutingAttentionError,
-  type ProductRoutingCatalog,
-} from "./product-routing.js";
+  type TaskRepositoryRouter,
+} from "./repository-routing.js";
+import {
+  requireRetainedTaskRepositoryScope,
+  taskContractWithRepositoryScope,
+  taskFrontMatterWithRepositoryScope,
+} from "./task-repository-scope.js";
 
 const json = (value: unknown): JsonValue =>
   JSON.parse(JSON.stringify(value)) as JsonValue;
-
-const taskContract = (task: BoardTask): JsonValue => {
-  const contract = { ...task } as Partial<BoardTask>;
-  delete contract.frontMatter;
-  return json(contract);
-};
 
 const retainedProviderAliases = (
   context: LifecycleContextRecord,
@@ -174,7 +174,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly configuration: ResolvedProductionConfiguration,
     private readonly persistence: SqlitePersistence,
     private readonly lifecycle: ProductionLifecycleRouter,
-    private readonly routing: ProductRoutingCatalog,
+    private readonly routing: TaskRepositoryRouter,
     private readonly projects: EpicProjectCoordinator,
     private readonly attention: ReconcilerAttentionQueue,
     private readonly t3: SessionT3Client,
@@ -193,7 +193,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     private readonly providerSelection?: StageProviderSelectionResolver,
     private readonly agentNames?: AgentNameAllocator,
     private readonly taskLifecycleResolver?: Pick<
-      ProductLifecycleResolver,
+      TaskLifecycleResolver,
       "resolve" | "validateTaskProviderAliases"
     >,
     private readonly fallbackPacing?: {
@@ -209,6 +209,18 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         this.configuration.session.resolvedSelections,
       )
     );
+  }
+
+  #taskContract(task: BoardTask): JsonValue {
+    try {
+      return taskContractWithRepositoryScope(
+        task,
+        this.routing.route(task).repositoryNames,
+      );
+    } catch (error) {
+      if (!(error instanceof TaskRoutingAttentionError)) throw error;
+      return taskContractWithRepositoryScope(task);
+    }
   }
 
   #providerFailureDetail(
@@ -887,7 +899,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
                         input.instanceId,
                         input.repositoryName,
                       )),
-                      taskContract: taskContract(input.task),
+                      taskContract: this.#taskContract(input.task),
                       taskId: input.task.id,
                     },
                   }
@@ -1208,9 +1220,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     instanceId: string,
     repositoryName?: string,
   ): Promise<Record<string, JsonValue>> {
-    let repository;
+    let repositories;
     try {
-      repository = this.routing.repositoryForStage(task, repositoryName);
+      repositories = this.routing.repositoriesForStage(task, repositoryName);
     } catch (error) {
       if (!(error instanceof TaskRoutingAttentionError)) throw error;
       await this.#raiseInitialRoutingAttention(instanceId, error);
@@ -1218,19 +1230,21 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     }
     const session = this.configuration.session;
     return {
-      [mechanicalChangeContextKey]: json({
-        baseBranch: this.projects.baseBranchForTask(task),
-        branch: `heddle/task-${task.id}`,
-        repositoryName: repository.name,
-        repositoryRoot: repository.repositoryRoot,
-        reviewDescription: `Task ${task.id}: ${task.title}`,
-        reviewTitle: task.title,
-        taskId: task.id,
-        worktreeName: String(task.id),
-        ...(session.worktreesRoot === undefined
-          ? {}
-          : { worktreesRoot: session.worktreesRoot }),
-      }),
+      [mechanicalChangeContextKey]: json(
+        repositories.map((repository) => ({
+          baseBranch: this.projects.baseBranchForTask(task),
+          branch: `heddle/task-${task.id}`,
+          repositoryName: repository.name,
+          repositoryRoot: repository.repositoryRoot,
+          reviewDescription: `Task ${task.id}: ${task.title}`,
+          reviewTitle: task.title,
+          taskId: task.id,
+          worktreeName: String(task.id),
+          ...(session.worktreesRoot === undefined
+            ? {}
+            : { worktreesRoot: session.worktreesRoot }),
+        })),
+      ),
     };
   }
 
@@ -1675,11 +1689,34 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         });
       }
     }
-    const repository = this.routing.repositoryForStage(
-      task,
-      stage.repositoryName,
+    const lifecycleRecord = this.persistence.getInstance(instanceId);
+    if (lifecycleRecord === undefined) {
+      throw new Error(`Instance ${instanceId} has no retained task contract`);
+    }
+    const repositoryNames = requireRetainedTaskRepositoryScope(
+      readLifecycleContext(lifecycleRecord).serializedContext,
+      task.id,
     );
+    const repositories = this.routing.repositoriesForNames(
+      task.id,
+      repositoryNames,
+    );
+    const repository = this.routing.repositoriesForNames(
+      task.id,
+      repositoryNames,
+      stage.repositoryName,
+    )[0]!;
     const projectId = this.projects.projectForTask(task);
+    const worktrees = repositories.map((candidate) => ({
+      baseRef: this.projects.baseBranchForTask(task),
+      branch: `heddle/task-${task.id}`,
+      repositoryName: candidate.name,
+      repositoryRoot: candidate.repositoryRoot,
+      worktreeName: String(task.id),
+      ...(session.worktreesRoot === undefined
+        ? {}
+        : { worktreesRoot: session.worktreesRoot }),
+    }));
     const sessionRuntime: SessionRuntimeRecord = {
       activation,
       binding,
@@ -1709,6 +1746,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       }
     }
     try {
+      for (const worktree of worktrees) await ensureWorktree(worktree);
       await bootstrapStageSession(
         {
           handoff: {
@@ -1717,7 +1755,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
               ...stage.handoff,
               ...(agentName === undefined ? {} : { agentName }),
             },
-            taskContract: taskContract(task),
+            taskContract: taskContractWithRepositoryScope(
+              task,
+              repositoryNames,
+            ),
           },
           instanceId,
           interactionMode: binding.interactionMode,
@@ -1726,19 +1767,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           providerContext: providerContextFromBinding(binding),
           runtimeMode: binding.runtimeMode,
           sessionKey,
-          task: task.frontMatter,
+          task: taskFrontMatterWithRepositoryScope(task, repositoryNames),
           taskId: task.id,
           title: heddleSessionTitle(task.id, `${stageId}-${activation}`),
-          worktree: {
-            baseRef: session.baseRef,
-            branch: `heddle/task-${task.id}`,
-            repositoryName: repository.name,
-            repositoryRoot: repository.repositoryRoot,
-            worktreeName: String(task.id),
-            ...(session.worktreesRoot === undefined
-              ? {}
-              : { worktreesRoot: session.worktreesRoot }),
-          },
+          worktree: worktrees[0]!,
         },
         {
           activationEvents: this.persistence,

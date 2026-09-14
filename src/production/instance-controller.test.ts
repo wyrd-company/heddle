@@ -19,7 +19,7 @@ import type {
 } from "../engine/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
-import { ProductRoutingCatalog } from "./product-routing.js";
+import { TaskRepositoryRouter } from "./repository-routing.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 import {
@@ -66,7 +66,7 @@ describe("production instance controller", () => {
       {} as ProductionConfiguration,
       persistence,
       {} as ProductionLifecycleRouter,
-      {} as ProductRoutingCatalog,
+      {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       new DurableAttentionQueue(persistence),
       {} as never,
@@ -104,9 +104,10 @@ describe("production instance controller", () => {
     const task: BoardTask = {
       blocked: false,
       dependencies: [],
-      frontMatter: {},
+      frontMatter: { repos: ["sample-repository"] },
       id: 11,
       priority: "medium",
+      repos: ["sample-repository"],
       status: "in-progress",
       tags: [],
       title: "Arrange inventory",
@@ -194,7 +195,7 @@ describe("production instance controller", () => {
       } as never,
       persistence,
       {} as ProductionLifecycleRouter,
-      {} as ProductRoutingCatalog,
+      {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       attention,
       {} as never,
@@ -321,7 +322,7 @@ describe("production instance controller", () => {
       { session: {} } as never,
       persistence,
       {} as ProductionLifecycleRouter,
-      {} as ProductRoutingCatalog,
+      {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       new DurableAttentionQueue(persistence),
       { dispatch } as never,
@@ -431,7 +432,7 @@ describe("production instance controller", () => {
       {} as never,
       persistence,
       {} as ProductionLifecycleRouter,
-      {} as ProductRoutingCatalog,
+      {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       new DurableAttentionQueue(persistence),
       {} as never,
@@ -486,7 +487,7 @@ describe("production instance controller", () => {
       {} as ProductionConfiguration,
       persistence,
       {} as ProductionLifecycleRouter,
-      {} as ProductRoutingCatalog,
+      {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       attention,
       {} as never,
@@ -577,9 +578,10 @@ describe("production instance controller", () => {
     const task: BoardTask = {
       blocked: false,
       dependencies: [],
-      frontMatter: {},
+      frontMatter: { repos: ["sample-repository"] },
       id: 11,
       priority: "medium",
+      repos: ["sample-repository"],
       status: "in-progress",
       tags: [],
       title: "Arrange inventory",
@@ -606,11 +608,14 @@ describe("production instance controller", () => {
       persistence,
       lifecycle,
       {
-        repositoryForStage: () => ({
-          name: "sample-repository",
-          repositoryRoot: root,
-        }),
-      } as unknown as ProductRoutingCatalog,
+        route: () => ({ repositoryNames: ["sample-repository"] }),
+        repositoriesForStage: () => [
+          {
+            name: "sample-repository",
+            repositoryRoot: root,
+          },
+        ],
+      } as unknown as TaskRepositoryRouter,
       {
         baseBranchForTask: () => "main",
       } as unknown as EpicProjectCoordinator,
@@ -754,7 +759,7 @@ describe("production instance controller", () => {
       {} as ProductionConfiguration,
       persistence,
       {} as ProductionLifecycleRouter,
-      {} as ProductRoutingCatalog,
+      {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       attention,
       {} as never,
@@ -878,7 +883,7 @@ describe("production instance controller", () => {
         {} as ProductionConfiguration,
         persistence,
         {} as ProductionLifecycleRouter,
-        {} as ProductRoutingCatalog,
+        {} as TaskRepositoryRouter,
         {} as EpicProjectCoordinator,
         attention,
         {} as never,
@@ -958,7 +963,7 @@ describe("production instance controller", () => {
       {} as ProductionConfiguration,
       persistence,
       lifecycle,
-      {} as ProductRoutingCatalog,
+      {} as TaskRepositoryRouter,
       {} as EpicProjectCoordinator,
       { has: async () => false, raise: async () => undefined },
       {} as never,
@@ -1032,17 +1037,7 @@ describe("production instance controller", () => {
       tags: [],
       title: "Arrange inventory",
     };
-    const routing = new ProductRoutingCatalog({
-      products: [
-        {
-          name: "Sample product",
-          repos: [
-            { name: "sample-alpha", repositoryRoot: root },
-            { name: "sample-beta", repositoryRoot: root },
-          ],
-        },
-      ],
-    } as ProductionConfiguration);
+    const routing = new TaskRepositoryRouter(root);
     routing.update([task]);
     const lifecycle = new ProductionLifecycleRouter({
       effects: { finish: async () => ({}) },
@@ -1077,11 +1072,10 @@ describe("production instance controller", () => {
     expect(start).toHaveBeenCalledOnce();
     expect(attention.raise).toHaveBeenCalledWith({
       attentionId: "production:initial-routing-failed:task:2:task-2",
-      code: "stage-repository-not-declared",
+      code: "repository-scope-not-declared",
       instanceId: "task-2",
       kind: "lifecycle-resolution",
-      message:
-        "Task 2 targets more than one repository but its stage declares none",
+      message: "Task 2 does not declare repository scope in repos",
       taskId: 2,
     });
     expect(persistence.listReconcilerRuntime()).toMatchObject([
@@ -1183,7 +1177,7 @@ describe("production instance controller", () => {
         {} as ProductionConfiguration,
         persistence,
         lifecycle,
-        {} as ProductRoutingCatalog,
+        {} as TaskRepositoryRouter,
         {} as EpicProjectCoordinator,
         { has: async () => false, raise: async () => undefined },
         {} as never,

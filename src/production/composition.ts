@@ -91,9 +91,9 @@ import {
   notificationDeliveryErrorAttention,
   productionErrorAttention,
 } from "./error-visibility.js";
-import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
-import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
-import { ProductRoutingCatalog } from "./product-routing.js";
+import { OrganizationBlueprintArtifactEditor } from "./organization-blueprint-editor.js";
+import { TaskLifecycleResolver } from "./task-lifecycle-resolver.js";
+import { TaskRepositoryRouter } from "./repository-routing.js";
 import { pageSessionAttentions } from "./session-attention-paging.js";
 import { DynamicTaskAuthority } from "./dynamic-task-authority.js";
 import { EpicOperationCoordinator } from "./epic-operation-coordinator.js";
@@ -274,14 +274,16 @@ export const createProductionComposition = (
     const effects: Record<string, LifecycleEffect> =
       createMechanicalNodeEffects({ board, statuses: boardStatuses });
     effects["complete"] = async () => ({});
-    const routing = new ProductRoutingCatalog(configuration);
+    const routing = new TaskRepositoryRouter(
+      configuration.adHocProject.workspaceRoot,
+    );
     const lifecycle = new ProductionLifecycleRouter({
       effects,
       persistence,
       repositoryRoot: blueprintRepository.repositoryRoot,
       sourceRef: blueprintRepository.sourceRef,
     });
-    const lifecycleResolver = new ProductLifecycleResolver(
+    const lifecycleResolver = new TaskLifecycleResolver(
       routing,
       blueprintRepository,
     );
@@ -524,6 +526,7 @@ export const createProductionComposition = (
       persistence,
       providerResolver,
       resolveSystemPrompt,
+      routing,
       t3,
       templateAuthority,
       workflowMcpEndpoint: options.workflowMcpEndpoint,

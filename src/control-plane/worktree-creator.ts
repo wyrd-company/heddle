@@ -4,7 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { lstat, mkdir } from "node:fs/promises";
+import { lstat, mkdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 export type WorktreeInput = {
@@ -121,6 +121,15 @@ export const ensureWorktree = async (
   assertBranchOperand(input.branch);
   if (input.baseRef.trim() === "")
     throw new TypeError("baseRef must not be empty");
+  const repositoryAvailable = await stat(input.repositoryRoot).then(
+    (entry) => entry.isDirectory(),
+    () => false,
+  );
+  if (!repositoryAvailable) {
+    throw new TypeError(
+      `Repository '${input.repositoryName}' resolved to unavailable path '${input.repositoryRoot}'`,
+    );
+  }
 
   const baseCommit = await resolveCommitRef(
     input.repositoryRoot,

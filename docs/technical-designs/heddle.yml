@@ -104,10 +104,10 @@ proposed-design:
     delivery: the reconciler
     promotes its non-UAT children from `backlog` to `todo` — including children
     added later — and dispatches them as readiness allows, with sequencing
-    carried by dependency edges. It also prepares each declared
-    repository at `/workspaces/worktrees/{epic-id}/{repository}` on the
+    carried by dependency edges. It also prepares every repository declared by
+    the epic at `/workspaces/worktrees/{epic-id}/{repository}` on the
     `epic/{epic-id}` branch and creates a T3 project titled
-    `{product} - epic-{epic-id}` with `/workspaces/worktrees/{epic-id}` as
+    `{epic-title} - epic-{epic-id}` with `/workspaces/worktrees/{epic-id}` as
     its workspace root. An epic in `backlog` or `todo` is paused: no new child
     dispatch starts, while in-flight instances run to their next wait state and
     hold. An epic in `uat` is not paused; it admits UAT child dispatch and only
@@ -147,22 +147,30 @@ proposed-design:
     Every child remains a completion gate. When they are all done, Heddle
     completes the epic without starting another UAT instance.
 
-    Production configuration declares a complete product inventory. Each
-    product owns one or more named repositories and may carry the durable T3
-    identity of its active epic project. One separately named ad-hoc project
-    supplies the shared project ID and workspace root for tasks outside an
-    epic. Heddle owns that project's existence exactly as it owns an epic
+    A top-level ad-hoc task or epic declares its complete repository scope in
+    the typed kanban front-matter `repos` array. Each entry is one logical,
+    single-safe-path-segment repository name. Heddle resolves it at
+    `{adHocProject.workspaceRoot}/tools/{repository}`. A child task must omit
+    `repos` and inherits the complete array from its epic; it cannot narrow that
+    scope. Heddle records the effective ordered array in the initial lifecycle
+    task contract. Later stages, restart, delegated sessions, and mechanical
+    delivery consume that retained scope even if the live board declaration is
+    edited. Mechanical delivery applies to every repository in the retained
+    scope. A wait node may select one declared `repo` as its session worktree;
+    any repository-bound node that names a `repo` outside the scope is invalid.
+    Missing scope, a child declaration, an unavailable repository path, or an
+    undeclared node repository raises attention with the concrete failure.
+
+    The separately named ad-hoc project supplies the shared project ID and
+    workspace root for tasks outside an epic. Heddle owns that project's
+    existence exactly as it owns an epic
     project's: at startup it reconciles the configured shared project against
     the control plane, creating it under a deterministic command identifier
     when absent and recording it durably, so a replay neither duplicates the
     project nor dispatches a second creation. A shared project that cannot be
     reconciled fails startup closed and names the project, rather than
-    surfacing as a dispatch rejection at the first session. A task or epic may
-    narrow its repository set in board front matter. Child tasks inherit their
-    epic's product and repository declarations. Heddle never infers repository
-    authority from a diff, branch, session, or filesystem scan. An unknown
-    product, a repository outside the product, or a stage `repo` outside the
-    task declaration raises attention before lifecycle dispatch.
+    surfacing as a dispatch rejection at the first session. Heddle never infers
+    repository scope from a diff, branch, session, or filesystem scan.
 
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else
@@ -434,8 +442,9 @@ proposed-design:
     Sessions run on T3 Code, driven headlessly over plain HTTP:
     `POST /api/orchestration/dispatch` carries every command, and
     bearer tokens come from T3's pairing and RFC 8693 token exchange.
-    Heddle prepares each session itself: it creates the git worktree
-    under `/workspaces/worktrees/{task-id}/{repository}`, creates the
+    Heddle prepares each session itself: it creates a git worktree for every
+    repository in the effective task scope under
+    `/workspaces/worktrees/{task-id}/{repository}`, creates the
     thread, and sends one rendered Markdown handoff with the first
     `thread.turn.start` — three deterministic steps it owns end to end.
     The resolved session binding supplies the provider instance, model slug,
@@ -444,15 +453,15 @@ proposed-design:
 
     A child task thread uses its epic project's durable ID. An ad-hoc task uses
     the configured shared project. A delegated subagent inherits its parent's
-    project, repository, branch, and worktree. Its bounded deterministic title
+    project, retained repository scope, branches, and worktrees. Its bounded deterministic title
     is `task-{id} · {stage-occurrence}`: it contains the complete task identity
     and a stable occurrence discriminator, with no service marker or epic
     prefix. Each
     wait-stage occurrence has one durable session and thread identity; a stage
     reached again through a lifecycle loop receives a new occurrence identity,
     while restart resumes an incomplete occurrence. Stage-scoped sessions for
-    one task share its task-scoped branch and worktree so each stage receives
-    the delivery state produced by prior stages. First-turn dispatch omits
+    one task share its task-scoped branch and worktree in each repository so
+    each stage receives the delivery state produced by prior stages. First-turn dispatch omits
     `titleSeed`, so T3 cannot replace the Heddle title from a prompt-derived seed.
 
     Qualification against isolated pinned Wyrd Company T3 fork 0.0.38-wyrd.2 creates a project and a
@@ -1327,7 +1336,7 @@ proposed-design:
     `worker.yml`. Objects and maps merge by key, arrays replace wholesale, and
     `null` restores a built-in value or removes an inherited optional value.
     The validated effective result is the authority for board, state, server,
-    T3, Pushover, pacing, session, threshold, product, project, and secret
+    T3, Pushover, pacing, session, threshold, project, and secret
     settings. Other `HEDDLE_*` values do not affect deployed configuration.
     Invalid configuration fails before composition or network bind and names
     the source file and JSON-pointer field in a secret-redacted first
@@ -1396,9 +1405,9 @@ proposed-design:
     The installation uses one configured shared T3 project for ad-hoc tasks
     and one Heddle-managed T3 project per started epic. Managed projects remain
     available after epic completion so their archived stage threads can be
-    inspected. The product inventory is the repository and project-routing
-    authority. Existing repo-first worktrees remain usable; Heddle does not
-    move or rewrite them.
+    inspected. Repository scope comes from the top-level task or epic and is
+    visible in every agent handoff, including inherited child scope. Existing
+    repo-first worktrees remain usable; Heddle does not move or rewrite them.
 
     The deployment server accepts the canonical production composition and
     shares its board, persistence, console state, console action port,

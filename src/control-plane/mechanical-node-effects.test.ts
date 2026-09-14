@@ -103,7 +103,9 @@ const writeGitprMetaRef = async (
   }
 };
 
-const makeChange = async (): Promise<{
+const makeChange = async (
+  repositoryName = "sample-repository",
+): Promise<{
   change: MechanicalChangeContext;
   sourcePath: string;
   worktreePath: string;
@@ -112,7 +114,7 @@ const makeChange = async (): Promise<{
   temporaryDirectories.push(root);
   const sourcePath = join(root, "source");
   const worktreesRoot = join(root, "worktrees");
-  const worktreePath = join(worktreesRoot, "task-change", "sample-repository");
+  const worktreePath = join(worktreesRoot, "task-change", repositoryName);
   await mkdir(sourcePath);
   await git(sourcePath, "init", "--quiet", "--initial-branch=main");
   await git(sourcePath, "config", "user.email", "test@example.invalid");
@@ -124,7 +126,7 @@ const makeChange = async (): Promise<{
     change: {
       baseBranch: "main",
       branch: "task/change",
-      repositoryName: "sample-repository",
+      repositoryName,
       repositoryRoot: sourcePath,
       reviewDescription: "Record the second inventory item.",
       reviewTitle: "Record inventory item",
@@ -136,8 +138,8 @@ const makeChange = async (): Promise<{
   };
 };
 
-const prepareCommittedChange = async () => {
-  const fixture = await makeChange();
+const prepareCommittedChange = async (repositoryName?: string) => {
+  const fixture = await makeChange(repositoryName);
   const input = {
     baseRef: fixture.change.baseBranch,
     branch: fixture.change.branch,
@@ -794,6 +796,71 @@ describe("delivery mechanical nodes", () => {
       );
     },
   );
+
+  it.each(["merge", "finalize"] as const)(
+    "rejects %s when the retained snapshots do not cover every repository",
+    async (effectName) => {
+      const fixture = await makeChange();
+      const snapshot = await ensureReviewSnapshot(fixture.change);
+      const effects = createMechanicalNodeEffects({
+        command: async () => {
+          throw new Error("mechanical command must not run");
+        },
+      });
+      const input = {
+        context: {
+          get: async (key: string) =>
+            key === mechanicalChangeContextKey
+              ? [fixture.change, fixture.change]
+              : [snapshot],
+        },
+        idempotencyKey: "sample-effect",
+        input: null,
+        params: {},
+      } as unknown as LifecycleEffectInput;
+
+      await expect(effects[effectName](input)).rejects.toThrow(
+        "Review snapshot output does not match repository scope",
+      );
+    },
+  );
+
+  it("identifies the repository that requires remediation in a multi-repository merge", async () => {
+    const first = await prepareCommittedChange("sample-alpha");
+    const second = await prepareCommittedChange("sample-beta");
+    const firstSnapshot = await ensureReviewSnapshot(first.change);
+    const secondSnapshot = await ensureReviewSnapshot(second.change);
+    await writeFile(join(first.sourcePath, "catalog.txt"), "published\n");
+    await git(first.sourcePath, "add", "catalog.txt");
+    await git(first.sourcePath, "commit", "--quiet", "-m", "publish catalog");
+    const effects = createMechanicalNodeEffects();
+    const input = {
+      context: {
+        get: async (key: string) =>
+          key === mechanicalChangeContextKey
+            ? [first.change, second.change]
+            : [firstSnapshot, secondSnapshot],
+      },
+      idempotencyKey: "sample-effect",
+      input: null,
+      params: {},
+    } as unknown as LifecycleEffectInput;
+
+    await expect(effects.merge(input)).resolves.toMatchObject({
+      dispositions: { merged: false, remediate: true },
+      remediationCause: {
+        kind: "review-basis-drift",
+        repositoryName: "sample-alpha",
+      },
+      repositories: [
+        { dispositions: { merged: false, remediate: true } },
+        { dispositions: { merged: true, remediate: false }, merged: true },
+      ],
+    });
+    expect(await git(second.sourcePath, "rev-parse", "main")).toBe(
+      `${secondSnapshot.sourceHead}\n`,
+    );
+  });
 
   it("repeatedly routes an unchanged already-behind review source to remediation", async () => {
     const fixture = await prepareCommittedChange();

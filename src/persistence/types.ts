@@ -241,6 +241,7 @@ export interface EpicProjectRecord {
   epicId: number;
   productName: string;
   projectId: string;
+  repositoryNames?: string[];
   state: "active" | "creating" | "deleted" | "deleting";
 }
 

@@ -64,17 +64,6 @@ const configuration: ResolvedProductionConfiguration = {
       providerDisplayName: "Workbench Alpha",
     },
   },
-  products: [
-    {
-      name: "Sample product",
-      repos: [
-        {
-          name: "sample-repository",
-          repositoryRoot: join(root, "repository"),
-        },
-      ],
-    },
-  ],
   pushover: {
     apiUrl: "https://notify.invalid/messages",
     applicationToken: "application-token",

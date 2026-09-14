@@ -92,6 +92,39 @@ type SchedulerPassHistoryRow = {
   type: SchedulerPassHistoryRecord["type"];
 };
 
+type EpicProjectRow = Omit<EpicProjectRecord, "repositoryNames"> & {
+  repositoryNamesJson: string | null;
+};
+
+const parseEpicProjectRow = (row: EpicProjectRow): EpicProjectRecord => {
+  const { repositoryNamesJson, ...record } = row;
+  if (repositoryNamesJson === null) return record;
+  let value: unknown;
+  try {
+    value = JSON.parse(repositoryNamesJson) as unknown;
+  } catch {
+    throw new Error(`Epic ${row.epicId} has invalid durable repository scope`);
+  }
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((name) => typeof name !== "string" || name === "") ||
+    new Set(value).size !== value.length
+  ) {
+    throw new Error(`Epic ${row.epicId} has invalid durable repository scope`);
+  }
+  return { ...record, repositoryNames: value as string[] };
+};
+
+const sameStrings = (
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean =>
+  left !== undefined &&
+  right !== undefined &&
+  left.length === right.length &&
+  left.every((value, index) => value === right[index]);
+
 export class LegacyNotificationIntentMismatchError extends Error {
   public constructor() {
     super("Legacy notification intent cannot verify the current secure route");
@@ -1287,10 +1320,11 @@ export class SqlitePersistence {
 
   getEpicProject(epicId: number): EpicProjectRecord | undefined {
     this.assertTaskId("epicId", epicId);
-    return this.database
+    const row = this.database
       .prepare(
         `SELECT epic_id AS epicId, product_name AS productName,
                 project_id AS projectId,
+                repository_names_json AS repositoryNamesJson,
                 CASE WHEN deleted = 1 THEN 'deleted' ELSE state END AS state,
                 create_command_id AS createCommandId,
                 created_at AS createdAt,
@@ -1298,14 +1332,16 @@ export class SqlitePersistence {
          FROM heddle_epic_projects
          WHERE epic_id = ?`,
       )
-      .get(epicId) as EpicProjectRecord | undefined;
+      .get(epicId) as EpicProjectRow | undefined;
+    return row === undefined ? undefined : parseEpicProjectRow(row);
   }
 
   listEpicProjects(): EpicProjectRecord[] {
-    return this.database
+    const rows = this.database
       .prepare(
         `SELECT epic_id AS epicId, product_name AS productName,
                 project_id AS projectId,
+                repository_names_json AS repositoryNamesJson,
                 CASE WHEN deleted = 1 THEN 'deleted' ELSE state END AS state,
                 create_command_id AS createCommandId,
                 created_at AS createdAt,
@@ -1313,7 +1349,8 @@ export class SqlitePersistence {
          FROM heddle_epic_projects
          ORDER BY epic_id`,
       )
-      .all() as EpicProjectRecord[];
+      .all() as EpicProjectRow[];
+    return rows.map(parseEpicProjectRow);
   }
 
   writeEpicProject(record: EpicProjectRecord): void {
@@ -1327,11 +1364,26 @@ export class SqlitePersistence {
     ] as const) {
       this.assertStableId(name, record[name]);
     }
+    if (
+      record.repositoryNames === undefined ||
+      record.repositoryNames.length === 0
+    ) {
+      throw new Error(`Epic ${record.epicId} repository scope is missing`);
+    }
+    for (const repositoryName of record.repositoryNames) {
+      this.assertStableId("repositoryName", repositoryName);
+    }
+    if (
+      new Set(record.repositoryNames).size !== record.repositoryNames.length
+    ) {
+      throw new Error(`Epic ${record.epicId} repository scope is invalid`);
+    }
     const prior = this.getEpicProject(record.epicId);
     if (
       prior !== undefined &&
       (prior.productName !== record.productName ||
         prior.projectId !== record.projectId ||
+        !sameStrings(prior.repositoryNames, record.repositoryNames) ||
         prior.createCommandId !== record.createCommandId ||
         prior.createdAt !== record.createdAt ||
         prior.deleteCommandId !== record.deleteCommandId)
@@ -1345,9 +1397,9 @@ export class SqlitePersistence {
     this.database
       .prepare(
         `INSERT INTO heddle_epic_projects
-           (epic_id, product_name, project_id, state, deleted,
-            create_command_id, created_at, delete_command_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           (epic_id, product_name, project_id, repository_names_json, state,
+            deleted, create_command_id, created_at, delete_command_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(epic_id) DO UPDATE SET
            state = excluded.state,
            deleted = excluded.deleted`,
@@ -1356,6 +1408,7 @@ export class SqlitePersistence {
         record.epicId,
         record.productName,
         record.projectId,
+        JSON.stringify(record.repositoryNames),
         storedState,
         record.state === "deleted" ? 1 : 0,
         record.createCommandId,

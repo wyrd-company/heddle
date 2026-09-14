@@ -9,6 +9,7 @@ import {
   type LifecycleEffectInput,
   type MechanicalNodeUse,
 } from "../engine/index.js";
+import type { JsonValue } from "../persistence/index.js";
 
 import { ensureWorktree, type GitRunner } from "./worktree-creator.js";
 import {
@@ -90,49 +91,97 @@ export interface MechanicalNodeEffectOptions {
   statuses?: MechanicalBoardStatusSource;
 }
 
-const requireChange = async (
+const requireChanges = async (
   input: LifecycleEffectInput,
-): Promise<MechanicalChangeContext> => {
+): Promise<MechanicalChangeContext[]> => {
   const value = await input.context.get(mechanicalChangeContextKey);
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (typeof value !== "object" || value === null) {
     throw new Error("Mechanical change context is missing");
   }
-  const change = value as Partial<MechanicalChangeContext>;
-  for (const key of [
-    "baseBranch",
-    "branch",
-    "repositoryName",
-    "repositoryRoot",
-    "reviewDescription",
-    "reviewTitle",
-    "worktreeName",
-  ] as const) {
-    if (typeof change[key] !== "string") {
-      throw new Error(`Mechanical change context is missing ${key}`);
+  const changes = (
+    Array.isArray(value) ? value : [value]
+  ) as Partial<MechanicalChangeContext>[];
+  if (changes.length === 0) {
+    throw new Error("Mechanical change context has no repositories");
+  }
+  for (const change of changes) {
+    for (const key of [
+      "baseBranch",
+      "branch",
+      "repositoryName",
+      "repositoryRoot",
+      "reviewDescription",
+      "reviewTitle",
+      "worktreeName",
+    ] as const) {
+      if (typeof change[key] !== "string") {
+        throw new Error(`Mechanical change context is missing ${key}`);
+      }
     }
   }
-  return change as MechanicalChangeContext;
+  return changes as MechanicalChangeContext[];
 };
 
-const requireSnapshotOutput = async (
+const requireSnapshotOutputs = async (
   input: LifecycleEffectInput,
-): Promise<ReviewSnapshot> => {
+): Promise<ReviewSnapshot[]> => {
   const value = await input.context.get(reviewSnapshotOutputKey);
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    typeof (value as Partial<ReviewSnapshot>).snapshotId !== "string"
-  ) {
+  if (typeof value !== "object" || value === null) {
     throw new Error("Review snapshot output is missing");
   }
-  const snapshot = value as Partial<ReviewSnapshot>;
-  for (const key of ["sourceHead", "baseHead"] as const) {
-    if (!isReviewObjectId(snapshot[key])) {
-      throw new Error(`Review snapshot output has invalid ${key}`);
+  const snapshots = (
+    Array.isArray(value) ? value : [value]
+  ) as Partial<ReviewSnapshot>[];
+  if (snapshots.length === 0) {
+    throw new Error("Review snapshot output has no repositories");
+  }
+  for (const snapshot of snapshots) {
+    if (typeof snapshot.snapshotId !== "string") {
+      throw new Error("Review snapshot output is missing snapshotId");
+    }
+    for (const key of ["sourceHead", "baseHead"] as const) {
+      if (!isReviewObjectId(snapshot[key])) {
+        throw new Error(`Review snapshot output has invalid ${key}`);
+      }
     }
   }
-  return snapshot as ReviewSnapshot;
+  return snapshots as ReviewSnapshot[];
+};
+
+const oneOrMany = <T>(values: T[]): T | T[] =>
+  values.length === 1 ? values[0]! : values;
+
+const mergedRepositoryResults = (
+  changes: readonly MechanicalChangeContext[],
+  results: readonly MergeSnapshotResult[],
+): JsonValue => {
+  if (results.length === 1) return results[0]!;
+  const remediationIndex = results.findIndex(
+    ({ dispositions }) => dispositions.remediate,
+  );
+  if (remediationIndex >= 0) {
+    const remediation = results[remediationIndex]!;
+    if (!remediation.dispositions.remediate) {
+      throw new Error("Mechanical merge remediation result is inconsistent");
+    }
+    const remediationCause = remediation.remediationCause as
+      ReviewIntegrationRemediationCause | undefined;
+    if (remediationCause === undefined) {
+      throw new Error("Mechanical merge remediation cause is missing");
+    }
+    return {
+      dispositions: { merged: false, remediate: true },
+      remediationCause: {
+        ...remediationCause,
+        repositoryName: changes[remediationIndex]!.repositoryName,
+      },
+      repositories: [...results],
+    };
+  }
+  return {
+    dispositions: { merged: true, remediate: false },
+    repositories: [...results],
+  };
 };
 
 const mirrorStatuses = async (
@@ -184,50 +233,78 @@ export const createMechanicalNodeEffects = (
     runMechanicalGit(command, cwd, arguments_);
   return {
     "prepare-worktree": async (input) => {
-      const change = await requireChange(input);
-      const statuses = await mirrorStatuses(input, options, change);
-      const prepared = await ensureWorktree(
-        {
-          baseRef: change.baseBranch,
-          branch: change.branch,
-          repositoryName: change.repositoryName,
-          repositoryRoot: change.repositoryRoot,
-          worktreeName: change.worktreeName,
-          worktreesRoot: change.worktreesRoot,
-        },
-        git,
-      );
-      await mirror(input, options, change, statuses, "prepare-worktree");
-      return prepared;
+      const changes = await requireChanges(input);
+      const statuses = await mirrorStatuses(input, options, changes[0]!);
+      const prepared = [];
+      for (const change of changes) {
+        prepared.push(
+          await ensureWorktree(
+            {
+              baseRef: change.baseBranch,
+              branch: change.branch,
+              repositoryName: change.repositoryName,
+              repositoryRoot: change.repositoryRoot,
+              worktreeName: change.worktreeName,
+              worktreesRoot: change.worktreesRoot,
+            },
+            git,
+          ),
+        );
+      }
+      await mirror(input, options, changes[0]!, statuses, "prepare-worktree");
+      return oneOrMany(prepared);
     },
     "review-snapshot": async (input) => {
-      const change = await requireChange(input);
-      const statuses = await mirrorStatuses(input, options, change);
-      const snapshot = await ensureReviewSnapshot(change, command);
-      await mirror(input, options, change, statuses, "review-snapshot");
-      return snapshot;
+      const changes = await requireChanges(input);
+      const statuses = await mirrorStatuses(input, options, changes[0]!);
+      const snapshots = [];
+      for (const change of changes) {
+        snapshots.push(await ensureReviewSnapshot(change, command));
+      }
+      await mirror(input, options, changes[0]!, statuses, "review-snapshot");
+      return oneOrMany(snapshots);
     },
     merge: async (input) => {
-      const change = await requireChange(input);
-      const snapshot = await requireSnapshotOutput(input);
-      const statuses = await mirrorStatuses(input, options, change);
-      const result = await mergeReviewSnapshot(change, snapshot, command);
-      if (result.merged || result.alreadyMerged) {
-        await mirror(input, options, change, statuses, "merge");
+      const changes = await requireChanges(input);
+      const snapshots = await requireSnapshotOutputs(input);
+      if (snapshots.length !== changes.length) {
+        throw new Error(
+          "Review snapshot output does not match repository scope",
+        );
       }
-      return result;
+      const statuses = await mirrorStatuses(input, options, changes[0]!);
+      const results = [];
+      for (const [index, change] of changes.entries()) {
+        results.push(
+          await mergeReviewSnapshot(change, snapshots[index]!, command),
+        );
+      }
+      if (results.every((result) => result.merged || result.alreadyMerged)) {
+        await mirror(input, options, changes[0]!, statuses, "merge");
+      }
+      return mergedRepositoryResults(changes, results);
     },
     finalize: async (input) => {
-      const change = await requireChange(input);
-      const snapshot = await requireSnapshotOutput(input);
-      const statuses = await mirrorStatuses(input, options, change);
-      const result = await cleanupMergedChange(
-        change,
-        snapshot.snapshotId,
-        command,
-      );
-      await mirror(input, options, change, statuses, "finalize");
-      return result;
+      const changes = await requireChanges(input);
+      const snapshots = await requireSnapshotOutputs(input);
+      if (snapshots.length !== changes.length) {
+        throw new Error(
+          "Review snapshot output does not match repository scope",
+        );
+      }
+      const statuses = await mirrorStatuses(input, options, changes[0]!);
+      const results = [];
+      for (const [index, change] of changes.entries()) {
+        results.push(
+          await cleanupMergedChange(
+            change,
+            snapshots[index]!.snapshotId,
+            command,
+          ),
+        );
+      }
+      await mirror(input, options, changes[0]!, statuses, "finalize");
+      return oneOrMany(results);
     },
   };
 };

@@ -626,6 +626,9 @@ describe("SqlitePersistence", () => {
       projectId: "sample-project",
       state: "active",
     });
+    expect(persistence.getEpicProject(101)).not.toHaveProperty(
+      "repositoryNames",
+    );
     const migrated = new Database(databasePath, { readonly: true });
     expect(
       (
@@ -633,10 +636,82 @@ describe("SqlitePersistence", () => {
           .prepare("PRAGMA table_info(heddle_epic_projects)")
           .all() as Array<{ name: string }>
       ).map(({ name }) => name),
-    ).toContain("deleted");
+    ).toEqual(expect.arrayContaining(["deleted", "repository_names_json"]));
     migrated.close();
     persistence.close();
   });
+
+  it("persists exact ordered epic repository scope as durable identity", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const record = {
+      createCommandId: "create-sample-project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      deleteCommandId: "delete-sample-project",
+      epicId: 101,
+      productName: "Sample delivery",
+      projectId: "sample-project",
+      repositoryNames: ["sample-alpha", "sample-beta"],
+      state: "creating" as const,
+    };
+
+    persistence.writeEpicProject(record);
+    persistence.writeEpicProject({ ...record, state: "active" });
+    expect(persistence.getEpicProject(101)).toEqual({
+      ...record,
+      state: "active",
+    });
+    expect(() =>
+      persistence.writeEpicProject({
+        ...record,
+        repositoryNames: ["sample-beta", "sample-alpha"],
+      }),
+    ).toThrow("Epic 101 changed durable project identity");
+    expect(() =>
+      persistence.writeEpicProject({
+        ...record,
+        epicId: 102,
+        projectId: "second-sample-project",
+        repositoryNames: ["sample-alpha", "sample-alpha"],
+      }),
+    ).toThrow("Epic 102 repository scope is invalid");
+    persistence.close();
+  });
+
+  it.each([
+    ["malformed JSON", "["],
+    ["an empty array", "[]"],
+    ["a duplicate name", '["sample-alpha","sample-alpha"]'],
+    ["a non-array", "{}"],
+  ])(
+    "rejects durable epic repository scope containing %s",
+    async (_, value) => {
+      const stateDirectory = await makeStateDirectory();
+      const persistence = new SqlitePersistence({ stateDirectory });
+      persistence.writeEpicProject({
+        createCommandId: "create-sample-project",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        deleteCommandId: "delete-sample-project",
+        epicId: 101,
+        productName: "Sample delivery",
+        projectId: "sample-project",
+        repositoryNames: ["sample-alpha"],
+        state: "active",
+      });
+      const database = new Database(persistence.databasePath);
+      database
+        .prepare(
+          "UPDATE heddle_epic_projects SET repository_names_json = ? WHERE epic_id = ?",
+        )
+        .run(value, 101);
+      database.close();
+
+      expect(() => persistence.getEpicProject(101)).toThrow(
+        "Epic 101 has invalid durable repository scope",
+      );
+      persistence.close();
+    },
+  );
 
   it("persists one immutable shared-project identity while its state advances", async () => {
     const stateDirectory = await makeStateDirectory();

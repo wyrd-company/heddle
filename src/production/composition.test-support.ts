@@ -34,6 +34,8 @@ kind: standard
 
 Stage: {{ handoff.stage.name }}
 
+Repositories: {{ task.repos | stableJson }}
+
 Prior outputs: {{ handoff.stage.priorStageOutputs | stableJson }}
 
 {% for list in handoff.todoList.lists %}{% for item in list.items %}- [{% if item.checked %}x{% else %} {% endif %}] {{ item.text }}
@@ -244,7 +246,7 @@ export type ProductionEpicFixture = ProductionFixture & { epicId: number };
 export const prepareProductionFixture =
   async (): Promise<ProductionFixture> => {
     const root = await mkdtemp(join(tmpdir(), "heddle-production-"));
-    const repositoryRoot = join(root, "sample-repository");
+    const repositoryRoot = join(root, "tools", "sample-repository");
     const blueprintsRepositoryRoot = join(root, "blueprint-repository");
     const blueprintsRemote = join(root, "blueprint-origin.git");
     const boardDirectory = join(root, "sample-board");
@@ -592,6 +594,8 @@ next_id: 1
         "medium",
         "--tags",
         "lifecycle:sample",
+        "--repos",
+        "sample-repository",
         "--json",
       ],
       { cwd: root },
@@ -637,17 +641,6 @@ next_id: 1
             providerDisplayName: "Workbench Alpha",
           },
         },
-        products: [
-          {
-            name: "Sample product",
-            repos: [
-              {
-                name: "sample-repository",
-                repositoryRoot,
-              },
-            ],
-          },
-        ],
         pushover: {
           apiUrl: "https://notify.invalid/messages",
           applicationToken: "application-token",
@@ -748,6 +741,8 @@ export const prepareProductionEpicFixture =
         "in-progress",
         "--tags",
         "type:epic",
+        "--repos",
+        "sample-repository",
         "--json",
       ],
       { cwd: fixture.root },

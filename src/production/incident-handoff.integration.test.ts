@@ -22,7 +22,7 @@ import {
 } from "./incident-coordinator.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
-import { ProductRoutingCatalog } from "./product-routing.js";
+import { TaskRepositoryRouter } from "./repository-routing.js";
 import { ProductionConsoleState } from "./console-state.js";
 import { SyntheticT3 } from "./composition.test-support.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
@@ -60,7 +60,7 @@ describe("production incident handoff", () => {
   it("renders source identity, code, error, observations, and recheck without tokens or configured secrets", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-incident-handoff-"));
     const blueprintsRoot = join(root, "blueprints-repository");
-    const repositoryRoot = join(root, "sample-repository");
+    const repositoryRoot = join(root, "tools", "sample-repository");
     await mkdir(join(blueprintsRoot, "blueprints"), { recursive: true });
     await mkdir(join(blueprintsRoot, "handoff-templates"), { recursive: true });
     await mkdir(join(blueprintsRoot, "todo-templates"), { recursive: true });
@@ -192,12 +192,6 @@ describe("production incident handoff", () => {
         projectId: "sample-project",
         workspaceRoot: root,
       },
-      products: [
-        {
-          name: "Sample product",
-          repos: [{ name: "sample-repository", repositoryRoot }],
-        },
-      ],
       session: {
         baseRef: "main",
         defaultProviderAlias: "primary",
@@ -237,16 +231,17 @@ describe("production incident handoff", () => {
         worktreesRoot: join(root, "worktrees"),
       },
     } as unknown as ResolvedProductionConfiguration;
-    const routing = new ProductRoutingCatalog(configuration);
+    const routing = new TaskRepositoryRouter(root);
     const boardTask: BoardTask = {
       blocked: false,
       dependencies: [],
-      frontMatter: {},
+      frontMatter: { repos: ["sample-repository"] },
       id: 17,
       priority: "medium",
       status: "in-progress",
       tags: [],
       title: "Arrange inventory",
+      repos: ["sample-repository"],
     };
     routing.update([boardTask]);
     const lifecycle = new ProductionLifecycleRouter({
@@ -265,6 +260,7 @@ describe("production incident handoff", () => {
       lifecycle,
       routing,
       {
+        baseBranchForTask: () => "main",
         projectForTask: () => "sample-project",
       } as EpicProjectCoordinator,
       attention,

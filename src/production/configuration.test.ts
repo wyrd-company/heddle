@@ -46,18 +46,6 @@ const fixture = (): ProductionConfiguration => ({
       providerDisplayName: "Workbench Alpha",
     },
   },
-  products: [
-    {
-      epicProject: { epicId: 101, projectId: "epic-project" },
-      name: "Sample product",
-      repos: [
-        {
-          name: "sample-repository",
-          repositoryRoot: "/tmp/sample-repository",
-        },
-      ],
-    },
-  ],
   pushover: {
     apiUrl: "https://notify.invalid/messages",
     applicationToken: "application-token",
@@ -313,28 +301,6 @@ describe("production configuration", () => {
     expect(validate(invalid)).toBe(false);
     expect(() => validateProductionConfiguration(invalid)).toThrow(
       "pushover.recipientLabel must not be empty",
-    );
-  });
-
-  it("rejects a repository referenced by more than one product", () => {
-    const invalid: ProductionConfiguration = {
-      ...fixture(),
-      products: [
-        ...fixture().products,
-        {
-          name: "Second product",
-          repos: [
-            {
-              name: "sample-repository",
-              repositoryRoot: "/tmp/second-repository",
-            },
-          ],
-        },
-      ],
-    };
-
-    expect(() => validateProductionConfiguration(invalid)).toThrow(
-      "must belong to exactly one product",
     );
   });
 

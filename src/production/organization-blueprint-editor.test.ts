@@ -18,7 +18,7 @@ import {
   type BlueprintRepositoryFixture,
   executeGit,
 } from "./blueprint-repository.test-support.js";
-import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
+import { OrganizationBlueprintArtifactEditor } from "./organization-blueprint-editor.js";
 import { DurableAttentionQueue } from "./durable-adapters.js";
 
 describe("organization blueprint artifact editor", () => {

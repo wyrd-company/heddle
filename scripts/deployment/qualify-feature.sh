@@ -205,6 +205,7 @@ printf 'n\n' | kanban-md init \
 qualification_task_id="$(
     kanban-md create \
         --dir "${board_directory}" \
+        --repos sample-repository \
         --status in-progress \
         --json \
         "Sample Record" | jq -er '.id'
@@ -239,11 +240,6 @@ providerAliases:
   default:
     providerDisplayName: Workbench Alpha
     model: sample-model
-products:
-  - name: Sample collection
-    repos:
-      - name: sample-repository
-        repositoryRoot: /workspaces/heddle
 pushover:
   apiUrl: http://127.0.0.1:9/messages
   applicationToken: sample-application-token

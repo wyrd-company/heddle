@@ -35,7 +35,6 @@ export interface BoardTask {
   parent?: number;
   lifecycle?: string;
   providerAlias?: TaskProviderAliasMap;
-  product?: string;
   repos?: string[];
 }
 
@@ -218,15 +217,6 @@ const rawFrontMatter = (serialized: string | undefined): JsonValue => {
     throw new Error("task front matter must be a JSON-compatible object");
   }
   return value;
-};
-
-const scalarFromFrontMatter = (
-  frontMatter: string | undefined,
-  key: string,
-): string | undefined => {
-  if (frontMatter === undefined) return undefined;
-  const match = new RegExp(`^${key}:\\s*(.*?)\\s*$`, "m").exec(frontMatter);
-  return match?.[1] === undefined ? undefined : unquoteScalar(match[1]);
 };
 
 const lifecycleFromFrontMatter = (source: string): string | undefined => {
@@ -505,10 +495,6 @@ export class KanbanBoardAdapter {
       (parsedFrontMatter as Record<string, JsonValue>)["provider-alias"],
       task.id,
     );
-    const product = scalarFromFrontMatter(frontMatter, "product");
-    if (product !== undefined && product.trim() === "") {
-      throw new Error("task product declaration must not be empty");
-    }
     const declaredRepos = requireRepositories(
       (parsedFrontMatter as Record<string, JsonValue>)["repos"],
     );
@@ -535,7 +521,6 @@ export class KanbanBoardAdapter {
       parent: task.parent,
       lifecycle,
       ...(providerAlias === undefined ? {} : { providerAlias }),
-      ...(product === undefined ? {} : { product }),
       ...(repos === undefined ? {} : { repos }),
     };
   }

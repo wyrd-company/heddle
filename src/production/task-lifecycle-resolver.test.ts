@@ -9,29 +9,28 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import type { ProductionConfiguration } from "./configuration.js";
 import {
   executeGit,
   prepareBlueprintRepositoryFixture,
   type BlueprintRepositoryFixture,
 } from "./blueprint-repository.test-support.js";
-import { ProductLifecycleResolver } from "./product-lifecycle-resolver.js";
-import { ProductRoutingCatalog } from "./product-routing.js";
+import { TaskRepositoryRouter } from "./repository-routing.js";
+import { TaskLifecycleResolver } from "./task-lifecycle-resolver.js";
 
 const task = (): BoardTask => ({
   blocked: false,
   dependencies: [],
+  frontMatter: { repos: ["sample-alpha"] },
   id: 101,
   lifecycle: "sample-process",
   priority: "medium",
-  product: "Sample collection",
   repos: ["sample-alpha"],
   status: "todo",
   tags: [],
   title: "Arrange sample items",
 });
 
-describe("ProductLifecycleResolver", () => {
+describe("TaskLifecycleResolver", () => {
   let fixture: BlueprintRepositoryFixture | undefined;
 
   afterEach(async () => {
@@ -61,27 +60,16 @@ describe("ProductLifecycleResolver", () => {
     await executeGit("git", ["push", "--quiet"], {
       cwd: fixture.repositoryRoot,
     });
-    const alpha = join(fixture.root, "sample-alpha");
-    const beta = join(fixture.root, "sample-beta");
+    const toolsRoot = join(fixture.root, "tools");
+    const alpha = join(toolsRoot, "sample-alpha");
     await mkdir(join(alpha, "blueprints"), { recursive: true });
-    await mkdir(beta);
-    const configuration = {
-      products: [
-        {
-          name: "Sample collection",
-          repos: [
-            { name: "sample-alpha", repositoryRoot: alpha },
-            { name: "sample-beta", repositoryRoot: beta },
-          ],
-        },
-      ],
-    } as ProductionConfiguration;
-    const routing = new ProductRoutingCatalog(configuration);
+    await mkdir(join(toolsRoot, "sample-beta"));
+    const routing = new TaskRepositoryRouter(fixture.root);
     const selected = task();
     routing.update([selected]);
     return {
       alpha,
-      resolver: new ProductLifecycleResolver(routing, fixture.repository),
+      resolver: new TaskLifecycleResolver(routing, fixture.repository),
       selected,
     };
   };
@@ -95,7 +83,7 @@ describe("ProductLifecycleResolver", () => {
     });
   });
 
-  it("resolves only the central blueprint root even when a product repository carries a conflicting artifact", async () => {
+  it("resolves only the central blueprint root when a task repository carries a conflicting artifact", async () => {
     const { alpha, resolver, selected } = await prepare("sample-alpha");
     await writeFile(
       join(alpha, "blueprints", "sample-process.json"),

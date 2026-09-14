@@ -39,6 +39,24 @@ afterEach(async () => {
 });
 
 describe("ensureWorktree", () => {
+  it("names a repository scope path that is unavailable", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "heddle-worktree-"));
+    scratchDirectories.push(scratch);
+    const repositoryRoot = join(scratch, "tools", "sample-missing");
+
+    await expect(
+      ensureWorktree({
+        baseRef: "main",
+        branch: "task/prepare",
+        repositoryName: "sample-missing",
+        repositoryRoot,
+        worktreeName: "task-prepare",
+      }),
+    ).rejects.toThrow(
+      `Repository 'sample-missing' resolved to unavailable path '${repositoryRoot}'`,
+    );
+  });
+
   it.each(["--detach", "HEAD"])(
     "rejects unsafe branch %s before calling Git",
     async (branch) => {
@@ -240,6 +258,7 @@ describe("ensureWorktree", () => {
     );
     const commit = "a".repeat(40);
     const calls: string[][] = [];
+    await mkdir(repositoryRoot, { recursive: true });
 
     await ensureWorktree(
       {

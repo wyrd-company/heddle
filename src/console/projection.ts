@@ -16,7 +16,6 @@ export interface PublicBoardTask {
   lifecycle?: string;
   parent?: number;
   priority: string;
-  product?: string;
   repos?: string[];
   status: string;
   tags: string[];
@@ -38,7 +37,6 @@ export const projectPublicBoardTask = (task: BoardTask): PublicBoardTask => ({
   ...(task.lifecycle === undefined ? {} : { lifecycle: task.lifecycle }),
   ...(task.parent === undefined ? {} : { parent: task.parent }),
   priority: task.priority,
-  ...(task.product === undefined ? {} : { product: task.product }),
   ...(task.repos === undefined ? {} : { repos: [...task.repos] }),
   status: task.status,
   tags: [...task.tags],

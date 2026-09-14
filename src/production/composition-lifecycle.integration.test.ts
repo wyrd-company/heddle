@@ -4,13 +4,14 @@
 // ---
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   bootstrapStageSession,
   builtInSystemPrompt,
 } from "../control-plane/index.js";
+import { readLifecycleContext } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
@@ -34,8 +35,75 @@ describe("production lifecycle composition", () => {
     return fixture;
   };
 
-  it("starts one durable instance and one project-grouped titled session across restart", async () => {
-    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+  it("starts one durable project-grouped session, prepares every scoped repository, and retains it across restart", async () => {
+    const { blueprintsRepositoryRoot, configuration, root, taskId } =
+      await prepare();
+    const secondRepositoryRoot = join(root, "tools", "sample-secondary");
+    await mkdir(secondRepositoryRoot);
+    await writeFile(join(secondRepositoryRoot, "inventory.txt"), "one\n");
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: secondRepositoryRoot,
+    });
+    await execute("git", ["add", "inventory.txt"], {
+      cwd: secondRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add sample inventory",
+      ],
+      { cwd: secondRepositoryRoot },
+    );
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        configuration.boardDirectory,
+        "edit",
+        String(taskId),
+        "--repos",
+        "sample-repository,sample-secondary",
+      ],
+      { cwd: root },
+    );
+    const blueprintPath = join(
+      blueprintsRepositoryRoot,
+      "blueprints",
+      "sample.json",
+    );
+    const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    blueprint.nodes.find(({ id }) => id === "implement")!["repo"] =
+      "sample-repository";
+    await writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Select sample session repository",
+      ],
+      { cwd: blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet"], {
+      cwd: blueprintsRepositoryRoot,
+    });
     const firstT3 = new SyntheticT3();
     const transport = { send: vi.fn(async () => undefined) };
     const first = createProductionComposition({
@@ -65,7 +133,32 @@ describe("production lifecycle composition", () => {
       projectId: "workspace-project",
       title: expect.stringContaining(`task-${taskId}`),
       type: "thread.create",
+      worktreePath: join(
+        configuration.session.worktreesRoot!,
+        String(taskId),
+        "sample-repository",
+      ),
     });
+    await expect(
+      stat(
+        join(
+          configuration.session.worktreesRoot!,
+          String(taskId),
+          "sample-repository",
+          ".git",
+        ),
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      stat(
+        join(
+          configuration.session.worktreesRoot!,
+          String(taskId),
+          "sample-secondary",
+          ".git",
+        ),
+      ),
+    ).resolves.toBeDefined();
     expect(turn).not.toHaveProperty("titleSeed");
     const renderedDocument = (turn?.["message"] as { text: string }).text;
     expect(renderedDocument.startsWith(`${builtInSystemPrompt}\n\n`)).toBe(
@@ -110,6 +203,67 @@ describe("production lifecycle composition", () => {
         .filter(({ type }) => type === "session:activated"),
     ).toHaveLength(1);
     await second.close();
+  });
+
+  it("fails restart closed when a legacy active context has no retained repository scope", async () => {
+    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
+    const first = createProductionComposition({
+      workflowMcpEndpoint,
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+    });
+    await first.start();
+    const instanceId = `task-${taskId}`;
+    await first.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:implement:1`),
+    });
+    const record = first.persistence.getInstance(instanceId)!;
+    const context = readLifecycleContext(record);
+    const serialized = JSON.parse(context.serializedContext!) as {
+      taskContract: Record<string, unknown>;
+    };
+    delete serialized.taskContract["repos"];
+    first.persistence.updateInstance(instanceId, {
+      ...record.state,
+      flowcraftContext: {
+        ...context,
+        serializedContext: JSON.stringify(serialized),
+      },
+    });
+    await first.close();
+
+    const restartedT3 = new SyntheticT3();
+    const restarted = createProductionComposition({
+      workflowMcpEndpoint,
+      blueprintsRepositoryRoot,
+      configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: restartedT3,
+    });
+    await restarted.start();
+
+    expect(restarted.attention.list()).toContainEqual(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          `Task ${taskId} has no retained repository scope; operator recovery is required`,
+        ),
+        taskId,
+      }),
+    );
+    expect(
+      restartedT3.commands.filter(({ type }) => type === "thread.create"),
+    ).toHaveLength(0);
+    await restarted.close();
   });
 
   it("raises durable attention and performs no partial dispatch when a handoff include escapes containment", async () => {
@@ -999,8 +1153,12 @@ kind: standard
           worktree: {
             baseRef: configuration.session.baseRef,
             branch: `heddle/task-${taskId}`,
-            repositoryName: configuration.products[0]!.repos[0]!.name,
-            repositoryRoot: configuration.products[0]!.repos[0]!.repositoryRoot,
+            repositoryName: "sample-repository",
+            repositoryRoot: join(
+              configuration.adHocProject.workspaceRoot,
+              "tools",
+              "sample-repository",
+            ),
             worktreeName: String(taskId),
             worktreesRoot: configuration.session.worktreesRoot,
           },
@@ -1193,7 +1351,7 @@ kind: standard
         },
         instanceId: `task-${taskId}`,
         projectId: configuration.adHocProject.projectId,
-        repositoryName: configuration.products[0]!.repos[0]!.name,
+        repositoryName: "sample-repository",
         sessionKey: `task-${taskId}:review:${activation}`,
         stageId: "review",
         threadId: `review-thread-${activation}`,

@@ -38,6 +38,8 @@ describe("production trusted dynamic work during UAT", () => {
       "Example Collection",
       "--status",
       "in-progress",
+      "--repos",
+      "sample-repository",
       "--tags",
       "type:epic",
     ]);
@@ -255,6 +257,8 @@ describe("production trusted dynamic work during UAT", () => {
       "Example Schedule",
       "--status",
       "in-progress",
+      "--repos",
+      "sample-repository",
       "--tags",
       "type:epic",
     ]);

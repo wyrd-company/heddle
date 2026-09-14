@@ -255,7 +255,6 @@ next_id: 1
         repos: ["sample-alpha", "sample-beta"],
         title: "Arrange sample items",
       },
-      product: "sample-product",
       repos: ["sample-alpha", "sample-beta"],
     });
   });

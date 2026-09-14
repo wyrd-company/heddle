@@ -31,9 +31,9 @@ export interface LifecycleResolutionAttention {
       | "lifecycle-declaration-invalid"
       | "lifecycle-blueprint-not-found"
       | "lifecycle-blueprint-ambiguous"
-      | "product-not-declared"
-      | "repository-not-declared"
-      | "stage-repository-not-declared"
+      | "child-repository-scope-declared"
+      | "epic-repository-scope-unavailable"
+      | "repository-scope-not-declared"
       | "stage-repository-undeclared";
     message: string;
     taskId: number;

@@ -3,15 +3,20 @@
 //   verifies: heddle
 // ---
 
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
+import { readLifecycleContext } from "../engine/index.js";
 import { escalationAttentionId } from "../mcp-server/escalation-contract.js";
 import type { JsonValue } from "../persistence/index.js";
 import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import { isTodoState } from "../todo/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
+  execute,
   prepareProductionEpicFixture,
   prepareProductionFixture,
   SyntheticT3,
@@ -116,6 +121,53 @@ describe("production subagent composition", () => {
 
   afterEach(async () => {
     await cleanup?.();
+  });
+
+  it("fails delegated spawn closed when the parent context has no retained repository scope", async () => {
+    const fixture = await prepareProductionFixture();
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3: new SyntheticT3(),
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    cleanup = async () => {
+      await composition.close();
+      await fixture.cleanup();
+    };
+    await composition.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const record = composition.persistence.getInstance(instanceId)!;
+    const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+    const parent = await resolver.resolve(
+      storedCorrelationToken(record.state.handoffs),
+    );
+    const context = readLifecycleContext(record);
+    const serialized = JSON.parse(context.serializedContext!) as {
+      taskContract: Record<string, unknown>;
+    };
+    delete serialized.taskContract["repos"];
+    composition.persistence.updateInstance(instanceId, {
+      ...record.state,
+      flowcraftContext: {
+        ...context,
+        serializedContext: JSON.stringify(serialized),
+      },
+    });
+
+    await expect(
+      composition.subagents.spawn(parent, {
+        operationId: "spawn-legacy-child",
+        providerAlias: "primary",
+        rootItemId: "deliver",
+      }),
+    ).rejects.toThrow(
+      `Task ${fixture.taskId} has no retained repository scope; operator recovery is required`,
+    );
   });
 
   it("delivers a parent answer to the completed child thread without replacing the parent stage", async () => {
@@ -447,6 +499,46 @@ describe("production subagent composition", () => {
   it("shares organization template authority, persistence, pacing, observation, and tokens", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
+    const secondRepositoryRoot = join(
+      fixture.root,
+      "tools",
+      "second-repository",
+    );
+    await mkdir(secondRepositoryRoot, { recursive: true });
+    await writeFile(
+      join(secondRepositoryRoot, "README.md"),
+      "# Second sample\n",
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: secondRepositoryRoot,
+    });
+    await execute("git", ["add", "README.md"], { cwd: secondRepositoryRoot });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Add second sample",
+      ],
+      { cwd: secondRepositoryRoot },
+    );
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.epicId),
+        "--repos",
+        "sample-repository,second-repository",
+      ],
+      { cwd: fixture.root },
+    );
     fixture.configuration.session.resolvedSelections = [
       ...fixture.configuration.session.resolvedSelections,
       {
@@ -510,6 +602,18 @@ describe("production subagent composition", () => {
       t3,
     });
     await composition.start();
+    await execute(
+      "kanban-md",
+      [
+        "--dir",
+        fixture.configuration.boardDirectory,
+        "edit",
+        String(fixture.taskId),
+        "--repos",
+        "sample-repository",
+      ],
+      { cwd: fixture.root },
+    );
     const instanceId = `task-${fixture.taskId}`;
     const parentRecord = composition.persistence.getInstance(instanceId)!;
     const resolver = new WorkflowMcpSessionResolver(composition.persistence);
@@ -622,6 +726,12 @@ describe("production subagent composition", () => {
         command.threadId === spawned.assignment.threadId,
     );
     expect(childTurn).not.toHaveProperty("titleSeed");
+    expect((childTurn?.["message"] as { text: string }).text).toContain(
+      '"sample-repository"',
+    );
+    expect((childTurn?.["message"] as { text: string }).text).toContain(
+      '"second-repository"',
+    );
     const parentTurn = t3.commands.find(
       (command) =>
         command.type === "thread.turn.start" &&

@@ -140,6 +140,23 @@ const sourceTaskContract = (
     : undefined;
 };
 
+const incidentTaskContract = (
+  persistence: SqlitePersistence,
+  incident: JsonValue,
+): Partial<BoardTask> | undefined => {
+  const incidentId = asRecord(incident)?.["incidentId"];
+  return typeof incidentId === "string"
+    ? sourceTaskContract(persistence, incidentId)
+    : undefined;
+};
+
+const retainedTaskContract = (task: BoardTask): JsonValue => {
+  const contract = { ...task } as Partial<BoardTask>;
+  delete contract.frontMatter;
+  delete (contract as Partial<BoardTask> & { incident?: JsonValue }).incident;
+  return contract as JsonValue;
+};
+
 const taskForIncident = (
   persistence: SqlitePersistence,
   boardTasks: readonly BoardTask[],
@@ -149,7 +166,8 @@ const taskForIncident = (
   const boardTask = boardTasks.find(({ id }) => id === attention.taskId);
   const retained =
     boardTask === undefined
-      ? sourceTaskContract(persistence, attention.instanceId ?? undefined)
+      ? (sourceTaskContract(persistence, attention.instanceId ?? undefined) ??
+        incidentTaskContract(persistence, incident))
       : undefined;
   const taskId = attention.taskId;
   if (taskId === null) throw new Error("Incident attention has no task ID");
@@ -169,7 +187,6 @@ const taskForIncident = (
     ...(retained?.providerAlias === undefined
       ? {}
       : { providerAlias: retained.providerAlias }),
-    ...(retained?.product === undefined ? {} : { product: retained.product }),
     ...(retained?.repos === undefined ? {} : { repos: retained.repos }),
   };
   return { ...base, frontMatter: {}, incident } as BoardTask;
@@ -352,9 +369,20 @@ export class ProductionIncidentCoordinator {
           stageId,
           task,
         );
+        const sourceContract = sourceTaskContract(
+          this.persistence,
+          source.instanceId ?? undefined,
+        );
+        const taskContract =
+          sourceContract === undefined
+            ? retainedTaskContract(task)
+            : (JSON.parse(JSON.stringify(sourceContract)) as JsonValue);
         const snapshot = await this.lifecycle.start({
           blueprintPath: incidentBlueprintPath,
-          initialContext: { incident },
+          initialContext: {
+            incident,
+            taskContract,
+          },
           instanceId: runtime.incidentId,
         });
         await this.#synchronizeSnapshot(runtime, snapshot, tasks, source);

@@ -196,11 +196,6 @@ providerAliases:
   primary:
     - providerDisplayName: Workbench Alpha
       model: model-alpha
-products:
-  - name: Sample collection
-    repos:
-      - name: sample-repository
-        repositoryRoot: /workspaces/sample-repository
 pushover:
   apiUrl: https://notify.example.invalid/messages
   applicationToken: replace-with-operator-secret
@@ -270,19 +265,26 @@ move the escalation to operator attention without answering an approval or
 including the malformed durable payload in the cause. Reconciliation and
 restart retain the same attention occurrence and cause.
 
-Configuration conforms to `schemas/production-configuration.json`. The
-`products` inventory is the authority for product and repository routing. Each
-product declares a unique name and one or more globally unique repository names
-with absolute roots. Its optional `epicProject` records the one active epic's
-ID and existing T3 project ID when composition starts with that project already
-provisioned. `adHocProject` declares the shared project name, ID, and absolute
-workspace root for tasks outside an epic. Heddle reconciles that project at
-startup, creating it in the control plane when it is absent and recording it
-durably, so an operator does not provision it by hand. A shared project that
-cannot be reconciled fails startup and names the project. Board tasks may declare `product` and `repos` in front
-matter. Child tasks inherit omitted declarations from their epic. Heddle raises
-attention when a task, epic, or lifecycle stage refers to authority outside
-these declarations; it does not inspect diffs or branches to guess.
+Configuration conforms to `schemas/production-configuration.json`.
+`adHocProject` declares the shared project name, ID, and absolute workspace root
+for tasks outside an epic. Heddle also uses that workspace root to resolve each
+task-declared repository name as
+`{adHocProject.workspaceRoot}/tools/{repository}`. Heddle reconciles the shared
+project at startup, creating it in the control plane when it is absent and
+recording it durably, so an operator does not provision it by hand. A shared
+project that cannot be reconciled fails startup and names the project.
+
+A top-level ad-hoc task or epic declares its complete repository scope in the
+typed `repos` front-matter array. Each entry must be a logical,
+single-safe-path-segment repository name. A child task must omit `repos` and
+inherits the complete repository scope from its epic. Heddle raises attention
+when scope is absent, a child tries to declare scope, a resolved repository path
+is unavailable, or a lifecycle node selects a `repo` outside the effective
+scope. It does not inspect diffs or branches to guess scope.
+
+Lifecycle activation retains the effective ordered array in its task contract.
+Every later stage, restart, delegated session, and mechanical delivery uses that
+same array. Editing the live task declaration does not retarget active work.
 
 Other required values are the absolute board and state directories, optional
 worktree root, reconciliation cadence, bounded stop timeout, provider aliases,
@@ -656,32 +658,27 @@ repository owns authored blueprint artifacts together with the
 fails when a node's pinned handoff-template commit and path or named todo
 template does not resolve in the repository being validated.
 
-For example, the routing portion has this shape:
+Author an ad-hoc task with its repository scope:
 
-```json
-{
-  "adHocProject": {
-    "name": "Shared tasks",
-    "projectId": "shared-project-id",
-    "workspaceRoot": "/workspaces/sample-workspace"
-  },
-  "products": [
-    {
-      "name": "Sample product",
-      "repos": [
-        {
-          "name": "sample-repository",
-          "repositoryRoot": "/workspaces/sample-repository"
-        }
-      ],
-      "epicProject": {
-        "epicId": 101,
-        "projectId": "epic-project-id"
-      }
-    }
-  ]
-}
+```console
+kanban-md --dir /workspaces/sample-board create "Arrange sample records" \
+  --repos sample-alpha,sample-beta \
+  --tags lifecycle:standard-delivery
 ```
+
+Author an epic with the same field, then omit it from every child:
+
+```console
+kanban-md --dir /workspaces/sample-board create "Coordinate sample delivery" \
+  --repos sample-alpha,sample-beta \
+  --tags type:epic
+kanban-md --dir /workspaces/sample-board create "Prepare sample output" \
+  --parent 101 \
+  --tags lifecycle:standard-delivery
+```
+
+The organization blueprint repository's `skills/task-authoring/` directory is
+the canonical Heddle-specific task-authoring guide and task-body template.
 
 The provider-usage source is an explicit runtime port. A nonempty
 `pacing.providerBudgets` requires top-level
@@ -708,7 +705,7 @@ Omitting a second alias does not give that alias an unbudgeted route to the
 instance.
 
 An in-progress epic gets one T3 project titled
-`{product} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
+`{epic-title} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
 each declared repository at `/workspaces/worktrees/{epic-id}/{repository}` on
 `epic/{epic-id}` before project creation. Paused, stopped, and UAT epics retain
 their project. A done epic also retains its project so its archived stage
@@ -760,14 +757,21 @@ operation. Heddle observes them on a later read, so a direct pause can lose one
 race to an admission decision that already reserved a start. Use the Console
 control when this ordering matters.
 
-Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Existing
+Task worktrees use `/workspaces/worktrees/{task-id}/{repository}`. Heddle
+prepares every repository in the effective scope before session activation. A
+top-level task uses its own `repos`; a child uses the complete array inherited
+from its epic and bases each task branch on that repository's epic branch. The
+handoff task contract contains the effective array, so a child session sees the
+inherited names. Mechanical nodes act on all retained repositories. A wait node
+can select one declared `repo` as its session worktree. Existing
 repo-first worktrees are not migrated. Every thread has a bounded deterministic
 `task-<id> · <stage-occurrence>` title and no `titleSeed` on its first turn.
 Each occurrence of a wait stage has one durable
 session and thread identity. A recurring review or remediation stage receives
 a new occurrence discriminator; restart resumes an incomplete occurrence.
-All stage occurrences for one task use the same task branch and worktree so
-review, remediation, and later stages operate on the same delivery state.
+All stage occurrences for one task use the same task branches and repository
+worktrees so review, remediation, and later stages operate on the same delivery
+state.
 
 ## System prompt
 
@@ -803,7 +807,7 @@ with a repository-relative Markdown path and exact Git commit SHA. Heddle reads
 the entry file and `handoff-templates/includes/` files from that commit in the
 worker blueprint checkout, retains the commit under
 `refs/heddle/handoff-templates/<commit-sha>`, and does not read mutable
-working-tree files during session activation. Product repositories receive no
+working-tree files during session activation. Task repositories receive no
 template-retention refs.
 An agent wait node can also declare `skills: [<name>, ...]`. Each name must be
 unique, kebab-case, and no longer than 64 characters. Heddle reads

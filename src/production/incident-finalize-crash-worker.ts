@@ -31,7 +31,7 @@ import {
 } from "./incident-coordinator.js";
 import { ProductionInstanceController } from "./instance-controller.js";
 import { ProductionLifecycleRouter } from "./lifecycle-router.js";
-import { ProductRoutingCatalog } from "./product-routing.js";
+import { TaskRepositoryRouter } from "./repository-routing.js";
 import type { EpicProjectCoordinator } from "./epic-projects.js";
 
 const execute = promisify(execFile);
@@ -41,7 +41,7 @@ if ((mode !== "crash" && mode !== "resume") || root === undefined) {
 }
 
 const blueprintsRoot = join(root, "blueprint-repository");
-const repositoryRoot = join(root, "sample-repository");
+const repositoryRoot = join(root, "tools", "sample-repository");
 const commandLog = join(root, "commands.jsonl");
 const issueLog = join(root, "issue-attempts.jsonl");
 
@@ -245,12 +245,6 @@ const configuration = {
     projectId: "sample-project",
     workspaceRoot: root,
   },
-  products: [
-    {
-      name: "Sample product",
-      repos: [{ name: "sample-repository", repositoryRoot }],
-    },
-  ],
   session: {
     baseRef: "main",
     defaultProviderAlias: "primary",
@@ -293,18 +287,19 @@ const configuration = {
 const task: BoardTask = {
   blocked: false,
   dependencies: [],
-  frontMatter: {},
+  frontMatter: { repos: ["sample-repository"] },
   id: 17,
   priority: "medium",
   status: "in-progress",
   tags: [],
   title: "Arrange inventory",
+  repos: ["sample-repository"],
 };
 const persistence = new SqlitePersistence({
   stateDirectory: join(root, "state"),
 });
 const attention = new DurableAttentionQueue(persistence);
-const routing = new ProductRoutingCatalog(configuration);
+const routing = new TaskRepositoryRouter(root);
 routing.update([task]);
 const lifecycle = new ProductionLifecycleRouter({
   effects: { complete: async () => ({}) },
@@ -318,6 +313,7 @@ const controller = new ProductionInstanceController(
   lifecycle,
   routing,
   {
+    baseBranchForTask: () => "main",
     projectForTask: () => "sample-project",
   } as unknown as EpicProjectCoordinator,
   attention,
