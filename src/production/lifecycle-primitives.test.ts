@@ -100,7 +100,10 @@ describe("fail primitive", () => {
         payload: expect.objectContaining({
           code: "lifecycle-failed",
           instanceId: "instance-f",
-          message: "Task 17 stopped: Too risky",
+          // The operator-only floor sentence follows the rendered message.
+          message: expect.stringMatching(
+            /^Task 17 stopped: Too risky/,
+          ) as unknown as string,
           taskId: 17,
         }),
       }),

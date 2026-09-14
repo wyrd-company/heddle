@@ -23,6 +23,9 @@ export const schedulerPassFailureCode = "scheduler-pass-failed" as const;
 export const operatorOnlyProductionErrorCodes = new Set<string>([
   "dynamic-task-authority-failed",
   "incident-execution-failed",
+  // A blueprint's own fail node is a decision, not a production error to
+  // diagnose; it reaches the operator and never admits an incident.
+  "lifecycle-failed",
   "provider-alias-exhausted",
   "provider-fallback-active",
   schedulerPassFailureCode,

@@ -377,7 +377,9 @@ describe("production incident lifecycle", () => {
       expect.arrayContaining([
         expect.objectContaining({
           attentionId: `lifecycle:failed:${incident.incidentId}:declined:1`,
-          message: "The operator declined the proposal",
+          message: expect.stringMatching(
+            /^The operator declined the proposal/,
+          ) as unknown as string,
         }),
       ]),
     );
@@ -400,7 +402,9 @@ describe("production incident lifecycle", () => {
       expect.arrayContaining([
         expect.objectContaining({
           attentionId: `lifecycle:failed:${incident.incidentId}:exhausted:1`,
-          message: "Review rejected the diagnosis 2 times",
+          message: expect.stringMatching(
+            /^Review rejected the diagnosis 2 times/,
+          ) as unknown as string,
         }),
       ]),
     );

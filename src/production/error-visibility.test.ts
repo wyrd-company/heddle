@@ -20,6 +20,7 @@ describe("production error visibility", () => {
       new Set([
         "dynamic-task-authority-failed",
         "incident-execution-failed",
+        "lifecycle-failed",
         "provider-alias-exhausted",
         "provider-fallback-active",
         "scheduler-pass-failed",
@@ -31,6 +32,8 @@ describe("production error visibility", () => {
     expect(productionErrorIncidentEligible("incident-execution-failed")).toBe(
       false,
     );
+    // A fail node's attention is the blueprint's decision, not an incident.
+    expect(productionErrorIncidentEligible("lifecycle-failed")).toBe(false);
   });
 
   it("derives deterministic incident identities for numbered condition occurrences", () => {

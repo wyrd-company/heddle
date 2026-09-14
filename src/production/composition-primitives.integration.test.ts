@@ -119,7 +119,12 @@ describe("production fail primitive", () => {
         attentionId: `lifecycle:failed:${instanceId}:stop:1`,
         kind: "production-error",
         instanceId,
-        message: `Task ${fixture.taskId} stopped after implement: the sample did not fit`,
+        // The floor sentence follows: a fail node's attention is operator-only.
+        message: expect.stringMatching(
+          new RegExp(
+            `^Task ${fixture.taskId} stopped after implement: the sample did not fit`,
+          ),
+        ) as unknown as string,
         taskId: fixture.taskId,
       }),
     ]);
@@ -133,6 +138,9 @@ describe("production fail primitive", () => {
     expect((await composition.board.readTask(fixture.taskId)).status).toBe(
       "in-progress",
     );
+    // The fail attention is operator-only: no incident is admitted for it.
+    await composition.scheduler.trigger();
+    expect(composition.persistence.listIncidentRuntime()).toEqual([]);
     await composition.close();
   });
 });
