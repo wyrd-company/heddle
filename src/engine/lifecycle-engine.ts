@@ -19,7 +19,7 @@ import {
 import type { AgentNameThemeKind } from "../agent-names/index.js";
 import { errorDetail } from "../error-details.js";
 import { createHash } from "node:crypto";
-import { routeResume } from "./edge-conditions.js";
+import { edgeRoutingKey, routeResume } from "./edge-conditions.js";
 import {
   initialProjection,
   lifecycleContextKey,
@@ -64,6 +64,27 @@ import type {
   StartLifecycleInput,
 } from "./types.js";
 import type { TaskProviderAliasMap } from "../provider-alias.js";
+
+/** Context keys Heddle writes itself; a caller may not seed them. */
+const reservedContextKeys = [
+  "_heddleInstanceId",
+  edgeRoutingKey,
+  lifecycleContextKey,
+  "result",
+];
+
+const assertNoReservedContextKeys = (
+  initialContext: Record<string, unknown> | undefined,
+): void => {
+  const reserved = reservedContextKeys.filter(
+    (key) => initialContext !== undefined && Object.hasOwn(initialContext, key),
+  );
+  if (reserved.length > 0) {
+    throw new TypeError(
+      `Initial context must not contain reserved keys: ${reserved.join(", ")}`,
+    );
+  }
+};
 
 export class LifecycleEngine {
   private readonly blueprintStore: GitBlueprintStore;
@@ -162,6 +183,7 @@ export class LifecycleEngine {
   }
 
   async start(input: StartLifecycleInput): Promise<LifecycleSnapshot> {
+    assertNoReservedContextKeys(input.initialContext);
     let existing = this.persistence.getInstance(input.instanceId);
     if (existing !== undefined) {
       existing = flushPendingAttentions(this.persistence, input.instanceId);

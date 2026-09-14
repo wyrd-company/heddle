@@ -313,6 +313,30 @@ describe("LifecycleEngine", () => {
     fixture.persistence.close();
   });
 
+  it("rejects an initial context that seeds a reserved key", async () => {
+    const fixture = await makeFixture();
+    for (const key of [
+      "lifecycle",
+      "heddleEdges",
+      "result",
+      "_heddleInstanceId",
+    ]) {
+      await expect(
+        fixture.engine.start({
+          blueprintPath: fixture.blueprintPath,
+          initialContext: { [key]: { forged: true } },
+          instanceId: `reserved-${key}`,
+        }),
+      ).rejects.toThrow(
+        `Initial context must not contain reserved keys: ${key}`,
+      );
+      expect(
+        fixture.persistence.getInstance(`reserved-${key}`),
+      ).toBeUndefined();
+    }
+    fixture.persistence.close();
+  });
+
   it("rejects an invalid disposition with the valid set", async () => {
     const fixture = await makeFixture();
     await fixture.engine.start({
