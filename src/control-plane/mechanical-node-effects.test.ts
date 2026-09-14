@@ -875,6 +875,40 @@ describe("delivery mechanical nodes", () => {
     );
   });
 
+  it("fails the merge by name when several review-snapshot nodes have outputs", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const effects = createMechanicalNodeEffects();
+    const input = {
+      blueprint: {
+        edges: [],
+        id: "sample",
+        nodes: [
+          { id: "plate", uses: "review-snapshot" },
+          { id: "garnish", uses: "review-snapshot" },
+        ],
+      },
+      context: {
+        get: async (key: string) =>
+          key === mechanicalChangeContextKey
+            ? fixture.change
+            : key === "_outputs.plate" || key === "_outputs.garnish"
+              ? snapshot
+              : undefined,
+      },
+      idempotencyKey: "sample-effect",
+      input: null,
+      params: {},
+    } as unknown as LifecycleEffectInput;
+
+    await expect(effects.merge(input)).rejects.toThrow(
+      /Several review-snapshot nodes have outputs: \["plate","garnish"\]/,
+    );
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).not.toBe(
+      `${snapshot.sourceHead}\n`,
+    );
+  });
+
   it("identifies the repository that requires remediation in a multi-repository merge", async () => {
     const first = await prepareCommittedChange("sample-alpha");
     const second = await prepareCommittedChange("sample-beta");
