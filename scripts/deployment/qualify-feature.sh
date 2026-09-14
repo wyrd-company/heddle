@@ -676,7 +676,7 @@ inside_assert_equal \
     bash -lc 'if grep -q "<title>Heddle Console</title>" /tmp/heddle-console.html; then printf present; else printf absent; fi'
 expected_projection="$(
     jq -ncS --arg task_id "${qualification_task_id}" \
-        '[{blocked:false,dependencies:[],id:($task_id | tonumber),priority:"medium",status:"in-progress",tags:[],title:"Sample Record"}]'
+        '[{blocked:false,dependencies:[],id:($task_id | tonumber),priority:"medium",repos:["sample-repository"],status:"in-progress",tags:[],title:"Sample Record"}]'
 )"
 inside_assert_equal \
     board-projection \

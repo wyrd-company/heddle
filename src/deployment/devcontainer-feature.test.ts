@@ -367,6 +367,9 @@ describe("Heddle devcontainer feature", () => {
       'repository_directory="${tools_directory}/sample-repository"',
     );
     expect(featureQualification).toContain(
+      'repos:["sample-repository"],status:"in-progress"',
+    );
+    expect(featureQualification).toContain(
       "Qualification command failed with status %s:",
     );
     expect(featureQualification).toContain("Container state: status=");
