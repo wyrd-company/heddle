@@ -90,12 +90,12 @@ jobs:
       - name: Install Task
         uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2
       - name: Stage the Feature collection
-        run: task deployment:stage-feature FEATURE_COLLECTION_PATH=.devcontainer/publish/features
+        run: task deployment:stage-feature FEATURE_COLLECTION_PATH=.publish/features
       - name: Publish the Feature collection
         uses: devcontainers/action@1082abd5d2bf3a11abccba70eef98df068277772 # v1
         with:
           publish-features: "true"
-          base-path-to-features: "./.devcontainer/publish/features"
+          base-path-to-features: "./.publish/features"
           devcontainer-cli-version: "0.88.0"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

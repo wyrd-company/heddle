@@ -15,7 +15,7 @@ import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const featureDirectory = ".devcontainer/features/heddle";
+const featureDirectory = "features/heddle";
 const publishedReference = "ghcr.io/wyrd-company/heddle/heddle:0";
 
 // The Feature's own manifest is its version authority, so assertions follow a
@@ -53,7 +53,7 @@ describe("Heddle devcontainer feature publication", () => {
         },
         {
           detector: "devcontainer-feature",
-          path: ".devcontainer/features/heddle/devcontainer-feature.json",
+          path: "features/heddle/devcontainer-feature.json",
           "release-unit": "heddle-feature",
         },
       ]),
@@ -62,7 +62,7 @@ describe("Heddle devcontainer feature publication", () => {
       { adapter: "npm", file: "package.json", mode: "committed" },
     ]);
     expect(config["release-units"]["heddle-feature"]?.path).toBe(
-      ".devcontainer/features/heddle",
+      "features/heddle",
     );
     expect(config["release-units"]["heddle-feature"]?.projections).toEqual([
       {
@@ -254,7 +254,7 @@ describe("Heddle devcontainer feature publication", () => {
     await expect(
       execute("bash", [
         "scripts/deployment/stage-feature.sh",
-        ".devcontainer/features",
+        "features",
       ]),
     ).rejects.toMatchObject({
       code: 1,
@@ -277,7 +277,7 @@ describe("Heddle devcontainer feature publication", () => {
 
     expect(manifest).toMatchObject({
       documentationURL:
-        "https://github.com/wyrd-company/heddle/tree/main/.devcontainer/features/heddle",
+        "https://github.com/wyrd-company/heddle/tree/main/features/heddle",
       id: "heddle",
       version: featureVersion,
     });
@@ -332,7 +332,7 @@ describe("Heddle devcontainer feature publication", () => {
       expect.objectContaining({
         uses: "devcontainers/action@1082abd5d2bf3a11abccba70eef98df068277772",
         with: expect.objectContaining({
-          "base-path-to-features": "./.devcontainer/publish/features",
+          "base-path-to-features": "./.publish/features",
           "devcontainer-cli-version": "0.88.0",
           "publish-features": "true",
         }),

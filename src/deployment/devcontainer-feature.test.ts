@@ -22,7 +22,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-const featureDirectory = ".devcontainer/features/heddle";
+const featureDirectory = "features/heddle";
 const execute = promisify(execFile);
 
 describe("Heddle devcontainer feature", () => {
@@ -251,7 +251,7 @@ describe("Heddle devcontainer feature", () => {
       'chmod 0600 "${config_directory}/config.yml"',
     );
     expect(featureQualification).toContain(
-      'feature_version="$(jq -r \'.version\' "${repository}/.devcontainer/features/heddle/devcontainer-feature.json")"',
+      'feature_version="$(jq -r \'.version\' "${repository}/features/heddle/devcontainer-feature.json")"',
     );
     expect(featureQualification).toContain(
       'feature_major="${feature_version%%.*}"',

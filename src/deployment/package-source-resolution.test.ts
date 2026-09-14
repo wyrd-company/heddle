@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const resolver = ".devcontainer/features/heddle/resolve-package-source.mjs";
+const resolver = "features/heddle/resolve-package-source.mjs";
 const servers: ReturnType<typeof createServer>[] = [];
 
 afterEach(async () => {

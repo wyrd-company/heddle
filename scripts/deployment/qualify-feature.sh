@@ -10,7 +10,7 @@ set -euo pipefail
 repository="$(git rev-parse --show-toplevel)"
 accepted_head="$(git rev-parse HEAD)"
 source_configuration="${repository}/.devcontainer/qualification/devcontainer.json"
-feature_version="$(jq -r '.version' "${repository}/.devcontainer/features/heddle/devcontainer-feature.json")"
+feature_version="$(jq -r '.version' "${repository}/features/heddle/devcontainer-feature.json")"
 feature_major="${feature_version%%.*}"
 feature_minor="${feature_version%.*}"
 published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:${feature_major}"
