@@ -1271,7 +1271,7 @@ occurrence.
 
 The incident handoff identifies `incident.workspaceRoot`, the worker blueprint
 checkout, board and state paths, T3 endpoint, configured GitHub sink, source
-condition, approval threshold, and prohibitions. The agent may change organization
+condition and prohibitions. The agent may change organization
 blueprints, Heddle or T3 configuration and data, provider enablement, installed
 component versions, and service processes when it can observe the result before
 closure. It must not suppress detection, handle secrets, push a real remote or

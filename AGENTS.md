@@ -124,14 +124,30 @@ When this file does not settle a question, decide with these.
   has no task, lifecycle instance, or board status.
 - **blueprint** is the lifecycle definition a task follows, resolved from the
   organization blueprint repository and pinned by content hash at activation.
+- **capability** is what a blueprint node declares with `uses` — `wait`,
+  `question`, `fail`, `resolve-attention`, `complete`, or a mechanical
+  operation. Heddle reads the capability; the node id is the author's label.
 - **escalation** is a durable question from a session. Answer authority begins
   with its parent when it has one and with a fresh adjudication when it does
   not. The answer replies to the original harness request on its recorded thread.
+- **guard** is the JSONata condition on an edge, evaluated over the source
+  node's result and the lifecycle projection. Exactly one edge out of a
+  finished node must fire.
 - **instance** is one running lifecycle bound to one task.
+- **lifecycle projection** is the `lifecycle` object Heddle writes into the
+  graph context — blueprint metadata, node outputs, visit counts, the current
+  node, and the task contract — that guards, question text, fail messages,
+  and handoff templates read.
 - **lifecycle** is the prescribed stages and transitions through which a task
   moves to completion.
 - **mechanical stage** is a stage Heddle executes itself — worktree, snapshot,
   merge — with no agent session.
+- **output contract** is a JSON Schema artifact an edge binds to its
+  disposition; `advance` validates the session's output against it before the
+  transition is recorded.
+- **primitive** is a capability Heddle runs itself without a session or a
+  repository: `fail` ends the lifecycle with rendered attention,
+  `resolve-attention` resolves the attention the lifecycle was started for.
 - **provider alias** is an operator-owned Heddle allowlist name that maps to one
   T3 provider display name and model slug.
 - **provider display name** is the operator-visible T3 name that a provider alias
@@ -142,6 +158,9 @@ When this file does not settle a question, decide with these.
   not use it as provider identity.
 - **resolved session binding** is the durable provider instance, model, runtime,
   and interaction selection for one session occurrence.
+- **question node** is a node that waits on a role — the operator or an
+  adjudicator — instead of a session, asks its templated questions once per
+  occurrence, and routes on the answer.
 - **runtime mode** is T3's approval and access mode for a session, independent
   from provider and model selection.
 - **session** is one agent thread bound to one instance at one stage, addressed

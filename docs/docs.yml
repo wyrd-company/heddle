@@ -1,0 +1,17 @@
+name: heddle
+tagline: Run board tasks through a blueprint, one agent session per stage.
+blurb: >-
+  A workflow service that reads a kanban-md board, runs each task through a
+  lifecycle blueprint pinned by content, starts a coding-agent session only at
+  the stages that need judgment, and gives the operator a durable console over
+  the work in flight.
+category: Workflow & Orchestration
+language: TypeScript
+status: experimental
+repo: https://github.com/wyrd-company/heddle
+order: 3
+install:
+  - label: npm
+    command: npm install -g @wyrd-company/heddle
+  - label: Dev Container Feature
+    command: ghcr.io/wyrd-company/heddle/heddle

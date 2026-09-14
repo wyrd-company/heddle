@@ -48,10 +48,13 @@ proposed-design:
     tag otherwise — selects the blueprint by artifact ID, set when
     the task is authored. The reconciler starts no instance for a
     task without one; it raises attention instead of guessing.
-    The standard delivery lifecycle
-    is implement → review → remediate loop → merge → retrospective →
-    finalize; other lifecycles are shorter or different blueprints
-    (a trivial lifecycle omits retrospective). Blueprints are schema'd
+    Heddle reads a blueprint by the capability each node declares with
+    `uses` and the JSONata guard on each edge; node identifiers,
+    disposition names, and handoff wording are the author's. The catalog's
+    standard delivery is one such graph — an implement stage, a review
+    snapshot, a review stage with a remediation loop, a merge, a
+    retrospective, and a finalize — and the trivial lifecycle is the same
+    graph without the retrospective. Blueprints are schema'd
     artifacts in one organization repository supplied read-only at
     `<HEDDLE_CONFIG>/blueprints` and synchronized independently in each worker's
     state directory; Heddle retains the schema and interpreter validation
@@ -504,31 +507,31 @@ proposed-design:
     provenance marker.
 
     Heddle first assembles a canonical JSON
-    projection containing the task contract, the outputs of prior stages (a
-    remediation session receives either the current review's findings or a
-    typed current-transition review integration cause, never the review
-    session's transcript), the stage's instantiated todo list,
-    and a pointer to the stage's skill. It then renders that projection and
-    the board task's raw front matter through a schema'd, strict Nunjucks
-    Markdown template. Normalized task-contract data remains the machine
+    projection containing the task contract, the outputs of prior stages,
+    the stage's entry — the node whose edge activated it and that node's
+    output, so a remediation stage reads the review's findings or a merge's
+    typed integration cause from `handoff.stage.entry` and never a
+    transcript — the stage's instantiated todo list, and a pointer to the
+    stage's skill. It then renders that projection, the lifecycle projection
+    the guards read, and the board task's raw front matter through a
+    schema'd, strict Nunjucks Markdown template. Normalized task-contract data remains the machine
     authority; raw front matter is display input only. Undefined values,
     disabled nondeterministic filters, invalid identity, template and stage
     disagreement, or unequal repeated renders fail before MCP registration,
     thread creation, or first-turn dispatch. The failure raises one durable,
     stable lifecycle-resolution attention entry.
 
-    Every agent wait node declares explicit
-    `handoff` metadata as `standard` or `remediation`; missing, invalid, or
-    non-wait metadata fails closed. It also declares a `handoff-template`
-    path and exact Git commit SHA. Heddle reads the entry file and every file
+    Every agent wait node declares a `handoff-template`
+    path and exact Git commit SHA; the template's path is its only
+    declaration, and the template decides what it renders from the
+    projection. Heddle reads the entry file and every file
     under `handoff-templates/includes/` from that commit in the organization
     blueprint repository and retains the commit under
     `refs/heddle/handoff-templates/<commit-sha>`. Include directives use the
     full repository-relative form
     `handoff-templates/includes/<path>`. Paths outside that directory and the
     Nunjucks `extends` and `import` directives fail closed. Heddle verifies the
-    entry schema and declared handoff kind and never substitutes mutable
-    working-tree content. A wait node can declare a unique, non-empty array of
+    entry schema and never substitutes mutable working-tree content. A wait node can declare a unique, non-empty array of
     kebab-case `skills` names no longer than 64 characters. Each name resolves from
     `skills/<name>/SKILL.md` at the handoff template's pinned commit. The skill
     must have YAML front matter whose `name` equals its folder and whose
@@ -602,20 +605,18 @@ proposed-design:
     `advance` presents only the dispositions valid for
     the instance's current state, generated from the blueprint's
     outgoing edges with per-disposition descriptions — the tool schema
-    itself guides the agent to a legal transition. Every session's
-    stored contract classifies each disposition's output as `optional` or
-    `review-findings`. A disposition whose edge targets a remediation handoff
-    requires a non-empty `output.findings` array; the MCP boundary validates
-    this schema before recording the lifecycle transition. Every other
-    disposition accepts an omitted output or a JSON object. A stored contract
-    without an output classification remains replayable as `optional`.
-    A validated review integration cause satisfies remediation input without
-    inventing reviewer findings. When remediation receives neither that cause
-    nor a completed stage output with `findings`, it
-    raises one durable attention entry keyed by the remediation session and
-    missing field, renders an empty findings list, and continues activation.
-    This keeps legacy or malformed output visible without blocking activation.
-    A standard handoff also carries persisted outputs from completed mechanical
+    itself guides the agent to a legal transition. An edge may bind its
+    disposition to an output contract: a JSON Schema artifact under
+    `output-contracts/` in the blueprint repository, read at the stage's
+    pinned template commit and stored in the session's stage contract. The
+    `advance` schema prints the contract; the MCP boundary validates the
+    output against it and reports every violation before recording the
+    lifecycle transition. A disposition without a contract accepts an
+    omitted output or any JSON object. The catalog binds its review
+    rejections to `review-findings`, so a remediation stage always finds
+    findings in its entry; a merge that routes to remediation supplies a
+    typed integration cause as that entry instead.
+    A handoff also carries persisted outputs from completed mechanical
     nodes between the preceding wait stage and the activating wait stage. The
     review handoff therefore names the exact review snapshot created for it.
     Every session's
@@ -906,11 +907,14 @@ proposed-design:
     occurrence. An incident execution failure stays on the operator-only floor
     and cannot recursively admit another incident.
 
-    The incident blueprint has implement, review, and finalize wait stages and
-    no board-status map or board-writing mechanical node. Its handoff carries
-    the operator-configured workspace root, worker blueprint checkout,
-    board and Heddle state locations, T3 endpoint, GitHub issue sink, approval
-    threshold, and the observed source condition. The agent may change any
+    An admitted incident runs the catalog's incident blueprint as an
+    ordinary lifecycle: Heddle starts it with the source attention identity
+    in its context, activates its wait and question nodes, and records the
+    runtime as `done` or, when the lifecycle ended in a fail node, `failed`.
+    It has no board-status map or board-writing mechanical node. Its handoff
+    carries the operator-configured workspace root, worker blueprint checkout,
+    board and Heddle state locations, T3 endpoint, GitHub issue sink, and
+    the observed source condition. The agent may change any
     blueprint, Heddle or T3 configuration, Heddle or T3 data, provider enablement,
     installed component version, or service process whose resulting condition
     it can observe before closure. A component-version change is a permitted
@@ -921,21 +925,23 @@ proposed-design:
     incident agent must not suppress its own condition detection, read, move, or
     write credentials or secret-bearing material, push a real remote or write a
     default branch, degrade attention, incident, or notification machinery, or
-    take an effect it cannot observe before closure. Implement rechecks the
-    condition as `live`, `cleared`, or `undetermined`, records a root-cause
-    analysis, and proposes GitHub issue, operator escalation, or production
-    mutation actions with severity. Review accepts the diagnosis or returns
-    findings to implement. Exhausting three rejected reviews raises floor
-    attention and leaves the source condition unresolved.
+    take an effect it cannot observe before closure. The catalog blueprint
+    diagnoses the condition as `live`, `cleared`, or `undetermined` with a
+    root-cause analysis and proposed GitHub issue, operator escalation, or
+    production mutation actions with severity, bound by the
+    `incident-diagnosis` output contract; a review stage accepts the
+    diagnosis or returns findings. The blueprint's own metadata bounds the
+    rejection rounds, and a guarded reject edge ends the incident at a fail
+    node that raises attention and leaves the source condition unresolved.
 
     Every incident stage uses the ordinary pinned stage-session binding,
-    durable occurrence identity, bootstrap, and T3 dispatch path. Finalize
-    starts only for an accepted diagnosis. A production mutation at or above
-    the configured `low`, `moderate`, `high`, or `critical` threshold requires
-    proposal-digest-bound operator approval before the action-capable session
-    starts. A lower-severity mutation proceeds unattended; a missing or unknown
-    severity fails closed to approval. Heddle records mutation intent before
-    activation and completion afterward, so restart retains one occurrence.
+    durable occurrence identity, bootstrap, and T3 dispatch path. Whether a
+    production mutation waits for the operator is a guard in the blueprint:
+    a mutation at or above the severity its metadata names routes to a
+    `question` node that asks the operator before the action-capable session
+    starts, a lower severity routes straight to it, and a missing or unknown
+    severity routes to the question. A declined question ends the incident
+    at a fail node. Each question occurrence asks once and survives restart.
 
     Code changes to Heddle or the T3 fork are reportable but not executable by
     an incident. They take effect only after a build and deployment the running
@@ -947,10 +953,13 @@ proposed-design:
     existing durable notification route; the repaired incident does not fail
     and the report is not dropped.
 
-    Finalization requires a fresh observed `conditionState: cleared` result
-    before it resolves the source attention with the incident identity as
-    justification. The resolved row and terminal incident occurrence remain
-    durable. A configuration workaround alongside a code fix is applied and
+    The action stage completes under the `incident-completion` output
+    contract with a fresh observed condition state, and a
+    `resolve-attention` node then resolves the source attention with the
+    incident identity as justification before the terminal node. The
+    resolved row and terminal incident occurrence remain durable, and a
+    restart between resolution and synchronization finishes the incident on
+    the next pass. A configuration workaround alongside a code fix is applied and
     verified before the code finding is reported. With no observable
     workaround, the incident reports and escalates, and the task remains
     blocked. Known correlation tokens, configured secrets, and
@@ -1146,8 +1155,9 @@ proposed-design:
     worktree and branch, creating the gitpr review record and persisting its
     exact source/base basis, integrating with
     the epic branch on approval, deleting integrated branches and
-    worktrees, mirroring board status, and filing records. The merge
-    node is reachable only from the review wait stage's approve disposition.
+    worktrees, mirroring board status, and filing records. A merge node is
+    reachable only by a disposition of a wait node that follows a
+    review-snapshot node, and it lands the snapshot that node produced.
     Each mechanical effect resolves its mirror status from the running
     instance's pinned blueprint and validates the complete declared map against
     the live board configuration before it performs the effect.
