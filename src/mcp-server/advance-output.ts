@@ -16,15 +16,17 @@ export type AdvanceOutputContract = {
   schema: JsonValue;
 };
 
+// One Ajv instance compiles every contract; the cache is keyed by schema text
+// so the same contract validates through one compiled function and holds one
+// entry per distinct pinned contract rather than an Ajv instance per entry.
+const ajv = new Ajv2020({ allErrors: true, strict: false });
 const compiled = new Map<string, ValidateFunction>();
 
 const validatorFor = (contract: AdvanceOutputContract): ValidateFunction => {
   const key = JSON.stringify(contract.schema);
   let validate = compiled.get(key);
   if (validate === undefined) {
-    validate = new Ajv2020({ allErrors: true, strict: false }).compile(
-      contract.schema as object,
-    );
+    validate = ajv.compile(contract.schema as object);
     compiled.set(key, validate);
   }
   return validate;

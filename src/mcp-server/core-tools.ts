@@ -70,7 +70,7 @@ const registerAdvance = (
       );
       if (selected === undefined) {
         throw new TypeError(
-          `Advance disposition ${JSON.stringify(disposition)} has no bound output contract`,
+          `Advance disposition ${JSON.stringify(disposition)} is not a disposition of this stage`,
         );
       }
       assertAdvanceOutput(
