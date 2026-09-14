@@ -52,7 +52,7 @@ export interface WorkflowMcpLifecycle {
   }): Promise<LifecycleSnapshot>;
 }
 
-export type StoredWorkflowMcpDisposition = {
+export type WorkflowMcpDisposition = {
   description: string;
   name: string;
   /** Artifact id of the pinned output contract, when the edge declares one. */
@@ -60,8 +60,6 @@ export type StoredWorkflowMcpDisposition = {
   /** The JSON Schema of that contract, read at bootstrap from its pin. */
   outputSchema?: JsonValue;
 };
-
-export type WorkflowMcpDisposition = StoredWorkflowMcpDisposition;
 
 export interface WorkflowMcpSessionBinding {
   adjudication?: {
@@ -82,11 +80,11 @@ export interface WorkflowMcpSessionBinding {
   token: string;
 }
 
-export interface StoredWorkflowMcpStageContract {
+export interface WorkflowMcpStageContract {
   [key: string]: JsonValue;
   blueprintBlobHash: string;
   blueprintPath: string;
-  dispositions: StoredWorkflowMcpDisposition[];
+  dispositions: WorkflowMcpDisposition[];
   handoffTemplate: {
     commitSha: string;
     path: string;
@@ -95,10 +93,6 @@ export interface StoredWorkflowMcpStageContract {
   stage: string;
   todoTemplate: string;
   tools: string[];
-}
-
-export interface WorkflowMcpStageContract extends StoredWorkflowMcpStageContract {
-  dispositions: WorkflowMcpDisposition[];
 }
 
 export interface WorkflowMcpToolContext {
@@ -151,7 +145,7 @@ export type StoredStageHandoff = {
     listSessionKey: string;
     rootItemId: string;
   };
-  workflowMcp: StoredWorkflowMcpStageContract;
+  workflowMcp: WorkflowMcpStageContract;
 };
 
 export type StoredAdjudicationHandoff = {

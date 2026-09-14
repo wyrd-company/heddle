@@ -46,7 +46,7 @@ import {
   stopTodoAssignmentTree,
   type SubagentCoordinator,
 } from "../subagents/index.js";
-import type { StoredWorkflowMcpStageContract } from "./types.js";
+import type { WorkflowMcpStageContract } from "./types.js";
 import { createWorkflowMcpHttpHandler } from "./workflow-mcp-handler.js";
 
 const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
@@ -1272,7 +1272,7 @@ describe("workflow MCP HTTP server", () => {
     const record = fixture.persistence.getInstance("instance-alpha");
     if (record === undefined) throw new Error("alpha fixture is missing");
     const parentStored = record.state.handoffs[0] as {
-      workflowMcp: StoredWorkflowMcpStageContract;
+      workflowMcp: WorkflowMcpStageContract;
     };
     fixture.persistence.updateInstance("instance-alpha", {
       ...record.state,
