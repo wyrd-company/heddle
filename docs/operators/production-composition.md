@@ -292,14 +292,20 @@ project at startup. On first use, it generates a UUID, records the complete
 identity before external effects, and creates the project in the control plane.
 The conventional title is `Heddle · ad-hoc work`; when `label` is present, the
 title is `Heddle · ad-hoc work · {label}`. A label change updates only the title
-through a durable, replayable revision. It never changes the project ID.
+through a durable, replayable revision. It never changes the project ID. A
+title changed directly in the T3 UI remains until the next Heddle label change;
+the title is last-writer presentation state, not identity.
 
 Heddle reuses an existing SQLite project identity after restart and recreates
-that exact identity when the paired T3 server has lost it. Fresh Heddle state
-fails closed when T3 still has another active project at the same workspace
-root. Restore the paired Heddle state instead of treating partial T3 history as
-authority. Importing or adopting a project requires a future explicit operation
-that imports the complete paired state; ordinary startup does not adopt it.
+that exact identity when the control plane does not expose the retained active
+identity. If T3 hides a soft-deleted project but refuses creation of its retained
+ID, Heddle reports that T3 retains a deleted project with this identity and
+fails closed. It does not undelete, adopt, or regenerate the project. Fresh
+Heddle state fails closed when T3 still has another active project at the same
+workspace root. Restore the paired Heddle state instead of treating partial T3
+history as authority. Importing or adopting a project requires a future explicit
+operation that imports the complete paired state; ordinary startup does not
+adopt it.
 
 A top-level ad-hoc task or epic declares its complete repository scope in the
 typed `repos` front-matter array. Each entry must be a logical,
@@ -742,8 +748,10 @@ status blocks child dispatch. Project deletion requires a separate explicit
 cleanup policy. A durable deleting or deleted record stays non-active across
 restart and is not reseeded. Child task threads use the epic project.
 An epic title change updates only the T3 project title through a durable,
-replayable revision. Ad-hoc threads use the persisted shared project ID.
-Subagents reuse the parent's project and worktree.
+replayable revision. A title changed directly in the T3 UI remains until the
+next epic-title change and never changes project identity. Ad-hoc threads use
+the persisted shared project ID. Subagents reuse the parent's project and
+worktree.
 
 An epic in `uat` requires at least one child tagged `uat`. Without one, Heddle
 raises one stable epic-scoped attention and keeps the epic in `uat`; it does not

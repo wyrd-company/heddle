@@ -16,6 +16,7 @@ import type {
   SqlitePersistence,
 } from "../persistence/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
+import { classifyRetainedProjectCreateError } from "./project-create-conflict.js";
 import { stableUuid } from "./stable-uuid.js";
 
 export interface SharedProjectT3Client {
@@ -46,6 +47,7 @@ export class SharedProjectCoordinator {
     let record = this.persistence.getSharedProject();
     try {
       const shell = await this.t3.getShell();
+      const retainedIdentity = record !== undefined;
       if (record === undefined) {
         this.assertWorkspaceRootAvailable(
           shell.projects,
@@ -75,14 +77,20 @@ export class SharedProjectCoordinator {
           retained.workspaceRoot,
           retained.projectId,
         );
-        await this.t3.dispatch({
-          commandId: retained.createCommandId,
-          createdAt: retained.createdAt,
-          projectId: retained.projectId,
-          title: retained.projectTitle,
-          type: "project.create",
-          workspaceRoot: retained.workspaceRoot,
-        });
+        try {
+          await this.t3.dispatch({
+            commandId: retained.createCommandId,
+            createdAt: retained.createdAt,
+            projectId: retained.projectId,
+            title: retained.projectTitle,
+            type: "project.create",
+            workspaceRoot: retained.workspaceRoot,
+          });
+        } catch (error) {
+          throw retainedIdentity
+            ? classifyRetainedProjectCreateError(error, retained.projectId)
+            : error;
+        }
         project = {
           createdAt: retained.createdAt,
           id: retained.projectId,

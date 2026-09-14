@@ -24,6 +24,7 @@ import type {
 import type { ReconcilerAttentionQueue } from "../reconciler/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
+import { classifyRetainedProjectCreateError } from "./project-create-conflict.js";
 import type { TaskRepositoryRouter } from "./repository-routing.js";
 import { stableUuid } from "./stable-uuid.js";
 
@@ -65,11 +66,12 @@ export class EpicProjectCoordinator {
     const epics = tasks
       .filter(({ tags }) => tags.includes("type:epic"))
       .sort((left, right) => left.id - right.id);
+    const shell = await this.t3.getShell();
     for (const epic of epics) {
       const attentionId = `production:epic-project-reconciliation-failed:task:${epic.id}`;
       try {
         if (epic.status === "in-progress") {
-          const created = await this.ensureActive(epic);
+          const created = await this.ensureActive(epic, shell);
           if (created !== undefined) actions.push(created);
           if (
             this.attention !== undefined &&
@@ -131,6 +133,7 @@ export class EpicProjectCoordinator {
 
   private async ensureActive(
     epic: BoardTask,
+    shell: T3ShellSnapshot,
   ): Promise<EpicProjectAction | undefined> {
     const route = this.routing.route(epic);
     const repositoryNames = [...route.repositoryNames];
@@ -140,6 +143,7 @@ export class EpicProjectCoordinator {
       String(epic.id),
     );
     let record = this.persistence.getEpicProject(epic.id);
+    const retainedIdentity = record !== undefined;
     if (record?.state === "deleting" || record?.state === "deleted") {
       throw new Error(`Epic ${epic.id} project deletion cannot be reversed`);
     }
@@ -154,7 +158,6 @@ export class EpicProjectCoordinator {
     ) {
       throw new Error(`Epic ${epic.id} changed durable repository scope`);
     }
-    const shell = await this.t3.getShell();
     if (record === undefined) {
       this.assertWorkspaceRootAvailable(shell.projects, workspaceRoot);
       record = this.recordFor(
@@ -201,14 +204,20 @@ export class EpicProjectCoordinator {
     }
     let created = false;
     if (project === undefined) {
-      await this.t3.dispatch({
-        commandId: record.createCommandId,
-        createdAt: record.createdAt,
-        projectId: record.projectId,
-        title: record.projectTitle,
-        type: "project.create",
-        workspaceRoot,
-      });
+      try {
+        await this.t3.dispatch({
+          commandId: record.createCommandId,
+          createdAt: record.createdAt,
+          projectId: record.projectId,
+          title: record.projectTitle,
+          type: "project.create",
+          workspaceRoot,
+        });
+      } catch (error) {
+        throw retainedIdentity
+          ? classifyRetainedProjectCreateError(error, record.projectId)
+          : error;
+      }
       project = {
         createdAt: record.createdAt,
         id: record.projectId,

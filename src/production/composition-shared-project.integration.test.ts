@@ -217,6 +217,46 @@ describe("production shared-project reconciliation", () => {
     });
   });
 
+  it("names a retained identity that T3 keeps soft-deleted", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    class SoftDeletedProjectT3 extends SyntheticT3 {
+      createAttempts = 0;
+
+      override async dispatch(command: T3DispatchCommand) {
+        if (command.type === "project.create") {
+          this.createAttempts += 1;
+          throw new Error(
+            "Project 'retained-project' already exists and cannot be created twice.",
+          );
+        }
+        return super.dispatch(command);
+      }
+    }
+    const t3 = new SoftDeletedProjectT3();
+    const started = open(fixture, t3);
+    started.persistence.writeSharedProject({
+      createCommandId: "create-retained-project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: "retained-project",
+      projectTitle: "Retained sample",
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
+      state: "active",
+      workspaceRoot: fixture.configuration.adHocProject.workspaceRoot,
+    });
+
+    await expect(started.start()).rejects.toThrow(
+      "T3 retains a deleted project with this identity (retained-project)",
+    );
+
+    expect(t3.createAttempts).toBe(1);
+    expect(started.persistence.getSharedProject()).toMatchObject({
+      projectId: "retained-project",
+      state: "active",
+    });
+  });
+
   it("fails startup closed before recording identity when T3 is unavailable", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

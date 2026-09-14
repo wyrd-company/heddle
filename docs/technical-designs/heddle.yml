@@ -117,6 +117,9 @@ proposed-design:
     records a durable title revision before an idempotent
     T3 metadata update and does not change the project UUID. Fresh Heddle state
     fails closed when another T3 project already owns the epic workspace root.
+    A title changed directly in the T3 UI remains until the next epic-title
+    change. The title is last-writer presentation state and never changes the
+    project UUID.
     Paused, UAT, and completed epics retain their project so archived stage
     threads remain available for inspection. The durable `active` project
     state means that the T3 project exists; it does not authorize child task
@@ -172,15 +175,20 @@ proposed-design:
     ` · {label}`. Heddle records each title change as a durable revision before
     dispatching its idempotent metadata update. A restart reuses the persisted
     identity and completes an interrupted creation or title revision without
-    generating another ID.
+    generating another ID. A title changed directly in the T3 UI remains until
+    the next Heddle label change. Heddle does not continuously reassert the
+    title, which is last-writer presentation state rather than identity.
 
     Fresh Heddle state fails closed when T3 has an active project at the same
     workspace root. Ordinary reconciliation does not adopt partial external
-    history. Adoption requires a future explicit operation that imports the
-    complete paired state. This project-level rule does not repair or redefine
-    archived stage-thread identity; archived-thread recovery remains within the
-    stage archive evidence boundary. Heddle never infers repository scope from
-    a diff, branch, session, or filesystem scan.
+    history. If the shell hides a soft-deleted project and T3 refuses creation
+    of its retained ID, Heddle names the retained deleted identity and fails
+    closed without undeleting, adopting, or regenerating it. Adoption requires a
+    future explicit operation that imports the complete paired state. This
+    project-level rule does not repair or redefine archived stage-thread
+    identity; archived-thread recovery remains within the stage archive evidence
+    boundary. Heddle never infers repository scope from a diff, branch, session,
+    or filesystem scan.
 
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else
