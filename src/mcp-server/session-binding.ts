@@ -264,14 +264,16 @@ export const resolveWorkflowMcpSessionBinding = (
   ) {
     throw new CorrelationTokenError();
   }
-  // A delegated child works its assigned subtree; the stage disposition
-  // stays with the session the stage was activated for.
+  // A completed stage keeps replay-only advance and nothing else. A delegated
+  // child works its assigned subtree; the stage disposition stays with the
+  // session the stage was activated for, so the child never holds advance.
   const isDelegatedChild = storedHandoffs[0]!.parentSessionKey !== undefined;
+  const stageTools = isCompletedStage
+    ? stageContract.tools.filter((tool) => tool === "advance")
+    : stageContract.tools;
   const tools = isDelegatedChild
-    ? stageContract.tools.filter((tool) => tool !== "advance")
-    : isCompletedStage
-      ? stageContract.tools.filter((tool) => tool === "advance")
-      : stageContract.tools;
+    ? stageTools.filter((tool) => tool !== "advance")
+    : stageTools;
   const todoAssignment = storedHandoffs[0]!.todoAssignment;
   if (todoAssignment !== undefined) {
     try {

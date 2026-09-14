@@ -1237,13 +1237,10 @@ describe("workflow MCP HTTP server", () => {
     );
   });
 
-  it("gives a delegated child its subtree without the stage disposition", async () => {
-    const fixture = await makeFixture();
-    const parent = await connect(
-      fixture.url,
-      fixture.alphaToken,
-      "delegating-parent-client",
-    );
+  // A delegated child of stage-alpha, bound to the parent's pinned contract.
+  const installDelegatedChild = (
+    fixture: Awaited<ReturnType<typeof makeFixture>>,
+  ): WorkflowMcpStageContract => {
     claimTodoAssignment(fixture.persistence, {
       binding: resolvedSessionBindingFixture({
         sessionKey: "child-session",
@@ -1298,6 +1295,17 @@ describe("workflow MCP HTTP server", () => {
         },
       ],
     });
+    return parentStored.workflowMcp;
+  };
+
+  it("gives a delegated child its subtree without the stage disposition", async () => {
+    const fixture = await makeFixture();
+    const parent = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "delegating-parent-client",
+    );
+    const parentStored = { workflowMcp: installDelegatedChild(fixture) };
     const child = await connect(fixture.url, "child-token", "child-client");
 
     // The pinned stage contract lists advance; the child's binding does not.
@@ -1319,6 +1327,27 @@ describe("workflow MCP HTTP server", () => {
       arguments: { disposition: "accept" },
     });
     expect(fixture.accepted).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a delegated child of a completed stage no live tools", async () => {
+    const fixture = await makeFixture();
+    const parent = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "completing-parent-client",
+    );
+    const contract = installDelegatedChild(fixture);
+    await parent.callTool({
+      name: "advance",
+      arguments: { disposition: "accept" },
+    });
+
+    // The completed-stage rule leaves replay-only advance, which the child
+    // never held, so the child cannot bind at all once its stage completed.
+    expect(contract.tools.length).toBeGreaterThan(1);
+    await expect(
+      connect(fixture.url, "child-token", "child-client"),
+    ).rejects.toThrow(/Unauthorized/);
   });
 
   it("limits child todo reads and writes to its durable assigned subtree", async () => {
