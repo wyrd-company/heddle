@@ -34,6 +34,7 @@ import {
   resolveConfigurationDirectory,
   validateProviderUsageConfiguration,
 } from "./configuration.js";
+import { layerConfiguration } from "./configuration-layering.js";
 
 const fixture = (root: string): ProductionConfiguration => ({
   adHocProject: {
@@ -338,6 +339,57 @@ describe("deployed configuration directory", () => {
       { cwd: join(shared, "blueprints") },
     );
     expect(blueprintStatus).toBe("");
+  });
+
+  it("treats an empty optional worker source as no override layer", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
+    await prepareBlueprintRepository(root);
+    const core = fixture(root);
+    await writeFile(join(root, "config.yml"), stringify(core));
+    const workerPath = join(root, "worker.yml");
+
+    for (const source of ["", "# no differences\n", "null\n"]) {
+      await writeFile(workerPath, source);
+      const loaded = await loadDeploymentConfiguration(root);
+      expect(loaded.configuration).toMatchObject(core);
+      expect(loaded.workerConfigurationPath).toBeUndefined();
+    }
+  });
+
+  it("attributes missing required children to a worker-declared parent", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const workerPath = join(root, "worker.yml");
+    await writeFile(
+      workerPath,
+      stringify({ adjudication: { policyPath: "adjudication/policy.json" } }),
+    );
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `field '/adjudication/providerAlias' from '${workerPath}'`,
+    );
+  });
+
+  it("keeps inherited map entries for an empty map and clears them with null", () => {
+    const core = {
+      pacing: { providerBudgets: { primary: { usageLimit: 80 } } },
+    };
+    const emptyMap = layerConfiguration([
+      { source: "config.yml", value: core },
+      { source: "worker.yml", value: { pacing: { providerBudgets: {} } } },
+    ]);
+    expect(emptyMap.value).toMatchObject(core);
+    expect(
+      (emptyMap.value as { pacing: { providerBudgets: unknown } }).pacing
+        .providerBudgets,
+    ).toEqual(core.pacing.providerBudgets);
+
+    const cleared = layerConfiguration([
+      { source: "config.yml", value: core },
+      { source: "worker.yml", value: { pacing: { providerBudgets: null } } },
+    ]);
+    expect(cleared.value).toMatchObject({ pacing: { providerBudgets: {} } });
   });
 
   it("names the worker source and field when an override is invalid", async () => {

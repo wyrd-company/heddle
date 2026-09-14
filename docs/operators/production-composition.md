@@ -99,6 +99,10 @@ contains required shared core settings in `config.yml`, optional worker
 overrides in `worker.yml`, and the organization blueprint clone. A worker with
 no differences has no `worker.yml`.
 
+An empty, comment-only, or root-level `null` `worker.yml` is treated as no
+override layer. Root-level clearing is not supported; use field-level `null`
+values when a worker must clear an inherited optional value.
+
 Heddle layers built-in defaults, `config.yml`, then `worker.yml`, and validates
 the effective result. Objects and maps merge by key. Arrays replace the whole
 inherited array so provider fallback and executable argument order cannot change

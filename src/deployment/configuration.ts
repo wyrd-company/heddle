@@ -321,7 +321,7 @@ export const loadDeploymentConfiguration = async (
   }
   const layered = layerConfiguration([
     { source: configurationPath, value: core },
-    ...(worker === undefined
+    ...(worker === undefined || worker === null
       ? []
       : [{ source: workerConfigurationPath, value: worker }]),
   ]);
@@ -336,11 +336,18 @@ export const loadDeploymentConfiguration = async (
     }).compile(await readConfigurationSchema());
     if (!validator(value)) {
       const failure = firstSchemaError(validator.errors?.[0]);
-      const source =
-        validator.errors?.[0]?.keyword === "required" &&
-        layered.clearedBy[failure.pointer] === undefined
+      const source = (() => {
+        if (validator.errors?.[0]?.keyword !== "required") {
+          return sourceForConfigurationPointer(failure.pointer, layered);
+        }
+        const parentPointer = failure.pointer.slice(
+          0,
+          failure.pointer.lastIndexOf("/"),
+        );
+        return parentPointer === ""
           ? configurationPath
-          : sourceForConfigurationPointer(failure.pointer, layered);
+          : sourceForConfigurationPointer(parentPointer, layered);
+      })();
       throw new TypeError(
         `field '${failure.pointer || "/"}' from '${source}': ${failure.detail}`,
       );
@@ -407,7 +414,9 @@ export const loadDeploymentConfiguration = async (
             },
           }),
       server: { ...server, host: server.host.trim() },
-      ...(worker === undefined ? {} : { workerConfigurationPath }),
+      ...(worker === undefined || worker === null
+        ? {}
+        : { workerConfigurationPath }),
     };
     return {
       ...loaded,
