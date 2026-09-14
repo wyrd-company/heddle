@@ -122,6 +122,7 @@ next_id: 1
       ...scopedRecord,
       operationKey: "inventory:count:scoped",
     });
+    expect(scopedIdentity.recordDigest).not.toBe(legacyIdentity.recordDigest);
     const task: BoardTask = {
       blocked: false,
       dependencies: [],
@@ -667,6 +668,30 @@ next_id: 1
       ]),
     );
   });
+
+  it.each([
+    ["empty", []],
+    ["duplicate", ["sample-alpha", "sample-alpha"]],
+    ["invalid identifier", ["../outside"]],
+  ])(
+    "rejects invalid repository scope before board authoring: %s",
+    async (_, repos) => {
+      commands = [];
+      await expect(
+        adapter.createRecord({
+          body: "Record the selected storage locations.",
+          kind: "finding",
+          lifecycle: "inspection-response",
+          operationKey: "stage-one:create-finding:invalid-locations",
+          parent: 1,
+          repos,
+          status: "backlog",
+          title: "Record storage locations",
+        }),
+      ).rejects.toThrow("invalid task repository scope");
+      expect(commands).toEqual([]);
+    },
+  );
 
   it("replays one board-write occurrence without creating another task", async () => {
     const collectionId = await createTask(
