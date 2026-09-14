@@ -304,6 +304,22 @@ export const readPinnedOutputContract = async (
   let schema: JsonValue;
   try {
     schema = JSON.parse(serialized) as JsonValue;
+  } catch (error) {
+    throw new HandoffTemplateError(
+      `Pinned output contract ${path} at commit ${commitSha} is not a valid JSON Schema: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  // Ajv compiles boolean schemas too, but advance output is always an
+  // object; anything else would be persisted into the stage contract and
+  // refused only when the session binds, far from the cause.
+  if (!isObjectSchema(schema)) {
+    throw new HandoffTemplateError(
+      `Pinned output contract ${path} at commit ${commitSha} must be an object schema with "type": "object"`,
+    );
+  }
+  try {
     new Ajv2020({ allErrors: true, strict: false }).compile(schema as object);
   } catch (error) {
     throw new HandoffTemplateError(
@@ -314,6 +330,13 @@ export const readPinnedOutputContract = async (
   }
   return schema;
 };
+
+/** An output contract describes an object: a JSON object schema typed `object`. */
+export const isObjectSchema = (schema: JsonValue): boolean =>
+  typeof schema === "object" &&
+  schema !== null &&
+  !Array.isArray(schema) &&
+  schema["type"] === "object";
 
 export class GitHandoffTemplateStore {
   constructor(private readonly repositoryRoot: string) {}

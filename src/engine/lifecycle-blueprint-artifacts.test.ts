@@ -480,11 +480,24 @@ describe("organization lifecycle blueprint artifacts", () => {
     const root = await withOutputContract("sample-findings");
     await writeFile(
       join(root, "output-contracts", "sample-findings.json"),
-      `${JSON.stringify({ type: "not-a-type" })}\n`,
+      `${JSON.stringify({ properties: "not-an-object", type: "object" })}\n`,
     );
     await expect(validateBlueprintRepository(root)).rejects.toThrow(
       /output contract 'sample-findings' is not a valid JSON Schema/,
     );
+  });
+
+  it("rejects an output contract artifact that is not an object schema", async () => {
+    const root = await withOutputContract("sample-findings");
+    for (const schema of [true, [], { properties: { findings: {} } }]) {
+      await writeFile(
+        join(root, "output-contracts", "sample-findings.json"),
+        `${JSON.stringify(schema)}\n`,
+      );
+      await expect(validateBlueprintRepository(root)).rejects.toThrow(
+        /output contract 'sample-findings' must be an object schema with "type": "object"/,
+      );
+    }
   });
 
   it("rejects a blueprint that omits a mechanical node board status", () => {

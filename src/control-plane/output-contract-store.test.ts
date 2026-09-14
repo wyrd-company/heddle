@@ -88,11 +88,24 @@ describe("pinned output contracts", () => {
 
   it("rejects an artifact that is not a JSON Schema", async () => {
     const { commitSha, root } = await repository({
-      broken: { type: "not-a-type" },
+      broken: { properties: "not-an-object", type: "object" },
     });
     await expect(
       readPinnedOutputContract(root, commitSha, "broken"),
     ).rejects.toThrow(/broken\.json at commit .* is not a valid JSON Schema/);
+  });
+
+  it("rejects a contract that is not an object schema", async () => {
+    const { commitSha, root } = await repository({
+      "always-true": true,
+      "list-shaped": [],
+      untyped: { properties: { findings: { type: "array" } } },
+    });
+    for (const name of ["always-true", "list-shaped", "untyped"]) {
+      await expect(
+        readPinnedOutputContract(root, commitSha, name),
+      ).rejects.toThrow(/must be an object schema with "type": "object"/);
+    }
   });
 
   it("rejects a contract name that is not an artifact id", async () => {

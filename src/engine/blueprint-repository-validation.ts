@@ -140,8 +140,21 @@ const assertOutputContractArtifacts = async (
         `Blueprint '${artifactId}' names output contract '${name}' that has no artifact in output-contracts/`,
       );
     }
+    const schema = await json(path);
+    // Advance output is always an object; a boolean, array, or untyped schema
+    // would be refused only when a session binds, far from the author.
+    if (
+      typeof schema !== "object" ||
+      schema === null ||
+      Array.isArray(schema) ||
+      (schema as Record<string, unknown>)["type"] !== "object"
+    ) {
+      throw new BlueprintValidationError(
+        `Blueprint '${artifactId}' output contract '${name}' must be an object schema with "type": "object"`,
+      );
+    }
     try {
-      validator.compile((await json(path)) as object);
+      validator.compile(schema as object);
     } catch (error) {
       throw new BlueprintValidationError(
         `Blueprint '${artifactId}' output contract '${name}' is not a valid JSON Schema: ${
