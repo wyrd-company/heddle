@@ -1309,7 +1309,11 @@ proposed-design:
     replaying its stored bootstrap and resolved session binding. Recovery never
     retargets an existing occurrence through current provider configuration.
 
-    A top-level stage-session runtime row owns its immutable resolved binding.
+    A top-level session-runtime row owns its immutable resolved binding and an
+    explicit kind. A `stage` session carries its blueprint stage identifier;
+    an `adjudication` session has no stage identifier. The kind is an extensible
+    discriminator so additional session owners can add their own variant
+    without reserving names in the blueprint stage namespace.
     A delegated todo assignment owns the same binding shape for its child.
     Runtime instance projection joins both stores by the owning lifecycle
     instance and exposes only the binding's non-secret identity fields. A

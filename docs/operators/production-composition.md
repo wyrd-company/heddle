@@ -527,13 +527,19 @@ the session fails visibly. A failed turn, poor result, rejected review, or
 failed gate never selects another candidate. A new stage occurrence or
 subagent assignment makes a new selection.
 
-SQLite stores a top-level binding with its stage-session runtime row and a
+SQLite stores a top-level binding with its session-runtime row and a
 delegated binding with its todo assignment. The binding and session identity
 are immutable after T3 reports that the thread started. Existing binding JSON
 that predates candidate metadata loads as candidate position 1 with no skipped
 candidates. A pre-release state directory that contains a stage-session row
 without a binding cannot start recovery; clear that isolated state directory
 and restart Heddle.
+
+Each top-level session-runtime row has a `kind`. A `stage` row has a `stageId`
+that names its blueprint node. An `adjudication` row has no `stageId`, so a
+blueprint node identifier cannot be interpreted as a Heddle-owned session
+kind. Existing rows are classified from their stored adjudication handoff when
+the database opens; other rows remain stage sessions.
 
 The existing instance runtime response includes a sorted `sessionBindings`
 array for each instance. Each entry contains only `sessionKey`, `threadId`,
