@@ -87,9 +87,11 @@ dry-publishes the source-free Feature collection to an isolated local OCI
 registry, and replaces only the registry portion of the checked-in remote
 reference. It proves a failed download, a digest mismatch, a missing registry
 version, and a missing native prebuild each stop before service registration.
-It then installs the Feature at the default `latest`, proves that Python is
-absent and that the installed service answers its configured endpoint,
-rebuilds at the exact package version, and proves persisted state replays.
+It then installs the Feature at the default `latest`, verifies that the
+installer requests no Python or compiler packages and uses no native
+source-build fallback, proves that the installed service answers its configured
+endpoint, rebuilds at the exact package version, and proves persisted state
+replays.
 `task deployment:package` checks the OCI Feature archive without exercising
 registry resolution; it is not the remote installation proof.
 

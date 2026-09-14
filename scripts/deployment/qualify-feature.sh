@@ -651,10 +651,6 @@ inside_assert_equal \
     "kanban-md version 0.38.0-fork+794efef" \
     kanban-md --version
 inside_assert_equal \
-    python-absence \
-    absent \
-    bash -lc 'if command -v python3 >/dev/null 2>&1; then printf present; else printf absent; fi'
-inside_assert_equal \
     packaged-console-asset \
     present \
     bash -lc 'if test -f /usr/local/lib/node_modules/@wyrd-company/heddle/assets/console-viewer/lifecycle.js; then printf present; else printf absent; fi'

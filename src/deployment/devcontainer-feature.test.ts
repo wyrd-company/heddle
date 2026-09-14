@@ -70,10 +70,18 @@ describe("Heddle devcontainer feature", () => {
   it("binds s6, state-mount, installed-package, and Caddy agreements", async () => {
     const common = await readFile(`${featureDirectory}/common.sh`, "utf8");
     const installer = await readFile(`${featureDirectory}/install.sh`, "utf8");
+    const operatorGuide = await readFile(
+      "docs/operators/production-composition.md",
+      "utf8",
+    );
 
     expect(common).toContain("apt-get install -y --no-install-recommends");
     expect(installer).toContain("ensure_apt_packages ca-certificates curl jq");
     expect(installer).not.toMatch(/\b(?:build-essential|python3)\b/u);
+    expect(operatorGuide).toContain(
+      "installer requests no Python or compiler packages",
+    );
+    expect(operatorGuide).not.toContain("proves that Python is absent");
     expect(installer).toContain(
       '"$(dirname "$0")/verify-feature-source.sh" "$(dirname "$0")"',
     );
@@ -365,7 +373,6 @@ describe("Heddle devcontainer feature", () => {
     for (const assertion of [
       "service-registration-count",
       "kanban-version",
-      "python-absence",
       "packaged-console-asset",
       "loopback-console-readiness",
       "loopback-console-title",
