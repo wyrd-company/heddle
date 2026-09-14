@@ -188,7 +188,15 @@ export class EscalationCoordinator {
       return { awaitingAnswer: false, escalationId: input.escalationId };
     }
     if (history.answered === undefined) {
-      void this.#ensureRouted(history.opened).catch(() => undefined);
+      // A session escalation returns as soon as the open event is durable so
+      // the session is not held; routing continues in the background. A
+      // blueprint question has no session to hold, so its route is awaited
+      // and a failed attention raise surfaces to the activation that asked.
+      if (options.question === undefined) {
+        void this.#ensureRouted(history.opened).catch(() => undefined);
+      } else {
+        await this.#ensureRouted(history.opened);
+      }
     } else {
       void this.#settle(history.opened, history.answered).catch(
         () => undefined,

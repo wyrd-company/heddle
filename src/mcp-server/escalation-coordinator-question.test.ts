@@ -117,6 +117,14 @@ describe("lifecycle question escalations", () => {
     persistence.close();
   });
 
+  it("surfaces a failed attention raise to the activation that asked", async () => {
+    const { ask, raise } = await harness(false);
+    raise.mockRejectedValueOnce(new Error("attention store unavailable"));
+    await expect(ask("operator")).rejects.toThrow(
+      "attention store unavailable",
+    );
+  });
+
   it("reads the occurrence back from the persisted event", async () => {
     const { ask, persistence } = await harness(false);
     await ask("operator");
