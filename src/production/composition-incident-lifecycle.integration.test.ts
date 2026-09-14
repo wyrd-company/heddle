@@ -349,6 +349,9 @@ describe("production incident lifecycle", () => {
       instanceId: incident.incidentId,
       ownerSessionKey: pending[0]!.ownerSessionKey,
     });
+    // Delivery resumes through the incident coordinator, so the successor
+    // stage is prepared before any scheduler pass.
+    expect(runtime()).toMatchObject({ stageId: "act" });
     await settle();
     expect(runtime()).toMatchObject({ stageId: "act", state: "waiting" });
     await composition.close();

@@ -370,11 +370,14 @@ export const createProductionComposition = (
       });
       await attention.raiseCurrentNotificationFailure(failure);
     };
+    // A question's answer resumes the lifecycle through the incident-aware
+    // router, so an incident's successor stage is prepared on delivery and a
+    // resume failure is recorded on the incident, not only on a later pass.
     const escalationAnswerEffects = new ProductionEscalationAnswerEffects(
       persistence,
       board,
       t3,
-      lifecycle,
+      { resume: (input) => incidents.resume(input) },
     );
     const scopedAdjudication =
       configuration.adjudication === undefined
