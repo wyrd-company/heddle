@@ -354,6 +354,12 @@ describe("deployed configuration directory", () => {
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
       `Configuration file '${workerPath}' is invalid YAML`,
     );
+
+    await rm(workerPath);
+    await mkdir(workerPath);
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `Configuration file '${workerPath}' cannot be read`,
+    );
   });
 
   it("prints redacted effective values, provenance, and explicit clears", async () => {
@@ -370,7 +376,10 @@ describe("deployed configuration directory", () => {
         incident: {
           immediateEscalationCodes: ["t3-secret-value", "worker-t3-secret"],
         },
-        stageThresholds: { "worker-t3-secret": 20_000 },
+        stageThresholds: {
+          "worker-t3-secret": 20_000,
+          "worker/tier~one": 30_000,
+        },
         t3: { accessToken: "worker-t3-secret" },
       }),
     );
@@ -396,10 +405,16 @@ describe("deployed configuration directory", () => {
         immediateEscalationCodes: ["[REDACTED]", "[REDACTED]"],
       },
       server: { host: "127.0.0.1", port: 3774 },
-      stageThresholds: { "[REDACTED]": 20_000 },
+      stageThresholds: {
+        "[REDACTED]": 20_000,
+        "worker/tier~one": 30_000,
+      },
       t3: { accessToken: "[REDACTED]" },
     });
     expect(disclosure.provenance["/stageThresholds/[REDACTED]"]).toBe(
+      workerPath,
+    );
+    expect(disclosure.provenance["/stageThresholds/worker~1tier~0one"]).toBe(
       workerPath,
     );
     expect(serialized).not.toContain("worker-t3-secret");
@@ -588,7 +603,8 @@ describe("deployed configuration directory", () => {
   it("prints the redacted layered configuration through the packaged entry point", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await prepareBlueprintRepository(root);
-    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const configuration = fixture(root);
+    await writeFile(join(root, "config.yml"), stringify(configuration));
     const workerPath = join(root, "worker.yml");
     await writeFile(
       workerPath,
@@ -618,6 +634,9 @@ describe("deployed configuration directory", () => {
     );
     expect(result.stdout).not.toContain("secret-value");
     expect(result.stderr).toBe("");
+    await expect(
+      access(configuration.stateDirectory, constants.F_OK),
+    ).rejects.toThrow();
   });
 
   it("reloads worker overrides when the packaged process restarts", async () => {
