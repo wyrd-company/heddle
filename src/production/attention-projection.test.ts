@@ -200,13 +200,11 @@ describe("production attention projection", () => {
   it("links dead-session attention to its latest admitted occurrence", () => {
     const attentionId = "attention-failed";
     const incident: IncidentRuntimeRecord = {
-      accepted: false,
       attentionId,
       code: "session-failed",
       createdAt: 1_000,
       incidentId: productionErrorIncidentId(attentionId),
       occurrence: 1,
-      rejectionOperationIds: [],
       sourceInstanceId: "task-41",
       state: "starting",
       taskId: 41,
@@ -470,13 +468,11 @@ describe("production attention projection", () => {
   it("links recurring production attention to its latest admitted occurrence", () => {
     const attentionId = "attention-production-recurrence";
     const first: IncidentRuntimeRecord = {
-      accepted: false,
       attentionId,
       code: "unregistered-production-failure",
       createdAt: 1_000,
       incidentId: productionErrorIncidentId(attentionId),
       occurrence: 1,
-      rejectionOperationIds: [],
       state: "done",
       taskId: 41,
     };

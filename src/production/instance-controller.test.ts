@@ -292,14 +292,12 @@ describe("production instance controller", () => {
       threadId: "thread-one",
     });
     persistence.writeIncidentRuntime({
-      accepted: false,
       attentionId: "attention-one",
       code: "sample-condition",
       createdAt: 1,
       incidentId: "incident-11",
       occurrence: 1,
       provider: "provider-one",
-      rejectionOperationIds: [],
       sessionKey,
       stageId: "implement",
       state: "starting",
@@ -765,13 +763,11 @@ describe("production instance controller", () => {
     persistence.observeIncidentFailure({ ...failure, observedAt: 1_100 });
     persistence.observeIncidentFailure({ ...failure, observedAt: 1_200 });
     persistence.writeIncidentRuntime({
-      accepted: false,
       attentionId,
       code: failure.code,
       createdAt: 1_200,
       incidentId: productionErrorIncidentId(attentionId),
       occurrence: 1,
-      rejectionOperationIds: [],
       state: "failed",
       taskId: task.id,
     });
@@ -873,7 +869,6 @@ describe("production instance controller", () => {
       persistence.observeIncidentFailure({ ...failure, observedAt: 1_200 });
       const limitingAttentionId = `limiting-${suppressionReason}`;
       persistence.writeIncidentRuntime({
-        accepted: false,
         attentionId: limitingAttentionId,
         code:
           suppressionReason === "per-code-cooldown"
@@ -882,7 +877,6 @@ describe("production instance controller", () => {
         createdAt: 1_200,
         incidentId: productionErrorIncidentId(limitingAttentionId),
         occurrence: 1,
-        rejectionOperationIds: [],
         state: suppressionReason === "per-code-cooldown" ? "done" : "waiting",
         taskId: 19,
       });
