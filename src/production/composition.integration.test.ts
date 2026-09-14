@@ -250,6 +250,18 @@ describe("production composition", () => {
     expect(notify.mock.calls[0]?.[0].message).not.toContain(
       "opaque-command-marker",
     );
+    if (failure === "blank-request-identity") {
+      t3.threadActivities.get(adjudication.threadId)!.push({
+        createdAt: new Date().toISOString(),
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId: "request-after-taint",
+          requestKind: "mcp-elicitation",
+        },
+      });
+    }
     await first.scheduler.trigger();
     expect(
       first.attention.list().filter((entry) => entry.kind === "escalation"),

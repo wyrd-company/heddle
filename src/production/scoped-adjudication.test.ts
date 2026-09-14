@@ -482,8 +482,8 @@ describe("scoped adjudication sanctioned approvals", () => {
     },
   );
 
-  it("abandons an approval request without usable identity before issuing any response", async () => {
-    const { adjudication, approvals, construct, events } = build({
+  it("permanently taints an adjudication thread with a sanctioned approval that has no usable identity", async () => {
+    const { activities, adjudication, approvals, construct, events } = build({
       activities: [
         sanctionedRequest("request-valid"),
         sanctionedRequest("   "),
@@ -496,6 +496,14 @@ describe("scoped adjudication sanctioned approvals", () => {
       cause: "Adjudication tool approval request has no usable identity",
       kind: "abandoned",
     });
+
+    activities.push(resolved("request-valid"));
+    expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
+      cause: "Adjudication tool approval request has no usable identity",
+      kind: "abandoned",
+    });
+
+    activities.push(sanctionedRequest("request-later"));
     expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
       cause: "Adjudication tool approval request has no usable identity",
       kind: "abandoned",

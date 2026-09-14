@@ -507,6 +507,8 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
   ): Promise<AdjudicationApprovalOutcome> {
     const { instanceId, sessionKey, threadId } = runtime;
     const snapshot = await this.options.t3.getThread(threadId);
+    // A blank identity cannot be correlated with a later resolution, so its
+    // presence permanently taints this adjudication thread and occurrence.
     if (
       snapshot.thread.activities?.some((activity) => {
         if (
@@ -536,13 +538,8 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       requestId: string;
     }> = [];
     for (const activity of pending) {
-      const requestId = activity.payload?.requestId;
-      if (typeof requestId !== "string" || requestId.trim() === "") {
-        return {
-          cause: invalidApprovalRequestIdentityCause,
-          kind: "abandoned",
-        };
-      }
+      // pendingRequestActivitiesFor admits only nonblank string identities.
+      const requestId = activity.payload!.requestId as string;
       const issue = this.#retainedApprovalResponseIssue({
         instanceId,
         requestId,
