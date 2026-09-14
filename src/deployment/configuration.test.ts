@@ -580,7 +580,19 @@ describe("deployed configuration directory", () => {
     await prepareBlueprintRepository(root);
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      "The blueprint source and worker synchronization checkout must use distinct paths",
+      "The blueprint source and worker synchronization checkout must use disjoint paths",
+    );
+  });
+
+  it("rejects worker synchronization state nested inside the shared blueprint source", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const configuration = fixture(root);
+    configuration.stateDirectory = join(root, "blueprints", "worker-state");
+    await writeFile(join(root, "config.yml"), stringify(configuration));
+    await prepareBlueprintRepository(root);
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "The blueprint source and worker synchronization checkout must use disjoint paths",
     );
   });
 

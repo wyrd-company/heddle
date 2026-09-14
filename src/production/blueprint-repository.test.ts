@@ -238,13 +238,7 @@ describe("organization blueprint repository", () => {
       { cwd: workerRoot },
     );
 
-    const restarted = new OrganizationBlueprintRepository(
-      workerRoot,
-      persistence,
-      attention,
-      setup.repositoryRoot,
-    );
-    await expect(restarted.synchronize()).rejects.toThrow(
+    await expect(repository.synchronize()).rejects.toThrow(
       "does not match the shared source's origin and upstream branch",
     );
 
@@ -264,6 +258,53 @@ describe("organization blueprint repository", () => {
         }),
       }),
     ]);
+  });
+
+  it("preserves a shared source's behind state in the worker checkout", async () => {
+    const setup = await prepare();
+    const upstream = await publisher(setup);
+    await writeFile(join(upstream, "upstream.txt"), "new\n");
+    await executeGit("git", ["add", "upstream.txt"], { cwd: upstream });
+    await executeGit("git", ["commit", "--quiet", "-m", "Advance upstream"], {
+      cwd: upstream,
+    });
+    await executeGit("git", ["push", "--quiet"], { cwd: upstream });
+    await executeGit("git", ["fetch", "--quiet", "origin"], {
+      cwd: setup.repositoryRoot,
+    });
+    const workerRoot = join(setup.root, "worker", "blueprints");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(setup.root, "worker-state"),
+    });
+    workerPersistence.push(persistence);
+    const attention = new DurableAttentionQueue(persistence);
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      attention,
+      setup.repositoryRoot,
+    );
+
+    await expect(repository.synchronize()).resolves.toBeUndefined();
+
+    expect(attention.list()).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining(
+          "The organization blueprint repository branch is behind origin",
+        ),
+      }),
+    ]);
+    expect(
+      (
+        await executeGit(
+          "git",
+          ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+          {
+            cwd: workerRoot,
+          },
+        )
+      ).stdout.trim(),
+    ).toBe("0\t1");
   });
 
   it("leaves worker-irrelevant shared working-tree changes untouched", async () => {
@@ -308,12 +349,37 @@ describe("organization blueprint repository", () => {
     );
 
     await expect(repository.synchronize()).rejects.toThrow(
-      "must resolve to distinct directories",
+      "must resolve to disjoint directories",
     );
 
     expect(await realpath(workerRoot)).toBe(
       await realpath(setup.repositoryRoot),
     );
+  });
+
+  it("rejects an absent worker checkout nested through a shared-source alias before writing", async () => {
+    const setup = await prepare();
+    const sourceAlias = join(setup.root, "source-alias");
+    await symlink(setup.repositoryRoot, sourceAlias, "dir");
+    const workerRoot = join(sourceAlias, "worker-state", "blueprints");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(setup.root, "worker-state"),
+    });
+    workerPersistence.push(persistence);
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      new DurableAttentionQueue(persistence),
+      setup.repositoryRoot,
+    );
+
+    await expect(repository.synchronize()).rejects.toThrow(
+      "must resolve to disjoint directories",
+    );
+
+    await expect(
+      readFile(join(setup.repositoryRoot, "worker-state"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("accepts a shared source reached through a read-only mount-style alias", async () => {

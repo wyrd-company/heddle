@@ -582,7 +582,8 @@ that checkout to the shared source's `origin` fetch URL, push URL, and upstream
 branch. A later source/checkout binding mismatch fails reconciliation and raises
 durable repository attention; Heddle does not rewrite an existing checkout's
 Git identity. The checkout persists with the rest of that worker's state. Do
-not mount or copy it into another worker.
+not nest either path inside the other, and do not mount or copy the checkout
+into another worker.
 
 Provision each service user with a forwarded SSH agent socket or a scoped
 deploy key that can fetch and push the configured origin. Heddle stores no Git

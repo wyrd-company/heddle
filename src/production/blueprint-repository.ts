@@ -85,7 +85,6 @@ const parseCounts = (value: string): { ahead: number; behind: number } => {
 export class OrganizationBlueprintRepository {
   public readonly repositoryRoot: string;
   public readonly sourceRef = sourceRef;
-  private prepared = false;
 
   public constructor(
     repositoryRoot: string,
@@ -106,15 +105,12 @@ export class OrganizationBlueprintRepository {
 
   async synchronize(): Promise<void> {
     try {
-      if (!this.prepared) {
-        await prepareBlueprintRepositoryCheckout({
-          repositoryRoot: this.repositoryRoot,
-          ...(this.sharedSourceRoot === undefined
-            ? {}
-            : { sourceRoot: this.sharedSourceRoot }),
-        });
-        this.prepared = true;
-      }
+      await prepareBlueprintRepositoryCheckout({
+        repositoryRoot: this.repositoryRoot,
+        ...(this.sharedSourceRoot === undefined
+          ? {}
+          : { sourceRoot: this.sharedSourceRoot }),
+      });
     } catch (error) {
       await this.replaceRepositoryAttention({
         attentionId: `${stateAttentionPrefix}checkout-unavailable`,

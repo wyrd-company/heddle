@@ -880,7 +880,7 @@ proposed-design:
 
     The incident blueprint has implement, review, and finalize wait stages and
     no board-status map or board-writing mechanical node. Its handoff carries
-    the operator-configured workspace root, organization blueprint repository,
+    the operator-configured workspace root, worker blueprint checkout,
     board and Heddle state locations, T3 endpoint, GitHub issue sink, approval
     threshold, and the observed source condition. The agent may change any
     blueprint, Heddle or T3 configuration, Heddle or T3 data, provider enablement,
@@ -1357,8 +1357,8 @@ proposed-design:
     outside this committed-state transfer. Every later fetch and every
     editor write operates on that worker checkout. A source/checkout identity
     mismatch fails reconciliation with durable repository attention rather
-    than silently redirecting existing Git state. No worker writes the shared
-    source or uses another worker's checkout.
+    than silently redirecting existing Git state. The paths are disjoint; no
+    worker writes the shared source or uses another worker's checkout.
 
     Fetch updates worker-local remote-tracking refs only. A dirty, unpushed,
     behind, or diverged worker branch raises durable repository attention;

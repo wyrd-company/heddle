@@ -110,11 +110,12 @@ worktree whose current branch tracks `origin`. On its first reconciliation
 pass, each worker creates an independent writable checkout at
 `<stateDirectory>/blueprints`. Fetch, pinned-content retention, repository
 attention, and console editing use that worker checkout. Heddle never writes the
-shared source. The service refuses to start when `stateDirectory` is not a mount
-point. The root launcher writes only the nonsecret Caddy snippet, completes a
-bounded Caddy reload handshake, and then drops privileges. The watcher owns
-later Caddy reloads. The launcher never prints or copies raw YAML. One Heddle
-service, one worker checkout, and one state source belong to one workspace.
+shared source, and neither path may contain the other. The service refuses to
+start when `stateDirectory` is not a mount point. The root launcher writes only
+the nonsecret Caddy snippet, completes a bounded Caddy reload handshake, and
+then drops privileges. The watcher owns later Caddy reloads. The launcher never
+prints or copies raw YAML. One Heddle service, one worker checkout, and one state
+source belong to one workspace.
 `heddle-server --print-effective-configuration` prints redacted values with
 source provenance and explicit clears without creating worker state.
 

@@ -6,7 +6,7 @@
 import { constants } from "node:fs";
 import { execFile } from "node:child_process";
 import { access, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { URL } from "node:url";
 import { promisify } from "node:util";
 
@@ -405,9 +405,22 @@ export const loadDeploymentConfiguration = async (
       validated.stateDirectory,
       blueprintsDirectoryName,
     );
-    if (resolve(blueprintsRepositoryRoot) === resolve(blueprintsSourceRoot)) {
+    const checkoutFromSource = relative(
+      resolve(blueprintsSourceRoot),
+      resolve(blueprintsRepositoryRoot),
+    );
+    const sourceFromCheckout = relative(
+      resolve(blueprintsRepositoryRoot),
+      resolve(blueprintsSourceRoot),
+    );
+    const pathsOverlap = [checkoutFromSource, sourceFromCheckout].some(
+      (path) =>
+        path === "" ||
+        (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`)),
+    );
+    if (pathsOverlap) {
       throw new TypeError(
-        "The blueprint source and worker synchronization checkout must use distinct paths",
+        "The blueprint source and worker synchronization checkout must use disjoint paths",
       );
     }
     const loaded: LoadedDeploymentConfiguration = {

@@ -13,7 +13,15 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { promisify } from "node:util";
 
 import { BlueprintValidationError } from "../engine/index.js";
@@ -31,6 +39,54 @@ type RepositoryBinding = {
 
 const repositoryError = (description: string): BlueprintValidationError =>
   new BlueprintValidationError(`The organization blueprint ${description}`);
+
+const canonicalizePotentialPath = async (path: string): Promise<string> => {
+  let existingAncestor = resolve(path);
+  const missingSegments: string[] = [];
+  for (;;) {
+    try {
+      return resolve(await realpath(existingAncestor), ...missingSegments);
+    } catch (error) {
+      if (
+        typeof error !== "object" ||
+        error === null ||
+        !("code" in error) ||
+        error.code !== "ENOENT"
+      ) {
+        throw error;
+      }
+      const parent = dirname(existingAncestor);
+      if (parent === existingAncestor) throw error;
+      missingSegments.unshift(basename(existingAncestor));
+      existingAncestor = parent;
+    }
+  }
+};
+
+const containsPath = (parent: string, candidate: string): boolean => {
+  const pathFromParent = relative(parent, candidate);
+  return (
+    pathFromParent === "" ||
+    (!isAbsolute(pathFromParent) &&
+      pathFromParent !== ".." &&
+      !pathFromParent.startsWith(`..${sep}`))
+  );
+};
+
+const assertDisjointRoots = async (
+  sourceRoot: string,
+  checkoutRoot: string,
+): Promise<void> => {
+  const [source, checkout] = await Promise.all([
+    realpath(sourceRoot),
+    canonicalizePotentialPath(checkoutRoot),
+  ]);
+  if (containsPath(source, checkout) || containsPath(checkout, source)) {
+    throw repositoryError(
+      "shared source and worker synchronization checkout must resolve to disjoint directories",
+    );
+  }
+};
 
 const normalizeRemoteUrl = (repositoryRoot: string, url: string): string => {
   if (isAbsolute(url) || url.includes("://") || /^[^/]+:[^/]/u.test(url)) {
@@ -93,7 +149,9 @@ const inspectRepository = async (
   } catch (error) {
     if (error instanceof BlueprintValidationError) throw error;
     throw repositoryError(
-      `${ownership} '${root}' must be a physical Git clone root whose current branch tracks origin`,
+      `${ownership} '${root}' must be ${
+        ownership === "shared source" ? "a" : "a physical"
+      } Git clone root whose current branch tracks origin`,
     );
   }
 };
@@ -211,10 +269,11 @@ export const prepareBlueprintRepositoryCheckout = async (input: {
   sourceRoot?: string;
 }): Promise<void> => {
   const checkoutRoot = resolve(input.repositoryRoot);
-  const sourceRoot = resolve(input.sourceRoot ?? input.repositoryRoot);
-  if (checkoutRoot === sourceRoot) return;
+  if (input.sourceRoot === undefined) return;
+  const sourceRoot = resolve(input.sourceRoot);
 
   const source = await inspectRepository(sourceRoot, "shared source");
+  await assertDisjointRoots(sourceRoot, checkoutRoot);
   const checkoutExists = await lstat(checkoutRoot).then(
     () => true,
     (error: unknown) => {
@@ -231,10 +290,6 @@ export const prepareBlueprintRepositoryCheckout = async (input: {
   );
   if (!checkoutExists) {
     await seedCheckout(sourceRoot, checkoutRoot, source);
-  } else if ((await realpath(checkoutRoot)) === (await realpath(sourceRoot))) {
-    throw repositoryError(
-      "shared source and worker synchronization checkout must resolve to distinct directories",
-    );
   }
   const checkout = await inspectRepository(
     checkoutRoot,
