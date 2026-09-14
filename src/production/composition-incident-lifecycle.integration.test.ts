@@ -454,6 +454,25 @@ describe("production incident lifecycle", () => {
     await restarted.close();
   });
 
+  it("asks the operator when a production change declares no severity", async () => {
+    const { advance, composition, incident, runtime } = await raiseIncident();
+    await advance("diagnosed", {
+      conditionState: "live",
+      proposedActions: [
+        { kind: "production-mutation", summary: "Restart the sample worker" },
+      ],
+      rootCauseAnalysis: "A sample dependency was unavailable",
+    });
+    await advance("approve");
+    expect(runtime()).toMatchObject({ stageId: "confirm", state: "waiting" });
+    expect(
+      composition.escalation.pendingEscalations(incident.incidentId),
+    ).toEqual([
+      expect.objectContaining({ question: { nodeId: "confirm", visit: 1 } }),
+    ]);
+    await composition.close();
+  });
+
   it("acts without asking when the mutation is below the threshold", async () => {
     const { advance, composition, diagnosis, runtime } = await raiseIncident();
     await advance("diagnosed", diagnosis("moderate"));
