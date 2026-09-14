@@ -385,6 +385,34 @@ export class LifecycleEngine {
     return blueprint.nodes.find(({ id }) => id === nodeId);
   }
 
+  /**
+   * The nodes without outgoing edges whose outputs the run recorded: where a
+   * completed lifecycle ended.
+   */
+  async completedTerminalNodes(
+    instanceId: string,
+  ): Promise<LifecycleBlueprint["nodes"]> {
+    const record = this.persistence.getInstance(instanceId);
+    if (record === undefined) {
+      throw new Error(`Instance does not exist: ${instanceId}`);
+    }
+    const context = readLifecycleContext(record);
+    if (context.serializedContext === null) return [];
+    const serialized = JSON.parse(context.serializedContext) as Record<
+      string,
+      unknown
+    >;
+    const blueprint = await this.blueprintStore.read(
+      context.blueprintBlobHash,
+      context.blueprintPath,
+    );
+    return blueprint.nodes.filter(
+      (node) =>
+        Object.hasOwn(serialized, `_outputs.${node.id}`) &&
+        !blueprint.edges.some(({ source }) => source === node.id),
+    );
+  }
+
   async boardStatusFor(
     instanceId: string,
     uses: MechanicalNodeUse,

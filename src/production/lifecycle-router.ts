@@ -15,6 +15,7 @@ import {
 import type { SqlitePersistence } from "../persistence/index.js";
 import type { TaskProviderAliasMap } from "../provider-alias.js";
 import type { AgentNameThemeKind } from "../agent-names/index.js";
+import { failNodeUse } from "./lifecycle-primitives.js";
 
 export class ProductionLifecycleRouter {
   private readonly activeTransitions = new Map<string, number>();
@@ -66,6 +67,17 @@ export class ProductionLifecycleRouter {
 
   awaitingNode(instanceId: string) {
     return this.engine.awaitingNode(instanceId);
+  }
+
+  completedTerminalNodes(instanceId: string) {
+    return this.engine.completedTerminalNodes(instanceId);
+  }
+
+  /** Whether a completed lifecycle ended at a `fail` node. */
+  async endedInFailure(instanceId: string): Promise<boolean> {
+    return (await this.engine.completedTerminalNodes(instanceId)).some(
+      ({ uses }) => uses === failNodeUse,
+    );
   }
 
   boardStatusFor(

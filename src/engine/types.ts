@@ -67,6 +67,8 @@ export interface LifecycleEffectInput {
   context: IAsyncContext<Record<string, unknown>>;
   idempotencyKey: string;
   input: unknown;
+  /** The id of the node running this effect. */
+  nodeId: string;
   params: Record<string, unknown>;
 }
 

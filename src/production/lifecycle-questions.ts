@@ -3,8 +3,6 @@
 //   implements: heddle
 // ---
 
-import nunjucks from "nunjucks";
-
 import type { BoardTask } from "../board-adapter/index.js";
 import {
   answeredDisposition,
@@ -12,7 +10,6 @@ import {
   questionNodeParams,
   readLifecycleContext,
   type LifecycleNode,
-  type LifecycleProjection,
 } from "../engine/index.js";
 import type {
   AnsweredEscalation,
@@ -22,6 +19,10 @@ import type {
   PendingEscalation,
 } from "../mcp-server/index.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
+import {
+  renderLifecycleText,
+  type LifecycleTextContext,
+} from "./lifecycle-text.js";
 
 /**
  * The stable owner key of a question node occurrence. Heddle writes it, so a
@@ -36,47 +37,11 @@ export const questionOwnerSessionKey = (
 export const questionOperationId = (nodeId: string, visit: number): string =>
   `question:${nodeId}:${visit}`;
 
-const sortedJson = (value: JsonValue): JsonValue => {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(sortedJson);
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, sortedJson(value[key]!)]),
-  );
-};
-
-const textEnvironment = (): nunjucks.Environment => {
-  const environment = new nunjucks.Environment(undefined, {
-    autoescape: false,
-    throwOnUndefined: true,
-  });
-  environment.addFilter("stableJson", (value: JsonValue) =>
-    JSON.stringify(sortedJson(value), undefined, 2),
-  );
-  return environment;
-};
-
-/**
- * Question text is a template over what the graph has done so far, so the
- * role sees the proposal it is deciding on, not a reference to it.
- */
+/** Question text is a template over what the graph has done so far. */
 export const renderQuestionText = (
   text: string,
-  context: { lifecycle: LifecycleProjection; task: JsonValue },
-): string => {
-  try {
-    return new nunjucks.Template(text, textEnvironment(), "question").render(
-      context,
-    );
-  } catch (error) {
-    throw new Error(
-      `Question text ${JSON.stringify(text)} failed to render: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-};
+  context: LifecycleTextContext,
+): string => renderLifecycleText(text, context, "question text");
 
 /**
  * What a question node hands the graph: the answer contract verbatim, a

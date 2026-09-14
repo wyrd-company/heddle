@@ -178,6 +178,7 @@ export const createLifecycleRuntime = (
           context,
           idempotencyKey: JSON.stringify([pending.id, nodeId]),
           input,
+          nodeId,
           params: effectParams,
         }),
       };
