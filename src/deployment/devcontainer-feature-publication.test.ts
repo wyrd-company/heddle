@@ -15,7 +15,7 @@ import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const featureDirectory = ".devcontainer/features/heddle";
+const featureDirectory = "features/heddle";
 const publishedReference = "ghcr.io/wyrd-company/heddle/heddle:0";
 
 // The Feature's own manifest is its version authority, so assertions follow a
@@ -53,7 +53,7 @@ describe("Heddle devcontainer feature publication", () => {
         },
         {
           detector: "devcontainer-feature",
-          path: ".devcontainer/features/heddle/devcontainer-feature.json",
+          path: "features/heddle/devcontainer-feature.json",
           "release-unit": "heddle-feature",
         },
       ]),
@@ -62,7 +62,7 @@ describe("Heddle devcontainer feature publication", () => {
       { adapter: "npm", file: "package.json", mode: "committed" },
     ]);
     expect(config["release-units"]["heddle-feature"]?.path).toBe(
-      ".devcontainer/features/heddle",
+      "features/heddle",
     );
     expect(config["release-units"]["heddle-feature"]?.projections).toEqual([
       {
@@ -80,14 +80,31 @@ describe("Heddle devcontainer feature publication", () => {
     ).toBe("{id}@{version}");
   });
 
+  it("publishes a public scoped package for the supported Node range", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
+      engines: Record<string, string>;
+      name: string;
+      private?: boolean;
+      publishConfig: Record<string, string>;
+      repository: Record<string, string>;
+    };
+
+    expect(manifest.name).toBe("@wyrd-company/heddle");
+    expect(manifest).not.toHaveProperty("private");
+    expect(manifest.publishConfig).toEqual({ access: "public" });
+    expect(manifest.repository).toEqual({
+      type: "git",
+      url: "git+https://github.com/wyrd-company/heddle.git",
+    });
+    expect(manifest.engines).toEqual({ node: "^24.0.0 || ^26.0.0" });
+  });
+
   it("keeps viewer libraries out of the eight runtime dependencies", async () => {
     const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
       dependencies: Record<string, string>;
       devDependencies: Record<string, string>;
-      private: boolean;
     };
 
-    expect(manifest.private).toBe(true);
     expect(Object.keys(manifest.dependencies).sort()).toEqual([
       "@flowcraft/sqlite-history",
       "@modelcontextprotocol/server",
@@ -137,7 +154,7 @@ describe("Heddle devcontainer feature publication", () => {
       ).rejects.toMatchObject({ code: "ENOENT" });
       await expect(
         readFile(join(stagedFeature, "resolve-package-source.mjs"), "utf8"),
-      ).resolves.toContain("heddle@*");
+      ).resolves.toContain('const packageName = "@wyrd-company/heddle";');
       await expect(
         execute(join(stagedFeature, "verify-feature-source.sh"), [
           stagedFeature,
@@ -252,10 +269,7 @@ describe("Heddle devcontainer feature publication", () => {
 
   it("refuses to replace the checked-in Feature collection", async () => {
     await expect(
-      execute("bash", [
-        "scripts/deployment/stage-feature.sh",
-        ".devcontainer/features",
-      ]),
+      execute("bash", ["scripts/deployment/stage-feature.sh", "features"]),
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining("Refusing to replace source directory"),
@@ -277,7 +291,7 @@ describe("Heddle devcontainer feature publication", () => {
 
     expect(manifest).toMatchObject({
       documentationURL:
-        "https://github.com/wyrd-company/heddle/tree/main/.devcontainer/features/heddle",
+        "https://github.com/wyrd-company/heddle/tree/main/features/heddle",
       id: "heddle",
       version: featureVersion,
     });
@@ -297,6 +311,7 @@ describe("Heddle devcontainer feature publication", () => {
           if: string;
           permissions: Record<string, string>;
           steps: Array<{
+            env?: Record<string, string>;
             run?: string;
             uses?: string;
             with?: Record<string, string>;
@@ -332,20 +347,59 @@ describe("Heddle devcontainer feature publication", () => {
       expect.objectContaining({
         uses: "devcontainers/action@1082abd5d2bf3a11abccba70eef98df068277772",
         with: expect.objectContaining({
-          "base-path-to-features": "./.devcontainer/publish/features",
+          "base-path-to-features": "./.publish/features",
           "devcontainer-cli-version": "0.88.0",
           "publish-features": "true",
         }),
       }),
     );
 
-    const packageAsset = workflow.jobs["publish-package-asset"];
-    expect(packageAsset?.if).toContain("refs/tags/heddle@");
-    expect(packageAsset?.if).not.toContain("heddle-feature@");
-    expect(packageAsset?.permissions).toEqual({ contents: "write" });
-    expect(packageAsset?.steps).toContainEqual(
+    const packagePublish = workflow.jobs["publish-package"];
+    expect(packagePublish?.if).toContain("refs/tags/heddle@");
+    expect(packagePublish?.if).not.toContain("heddle-feature@");
+    expect(packagePublish?.permissions).toEqual({
+      contents: "read",
+      "id-token": "write",
+    });
+    expect(packagePublish?.steps).toContainEqual(
       expect.objectContaining({ run: "npm run build" }),
     );
+    expect(packagePublish?.steps).toContainEqual(
+      expect.objectContaining({
+        uses: expect.stringMatching(/^actions\/setup-node@/u),
+        with: expect.objectContaining({
+          "registry-url": "https://registry.npmjs.org",
+        }),
+      }),
+    );
+    expect(packagePublish?.steps).toContainEqual(
+      expect.objectContaining({
+        run: expect.stringContaining(
+          '[ "${GITHUB_REF_NAME}" = "heddle@${package_version}" ]',
+        ),
+      }),
+    );
+    expect(packagePublish?.steps).toContainEqual(
+      expect.objectContaining({
+        run: expect.stringContaining(
+          '[ "${package_name}" = "@wyrd-company/heddle" ]',
+        ),
+      }),
+    );
+    expect(packagePublish?.steps).toContainEqual(
+      expect.objectContaining({
+        env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" },
+        run: "npm publish --provenance --access public --ignore-scripts",
+      }),
+    );
+    const publishIndex = packagePublish?.steps.findIndex((step) =>
+      step.run?.startsWith("npm publish"),
+    );
+    const verifyIndex = packagePublish?.steps.findIndex((step) =>
+      step.run?.includes("heddle@${package_version}"),
+    );
+    expect(verifyIndex).toBeGreaterThan(-1);
+    expect(publishIndex).toBeGreaterThan(verifyIndex ?? -1);
 
     const pushGuard = (condition: string | undefined) => {
       const namespaces = [
@@ -360,40 +414,35 @@ describe("Heddle devcontainer feature publication", () => {
         reference.startsWith(namespaces[0] ?? "") &&
         reference !== exclusions[0];
     };
-    const publishesPackageAsset = pushGuard(packageAsset?.if);
+    const publishesPackage = pushGuard(packagePublish?.if);
     const publishesFeature = pushGuard(publish?.if);
 
     expect([
       {
-        asset: publishesPackageAsset("refs/tags/heddle@0.0.0"),
+        package: publishesPackage("refs/tags/heddle@0.0.0"),
         feature: publishesFeature("refs/tags/heddle@0.0.0"),
       },
       {
-        asset: publishesPackageAsset("refs/tags/heddle-feature@0.0.0"),
+        package: publishesPackage("refs/tags/heddle-feature@0.0.0"),
         feature: publishesFeature("refs/tags/heddle-feature@0.0.0"),
       },
       {
-        asset: publishesPackageAsset("refs/tags/heddle@0.1.0"),
+        package: publishesPackage("refs/tags/heddle@0.1.0"),
         feature: publishesFeature("refs/tags/heddle@0.1.0"),
       },
       {
-        asset: publishesPackageAsset("refs/tags/heddle-feature@0.1.0"),
+        package: publishesPackage("refs/tags/heddle-feature@0.1.0"),
         feature: publishesFeature("refs/tags/heddle-feature@0.1.0"),
       },
     ]).toEqual([
-      { asset: false, feature: false },
-      { asset: false, feature: false },
-      { asset: true, feature: false },
-      { asset: false, feature: true },
+      { feature: false, package: false },
+      { feature: false, package: false },
+      { feature: false, package: true },
+      { feature: true, package: false },
     ]);
-    expect(packageAsset?.steps).toContainEqual(
-      expect.objectContaining({
-        run: expect.stringContaining('gh release upload "${GITHUB_REF_NAME}"'),
-      }),
-    );
-    expect(await readFile(".github/workflows/cd.yml", "utf8")).not.toContain(
-      "npm publish",
-    );
+    const workflowSource = await readFile(".github/workflows/cd.yml", "utf8");
+    expect(workflowSource).not.toContain("gh release");
+    expect(workflowSource).not.toContain("releases/download");
 
     const ci = parse(await readFile(".github/workflows/ci.yml", "utf8")) as {
       on: { pull_request: unknown; push: { branches: string[] } };

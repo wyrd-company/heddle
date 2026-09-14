@@ -6,7 +6,7 @@ settings:
 discovery:
   managed-paths:
     - detector: devcontainer-feature
-      path: .devcontainer/features/heddle/devcontainer-feature.json
+      path: features/heddle/devcontainer-feature.json
       release-unit: heddle-feature
     - detector: npm-package
       path: package.json
@@ -27,7 +27,7 @@ release-units:
         role: primary
         template: "{id}@{version}"
   heddle-feature:
-    path: .devcontainer/features/heddle
+    path: features/heddle
     projections:
       - adapter: json
         file: devcontainer-feature.json

@@ -39,7 +39,7 @@ build/Release
 
 # Dependency directories
 node_modules/
-/.devcontainer/publish/
+/.publish/
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)

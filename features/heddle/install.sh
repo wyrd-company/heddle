@@ -71,7 +71,30 @@ case "${package_source}" in
         cp -- "${package_source}" "${package_path}" \
             || err "Failed to copy the Heddle package from ${package_source}."
         ;;
-    *) err "Resolved Heddle package source is neither an https URL nor an absolute path: ${package_source}." ;;
+    @wyrd-company/heddle@*)
+        validate_npm_registry "${NPMREGISTRY}"
+        log "Fetching ${package_source} from ${NPMREGISTRY}"
+        pack_log="${package_directory}/npm-pack.log"
+        pack_output="${package_directory}/npm-pack.json"
+        # A user or global npmrc can map the @wyrd-company scope to another
+        # registry, so the scope mapping is set explicitly alongside --registry.
+        if ! env NPM_CONFIG_UPDATE_NOTIFIER=false \
+            npm pack --silent --json --ignore-scripts \
+                --registry "${NPMREGISTRY}" \
+                "--@wyrd-company:registry=${NPMREGISTRY}" \
+                --pack-destination "${package_directory}" \
+                "${package_source}" >"${pack_output}" 2>"${pack_log}"; then
+            cat "${pack_log}" "${pack_output}" >&2
+            err "Heddle package resolution from ${NPMREGISTRY} failed for ${package_source}."
+        fi
+        packed_name="$(jq -er '.[0].filename' "${pack_output}")" || {
+            cat "${pack_output}" >&2
+            err "npm pack did not name the packed Heddle tarball."
+        }
+        mv -- "${package_directory}/${packed_name}" "${package_path}" \
+            || err "npm pack did not produce ${packed_name}."
+        ;;
+    *) err "Resolved Heddle package source is neither an https URL, an absolute path, nor a Heddle package specifier: ${package_source}." ;;
 esac
 
 if [ -n "${PACKAGESHA256}" ]; then
@@ -93,8 +116,8 @@ if ! env \
     cat "${install_log}" >&2
     err "Heddle package dependency installation failed."
 fi
-better_sqlite_directory="${preflight_prefix}/lib/node_modules/heddle/node_modules/better-sqlite3"
-prebuild_install="${preflight_prefix}/lib/node_modules/heddle/node_modules/.bin/prebuild-install"
+better_sqlite_directory="${preflight_prefix}/lib/node_modules/@wyrd-company/heddle/node_modules/better-sqlite3"
+prebuild_install="${preflight_prefix}/lib/node_modules/@wyrd-company/heddle/node_modules/.bin/prebuild-install"
 [ -x "${prebuild_install}" ] && [ -d "${better_sqlite_directory}" ] \
     || err "The Heddle package does not contain the expected better-sqlite3 prebuild installer."
 if ! (cd "${better_sqlite_directory}" && "${prebuild_install}") \

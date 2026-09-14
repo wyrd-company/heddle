@@ -18,8 +18,11 @@ together. Other spike support scripts remain in `scripts/spike`.
 
 ## Operation
 
-The canonical per-workspace scheduler and adapter configuration is documented
-in [Production composition](docs/operators/production-composition.md).
+Heddle is published as the npm package `@wyrd-company/heddle` and as the Dev
+Container Feature `ghcr.io/wyrd-company/heddle/heddle`, whose source is
+`features/heddle/`. The canonical per-workspace scheduler and adapter
+configuration, the command-line installation path, and the Feature contract are
+documented in [Production composition](docs/operators/production-composition.md).
 
 ## Validation
 

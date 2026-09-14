@@ -10,7 +10,7 @@ set -euo pipefail
 repository="$(git rev-parse --show-toplevel)"
 accepted_head="$(git rev-parse HEAD)"
 source_configuration="${repository}/.devcontainer/qualification/devcontainer.json"
-feature_version="$(jq -r '.version' "${repository}/.devcontainer/features/heddle/devcontainer-feature.json")"
+feature_version="$(jq -r '.version' "${repository}/features/heddle/devcontainer-feature.json")"
 feature_major="${feature_version%%.*}"
 feature_minor="${feature_version%.*}"
 published_feature_reference="ghcr.io/wyrd-company/heddle/heddle:${feature_major}"
@@ -30,6 +30,9 @@ t3_mock_error=""
 t3_mock_log=""
 t3_mock_pid=""
 t3_mock_port=""
+npm_registry_log=""
+npm_registry_pid=""
+npm_registry_port=""
 qualification_label="heddle-$(printf '%s' "${accepted_head}" | cut -c1-12)-$$"
 
 remove_owned_container() {
@@ -85,6 +88,10 @@ cleanup() {
         kill "${t3_mock_pid}" 2>/dev/null || true
         wait "${t3_mock_pid}" 2>/dev/null || true
     fi
+    if [ -n "${npm_registry_pid}" ]; then
+        kill "${npm_registry_pid}" 2>/dev/null || true
+        wait "${npm_registry_pid}" 2>/dev/null || true
+    fi
     mapfile -t scratch_containers < <(
         docker ps --all --quiet \
             --filter "label=heddle.qualification=${qualification_label}" \
@@ -114,6 +121,7 @@ cleanup() {
     [ -z "${config_directory}" ] || rm -rf "${config_directory}"
     [ -z "${publication_directory}" ] || rm -rf "${publication_directory}"
     [ -z "${t3_mock_log}" ] || rm -f "${t3_mock_log}"
+    [ -z "${npm_registry_log}" ] || rm -f "${npm_registry_log}"
     [ -z "${t3_mock_error}" ] || rm -f "${t3_mock_error}"
     return "${cleanup_failed}"
 }
@@ -323,8 +331,9 @@ write_configuration() {
     local base_image="$1"
     local package_source="$2"
     local package_digest="$3"
-    local dns_name="$4"
-    local output="$5"
+    local package_version="$4"
+    local dns_name="$5"
+    local output="$6"
 
     jq \
         --arg published "${published_feature_reference}" \
@@ -332,6 +341,8 @@ write_configuration() {
         --arg base_image "${base_image}" \
         --arg package_source "${package_source}" \
         --arg package_digest "${package_digest}" \
+        --arg package_version "${package_version}" \
+        --arg npm_registry "${npm_registry_url}" \
         --arg dns_name "${dns_name}" \
         '.image = $base_image |
          .features |= with_entries(
@@ -339,9 +350,10 @@ write_configuration() {
              .key = $dry_published |
              .value += {
                dnsName: $dns_name,
+               npmRegistry: $npm_registry,
                packageSource: $package_source,
                packageSha256: $package_digest,
-               version: "latest"
+               version: $package_version
              }
            else . end
          )' \
@@ -388,7 +400,7 @@ package_version="$(jq -er '.version' "${repository}/package.json")"
 npm pack --silent \
     --pack-destination "${publication_directory}" \
     "${repository}" >/dev/null
-package_path="${publication_directory}/heddle-${package_version}.tgz"
+package_path="${publication_directory}/wyrd-company-heddle-${package_version}.tgz"
 [ -f "${package_path}" ] || {
     echo "npm pack did not produce ${package_path}." >&2
     exit 1
@@ -400,6 +412,34 @@ grep -qx package/assets/console-viewer/lifecycle.js "${package_contents}" || {
     exit 1
 }
 package_digest="$(sha256sum "${package_path}" | cut -d ' ' -f 1)"
+npm_registry_log="$(mktemp)"
+node "${repository}/scripts/deployment/qualification-npm-registry.mjs" \
+    "${package_path}" "${package_version}" >"${npm_registry_log}" 2>&1 &
+npm_registry_pid="$!"
+for attempt in $(seq 1 100); do
+    npm_registry_port="$(sed -n '1p' "${npm_registry_log}")"
+    if [[ "${npm_registry_port}" =~ ^[0-9]+$ ]]; then break; fi
+    if ! kill -0 "${npm_registry_pid}" 2>/dev/null; then
+        cat "${npm_registry_log}" >&2
+        exit 1
+    fi
+    [ "${attempt}" -lt 100 ] || {
+        echo "The qualification npm registry did not become ready." >&2
+        exit 1
+    }
+    sleep 0.1
+done
+# Feature installation runs inside `docker build`, where devcontainer runArgs
+# such as --add-host do not apply, so the registry is addressed through the
+# default bridge gateway that build steps can reach.
+npm_registry_host="$(
+    docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
+)"
+[[ "${npm_registry_host}" =~ ^[0-9.]+$ ]] || {
+    echo "The Docker bridge gateway address is unavailable: '${npm_registry_host}'." >&2
+    exit 1
+}
+npm_registry_url="http://${npm_registry_host}:${npm_registry_port}"
 feature_collection="${publication_directory}/features"
 "${repository}/scripts/deployment/stage-feature.sh" "${feature_collection}"
 base_context="${publication_directory}/base-image"
@@ -479,6 +519,7 @@ write_configuration \
     "${qualification_base_image}" \
     "https://127.0.0.1:1/missing.tgz" \
     "" \
+    "latest" \
     "" \
     "${configuration}"
 expect_feature_install_failure \
@@ -487,8 +528,26 @@ expect_feature_install_failure \
 
 write_configuration \
     "${qualification_base_image}" \
+    "" \
+    "" \
+    "9.9.9" \
+    "" \
+    "${configuration}"
+expect_feature_install_failure \
+    missing-registry-version \
+    "\\[heddle\\] ERROR: Heddle package resolution from ${npm_registry_url} failed for @wyrd-company/heddle@9\\.9\\.9\\."
+# The registry must have answered; a network failure names the same cause.
+grep -Fq 'No matching version found for @wyrd-company/heddle@9.9.9.' \
+    "${publication_directory}/missing-registry-version.log" || {
+    echo "The missing-registry-version failure did not come from the qualification npm registry." >&2
+    exit 1
+}
+
+write_configuration \
+    "${qualification_base_image}" \
     "/opt/heddle-package.tgz" \
     "$(printf '0%.0s' {1..64})" \
+    "latest" \
     "" \
     "${configuration}"
 expect_feature_install_failure \
@@ -499,16 +558,20 @@ write_configuration \
     "${missing_prebuild_base_image}" \
     "/opt/heddle-package.tgz" \
     "${package_digest}" \
+    "latest" \
     "" \
     "${configuration}"
 expect_feature_install_failure \
     missing-native-prebuild \
     '\[heddle\] ERROR: No matching better-sqlite3 prebuild exists for platform [^ ]+ and Node ABI [0-9]+\.'
 
+# The default install resolves the registry's `latest` dist-tag; the digest
+# binds that registry tarball to the bytes this qualification packed.
 write_configuration \
     "${qualification_base_image}" \
-    "/opt/heddle-package.tgz" \
+    "" \
     "${package_digest}" \
+    "latest" \
     "heddle.localhost" \
     "${configuration}"
 jq -e --arg reference "${dry_published_reference}" \
@@ -521,6 +584,13 @@ printf 'Dry-published %s as %s (%s)\n' \
     "$(jq -r '.heddle.digest' <<<"${publication_result}")"
 up
 
+inside jq -e --arg version "${package_version}" \
+    '.name == "@wyrd-company/heddle" and .version == $version' \
+    /usr/local/lib/node_modules/@wyrd-company/heddle/package.json >/dev/null
+grep -qx "GET /@wyrd-company/heddle/-/heddle-${package_version}.tgz" "${npm_registry_log}" || {
+    echo "The default install did not fetch the Heddle tarball from the qualification npm registry." >&2
+    exit 1
+}
 inside jq -e '(.dependencies | keys | sort) == [
   "@flowcraft/sqlite-history",
   "@modelcontextprotocol/server",
@@ -530,14 +600,14 @@ inside jq -e '(.dependencies | keys | sort) == [
   "nunjucks",
   "yaml",
   "zod"
-]' /usr/local/lib/node_modules/heddle/package.json >/dev/null
+]' /usr/local/lib/node_modules/@wyrd-company/heddle/package.json >/dev/null
 
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
 set -euo pipefail
 test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
 test "$(kanban-md --version)" = "kanban-md version 0.37.0-fork+b9fc380"
 ! command -v python3 >/dev/null 2>&1
-test -f /usr/local/lib/node_modules/heddle/assets/console-viewer/lifecycle.js
+test -f /usr/local/lib/node_modules/@wyrd-company/heddle/assets/console-viewer/lifecycle.js
 for attempt in $(seq 1 100); do
     if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then break; fi
     [ "${attempt}" -lt 100 ] || exit 1
@@ -558,7 +628,7 @@ grep -q "<title>Heddle Console</title>" /tmp/heddle-caddy.html
 
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" \
 node --input-type=module -e '
-import { SqlitePersistence } from "/usr/local/lib/node_modules/heddle/dist/persistence/index.js";
+import { SqlitePersistence } from "/usr/local/lib/node_modules/@wyrd-company/heddle/dist/persistence/index.js";
 const persistence = new SqlitePersistence({ stateDirectory: "/var/lib/heddle" });
 persistence.createInstance(`task-${process.env.HEDDLE_QUALIFICATION_TASK_ID}`, {
   correlationTokens: {},
@@ -592,7 +662,19 @@ remove_owned_container \
     heddle.qualification
 container_id=""
 assert_head
+# The rebuild installs the exact package version; a pinned version must
+# resolve on every build.
+write_configuration \
+    "${qualification_base_image}" \
+    "" \
+    "${package_digest}" \
+    "${package_version}" \
+    "heddle.localhost" \
+    "${configuration}"
 up
+inside jq -e --arg version "${package_version}" \
+    '.name == "@wyrd-company/heddle" and .version == $version' \
+    /usr/local/lib/node_modules/@wyrd-company/heddle/package.json >/dev/null
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
 set -euo pipefail
 for attempt in $(seq 1 100); do
@@ -606,7 +688,7 @@ exit 1
 '
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" \
 node --input-type=module -e '
-import { SqlitePersistence } from "/usr/local/lib/node_modules/heddle/dist/persistence/index.js";
+import { SqlitePersistence } from "/usr/local/lib/node_modules/@wyrd-company/heddle/dist/persistence/index.js";
 const persistence = new SqlitePersistence({ stateDirectory: "/var/lib/heddle" });
 const record = persistence.getInstance(`task-${process.env.HEDDLE_QUALIFICATION_TASK_ID}`);
 if (record?.version !== 1 || record.state.flowcraftContext.awaitingNodeIds?.[0] !== "inspect") {
@@ -623,7 +705,7 @@ prefix=\"\$(mktemp -d /tmp/heddle-t3-install.XXXXXX)\"
 trap 'rm -rf \"\${prefix}\"' EXIT
 npm install --global --no-audit --no-fund --prefix \"\${prefix}\" '${t3_package_source}'
 HEDDLE_EXPECTED_T3_VERSION='${expected_t3}' \\
-HEDDLE_INSTALLED_PACKAGE=/usr/local/lib/node_modules/heddle \\
+HEDDLE_INSTALLED_PACKAGE=/usr/local/lib/node_modules/@wyrd-company/heddle \\
 HEDDLE_T3_BINARY=\"\${prefix}/bin/t3\" \\
 node scripts/deployment/qualify-pinned-t3.mjs
 "

@@ -517,7 +517,7 @@ describe("deployed configuration directory", () => {
   it("keeps operator and Feature configuration guidance on the deployed contract", async () => {
     const [operatorGuide, featureGuide] = await Promise.all([
       readFile("docs/operators/production-composition.md", "utf8"),
-      readFile(".devcontainer/features/heddle/README.md", "utf8"),
+      readFile("features/heddle/README.md", "utf8"),
     ]);
 
     for (const guide of [operatorGuide, featureGuide]) {

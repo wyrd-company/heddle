@@ -22,7 +22,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-const featureDirectory = ".devcontainer/features/heddle";
+const featureDirectory = "features/heddle";
 const execute = promisify(execFile);
 
 describe("Heddle devcontainer feature", () => {
@@ -53,6 +53,7 @@ describe("Heddle devcontainer feature", () => {
       version: { default: "latest" },
       packageSource: { default: "" },
       packageSha256: { default: "" },
+      npmRegistry: { default: "https://registry.npmjs.org" },
       configDirectory: { default: "/home/vscode/.heddle" },
       dnsName: { default: "" },
     });
@@ -75,11 +76,21 @@ describe("Heddle devcontainer feature", () => {
       '"$(dirname "$0")/verify-feature-source.sh" "$(dirname "$0")"',
     );
     expect(installer).not.toContain("heddle-source");
-    expect(installer).not.toMatch(/npm (?:ci|run|pack)\b/u);
+    expect(installer).not.toMatch(/npm (?:ci|run)\b/u);
+    expect(installer).not.toMatch(/npm pack[^\n]*"\$\{repository\}"/u);
     expect(installer).not.toContain(
       'packages=("$(dirname "$0")"/heddle-*.tgz)',
     );
     expect(installer).toContain("--allow-scripts=better-sqlite3");
+    expect(installer).toContain('--registry "${NPMREGISTRY}"');
+    expect(installer).toContain('"--@wyrd-company:registry=${NPMREGISTRY}"');
+    expect(installer).toContain("npm pack --silent --json --ignore-scripts");
+    expect(installer).toContain(
+      "Heddle package resolution from ${NPMREGISTRY} failed for ${package_source}.",
+    );
+    expect(installer).toContain(
+      "lib/node_modules/@wyrd-company/heddle/node_modules/better-sqlite3",
+    );
     const finalInstall = installer.slice(
       installer.indexOf('log "Installing the prebuilt Heddle package"'),
     );
@@ -238,7 +249,7 @@ describe("Heddle devcontainer feature", () => {
     expect(qualification).toContain("registerWorkflowMcpProviderSession");
     expect(qualification).toContain('t3Binary === "/home/vscode/.t3"');
     expect(qualification).toContain(
-      'installedPackage !== "/usr/local/lib/node_modules/heddle"',
+      'installedPackage !== "/usr/local/lib/node_modules/@wyrd-company/heddle"',
     );
     expect(qualification).toContain("port === 3773");
     expect(qualification).toContain("dirname(process.execPath)");
@@ -251,7 +262,7 @@ describe("Heddle devcontainer feature", () => {
       'chmod 0600 "${config_directory}/config.yml"',
     );
     expect(featureQualification).toContain(
-      'feature_version="$(jq -r \'.version\' "${repository}/.devcontainer/features/heddle/devcontainer-feature.json")"',
+      'feature_version="$(jq -r \'.version\' "${repository}/features/heddle/devcontainer-feature.json")"',
     );
     expect(featureQualification).toContain(
       'feature_major="${feature_version%%.*}"',
@@ -268,49 +279,51 @@ describe("Heddle devcontainer feature", () => {
       '    "/opt/heddle-package.tgz" \\\n    "${package_digest}"',
     );
     expect(featureQualification).toContain("packageSha256: $package_digest");
-    expect(featureQualification).toContain("! command -v python3");
+    expect(featureQualification).toContain("npmRegistry: $npm_registry,");
+    expect(featureQualification).toContain("version: $package_version");
     expect(featureQualification).toContain(
-      "package/assets/console-viewer/lifecycle.js",
+      'npm_registry_url="http://${npm_registry_host}:${npm_registry_port}"',
     );
     expect(featureQualification).toContain(
-      'HEDDLE_QUALIFICATION_CONFIG="${config_directory}"',
-    );
-    expect(
-      featureQualification.match(/DOCKER_CONFIG="\$\{docker_config\}"/g),
-    ).toHaveLength(3);
-    expect(featureQualification).toContain(
-      "expect_feature_install_failure \\\n    download-failure",
+      "docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'",
     );
     expect(featureQualification).toContain(
-      "expect_feature_install_failure \\\n    digest-mismatch",
+      "grep -Fq 'No matching version found for @wyrd-company/heddle@9.9.9.'",
     );
     expect(featureQualification).toContain(
-      "expect_feature_install_failure \\\n    missing-native-prebuild",
-    );
-    expect(featureQualification).toContain("remove_owned_container() {");
-    expect(featureQualification).toContain(
-      "Refusing to remove container ${full_id}",
+      "scripts/deployment/qualification-npm-registry.mjs",
     );
     expect(featureQualification).toContain(
-      "Removing verified qualification container %s label=%s=%s",
+      "expect_feature_install_failure \\\n    missing-registry-version",
     );
     expect(featureQualification).toContain(
-      "persistence.writeReconcilerRuntime({",
+      "failed for @wyrd-company/heddle@9\\\\.9\\\\.9",
     );
     expect(featureQualification).toContain(
-      'blueprintPath: "blueprints/qualification.json",',
-    );
-    expect(featureQualification).toContain("pendingTransition: null,");
-    expect(featureQualification).toContain(
-      'stageId: "inspect",\n  state: "waiting",',
+      "'.name == \"@wyrd-company/heddle\" and .version == $version'",
     );
     expect(
       featureQualification.match(
-        /--filter "label=heddle\.qualification=\$\{qualification_label\}"/g,
+        /'\.name == "@wyrd-company\/heddle" and \.version == \$version'/g,
       ),
     ).toHaveLength(2);
-    expect(qualification).toContain(
-      "dist/control-plane/t3-control-plane-client.js",
+    expect(featureQualification).toContain(
+      'grep -qx "GET /@wyrd-company/heddle/-/heddle-${package_version}.tgz" "${npm_registry_log}"',
+    );
+    const latestInstall = featureQualification.indexOf(
+      '    "" \\\n    "${package_digest}" \\\n    "latest" \\\n    "heddle.localhost"',
+    );
+    const exactInstall = featureQualification.indexOf(
+      '    "" \\\n    "${package_digest}" \\\n    "${package_version}" \\\n    "heddle.localhost"',
+    );
+    expect(latestInstall).toBeGreaterThan(-1);
+    expect(exactInstall).toBeGreaterThan(latestInstall);
+    const qualificationConfiguration = JSON.parse(
+      await readFile(".devcontainer/qualification/devcontainer.json", "utf8"),
+    ) as { runArgs: string[] };
+    // Feature installation runs in docker build, where runArgs do not apply.
+    expect(qualificationConfiguration.runArgs).not.toContain(
+      "npm.qualification:host-gateway",
     );
   });
 
@@ -453,6 +466,61 @@ describe("Heddle devcontainer feature", () => {
     const { stdout } = await execute("bash", ["-c", script]);
 
     expect(stdout).toBe("0.1.0");
+  });
+
+  it("rejects an npm registry that carries credentials or is not http", async () => {
+    const validate = async (registry: string) =>
+      execute("bash", [
+        "-c",
+        [
+          "set -euo pipefail",
+          `source ${featureDirectory}/common.sh`,
+          'validate_npm_registry "$1"',
+          'printf "accepted"',
+        ].join("\n"),
+        "validate",
+        registry,
+      ]);
+
+    for (const registry of [
+      "https://registry.npmjs.org",
+      "http://172.17.0.1:4873",
+      "https://npm.example.invalid/scoped/",
+    ]) {
+      await expect(validate(registry)).resolves.toMatchObject({
+        stdout: "accepted",
+      });
+    }
+    for (const registry of [
+      "https://user:secret@npm.example.invalid/",
+      "http://token@127.0.0.1:4873",
+    ]) {
+      await expect(validate(registry)).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining(
+          "npmRegistry must not contain credentials",
+        ),
+      });
+      await expect(validate(registry)).rejects.not.toMatchObject({
+        stderr: expect.stringContaining("secret"),
+      });
+    }
+    for (const registry of [
+      "ftp://npm.example.invalid/",
+      "registry.npmjs.org",
+      "https://",
+    ]) {
+      await expect(validate(registry)).rejects.toMatchObject({ code: 1 });
+    }
+    const installer = await readFile(`${featureDirectory}/install.sh`, "utf8");
+    const validation = installer.indexOf(
+      'validate_npm_registry "${NPMREGISTRY}"',
+    );
+    const firstUse = installer.indexOf(
+      'log "Fetching ${package_source} from ${NPMREGISTRY}"',
+    );
+    expect(validation).toBeGreaterThan(-1);
+    expect(firstUse).toBeGreaterThan(validation);
   });
 
   it("snapshots the version option before sourcing any helper", async () => {
