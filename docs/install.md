@@ -36,8 +36,10 @@ Reference the Feature from `devcontainer.json`:
 - A kanban-md board directory and a clone of the organization blueprint
   repository under the configuration directory.
 - A T3Code control plane with at least one configured provider.
-- `git`, `gh`, `gitpr`, and `kanban-md` on the service user's `PATH`; the
-  mechanical delivery steps invoke them without a shell.
+- `git`, `gh`, `gitpr`, and `kanban-md` on the service user's `PATH`. The
+  board adapter invokes `kanban-md` on every scheduler pass; the mechanical
+  delivery steps invoke `git` and `gitpr`; agent sessions invoke `gh`. None
+  of them runs through a shell.
 
 The complete operator configuration — the workspace `config.yml`, provider
 aliases and pacing, incident admission, and the blueprint repository contract —

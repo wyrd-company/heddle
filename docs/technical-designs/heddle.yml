@@ -31,8 +31,8 @@ proposed-design:
     nodes and edges interpreted by the flowcraft runtime. Judgment
     stages are wait nodes; an instance parked at a wait node costs
     nothing and persists indefinitely. Resumes route through condition
-    edges keyed on the disposition supplied by the resuming caller
-    (for review: approve, reject, escalate), and cycle re-entry nodes
+    edges keyed on the disposition supplied by the resuming caller,
+    and cycle re-entry nodes
     declare `joinStrategy: any` so loops such as review → remediate →
     review traverse repeatedly. After every resume, Heddle asserts that
     the instance landed in an expected state and raises attention when
@@ -545,19 +545,14 @@ proposed-design:
     `path`, and `description`. A missing or malformed pinned skill fails with
     the same stable lifecycle-resolution attention before any T3 effect.
     Task front-matter `skills` remains a per-task display override; blueprint
-    stage skills provide the generic journey declaration. Standard handoffs receive completed
-    wait-stage outputs reconstructed in recorded lifecycle execution order.
-    Remediation receives the latest canonical review output through the
-    handoff assembler, which retains findings and excludes transcript data.
-    When the current transition's merge node detects review-basis drift or a
-    reviewed source that does not contain its target, the assembler selects
-    that validated mechanical cause instead. The cause distinguishes those
-    conditions and names the snapshot, source and target branches, reviewed
-    source and base heads, and current source and target heads. Selection reads
-    only the execution that entered the current remediation occurrence, so an
-    earlier loop's mechanical output cannot replace later review findings.
-    The source-behind cause is valid only while current heads equal the reviewed
-    heads; movement during classification becomes review-basis drift.
+    stage skills provide the generic journey declaration. Every handoff
+    receives completed wait-stage outputs reconstructed in recorded lifecycle
+    execution order. A merge's integration cause distinguishes review-basis
+    drift from a reviewed source that does not contain its target and names
+    the snapshot, source and target branches, reviewed source and base heads,
+    and current source and target heads; the source-behind cause is valid only
+    while current heads equal the reviewed heads, and movement during
+    classification becomes review-basis drift.
     The rendered document is stored with the session handoff before any T3
     effect. Retry and restart replay those exact bytes. After T3 accepts the
     first turn, Heddle appends a `session:activated` event containing the exact
@@ -612,9 +607,10 @@ proposed-design:
     `advance` schema prints the contract; the MCP boundary validates the
     output against it and reports every violation before recording the
     lifecycle transition. A disposition without a contract accepts an
-    omitted output or any JSON object. The catalog binds its review
-    rejections to `review-findings`, so a remediation stage always finds
-    findings in its entry; a merge that routes to remediation supplies a
+    omitted output or any JSON object. Which dispositions carry a contract
+    is the catalog's choice: the organization catalog binds its review
+    rejections to `review-findings`, so its remediation stage always finds
+    findings in its entry, and a merge that routes to remediation supplies a
     typed integration cause as that entry instead.
     A handoff also carries persisted outputs from completed mechanical
     nodes between the preceding wait stage and the activating wait stage. The
@@ -1176,10 +1172,12 @@ proposed-design:
     reviewed source does not contain its reviewed target, routes the instance
     back to remediation with a distinct typed cause and the exact reviewed and
     current basis. The latter requires a common history; unrelated histories
-    remain a visible mechanical failure. The pinned remediation handoff directs
-    the agent to rebase the source onto that exact current target without a
-    merge commit, validate, commit only task-scoped changes, and prove target
-    ancestry and a clean worktree before advancing. A later target movement
+    remain a visible mechanical failure. The catalog's pinned remediation
+    handoff template directs the agent to rebase the source onto that exact
+    current target without a merge commit, validate, commit only task-scoped
+    changes, and prove target ancestry and a clean worktree before advancing;
+    Heddle supplies the cause and the template decides the instruction. A later
+    target movement
     repeats the drift loop under the same exact-basis checks. Reviewed history
     must contain no merge commit.
     A mechanical failure with no valid integration cause — an unrelated

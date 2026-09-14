@@ -709,9 +709,11 @@ task validate HEDDLE_REPOSITORY_ROOT=/absolute/path/to/heddle
 
 Heddle owns the lifecycle blueprint schema and interpreter. The organization
 repository owns authored blueprint artifacts together with the
-`handoff-templates/` and `todo-templates/` artifacts they bind. Validation
-fails when a node's pinned handoff-template commit and path or named todo
-template does not resolve in the repository being validated.
+`handoff-templates/`, `todo-templates/`, and `output-contracts/<id>.json`
+artifacts they bind. Validation fails when a node's pinned handoff-template
+commit and path or named todo template does not resolve in the repository
+being validated, or when a bound output contract is missing or is not an
+object JSON Schema.
 
 Author an ad-hoc task with its repository scope:
 
@@ -859,9 +861,9 @@ Use `advance` to disposition the current stage. The operation is idempotent for 
 Use your harness question tool when you need an answer. Heddle routes the question set to your parent, an adjudicator, or the operator. Answer assigned questions with Heddle's `answer` tool: every question ID needs selectedOptions or text, plus reasoning. Finish the work or advance; do not stop while you owe an answer.
 ```
 
-Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
-pinned lifecycle blueprint. Each wait node also declares a `handoff-template`
-with a repository-relative Markdown path and exact Git commit SHA. Heddle reads
+Each agent wait node in the pinned lifecycle blueprint declares a
+`handoff-template` with a repository-relative Markdown path and exact Git
+commit SHA; that path is the stage's only handoff declaration. Heddle reads
 the entry file and `handoff-templates/includes/` files from that commit in the
 worker blueprint checkout, retains the commit under
 `refs/heddle/handoff-templates/<commit-sha>`, and does not read mutable
@@ -881,24 +883,23 @@ stage carries the names. Templates resolve one with the `skill(name)` global,
 which returns `{name,path,description}` with a repository-relative path. This
 blueprint declaration supplies generic stage skills. A task's front-matter
 `skills` map remains an independent per-task override.
-Heddle reconstructs completed wait-stage outputs in
-recorded lifecycle execution order. A standard stage receives those prior
-outputs plus the persisted outputs of completed mechanical nodes on the path
-from the preceding wait stage, including the review snapshot identity. A
-remediation stage receives either the current review findings or a validated
-review integration cause from the mechanical merge execution that entered that
-remediation occurrence. The cause distinguishes review-basis drift from a
-reviewed source that did not contain its target. It contains the snapshot,
-source and target branches, reviewed source and base heads, and current source
-and target heads. It directs the agent to rebase onto the named exact target
-without a merge commit. Review transcript data is not dispatched. Missing or
-malformed legacy cause data keeps the existing missing-findings attention and
-empty list.
+Heddle reconstructs completed wait-stage outputs in recorded lifecycle
+execution order. Every stage receives those prior outputs, the persisted
+outputs of completed mechanical nodes on the path from the preceding wait
+stage (including the review snapshot identity), and `handoff.stage.entry`: the
+node whose edge activated the stage and that node's complete output. A stage
+entered from a review rejection reads the reviewer's findings there; a stage
+entered from a merge reads the merge's typed integration cause, which
+distinguishes review-basis drift from a reviewed source that did not contain
+its target and names the snapshot, source and target branches, reviewed source
+and base heads, and current source and target heads. What the stage sees of
+its entry is the template's choice.
 
 The review snapshot identity is a gitpr schema-2 PR ID plus the exact source
 and base heads captured for review. The PR remains in `state: open` while review
-events are recorded. A review-stage approve disposition authorizes Heddle to
-record one `verdict: accepted` event for that captured basis. When the accepted
+events are recorded. The disposition that reaches a merge node — any
+disposition of a wait node that follows a review-snapshot node — authorizes
+Heddle to record one `verdict: accepted` event for that captured basis. When the accepted
 source and base heads are equal, Heddle closes the PR as integrated with the
 base branch and exact head as closure evidence; it does not invoke gitpr's
 strict fast-forward merge. Otherwise Heddle invokes gitpr's separate merge
@@ -912,23 +913,23 @@ exact reviewed head.
 
 Handoff templates are schema'd Markdown artifacts in `handoff-templates/`.
 Their YAML front matter declares the Heddle template schema, relationship,
-format version, and either `standard` or `remediation`. Template bodies use
+and format version. Template bodies use
 strict Nunjucks variables. Use `stableJson` for structured values and do not
 use `random` or `date`; Heddle disables both filters and compares two renders.
 Templates can include pinned partials with the full repository-relative form
 `{% include "handoff-templates/includes/<path>" %}`. An include path cannot
 escape that directory. Nunjucks `extends`, `import`, and `from ... import`
 directives are not supported in entry files or included files.
-The standard context supplies `task` and `handoff`, including the normalized
-task contract, prior outputs, stage skill names, skill pointer, and persisted todo lists. The
-remediation context supplies the same roots with canonical review findings and
-the typed remediation cause in the handoff. Raw board front matter is available only as display input under
-`task`; normalized `handoff.taskContract` remains the machine authority.
+One render context supplies three roots: `handoff` (the normalized task
+contract, prior outputs, the stage entry, stage skill names, skill pointer, and
+persisted todo lists), `lifecycle` (the projection the guards read), and
+`task` (the board task's raw front matter as display input only). Normalized
+`handoff.taskContract` remains the machine authority.
 
 Before dispatch, Heddle resolves the effective system prompt, prepends it to
 the rendered handoff, and durably stores both the prompt and exact composed
 Markdown document.
-A missing variable, invalid template or pinned skill, pin or kind disagreement, invalid
+A missing variable, invalid template or pinned skill, pin disagreement, invalid
 identity, or nondeterministic render raises one stable
 `handoff-render-failed` lifecycle-resolution attention entry. No MCP
 registration, thread, or first-turn effect occurs. After T3 accepts the first turn, Heddle
@@ -1294,9 +1295,10 @@ delivery or an `incident-report-undelivered` attention. The latter uses the
 existing durable notification path and does not fail an otherwise repaired
 incident.
 
-Finalization accepts only a fresh `conditionState: cleared` observation. It then
-resolves the source attention with the incident identity as justification and
-retains the attention row and terminal incident occurrence for audit. Resolution
+What finalization accepts is the blueprint's `incident-completion` output
+contract, and the blueprint's `resolve-attention` node resolves the source
+attention with the lifecycle identity as justification; Heddle retains the
+attention row and terminal incident occurrence for audit. Resolution
 atomically removes the source admission record, so recurrence starts a fresh
 failure-count and breaker episode. If that breaker opens, Heddle allocates the
 next occurrence and new lifecycle identity; prior sessions, actions, effects,

@@ -131,8 +131,9 @@ When this file does not settle a question, decide with these.
   with its parent when it has one and with a fresh adjudication when it does
   not. The answer replies to the original harness request on its recorded thread.
 - **guard** is the JSONata condition on an edge, evaluated over the source
-  node's result and the lifecycle projection. Exactly one edge out of a
-  finished node must fire.
+  node's result and the lifecycle projection. When a wait or question node
+  resumes, exactly one edge out of it must fire; a mechanical node's edges
+  follow Flowcraft fan-out.
 - **instance** is one running lifecycle bound to one task.
 - **lifecycle projection** is the `lifecycle` object Heddle writes into the
   graph context — blueprint metadata, node outputs, visit counts, the current
