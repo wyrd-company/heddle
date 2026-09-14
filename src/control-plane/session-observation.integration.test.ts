@@ -336,6 +336,7 @@ describe.skipIf(!t3Binary)(
       persistence.writeSessionRuntime({
         activation: 1,
         instanceId: target.instanceId,
+        kind: "stage",
         stageId: "mix",
         sessionKey: target.sessionKey,
         threadId: target.threadId,

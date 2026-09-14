@@ -222,17 +222,23 @@ export interface ResolvedSessionBinding extends Record<string, JsonValue> {
   threadId: string;
 }
 
-export interface SessionRuntimeRecord {
+interface SessionRuntimeRecordBase {
   activation: number;
   binding: ResolvedSessionBinding;
   bindingState?: "provisional";
   instanceId: string;
+  kind: "adjudication" | "stage";
   projectId?: string;
   repositoryName?: string;
   sessionKey: string;
-  stageId: string;
   threadId: string;
 }
+
+export type SessionRuntimeRecord = SessionRuntimeRecordBase &
+  (
+    | { kind: "stage"; stageId: string }
+    | { kind: "adjudication"; stageId?: never }
+  );
 
 export interface EpicProjectRecord {
   createCommandId: string;

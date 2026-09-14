@@ -41,11 +41,12 @@ describe("scoped adjudication sanctioned approvals", () => {
     sessionKey,
   };
 
-  const runtimeRow = (stageId: string) => ({
+  const runtimeRow = (kind: "adjudication" | "stage", stageId?: string) => ({
     binding: { modelSlug: "model-under-test" },
     instanceId,
+    kind,
     sessionKey,
-    stageId,
+    ...(stageId === undefined ? {} : { stageId }),
     threadId,
   });
 
@@ -112,6 +113,7 @@ describe("scoped adjudication sanctioned approvals", () => {
     hasPendingUserInput?: boolean;
     onResponseAttempt?: (events: readonly PersistedEvent[]) => void;
     onRespond?: (requestId: string) => unknown;
+    runtimeKind?: "adjudication" | "stage";
     stageId: string;
   }) => {
     let clock = now;
@@ -136,7 +138,14 @@ describe("scoped adjudication sanctioned approvals", () => {
         return event;
       },
       getInstance: () => ({ state: { handoffs: input.handoffs } }),
-      listSessionRuntime: () => [runtimeRow(input.stageId)],
+      listSessionRuntime: () => [
+        (input.runtimeKind ??
+          (input.handoffs.includes(adjudicationHandoff)
+            ? "adjudication"
+            : "stage")) === "adjudication"
+          ? runtimeRow("adjudication")
+          : runtimeRow("stage", input.stageId),
+      ],
       replayEvents: () => [...events],
     } as unknown as SqlitePersistence;
     const construct = () =>
@@ -182,7 +191,8 @@ describe("scoped adjudication sanctioned approvals", () => {
     // a stored adjudication handoff, which Heddle writes itself, is authority.
     const { adjudication, approvals } = build({
       activities: [sanctionedRequest("request-impersonated")],
-      handoffs: [],
+      handoffs: [adjudicationHandoff],
+      runtimeKind: "stage",
       stageId: "adjudication",
     });
 

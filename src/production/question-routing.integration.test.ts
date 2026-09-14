@@ -281,7 +281,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       expect(composition.attention.list()).toEqual([]);
       const adjudication = composition.persistence
         .listSessionRuntime()
-        .find((item) => item.stageId === "adjudication")!;
+        .find((item) => item.kind === "adjudication")!;
       await expect(
         new ProductionScopedAdjudication({
           persistence: composition.persistence,
@@ -358,7 +358,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       expect(
         composition.persistence
           .listSessionRuntime()
-          .filter((x) => x.stageId === "adjudication"),
+          .filter((x) => x.kind === "adjudication"),
       ).toHaveLength(1),
     );
     await composition.scheduler.trigger();
@@ -378,7 +378,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
     });
     const adjudication = composition.persistence
       .listSessionRuntime()
-      .find((x) => x.stageId === "adjudication")!;
+      .find((x) => x.kind === "adjudication")!;
     const binding = await resolver.resolve(
       composition.persistence.getInstance(runtime.instanceId)!.state
         .correlationTokens[adjudication.sessionKey]!,
@@ -687,7 +687,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       await composition.escalation.replayPendingRoutes();
       const adjudication = composition.persistence
         .listSessionRuntime()
-        .find((item) => item.stageId === "adjudication")!;
+        .find((item) => item.kind === "adjudication")!;
       if (failure === "session error") {
         const getShell = t3.getShell.bind(t3);
         t3.getShell = async () => {
@@ -755,7 +755,7 @@ describe("production harness question routing", { timeout: 30_000 }, () => {
       await composition.escalation.replayPendingRoutes();
       const adjudication = composition.persistence
         .listSessionRuntime()
-        .find((item) => item.stageId === "adjudication")!;
+        .find((item) => item.kind === "adjudication")!;
       expect(adjudication).toBeDefined();
       if (cancellation === "asker absent") t3.threads.delete(runtime.threadId);
       else

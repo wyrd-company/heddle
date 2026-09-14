@@ -1826,7 +1826,7 @@ export class SqlitePersistence {
       .prepare(
         `SELECT activation, binding_json AS bindingJson, binding_state AS bindingState,
                 instance_id AS instanceId, project_id AS projectId,
-                repository_name AS repositoryName, session_key AS sessionKey,
+                kind, repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
          ORDER BY instance_id, stage_id, activation`,
@@ -1843,7 +1843,14 @@ export class SqlitePersistence {
       }
     >;
     return rows.map(
-      ({ bindingJson, bindingState, projectId, repositoryName, ...row }) => {
+      ({
+        bindingJson,
+        bindingState,
+        projectId,
+        repositoryName,
+        stageId,
+        ...row
+      }) => {
         if (bindingJson === null) {
           throw new Error(
             `Session '${row.sessionKey}' predates resolved session bindings; clear the pre-release state directory before restart`,
@@ -1854,13 +1861,20 @@ export class SqlitePersistence {
           row.sessionKey,
           row.threadId,
         );
+        if (
+          (row.kind === "stage" && stageId === null) ||
+          (row.kind === "adjudication" && stageId !== null)
+        ) {
+          throw new Error(`Session '${row.sessionKey}' has an invalid kind`);
+        }
         return {
           ...row,
           binding,
           ...(bindingState === "provisional" ? { bindingState } : {}),
           ...(projectId === null ? {} : { projectId }),
           ...(repositoryName === null ? {} : { repositoryName }),
-        };
+          ...(stageId === null ? {} : { stageId }),
+        } as SessionRuntimeRecord;
       },
     );
   }
@@ -1869,13 +1883,14 @@ export class SqlitePersistence {
     if (!Number.isSafeInteger(record.activation) || record.activation < 1) {
       throw new TypeError("activation must be a positive safe integer");
     }
-    for (const name of [
-      "instanceId",
-      "sessionKey",
-      "stageId",
-      "threadId",
-    ] as const) {
+    if (record.kind !== "stage" && record.kind !== "adjudication") {
+      throw new TypeError("kind must be 'stage' or 'adjudication'");
+    }
+    for (const name of ["instanceId", "sessionKey", "threadId"] as const) {
       this.assertStableId(name, record[name]);
+    }
+    if (record.kind === "stage") {
+      this.assertStableId("stageId", record.stageId);
     }
     if (record.projectId !== undefined) {
       this.assertStableId("projectId", record.projectId);
@@ -1892,7 +1907,7 @@ export class SqlitePersistence {
       .prepare(
         `SELECT activation, binding_json AS bindingJson, binding_state AS bindingState,
                 instance_id AS instanceId, project_id AS projectId,
-                repository_name AS repositoryName, session_key AS sessionKey,
+                kind, repository_name AS repositoryName, session_key AS sessionKey,
                 stage_id AS stageId, thread_id AS threadId
          FROM heddle_session_runtime
          WHERE session_key = ?`,
@@ -1911,8 +1926,8 @@ export class SqlitePersistence {
     const prior =
       priorRow === undefined
         ? undefined
-        : {
-            ...priorRow,
+        : ({
+            activation: priorRow.activation,
             binding:
               priorRow.bindingJson === null
                 ? undefined
@@ -1921,18 +1936,25 @@ export class SqlitePersistence {
                     priorRow.sessionKey,
                     priorRow.threadId,
                   ),
+            bindingState: priorRow.bindingState,
+            instanceId: priorRow.instanceId,
+            kind: priorRow.kind,
             ...(priorRow.projectId === null
               ? { projectId: undefined }
               : { projectId: priorRow.projectId }),
             ...(priorRow.repositoryName === null
               ? { repositoryName: undefined }
               : { repositoryName: priorRow.repositoryName }),
-          };
+            sessionKey: priorRow.sessionKey,
+            ...(priorRow.stageId === null ? {} : { stageId: priorRow.stageId }),
+            threadId: priorRow.threadId,
+          } as SessionRuntimeRecord);
     if (prior !== undefined) {
       const fixedIdentityChanged =
         prior.activation !== record.activation ||
         prior.instanceId !== record.instanceId ||
         prior.sessionKey !== record.sessionKey ||
+        prior.kind !== record.kind ||
         prior.stageId !== record.stageId;
       const bindingChanged =
         prior.binding === undefined ||
@@ -1996,9 +2018,9 @@ export class SqlitePersistence {
     this.database
       .prepare(
         `INSERT INTO heddle_session_runtime
-           (session_key, activation, binding_json, binding_state, instance_id, project_id, repository_name,
+           (session_key, activation, binding_json, binding_state, instance_id, kind, project_id, repository_name,
             stage_id, thread_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.sessionKey,
@@ -2006,9 +2028,10 @@ export class SqlitePersistence {
         serialize(record.binding),
         record.bindingState ?? "bound",
         record.instanceId,
+        record.kind,
         record.projectId ?? null,
         record.repositoryName ?? null,
-        record.stageId,
+        record.stageId ?? null,
         record.threadId,
       );
   }

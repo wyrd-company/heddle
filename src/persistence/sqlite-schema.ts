@@ -32,6 +32,27 @@ const incidentRuntimeCodeIndex = `
     ON heddle_incident_runtime(code, created_at);
 `;
 
+const sessionRuntimeTable = `
+  CREATE TABLE IF NOT EXISTS heddle_session_runtime (
+    session_key TEXT PRIMARY KEY,
+    activation INTEGER NOT NULL CHECK (activation > 0),
+    binding_json TEXT,
+    binding_state TEXT NOT NULL DEFAULT 'bound' CHECK (binding_state IN ('bound', 'provisional')),
+    instance_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('stage', 'adjudication')),
+    project_id TEXT,
+    repository_name TEXT,
+    stage_id TEXT,
+    thread_id TEXT NOT NULL UNIQUE,
+    CHECK ((kind = 'stage' AND stage_id IS NOT NULL) OR (kind <> 'stage' AND stage_id IS NULL))
+  );
+`;
+
+const sessionRuntimeOccurrenceIndex = `
+  CREATE UNIQUE INDEX IF NOT EXISTS heddle_session_runtime_occurrence
+    ON heddle_session_runtime(instance_id, kind, COALESCE(stage_id, ''), activation);
+`;
+
 export const initializePersistenceSchema = (
   database: Database.Database,
 ): void => {
@@ -93,18 +114,7 @@ export const initializePersistenceSchema = (
       state TEXT NOT NULL CHECK (state IN ('closed', 'open'))
     );
 
-    CREATE TABLE IF NOT EXISTS heddle_session_runtime (
-      session_key TEXT PRIMARY KEY,
-      activation INTEGER NOT NULL CHECK (activation > 0),
-      binding_json TEXT NOT NULL,
-      binding_state TEXT NOT NULL DEFAULT 'bound' CHECK (binding_state IN ('bound', 'provisional')),
-      instance_id TEXT NOT NULL,
-      project_id TEXT,
-      repository_name TEXT,
-      stage_id TEXT NOT NULL,
-      thread_id TEXT NOT NULL UNIQUE,
-      UNIQUE(instance_id, stage_id, activation)
-    );
+    ${sessionRuntimeTable}
 
     CREATE TABLE IF NOT EXISTS heddle_completed_effects (
       effect_kind TEXT NOT NULL,
@@ -371,6 +381,39 @@ export const initializePersistenceSchema = (
       "ALTER TABLE heddle_session_runtime ADD COLUMN binding_state TEXT NOT NULL DEFAULT 'bound' CHECK (binding_state IN ('bound', 'provisional'))",
     );
   }
+  if (!sessionColumns.some(({ name }) => name === "kind")) {
+    database.transaction(() => {
+      database.exec(`
+        ALTER TABLE heddle_session_runtime
+          RENAME TO heddle_session_runtime_without_kind;
+        DROP INDEX IF EXISTS heddle_session_runtime_occurrence;
+        ${sessionRuntimeTable}
+        INSERT INTO heddle_session_runtime
+          (session_key, activation, binding_json, binding_state, instance_id,
+           kind, project_id, repository_name, stage_id, thread_id)
+        WITH classified AS (
+          SELECT old.*,
+            old.stage_id = 'adjudication' AND EXISTS (
+              SELECT 1
+              FROM heddle_instances AS instance,
+                   json_each(instance.state_json, '$.handoffs') AS handoff
+              WHERE instance.instance_id = old.instance_id
+                AND json_extract(handoff.value, '$.kind') = 'adjudication-handoff'
+                AND json_extract(handoff.value, '$.sessionKey') = old.session_key
+            ) AS is_adjudication
+          FROM heddle_session_runtime_without_kind AS old
+        )
+        SELECT session_key, activation, binding_json, binding_state, instance_id,
+               CASE WHEN is_adjudication THEN 'adjudication' ELSE 'stage' END,
+               project_id, repository_name,
+               CASE WHEN is_adjudication THEN NULL ELSE stage_id END,
+               thread_id
+        FROM classified;
+        DROP TABLE heddle_session_runtime_without_kind;
+      `);
+    })();
+  }
+  database.exec(sessionRuntimeOccurrenceIndex);
   const epicProjectColumns = database
     .prepare("PRAGMA table_info(heddle_epic_projects)")
     .all() as Array<{ name: string }>;

@@ -88,6 +88,7 @@ describe("SqlitePersistence", () => {
       activation: 1,
       binding: current,
       instanceId: "instance-one",
+      kind: "stage",
       sessionKey: current.sessionKey,
       stageId: "implement",
       threadId: current.threadId,
@@ -112,6 +113,7 @@ describe("SqlitePersistence", () => {
       activation: 1,
       binding: current,
       instanceId: "instance-one",
+      kind: "stage",
       sessionKey: current.sessionKey,
       stageId: "implement",
       threadId: current.threadId,
@@ -137,6 +139,7 @@ describe("SqlitePersistence", () => {
       activation: 1,
       bindingState: "provisional" as const,
       instanceId: "instance-one",
+      kind: "stage" as const,
       sessionKey: "session-one",
       stageId: "implement",
     };
@@ -263,6 +266,7 @@ describe("SqlitePersistence", () => {
       activation: 1,
       binding,
       instanceId: "instance-one",
+      kind: "stage",
       projectId: "project-one",
       repositoryName: "sample-repository",
       sessionKey: "session-one",
@@ -277,6 +281,7 @@ describe("SqlitePersistence", () => {
         activation: 1,
         binding,
         instanceId: "instance-one",
+        kind: "stage",
         projectId: "project-one",
         repositoryName: "sample-repository",
         sessionKey: "session-one",
@@ -289,6 +294,7 @@ describe("SqlitePersistence", () => {
         activation: 1,
         binding: { ...binding, alias: "changed-selection" },
         instanceId: "instance-one",
+        kind: "stage",
         projectId: "project-one",
         repositoryName: "sample-repository",
         sessionKey: "session-one",
@@ -307,6 +313,7 @@ describe("SqlitePersistence", () => {
           accessToken: "must-not-persist",
         } as ResolvedSessionBinding,
         instanceId: "instance-one",
+        kind: "stage",
         sessionKey: "session-two",
         stageId: "verify",
         threadId: "thread-two",
@@ -339,6 +346,98 @@ describe("SqlitePersistence", () => {
       "clear the pre-release state directory before restart",
     );
     persistence.close();
+  });
+
+  it("migrates prior session rows by stored adjudication authority", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const first = new SqlitePersistence({ stateDirectory });
+    const adjudicationBinding = resolvedSessionBindingFixture({
+      sessionKey: "adjudication-session",
+      threadId: "adjudication-thread",
+    });
+    const stageBinding = resolvedSessionBindingFixture({
+      sessionKey: "stage-session",
+      threadId: "stage-thread",
+    });
+    first.createInstance("adjudication-instance", {
+      ...initialState,
+      handoffs: [
+        {
+          correlationToken: "sample-token",
+          escalationId: "sample-escalation",
+          handoff: "{}",
+          kind: "adjudication-handoff",
+          modelSlug: "sample-model",
+          ownerSessionKey: "owner-session",
+          renderedHandoff: "sample handoff",
+          sessionKey: "adjudication-session",
+        },
+      ],
+    });
+    first.createInstance("stage-instance", {
+      ...initialState,
+      correlationTokens: {},
+    });
+    first.writeSessionRuntime({
+      activation: 1,
+      binding: adjudicationBinding,
+      instanceId: "adjudication-instance",
+      kind: "adjudication",
+      sessionKey: "adjudication-session",
+      threadId: "adjudication-thread",
+    });
+    first.writeSessionRuntime({
+      activation: 1,
+      binding: stageBinding,
+      instanceId: "stage-instance",
+      kind: "stage",
+      sessionKey: "stage-session",
+      stageId: "adjudication",
+      threadId: "stage-thread",
+    });
+    first.close();
+
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    database.exec(`
+      ALTER TABLE heddle_session_runtime RENAME TO current_session_runtime;
+      CREATE TABLE heddle_session_runtime (
+        session_key TEXT PRIMARY KEY,
+        activation INTEGER NOT NULL CHECK (activation > 0),
+        binding_json TEXT,
+        binding_state TEXT NOT NULL DEFAULT 'bound',
+        instance_id TEXT NOT NULL,
+        project_id TEXT,
+        repository_name TEXT,
+        stage_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL UNIQUE,
+        UNIQUE(instance_id, stage_id, activation)
+      );
+      INSERT INTO heddle_session_runtime
+        (session_key, activation, binding_json, binding_state, instance_id,
+         project_id, repository_name, stage_id, thread_id)
+      SELECT session_key, activation, binding_json, binding_state, instance_id,
+             project_id, repository_name, COALESCE(stage_id, 'adjudication'), thread_id
+      FROM current_session_runtime;
+      DROP TABLE current_session_runtime;
+    `);
+    database.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    expect(restarted.listSessionRuntime()).toEqual([
+      expect.objectContaining({
+        instanceId: "adjudication-instance",
+        kind: "adjudication",
+        sessionKey: "adjudication-session",
+      }),
+      expect.objectContaining({
+        instanceId: "stage-instance",
+        kind: "stage",
+        sessionKey: "stage-session",
+        stageId: "adjudication",
+      }),
+    ]);
+    expect(restarted.listSessionRuntime()[0]).not.toHaveProperty("stageId");
+    restarted.close();
   });
 
   it("retains immutable scheduler failure and recovery episodes across restart", async () => {

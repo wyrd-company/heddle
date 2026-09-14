@@ -319,10 +319,10 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         binding,
         bindingState: "provisional",
         instanceId: opened.instanceId,
+        kind: "adjudication",
         projectId: route.projectId,
         repositoryName: route.repositoryName,
         sessionKey: binding.sessionKey,
-        stageId: "adjudication",
         threadId,
       };
       this.options.persistence.writeSessionRuntime(runtime);
@@ -654,15 +654,13 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
    * Resolves the session runtime only for a session Heddle itself started as
    * an adjudication.
    *
-   * A stage id is copied from a blueprint node id, so a lifecycle node named
-   * `adjudication` would otherwise present an ordinary session as an
-   * adjudication. The stored adjudication handoff is written by Heddle when it
-   * starts the session and carries the session key, so a blueprint author
-   * cannot produce one by naming a node.
+   * The explicit kind separates Heddle-owned adjudications from blueprint
+   * stage identifiers. The stored handoff independently proves that Heddle
+   * created this specific adjudication occurrence.
    */
   #adjudicationRuntime(sessionKey: string): SessionRuntimeRecord | undefined {
     const runtime = this.#runtime(sessionKey);
-    if (runtime?.stageId !== "adjudication") return undefined;
+    if (runtime?.kind !== "adjudication") return undefined;
     const stored = this.options.persistence
       .getInstance(runtime.instanceId)
       ?.state.handoffs.filter(isStoredAdjudicationHandoff)

@@ -355,6 +355,11 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     session: SessionRuntimeRecord,
     cause: unknown,
   ): Promise<void> {
+    if (session.kind !== "stage") {
+      throw new Error(
+        `Session '${session.sessionKey}' cannot use stage provider fallback`,
+      );
+    }
     const resolver = this.sessionSelectionResolver();
     const selectionInputs = {
       interactionMode: session.binding.interactionMode,
@@ -874,6 +879,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           binding,
           bindingState: "provisional",
           instanceId: input.instanceId,
+          kind: "stage",
           sessionKey,
           stageId,
           threadId,
@@ -1101,8 +1107,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     const sessions = this.persistence
       .listSessionRuntime()
       .filter(
-        ({ instanceId, stageId }) =>
-          instanceId === input.instanceId && stageId === input.stageId,
+        ({ instanceId, kind, stageId }) =>
+          kind === "stage" &&
+          instanceId === input.instanceId &&
+          stageId === input.stageId,
       )
       .sort((left, right) => right.activation - left.activation);
     if (sessions.length === 0) {
@@ -1126,6 +1134,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       .filter(
         (session) =>
           session.instanceId === runtime.instanceId &&
+          session.kind === "stage" &&
           session.stageId === stageId &&
           session.sessionKey === runtime.sessionKey,
       );
@@ -1165,6 +1174,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       .filter(
         (session) =>
           session.instanceId === runtime.incidentId &&
+          session.kind === "stage" &&
           session.stageId === stageId,
       );
     const activation =
@@ -1208,6 +1218,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       binding,
       bindingState: "provisional",
       instanceId: runtime.incidentId,
+      kind: "stage",
       sessionKey,
       stageId,
       threadId,
@@ -1603,7 +1614,9 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       .listSessionRuntime()
       .filter(
         (session) =>
-          session.instanceId === instanceId && session.stageId === stageId,
+          session.kind === "stage" &&
+          session.instanceId === instanceId &&
+          session.stageId === stageId,
       );
     const intendedSession = retryingIntent
       ? priorSessions.find(
@@ -1733,6 +1746,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         ? { bindingState: "provisional" as const }
         : {}),
       instanceId,
+      kind: "stage",
       projectId,
       repositoryName: repository.name,
       sessionKey,

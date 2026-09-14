@@ -1357,6 +1357,7 @@ kind: standard
           threadId: `review-thread-${activation}`,
         },
         instanceId: `task-${taskId}`,
+        kind: "stage",
         projectId: sharedProjectId,
         repositoryName: "sample-repository",
         sessionKey: `task-${taskId}:review:${activation}`,

@@ -16,7 +16,11 @@ import {
   type LifecycleBlueprint,
 } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
-import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
+import type {
+  JsonValue,
+  SessionRuntimeRecord,
+  SqlitePersistence,
+} from "../persistence/index.js";
 import type { ResolvedSessionRuntimeMode } from "../persistence/index.js";
 import type { AgentNameListName } from "../agent-names/index.js";
 
@@ -187,7 +191,10 @@ export const readProductionHandoffStage = async (input: {
   }
   const completedStages = input.persistence
     .listSessionRuntime()
-    .filter((session) => session.instanceId === input.instanceId)
+    .filter(
+      (session): session is SessionRuntimeRecord & { kind: "stage" } =>
+        session.kind === "stage" && session.instanceId === input.instanceId,
+    )
     .flatMap((session) => {
       const operation =
         context.completedOperations[advanceOperationId(session.sessionKey)];

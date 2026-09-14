@@ -99,7 +99,7 @@ export class ProductionQuestionRouting {
             : { parentSessionKey: assignment.parentSessionKey }),
           stage: {
             id:
-              runtime?.stageId ??
+              (runtime?.kind === "stage" ? runtime.stageId : runtime?.kind) ??
               readLifecycleContext(record).awaitingNodeIds[0]!,
             skills: [],
             tools: [],
@@ -150,9 +150,11 @@ export class ProductionQuestionRouting {
     const runtime = this.persistence
       .listSessionRuntime()
       .find((candidate) => candidate.sessionKey === target.sessionKey);
-    const isAdjudication = record.state.handoffs
-      .filter(isStoredAdjudicationHandoff)
-      .some((handoff) => handoff.sessionKey === target.sessionKey);
+    const isAdjudication =
+      runtime?.kind === "adjudication" &&
+      record.state.handoffs
+        .filter(isStoredAdjudicationHandoff)
+        .some((handoff) => handoff.sessionKey === target.sessionKey);
     if (
       owed.length === 0 &&
       (runtime === undefined ||

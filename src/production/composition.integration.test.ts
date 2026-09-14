@@ -158,13 +158,13 @@ describe("production composition", () => {
       expect(
         composition.persistence
           .listSessionRuntime()
-          .filter(({ stageId }) => stageId === "adjudication"),
+          .filter(({ kind }) => kind === "adjudication"),
       ).toHaveLength(1),
     );
     return {
       adjudication: composition.persistence
         .listSessionRuntime()
-        .find(({ stageId }) => stageId === "adjudication")!,
+        .find(({ kind }) => kind === "adjudication")!,
       runtime,
     };
   };
@@ -959,12 +959,12 @@ describe("production composition", () => {
       expect(
         composition.persistence
           .listSessionRuntime()
-          .filter(({ stageId }) => stageId === "adjudication"),
+          .filter(({ kind }) => kind === "adjudication"),
       ).toHaveLength(3),
     );
     const adjudications = composition.persistence
       .listSessionRuntime()
-      .filter(({ stageId }) => stageId === "adjudication");
+      .filter(({ kind }) => kind === "adjudication");
     expect(
       new Set(adjudications.map(({ sessionKey }) => sessionKey)),
     ).toHaveLength(3);
@@ -1109,7 +1109,7 @@ describe("production composition", () => {
     );
     const failedAdjudication = composition.persistence
       .listSessionRuntime()
-      .find(({ stageId }) => stageId === "adjudication")!;
+      .find(({ kind }) => kind === "adjudication")!;
     expect(failedAdjudication.binding.skippedCandidates.at(-1)).toMatchObject({
       failure: {
         message: expect.stringContaining(
@@ -1129,7 +1129,7 @@ describe("production composition", () => {
     expect(
       composition.persistence
         .listSessionRuntime()
-        .find(({ stageId }) => stageId === "adjudication")?.binding,
+        .find(({ kind }) => kind === "adjudication")?.binding,
     ).toEqual(exhaustedBinding);
     await composition.close();
   });
@@ -1371,10 +1371,10 @@ describe("production composition", () => {
       ),
       bindingState: "provisional",
       instanceId: owner.instanceId,
+      kind: "adjudication",
       projectId: ownerSession.projectId,
       repositoryName: ownerSession.repositoryName,
       sessionKey,
-      stageId: "adjudication",
       threadId: laterThreadId,
     });
 
