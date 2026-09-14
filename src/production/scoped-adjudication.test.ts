@@ -444,10 +444,13 @@ describe("scoped adjudication sanctioned approvals", () => {
     ["empty command identity", "", new Date(now).toISOString()],
     ["unreadable issuance time", "recorded-command", "not-a-timestamp"],
   ])(
-    "does not replay a durable response issue with %s",
+    "abandons a durable response issue with %s using its actual cause",
     async (_invalidField, commandId, issuedAt) => {
-      const { adjudication, approvals, events } = build({
-        activities: [sanctionedRequest("request-invalid-issue")],
+      const { adjudication, approvals, construct, events } = build({
+        activities: [
+          sanctionedRequest("request-valid-before-invalid"),
+          sanctionedRequest("request-invalid-issue"),
+        ],
         handoffs: [adjudicationHandoff],
         stageId: "adjudication",
       });
@@ -467,11 +470,39 @@ describe("scoped adjudication sanctioned approvals", () => {
       });
 
       expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
-        kind: "none",
+        cause: "Adjudication approval response issuance evidence is invalid",
+        kind: "abandoned",
+      });
+      expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
+        cause: "Adjudication approval response issuance evidence is invalid",
+        kind: "abandoned",
       });
       expect(approvals).toEqual([]);
+      expect(events).toHaveLength(1);
     },
   );
+
+  it("abandons an approval request without usable identity before issuing any response", async () => {
+    const { adjudication, approvals, construct, events } = build({
+      activities: [
+        sanctionedRequest("request-valid"),
+        sanctionedRequest("   "),
+      ],
+      handoffs: [adjudicationHandoff],
+      stageId: "adjudication",
+    });
+
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      cause: "Adjudication tool approval request has no usable identity",
+      kind: "abandoned",
+    });
+    expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
+      cause: "Adjudication tool approval request has no usable identity",
+      kind: "abandoned",
+    });
+    expect(approvals).toEqual([]);
+    expect(events).toEqual([]);
+  });
 
   it("reuses the durable response command identity after restart", async () => {
     const { adjudication, approvalCommands, events } = build({

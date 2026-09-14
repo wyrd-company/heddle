@@ -169,6 +169,107 @@ describe("production composition", () => {
     };
   };
 
+  const verifyFailClosedApprovalCause = async (
+    failure: "blank-request-identity" | "invalid-durable-evidence",
+    cause: string,
+  ) => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const options = {
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    };
+    const first = createProductionComposition(options);
+    await first.start();
+    const { adjudication, runtime } = await openProductionEscalation(first);
+    const requestId =
+      failure === "blank-request-identity" ? "   " : "request-invalid-issue";
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        createdAt: new Date().toISOString(),
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId,
+          requestKind: "mcp-elicitation",
+        },
+      },
+    ]);
+    if (failure === "invalid-durable-evidence") {
+      first.persistence.appendEvent(
+        runtime.instanceId,
+        "adjudication:approval-response-issued",
+        {
+          commandId: "opaque-command-marker",
+          instanceId: runtime.instanceId,
+          issuedAt: "opaque-time-marker",
+          requestId,
+          sessionKey: adjudication.sessionKey,
+          threadId: adjudication.threadId,
+        },
+      );
+    }
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await first.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(t3.approvalResponses).toEqual([]);
+    const firstAttention = first.attention
+      .list()
+      .filter((entry) => entry.kind === "escalation");
+    expect(firstAttention).toHaveLength(1);
+    expect(firstAttention[0]?.adjudication?.cause).toBe(cause);
+    expect(JSON.stringify(first.attention.list())).not.toContain(
+      "opaque-command-marker",
+    );
+    expect(notify.mock.calls[0]?.[0].message).toContain(cause);
+    expect(notify.mock.calls[0]?.[0].message).not.toContain(
+      "opaque-command-marker",
+    );
+    await first.scheduler.trigger();
+    expect(
+      first.attention.list().filter((entry) => entry.kind === "escalation"),
+    ).toEqual(firstAttention);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(t3.approvalResponses).toEqual([]);
+    await first.close();
+
+    const restarted = createProductionComposition(options);
+    await restarted.start();
+    await restarted.scheduler.trigger();
+    const restartedAttention = restarted.attention
+      .list()
+      .filter((entry) => entry.kind === "escalation");
+    expect(restartedAttention).toEqual(firstAttention);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(t3.approvalResponses).toEqual([]);
+    await restarted.close();
+  };
+
   it("starts a fresh production adjudication and delivers its scoped answer", async () => {
     const fixture = await prepare();
     configureAdjudication(fixture);
@@ -777,6 +878,24 @@ describe("production composition", () => {
     );
     await composition.close();
   });
+
+  it.each([
+    [
+      "invalid durable response-issuance evidence",
+      "invalid-durable-evidence",
+      "Adjudication approval response issuance evidence is invalid",
+    ],
+    [
+      "a blank approval-request identity",
+      "blank-request-identity",
+      "Adjudication tool approval request has no usable identity",
+    ],
+  ] as const)(
+    "reports %s through the production path without answering or duplicating attention",
+    async (_case, failure, cause) => {
+      await verifyFailClosedApprovalCause(failure, cause);
+    },
+  );
 
   it("observes failed, ended, and timestamp-free stalled adjudications through normal session policy", async () => {
     const fixture = await prepare();

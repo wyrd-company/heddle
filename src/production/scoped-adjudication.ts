@@ -90,6 +90,16 @@ const sanctionedToolApproval = (activity: T3ThreadActivity): boolean => {
 };
 
 const approvalResponseIssuedEvent = "adjudication:approval-response-issued";
+const invalidApprovalRequestIdentityCause =
+  "Adjudication tool approval request has no usable identity";
+const invalidApprovalResponseEvidenceCause =
+  "Adjudication approval response issuance evidence is invalid";
+
+type ApprovalResponseIssue = { commandId: string; issuedAt: string };
+type RetainedApprovalResponseIssue =
+  | { kind: "absent" }
+  | { kind: "invalid" }
+  | ({ kind: "retained" } & ApprovalResponseIssue);
 
 /** Whether an issued response is still inside its settlement bound. */
 const withinSettlementBound = (
@@ -496,10 +506,22 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     runtime: SessionRuntimeRecord,
   ): Promise<AdjudicationApprovalOutcome> {
     const { instanceId, sessionKey, threadId } = runtime;
-    const pending = pendingRequestActivitiesFor(
-      await this.options.t3.getThread(threadId),
-      "approval.requested",
-    );
+    const snapshot = await this.options.t3.getThread(threadId);
+    if (
+      snapshot.thread.activities?.some((activity) => {
+        if (
+          activity.kind !== "approval.requested" ||
+          !sanctionedToolApproval(activity)
+        ) {
+          return false;
+        }
+        const requestId = activity.payload?.requestId;
+        return typeof requestId !== "string" || requestId.trim() === "";
+      }) === true
+    ) {
+      return { cause: invalidApprovalRequestIdentityCause, kind: "abandoned" };
+    }
+    const pending = pendingRequestActivitiesFor(snapshot, "approval.requested");
     if (pending.length === 0 || !pending.every(sanctionedToolApproval)) {
       return { kind: "none" };
     }
@@ -509,17 +531,45 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
       defaultApprovalSettlementMilliseconds;
     // Issuance is durable before the idempotent effect, so a crash cannot reset
     // the settlement clock or change the command identity on replay.
-    let dispatched = 0;
-    const responseIssuedAt: string[] = [];
+    const requests: Array<{
+      issue: RetainedApprovalResponseIssue;
+      requestId: string;
+    }> = [];
     for (const activity of pending) {
       const requestId = activity.payload?.requestId;
-      if (typeof requestId !== "string" || requestId.trim() === "") continue;
-      const issue = this.#approvalResponseIssue({
+      if (typeof requestId !== "string" || requestId.trim() === "") {
+        return {
+          cause: invalidApprovalRequestIdentityCause,
+          kind: "abandoned",
+        };
+      }
+      const issue = this.#retainedApprovalResponseIssue({
         instanceId,
         requestId,
         sessionKey,
         threadId,
       });
+      if (issue.kind === "invalid") {
+        return {
+          cause: invalidApprovalResponseEvidenceCause,
+          kind: "abandoned",
+        };
+      }
+      requests.push({ issue, requestId });
+    }
+    let dispatched = 0;
+    const responseIssuedAt: string[] = [];
+    for (const request of requests) {
+      const { requestId } = request;
+      const issue =
+        request.issue.kind === "retained"
+          ? request.issue
+          : this.#recordApprovalResponseIssue({
+              instanceId,
+              requestId,
+              sessionKey,
+              threadId,
+            });
       responseIssuedAt.push(issue.issuedAt);
       try {
         await this.options.t3.respondToApproval(
@@ -545,17 +595,13 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     return dispatched > 0 ? { kind: "deferred" } : { kind: "none" };
   }
 
-  /**
-   * Records the response issuance before the idempotent T3 effect. The request
-   * ID is T3's approval-occurrence identity; the thread and session prevent an
-   * issuance from another occurrence namespace from supplying its clock.
-   */
-  #approvalResponseIssue(input: {
+  /** Reads and validates issuance evidence for this exact request occurrence. */
+  #retainedApprovalResponseIssue(input: {
     instanceId: string;
     requestId: string;
     sessionKey: string;
     threadId: string;
-  }): { commandId: string; issuedAt: string } {
+  }): RetainedApprovalResponseIssue {
     const prior = this.options.persistence
       .replayEvents(input.instanceId)
       .find((event) => {
@@ -577,12 +623,24 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         typeof issuedAt !== "string" ||
         Number.isNaN(Date.parse(issuedAt))
       ) {
-        throw new Error(
-          `Adjudication approval response event ${prior.sequence} is invalid`,
-        );
+        return { kind: "invalid" };
       }
-      return { commandId, issuedAt };
+      return { commandId, issuedAt, kind: "retained" };
     }
+    return { kind: "absent" };
+  }
+
+  /**
+   * Records the response issuance before the idempotent T3 effect. The request
+   * ID is T3's approval-occurrence identity; the thread and session prevent an
+   * issuance from another occurrence namespace from supplying its clock.
+   */
+  #recordApprovalResponseIssue(input: {
+    instanceId: string;
+    requestId: string;
+    sessionKey: string;
+    threadId: string;
+  }): ApprovalResponseIssue {
     const commandId = stableUuid(
       `${input.threadId}:approval:${input.requestId}`,
     );

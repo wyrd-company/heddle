@@ -734,6 +734,11 @@ proposed-design:
     cadence nor the age of an unanswered request consumes the settlement
     interval. T3 request IDs identify approval occurrences; a later approval
     has a different request ID and cannot inherit the earlier response record.
+    A sanctioned request without a usable request ID and invalid retained
+    response-issuance evidence each abandon adjudication with a distinct cause
+    before Heddle answers an approval. The cause, not the malformed durable
+    payload, reaches the existing operator attention occurrence and remains
+    stable through reconciliation and restart.
     A request still pending beyond the bound abandons the adjudication and
     carries that cause into attention. An answerer
     asking its own question is awaiting that answer; its request follows the

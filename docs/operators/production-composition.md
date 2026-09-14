@@ -211,7 +211,13 @@ observed after a long delay still receives the full settlement interval after
 Heddle answers it. The issuance record is keyed by the adjudication session,
 T3 thread, and request occurrence, and survives service restart. Reconciliation
 reuses its command identity and starting time until T3 records the resolution
-or the interval expires.
+or the interval expires. A sanctioned approval request without a usable request
+identity abandons adjudication as `Adjudication tool approval request has no
+usable identity`. Invalid retained response-issuance evidence abandons it as
+`Adjudication approval response issuance evidence is invalid`. Both conditions
+move the escalation to operator attention without answering an approval or
+including the malformed durable payload in the cause. Reconciliation and
+restart retain the same attention occurrence and cause.
 
 Configuration conforms to `schemas/production-configuration.json`. The
 `products` inventory is the authority for product and repository routing. Each
