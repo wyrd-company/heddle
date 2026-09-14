@@ -194,10 +194,6 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
 
         const configured = {
           ...fixture.configuration,
-          adHocProject: {
-            ...fixture.configuration.adHocProject,
-            workspaceRoot: fixture.repositoryRoot,
-          },
           pacing: {
             ...configuredPacing,
             maxConcurrentSessions: 3,
