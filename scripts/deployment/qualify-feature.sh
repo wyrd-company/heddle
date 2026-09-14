@@ -429,7 +429,17 @@ for attempt in $(seq 1 100); do
     }
     sleep 0.1
 done
-npm_registry_url="http://npm.qualification:${npm_registry_port}"
+# Feature installation runs inside `docker build`, where devcontainer runArgs
+# such as --add-host do not apply, so the registry is addressed through the
+# default bridge gateway that build steps can reach.
+npm_registry_host="$(
+    docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
+)"
+[[ "${npm_registry_host}" =~ ^[0-9.]+$ ]] || {
+    echo "The Docker bridge gateway address is unavailable: '${npm_registry_host}'." >&2
+    exit 1
+}
+npm_registry_url="http://${npm_registry_host}:${npm_registry_port}"
 feature_collection="${publication_directory}/features"
 "${repository}/scripts/deployment/stage-feature.sh" "${feature_collection}"
 base_context="${publication_directory}/base-image"
@@ -526,6 +536,12 @@ write_configuration \
 expect_feature_install_failure \
     missing-registry-version \
     "\\[heddle\\] ERROR: Heddle package resolution from ${npm_registry_url} failed for @wyrd-company/heddle@9\\.9\\.9\\."
+# The registry must have answered; a network failure names the same cause.
+grep -Fq 'No matching version found for @wyrd-company/heddle@9.9.9.' \
+    "${publication_directory}/missing-registry-version.log" || {
+    echo "The missing-registry-version failure did not come from the qualification npm registry." >&2
+    exit 1
+}
 
 write_configuration \
     "${qualification_base_image}" \

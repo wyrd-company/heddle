@@ -37,9 +37,7 @@
     "--add-host",
     "heddle.localhost:127.0.0.1",
     "--add-host",
-    "t3.qualification:host-gateway",
-    "--add-host",
-    "npm.qualification:host-gateway"
+    "t3.qualification:host-gateway"
   ],
   "overrideCommand": false,
   "shutdownAction": "none"
