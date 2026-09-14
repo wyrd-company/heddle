@@ -123,9 +123,10 @@ therefore leaves the board, T3, Pushover, and production persistence untouched.
 
 The layered effective configuration is the sole deployed runtime authority.
 `HEDDLE_BOARD_PATH`, `HEDDLE_HOST`, `HEDDLE_PORT`, and `HEDDLE_STATE_PATH` do not
-affect deployed configuration. Configuration changes require service restart. Heddle does not
-write, migrate, or reformat either source. The operator owns the bundle and must
-make both source files readable only by that account, normally mode `0600`.
+affect deployed configuration. Configuration changes require service restart.
+Heddle does not write, migrate, or reformat either source. The operator owns the
+bundle and must make both source files readable only by that account, normally
+mode `0600`.
 
 `heddle-server --print-effective-configuration` prints the effective values,
 their source provenance and explicit clears as JSON. T3 and Pushover credential
@@ -277,8 +278,9 @@ worktree root, reconciliation cadence, bounded stop timeout, provider aliases,
 provider pacing, session defaults, observation and per-stage staleness
 thresholds, and Pushover routing. The server port is a fixed integer from 1
 through 65535. T3 and Pushover secrets enter only through operator-owned
-configuration sources; Heddle does not log, emit, or persist them. Every lifecycle and
-delegated session resolves an allowed alias before it enters pacing or T3.
+configuration sources; Heddle does not log, emit, or persist them. Every
+lifecycle and delegated session resolves an allowed alias before it enters
+pacing or T3.
 T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
 the runtime validator and configuration schema reject other schemes.
 

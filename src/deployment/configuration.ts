@@ -23,6 +23,19 @@ import {
   sourceForConfigurationPointer,
   type ConfigurationProvenance,
 } from "./configuration-layering.js";
+import {
+  configurationSecretValues,
+  redactConfigurationText,
+} from "./configuration-redaction.js";
+import {
+  buildEffectiveConfigurationDisclosure,
+  type EffectiveConfigurationDisclosure,
+} from "./configuration-disclosure.js";
+
+export {
+  effectiveConfigurationDisclosure,
+  type EffectiveConfigurationDisclosure,
+} from "./configuration-disclosure.js";
 
 const defaultConfigurationDirectory = "/home/vscode/.heddle";
 const configurationFileName = "config.yml";
@@ -44,6 +57,7 @@ export type LoadedDeploymentConfiguration = {
   configurationDirectory: string;
   configurationPath: string;
   configurationProvenance?: ConfigurationProvenance;
+  effectiveConfigurationDisclosure?: EffectiveConfigurationDisclosure;
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
   workerConfigurationPath?: string;
@@ -58,17 +72,6 @@ export type ExecutableProviderUsageConfiguration = {
 export type HeddleServerArguments = {
   command: "effective-configuration" | "help" | "launch-settings" | "serve";
   configurationDirectory?: string;
-};
-
-export type EffectiveConfigurationDisclosure = {
-  cleared: ConfigurationProvenance;
-  configuration: unknown;
-  provenance: ConfigurationProvenance;
-  sources: {
-    builtIn: "built-in";
-    core: string;
-    worker?: string;
-  };
 };
 
 type ConfigurationDocument = Omit<ProductionConfiguration, "session"> & {
@@ -155,83 +158,6 @@ export const deploymentLaunchSettings = (
   port: loaded.server.port,
   stateDirectory: loaded.configuration.stateDirectory,
 });
-
-const secretValues = (value: unknown): string[] => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return [];
-  }
-  const root = value as Record<string, unknown>;
-  const strings: string[] = [];
-  for (const [section, names] of [
-    ["t3", ["accessToken"]],
-    ["pushover", ["applicationToken", "userKey"]],
-  ] as const) {
-    const candidate = root[section];
-    if (
-      typeof candidate !== "object" ||
-      candidate === null ||
-      Array.isArray(candidate)
-    ) {
-      continue;
-    }
-    for (const name of names) {
-      const secret = (candidate as Record<string, unknown>)[name];
-      if (typeof secret === "string" && secret !== "") strings.push(secret);
-    }
-  }
-  return strings;
-};
-
-const redact = (message: string, secrets: readonly string[]): string =>
-  secrets.reduce(
-    (result, secret) => result.split(secret).join("[REDACTED]"),
-    message,
-  );
-
-const redactedConfiguration = (
-  value: unknown,
-  secrets: readonly string[],
-): unknown => {
-  if (typeof value === "string") return redact(value, secrets);
-  if (Array.isArray(value))
-    return value.map((child) => redactedConfiguration(child, secrets));
-  if (typeof value !== "object" || value === null) return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, child]) => [
-      key,
-      ["accessToken", "applicationToken", "userKey"].includes(key)
-        ? "[REDACTED]"
-        : redactedConfiguration(child, secrets),
-    ]),
-  );
-};
-
-export const effectiveConfigurationDisclosure = (
-  loaded: LoadedDeploymentConfiguration,
-): EffectiveConfigurationDisclosure => {
-  const configuration = {
-    ...loaded.configuration,
-    ...(loaded.providerUsage === undefined
-      ? {}
-      : { providerUsage: loaded.providerUsage }),
-    server: loaded.server,
-  };
-  return {
-    cleared: loaded.configurationClearedBy ?? {},
-    configuration: redactedConfiguration(
-      configuration,
-      secretValues(configuration),
-    ),
-    provenance: loaded.configurationProvenance ?? {},
-    sources: {
-      builtIn: "built-in",
-      core: loaded.configurationPath,
-      ...(loaded.workerConfigurationPath === undefined
-        ? {}
-        : { worker: loaded.workerConfigurationPath }),
-    },
-  };
-};
 
 const firstSchemaError = (
   error: ErrorObject | undefined,
@@ -381,10 +307,18 @@ export const loadDeploymentConfiguration = async (
   const configurationPath = join(directory, configurationFileName);
   const workerConfigurationPath = join(directory, workerConfigurationFileName);
   const core = await readConfigurationDocument(configurationPath, true);
-  const worker = await readConfigurationDocument(
-    workerConfigurationPath,
-    false,
-  );
+  const coreSecrets = configurationSecretValues(core);
+  let worker: unknown | undefined;
+  try {
+    worker = await readConfigurationDocument(workerConfigurationPath, false);
+  } catch (error) {
+    throw new HeddleConfigurationError(
+      redactConfigurationText(
+        error instanceof Error ? error.message : "unknown error",
+        coreSecrets,
+      ),
+    );
+  }
   const layered = layerConfiguration([
     { source: configurationPath, value: core },
     ...(worker === undefined
@@ -392,7 +326,7 @@ export const loadDeploymentConfiguration = async (
       : [{ source: workerConfigurationPath, value: worker }]),
   ]);
   const value = layered.value;
-  const secrets = [...secretValues(core), ...secretValues(worker)];
+  const secrets = [...coreSecrets, ...configurationSecretValues(worker)];
   try {
     const validator = new Ajv2020({
       allErrors: true,
@@ -405,7 +339,7 @@ export const loadDeploymentConfiguration = async (
       const source =
         validator.errors?.[0]?.keyword === "required" &&
         layered.clearedBy[failure.pointer] === undefined
-          ? "effective configuration"
+          ? configurationPath
           : sourceForConfigurationPointer(failure.pointer, layered);
       throw new TypeError(
         `field '${failure.pointer || "/"}' from '${source}': ${failure.detail}`,
@@ -457,7 +391,7 @@ export const loadDeploymentConfiguration = async (
     }
     const blueprintsRepositoryRoot =
       await preflightBlueprintRepository(directory);
-    return {
+    const loaded: LoadedDeploymentConfiguration = {
       blueprintsRepositoryRoot,
       configuration: validated,
       configurationClearedBy: layered.clearedBy,
@@ -475,10 +409,20 @@ export const loadDeploymentConfiguration = async (
       server: { ...server, host: server.host.trim() },
       ...(worker === undefined ? {} : { workerConfigurationPath }),
     };
+    return {
+      ...loaded,
+      effectiveConfigurationDisclosure: buildEffectiveConfigurationDisclosure(
+        loaded,
+        secrets,
+      ),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     throw new HeddleConfigurationError(
-      `Configuration file '${configurationPath}' is invalid: ${redact(message, secrets)}`,
+      redactConfigurationText(
+        `Configuration file '${configurationPath}' is invalid: ${message}`,
+        secrets,
+      ),
     );
   }
 };

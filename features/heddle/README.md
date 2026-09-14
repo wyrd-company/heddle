@@ -101,10 +101,10 @@ directory to be the exact root of a Git worktree whose current branch tracks
 `origin`. It refuses to start when `stateDirectory` is not a mount point. The
 root launcher writes only the nonsecret Caddy snippet, completes a bounded Caddy
 reload handshake, and then drops privileges. The watcher owns later Caddy
-reloads. The launcher never
-prints or copies raw YAML. `heddle-server --print-effective-configuration`
-prints redacted values with source provenance and explicit clears. One Heddle
-service, one blueprint clone, and one state source belong to one workspace.
+reloads. The launcher never prints or copies raw YAML.
+`heddle-server --print-effective-configuration` prints redacted values with
+source provenance and explicit clears. One Heddle service, one blueprint clone,
+and one state source belong to one workspace.
 
 Heddle binds the configured loopback endpoint before production composition
 startup. The endpoint returns `503 Service Unavailable` until startup succeeds;

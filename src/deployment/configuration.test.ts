@@ -194,7 +194,7 @@ describe("deployed configuration directory", () => {
     ).toThrow("Choose one configuration diagnostic output");
   });
 
-  it("keeps config.yml as configuration authority while prompt discovery stays at dispatch", async () => {
+  it("keeps configuration bundle loading separate from prompt discovery", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     await writeFile(join(root, "config.yml"), stringify(fixture(root)));
     await writeFile(join(root, "heddle.md"), "resolved only at dispatch\n");
@@ -359,13 +359,18 @@ describe("deployed configuration directory", () => {
   it("prints redacted effective values, provenance, and explicit clears", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
     await prepareBlueprintRepository(root);
-    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const core = fixture(root);
+    core.incident.immediateEscalationCodes = ["t3-secret-value"];
+    await writeFile(join(root, "config.yml"), stringify(core));
     const workerPath = join(root, "worker.yml");
     await writeFile(
       workerPath,
       stringify({
         boardDirectory: join(root, "worker-board"),
-        incident: { immediateEscalationCodes: ["worker-t3-secret"] },
+        incident: {
+          immediateEscalationCodes: ["t3-secret-value", "worker-t3-secret"],
+        },
+        stageThresholds: { "worker-t3-secret": 20_000 },
         t3: { accessToken: "worker-t3-secret" },
       }),
     );
@@ -387,10 +392,16 @@ describe("deployed configuration directory", () => {
     });
     expect(disclosure.configuration).toMatchObject({
       boardDirectory: join(root, "worker-board"),
-      incident: { immediateEscalationCodes: ["[REDACTED]"] },
+      incident: {
+        immediateEscalationCodes: ["[REDACTED]", "[REDACTED]"],
+      },
       server: { host: "127.0.0.1", port: 3774 },
+      stageThresholds: { "[REDACTED]": 20_000 },
       t3: { accessToken: "[REDACTED]" },
     });
+    expect(disclosure.provenance["/stageThresholds/[REDACTED]"]).toBe(
+      workerPath,
+    );
     expect(serialized).not.toContain("worker-t3-secret");
     expect(serialized).not.toContain("application-secret-value");
     expect(serialized).not.toContain("operator-secret-value");
@@ -659,6 +670,13 @@ describe("deployed configuration directory", () => {
     await writeFile(path, "server: [\n");
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
       `Configuration file '${path}' is invalid YAML`,
+    );
+
+    const withoutBoardDirectory: Record<string, unknown> = { ...fixture(root) };
+    delete withoutBoardDirectory["boardDirectory"];
+    await writeFile(path, stringify(withoutBoardDirectory));
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `field '/boardDirectory' from '${path}'`,
     );
 
     await writeFile(path, stringify({ ...fixture(root), products: [] }));

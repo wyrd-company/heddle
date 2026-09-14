@@ -1334,6 +1334,11 @@ proposed-design:
     service. The fixed loopback server port is restricted to 1 through 65535
     so the same value can be projected into Caddy. The operator owns both
     source files with mode `0600`; Heddle never writes or reformats them.
+    A relative secret-file reference resolves against the directory containing
+    the configuration source that supplied the effective field; an absolute
+    reference remains absolute. Per-field source provenance survives layering
+    so secret resolution does not depend on which layer supplied neighboring
+    values.
 
     The configuration directory also contains the organization blueprint clone
     at the hard-coded `blueprints` subdirectory. It is not a `config.yml` field.
