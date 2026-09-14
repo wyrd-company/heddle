@@ -365,6 +365,26 @@ export class LifecycleEngine {
     );
   }
 
+  /** The node the instance is waiting on, from its pinned blueprint. */
+  async awaitingNode(
+    instanceId: string,
+  ): Promise<LifecycleBlueprint["nodes"][number] | undefined> {
+    const record = this.persistence.getInstance(instanceId);
+    if (record === undefined) {
+      throw new Error(`Instance does not exist: ${instanceId}`);
+    }
+    const context = readLifecycleContext(record);
+    const nodeId = context.awaitingNodeIds[0];
+    if (nodeId === undefined || context.awaitingNodeIds.length !== 1) {
+      return undefined;
+    }
+    const blueprint = await this.blueprintStore.read(
+      context.blueprintBlobHash,
+      context.blueprintPath,
+    );
+    return blueprint.nodes.find(({ id }) => id === nodeId);
+  }
+
   async boardStatusFor(
     instanceId: string,
     uses: MechanicalNodeUse,

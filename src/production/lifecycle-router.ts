@@ -64,6 +64,10 @@ export class ProductionLifecycleRouter {
     return this.engine.rebase(input);
   }
 
+  awaitingNode(instanceId: string) {
+    return this.engine.awaitingNode(instanceId);
+  }
+
   boardStatusFor(
     instanceId: string,
     uses: MechanicalNodeUse,

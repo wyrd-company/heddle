@@ -7,6 +7,7 @@ import jsonata from "jsonata";
 
 import { BlueprintValidationError } from "./errors.js";
 import { recordNodeFinish } from "./lifecycle-projection.js";
+import { questionNodeUse } from "./question-node.js";
 import type { LifecycleBlueprint, LifecycleEdge } from "./types.js";
 
 /**
@@ -28,12 +29,26 @@ export const edgeLabel = (edge: LifecycleEdge): string =>
 export const defaultDispositionCondition = (disposition: string): string =>
   `result.output.dispositions.${disposition}`;
 
-/** The condition an edge routes on: its own, or the disposition default. */
-export const effectiveCondition = (edge: LifecycleEdge): string | undefined =>
-  edge.condition ??
-  (edge.disposition === undefined
-    ? undefined
-    : defaultDispositionCondition(edge.disposition));
+const sourceUses = (
+  blueprint: LifecycleBlueprint,
+  edge: LifecycleEdge,
+): string | undefined =>
+  blueprint.nodes.find(({ id }) => id === edge.source)?.uses;
+
+/**
+ * The condition an edge routes on: its own; the disposition default for an
+ * `advance` edge; `true` for the one unconditional edge of a question node.
+ */
+export const effectiveCondition = (
+  blueprint: LifecycleBlueprint,
+  edge: LifecycleEdge,
+): string | undefined => {
+  if (edge.condition !== undefined) return edge.condition;
+  if (edge.disposition !== undefined) {
+    return defaultDispositionCondition(edge.disposition);
+  }
+  return sourceUses(blueprint, edge) === questionNodeUse ? "true" : undefined;
+};
 
 // JSONata throws plain objects `{ code, message, position, token }`, not
 // Error instances, so the message is read off whatever shape arrives.
@@ -92,7 +107,7 @@ export const assertConditionsCompile = (
   blueprint: LifecycleBlueprint,
 ): void => {
   for (const edge of blueprint.edges) {
-    const expression = effectiveCondition(edge);
+    const expression = effectiveCondition(blueprint, edge);
     if (expression !== undefined) compileCondition(expression, edgeLabel(edge));
   }
 };
@@ -127,7 +142,7 @@ export const evaluateOutgoingConditions = async (
   const routing: EdgeRouting = {};
   for (const [index, edge] of blueprint.edges.entries()) {
     if (edge.source !== sourceNodeId) continue;
-    const expression = effectiveCondition(edge);
+    const expression = effectiveCondition(blueprint, edge);
     if (expression === undefined) continue;
     routing[edgeRoutingSlot(index)] = await evaluate(edge, expression, data);
   }
@@ -144,7 +159,7 @@ export const routedBlueprint = (
 ): LifecycleBlueprint => ({
   ...blueprint,
   edges: blueprint.edges.map((edge, index) =>
-    effectiveCondition(edge) === undefined
+    effectiveCondition(blueprint, edge) === undefined
       ? { ...edge }
       : { ...edge, condition: `${edgeRoutingKey}.${edgeRoutingSlot(index)}` },
   ),
@@ -184,9 +199,12 @@ export const routeResume = async (
     ...context,
     result: { output },
   });
+  const question =
+    blueprint.nodes.find(({ id }) => id === waitNodeId)?.uses ===
+    questionNodeUse;
   const matched = blueprint.edges.flatMap((edge, index) =>
     edge.source === waitNodeId &&
-    edge.disposition === disposition &&
+    (question || edge.disposition === disposition) &&
     routing[edgeRoutingSlot(index)] === true
       ? [edgeLabel(edge)]
       : [],

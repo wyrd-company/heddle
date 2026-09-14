@@ -38,6 +38,16 @@ export {
 export { LifecycleResolver } from "./lifecycle-resolver.js";
 export { readLifecycleContext } from "./lifecycle-state.js";
 export {
+  answeredDisposition,
+  isAwaitingNode,
+  questionNodeParams,
+  questionNodeUse,
+  questionRoles,
+  type QuestionNodeParams,
+  type QuestionNodeQuestion,
+  type QuestionRole,
+} from "./question-node.js";
+export {
   lifecycleContextKey,
   lifecycleProjectionOf,
   type LifecycleProjection,

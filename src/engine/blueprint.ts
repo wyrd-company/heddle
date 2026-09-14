@@ -13,6 +13,13 @@ import {
 import { assertConditionsCompile, edgeLabel } from "./edge-conditions.js";
 import { BlueprintValidationError } from "./errors.js";
 import {
+  answeredDisposition,
+  isAwaitingNode,
+  questionNodeParams,
+  questionNodeUse,
+  validateQuestionEdges,
+} from "./question-node.js";
+import {
   agentNameListNames,
   agentNameThemeKindForList,
   type AgentNameThemeKind,
@@ -151,6 +158,7 @@ export const validateBlueprint = (
     nodeIds.add(node.id);
   }
   const registry: Record<string, NodeFunction | typeof WaitNode> = {
+    [questionNodeUse]: placeholderNode,
     wait: WaitNode,
   };
   for (const effectName of Object.keys(effects)) {
@@ -320,6 +328,11 @@ export const validateBlueprint = (
     }
     const dispositions = new Map<string, LifecycleEdge>();
     const edges = outgoingEdges(blueprint, node.id);
+    if (node.uses === questionNodeUse) {
+      questionNodeParams(node);
+      validateQuestionEdges(node, edges);
+      continue;
+    }
     const usesDispositionRouting = edges.some(
       ({ disposition }) => disposition !== undefined,
     );
@@ -388,33 +401,46 @@ export const validateBlueprint = (
   }
 
   expectedLanding(blueprint, analysis.startNodeIds);
-  for (const node of blueprint.nodes.filter(({ uses }) => uses === "wait")) {
+  for (const node of blueprint.nodes.filter(isAwaitingNode)) {
     for (const edge of outgoingEdges(blueprint, node.id)) {
       expectedLanding(blueprint, [edge.target]);
     }
   }
 };
 
+const nodeUses = (blueprint: LifecycleBlueprint, nodeId: string) =>
+  blueprint.nodes.find(({ id }) => id === nodeId)?.uses;
+
 export const dispositionsForNode = (
   blueprint: LifecycleBlueprint,
   nodeId: string,
 ): string[] =>
-  [
-    ...new Set(
-      outgoingEdges(blueprint, nodeId)
-        .map(({ disposition }) => disposition)
-        .filter((value): value is string => value !== undefined),
-    ),
-  ].sort();
+  nodeUses(blueprint, nodeId) === questionNodeUse
+    ? [answeredDisposition]
+    : [
+        ...new Set(
+          outgoingEdges(blueprint, nodeId)
+            .map(({ disposition }) => disposition)
+            .filter((value): value is string => value !== undefined),
+        ),
+      ].sort();
 
+/**
+ * The edges a disposition may take. A question node has one disposition and
+ * every outgoing edge is a candidate; the answer decides which one fires.
+ */
 export const edgesForDisposition = (
   blueprint: LifecycleBlueprint,
   nodeId: string,
   disposition: string,
 ): LifecycleEdge[] =>
-  outgoingEdges(blueprint, nodeId).filter(
-    (edge) => edge.disposition === disposition,
-  );
+  nodeUses(blueprint, nodeId) === questionNodeUse
+    ? disposition === answeredDisposition
+      ? outgoingEdges(blueprint, nodeId)
+      : []
+    : outgoingEdges(blueprint, nodeId).filter(
+        (edge) => edge.disposition === disposition,
+      );
 
 export const expectedLanding = (
   blueprint: LifecycleBlueprint,
@@ -433,7 +459,7 @@ export const expectedLanding = (
         `Expected landing references missing node ${JSON.stringify(nodeId)}`,
       );
     }
-    if (node.uses === "wait") {
+    if (isAwaitingNode(node)) {
       return [{ awaitingNodeIds: [nodeId], terminalNodeIds: [] }];
     }
     const edges = outgoingEdges(blueprint, nodeId);

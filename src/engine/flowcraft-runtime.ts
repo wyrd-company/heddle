@@ -26,6 +26,7 @@ import {
   lifecycleContextKey,
   recordNodeFinish,
 } from "./lifecycle-projection.js";
+import { isAwaitingNode, questionNodeUse } from "./question-node.js";
 import type {
   ExpectedLandings,
   LifecycleBlueprint,
@@ -78,9 +79,8 @@ export const landedAsExpected = (
   >();
   for (const edge of blueprint.edges) {
     if (edge.condition === undefined) continue;
-    if (blueprint.nodes.find(({ id }) => id === edge.source)?.uses === "wait") {
-      continue;
-    }
+    const source = blueprint.nodes.find(({ id }) => id === edge.source);
+    if (source !== undefined && isAwaitingNode(source)) continue;
     const conditional = conditionalEdgesBySource.get(edge.source) ?? {
       edgeKeys: new Set<string>(),
       exclusive: false,
@@ -140,10 +140,23 @@ export const createLifecycleRuntime = (
   history: FlowcraftHistory,
   pending: PendingTransition,
 ): FlowRuntime<Record<string, unknown>, Record<string, never>> => {
-  const registry: Record<string, NodeFunction> = {};
+  const registry: Record<string, NodeFunction> = {
+    // A question node waits like a wait node; the production layer asks the
+    // role and resumes the lifecycle with the answer as this node's output.
+    [questionNodeUse]: async ({ dependencies, params }) => {
+      const nodeId = params[internalNodeIdParameter];
+      if (typeof nodeId !== "string") {
+        throw new Error("Lifecycle node id is missing");
+      }
+      await dependencies.workflowState.markAsAwaiting(nodeId, {
+        reason: "external_event",
+      });
+      return { output: undefined };
+    },
+  };
   for (const effectName of new Set(
     blueprint.nodes
-      .filter(({ uses }) => uses !== "wait")
+      .filter((node) => !isAwaitingNode(node))
       .map(({ uses }) => uses),
   )) {
     const effect = effects[effectName];
@@ -201,8 +214,8 @@ export const createLifecycleRuntime = (
         // calling resume.
         afterNode: async (context, nodeId, result, error) => {
           if (error !== undefined || result === undefined) return;
-          if (blueprint.nodes.find(({ id }) => id === nodeId)?.uses === "wait")
-            return;
+          const node = blueprint.nodes.find(({ id }) => id === nodeId);
+          if (node !== undefined && isAwaitingNode(node)) return;
           const data = recordNodeFinish(
             await context.toJSON(),
             nodeId,
