@@ -245,6 +245,33 @@ describe("deployed configuration directory", () => {
     expect(second.server).toEqual(first.server);
   });
 
+  it("keeps live-resource defaults paired with isolated fixture guidance", async () => {
+    const guidance = await readFile(join(process.cwd(), "AGENTS.md"), "utf8");
+    const normalized = guidance.replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
+      "The conventional `t3.baseUrl` default resolves to it in this devcontainer.",
+    );
+    expect(normalized).toContain(
+      "The conventional `boardDirectory` default resolves to it in this devcontainer.",
+    );
+    expect(normalized).toContain(
+      "The conventional `pushover.apiUrl` default resolves to the real Pushover endpoint in this devcontainer",
+    );
+    expect(normalized).toContain(
+      "Executable tests and direct-composition fixtures use an isolated T3 endpoint instead",
+    );
+    expect(normalized).toContain(
+      "an explicit disposable board path or a disposable bind mount at `/workspaces/kanban`",
+    );
+    expect(normalized).toContain(
+      "Executable tests and direct-composition fixtures use an isolated notification endpoint and disposable credentials.",
+    );
+    expect(normalized).toContain(
+      "A production operator keeps the valid conventional default and does not override it to satisfy a test.",
+    );
+  });
+
   it("retains explicit overrides for every conventional worker value", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-conventional-overrides-"));
     await prepareBlueprintRepository(root);
