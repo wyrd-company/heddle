@@ -8,10 +8,14 @@ import { describe, expect, it } from "vitest";
 import type {
   JsonValue,
   PersistedEvent,
+  SessionRuntimeRecord,
   SqlitePersistence,
 } from "../persistence/index.js";
 import type { ProductionT3Client } from "./composition.js";
-import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
+import {
+  ProductionScopedAdjudication,
+  questionRouteOwner,
+} from "./scoped-adjudication.js";
 
 describe("scoped adjudication sanctioned approvals", () => {
   const sessionKey = "session-under-test";
@@ -711,5 +715,53 @@ describe("scoped adjudication sanctioned approvals", () => {
     await expect(
       adjudication.settleSanctionedApprovals(sessionKey),
     ).resolves.toEqual({ kind: "none" });
+  });
+});
+
+describe("question route owner", () => {
+  const session = (
+    sessionKey: string,
+    activation: number,
+    kind: "adjudication" | "stage",
+  ) =>
+    ({
+      activation,
+      instanceId: "task-7",
+      kind,
+      sessionKey,
+      ...(kind === "stage"
+        ? {
+            projectId: "project-a",
+            repositoryName: "sample-repository",
+            stageId: sessionKey.split(":")[1],
+          }
+        : {}),
+    }) as unknown as SessionRuntimeRecord;
+  const sessions = [
+    session("task-7:cook:3", 3, "stage"),
+    session("task-7:taste:1", 1, "stage"),
+    session("task-7:adjudication:9", 9, "adjudication"),
+    { ...session("task-9:cook:8", 8, "stage"), instanceId: "task-9" },
+  ];
+
+  it("routes to the current stage's session over higher activations and adjudication sessions", () => {
+    expect(
+      questionRouteOwner(sessions, "task-7", "task-7:taste:1"),
+    ).toMatchObject({
+      sessionKey: "task-7:taste:1",
+    });
+  });
+
+  it("falls back to the latest stage activation and never to an adjudication session", () => {
+    expect(questionRouteOwner(sessions, "task-7", undefined)).toMatchObject({
+      sessionKey: "task-7:cook:3",
+    });
+    expect(
+      questionRouteOwner(
+        sessions.filter(({ kind }) => kind === "adjudication"),
+        "task-7",
+        undefined,
+      ),
+    ).toBeUndefined();
   });
 });

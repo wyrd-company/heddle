@@ -195,6 +195,27 @@ const mergeSkippedCandidates = (
   );
 };
 
+/**
+ * The stage session an adjudicator answers a lifecycle question from: the
+ * instance's current stage session, or its latest stage activation when the
+ * current one is unknown. Activation counts per stage and adjudication
+ * sessions carry no route, so neither an earlier stage's higher activation
+ * nor an adjudication session may outrank the current stage.
+ */
+export const questionRouteOwner = (
+  sessions: readonly SessionRuntimeRecord[],
+  instanceId: string,
+  currentSessionKey: string | undefined,
+): SessionRuntimeRecord | undefined => {
+  const stages = sessions.filter(
+    (session) => session.instanceId === instanceId && session.kind === "stage",
+  );
+  return (
+    stages.find(({ sessionKey }) => sessionKey === currentSessionKey) ??
+    [...stages].sort((left, right) => right.activation - left.activation)[0]
+  );
+};
+
 export class ProductionScopedAdjudication implements AdjudicationEscalationRouter {
   public constructor(
     private readonly options: {
@@ -716,19 +737,17 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     worktreePath: string;
   }> {
     const sessions = this.options.persistence.listSessionRuntime();
+    const runtime = this.options.persistence
+      .listReconcilerRuntime()
+      .find(({ instanceId }) => instanceId === opened.instanceId);
     // A lifecycle question has no owning session; the adjudicator works
-    // where the instance's most recent stage session worked.
+    // where the instance's current stage session worked.
     const owner =
       opened.question === undefined
         ? sessions.find(
             ({ sessionKey }) => sessionKey === opened.ownerSessionKey,
           )
-        : sessions
-            .filter(({ instanceId }) => instanceId === opened.instanceId)
-            .sort((left, right) => right.activation - left.activation)[0];
-    const runtime = this.options.persistence
-      .listReconcilerRuntime()
-      .find(({ instanceId }) => instanceId === opened.instanceId);
+        : questionRouteOwner(sessions, opened.instanceId, runtime?.sessionKey);
     if (
       owner === undefined ||
       runtime === undefined ||
