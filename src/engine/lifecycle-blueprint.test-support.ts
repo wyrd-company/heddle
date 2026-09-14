@@ -108,6 +108,7 @@ export const deliveryBlueprintFixture = (
         condition: "result.output.dispositions.reject",
         description: "Return the reviewed change for remediation",
         disposition: "reject",
+        "output-contract": "review-findings",
         source: "review",
         target: "remediate",
       },

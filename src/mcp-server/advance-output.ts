@@ -3,72 +3,60 @@
 //   implements: heddle
 // ---
 
-import { readFileSync } from "node:fs";
+import {
+  Ajv2020,
+  type ErrorObject,
+  type ValidateFunction,
+} from "ajv/dist/2020.js";
 
-import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
-
-import type { LifecycleOutputContract } from "../engine/index.js";
 import type { JsonValue } from "../persistence/index.js";
 
-export type AdvanceOutputContract = LifecycleOutputContract;
+export type AdvanceOutputContract = {
+  name: string;
+  schema: JsonValue;
+};
 
-export const incidentActionKinds = [
-  "github-issue",
-  "operator-escalation",
-  "production-mutation",
-] as const;
+const compiled = new Map<string, ValidateFunction>();
 
-const schema = JSON.parse(
-  readFileSync(
-    new globalThis.URL("../../schemas/advance-output.json", import.meta.url),
-    "utf8",
-  ),
-) as object;
-const validate = new Ajv2020({ allErrors: true, strict: false }).compile(
-  schema,
-);
+const validatorFor = (contract: AdvanceOutputContract): ValidateFunction => {
+  const key = JSON.stringify(contract.schema);
+  let validate = compiled.get(key);
+  if (validate === undefined) {
+    validate = new Ajv2020({ allErrors: true, strict: false }).compile(
+      contract.schema as object,
+    );
+    compiled.set(key, validate);
+  }
+  return validate;
+};
 
 const validationMessage = (errors: ErrorObject[] | null | undefined): string =>
   (errors ?? [])
     .filter(({ keyword }) => keyword !== "oneOf")
-    .map(({ instancePath, message }) => `${instancePath || "input"} ${message}`)
+    .map(
+      ({ instancePath, message }) => `${instancePath || "output"} ${message}`,
+    )
     .join("; ");
 
+/**
+ * Validates an `advance` output against the disposition's pinned output
+ * contract. A disposition without a contract accepts any object or none.
+ */
 export const assertAdvanceOutput = (
   disposition: string,
-  contract: AdvanceOutputContract,
+  contract: AdvanceOutputContract | undefined,
   output: Record<string, JsonValue> | undefined,
 ): void => {
-  if (contract === "incident-diagnosis" && output !== undefined) {
-    const actions = output["proposedActions"];
-    if (Array.isArray(actions)) {
-      for (const [index, action] of actions.entries()) {
-        const kind =
-          typeof action === "object" &&
-          action !== null &&
-          !Array.isArray(action)
-            ? action["kind"]
-            : undefined;
-        if (
-          typeof kind === "string" &&
-          !incidentActionKinds.includes(
-            kind as (typeof incidentActionKinds)[number],
-          )
-        ) {
-          throw new TypeError(
-            `Advance disposition ${JSON.stringify(disposition)} names unknown incident action kind ${JSON.stringify(kind)} at proposedActions[${index}]`,
-          );
-        }
-      }
-    }
+  if (contract === undefined) return;
+  if (output === undefined) {
+    throw new TypeError(
+      `Advance disposition ${JSON.stringify(disposition)} requires output contract ${JSON.stringify(contract.name)}: output is missing`,
+    );
   }
-  const candidate = {
-    contract,
-    ...(output === undefined ? {} : { output }),
-  };
-  if (validate(candidate)) return;
+  const validate = validatorFor(contract);
+  if (validate(output)) return;
   const detail = validationMessage(validate.errors);
   throw new TypeError(
-    `Advance disposition ${JSON.stringify(disposition)} requires output contract ${JSON.stringify(contract)}${detail === "" ? "" : `: ${detail}`}`,
+    `Advance disposition ${JSON.stringify(disposition)} requires output contract ${JSON.stringify(contract.name)}${detail === "" ? "" : `: ${detail}`}`,
   );
 };

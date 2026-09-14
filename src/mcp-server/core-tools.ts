@@ -28,8 +28,15 @@ const dispositionSchema = (
   if (dispositions.length === 0) {
     throw new Error("advance requires at least one stage disposition");
   }
-  const literals = dispositions.map(({ description, name }) =>
-    z.literal(name).describe(description),
+  const literals = dispositions.map(
+    ({ description, name, outputContract, outputSchema }) =>
+      z
+        .literal(name)
+        .describe(
+          outputContract === undefined
+            ? description
+            : `${description}\nOutput must satisfy contract ${JSON.stringify(outputContract)}: ${JSON.stringify(outputSchema)}`,
+        ),
   );
   return literals.length === 1
     ? literals[0]!
@@ -68,7 +75,10 @@ const registerAdvance = (
       }
       assertAdvanceOutput(
         disposition,
-        selected.outputContract,
+        selected.outputContract === undefined ||
+          selected.outputSchema === undefined
+          ? undefined
+          : { name: selected.outputContract, schema: selected.outputSchema },
         output as Record<string, JsonValue> | undefined,
       );
       const operationId = advanceOperationId(context.binding.sessionKey);

@@ -4,10 +4,14 @@
 // ---
 
 import { execFile } from "node:child_process";
+
+import { Ajv2020 } from "ajv/dist/2020.js";
 import { basename, dirname, extname } from "node:path";
 import { promisify } from "node:util";
 
 import { parse } from "yaml";
+
+import type { JsonValue } from "../persistence/index.js";
 
 const execute = promisify(execFile);
 const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -275,6 +279,46 @@ const readPinnedSkills = async (
     skills.push([name, validateAgentSkillSource(serialized, name)]);
   }
   return Object.freeze(Object.fromEntries(skills));
+};
+
+/**
+ * Reads `output-contracts/<name>.json` at the commit that pins the stage's
+ * handoff template, and proves it is a JSON Schema Ajv can compile.
+ */
+export const readPinnedOutputContract = async (
+  repositoryRoot: string,
+  commitSha: string,
+  name: string,
+): Promise<JsonValue> => {
+  if (!gitObjectId.test(commitSha)) {
+    throw new HandoffTemplateError("Output contract commit SHA is invalid");
+  }
+  if (!artifactId.test(name)) {
+    throw new HandoffTemplateError(
+      `Output contract name must be a kebab-case artifact id: ${JSON.stringify(name)}`,
+    );
+  }
+  const path = `output-contracts/${name}.json`;
+  let serialized: string;
+  try {
+    serialized = await readPinnedPath(repositoryRoot, commitSha, path);
+  } catch {
+    throw new HandoffTemplateError(
+      `Pinned output contract is unavailable at commit ${commitSha}: ${path}`,
+    );
+  }
+  let schema: JsonValue;
+  try {
+    schema = JSON.parse(serialized) as JsonValue;
+    new Ajv2020({ allErrors: true, strict: false }).compile(schema as object);
+  } catch (error) {
+    throw new HandoffTemplateError(
+      `Pinned output contract ${path} at commit ${commitSha} is not a valid JSON Schema: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  return schema;
 };
 
 export class GitHandoffTemplateStore {

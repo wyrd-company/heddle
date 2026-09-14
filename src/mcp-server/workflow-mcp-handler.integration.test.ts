@@ -461,12 +461,21 @@ const installDeliveryReviewFixture = async (
     ),
     join(repositoryRoot, "todo-templates/standard-delivery-review.json"),
   );
+  await mkdir(join(repositoryRoot, "output-contracts"), { recursive: true });
+  await copyFile(
+    join(
+      cwd(),
+      "src/test-fixtures/standard-delivery/output-contracts/review-findings.json",
+    ),
+    join(repositoryRoot, "output-contracts/review-findings.json"),
+  );
   await execFileAsync(
     "git",
     [
       "add",
       "handoff-templates/standard.md",
       "todo-templates/standard-delivery-review.json",
+      "output-contracts/review-findings.json",
     ],
     { cwd: repositoryRoot },
   );

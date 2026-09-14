@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wyrd.company/heddle/output-contracts/review-findings.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "title": "Review findings",
+  "description": "A rejected review carries at least one finding for remediation.",
+  "type": "object",
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "minItems": 1
+    }
+  }
+}

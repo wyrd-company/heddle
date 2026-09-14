@@ -74,3 +74,50 @@ describe("workflow MCP stage contract", () => {
     );
   });
 });
+
+describe("stage contract output contracts", () => {
+  const contract = () => ({
+    blueprintBlobHash: "a".repeat(40),
+    blueprintPath: "blueprints/sample.json",
+    dispositions: [
+      {
+        description: "Return with findings",
+        name: "reject",
+        outputContract: "review-findings",
+        outputSchema: { required: ["findings"], type: "object" },
+      },
+      { description: "Approve", name: "approve" },
+    ],
+    handoffTemplate: {
+      commitSha: "b".repeat(40),
+      path: "handoff-templates/sample.md",
+    },
+    skills: [],
+    stage: "review",
+    todoTemplate: "sample-review",
+    tools: ["advance"],
+  });
+
+  it("accepts a disposition carrying its pinned contract name and schema", () => {
+    expect(isWorkflowMcpStageContract(contract())).toBe(true);
+  });
+
+  it("rejects a contract name without its schema, or a schema without its name", () => {
+    const nameOnly = contract();
+    delete (nameOnly.dispositions[0] as Record<string, unknown>)[
+      "outputSchema"
+    ];
+    expect(isWorkflowMcpStageContract(nameOnly)).toBe(false);
+    const schemaOnly = contract();
+    delete (schemaOnly.dispositions[0] as Record<string, unknown>)[
+      "outputContract"
+    ];
+    expect(isWorkflowMcpStageContract(schemaOnly)).toBe(false);
+  });
+
+  it("rejects a contract name that is not a kebab-case artifact id", () => {
+    const invalid = contract();
+    invalid.dispositions[0]!.outputContract = "Review Findings";
+    expect(isWorkflowMcpStageContract(invalid)).toBe(false);
+  });
+});

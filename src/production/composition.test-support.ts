@@ -279,6 +279,25 @@ export const prepareProductionFixture =
     await mkdir(join(blueprintsRepositoryRoot, "adjudication"), {
       recursive: true,
     });
+    await mkdir(join(blueprintsRepositoryRoot, "output-contracts"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(
+        blueprintsRepositoryRoot,
+        "output-contracts",
+        "review-findings.json",
+      ),
+      `${JSON.stringify(
+        {
+          properties: { findings: { minItems: 1, type: "array" } },
+          required: ["findings"],
+          type: "object",
+        },
+        null,
+        2,
+      )}\n`,
+    );
     await mkdir(repositoryRoot, { recursive: true });
     await writeFile(
       join(blueprintsRepositoryRoot, "handoff-templates", "standard.md"),
@@ -335,7 +354,14 @@ bystanders: [sample-bystander]
     });
     await execute(
       "git",
-      ["add", "adjudication", "handoff-templates", "todo-templates", "themes"],
+      [
+        "add",
+        "adjudication",
+        "handoff-templates",
+        "output-contracts",
+        "todo-templates",
+        "themes",
+      ],
       { cwd: blueprintsRepositoryRoot },
     );
     await execute(

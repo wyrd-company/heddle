@@ -36,6 +36,7 @@ import {
 import {
   type PinnedHandoffTemplate,
   type PinnedHandoffTemplateReference,
+  readPinnedOutputContract,
 } from "./handoff-template-store.js";
 import {
   resolveBuiltInSystemPrompt,
@@ -178,10 +179,24 @@ const lifecycleProjection = (record: InstanceRecord) => {
   return lifecycleProjectionOf({ serializedContext });
 };
 
+export type OutputContractResolver = (
+  commitSha: string,
+  name: string,
+) => Promise<JsonValue>;
+
 export type SessionTemplateAuthority = {
   readHandoffTemplate: HandoffTemplateResolver;
+  /** Defaults to reading `output-contracts/<name>.json` at `repositoryRoot`. */
+  readOutputContract?: OutputContractResolver;
   repositoryRoot: string;
 };
+
+const outputContractResolver = (
+  authority: SessionTemplateAuthority,
+): OutputContractResolver =>
+  authority.readOutputContract ??
+  ((commitSha, name) =>
+    readPinnedOutputContract(authority.repositoryRoot, commitSha, name));
 
 export type WorkflowMcpStageContractResolver = (
   input: SessionBootstrapInput,
@@ -237,8 +252,9 @@ const storedStageSkills = (serialized: string): string[] => {
 const resolveWorkflowMcpStageContract = async (
   input: SessionBootstrapInput,
   record: InstanceRecord,
-  repositoryRoot: string,
+  authority: SessionTemplateAuthority,
 ): Promise<WorkflowMcpStageContract> => {
+  const repositoryRoot = authority.repositoryRoot;
   const context = record.state.flowcraftContext;
   if (
     typeof context !== "object" ||
@@ -286,18 +302,23 @@ const resolveWorkflowMcpStageContract = async (
       "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
     );
   }
-  // Several edges may share one disposition; the agent sees it once.
-  const dispositions = [
-    ...new Map(
-      blueprint.edges
-        .filter(
-          ({ disposition, source }) =>
-            source === stage.id && disposition !== undefined,
-        )
-        .map((edge) => [edge.disposition, edge] as const),
-    ).values(),
-  ]
-    .map((edge) => {
+  const readOutputContract = outputContractResolver(authority);
+  const commitSha = stage["handoff-template"]["commitSha"];
+  // Several edges may share one disposition; the agent sees it once. An
+  // edge's output contract is the schema artifact pinned at the same commit
+  // as the stage's handoff template; the schema travels in the stored
+  // contract so `advance` validates without another repository read.
+  const dispositions = await Promise.all(
+    [
+      ...new Map(
+        blueprint.edges
+          .filter(
+            ({ disposition, source }) =>
+              source === stage.id && disposition !== undefined,
+          )
+          .map((edge) => [edge.disposition, edge] as const),
+      ).values(),
+    ].map(async (edge) => {
       const { description, disposition, target } = edge;
       if (
         disposition === undefined ||
@@ -308,23 +329,25 @@ const resolveWorkflowMcpStageContract = async (
           "Stage session bootstrap requires a description for every disposition",
         );
       }
-      const targetNode = blueprint.nodes.find(({ id }) => id === target);
-      if (targetNode === undefined) {
+      if (blueprint.nodes.find(({ id }) => id === target) === undefined) {
         throw new Error(
           `Stage disposition ${JSON.stringify(disposition)} has no target node`,
         );
       }
+      const outputContract = edge["output-contract"];
       return {
         description,
         name: disposition,
-        outputContract:
-          edge["output-contract"] ??
-          (targetNode.handoff === "remediation"
-            ? ("review-findings" as const)
-            : ("optional" as const)),
+        ...(outputContract === undefined
+          ? {}
+          : {
+              outputContract,
+              outputSchema: await readOutputContract(commitSha, outputContract),
+            }),
       };
-    })
-    .sort((left, right) => left.name.localeCompare(right.name));
+    }),
+  );
+  dispositions.sort((left, right) => left.name.localeCompare(right.name));
   return {
     blueprintBlobHash: context["blueprintBlobHash"],
     blueprintPath: context["blueprintPath"],
@@ -629,11 +652,7 @@ export const bootstrapStageSession = async (
     correlationToken,
     dependencies.resolveWorkflowMcpStageContract ??
       ((value, record) =>
-        resolveWorkflowMcpStageContract(
-          value,
-          record,
-          templateAuthority.repositoryRoot,
-        )),
+        resolveWorkflowMcpStageContract(value, record, templateAuthority)),
     dependencies.instantiateTodoList ?? instantiateTodoList,
     templateAuthority,
     dependencies.resolveSystemPrompt ?? resolveBuiltInSystemPrompt,

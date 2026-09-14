@@ -19,7 +19,6 @@ import type {
 } from "../persistence/index.js";
 import type { EscalationCoordinator } from "./escalation-coordinator.js";
 import type { SubagentCoordinator } from "../subagents/coordinator.js";
-import type { AdvanceOutputContract } from "./advance-output.js";
 
 export interface WorkflowMcpPersistence {
   appendEvent(
@@ -53,15 +52,16 @@ export interface WorkflowMcpLifecycle {
   }): Promise<LifecycleSnapshot>;
 }
 
-export interface StoredWorkflowMcpDisposition {
-  [key: string]: JsonValue;
+export type StoredWorkflowMcpDisposition = {
   description: string;
   name: string;
-}
+  /** Artifact id of the pinned output contract, when the edge declares one. */
+  outputContract?: string;
+  /** The JSON Schema of that contract, read at bootstrap from its pin. */
+  outputSchema?: JsonValue;
+};
 
-export interface WorkflowMcpDisposition extends StoredWorkflowMcpDisposition {
-  outputContract: AdvanceOutputContract;
-}
+export type WorkflowMcpDisposition = StoredWorkflowMcpDisposition;
 
 export interface WorkflowMcpSessionBinding {
   adjudication?: {

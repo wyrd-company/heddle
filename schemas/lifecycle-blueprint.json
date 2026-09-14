@@ -285,7 +285,7 @@
           "minLength": 1
         },
         "output-contract": {
-          "enum": ["incident-diagnosis", "optional", "review-findings"]
+          "$ref": "#/$defs/artifact-id"
         }
       },
       "dependentRequired": {

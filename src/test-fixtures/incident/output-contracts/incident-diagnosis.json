@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wyrd.company/heddle/output-contracts/incident-diagnosis.schema.json",
+  "relationships": {
+    "implements": "heddle"
+  },
+  "title": "Incident diagnosis",
+  "description": "A rechecked condition, its root-cause analysis, and the proposed actions.",
+  "type": "object",
+  "required": ["conditionState", "rootCauseAnalysis", "proposedActions"],
+  "properties": {
+    "conditionState": {
+      "enum": ["live", "cleared", "undetermined"]
+    },
+    "rootCauseAnalysis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposedActions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "summary"],
+        "properties": {
+          "kind": {
+            "enum": [
+              "github-issue",
+              "operator-escalation",
+              "production-mutation"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

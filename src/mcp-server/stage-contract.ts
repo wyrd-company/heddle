@@ -18,10 +18,13 @@ const isDisposition = (
   typeof value["name"] === "string" &&
   typeof value["description"] === "string" &&
   value["description"].trim() !== "" &&
-  (value["outputContract"] === undefined ||
-    value["outputContract"] === "incident-diagnosis" ||
-    value["outputContract"] === "optional" ||
-    value["outputContract"] === "review-findings");
+  ((value["outputContract"] === undefined &&
+    value["outputSchema"] === undefined) ||
+    (typeof value["outputContract"] === "string" &&
+      /^[a-z]+(?:-[a-z]+)*$/.test(value["outputContract"]) &&
+      typeof value["outputSchema"] === "object" &&
+      value["outputSchema"] !== null &&
+      !Array.isArray(value["outputSchema"])));
 
 export const removedHandoffTemplateBlobHashDiagnostic = (
   value: JsonValue,

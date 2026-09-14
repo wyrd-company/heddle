@@ -104,6 +104,11 @@ const assertTemplateRelationships = (
     if (node.skills !== undefined) values.push(...node.skills);
     return values;
   });
+  for (const edge of blueprint.edges) {
+    if (edge["output-contract"] !== undefined) {
+      bound.push(edge["output-contract"]);
+    }
+  }
   const declared = relationships["uses"].filter(
     (value): value is string => typeof value === "string",
   );
@@ -114,6 +119,36 @@ const assertTemplateRelationships = (
     throw new BlueprintValidationError(
       `Blueprint '${artifactId}' relationships must name its bound artifacts`,
     );
+  }
+};
+
+const assertOutputContractArtifacts = async (
+  artifactId: string,
+  blueprint: LifecycleBlueprint,
+  repositoryRoot: string,
+): Promise<void> => {
+  const validator = new Ajv2020({ allErrors: true, strict: false });
+  for (const name of new Set(
+    blueprint.edges.flatMap((edge) =>
+      edge["output-contract"] === undefined ? [] : [edge["output-contract"]],
+    ),
+  )) {
+    const path = join(repositoryRoot, "output-contracts", `${name}.json`);
+    const artifact = await stat(path).catch(() => undefined);
+    if (artifact === undefined || !artifact.isFile()) {
+      throw new BlueprintValidationError(
+        `Blueprint '${artifactId}' names output contract '${name}' that has no artifact in output-contracts/`,
+      );
+    }
+    try {
+      validator.compile((await json(path)) as object);
+    } catch (error) {
+      throw new BlueprintValidationError(
+        `Blueprint '${artifactId}' output contract '${name}' is not a valid JSON Schema: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 };
 
@@ -269,6 +304,7 @@ export const validateBlueprintRepository = async (
     );
     assertDeliveryHandoffs(artifactId, blueprint.nodes);
     await assertTemplateArtifacts(artifactId, blueprint.nodes, root);
+    await assertOutputContractArtifacts(artifactId, blueprint, root);
   }
   const artifacts = filenames.map((filename) => basename(filename, ".json"));
   const adjudicationPath = join(root, "adjudication", "policy.json");

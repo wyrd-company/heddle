@@ -22,8 +22,8 @@ import type {
 import type { ErrorDetail } from "../error-details.js";
 import type { AgentNameListName } from "../agent-names/index.js";
 
-export type LifecycleOutputContract =
-  "incident-diagnosis" | "optional" | "review-findings";
+/** The artifact id of `output-contracts/<id>.json` in the blueprint repository. */
+export type LifecycleOutputContract = string;
 
 export interface LifecycleEdge extends EdgeDefinition {
   description?: string;

@@ -87,6 +87,7 @@ const deliveryArtifact = (artifactId: "standard-delivery" | "trivial") => ({
       "standard-delivery-implement",
       "standard-delivery-review",
       "standard-delivery-remediate",
+      "review-findings",
       ...(artifactId === "standard-delivery"
         ? ["standard-delivery-retrospective"]
         : []),
@@ -116,12 +117,29 @@ const repository = async (
     join(root, "todo-templates", "sample-checklist.json"),
     sampleTodoTemplate,
   );
+  await mkdir(join(root, "output-contracts"));
+  for (const name of ["sample-findings", "review-findings"]) {
+    await writeFile(
+      join(root, "output-contracts", `${name}.json`),
+      `${JSON.stringify(
+        {
+          properties: { findings: { minItems: 1, type: "array" } },
+          required: ["findings"],
+          type: "object",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
   await execute("git", ["init", "--quiet", "--initial-branch=main"], {
     cwd: root,
   });
-  await execute("git", ["add", "handoff-templates", "todo-templates"], {
-    cwd: root,
-  });
+  await execute(
+    "git",
+    ["add", "handoff-templates", "todo-templates", "output-contracts"],
+    { cwd: root },
+  );
   await execute(
     "git",
     [
@@ -399,42 +417,60 @@ describe("organization lifecycle blueprint artifacts", () => {
     ).rejects.toThrow('Wait node "inspect" has no disposition edges');
   });
 
-  it("accepts an explicit producer output contract on a disposition", async () => {
+  const withOutputContract = async (name: string): Promise<string> => {
     const root = await repository();
     const valid = JSON.parse(
       await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
     ) as ReturnType<typeof artifact>;
-    valid.edges[1] = {
-      ...valid.edges[1]!,
-      "output-contract": "incident-diagnosis",
-    };
+    valid.edges[1] = { ...valid.edges[1]!, "output-contract": name };
+    valid.relationships.uses.push(name);
     await writeFile(
       join(root, "blueprints/sample-process.json"),
       `${JSON.stringify(valid, null, 2)}\n`,
     );
+    return root;
+  };
 
-    await expect(validateBlueprintRepository(root)).resolves.toEqual([
-      "sample-process",
-    ]);
+  it("accepts a disposition output contract that names a schema artifact", async () => {
+    await expect(
+      validateBlueprintRepository(await withOutputContract("sample-findings")),
+    ).resolves.toEqual(["sample-process"]);
   });
 
-  it("accepts explicit review findings when rejection returns to a standard handoff", async () => {
-    const root = await repository();
-    const valid = JSON.parse(
+  it("requires a declared output contract to be a bound relationship", async () => {
+    const root = await withOutputContract("sample-findings");
+    const value = JSON.parse(
       await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
     ) as ReturnType<typeof artifact>;
-    valid.edges[1] = {
-      ...valid.edges[1]!,
-      "output-contract": "review-findings",
-    };
+    value.relationships.uses = value.relationships.uses.filter(
+      (entry) => entry !== "sample-findings",
+    );
     await writeFile(
       join(root, "blueprints/sample-process.json"),
-      `${JSON.stringify(valid, null, 2)}\n`,
+      `${JSON.stringify(value, null, 2)}\n`,
     );
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      /relationships must name its bound artifacts/,
+    );
+  });
 
-    await expect(validateBlueprintRepository(root)).resolves.toEqual([
-      "sample-process",
-    ]);
+  it("rejects an output contract with no artifact in output-contracts/", async () => {
+    await expect(
+      validateBlueprintRepository(await withOutputContract("missing-contract")),
+    ).rejects.toThrow(
+      "Blueprint 'sample-process' names output contract 'missing-contract' that has no artifact in output-contracts/",
+    );
+  });
+
+  it("rejects an output contract artifact that is not a JSON Schema", async () => {
+    const root = await withOutputContract("sample-findings");
+    await writeFile(
+      join(root, "output-contracts", "sample-findings.json"),
+      `${JSON.stringify({ type: "not-a-type" })}\n`,
+    );
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      /output contract 'sample-findings' is not a valid JSON Schema/,
+    );
   });
 
   it("rejects a blueprint that omits a mechanical node board status", () => {

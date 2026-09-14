@@ -3,7 +3,14 @@
 //   verifies: heddle
 // ---
 
-import { access, copyFile, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { cwd } from "node:process";
 
@@ -3048,11 +3055,15 @@ describe("production composition", () => {
     const artifactPaths = [
       "handoff-templates/remediation.md",
       "handoff-templates/standard.md",
+      "output-contracts/review-findings.json",
       "todo-templates/standard-delivery-implement.json",
       "todo-templates/standard-delivery-remediate.json",
       "todo-templates/standard-delivery-retrospective.json",
       "todo-templates/standard-delivery-review.json",
     ];
+    await mkdir(join(fixture.blueprintsRepositoryRoot, "output-contracts"), {
+      recursive: true,
+    });
     for (const path of artifactPaths) {
       await copyFile(
         join(cwd(), "src/test-fixtures/standard-delivery", path),
