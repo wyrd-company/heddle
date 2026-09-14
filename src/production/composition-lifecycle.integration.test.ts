@@ -118,6 +118,7 @@ describe("production lifecycle composition", () => {
     });
     await first.start();
     await first.scheduler.trigger();
+    const sharedProjectId = first.persistence.getSharedProject()!.projectId;
 
     expect(first.persistence.listInstances()).toHaveLength(1);
     expect(first.persistence.listReconcilerRuntime()).toMatchObject([
@@ -130,7 +131,7 @@ describe("production lifecycle composition", () => {
       ({ type }) => type === "thread.turn.start",
     );
     expect(create).toMatchObject({
-      projectId: "workspace-project",
+      projectId: sharedProjectId,
       title: expect.stringContaining(`task-${taskId}`),
       type: "thread.create",
       worktreePath: join(
@@ -1117,6 +1118,8 @@ kind: standard
       t3,
     });
     await composition.start();
+    const sharedProjectId =
+      composition.persistence.getSharedProject()!.projectId;
     const commandsBeforeMismatch = t3.commands.length;
 
     await expect(
@@ -1139,7 +1142,7 @@ kind: standard
               configuration.session.defaultSelection.providerInstanceId,
             model: configuration.session.defaultSelection.model.slug,
           },
-          projectId: configuration.adHocProject.projectId,
+          projectId: sharedProjectId,
           providerContext: {
             cliVersion:
               configuration.session.defaultSelection.observedCliVersion,
@@ -1326,6 +1329,7 @@ kind: standard
       t3: new SyntheticT3(),
     });
     await first.start();
+    const sharedProjectId = first.persistence.getSharedProject()!.projectId;
     await first.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
@@ -1353,7 +1357,7 @@ kind: standard
           threadId: `review-thread-${activation}`,
         },
         instanceId: `task-${taskId}`,
-        projectId: configuration.adHocProject.projectId,
+        projectId: sharedProjectId,
         repositoryName: "sample-repository",
         sessionKey: `task-${taskId}:review:${activation}`,
         stageId: "review",

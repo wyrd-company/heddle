@@ -102,11 +102,13 @@ describe("production project routing", () => {
     });
 
     await composition.start();
+    const sharedProjectId =
+      composition.persistence.getSharedProject()!.projectId;
 
     const project = t3.commands.find(
       (command) =>
         command.type === "project.create" &&
-        command.projectId !== fixture.configuration.adHocProject.projectId,
+        command.projectId !== sharedProjectId,
     );
     const thread = t3.commands.find(
       (command) =>
@@ -187,10 +189,11 @@ describe("production project routing", () => {
     const first = compose();
 
     await first.start();
+    const sharedProjectId = first.persistence.getSharedProject()!.projectId;
     const project = t3.commands.find(
       (command) =>
         command.type === "project.create" &&
-        command.projectId !== fixture.configuration.adHocProject.projectId,
+        command.projectId !== sharedProjectId,
     );
     if (project?.type !== "project.create") {
       throw new Error("Expected the epic project creation command");
@@ -316,6 +319,8 @@ describe("production project routing", () => {
     });
 
     await composition.start();
+    const sharedProjectId =
+      composition.persistence.getSharedProject()!.projectId;
 
     const firstEpicWorktree = join(
       fixture.configuration.session.worktreesRoot!,
@@ -334,6 +339,12 @@ describe("production project routing", () => {
     expect(
       composition.persistence.getEpicProject(fixture.epicId),
     ).toMatchObject({ state: "creating" });
+    expect(
+      t3.commands.filter(
+        ({ type, projectId }) =>
+          type === "project.create" && projectId !== sharedProjectId,
+      ),
+    ).toHaveLength(0);
     await composition.close();
 
     await mkdir(secondRepositoryRoot, { recursive: true });
@@ -416,8 +427,10 @@ describe("production project routing", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       deleteCommandId: "delete-retained-project",
       epicId: fixture.epicId,
-      productName: "Retained sample",
       projectId: "retained-project",
+      projectTitle: "Retained sample",
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
       repositoryNames: ["sample-repository"],
       state: "active",
     });
@@ -484,6 +497,8 @@ describe("production project routing", () => {
     });
 
     await composition.start();
+    const sharedProjectId =
+      composition.persistence.getSharedProject()!.projectId;
 
     expect(composition.attention.list()).toContainEqual(
       expect.objectContaining({
@@ -499,7 +514,7 @@ describe("production project routing", () => {
       t3.commands.filter(
         (command) =>
           command.type === "project.create" &&
-          command.projectId !== fixture.configuration.adHocProject.projectId,
+          command.projectId !== sharedProjectId,
       ),
     ).toHaveLength(0);
     await composition.close();

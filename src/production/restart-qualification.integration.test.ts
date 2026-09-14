@@ -128,15 +128,6 @@ describe.skipIf(!t3Binary)("restart with an active session", () => {
       }),
     );
 
-    await client.dispatch({
-      commandId: globalThis.crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      projectId: fixture.configuration.adHocProject.projectId,
-      title: fixture.configuration.adHocProject.name,
-      type: "project.create",
-      workspaceRoot: fixture.repositoryRoot,
-    });
-
     const baseConfiguration = {
       ...fixture.configuration,
       adHocProject: {

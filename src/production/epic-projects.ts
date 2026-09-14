@@ -3,10 +3,15 @@
 //   implements: heddle
 // ---
 
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import type { BoardTask } from "../board-adapter/index.js";
-import type { T3DispatchCommand } from "../control-plane/t3-control-plane-client.js";
+import type {
+  T3DispatchCommand,
+  T3ShellProject,
+  T3ShellSnapshot,
+} from "../control-plane/t3-control-plane-client.js";
 import { describeError } from "../error-details.js";
 import {
   ensureWorktree,
@@ -24,6 +29,7 @@ import { stableUuid } from "./stable-uuid.js";
 
 export interface EpicProjectT3Client {
   dispatch(command: T3DispatchCommand): Promise<{ sequence: number }>;
+  getShell(): Promise<T3ShellSnapshot>;
 }
 
 export type EpicProjectAction = {
@@ -31,6 +37,13 @@ export type EpicProjectAction = {
   kind: "created";
   projectId: string;
 };
+
+const normalizedWorkspaceRoot = (value: string): string =>
+  value === "/" ? value : value.replace(/\/+$/, "");
+
+export const epicProjectTitle = (
+  epic: Pick<BoardTask, "id" | "title">,
+): string => `${epic.title} - epic-${epic.id}`;
 
 export class EpicProjectCoordinator {
   constructor(
@@ -43,6 +56,7 @@ export class EpicProjectCoordinator {
       input: WorktreeInput,
     ) => Promise<unknown> = ensureWorktree,
     private readonly attention?: ReconcilerAttentionQueue,
+    private readonly generateProjectId: () => string = randomUUID,
   ) {}
 
   async reconcile(tasks: readonly BoardTask[]): Promise<EpicProjectAction[]> {
@@ -83,8 +97,15 @@ export class EpicProjectCoordinator {
   }
 
   projectForTask(task: BoardTask): string {
-    if (task.parent === undefined)
-      return this.configuration.adHocProject.projectId;
+    if (task.parent === undefined) {
+      const shared = this.persistence.getSharedProject();
+      if (shared?.state !== "active") {
+        throw new Error(
+          `The shared T3 project is not active for task ${task.id}`,
+        );
+      }
+      return shared.projectId;
+    }
     const project = this.persistence.getEpicProject(task.parent);
     if (
       project?.repositoryNames === undefined &&
@@ -113,6 +134,11 @@ export class EpicProjectCoordinator {
   ): Promise<EpicProjectAction | undefined> {
     const route = this.routing.route(epic);
     const repositoryNames = [...route.repositoryNames];
+    const desiredTitle = epicProjectTitle(epic);
+    const workspaceRoot = join(
+      this.configuration.session.worktreesRoot ?? "/workspaces/worktrees",
+      String(epic.id),
+    );
     let record = this.persistence.getEpicProject(epic.id);
     if (record?.state === "deleting" || record?.state === "deleted") {
       throw new Error(`Epic ${epic.id} project deletion cannot be reversed`);
@@ -128,57 +154,149 @@ export class EpicProjectCoordinator {
     ) {
       throw new Error(`Epic ${epic.id} changed durable repository scope`);
     }
-    if (record?.state === "active") return undefined;
+    const shell = await this.t3.getShell();
     if (record === undefined) {
+      this.assertWorkspaceRootAvailable(shell.projects, workspaceRoot);
       record = this.recordFor(
         epic.id,
-        epic.title,
+        desiredTitle,
         repositoryNames,
-        stableUuid(`epic:${epic.id}:project`),
+        this.generateProjectId(),
         "creating",
       );
       this.persistence.writeEpicProject(record);
     }
-    for (const repository of route.repositories) {
-      await this.prepareWorktree({
-        baseRef: this.configuration.session.baseRef,
-        branch: `epic/${epic.id}`,
-        repositoryName: repository.name,
-        repositoryRoot: repository.repositoryRoot,
-        worktreeName: String(epic.id),
-        ...(this.configuration.session.worktreesRoot === undefined
-          ? {}
-          : { worktreesRoot: this.configuration.session.worktreesRoot }),
+    const retained = record;
+    let project = shell.projects.find(({ id }) => id === retained.projectId);
+    if (project !== undefined) {
+      if (
+        normalizedWorkspaceRoot(project.workspaceRoot) !==
+        normalizedWorkspaceRoot(workspaceRoot)
+      ) {
+        throw new Error(
+          `Epic ${epic.id} control-plane workspace root differs from durable state`,
+        );
+      }
+    } else {
+      this.assertWorkspaceRootAvailable(
+        shell.projects,
+        workspaceRoot,
+        retained.projectId,
+      );
+    }
+    record = retained;
+    if (record.state !== "active" || project === undefined) {
+      for (const repository of route.repositories) {
+        await this.prepareWorktree({
+          baseRef: this.configuration.session.baseRef,
+          branch: `epic/${epic.id}`,
+          repositoryName: repository.name,
+          repositoryRoot: repository.repositoryRoot,
+          worktreeName: String(epic.id),
+          ...(this.configuration.session.worktreesRoot === undefined
+            ? {}
+            : { worktreesRoot: this.configuration.session.worktreesRoot }),
+        });
+      }
+    }
+    let created = false;
+    if (project === undefined) {
+      await this.t3.dispatch({
+        commandId: record.createCommandId,
+        createdAt: record.createdAt,
+        projectId: record.projectId,
+        title: record.projectTitle,
+        type: "project.create",
+        workspaceRoot,
+      });
+      project = {
+        createdAt: record.createdAt,
+        id: record.projectId,
+        title: record.projectTitle,
+        workspaceRoot,
+      };
+      created = true;
+    }
+    if (record.state !== "active") {
+      record = { ...record, state: "active" };
+      this.persistence.writeEpicProject(record);
+      created = true;
+    }
+    record = await this.finishPendingTitle(record, project.title);
+    if (record.projectTitle !== desiredTitle) {
+      record = {
+        ...record,
+        projectTitle: desiredTitle,
+        projectTitleApplied: false,
+        projectTitleRevision: record.projectTitleRevision + 1,
+      };
+      this.persistence.writeEpicProject(record);
+      await this.updateTitle(record);
+      this.persistence.writeEpicProject({
+        ...record,
+        projectTitleApplied: true,
       });
     }
+    return created
+      ? { epicId: epic.id, kind: "created", projectId: record.projectId }
+      : undefined;
+  }
+
+  private assertWorkspaceRootAvailable(
+    projects: readonly T3ShellProject[],
+    workspaceRoot: string,
+    expectedProjectId?: string,
+  ): void {
+    const collision = projects.find(
+      ({ id, workspaceRoot: existingRoot }) =>
+        id !== expectedProjectId &&
+        normalizedWorkspaceRoot(existingRoot) ===
+          normalizedWorkspaceRoot(workspaceRoot),
+    );
+    if (collision !== undefined) {
+      throw new Error(
+        `T3 project '${collision.id}' survives at epic workspace root '${workspaceRoot}' without matching Heddle state; restore the paired Heddle state before starting`,
+      );
+    }
+  }
+
+  private async finishPendingTitle(
+    record: EpicProjectRecord,
+    observedTitle: string,
+  ): Promise<EpicProjectRecord> {
+    if (record.projectTitleApplied) return record;
+    if (observedTitle !== record.projectTitle) await this.updateTitle(record);
+    const completed = { ...record, projectTitleApplied: true };
+    this.persistence.writeEpicProject(completed);
+    return completed;
+  }
+
+  private async updateTitle(record: EpicProjectRecord): Promise<void> {
     await this.t3.dispatch({
-      commandId: record.createCommandId,
-      createdAt: record.createdAt,
-      projectId: record.projectId,
-      title: `${record.productName} - epic-${epic.id}`,
-      type: "project.create",
-      workspaceRoot: join(
-        this.configuration.session.worktreesRoot ?? "/workspaces/worktrees",
-        String(epic.id),
+      commandId: stableUuid(
+        `epic-project:${record.projectId}:title:${record.projectTitleRevision}`,
       ),
+      projectId: record.projectId,
+      title: record.projectTitle,
+      type: "project.meta.update",
     });
-    this.persistence.writeEpicProject({ ...record, state: "active" });
-    return { epicId: epic.id, kind: "created", projectId: record.projectId };
   }
 
   private recordFor(
     epicId: number,
-    title: string,
+    projectTitle: string,
     repositoryNames: string[],
     projectId: string,
     state: EpicProjectRecord["state"],
   ): EpicProjectRecord {
     return {
-      createCommandId: stableUuid(`epic:${epicId}:project:create`),
+      createCommandId: stableUuid(`epic-project:${projectId}:create`),
       createdAt: this.now(),
-      deleteCommandId: stableUuid(`epic:${epicId}:project:delete`),
+      deleteCommandId: stableUuid(`epic-project:${projectId}:delete`),
       epicId,
-      productName: title,
+      projectTitle,
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
       projectId,
       repositoryNames,
       state,

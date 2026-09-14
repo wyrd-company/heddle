@@ -188,8 +188,7 @@ describe("production incident handoff", () => {
     const configuredSecret = "configured-fixture-secret";
     const configuration = {
       adHocProject: {
-        name: "Shared tasks",
-        projectId: "sample-project",
+        label: "Sample worker",
         workspaceRoot: root,
       },
       session: {

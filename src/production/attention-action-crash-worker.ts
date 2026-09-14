@@ -32,8 +32,7 @@ const outcomePath = join(root, "outcome.json");
 
 const configuration: ResolvedProductionConfiguration = {
   adHocProject: {
-    name: "Shared tasks",
-    projectId: "workspace-project",
+    label: "Sample worker",
     workspaceRoot: root,
   },
   boardDirectory: join(root, "board"),
@@ -139,13 +138,7 @@ const recordAcceptedResponse = async (
 const t3 = {
   dispatch: async () => ({ sequence: 1 }),
   getShell: async () => ({
-    projects: [
-      {
-        id: configuration.adHocProject.projectId,
-        title: configuration.adHocProject.name,
-        workspaceRoot: configuration.adHocProject.workspaceRoot,
-      },
-    ],
+    projects: [],
     threads: [],
   }),
   getThread: async () => {

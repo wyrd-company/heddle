@@ -138,8 +138,9 @@ public console link and is not the message API endpoint. Each worker has its
 own T3 server, so the T3 default names that worker's local server.
 
 These defaults do not make credentials, provider choice, incident authority,
-or the remaining lifecycle settings optional. They do not create an identity:
-the configured project ID and the existing durable state remain authoritative.
+or the remaining lifecycle settings optional. Project identity is generated at
+runtime and persisted before Heddle creates the project. Existing durable state
+remains authoritative across restart.
 
 Both source files are read-only inputs. A missing `config.yml`, an unreadable
 present `worker.yml`, invalid YAML, or an invalid effective value fails before
@@ -191,9 +192,6 @@ single-candidate provider alias, and no provider budget, so it omits both the
 conventional values and the provider-usage executable:
 
 ```yaml
-adHocProject:
-  name: Shared records
-  projectId: shared-project
 cadenceMilliseconds: 60000
 adjudication:
   approvalSettlementMilliseconds: 60000
@@ -286,13 +284,22 @@ including the malformed durable payload in the cause. Reconciliation and
 restart retain the same attention occurrence and cause.
 
 Configuration conforms to `schemas/production-configuration.json`.
-`adHocProject` declares the shared project name, ID, and absolute workspace root
+`adHocProject` declares the absolute workspace root and an optional worker label
 for tasks outside an epic. Heddle also uses that workspace root to resolve each
 task-declared repository name as
 `{adHocProject.workspaceRoot}/tools/{repository}`. Heddle reconciles the shared
-project at startup, creating it in the control plane when it is absent and
-recording it durably, so an operator does not provision it by hand. A shared
-project that cannot be reconciled fails startup and names the project.
+project at startup. On first use, it generates a UUID, records the complete
+identity before external effects, and creates the project in the control plane.
+The conventional title is `Heddle · ad-hoc work`; when `label` is present, the
+title is `Heddle · ad-hoc work · {label}`. A label change updates only the title
+through a durable, replayable revision. It never changes the project ID.
+
+Heddle reuses an existing SQLite project identity after restart and recreates
+that exact identity when the paired T3 server has lost it. Fresh Heddle state
+fails closed when T3 still has another active project at the same workspace
+root. Restore the paired Heddle state instead of treating partial T3 history as
+authority. Importing or adopting a project requires a future explicit operation
+that imports the complete paired state; ordinary startup does not adopt it.
 
 A top-level ad-hoc task or epic declares its complete repository scope in the
 typed `repos` front-matter array. Each entry must be a logical,
@@ -724,7 +731,7 @@ configuration is invalid even when that instance is unavailable at startup.
 Omitting a second alias does not give that alias an unbudgeted route to the
 instance.
 
-An in-progress epic gets one T3 project titled
+An in-progress epic gets one generated, durably persisted T3 project titled
 `{epic-title} - epic-{id}` at `/workspaces/worktrees/{epic-id}`. Heddle prepares
 each declared repository at `/workspaces/worktrees/{epic-id}/{repository}` on
 `epic/{epic-id}` before project creation. Paused, stopped, and UAT epics retain
@@ -734,8 +741,9 @@ that the project exists; it is not execution permission. A done epic's board
 status blocks child dispatch. Project deletion requires a separate explicit
 cleanup policy. A durable deleting or deleted record stays non-active across
 restart and is not reseeded. Child task threads use the epic project.
-Ad-hoc threads use `adHocProject.projectId`. Subagents reuse the parent's project
-and worktree.
+An epic title change updates only the T3 project title through a durable,
+replayable revision. Ad-hoc threads use the persisted shared project ID.
+Subagents reuse the parent's project and worktree.
 
 An epic in `uat` requires at least one child tagged `uat`. Without one, Heddle
 raises one stable epic-scoped attention and keeps the epic in `uat`; it does not

@@ -3,8 +3,11 @@
 //   implements: heddle
 // ---
 
+import { randomUUID } from "node:crypto";
+
 import type {
   T3DispatchCommand,
+  T3ShellProject,
   T3ShellSnapshot,
 } from "../control-plane/t3-control-plane-client.js";
 import { describeError } from "../error-details.js";
@@ -23,76 +26,163 @@ export interface SharedProjectT3Client {
 const normalizedWorkspaceRoot = (value: string): string =>
   value === "/" ? value : value.replace(/\/+$/, "");
 
+export const sharedProjectTitle = (label?: string): string =>
+  label === undefined
+    ? "Heddle · ad-hoc work"
+    : `Heddle · ad-hoc work · ${label.trim()}`;
+
 export class SharedProjectCoordinator {
   public constructor(
     private readonly configuration: ResolvedProductionConfiguration,
     private readonly persistence: SqlitePersistence,
     private readonly t3: SharedProjectT3Client,
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly generateProjectId: () => string = randomUUID,
   ) {}
 
   public async reconcile(): Promise<void> {
     const configured = this.configuration.adHocProject;
+    const desiredTitle = sharedProjectTitle(configured.label);
+    let record = this.persistence.getSharedProject();
     try {
-      let record = this.persistence.getSharedProject();
-      if (
-        record !== undefined &&
-        (record.projectName !== configured.name ||
-          record.projectId !== configured.projectId ||
-          record.workspaceRoot !== configured.workspaceRoot)
-      ) {
-        throw new Error("the durable identity differs from configuration");
-      }
-
       const shell = await this.t3.getShell();
-      const project = shell.projects.find(
-        ({ id }) => id === configured.projectId,
-      );
-      if (project !== undefined) {
-        if (
-          project.title !== configured.name ||
-          normalizedWorkspaceRoot(project.workspaceRoot) !==
-            normalizedWorkspaceRoot(configured.workspaceRoot)
-        ) {
-          throw new Error(
-            "the control-plane identity differs from configuration",
-          );
-        }
-        record ??= this.recordFor(project.createdAt ?? this.now());
-        this.persistence.writeSharedProject({ ...record, state: "active" });
-        return;
+      if (record === undefined) {
+        this.assertWorkspaceRootAvailable(
+          shell.projects,
+          configured.workspaceRoot,
+        );
+        record = this.recordFor(
+          this.generateProjectId(),
+          desiredTitle,
+          configured.workspaceRoot,
+          this.now(),
+        );
+        this.persistence.writeSharedProject(record);
+      } else if (
+        normalizedWorkspaceRoot(record.workspaceRoot) !==
+        normalizedWorkspaceRoot(configured.workspaceRoot)
+      ) {
+        throw new Error(
+          "the durable workspace root differs from configuration",
+        );
       }
 
-      record ??= this.recordFor(this.now());
-      this.persistence.writeSharedProject({ ...record, state: "creating" });
-      await this.t3.dispatch({
-        commandId: record.createCommandId,
-        createdAt: record.createdAt,
-        projectId: record.projectId,
-        title: record.projectName,
-        type: "project.create",
-        workspaceRoot: record.workspaceRoot,
-      });
-      this.persistence.writeSharedProject({ ...record, state: "active" });
+      const retained = record;
+      let project = shell.projects.find(({ id }) => id === retained.projectId);
+      if (project === undefined) {
+        this.assertWorkspaceRootAvailable(
+          shell.projects,
+          retained.workspaceRoot,
+          retained.projectId,
+        );
+        await this.t3.dispatch({
+          commandId: retained.createCommandId,
+          createdAt: retained.createdAt,
+          projectId: retained.projectId,
+          title: retained.projectTitle,
+          type: "project.create",
+          workspaceRoot: retained.workspaceRoot,
+        });
+        project = {
+          createdAt: retained.createdAt,
+          id: retained.projectId,
+          title: retained.projectTitle,
+          workspaceRoot: retained.workspaceRoot,
+        };
+      } else if (
+        normalizedWorkspaceRoot(project.workspaceRoot) !==
+        normalizedWorkspaceRoot(retained.workspaceRoot)
+      ) {
+        throw new Error(
+          "the control-plane workspace root differs from durable state",
+        );
+      }
+
+      record = retained;
+      if (record.state !== "active") {
+        record = { ...record, state: "active" };
+        this.persistence.writeSharedProject(record);
+      }
+      record = await this.finishPendingTitle(record, project.title);
+      if (record.projectTitle !== desiredTitle) {
+        record = {
+          ...record,
+          projectTitle: desiredTitle,
+          projectTitleApplied: false,
+          projectTitleRevision: record.projectTitleRevision + 1,
+        };
+        this.persistence.writeSharedProject(record);
+        await this.updateTitle(record);
+        this.persistence.writeSharedProject({
+          ...record,
+          projectTitleApplied: true,
+        });
+      }
     } catch (error) {
+      const identity =
+        record === undefined ? "unprovisioned" : record.projectId;
       throw new Error(
-        `Shared project '${configured.name}' (${configured.projectId}) reconciliation failed: ${describeError(error)}`,
+        `Shared project (${identity}) reconciliation failed: ${describeError(error)}`,
         { cause: error },
       );
     }
   }
 
-  private recordFor(createdAt: string): SharedProjectRecord {
-    const configured = this.configuration.adHocProject;
-    return {
-      createCommandId: stableUuid(
-        `shared-project:${configured.projectId}:create`,
+  private assertWorkspaceRootAvailable(
+    projects: readonly T3ShellProject[],
+    workspaceRoot: string,
+    expectedProjectId?: string,
+  ): void {
+    const collision = projects.find(
+      ({ id, workspaceRoot: existingRoot }) =>
+        id !== expectedProjectId &&
+        normalizedWorkspaceRoot(existingRoot) ===
+          normalizedWorkspaceRoot(workspaceRoot),
+    );
+    if (collision !== undefined) {
+      throw new Error(
+        `T3 project '${collision.id}' survives at workspace root '${workspaceRoot}' without matching Heddle state; restore the paired Heddle state before starting`,
+      );
+    }
+  }
+
+  private async finishPendingTitle(
+    record: SharedProjectRecord,
+    observedTitle: string,
+  ): Promise<SharedProjectRecord> {
+    if (record.projectTitleApplied) return record;
+    if (observedTitle !== record.projectTitle) await this.updateTitle(record);
+    const completed = { ...record, projectTitleApplied: true };
+    this.persistence.writeSharedProject(completed);
+    return completed;
+  }
+
+  private async updateTitle(record: SharedProjectRecord): Promise<void> {
+    await this.t3.dispatch({
+      commandId: stableUuid(
+        `shared-project:${record.projectId}:title:${record.projectTitleRevision}`,
       ),
+      projectId: record.projectId,
+      title: record.projectTitle,
+      type: "project.meta.update",
+    });
+  }
+
+  private recordFor(
+    projectId: string,
+    projectTitle: string,
+    workspaceRoot: string,
+    createdAt: string,
+  ): SharedProjectRecord {
+    return {
+      createCommandId: stableUuid(`shared-project:${projectId}:create`),
       createdAt,
-      projectId: configured.projectId,
-      projectName: configured.name,
+      projectId,
+      projectTitle,
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
       state: "creating",
-      workspaceRoot: configured.workspaceRoot,
+      workspaceRoot,
     };
   }
 }

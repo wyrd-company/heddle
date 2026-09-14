@@ -756,7 +756,8 @@ describe("production subagent composition", () => {
     const epicProjectId = t3.commands.find(
       (command) =>
         command.type === "project.create" &&
-        command.projectId !== fixture.configuration.adHocProject.projectId,
+        command.projectId !==
+          composition.persistence.getSharedProject()?.projectId,
     )?.projectId;
     expect(childCreate).toMatchObject({
       branch: `heddle/task-${fixture.taskId}`,

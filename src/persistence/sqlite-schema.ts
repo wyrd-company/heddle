@@ -179,7 +179,9 @@ export const initializePersistenceSchema = (
       deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
       create_command_id TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL,
-      delete_command_id TEXT NOT NULL UNIQUE
+      delete_command_id TEXT NOT NULL UNIQUE,
+      project_title_applied INTEGER NOT NULL DEFAULT 1 CHECK (project_title_applied IN (0, 1)),
+      project_title_revision INTEGER NOT NULL DEFAULT 0 CHECK (project_title_revision >= 0)
     );
 
     CREATE TABLE IF NOT EXISTS heddle_shared_project (
@@ -189,7 +191,9 @@ export const initializePersistenceSchema = (
       workspace_root TEXT NOT NULL,
       state TEXT NOT NULL CHECK (state IN ('creating', 'active')),
       create_command_id TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      project_title_applied INTEGER NOT NULL DEFAULT 1 CHECK (project_title_applied IN (0, 1)),
+      project_title_revision INTEGER NOT NULL DEFAULT 0 CHECK (project_title_revision >= 0)
     );
 
     CREATE TABLE IF NOT EXISTS heddle_dynamic_task_intents (
@@ -380,6 +384,37 @@ export const initializePersistenceSchema = (
   ) {
     database.exec(
       "ALTER TABLE heddle_epic_projects ADD COLUMN repository_names_json TEXT",
+    );
+  }
+  if (
+    !epicProjectColumns.some(({ name }) => name === "project_title_applied")
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_epic_projects ADD COLUMN project_title_applied INTEGER NOT NULL DEFAULT 1 CHECK (project_title_applied IN (0, 1))",
+    );
+  }
+  if (
+    !epicProjectColumns.some(({ name }) => name === "project_title_revision")
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_epic_projects ADD COLUMN project_title_revision INTEGER NOT NULL DEFAULT 0 CHECK (project_title_revision >= 0)",
+    );
+  }
+  const sharedProjectColumns = database
+    .prepare("PRAGMA table_info(heddle_shared_project)")
+    .all() as Array<{ name: string }>;
+  if (
+    !sharedProjectColumns.some(({ name }) => name === "project_title_applied")
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_shared_project ADD COLUMN project_title_applied INTEGER NOT NULL DEFAULT 1 CHECK (project_title_applied IN (0, 1))",
+    );
+  }
+  if (
+    !sharedProjectColumns.some(({ name }) => name === "project_title_revision")
+  ) {
+    database.exec(
+      "ALTER TABLE heddle_shared_project ADD COLUMN project_title_revision INTEGER NOT NULL DEFAULT 0 CHECK (project_title_revision >= 0)",
     );
   }
 };

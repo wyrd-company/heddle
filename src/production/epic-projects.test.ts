@@ -15,6 +15,7 @@ import type { T3DispatchCommand } from "../control-plane/index.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
+import { SyntheticT3 } from "./composition.test-support.js";
 import { TaskRepositoryRouter } from "./repository-routing.js";
 
 const scratch: string[] = [];
@@ -39,8 +40,7 @@ const task = (status: string): BoardTask => ({
 const configuration = (root: string): ProductionConfiguration =>
   ({
     adHocProject: {
-      name: "Shared tasks",
-      projectId: "shared-project",
+      label: "Sample worker",
       workspaceRoot: root,
     },
     session: { baseRef: "main", worktreesRoot: join(root, "worktrees") },
@@ -53,7 +53,7 @@ describe("EpicProjectCoordinator", () => {
     const persistence = new SqlitePersistence({
       stateDirectory: join(root, "state"),
     });
-    const commands: T3DispatchCommand[] = [];
+    const t3 = new SyntheticT3();
     const worktrees: Parameters<
       ConstructorParameters<typeof EpicProjectCoordinator>[5]
     >[0][] = [];
@@ -62,21 +62,19 @@ describe("EpicProjectCoordinator", () => {
       config,
       persistence,
       new TaskRepositoryRouter(root),
-      {
-        dispatch: async (command) => (
-          commands.push(command),
-          { sequence: commands.length }
-        ),
-      },
+      t3,
       () => "2026-01-01T00:00:00.000Z",
       async (input) => void worktrees.push(input),
+      undefined,
+      () => "generated-epic-project",
     );
 
     await expect(
       coordinator.reconcile([task("in-progress")]),
     ).resolves.toMatchObject([{ epicId: 101, kind: "created" }]);
-    const created = commands[0]!;
+    const created = t3.commands[0]!;
     expect(created).toMatchObject({
+      projectId: "generated-epic-project",
       title: "Sample delivery - epic-101",
       type: "project.create",
       workspaceRoot: join(root, "worktrees", "101"),
@@ -94,11 +92,11 @@ describe("EpicProjectCoordinator", () => {
     await expect(coordinator.reconcile([task("uat")])).resolves.toEqual([]);
     await expect(coordinator.reconcile([task("paused")])).resolves.toEqual([]);
     await expect(coordinator.reconcile([task("stopped")])).resolves.toEqual([]);
-    expect(commands).toHaveLength(1);
+    expect(t3.commands).toHaveLength(1);
 
     await expect(coordinator.reconcile([task("done")])).resolves.toEqual([]);
     await expect(coordinator.reconcile([task("done")])).resolves.toEqual([]);
-    expect(commands).toHaveLength(1);
+    expect(t3.commands).toHaveLength(1);
     expect(persistence.getEpicProject(101)).toMatchObject({
       projectId: created.projectId,
       repositoryNames: ["sample-repository"],
@@ -113,23 +111,97 @@ describe("EpicProjectCoordinator", () => {
       config,
       restartedPersistence,
       new TaskRepositoryRouter(root),
-      {
-        dispatch: async (command) => (
-          commands.push(command),
-          { sequence: commands.length }
-        ),
-      },
+      t3,
       () => "2027-01-01T00:00:00.000Z",
       async () => undefined,
     );
     await expect(restarted.reconcile([task("done")])).resolves.toEqual([]);
-    expect(commands).toHaveLength(1);
+    expect(t3.commands).toHaveLength(1);
     expect(restartedPersistence.getEpicProject(101)).toMatchObject({
       projectId: created.projectId,
       repositoryNames: ["sample-repository"],
       state: "active",
     });
     restartedPersistence.close();
+  });
+
+  it("updates an epic title without changing its durable identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const t3 = new SyntheticT3();
+    const coordinator = new EpicProjectCoordinator(
+      configuration(root),
+      persistence,
+      new TaskRepositoryRouter(root),
+      t3,
+      undefined,
+      async () => undefined,
+      undefined,
+      () => "generated-epic-project",
+    );
+    await coordinator.reconcile([task("in-progress")]);
+    const create = t3.commands.find(({ type }) => type === "project.create");
+
+    await coordinator.reconcile([
+      { ...task("in-progress"), title: "Changed delivery" },
+    ]);
+
+    expect(t3.commands.filter(({ type }) => type === "project.create")).toEqual(
+      [create],
+    );
+    expect(
+      t3.commands.filter(({ type }) => type === "project.meta.update"),
+    ).toEqual([
+      expect.objectContaining({
+        projectId: "generated-epic-project",
+        title: "Changed delivery - epic-101",
+      }),
+    ]);
+    expect(persistence.getEpicProject(101)).toMatchObject({
+      projectId: "generated-epic-project",
+      projectTitle: "Changed delivery - epic-101",
+      projectTitleApplied: true,
+      projectTitleRevision: 1,
+    });
+    persistence.close();
+  });
+
+  it("rejects a surviving same-workspace project when Heddle state is fresh", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const t3 = new SyntheticT3();
+    await t3.dispatch({
+      commandId: "seed-surviving-project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: "surviving-project",
+      title: "External work",
+      type: "project.create",
+      workspaceRoot: join(root, "worktrees", "101"),
+    });
+    t3.commands.length = 0;
+    const worktrees: unknown[] = [];
+    const coordinator = new EpicProjectCoordinator(
+      configuration(root),
+      persistence,
+      new TaskRepositoryRouter(root),
+      t3,
+      undefined,
+      async (input) => void worktrees.push(input),
+    );
+
+    await expect(coordinator.reconcile([task("in-progress")])).rejects.toThrow(
+      "survives at epic workspace root",
+    );
+    expect(persistence.getEpicProject(101)).toBeUndefined();
+    expect(worktrees).toEqual([]);
+    expect(t3.commands).toEqual([]);
+    persistence.close();
   });
 
   it("uses one retained active project identity without creating it again", async () => {
@@ -144,22 +216,28 @@ describe("EpicProjectCoordinator", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       deleteCommandId: "delete-retained-project",
       epicId: 101,
-      productName: "Retained sample",
       projectId: "retained-project",
+      projectTitle: "Retained sample",
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
       repositoryNames: ["sample-repository"],
       state: "active",
     });
-    const commands: T3DispatchCommand[] = [];
+    const t3 = new SyntheticT3();
+    await t3.dispatch({
+      commandId: "seed-retained-project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: "retained-project",
+      title: "Retained sample",
+      type: "project.create",
+      workspaceRoot: join(root, "worktrees", "101"),
+    });
+    t3.commands.length = 0;
     const coordinator = new EpicProjectCoordinator(
       config,
       persistence,
       new TaskRepositoryRouter(root),
-      {
-        dispatch: async (command) => (
-          commands.push(command),
-          { sequence: commands.length }
-        ),
-      },
+      t3,
       undefined,
       async () => undefined,
     );
@@ -174,7 +252,7 @@ describe("EpicProjectCoordinator", () => {
     expect(() =>
       coordinator.baseBranchForTask({ ...task("todo"), id: 103, parent: 999 }),
     ).toThrow("Epic 999 has no active T3 project for task 103");
-    expect(commands).toEqual([]);
+    expect(t3.commands).toEqual([]);
     persistence.close();
   });
 
@@ -185,14 +263,19 @@ describe("EpicProjectCoordinator", () => {
     const persistence = new SqlitePersistence({
       stateDirectory: join(root, "state"),
     });
-    const commands: T3DispatchCommand[] = [];
-    const t3 = {
-      dispatch: async (command: T3DispatchCommand) => {
-        commands.push(command);
-        if (commands.length === 1) throw new Error("ambiguous create");
-        return { sequence: commands.length };
-      },
-    };
+    class AmbiguousCreateT3 extends SyntheticT3 {
+      createAttempts = 0;
+
+      override async dispatch(command: T3DispatchCommand) {
+        const result = await super.dispatch(command);
+        if (command.type === "project.create") {
+          this.createAttempts += 1;
+          if (this.createAttempts === 1) throw new Error("ambiguous create");
+        }
+        return result;
+      }
+    }
+    const t3 = new AmbiguousCreateT3();
     const prepareWorktree = async () => undefined;
     const first = new EpicProjectCoordinator(
       config,
@@ -221,8 +304,13 @@ describe("EpicProjectCoordinator", () => {
         { ...task("in-progress"), title: "Changed sample delivery" },
       ]),
     ).resolves.toMatchObject([{ epicId: 101, kind: "created" }]);
-    expect(commands).toHaveLength(2);
-    expect(commands[1]).toEqual(commands[0]);
+    expect(t3.createAttempts).toBe(1);
+    expect(
+      t3.commands.filter(({ type }) => type === "project.create"),
+    ).toHaveLength(1);
+    expect(
+      t3.commands.filter(({ type }) => type === "project.meta.update"),
+    ).toHaveLength(1);
     expect(persistence.getEpicProject(101)?.state).toBe("active");
     persistence.close();
   });
@@ -239,7 +327,7 @@ describe("EpicProjectCoordinator", () => {
       config,
       persistence,
       routing,
-      { dispatch: async () => ({ sequence: 1 }) },
+      new SyntheticT3(),
       undefined,
       async () => undefined,
     );
@@ -270,8 +358,10 @@ describe("EpicProjectCoordinator", () => {
         createdAt: "2026-01-01T00:00:00.000Z",
         deleteCommandId: "delete-retained-project",
         epicId: 101,
-        productName: "Retained sample",
         projectId: "retained-project",
+        projectTitle: "Retained sample",
+        projectTitleApplied: true,
+        projectTitleRevision: 0,
         repositoryNames: ["sample-repository"],
         state,
       });
@@ -286,7 +376,7 @@ describe("EpicProjectCoordinator", () => {
         configuration(root),
         persistence,
         new TaskRepositoryRouter(root),
-        { dispatch: async () => ({ sequence: 1 }) },
+        new SyntheticT3(),
         undefined,
         async () => undefined,
       );
@@ -312,21 +402,17 @@ describe("EpicProjectCoordinator", () => {
       scratch.push(root);
       const config = configuration(root);
       const stateDirectory = join(root, "state");
-      const commands: T3DispatchCommand[] = [];
-      const t3 = {
-        dispatch: async (command: T3DispatchCommand) => (
-          commands.push(command),
-          { sequence: commands.length }
-        ),
-      };
+      const t3 = new SyntheticT3();
       const firstPersistence = new SqlitePersistence({ stateDirectory });
       firstPersistence.writeEpicProject({
         createCommandId: "create-retained-project",
         createdAt: "2026-01-01T00:00:00.000Z",
         deleteCommandId: "delete-retained-project",
         epicId: 101,
-        productName: "Retained sample",
         projectId: "retained-project",
+        projectTitle: "Retained sample",
+        projectTitleApplied: true,
+        projectTitleRevision: 0,
         repositoryNames: ["sample-repository"],
         state,
       });
@@ -367,7 +453,7 @@ describe("EpicProjectCoordinator", () => {
       expect(() =>
         restarted.projectForTask({ ...task("todo"), id: 102, parent: 101 }),
       ).toThrow("has no active T3 project");
-      expect(commands).toHaveLength(0);
+      expect(t3.commands).toHaveLength(0);
       restartedPersistence.close();
     },
   );

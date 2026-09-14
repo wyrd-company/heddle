@@ -38,8 +38,7 @@ import { layerConfiguration } from "./configuration-layering.js";
 
 const fixture = (root: string): ProductionConfiguration => ({
   adHocProject: {
-    name: "Shared records",
-    projectId: "shared-project",
+    label: "Sample worker",
     workspaceRoot: join(root, "workspace"),
   },
   boardDirectory: join(root, "board"),
@@ -525,16 +524,20 @@ describe("deployed configuration directory", () => {
     );
   });
 
-  it("attributes a cleared required object to the worker source after defaults reapply", async () => {
+  it("restores the conventional ad-hoc root after a worker clears the object", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
     await prepareBlueprintRepository(root);
     await writeFile(join(root, "config.yml"), stringify(fixture(root)));
     const workerPath = join(root, "worker.yml");
     await writeFile(workerPath, stringify({ adHocProject: null }));
 
-    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `field '/adHocProject/name' from '${workerPath}'`,
-    );
+    const loaded = await loadDeploymentConfiguration(root);
+    expect(loaded.configuration.adHocProject).toEqual({
+      workspaceRoot: "/workspaces",
+    });
+    expect(loaded.configurationClearedBy).toMatchObject({
+      "/adHocProject": workerPath,
+    });
   });
 
   it("keeps inherited map entries for an empty map and clears them with null", () => {

@@ -241,8 +241,7 @@ const t3: SessionT3Client = {
 
 const configuration = {
   adHocProject: {
-    name: "Shared tasks",
-    projectId: "sample-project",
+    label: "Sample worker",
     workspaceRoot: root,
   },
   session: {

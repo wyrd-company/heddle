@@ -429,7 +429,7 @@ describe("Heddle devcontainer feature", () => {
     ).toBe(true);
     expect(configuration).not.toHaveProperty("boardDirectory");
     expect(configuration).not.toHaveProperty("stateDirectory");
-    expect(configuration["adHocProject"]).not.toHaveProperty("workspaceRoot");
+    expect(configuration).not.toHaveProperty("adHocProject");
     expect(configuration["pacing"]).not.toHaveProperty("usageWindowHours");
     expect(configuration["server"]).not.toHaveProperty("host");
 

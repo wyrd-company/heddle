@@ -106,14 +106,18 @@ proposed-design:
     added later — and dispatches them as readiness allows, with sequencing
     carried by dependency edges. It also prepares every repository declared by
     the epic at `/workspaces/worktrees/{epic-id}/{repository}` on the
-    `epic/{epic-id}` branch and creates a T3 project titled
+    `epic/{epic-id}` branch, generates and persists a project UUID before any
+    worktree or T3 effect, and creates a T3 project titled
     `{epic-title} - epic-{epic-id}` with `/workspaces/worktrees/{epic-id}` as
     its workspace root. An epic in `backlog` or `todo` is paused: no new child
     dispatch starts, while in-flight instances run to their next wait state and
     hold. An epic in `uat` is not paused; it admits UAT child dispatch and only
     the exact late delivery work described below. A `done` epic is terminal,
     and an epic with an unknown status dispatches nothing. Paused, UAT, and
-    completed epics retain their project so archived stage threads remain
+    An epic title change records a durable title revision before an idempotent
+    T3 metadata update and does not change the project UUID. Fresh Heddle state
+    fails closed when another T3 project already owns the epic workspace root.
+    Paused, UAT, and completed epics retain their project so archived stage threads remain
     available for inspection. The durable `active` project
     state means that the T3 project exists; it does not authorize child task
     execution. The epic's board status remains dispatch authority, and a done
@@ -161,16 +165,22 @@ proposed-design:
     Missing scope, a child declaration, an unavailable repository path, or an
     undeclared node repository raises attention with the concrete failure.
 
-    The separately named ad-hoc project supplies the shared project ID and
-    workspace root for tasks outside an epic. Heddle owns that project's
-    existence exactly as it owns an epic
-    project's: at startup it reconciles the configured shared project against
-    the control plane, creating it under a deterministic command identifier
-    when absent and recording it durably, so a replay neither duplicates the
-    project nor dispatches a second creation. A shared project that cannot be
-    reconciled fails startup closed and names the project, rather than
-    surfacing as a dispatch rejection at the first session. Heddle never infers
-    repository scope from a diff, branch, session, or filesystem scan.
+    The ad-hoc project setting supplies the workspace root and an optional
+    worker label for tasks outside an epic. Heddle generates the shared project
+    UUID and persists the complete identity before creating it in T3. The
+    default title is `Heddle · ad-hoc work`; a label appends
+    ` · {label}`. Heddle records each title change as a durable revision before
+    dispatching its idempotent metadata update. A restart reuses the persisted
+    identity and completes an interrupted creation or title revision without
+    generating another ID.
+
+    Fresh Heddle state fails closed when T3 has an active project at the same
+    workspace root. Ordinary reconciliation does not adopt partial external
+    history. Adoption requires a future explicit operation that imports the
+    complete paired state. This project-level rule does not repair or redefine
+    archived stage-thread identity; archived-thread recovery remains within the
+    stage archive evidence boundary. Heddle never infers repository scope from
+    a diff, branch, session, or filesystem scan.
 
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else
@@ -452,7 +462,7 @@ proposed-design:
     same bound thread and does not perform provider selection again.
 
     A child task thread uses its epic project's durable ID. An ad-hoc task uses
-    the configured shared project. A delegated subagent inherits its parent's
+    the persisted shared project. A delegated subagent inherits its parent's
     project, retained repository scope, branches, and worktrees. Its bounded deterministic title
     is `task-{id} · {stage-occurrence}`: it contains the complete task identity
     and a stable occurrence discriminator, with no service marker or epic
@@ -1410,8 +1420,10 @@ proposed-design:
     Usage-service authentication belongs to the executable and never enters
     Heddle arguments or output. Provider CLI authentication belongs to T3.
 
-    The installation uses one configured shared T3 project for ad-hoc tasks
-    and one Heddle-managed T3 project per started epic. Managed projects remain
+    The installation uses one Heddle-managed shared T3 project for ad-hoc tasks
+    and one Heddle-managed T3 project per started epic. Project UUIDs are
+    generated and persisted before creation. Optional labels and epic title
+    changes update only the T3 project title through durable revisions. Managed projects remain
     available after epic completion so their archived stage threads can be
     inspected. Repository scope comes from the top-level task or epic and is
     visible in every agent handoff, including inherited child scope. Existing

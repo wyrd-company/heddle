@@ -15,8 +15,7 @@ import {
 
 const fixture = (): ProductionConfiguration => ({
   adHocProject: {
-    name: "Shared tasks",
-    projectId: "shared-project",
+    label: "Sample worker",
     workspaceRoot: "/tmp/sample-workspace",
   },
   boardDirectory: "/tmp/sample-board",
@@ -67,6 +66,48 @@ const fixture = (): ProductionConfiguration => ({
 });
 
 describe("production configuration", () => {
+  it("accepts an omitted worker label and rejects configured project identity", async () => {
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+    const unlabeled = fixture();
+    unlabeled.pacing.providerBudgets = {};
+    delete unlabeled.adHocProject.label;
+
+    expect(validate(unlabeled), JSON.stringify(validate.errors)).toBe(true);
+    expect(validateProductionConfiguration(unlabeled)).toBe(unlabeled);
+    expect(
+      validate({
+        ...unlabeled,
+        adHocProject: {
+          ...unlabeled.adHocProject,
+          projectId: "configured-project",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        ...unlabeled,
+        adHocProject: {
+          ...unlabeled.adHocProject,
+          name: "Configured project",
+        },
+      }),
+    ).toBe(false);
+
+    const blankLabel = fixture();
+    blankLabel.adHocProject.label = "   ";
+    expect(validate(blankLabel)).toBe(false);
+    expect(() => validateProductionConfiguration(blankLabel)).toThrow(
+      "adHocProject.label must not be empty",
+    );
+  });
+
   it("accepts both the legacy single-object alias and an ordered candidate list", async () => {
     const schema = JSON.parse(
       await readFile("schemas/production-configuration.json", "utf8"),

@@ -239,7 +239,9 @@ export interface EpicProjectRecord {
   createdAt: string;
   deleteCommandId: string;
   epicId: number;
-  productName: string;
+  projectTitle: string;
+  projectTitleApplied: boolean;
+  projectTitleRevision: number;
   projectId: string;
   repositoryNames?: string[];
   state: "active" | "creating" | "deleted" | "deleting";
@@ -249,7 +251,9 @@ export interface SharedProjectRecord {
   createCommandId: string;
   createdAt: string;
   projectId: string;
-  projectName: string;
+  projectTitle: string;
+  projectTitleApplied: boolean;
+  projectTitleRevision: number;
   state: "active" | "creating";
   workspaceRoot: string;
 }

@@ -59,10 +59,9 @@
     "adHocProject": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "projectId", "workspaceRoot"],
+      "required": ["workspaceRoot"],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "projectId": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "pattern": "\\S" },
         "workspaceRoot": { "type": "string", "pattern": "^/" }
       }
     },

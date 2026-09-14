@@ -624,6 +624,9 @@ describe("SqlitePersistence", () => {
     expect(persistence.getEpicProject(101)).toMatchObject({
       epicId: 101,
       projectId: "sample-project",
+      projectTitle: "Sample product",
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
       state: "active",
     });
     expect(persistence.getEpicProject(101)).not.toHaveProperty(
@@ -636,7 +639,14 @@ describe("SqlitePersistence", () => {
           .prepare("PRAGMA table_info(heddle_epic_projects)")
           .all() as Array<{ name: string }>
       ).map(({ name }) => name),
-    ).toEqual(expect.arrayContaining(["deleted", "repository_names_json"]));
+    ).toEqual(
+      expect.arrayContaining([
+        "deleted",
+        "project_title_applied",
+        "project_title_revision",
+        "repository_names_json",
+      ]),
+    );
     migrated.close();
     persistence.close();
   });
@@ -649,8 +659,10 @@ describe("SqlitePersistence", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       deleteCommandId: "delete-sample-project",
       epicId: 101,
-      productName: "Sample delivery",
       projectId: "sample-project",
+      projectTitle: "Sample delivery",
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
       repositoryNames: ["sample-alpha", "sample-beta"],
       state: "creating" as const,
     };
@@ -675,6 +687,28 @@ describe("SqlitePersistence", () => {
         repositoryNames: ["sample-alpha", "sample-alpha"],
       }),
     ).toThrow("Epic 102 repository scope is invalid");
+    const renamed = {
+      ...record,
+      projectTitle: "Changed delivery",
+      projectTitleApplied: false,
+      projectTitleRevision: 1,
+      state: "active" as const,
+    };
+    persistence.writeEpicProject(renamed);
+    persistence.writeEpicProject({ ...renamed, projectTitleApplied: true });
+    expect(persistence.getEpicProject(101)).toMatchObject({
+      projectId: "sample-project",
+      projectTitle: "Changed delivery",
+      projectTitleApplied: true,
+      projectTitleRevision: 1,
+    });
+    expect(() =>
+      persistence.writeEpicProject({
+        ...renamed,
+        projectTitle: "Unrecorded revision",
+        projectTitleApplied: true,
+      }),
+    ).toThrow("Epic 101 changed project title invalidly");
     persistence.close();
   });
 
@@ -693,8 +727,10 @@ describe("SqlitePersistence", () => {
         createdAt: "2026-01-01T00:00:00.000Z",
         deleteCommandId: "delete-sample-project",
         epicId: 101,
-        productName: "Sample delivery",
         projectId: "sample-project",
+        projectTitle: "Sample delivery",
+        projectTitleApplied: true,
+        projectTitleRevision: 0,
         repositoryNames: ["sample-alpha"],
         state: "active",
       });
@@ -720,7 +756,9 @@ describe("SqlitePersistence", () => {
       createCommandId: "create-shared-records",
       createdAt: "2026-01-01T00:00:00.000Z",
       projectId: "shared-records",
-      projectName: "Shared records",
+      projectTitle: "Shared records",
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
       state: "creating" as const,
       workspaceRoot: "/workspaces/sample-records",
     };
@@ -737,9 +775,18 @@ describe("SqlitePersistence", () => {
         projectId: "changed-shared-records",
       }),
     ).toThrow("The shared project changed durable identity");
-    expect(persistence.getSharedProject()).toEqual({
+    const renamed = {
       ...record,
-      state: "active",
+      projectTitle: "Changed shared records",
+      projectTitleApplied: false,
+      projectTitleRevision: 1,
+      state: "active" as const,
+    };
+    persistence.writeSharedProject(renamed);
+    persistence.writeSharedProject({ ...renamed, projectTitleApplied: true });
+    expect(persistence.getSharedProject()).toEqual({
+      ...renamed,
+      projectTitleApplied: true,
     });
     const database = new Database(persistence.databasePath);
     expect(() =>
@@ -748,6 +795,42 @@ describe("SqlitePersistence", () => {
         .run(),
     ).toThrow(/CHECK constraint failed/);
     database.close();
+    persistence.close();
+  });
+
+  it("preserves a legacy shared-project identity while adding title revision state", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const databasePath = join(stateDirectory, "heddle-state.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE heddle_shared_project (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        project_name TEXT NOT NULL,
+        project_id TEXT NOT NULL UNIQUE,
+        workspace_root TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('creating', 'active')),
+        create_command_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO heddle_shared_project VALUES
+        (1, 'Retained shared project', 'retained-shared-project',
+         '/workspaces/sample', 'active', 'retained-create',
+         '2026-01-01T00:00:00.000Z');
+    `);
+    legacy.close();
+
+    const persistence = new SqlitePersistence({ stateDirectory });
+
+    expect(persistence.getSharedProject()).toEqual({
+      createCommandId: "retained-create",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: "retained-shared-project",
+      projectTitle: "Retained shared project",
+      projectTitleApplied: true,
+      projectTitleRevision: 0,
+      state: "active",
+      workspaceRoot: "/workspaces/sample",
+    });
     persistence.close();
   });
 

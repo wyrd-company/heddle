@@ -211,8 +211,7 @@ next_id: 1
 
     const configuration: ResolvedProductionConfiguration = {
       adHocProject: {
-        name: "Shared tasks",
-        projectId: "workspace-project",
+        label: "Sample worker",
         workspaceRoot: root,
       },
       boardDirectory,
@@ -516,8 +515,7 @@ next_id: 1
     );
     const configuration: ResolvedProductionConfiguration = {
       adHocProject: {
-        name: "Shared tasks",
-        projectId: "workspace-project",
+        label: "Sample worker",
         workspaceRoot: root,
       },
       boardDirectory,

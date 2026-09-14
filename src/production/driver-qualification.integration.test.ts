@@ -299,17 +299,19 @@ describe.skipIf(!t3Binary)(
       teardown.push(() => composition.close());
 
       await composition.start();
+      const sharedProjectRecord = composition.persistence.getSharedProject();
+      expect(sharedProjectRecord).toBeDefined();
 
       const sharedProject = (await catalogClient.getShell()).projects.find(
-        ({ id }) => id === configuration.adHocProject.projectId,
+        ({ id }) => id === sharedProjectRecord?.projectId,
       );
       expect(sharedProject).toMatchObject({
-        id: configuration.adHocProject.projectId,
-        title: configuration.adHocProject.name,
+        id: sharedProjectRecord?.projectId,
+        title: sharedProjectRecord?.projectTitle,
         workspaceRoot: configuration.adHocProject.workspaceRoot,
       });
       expect(composition.persistence.getSharedProject()).toMatchObject({
-        projectId: configuration.adHocProject.projectId,
+        projectId: sharedProjectRecord?.projectId,
         state: "active",
       });
 

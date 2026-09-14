@@ -36,8 +36,7 @@ export type ResolvedProductionSessionConfiguration =
   };
 
 export type AdHocProjectConfiguration = {
-  name: string;
-  projectId: string;
+  label?: string;
   workspaceRoot: string;
 };
 
@@ -142,7 +141,9 @@ const validateCommonProductionConfiguration = (
   },
   validateBudgetAliases = true,
 ): void => {
-  requireNonEmpty("adHocProject.name", configuration.adHocProject.name);
+  if (configuration.adHocProject.label !== undefined) {
+    requireNonEmpty("adHocProject.label", configuration.adHocProject.label);
+  }
   if (configuration.adjudication !== undefined) {
     requireNonEmpty(
       "adjudication.providerAlias",
@@ -168,10 +169,6 @@ const validateCommonProductionConfiguration = (
       );
     }
   }
-  requireNonEmpty(
-    "adHocProject.projectId",
-    configuration.adHocProject.projectId,
-  );
   requireAbsolute(
     "adHocProject.workspaceRoot",
     configuration.adHocProject.workspaceRoot,

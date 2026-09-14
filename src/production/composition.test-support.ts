@@ -151,6 +151,19 @@ export class SyntheticT3 implements ProductionT3Client {
         workspaceRoot: command.workspaceRoot,
       });
     }
+    if (
+      command.type === "project.meta.update" &&
+      typeof command.projectId === "string" &&
+      typeof command.title === "string"
+    ) {
+      const project = this.projects.get(command.projectId);
+      if (project !== undefined) {
+        this.projects.set(command.projectId, {
+          ...project,
+          title: command.title,
+        });
+      }
+    }
     if (command.type === "thread.create" && command.threadId !== undefined) {
       this.threads.add(command.threadId);
     }
@@ -609,8 +622,7 @@ next_id: 1
       taskId,
       configuration: {
         adHocProject: {
-          name: "Shared tasks",
-          projectId: "workspace-project",
+          label: "Sample worker",
           workspaceRoot: root,
         },
         boardDirectory,

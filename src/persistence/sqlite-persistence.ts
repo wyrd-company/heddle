@@ -92,12 +92,17 @@ type SchedulerPassHistoryRow = {
   type: SchedulerPassHistoryRecord["type"];
 };
 
-type EpicProjectRow = Omit<EpicProjectRecord, "repositoryNames"> & {
+type EpicProjectRow = Omit<
+  EpicProjectRecord,
+  "projectTitleApplied" | "repositoryNames"
+> & {
+  projectTitleApplied: number;
   repositoryNamesJson: string | null;
 };
 
 const parseEpicProjectRow = (row: EpicProjectRow): EpicProjectRecord => {
-  const { repositoryNamesJson, ...record } = row;
+  const { projectTitleApplied, repositoryNamesJson, ...rest } = row;
+  const record = { ...rest, projectTitleApplied: projectTitleApplied === 1 };
   if (repositoryNamesJson === null) return record;
   let value: unknown;
   try {
@@ -115,6 +120,15 @@ const parseEpicProjectRow = (row: EpicProjectRow): EpicProjectRecord => {
   }
   return { ...record, repositoryNames: value as string[] };
 };
+
+type SharedProjectRow = Omit<SharedProjectRecord, "projectTitleApplied"> & {
+  projectTitleApplied: number;
+};
+
+const parseSharedProjectRow = (row: SharedProjectRow): SharedProjectRecord => ({
+  ...row,
+  projectTitleApplied: row.projectTitleApplied === 1,
+});
 
 const sameStrings = (
   left: readonly string[] | undefined,
@@ -1322,8 +1336,10 @@ export class SqlitePersistence {
     this.assertTaskId("epicId", epicId);
     const row = this.database
       .prepare(
-        `SELECT epic_id AS epicId, product_name AS productName,
+        `SELECT epic_id AS epicId, product_name AS projectTitle,
                 project_id AS projectId,
+                project_title_applied AS projectTitleApplied,
+                project_title_revision AS projectTitleRevision,
                 repository_names_json AS repositoryNamesJson,
                 CASE WHEN deleted = 1 THEN 'deleted' ELSE state END AS state,
                 create_command_id AS createCommandId,
@@ -1339,8 +1355,10 @@ export class SqlitePersistence {
   listEpicProjects(): EpicProjectRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT epic_id AS epicId, product_name AS productName,
+        `SELECT epic_id AS epicId, product_name AS projectTitle,
                 project_id AS projectId,
+                project_title_applied AS projectTitleApplied,
+                project_title_revision AS projectTitleRevision,
                 repository_names_json AS repositoryNamesJson,
                 CASE WHEN deleted = 1 THEN 'deleted' ELSE state END AS state,
                 create_command_id AS createCommandId,
@@ -1356,13 +1374,21 @@ export class SqlitePersistence {
   writeEpicProject(record: EpicProjectRecord): void {
     this.assertTaskId("epicId", record.epicId);
     for (const name of [
-      "productName",
+      "projectTitle",
       "projectId",
       "createCommandId",
       "createdAt",
       "deleteCommandId",
     ] as const) {
       this.assertStableId(name, record[name]);
+    }
+    if (
+      !Number.isSafeInteger(record.projectTitleRevision) ||
+      record.projectTitleRevision < 0
+    ) {
+      throw new Error(
+        `Epic ${record.epicId} project title revision is invalid`,
+      );
     }
     if (
       record.repositoryNames === undefined ||
@@ -1381,14 +1407,31 @@ export class SqlitePersistence {
     const prior = this.getEpicProject(record.epicId);
     if (
       prior !== undefined &&
-      (prior.productName !== record.productName ||
-        prior.projectId !== record.projectId ||
+      (prior.projectId !== record.projectId ||
         !sameStrings(prior.repositoryNames, record.repositoryNames) ||
         prior.createCommandId !== record.createCommandId ||
         prior.createdAt !== record.createdAt ||
         prior.deleteCommandId !== record.deleteCommandId)
     ) {
       throw new Error(`Epic ${record.epicId} changed durable project identity`);
+    }
+    if (prior !== undefined) {
+      const sameRevision =
+        record.projectTitleRevision === prior.projectTitleRevision;
+      const nextRevision =
+        record.projectTitleRevision === prior.projectTitleRevision + 1;
+      if (
+        (!sameRevision && !nextRevision) ||
+        (sameRevision && record.projectTitle !== prior.projectTitle) ||
+        (sameRevision &&
+          prior.projectTitleApplied &&
+          !record.projectTitleApplied) ||
+        (nextRevision && record.projectTitleApplied)
+      ) {
+        throw new Error(
+          `Epic ${record.epicId} changed project title invalidly`,
+        );
+      }
     }
     if (prior?.state === "deleted" && record.state !== "deleted") {
       throw new Error(`Epic ${record.epicId} project deletion is terminal`);
@@ -1398,15 +1441,19 @@ export class SqlitePersistence {
       .prepare(
         `INSERT INTO heddle_epic_projects
            (epic_id, product_name, project_id, repository_names_json, state,
-            deleted, create_command_id, created_at, delete_command_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            deleted, create_command_id, created_at, delete_command_id,
+            project_title_applied, project_title_revision)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(epic_id) DO UPDATE SET
+           product_name = excluded.product_name,
+           project_title_applied = excluded.project_title_applied,
+           project_title_revision = excluded.project_title_revision,
            state = excluded.state,
            deleted = excluded.deleted`,
       )
       .run(
         record.epicId,
-        record.productName,
+        record.projectTitle,
         record.projectId,
         JSON.stringify(record.repositoryNames),
         storedState,
@@ -1414,24 +1461,29 @@ export class SqlitePersistence {
         record.createCommandId,
         record.createdAt,
         record.deleteCommandId,
+        record.projectTitleApplied ? 1 : 0,
+        record.projectTitleRevision,
       );
   }
 
   getSharedProject(): SharedProjectRecord | undefined {
-    return this.database
+    const row = this.database
       .prepare(
-        `SELECT project_name AS projectName, project_id AS projectId,
+        `SELECT project_name AS projectTitle, project_id AS projectId,
                 workspace_root AS workspaceRoot, state,
+                project_title_applied AS projectTitleApplied,
+                project_title_revision AS projectTitleRevision,
                 create_command_id AS createCommandId, created_at AS createdAt
          FROM heddle_shared_project
          WHERE singleton = 1`,
       )
-      .get() as SharedProjectRecord | undefined;
+      .get() as SharedProjectRow | undefined;
+    return row === undefined ? undefined : parseSharedProjectRow(row);
   }
 
   writeSharedProject(record: SharedProjectRecord): void {
     for (const name of [
-      "projectName",
+      "projectTitle",
       "projectId",
       "workspaceRoot",
       "createCommandId",
@@ -1439,32 +1491,60 @@ export class SqlitePersistence {
     ] as const) {
       this.assertStableId(name, record[name]);
     }
+    if (
+      !Number.isSafeInteger(record.projectTitleRevision) ||
+      record.projectTitleRevision < 0
+    ) {
+      throw new Error("The shared project title revision is invalid");
+    }
     const prior = this.getSharedProject();
     if (
       prior !== undefined &&
-      (prior.projectName !== record.projectName ||
-        prior.projectId !== record.projectId ||
+      (prior.projectId !== record.projectId ||
         prior.workspaceRoot !== record.workspaceRoot ||
         prior.createCommandId !== record.createCommandId ||
         prior.createdAt !== record.createdAt)
     ) {
       throw new Error("The shared project changed durable identity");
     }
+    if (prior !== undefined) {
+      const sameRevision =
+        record.projectTitleRevision === prior.projectTitleRevision;
+      const nextRevision =
+        record.projectTitleRevision === prior.projectTitleRevision + 1;
+      if (
+        (!sameRevision && !nextRevision) ||
+        (sameRevision && record.projectTitle !== prior.projectTitle) ||
+        (sameRevision &&
+          prior.projectTitleApplied &&
+          !record.projectTitleApplied) ||
+        (nextRevision && record.projectTitleApplied)
+      ) {
+        throw new Error("The shared project changed its title invalidly");
+      }
+    }
     this.database
       .prepare(
         `INSERT INTO heddle_shared_project
            (singleton, project_name, project_id, workspace_root, state,
-            create_command_id, created_at)
-         VALUES (1, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(singleton) DO UPDATE SET state = excluded.state`,
+            create_command_id, created_at, project_title_applied,
+            project_title_revision)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(singleton) DO UPDATE SET
+           project_name = excluded.project_name,
+           project_title_applied = excluded.project_title_applied,
+           project_title_revision = excluded.project_title_revision,
+           state = excluded.state`,
       )
       .run(
-        record.projectName,
+        record.projectTitle,
         record.projectId,
         record.workspaceRoot,
         record.state,
         record.createCommandId,
         record.createdAt,
+        record.projectTitleApplied ? 1 : 0,
+        record.projectTitleRevision,
       );
   }
 

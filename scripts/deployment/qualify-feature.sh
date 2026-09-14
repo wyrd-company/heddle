@@ -219,9 +219,6 @@ qualification_task_id="$(
 )"
 chmod -R a+rX "${board_directory}"
 cat >"${config_directory}/config.yml" <<'EOF'
-adHocProject:
-  name: Shared records
-  projectId: shared-project
 cadenceMilliseconds: 60000
 incident:
   approvalSeverityThreshold: high
