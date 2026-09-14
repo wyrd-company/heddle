@@ -53,11 +53,14 @@ describe("scoped adjudication sanctioned approvals", () => {
    * A control plane that accepts a response and only records the resolution
    * when its reactor runs, the way T3 does.
    */
-  const syntheticT3 = (input: {
-    activities: unknown[];
-    hasPendingUserInput?: boolean;
-    onRespond?: (requestId: string) => unknown;
-  }) => {
+  const syntheticT3 = (
+    input: {
+      activities: unknown[];
+      hasPendingUserInput?: boolean;
+      onRespond?: (requestId: string) => unknown;
+    },
+    responseStarting?: () => void,
+  ) => {
     const activities = [...input.activities];
     const approvals: string[] = [];
     const approvalCommands: string[] = [];
@@ -89,6 +92,7 @@ describe("scoped adjudication sanctioned approvals", () => {
           _decision: "accept" | "reject",
           commandId?: string,
         ) => {
+          responseStarting?.();
           approvals.push(requestId);
           approvalCommands.push(commandId ?? "");
           const recorded = input.onRespond?.(requestId);
@@ -106,12 +110,15 @@ describe("scoped adjudication sanctioned approvals", () => {
     approvalSettlementMilliseconds?: number;
     handoffs: unknown[];
     hasPendingUserInput?: boolean;
+    onResponseAttempt?: (events: readonly PersistedEvent[]) => void;
     onRespond?: (requestId: string) => unknown;
     stageId: string;
   }) => {
-    const synthetic = syntheticT3(input);
     let clock = now;
     const events: PersistedEvent[] = [];
+    const synthetic = syntheticT3(input, () =>
+      input.onResponseAttempt?.([...events]),
+    );
     const persistence = {
       appendEvent: (
         eventInstanceId: string,
@@ -275,6 +282,25 @@ describe("scoped adjudication sanctioned approvals", () => {
       kind: "deferred",
     });
     expect(approvals).toEqual(["request-stuck"]);
+  });
+
+  it("records response issuance before calling the control plane", async () => {
+    let eventTypesAtResponse: string[] = [];
+    const { adjudication } = build({
+      activities: [sanctionedRequest("request-order")],
+      handoffs: [adjudicationHandoff],
+      onResponseAttempt: (events) => {
+        eventTypesAtResponse = events.map(({ type }) => type);
+      },
+      stageId: "adjudication",
+    });
+
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    expect(eventTypesAtResponse).toContain(
+      "adjudication:approval-response-issued",
+    );
   });
 
   it("expires only after the answer has remained unsettled beyond the bound", async () => {
