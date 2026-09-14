@@ -159,7 +159,7 @@ describe("qualification npm registry", () => {
     ).rejects.toMatchObject({
       stdout: expect.stringContaining("http://127.0.0.1:9/"),
     });
-  }, 30_000);
+  });
 
   it("names a missing version as an npm target failure", async () => {
     const destination = await mkdtemp(join(directory, "pack-"));
