@@ -69,7 +69,7 @@ describe("production lifecycle composition", () => {
         "edit",
         String(taskId),
         "--repos",
-        "sample-repository,sample-secondary",
+        "sample-secondary,sample-repository",
       ],
       { cwd: root },
     );
@@ -139,6 +139,9 @@ describe("production lifecycle composition", () => {
         "sample-repository",
       ),
     });
+    expect(first.persistence.listSessionRuntime()).toMatchObject([
+      { repositoryName: "sample-repository" },
+    ]);
     await expect(
       stat(
         join(

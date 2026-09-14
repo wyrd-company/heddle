@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -539,6 +539,36 @@ describe("production subagent composition", () => {
       ],
       { cwd: fixture.root },
     );
+    const blueprintPath = join(
+      fixture.blueprintsRepositoryRoot,
+      "blueprints/sample.json",
+    );
+    const blueprint = JSON.parse(await readFile(blueprintPath, "utf8")) as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    blueprint.nodes.find(({ id }) => id === "implement")!["repo"] =
+      "second-repository";
+    await writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`);
+    await execute("git", ["add", "blueprints/sample.json"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Select second sample repository",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
     fixture.configuration.session.resolvedSelections = [
       ...fixture.configuration.session.resolvedSelections,
       {
@@ -676,6 +706,13 @@ describe("production subagent composition", () => {
     const parentRuntime = composition.persistence
       .listSessionRuntime()
       .find(({ sessionKey }) => sessionKey === parent.sessionKey)!;
+    const parentCreate = t3.commands.find(
+      (command) =>
+        command.type === "thread.create" &&
+        command.threadId === parentRuntime.threadId,
+    );
+    expect(parentRuntime.repositoryName).toBe("second-repository");
+    expect(parentCreate?.worktreePath).toBe(secondTaskWorktree);
 
     const spawnResponse = await callMcpTool(
       composition,
@@ -726,13 +763,7 @@ describe("production subagent composition", () => {
       projectId: epicProjectId,
       title: expect.stringContaining(`task-${fixture.taskId}`),
     });
-    expect(childCreate?.worktreePath).toBe(
-      t3.commands.find(
-        (command) =>
-          command.type === "thread.create" &&
-          command.threadId === parentRuntime.threadId,
-      )?.worktreePath,
-    );
+    expect(childCreate?.worktreePath).toBe(parentCreate?.worktreePath);
     const childTurn = t3.commands.find(
       (command) =>
         command.type === "thread.turn.start" &&

@@ -70,7 +70,7 @@ const describeDelegatedExhaustion = (
 const parentSessionRoute = (
   persistence: SqlitePersistence,
   sessionKey: string,
-): { projectId: string } => {
+): { projectId: string; repositoryName: string } => {
   const sessions = new Map(
     persistence
       .listSessionRuntime()
@@ -88,10 +88,16 @@ const parentSessionRoute = (
     visited.add(current);
     const session = sessions.get(current);
     if (session !== undefined) {
-      if (session.projectId === undefined) {
+      if (
+        session.projectId === undefined ||
+        session.repositoryName === undefined
+      ) {
         throw new Error("Subagent parent has no durable production route");
       }
-      return { projectId: session.projectId };
+      return {
+        projectId: session.projectId,
+        repositoryName: session.repositoryName,
+      };
     }
     const assignment = delegated.get(current);
     if (assignment === undefined) break;
@@ -414,6 +420,14 @@ export const createProductionSubagentCoordinator = (options: {
           ? {}
           : { worktreesRoot: session.worktreesRoot }),
       }));
+      const delegatedWorktree = worktrees.find(
+        (candidate) => candidate.repositoryName === route.repositoryName,
+      );
+      if (delegatedWorktree === undefined) {
+        throw new Error(
+          `Subagent parent repository '${route.repositoryName}' is outside the retained repository scope`,
+        );
+      }
       for (const worktree of worktrees) await ensureWorktree(worktree);
       return {
         binding: sessionBinding,
@@ -435,7 +449,7 @@ export const createProductionSubagentCoordinator = (options: {
           taskId,
           `${binding.stage.id}-subagent-${identity.sessionKey.slice(0, 8)}`,
         ),
-        worktree: worktrees[0]!,
+        worktree: delegatedWorktree,
       };
     },
     sessionTargetFor: (binding) => {

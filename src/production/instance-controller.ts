@@ -1717,6 +1717,14 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         ? {}
         : { worktreesRoot: session.worktreesRoot }),
     }));
+    const sessionWorktree = worktrees.find(
+      (candidate) => candidate.repositoryName === repository.name,
+    );
+    if (sessionWorktree === undefined) {
+      throw new Error(
+        `Task ${task.id} selected repository '${repository.name}' without a prepared worktree`,
+      );
+    }
     const sessionRuntime: SessionRuntimeRecord = {
       activation,
       binding,
@@ -1770,7 +1778,7 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           task: taskFrontMatterWithRepositoryScope(task, repositoryNames),
           taskId: task.id,
           title: heddleSessionTitle(task.id, `${stageId}-${activation}`),
-          worktree: worktrees[0]!,
+          worktree: sessionWorktree,
         },
         {
           activationEvents: this.persistence,
