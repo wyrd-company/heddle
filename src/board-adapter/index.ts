@@ -19,6 +19,7 @@ import { epicControlForStatus } from "./epic-control.js";
 
 const executeFile = promisify(execFile);
 const lifecycleName = /^[a-z][a-z-]*$/;
+const repositoryIdentifier = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export type KanbanCommandRunner = (arguments_: string[]) => Promise<string>;
 
@@ -47,6 +48,7 @@ export interface CreateBoardRecord {
   operationKey: string;
   dependsOn?: number[];
   priority?: string;
+  repos?: string[];
   status?: string;
 }
 
@@ -82,6 +84,7 @@ interface KanbanTaskJson {
   tags?: string[];
   parent?: number;
   depends_on?: number[];
+  repos?: string[];
   file: string;
 }
 
@@ -112,7 +115,24 @@ const requireTask = (value: unknown): KanbanTaskJson => {
   ) {
     throw new Error("kanban-md returned an invalid task");
   }
+  requireRepositories((value as KanbanTaskJson).repos);
   return value as KanbanTaskJson;
+};
+
+const requireRepositories = (value: unknown): string[] | undefined => {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    !value.every(
+      (repository): repository is string =>
+        typeof repository === "string" && repositoryIdentifier.test(repository),
+    ) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new Error("kanban-md returned an invalid task repository scope");
+  }
+  return value;
 };
 
 const requireBoardStatuses = (value: unknown): string[] => {
@@ -215,43 +235,6 @@ const lifecycleFromFrontMatter = (source: string): string | undefined => {
   return match?.[1] === undefined ? undefined : unquoteScalar(match[1]);
 };
 
-const repositoriesFromFrontMatter = (
-  frontMatter: string | undefined,
-): string[] | undefined => {
-  if (frontMatter === undefined) return undefined;
-  const lines = frontMatter.split("\n");
-  const index = lines.findIndex((line) => /^repos:\s*/.test(line));
-  if (index === -1) return undefined;
-  const inline = lines[index]!.replace(/^repos:\s*/, "").trim();
-  let values: string[];
-  if (inline !== "") {
-    if (!inline.startsWith("[") || !inline.endsWith("]")) {
-      throw new Error("task repos declaration must be a YAML list");
-    }
-    const body = inline.slice(1, -1).trim();
-    values = body === "" ? [] : body.split(",").map(unquoteScalar);
-  } else {
-    values = [];
-    for (const line of lines.slice(index + 1)) {
-      if (/^[^ \t]/.test(line)) break;
-      if (line.trim() === "") continue;
-      const item = /^\s+-\s+(.+?)\s*$/.exec(line)?.[1];
-      if (item === undefined) {
-        throw new Error("task repos declaration must be a YAML list");
-      }
-      values.push(unquoteScalar(item));
-    }
-  }
-  if (
-    values.length === 0 ||
-    values.some((value) => !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)) ||
-    new Set(values).size !== values.length
-  ) {
-    throw new Error("task repos declaration must name unique repositories");
-  }
-  return values;
-};
-
 const validateLifecycle = (value: string | undefined): string | undefined => {
   if (value !== undefined && !lifecycleName.test(value)) {
     throw new Error(`invalid lifecycle name: ${value}`);
@@ -278,6 +261,7 @@ const recordDigest = (
       priority: record.priority ?? null,
       status: record.status ?? null,
       title: record.title,
+      ...(record.repos === undefined ? {} : { repos: record.repos }),
     }),
   );
 
@@ -300,6 +284,10 @@ export const boardTaskMatchesRecord = (
   task.tags.includes(`type:${record.kind}`) &&
   task.tags.includes(operationTag(identity.operationDigest)) &&
   task.tags.includes(recordTag(identity.recordDigest)) &&
+  (task.repos ?? []).length === (record.repos ?? []).length &&
+  (task.repos ?? []).every(
+    (repository, index) => repository === (record.repos ?? [])[index],
+  ) &&
   recordDigest(record) === identity.recordDigest;
 
 export class KanbanBoardAdapter {
@@ -420,6 +408,7 @@ export class KanbanBoardAdapter {
     record: CreateBoardRecord,
   ): Promise<BoardRecordWriteResult> {
     validateLifecycle(record.lifecycle);
+    requireRepositories(record.repos);
     const identity = boardRecordIdentity(record);
     const occurrenceTag = operationTag(identity.operationDigest);
     const requestTag = recordTag(identity.recordDigest);
@@ -464,6 +453,9 @@ export class KanbanBoardAdapter {
     ];
     if (record.dependsOn !== undefined && record.dependsOn.length > 0) {
       arguments_.push("--depends-on", record.dependsOn.join(","));
+    }
+    if (record.repos !== undefined) {
+      arguments_.push("--repos", record.repos.join(","));
     }
     if (record.priority !== undefined) {
       arguments_.push("--priority", record.priority);
@@ -514,7 +506,7 @@ export class KanbanBoardAdapter {
     if (product !== undefined && product.trim() === "") {
       throw new Error("task product declaration must not be empty");
     }
-    const repos = repositoriesFromFrontMatter(frontMatter);
+    const repos = task.repos;
     return {
       blocked: task.blocked ?? false,
       frontMatter: parsedFrontMatter,

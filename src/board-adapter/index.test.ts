@@ -14,6 +14,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   EpicStatusConflictError,
   KanbanBoardAdapter,
+  boardRecordIdentity,
+  boardTaskMatchesRecord,
+  type BoardTask,
   type KanbanCommandRunner,
 } from "./index.js";
 import { TaskProviderAliasError } from "../provider-alias.js";
@@ -95,6 +98,59 @@ next_id: 1
     await rm(boardDirectory, { recursive: true });
   });
 
+  it("keeps repository-free record identities compatible and binds repository scope when present", () => {
+    const legacyRecord = {
+      body: "Record the storage count.",
+      kind: "finding" as const,
+      lifecycle: "inventory-review",
+      parent: 7,
+      title: "Count storage crates",
+    };
+    const legacyIdentity = boardRecordIdentity({
+      ...legacyRecord,
+      operationKey: "inventory:count",
+    });
+    expect(legacyIdentity.recordDigest).toBe(
+      "125e80387d80f6a0090b31af44440f4f1c99b0254278e6278810da8c11152529",
+    );
+
+    const scopedRecord = {
+      ...legacyRecord,
+      repos: ["sample-alpha", "sample-beta"],
+    };
+    const scopedIdentity = boardRecordIdentity({
+      ...scopedRecord,
+      operationKey: "inventory:count:scoped",
+    });
+    const task: BoardTask = {
+      blocked: false,
+      dependencies: [],
+      frontMatter: {},
+      id: 8,
+      lifecycle: scopedRecord.lifecycle,
+      parent: scopedRecord.parent,
+      priority: "medium",
+      repos: scopedRecord.repos,
+      status: "backlog",
+      tags: [
+        "type:finding",
+        `heddle-operation:${scopedIdentity.operationDigest}`,
+        `heddle-record:${scopedIdentity.recordDigest}`,
+      ],
+      title: scopedRecord.title,
+    };
+    expect(boardTaskMatchesRecord(task, scopedRecord, scopedIdentity)).toBe(
+      true,
+    );
+    expect(
+      boardTaskMatchesRecord(
+        { ...task, repos: ["sample-alpha"] },
+        scopedRecord,
+        scopedIdentity,
+      ),
+    ).toBe(false);
+  });
+
   it("reads parentage, dependencies, and both lifecycle representations", async () => {
     const collectionId = await createTask(
       "Seasonal collection",
@@ -167,7 +223,7 @@ next_id: 1
     );
   });
 
-  it("reads declared product and repository authority from front matter", async () => {
+  it("reads typed repository scope while retaining raw front matter", async () => {
     const taskId = await createTask("Arrange sample items");
     const task = JSON.parse(
       await runKanban([
@@ -187,7 +243,17 @@ next_id: 1
       ),
     );
 
-    await expect(adapter.readTask(taskId)).resolves.toMatchObject({
+    const typedAdapter = new KanbanBoardAdapter(
+      boardDirectory,
+      async (arguments_) => {
+        const output = await runKanban(arguments_);
+        const value = JSON.parse(output) as Record<string, unknown>;
+        value.repos = ["sample-alpha", "sample-beta"];
+        return JSON.stringify(value);
+      },
+    );
+
+    await expect(typedAdapter.readTask(taskId)).resolves.toMatchObject({
       frontMatter: {
         id: taskId,
         product: "sample-product",
@@ -321,27 +387,25 @@ next_id: 1
   );
 
   it.each([
-    "repos: []",
-    "repos: [sample-alpha, sample-alpha]",
-    "repos: ../outside",
-  ])("rejects an invalid declared repository catalog: %s", async (repos) => {
+    ["empty", []],
+    ["duplicate", ["sample-alpha", "sample-alpha"]],
+    ["scalar", "sample-alpha"],
+    ["invalid identifier", ["../outside"]],
+  ])("rejects invalid typed repository scope: %s", async (_, repos) => {
     const taskId = await createTask("Arrange sample items");
-    const task = JSON.parse(
-      await runKanban([
-        "--dir",
-        boardDirectory,
-        "show",
-        String(taskId),
-        "--json",
-      ]),
-    ) as { file: string };
-    const source = await readFile(task.file, "utf8");
-    await writeFile(
-      task.file,
-      source.replace("class: standard\n---", `class: standard\n${repos}\n---`),
+    const typedAdapter = new KanbanBoardAdapter(
+      boardDirectory,
+      async (arguments_) => {
+        const output = await runKanban(arguments_);
+        const value = JSON.parse(output) as Record<string, unknown>;
+        value.repos = repos;
+        return JSON.stringify(value);
+      },
     );
 
-    await expect(adapter.readTask(taskId)).rejects.toThrow(/repos declaration/);
+    await expect(typedAdapter.readTask(taskId)).rejects.toThrow(
+      "kanban-md returned an invalid task repository scope",
+    );
   });
 
   it("reads every configured board column in board order", async () => {
@@ -544,6 +608,64 @@ next_id: 1
     );
     expect(followUp.replayed).toBe(false);
     expect(finding.replayed).toBe(false);
+  });
+
+  it("authors repository scope through the typed kanban create field", async () => {
+    const collectionId = await createTask(
+      "Seasonal collection",
+      "--tags",
+      "type:epic",
+    );
+    const typedCommands: string[][] = [];
+    const typedAdapter = new KanbanBoardAdapter(
+      boardDirectory,
+      async (arguments_) => {
+        typedCommands.push(arguments_);
+        const reposIndex = arguments_.indexOf("--repos");
+        if (reposIndex === -1) return runKanban(arguments_);
+
+        const repositoryValue = arguments_[reposIndex + 1]!;
+        const forwarded = arguments_.filter(
+          (_, index) => index !== reposIndex && index !== reposIndex + 1,
+        );
+        const output = await runKanban(forwarded);
+        const value = JSON.parse(output) as Record<string, unknown> & {
+          file: string;
+        };
+        const repos = repositoryValue.split(",");
+        value.repos = repos;
+        const source = await readFile(value.file, "utf8");
+        await writeFile(
+          value.file,
+          source.replace(
+            "class: standard\n---",
+            `class: standard\nrepos:\n${repos.map((repo) => `  - ${repo}`).join("\n")}\n---`,
+          ),
+        );
+        return JSON.stringify(value);
+      },
+    );
+
+    const result = await typedAdapter.createRecord({
+      body: "Record the selected storage locations.",
+      kind: "finding",
+      lifecycle: "inspection-response",
+      operationKey: "stage-one:create-finding:locations",
+      parent: collectionId,
+      repos: ["sample-alpha", "sample-beta"],
+      status: "backlog",
+      title: "Record storage locations",
+    });
+
+    expect(result.task.repos).toEqual(["sample-alpha", "sample-beta"]);
+    expect(typedCommands).toContainEqual(
+      expect.arrayContaining([
+        "create",
+        "Record storage locations",
+        "--repos",
+        "sample-alpha,sample-beta",
+      ]),
+    );
   });
 
   it("replays one board-write occurrence without creating another task", async () => {
