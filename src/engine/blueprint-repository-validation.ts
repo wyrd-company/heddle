@@ -181,6 +181,16 @@ const assertOutputContractArtifacts = async (
         `Blueprint '${artifactId}' output contract '${name}' must be an object schema with "type": "object"`,
       );
     }
+    // What a contract does not declare cannot be in the output; a contract may
+    // say so itself but may not say otherwise.
+    const additional = (schema as Record<string, unknown>)[
+      "additionalProperties"
+    ];
+    if (additional !== undefined && additional !== false) {
+      throw new BlueprintValidationError(
+        `Blueprint '${artifactId}' output contract '${name}' must be closed: "additionalProperties" is false or absent`,
+      );
+    }
     try {
       validator.compile(schema as object);
     } catch (error) {

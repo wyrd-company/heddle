@@ -1853,6 +1853,29 @@ describe("workflow MCP HTTP server", () => {
       ],
       isError: true,
     });
+    // The contract declares findings only, so anything else the reviewer
+    // writes beside them, such as a private discussion, is refused.
+    await expect(
+      review.callTool({
+        name: "advance",
+        arguments: {
+          disposition: "reject",
+          output: {
+            findings: [{ summary: "A recorded value is unchecked" }],
+            transcript: ["private review discussion"],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      content: [
+        expect.objectContaining({
+          text: expect.stringMatching(
+            /review-findings.*must NOT have additional properties/,
+          ),
+        }),
+      ],
+      isError: true,
+    });
     expect(fixture.persistence.getInstance("instance-output-contract")).toEqual(
       beforeInvalidAdvance,
     );

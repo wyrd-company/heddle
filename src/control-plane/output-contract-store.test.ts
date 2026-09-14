@@ -72,7 +72,7 @@ describe("pinned output contracts", () => {
     );
     await expect(
       readPinnedOutputContract(root, commitSha, "sample-findings"),
-    ).resolves.toEqual(schema);
+    ).resolves.toEqual({ ...schema, additionalProperties: false });
   });
 
   it("rejects an artifact that is absent at the pinned commit", async () => {
@@ -106,6 +106,36 @@ describe("pinned output contracts", () => {
         readPinnedOutputContract(root, commitSha, name),
       ).rejects.toThrow(/must be an object schema with "type": "object"/);
     }
+  });
+
+  it("rejects a contract that is not closed", async () => {
+    for (const additionalProperties of [true, {}]) {
+      const { commitSha, root } = await repository({
+        open: { additionalProperties, type: "object" },
+      });
+      await expect(
+        readPinnedOutputContract(root, commitSha, "open"),
+      ).rejects.toThrow(
+        /must be closed: "additionalProperties" is false or absent/,
+      );
+    }
+  });
+
+  it("closes every contract it reads", async () => {
+    const { commitSha, root } = await repository({
+      implicit: { properties: { findings: { type: "array" } }, type: "object" },
+      explicit: { additionalProperties: false, type: "object" },
+    });
+    await expect(
+      readPinnedOutputContract(root, commitSha, "implicit"),
+    ).resolves.toEqual({
+      additionalProperties: false,
+      properties: { findings: { type: "array" } },
+      type: "object",
+    });
+    await expect(
+      readPinnedOutputContract(root, commitSha, "explicit"),
+    ).resolves.toEqual({ additionalProperties: false, type: "object" });
   });
 
   it("rejects a contract name that is not an artifact id", async () => {

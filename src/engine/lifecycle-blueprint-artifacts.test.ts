@@ -556,6 +556,22 @@ describe("organization lifecycle blueprint artifacts", () => {
     }
   });
 
+  it("rejects an output contract artifact that is not closed", async () => {
+    const root = await withOutputContract("sample-findings");
+    await commitContract(
+      root,
+      "sample-findings",
+      `${JSON.stringify({
+        additionalProperties: true,
+        properties: { findings: { type: "array" } },
+        type: "object",
+      })}\n`,
+    );
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      /output contract 'sample-findings' must be closed: "additionalProperties" is false or absent/,
+    );
+  });
+
   it("rejects a blueprint that omits a mechanical node board status", () => {
     const invalid = deliveryBlueprintFixture("standard-delivery");
     delete invalid["board-statuses"]!.merge;

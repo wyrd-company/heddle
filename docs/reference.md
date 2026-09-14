@@ -223,7 +223,9 @@ disposition with its description and, when declared, its output contract name
 and schema. The `advance` tool schema offers exactly those dispositions and
 prints each contract's schema in the description. Output is validated against
 the contract before the lifecycle records the transition; a violation reports
-every schema error. A completed stage keeps `advance` for replay and loses
+every schema error. A contract is closed: a property it does not declare
+cannot be in the output, so `additionalProperties` is `false` or absent and
+Heddle enforces `false`. A completed stage keeps `advance` for replay and loses
 every other tool.
 
 ## Validation

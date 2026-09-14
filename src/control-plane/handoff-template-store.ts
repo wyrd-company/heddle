@@ -319,8 +319,14 @@ export const readPinnedOutputContract = async (
       `Pinned output contract ${path} at commit ${commitSha} must be an object schema with "type": "object"`,
     );
   }
+  if (!isClosedSchema(schema)) {
+    throw new HandoffTemplateError(
+      `Pinned output contract ${path} at commit ${commitSha} must be closed: "additionalProperties" is false or absent`,
+    );
+  }
+  const closed = closeSchema(schema);
   try {
-    new Ajv2020({ allErrors: true, strict: false }).compile(schema as object);
+    new Ajv2020({ allErrors: true, strict: false }).compile(closed as object);
   } catch (error) {
     throw new HandoffTemplateError(
       `Pinned output contract ${path} at commit ${commitSha} is not a valid JSON Schema: ${
@@ -328,15 +334,30 @@ export const readPinnedOutputContract = async (
       }`,
     );
   }
-  return schema;
+  return closed;
 };
 
 /** An output contract describes an object: a JSON object schema typed `object`. */
-export const isObjectSchema = (schema: JsonValue): boolean =>
+export const isObjectSchema = (
+  schema: JsonValue,
+): schema is Record<string, JsonValue> =>
   typeof schema === "object" &&
   schema !== null &&
   !Array.isArray(schema) &&
   schema["type"] === "object";
+
+/**
+ * A contract is closed: what it does not declare cannot be in the output. A
+ * contract may say so itself; it may not say otherwise.
+ */
+export const isClosedSchema = (schema: Record<string, JsonValue>): boolean =>
+  schema["additionalProperties"] === undefined ||
+  schema["additionalProperties"] === false;
+
+/** The contract as the runtime enforces it, closed at the top level. */
+export const closeSchema = (
+  schema: Record<string, JsonValue>,
+): Record<string, JsonValue> => ({ ...schema, additionalProperties: false });
 
 export class GitHandoffTemplateStore {
   constructor(private readonly repositoryRoot: string) {}
