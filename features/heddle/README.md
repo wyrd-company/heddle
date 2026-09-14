@@ -112,10 +112,12 @@ qualification at one repository head:
 task deployment:qualification
 ```
 
-This gate packs the built repository tree, places that tarball in an isolated
-base image, stages the source-free Feature, dry-publishes it to an isolated
-local OCI registry, and supplies the tarball through `packageSource`. It then
-installs the published Feature through a versioned remote reference and proves
-the service endpoint. It does not use the local-path Feature form.
+This gate packs the built repository tree, serves that tarball from an isolated
+local npm registry as the package's only version and as `latest`, stages the
+source-free Feature, and dry-publishes it to an isolated local OCI registry. It
+installs the published Feature through a versioned remote reference at the
+default `latest`, proves the service endpoint, then rebuilds at the exact
+package version. `packageSource` and `packageSha256` are exercised only by the
+named failure cases. It does not use the local-path Feature form.
 `task deployment:package` separately checks the distribution archive without
 starting a container or registry.

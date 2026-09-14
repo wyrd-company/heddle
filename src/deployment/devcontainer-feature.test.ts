@@ -468,6 +468,61 @@ describe("Heddle devcontainer feature", () => {
     expect(stdout).toBe("0.1.0");
   });
 
+  it("rejects an npm registry that carries credentials or is not http", async () => {
+    const validate = async (registry: string) =>
+      execute("bash", [
+        "-c",
+        [
+          "set -euo pipefail",
+          `source ${featureDirectory}/common.sh`,
+          'validate_npm_registry "$1"',
+          'printf "accepted"',
+        ].join("\n"),
+        "validate",
+        registry,
+      ]);
+
+    for (const registry of [
+      "https://registry.npmjs.org",
+      "http://172.17.0.1:4873",
+      "https://npm.example.invalid/scoped/",
+    ]) {
+      await expect(validate(registry)).resolves.toMatchObject({
+        stdout: "accepted",
+      });
+    }
+    for (const registry of [
+      "https://user:secret@npm.example.invalid/",
+      "http://token@127.0.0.1:4873",
+    ]) {
+      await expect(validate(registry)).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining(
+          "npmRegistry must not contain credentials",
+        ),
+      });
+      await expect(validate(registry)).rejects.not.toMatchObject({
+        stderr: expect.stringContaining("secret"),
+      });
+    }
+    for (const registry of [
+      "ftp://npm.example.invalid/",
+      "registry.npmjs.org",
+      "https://",
+    ]) {
+      await expect(validate(registry)).rejects.toMatchObject({ code: 1 });
+    }
+    const installer = await readFile(`${featureDirectory}/install.sh`, "utf8");
+    const validation = installer.indexOf(
+      'validate_npm_registry "${NPMREGISTRY}"',
+    );
+    const firstUse = installer.indexOf(
+      'log "Fetching ${package_source} from ${NPMREGISTRY}"',
+    );
+    expect(validation).toBeGreaterThan(-1);
+    expect(firstUse).toBeGreaterThan(validation);
+  });
+
   it("snapshots the version option before sourcing any helper", async () => {
     const installer = await readFile(`${featureDirectory}/install.sh`, "utf8");
     const snapshot = installer.indexOf('heddle_option_version="${VERSION:-}"');

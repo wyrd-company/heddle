@@ -72,10 +72,7 @@ case "${package_source}" in
             || err "Failed to copy the Heddle package from ${package_source}."
         ;;
     @wyrd-company/heddle@*)
-        case "${NPMREGISTRY}" in
-            https://*|http://*) ;;
-            *) err "npmRegistry must be an http or https URL." ;;
-        esac
+        validate_npm_registry "${NPMREGISTRY}"
         log "Fetching ${package_source} from ${NPMREGISTRY}"
         pack_log="${package_directory}/npm-pack.log"
         pack_output="${package_directory}/npm-pack.json"

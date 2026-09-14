@@ -25,6 +25,8 @@ let tarballDigest = "";
 let registry: ReturnType<typeof spawn> | undefined;
 let registryUrl = "";
 let registryLog = "";
+let userConfig = "";
+let globalConfig = "";
 
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "heddle-npm-registry-"));
@@ -35,6 +37,17 @@ beforeAll(async () => {
   tarballDigest = createHash("sha256")
     .update(await readFile(tarballPath))
     .digest("hex");
+
+  // The installer must win over an npmrc that maps the scope elsewhere, so
+  // the test process gets an isolated npm configuration with an adversarial
+  // mapping instead of relying on whatever the host happens to configure.
+  userConfig = join(directory, "user.npmrc");
+  globalConfig = join(directory, "global.npmrc");
+  await writeFile(
+    userConfig,
+    "@wyrd-company:registry=http://127.0.0.1:9/\nregistry=http://127.0.0.1:9/\n",
+  );
+  await writeFile(globalConfig, "");
 
   registry = spawn(process.execPath, [registryScript, tarballPath, version], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -78,7 +91,15 @@ async function pack(spec: string, destination: string) {
       destination,
       spec,
     ],
-    { env: { ...process.env, NPM_CONFIG_UPDATE_NOTIFIER: "false" } },
+    {
+      env: {
+        ...process.env,
+        NPM_CONFIG_FETCH_RETRIES: "0",
+        NPM_CONFIG_GLOBALCONFIG: globalConfig,
+        NPM_CONFIG_UPDATE_NOTIFIER: "false",
+        NPM_CONFIG_USERCONFIG: userConfig,
+      },
+    },
   );
 }
 
@@ -107,6 +128,38 @@ describe("qualification npm registry", () => {
       `GET /${packageName}/-/heddle-${version}.tgz\n`,
     );
   });
+
+  it("would follow the adversarial scope mapping without the scope override", async () => {
+    const destination = await mkdtemp(join(directory, "pack-"));
+
+    await expect(
+      execute(
+        "npm",
+        [
+          "pack",
+          "--silent",
+          "--json",
+          "--ignore-scripts",
+          "--registry",
+          registryUrl,
+          "--pack-destination",
+          destination,
+          `${packageName}@${version}`,
+        ],
+        {
+          env: {
+            ...process.env,
+            NPM_CONFIG_FETCH_RETRIES: "0",
+            NPM_CONFIG_GLOBALCONFIG: globalConfig,
+            NPM_CONFIG_UPDATE_NOTIFIER: "false",
+            NPM_CONFIG_USERCONFIG: userConfig,
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      stdout: expect.stringContaining("http://127.0.0.1:9/"),
+    });
+  }, 30_000);
 
   it("names a missing version as an npm target failure", async () => {
     const destination = await mkdtemp(join(directory, "pack-"));

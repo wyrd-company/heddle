@@ -14,6 +14,23 @@ err() {
     exit 1
 }
 
+# Accepts an http or https registry URL with no userinfo. Credentials belong
+# in npm configuration, not in an option that installer logs and errors print.
+validate_npm_registry() {
+    local registry="$1"
+    local authority
+    case "${registry}" in
+        https://*|http://*) ;;
+        *) err "npmRegistry must be an http or https URL." ;;
+    esac
+    authority="${registry#*://}"
+    authority="${authority%%/*}"
+    case "${authority}" in
+        *@*) err "npmRegistry must not contain credentials; configure registry authentication through npm configuration." ;;
+    esac
+    [ -n "${authority}" ] || err "npmRegistry must name a registry host."
+}
+
 require_root() {
     [ "$(id -u)" -eq 0 ] || err "This Feature must run as root."
 }
