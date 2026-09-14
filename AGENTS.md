@@ -114,6 +114,18 @@ When this file does not settle a question, decide with these.
 7. **Guardrails over instructions.** If an agent must do something exactly
    right, give it a tool that can only do it right. Prose in a system prompt is
    the weakest form of guarantee available.
+8. **The blueprint is the workflow.** If a decision can be written as an edge
+   condition, it is written there. Heddle keeps no second state machine beside
+   the graph: no stage-name switch, and no out-of-graph fact that gates a
+   transition.
+9. **Heddle publishes; it does not judge.** Heddle puts complete, documented
+   data in the workflow context and the template context. It does not restrict
+   what an author does with it. An author who routes on free text has made a
+   choice, not a mistake for Heddle to prevent.
+10. **Declared, never inferred.** Heddle reads what an author wrote in a field.
+    It never reads meaning from a node's name, a substring, a naming
+    convention, or display text. Stage identifiers identify graph nodes and
+    persisted occurrences; they carry no behavior.
 
 ## A small glossary
 
