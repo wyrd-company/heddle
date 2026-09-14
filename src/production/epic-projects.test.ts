@@ -17,6 +17,7 @@ import type { ProductionConfiguration } from "./configuration.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
 import { SyntheticT3 } from "./composition.test-support.js";
 import { TaskRepositoryRouter } from "./repository-routing.js";
+import { stableUuid } from "./stable-uuid.js";
 
 const scratch: string[] = [];
 afterEach(async () => {
@@ -65,8 +66,6 @@ describe("EpicProjectCoordinator", () => {
       t3,
       () => "2026-01-01T00:00:00.000Z",
       async (input) => void worktrees.push(input),
-      undefined,
-      () => "generated-epic-project",
     );
 
     await expect(
@@ -74,11 +73,14 @@ describe("EpicProjectCoordinator", () => {
     ).resolves.toMatchObject([{ epicId: 101, kind: "created" }]);
     const created = t3.commands[0]!;
     expect(created).toMatchObject({
-      projectId: "generated-epic-project",
       title: "Sample delivery - epic-101",
       type: "project.create",
       workspaceRoot: join(root, "worktrees", "101"),
     });
+    expect(created.projectId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(created.projectId).not.toBe(stableUuid("epic:101:project"));
     expect(worktrees).toEqual([
       {
         baseRef: "main",
