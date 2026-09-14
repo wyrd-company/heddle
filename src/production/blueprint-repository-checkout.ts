@@ -101,15 +101,8 @@ const inspectRepository = async (
 ): Promise<RepositoryBinding> => {
   const root = resolve(repositoryRoot);
   try {
-    const metadata =
-      ownership === "shared source" ? await stat(root) : await lstat(root);
-    if (
-      !metadata.isDirectory() ||
-      (ownership === "worker synchronization checkout" &&
-        metadata.isSymbolicLink())
-    ) {
-      throw new Error("not a physical directory");
-    }
+    const metadata = await stat(root);
+    if (!metadata.isDirectory()) throw new Error("not a directory");
     const [topLevel, branch, upstream, upstreamCommit, fetchUrl, pushUrl] =
       await Promise.all([
         execute("git", ["rev-parse", "--show-toplevel"], { cwd: root }),
@@ -149,9 +142,7 @@ const inspectRepository = async (
   } catch (error) {
     if (error instanceof BlueprintValidationError) throw error;
     throw repositoryError(
-      `${ownership} '${root}' must be ${
-        ownership === "shared source" ? "a" : "a physical"
-      } Git clone root whose current branch tracks origin`,
+      `${ownership} '${root}' must be a Git clone root whose current branch tracks origin`,
     );
   }
 };

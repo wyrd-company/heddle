@@ -307,6 +307,44 @@ describe("organization blueprint repository", () => {
     ).toBe("0\t1");
   });
 
+  it("preserves an upstream branch whose name differs from the local branch", async () => {
+    const setup = await prepare();
+    await executeGit("git", ["push", "--quiet", "origin", "main:release"], {
+      cwd: setup.repositoryRoot,
+    });
+    await executeGit("git", ["fetch", "--quiet", "origin"], {
+      cwd: setup.repositoryRoot,
+    });
+    await executeGit(
+      "git",
+      ["branch", "--set-upstream-to=origin/release", "main"],
+      { cwd: setup.repositoryRoot },
+    );
+    const workerRoot = join(setup.root, "worker", "blueprints");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(setup.root, "worker-state"),
+    });
+    workerPersistence.push(persistence);
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      new DurableAttentionQueue(persistence),
+      setup.repositoryRoot,
+    );
+
+    await expect(repository.synchronize()).resolves.toBeUndefined();
+
+    expect(
+      (
+        await executeGit(
+          "git",
+          ["rev-parse", "--symbolic-full-name", "@{upstream}"],
+          { cwd: workerRoot },
+        )
+      ).stdout.trim(),
+    ).toBe("refs/remotes/origin/release");
+  });
+
   it("leaves worker-irrelevant shared working-tree changes untouched", async () => {
     const setup = await prepare();
     await writeFile(join(setup.repositoryRoot, "uncommitted.txt"), "draft\n");

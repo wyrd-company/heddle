@@ -72,6 +72,20 @@ describe("organization blueprint artifact editor", () => {
       fixture.repositoryRoot,
     );
     await repository.synchronize();
+    expect(
+      (
+        await executeGit("git", ["config", "--local", "--get", "user.name"], {
+          cwd: workerRoot,
+        })
+      ).stdout.trim(),
+    ).toBe("Fixture User");
+    expect(
+      (
+        await executeGit("git", ["config", "--local", "--get", "user.email"], {
+          cwd: workerRoot,
+        })
+      ).stdout.trim(),
+    ).toBe("fixture@example.invalid");
     const subject = new OrganizationBlueprintArtifactEditor({
       effects: {
         finish: async () => ({}),
