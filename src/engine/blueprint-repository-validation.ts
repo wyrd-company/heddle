@@ -128,19 +128,47 @@ const assertOutputContractArtifacts = async (
   repositoryRoot: string,
 ): Promise<void> => {
   const validator = new Ajv2020({ allErrors: true, strict: false });
-  for (const name of new Set(
-    blueprint.edges.flatMap((edge) =>
-      edge["output-contract"] === undefined ? [] : [edge["output-contract"]],
-    ),
-  )) {
-    const path = join(repositoryRoot, "output-contracts", `${name}.json`);
-    const artifact = await stat(path).catch(() => undefined);
-    if (artifact === undefined || !artifact.isFile()) {
+  const nodes = new Map(blueprint.nodes.map((node) => [node.id, node]));
+  // A stage reads its output contracts at its pinned template commit, so the
+  // artifact that is validated is the one the runtime will read, not the
+  // working tree's.
+  const pinned = new Map<string, string>();
+  for (const edge of blueprint.edges) {
+    const name = edge["output-contract"];
+    if (name === undefined) continue;
+    const commitSha = nodes.get(edge.source)?.["handoff-template"]?.commitSha;
+    if (commitSha === undefined) {
       throw new BlueprintValidationError(
-        `Blueprint '${artifactId}' names output contract '${name}' that has no artifact in output-contracts/`,
+        `Blueprint '${artifactId}' edge from '${edge.source}' binds output contract '${name}' but the node pins no handoff template commit`,
       );
     }
-    const schema = await json(path);
+    pinned.set(`${commitSha}:${name}`, commitSha);
+  }
+  for (const [key, commitSha] of pinned) {
+    const name = key.slice(commitSha.length + 1);
+    const path = `output-contracts/${name}.json`;
+    let serialized: string;
+    try {
+      serialized = (
+        await execute("git", ["cat-file", "-p", `${commitSha}:${path}`], {
+          cwd: repositoryRoot,
+        })
+      ).stdout;
+    } catch {
+      throw new BlueprintValidationError(
+        `Blueprint '${artifactId}' names output contract '${name}' that is unavailable at commit ${commitSha}: ${path}`,
+      );
+    }
+    let schema: unknown;
+    try {
+      schema = JSON.parse(serialized) as unknown;
+    } catch (error) {
+      throw new BlueprintValidationError(
+        `Blueprint '${artifactId}' output contract '${name}' at commit ${commitSha} is not valid JSON: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     // Advance output is always an object; a boolean, array, or untyped schema
     // would be refused only when a session binds, far from the author.
     if (

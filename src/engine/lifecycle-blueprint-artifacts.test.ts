@@ -430,6 +430,45 @@ describe("organization lifecycle blueprint artifacts", () => {
     return root;
   };
 
+  // Commits a contract change and moves the wait node's pin to it, the way
+  // the catalog freshness rule requires.
+  const commitContract = async (
+    root: string,
+    name: string,
+    serialized: string,
+  ): Promise<void> => {
+    await writeFile(join(root, "output-contracts", `${name}.json`), serialized);
+    await execute("git", ["add", "output-contracts"], { cwd: root });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Sample User",
+        "-c",
+        "user.email=sample@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        `change ${name}`,
+      ],
+      { cwd: root },
+    );
+    const commitSha = (
+      await execute("git", ["rev-parse", "HEAD"], { cwd: root })
+    ).stdout.trim();
+    const value = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    (value.nodes[1] as Record<string, unknown>)["handoff-template"] = {
+      commitSha,
+      path: "handoff-templates/sample-handoff.md",
+    };
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(value, null, 2)}\n`,
+    );
+  };
+
   it("accepts a disposition output contract that names a schema artifact", async () => {
     await expect(
       validateBlueprintRepository(await withOutputContract("sample-findings")),
@@ -457,7 +496,22 @@ describe("organization lifecycle blueprint artifacts", () => {
     await expect(
       validateBlueprintRepository(await withOutputContract("missing-contract")),
     ).rejects.toThrow(
-      "Blueprint 'sample-process' names output contract 'missing-contract' that has no artifact in output-contracts/",
+      /names output contract 'missing-contract' that is unavailable at commit [\da-f]{40}: output-contracts\/missing-contract\.json/,
+    );
+  });
+
+  it("reads an output contract at the pinned commit, not from the working tree", async () => {
+    const root = await withOutputContract("sample-findings");
+    await writeFile(
+      join(root, "output-contracts", "sample-findings.json"),
+      "not json\n",
+    );
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+    await commitContract(root, "sample-findings", "not json\n");
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      /output contract 'sample-findings' at commit [\da-f]{40} is not valid JSON/,
     );
   });
 
@@ -478,8 +532,9 @@ describe("organization lifecycle blueprint artifacts", () => {
 
   it("rejects an output contract artifact that is not a JSON Schema", async () => {
     const root = await withOutputContract("sample-findings");
-    await writeFile(
-      join(root, "output-contracts", "sample-findings.json"),
+    await commitContract(
+      root,
+      "sample-findings",
       `${JSON.stringify({ properties: "not-an-object", type: "object" })}\n`,
     );
     await expect(validateBlueprintRepository(root)).rejects.toThrow(
@@ -490,8 +545,9 @@ describe("organization lifecycle blueprint artifacts", () => {
   it("rejects an output contract artifact that is not an object schema", async () => {
     const root = await withOutputContract("sample-findings");
     for (const schema of [true, [], { properties: { findings: {} } }]) {
-      await writeFile(
-        join(root, "output-contracts", "sample-findings.json"),
+      await commitContract(
+        root,
+        "sample-findings",
         `${JSON.stringify(schema)}\n`,
       );
       await expect(validateBlueprintRepository(root)).rejects.toThrow(

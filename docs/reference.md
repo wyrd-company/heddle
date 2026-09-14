@@ -250,8 +250,10 @@ The interpreter refuses, naming the node or edge:
 - a condition that does not compile
 
 Repository validation adds the schema, template and todo-template resolution at
-the pinned commit, skill front matter, output contracts that are JSON Schemas
-and bound in `relationships.uses`, agent-name themes, and the tool registry.
+the pinned commit, skill front matter, output contracts read at the source
+stage's pinned commit (object schemas bound in `relationships.uses`; the
+working tree's copy is not consulted), agent-name themes, and the tool
+registry.
 
 ## Pinning and replay
 
