@@ -17,40 +17,79 @@ accepted `BlueprintArtifactEditor` over the organization blueprint clone and
 the same mechanical effect registry as the lifecycle engine. The factory
 rejects a second live composition for the same board directory.
 
+## Package distribution
+
+Heddle is published to npmjs as the public package `@wyrd-company/heddle`.
+The package carries the built service, the console viewer bundle, the JSON
+schemas, and the `heddle-server` and `heddle-cursor-agent` entry points. It
+declares runtime dependencies only; `react`, `react-dom`, and `tldraw` are
+compiled into the viewer bundle. The supported Node.js range is declared in
+`engines` and is enforced by the Feature installer.
+
+The package release workflow runs on a pushed `heddle@<version>` tag. It
+builds the tree, verifies that the tag names the `package.json` version and
+that the viewer bundle is in the packed file list, and publishes with npm
+provenance. `heddle-feature@*` tags publish only the Feature. A baseline tag
+`heddle@0.0.0` records release authority and does not publish.
+
+## Command-line installation
+
+An operator without a Dev Container installs the published package globally
+and runs the service against an operator-owned configuration directory:
+
+```console
+npm install --global @wyrd-company/heddle@<version>
+heddle-server --config /path/to/configuration
+```
+
+`heddle-server` requires the same `config.yml`, `blueprints` clone, and
+dedicated `stateDirectory` mount that the Feature requires; those contracts
+are in the sections below. `heddle-server --config <directory>
+--print-launch-settings` prints the nonsecret state directory, host, and port
+the service will use. The supported `kanban-md` fork recorded in
+`deployment/supported-versions.json` must be on `PATH`; the Feature's service
+launcher checks that version before each start, and a command-line operator
+owns that check. `better-sqlite3` installs from a prebuilt binary; a platform
+without a matching prebuild needs a compiler toolchain on the command-line
+path, which the Feature does not provide.
+
 ## Dev Container Feature distribution
 
 Install the service with the versioned Feature reference
 `ghcr.io/wyrd-company/heddle/heddle:0`. The `wyrd-company/heddle` collection
 namespace follows the source repository identity, and `heddle` is the Feature
 ID. The major-version reference accepts compatible Feature updates while the
-Feature manifest retains the complete semantic version.
+Feature manifest retains the complete semantic version. The Feature source is
+`features/heddle/` in the repository.
 
 The Feature and Heddle package are independent release units. The Feature's
-`version` option selects a Heddle package version and defaults to the newest
-GitHub release whose tag matches `heddle@*`; `heddle-feature@*` tags are not
-package releases. An exact version resolves the corresponding
-`heddle-<version>.tgz` release asset. An https URL or absolute path in
-`packageSource` overrides that resolution. `packageSha256` optionally binds the
-downloaded tarball to a hexadecimal SHA-256 digest.
+`version` option selects the Heddle package version installed from
+`npmRegistry`, which defaults to `https://registry.npmjs.org`. The default
+`latest` installs the registry's current `latest` dist-tag on every build, so
+a rebuild can move to a newer Heddle without a Feature change. An exact SemVer
+version installs that version on every build; pin one when a workspace must
+be reproducible. An https URL or absolute path in `packageSource` bypasses the
+registry. `packageSha256` optionally binds the tarball to a hexadecimal
+SHA-256 digest before installation, whichever source supplied it.
 
 The published Feature contains no Heddle source and no Heddle package tarball.
-The package release workflow builds the repository tree once, including
-`assets/console-viewer/lifecycle.js`, packs it, and uploads it to the existing
-`heddle@*` GitHub release. It does not publish to an npm registry. Feature
-installation downloads that artifact and installs only its runtime
-dependencies. Resolution, download, digest, and native-prebuild failures stop
-before service registration and name the cause. The target gets no compiler or
-source-build fallback.
+Installation fetches the exact package tarball with `npm pack`, verifies the
+optional digest, resolves the `better-sqlite3` prebuild, and installs only
+runtime dependencies. Resolution, download, digest, and native-prebuild
+failures stop before service registration and name the cause. The target gets
+no compiler or source-build fallback.
 
-`task deployment:qualification` packs the built tree, places the tarball in an
-isolated base image, dry-publishes the source-free Feature collection to an
-isolated local OCI registry, and replaces only the registry portion of the
-checked-in remote reference. The Dev Container CLI supplies the tarball through
-`packageSource`, then resolves and installs the Feature in a clean container.
-The qualification proves that Python is absent and that the installed service
-answers its configured endpoint. `task deployment:package` checks the OCI
-Feature archive without exercising registry resolution; it is not the remote
-installation proof.
+`task deployment:qualification` packs the built tree, serves it from an
+isolated local npm registry as the only published version and as `latest`,
+dry-publishes the source-free Feature collection to an isolated local OCI
+registry, and replaces only the registry portion of the checked-in remote
+reference. It proves a failed download, a digest mismatch, a missing registry
+version, and a missing native prebuild each stop before service registration.
+It then installs the Feature at the default `latest`, proves that Python is
+absent and that the installed service answers its configured endpoint,
+rebuilds at the exact package version, and proves persisted state replays.
+`task deployment:package` checks the OCI Feature archive without exercising
+registry resolution; it is not the remote installation proof.
 
 ## Configuration directory
 

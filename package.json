@@ -1,8 +1,17 @@
 {
-  "name": "heddle",
+  "name": "@wyrd-company/heddle",
   "version": "0.1.0",
   "description": "Workflow service for software delivery tasks",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wyrd-company/heddle.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0"
+  },
   "bin": {
     "heddle-cursor-agent": "bin/heddle-cursor-agent.mjs",
     "heddle-server": "bin/heddle-server.mjs"

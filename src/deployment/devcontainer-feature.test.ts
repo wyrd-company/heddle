@@ -53,6 +53,7 @@ describe("Heddle devcontainer feature", () => {
       version: { default: "latest" },
       packageSource: { default: "" },
       packageSha256: { default: "" },
+      npmRegistry: { default: "https://registry.npmjs.org" },
       configDirectory: { default: "/home/vscode/.heddle" },
       dnsName: { default: "" },
     });
@@ -75,11 +76,21 @@ describe("Heddle devcontainer feature", () => {
       '"$(dirname "$0")/verify-feature-source.sh" "$(dirname "$0")"',
     );
     expect(installer).not.toContain("heddle-source");
-    expect(installer).not.toMatch(/npm (?:ci|run|pack)\b/u);
+    expect(installer).not.toMatch(/npm (?:ci|run)\b/u);
+    expect(installer).not.toMatch(/npm pack[^\n]*"\$\{repository\}"/u);
     expect(installer).not.toContain(
       'packages=("$(dirname "$0")"/heddle-*.tgz)',
     );
     expect(installer).toContain("--allow-scripts=better-sqlite3");
+    expect(installer).toContain('--registry "${NPMREGISTRY}"');
+    expect(installer).toContain('"--@wyrd-company:registry=${NPMREGISTRY}"');
+    expect(installer).toContain("npm pack --silent --json --ignore-scripts");
+    expect(installer).toContain(
+      "Heddle package resolution from ${NPMREGISTRY} failed for ${package_source}.",
+    );
+    expect(installer).toContain(
+      "lib/node_modules/@wyrd-company/heddle/node_modules/better-sqlite3",
+    );
     const finalInstall = installer.slice(
       installer.indexOf('log "Installing the prebuilt Heddle package"'),
     );
@@ -238,7 +249,7 @@ describe("Heddle devcontainer feature", () => {
     expect(qualification).toContain("registerWorkflowMcpProviderSession");
     expect(qualification).toContain('t3Binary === "/home/vscode/.t3"');
     expect(qualification).toContain(
-      'installedPackage !== "/usr/local/lib/node_modules/heddle"',
+      'installedPackage !== "/usr/local/lib/node_modules/@wyrd-company/heddle"',
     );
     expect(qualification).toContain("port === 3773");
     expect(qualification).toContain("dirname(process.execPath)");
@@ -268,6 +279,45 @@ describe("Heddle devcontainer feature", () => {
       '    "/opt/heddle-package.tgz" \\\n    "${package_digest}"',
     );
     expect(featureQualification).toContain("packageSha256: $package_digest");
+    expect(featureQualification).toContain("npmRegistry: $npm_registry,");
+    expect(featureQualification).toContain("version: $package_version");
+    expect(featureQualification).toContain(
+      'npm_registry_url="http://npm.qualification:${npm_registry_port}"',
+    );
+    expect(featureQualification).toContain(
+      "scripts/deployment/qualification-npm-registry.mjs",
+    );
+    expect(featureQualification).toContain(
+      "expect_feature_install_failure \\\n    missing-registry-version",
+    );
+    expect(featureQualification).toContain(
+      "failed for @wyrd-company/heddle@9\\\\.9\\\\.9",
+    );
+    expect(featureQualification).toContain(
+      "'.name == \"@wyrd-company/heddle\" and .version == $version'",
+    );
+    expect(
+      featureQualification.match(
+        /'\.name == "@wyrd-company\/heddle" and \.version == \$version'/g,
+      ),
+    ).toHaveLength(2);
+    expect(featureQualification).toContain(
+      'grep -qx "GET /@wyrd-company/heddle/-/heddle-${package_version}.tgz" "${npm_registry_log}"',
+    );
+    const latestInstall = featureQualification.indexOf(
+      '    "" \\\n    "${package_digest}" \\\n    "latest" \\\n    "heddle.localhost"',
+    );
+    const exactInstall = featureQualification.indexOf(
+      '    "" \\\n    "${package_digest}" \\\n    "${package_version}" \\\n    "heddle.localhost"',
+    );
+    expect(latestInstall).toBeGreaterThan(-1);
+    expect(exactInstall).toBeGreaterThan(latestInstall);
+    const qualificationConfiguration = JSON.parse(
+      await readFile(".devcontainer/qualification/devcontainer.json", "utf8"),
+    ) as { runArgs: string[] };
+    expect(qualificationConfiguration.runArgs).toContain(
+      "npm.qualification:host-gateway",
+    );
     expect(featureQualification).toContain("! command -v python3");
     expect(featureQualification).toContain(
       "package/assets/console-viewer/lifecycle.js",

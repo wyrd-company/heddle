@@ -2,23 +2,28 @@
   "id": "heddle",
   "version": "0.1.1",
   "name": "Heddle",
-  "description": "Installs Heddle and configures one s6-supervised workflow service for the workspace.",
+  "description": "Installs the published Heddle npm package and configures one s6-supervised workflow service for the workspace.",
   "documentationURL": "https://github.com/wyrd-company/heddle/tree/main/features/heddle",
   "options": {
     "version": {
       "type": "string",
       "default": "latest",
-      "description": "Heddle package version to install. `latest` selects the newest GitHub release in the heddle@* tag namespace. This is independent of the Feature version."
+      "description": "Heddle package version to install from the npm registry. `latest` installs the registry's current `latest` dist-tag on every build; an exact SemVer version installs that exact version on every build. This is independent of the Feature version."
     },
     "packageSource": {
       "type": "string",
       "default": "",
-      "description": "Optional Heddle package tarball source. An https URL or absolute path overrides version resolution."
+      "description": "Optional Heddle package tarball source. An https URL or absolute path overrides registry resolution."
     },
     "packageSha256": {
       "type": "string",
       "default": "",
       "description": "Optional hexadecimal SHA-256 digest required for the resolved Heddle package tarball."
+    },
+    "npmRegistry": {
+      "type": "string",
+      "default": "https://registry.npmjs.org",
+      "description": "npm registry that serves `@wyrd-company/heddle` when `packageSource` is empty."
     },
     "configDirectory": {
       "type": "string",

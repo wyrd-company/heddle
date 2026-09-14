@@ -12,11 +12,13 @@ set, add the Wyrd Company Caddy Feature to the same devcontainer.
 
 The supported Feature reference is
 `ghcr.io/wyrd-company/heddle/heddle:0`. The published Feature contains the
-installer but no Heddle source or package tarball. The installer downloads the
-prebuilt `npm pack` tarball from the selected `heddle@*` GitHub release, verifies
-the optional digest, and installs its runtime dependencies. It does not use an
-npm registry for Heddle; `package.json` stays private. The Feature version and
-the installed Heddle package version are independent release units.
+installer but no Heddle source or package tarball. The installer fetches the
+published `@wyrd-company/heddle` package at the selected `version` from
+`npmRegistry`, verifies the optional digest, and installs its runtime
+dependencies. `latest` installs the registry's current `latest` dist-tag on
+every build; an exact version installs that version on every build. The
+Feature version and the installed Heddle package version are independent
+release units.
 
 Installation fails before service registration when package resolution,
 download, digest verification, or the required `better-sqlite3` prebuild fails.
@@ -25,14 +27,15 @@ not install a compiler or fall back to a source build.
 
 ## Options
 
-| Option            | Type   | Default                | Description                                                                                |
-| ----------------- | ------ | ---------------------- | ------------------------------------------------------------------------------------------ |
-| `version`         | string | `latest`               | Heddle package version. `latest` selects the newest `heddle@*` release, not a Feature tag. |
-| `packageSource`   | string | `""`                   | Optional https URL or absolute tarball path that overrides `version`.                      |
-| `packageSha256`   | string | `""`                   | Optional hexadecimal SHA-256 digest verified before installation.                          |
-| `configDirectory` | string | `/home/vscode/.heddle` | Operator-owned directory containing required `config.yml`.                                 |
-| `dnsName`         | string | `""`                   | Optional fully qualified workspace DNS name served through Caddy.                          |
-| `serviceUser`     | string | `automatic`            | User that runs Heddle; automatic selection prefers the remote user.                        |
+| Option            | Type   | Default                      | Description                                                                                       |
+| ----------------- | ------ | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `version`         | string | `latest`                     | Heddle package version. `latest` follows the registry dist-tag; an exact version is reproducible. |
+| `packageSource`   | string | `""`                         | Optional https URL or absolute tarball path that bypasses the registry.                           |
+| `packageSha256`   | string | `""`                         | Optional hexadecimal SHA-256 digest verified before installation.                                 |
+| `npmRegistry`     | string | `https://registry.npmjs.org` | npm registry that serves `@wyrd-company/heddle` when `packageSource` is empty.                    |
+| `configDirectory` | string | `/home/vscode/.heddle`       | Operator-owned directory containing required `config.yml`.                                        |
+| `dnsName`         | string | `""`                         | Optional fully qualified workspace DNS name served through Caddy.                                 |
+| `serviceUser`     | string | `automatic`                  | User that runs Heddle; automatic selection prefers the remote user.                               |
 
 ## Workspace configuration and persistence
 
@@ -89,7 +92,7 @@ Heddle binds the configured loopback endpoint before production composition
 startup. The endpoint returns `503 Service Unavailable` until startup succeeds;
 a bind failure cannot dispatch production effects or create production state.
 
-See [Production composition](../../../docs/operators/production-composition.md)
+See [Production composition](../../docs/operators/production-composition.md)
 for the complete schema and executable-adapter contracts.
 
 ## T3 compatibility qualification

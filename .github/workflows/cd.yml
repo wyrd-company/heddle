@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish-package-asset:
-    name: Publish Heddle package release asset
+  publish-package:
+    name: Publish the Heddle npm package
     # A baseline tag records release authority; it does not represent a release.
     if: >-
       ${{
@@ -25,27 +25,33 @@ jobs:
       }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      id-token: write
     steps:
       - name: Check out the tagged source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Set up Node.js
+        with:
+          persist-credentials: false
+      - name: Set up Node.js for npmjs
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "24"
           cache: npm
+          registry-url: https://registry.npmjs.org
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Build the package tree
         run: npm run build
-      - name: Upload the package release asset
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Verify the tag names the package version
         run: |
           set -euo pipefail
+          package_name="$(node -p 'require("./package.json").name')"
           package_version="$(node -p 'require("./package.json").version')"
-          expected_tag="heddle@${package_version}"
-          [ "${GITHUB_REF_NAME}" = "${expected_tag}" ] || {
+          [ "${package_name}" = "@wyrd-company/heddle" ] || {
+            echo "package.json names ${package_name}, not @wyrd-company/heddle." >&2
+            exit 1
+          }
+          [ "${GITHUB_REF_NAME}" = "heddle@${package_version}" ] || {
             echo "Tag ${GITHUB_REF_NAME} does not match package version ${package_version}." >&2
             exit 1
           }
@@ -53,21 +59,12 @@ jobs:
             echo "Built package is missing assets/console-viewer/lifecycle.js." >&2
             exit 1
           }
-          package_directory="$(mktemp -d)"
-          npm pack --silent --pack-destination "${package_directory}" >/dev/null
-          package_path="${package_directory}/heddle-${package_version}.tgz"
-          test -f "${package_path}" || {
-            echo "npm pack did not produce ${package_path}." >&2
-            exit 1
-          }
-          # A pushed release tag has no GitHub Release object yet, and
-          # `gh release upload` requires one, so create it when absent.
-          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create \
-            "${GITHUB_REF_NAME}" \
-            --verify-tag \
-            --title "${GITHUB_REF_NAME}" \
-            --notes "Heddle package ${package_version}."
-          gh release upload "${GITHUB_REF_NAME}" "${package_path}"
+          npm pack --dry-run --json --ignore-scripts \
+            | jq -e '.[0].files | map(.path) | index("assets/console-viewer/lifecycle.js") != null' >/dev/null
+      - name: Publish to npmjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public --ignore-scripts
 
   publish-features:
     name: Publish Dev Container Features
