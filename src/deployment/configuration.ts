@@ -6,7 +6,7 @@
 import { constants } from "node:fs";
 import { execFile } from "node:child_process";
 import { access, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { URL } from "node:url";
 import { promisify } from "node:util";
 
@@ -313,6 +313,91 @@ const declaresServerHost = (value: unknown): boolean => {
   );
 };
 
+const secretReferencePointers = [
+  "/t3/accessToken",
+  "/pushover/applicationToken",
+  "/pushover/userKey",
+] as const;
+
+type SecretReference = { file: string };
+
+const valueAtConfigurationPointer = (
+  root: unknown,
+  pointer: string,
+): unknown => {
+  let value = root;
+  for (const segment of pointer.slice(1).split("/")) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return value;
+};
+
+const setConfigurationPointer = (
+  root: Record<string, unknown>,
+  pointer: string,
+  value: string,
+): void => {
+  const segments = pointer.slice(1).split("/");
+  let parent = root;
+  for (const segment of segments.slice(0, -1)) {
+    parent = parent[segment] as Record<string, unknown>;
+  }
+  parent[segments.at(-1)!] = value;
+};
+
+const isSecretReference = (value: unknown): value is SecretReference =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  typeof (value as Record<string, unknown>)["file"] === "string";
+
+const readSecretReference = async (
+  field: string,
+  reference: string,
+  source: string,
+): Promise<string> => {
+  const path = isAbsolute(reference)
+    ? reference
+    : resolve(dirname(source), reference);
+  try {
+    const metadata = await stat(path);
+    if (!metadata.isFile()) throw new Error("not a file");
+    if ((metadata.mode & (constants.S_IRGRP | constants.S_IROTH)) !== 0) {
+      throw new Error("readable by group or world");
+    }
+    const value = await readFile(path, "utf8");
+    if (value.trim() === "") throw new Error("empty");
+    return value;
+  } catch {
+    throw new TypeError(
+      `field '${field}' secret file '${path}' must be a readable, non-empty regular file that is not readable by group or world`,
+    );
+  }
+};
+
+const resolveSecretReferences = async (
+  value: unknown,
+  layered: Pick<
+    ReturnType<typeof layerConfiguration>,
+    "clearedBy" | "provenance"
+  >,
+): Promise<{ secrets: string[]; value: unknown }> => {
+  const resolved = globalThis.structuredClone(value) as Record<string, unknown>;
+  const secrets: string[] = [];
+  for (const pointer of secretReferencePointers) {
+    const candidate = valueAtConfigurationPointer(resolved, pointer);
+    if (!isSecretReference(candidate)) continue;
+    const source = sourceForConfigurationPointer(pointer, layered);
+    const secret = await readSecretReference(pointer, candidate.file, source);
+    setConfigurationPointer(resolved, pointer, secret);
+    secrets.push(secret);
+  }
+  return { secrets, value: resolved };
+};
+
 export const loadDeploymentConfiguration = async (
   configurationDirectory: string,
 ): Promise<LoadedDeploymentConfiguration> => {
@@ -384,7 +469,9 @@ export const loadDeploymentConfiguration = async (
       ...completeConfigurationProvenance(value, layered.provenance),
       "/server/host": "built-in",
     };
-    const document = value as ConfigurationDocument;
+    const resolvedSecrets = await resolveSecretReferences(value, layered);
+    secrets.push(...resolvedSecrets.secrets);
+    const document = resolvedSecrets.value as ConfigurationDocument;
     const { providerUsage, server, ...root } = document;
     const configuration: ProductionConfiguration = {
       ...root,

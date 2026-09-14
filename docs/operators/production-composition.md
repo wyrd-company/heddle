@@ -147,6 +147,26 @@ present `worker.yml`, invalid YAML, or an invalid effective value fails before
 composition or network bind. Errors name the source file and JSON-pointer field
 while redacting configured T3 and Pushover secrets.
 
+Each secret-bearing field — `t3.accessToken`, `pushover.applicationToken`, and
+`pushover.userKey` — accepts an inline value or a file reference. Prefer a
+separate secret file with mode `0600`:
+
+```yaml
+t3:
+  accessToken:
+    file: secrets/t3-access-token
+pushover:
+  applicationToken:
+    file: /run/secrets/pushover-application-token
+  userKey:
+    file: secrets/pushover-user-key
+```
+
+The path is relative to the `config.yml` or `worker.yml` file that supplies the
+field, unless it is absolute. The file must be a non-empty regular file that is
+not readable by group or world. Heddle reads it once while loading configuration
+and keeps only the resolved value; it does not read it again during service use.
+
 The loopback server port must be from 1 through 65535; an ephemeral port cannot
 be projected into the fixed Caddy upstream.
 

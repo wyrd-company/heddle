@@ -1377,11 +1377,14 @@ proposed-design:
     worker-local data at those paths and runs its own T3 server. A source
     overrides only values that differ, such as a worker-specific credential or
     a nonconventional in-container path.
-    A relative secret-file reference resolves against the directory containing
-    the configuration source that supplied the effective field; an absolute
-    reference remains absolute. Per-field source provenance survives layering
-    so secret resolution does not depend on which layer supplied neighboring
-    values.
+    Each T3 and Pushover secret field accepts either an inline non-empty string
+    or a `{ file: path }` reference. A relative secret-file reference resolves
+    against the directory containing the configuration source that supplied the
+    effective field; an absolute reference remains absolute. The referenced
+    file is read once during configuration loading, must be a non-empty regular
+    file, and must not be readable by group or world. Per-field source
+    provenance survives layering so secret resolution does not depend on which
+    layer supplied neighboring values.
 
     The configuration directory also contains an organization blueprint clone
     at the hard-coded `blueprints` subdirectory. It is shared read-only

@@ -202,6 +202,217 @@ describe("deployed configuration directory", () => {
     });
   });
 
+  it("resolves each secret file reference once at configuration load and redacts its value", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-secret-file-config-"));
+    await prepareBlueprintRepository(root);
+    const coreSecretDirectory = join(root, "core-secrets");
+    const workerSecretDirectory = join(root, "worker-secrets");
+    await mkdir(coreSecretDirectory);
+    await mkdir(workerSecretDirectory);
+    const coreAccessToken = join(coreSecretDirectory, "t3-access-token");
+    const coreUserKey = join(coreSecretDirectory, "pushover-user-key");
+    const workerApplicationToken = join(
+      workerSecretDirectory,
+      "pushover-application-token",
+    );
+    await Promise.all([
+      writeFile(coreAccessToken, "referenced-t3-secret"),
+      writeFile(coreUserKey, "referenced-user-secret"),
+      writeFile(workerApplicationToken, "referenced-application-secret"),
+    ]);
+    await Promise.all(
+      [coreAccessToken, coreUserKey, workerApplicationToken].map((path) =>
+        chmod(path, 0o600),
+      ),
+    );
+    const core = globalThis.structuredClone(fixture(root)) as unknown as {
+      pushover: Record<string, unknown>;
+      t3: Record<string, unknown>;
+    };
+    core.t3["accessToken"] = { file: "core-secrets/t3-access-token" };
+    core.pushover["userKey"] = { file: "core-secrets/pushover-user-key" };
+    const workerPath = join(root, "worker.yml");
+    await writeFile(join(root, "config.yml"), stringify(core));
+    await writeFile(
+      workerPath,
+      stringify({
+        pushover: {
+          applicationToken: {
+            file: "worker-secrets/pushover-application-token",
+          },
+        },
+      }),
+    );
+
+    const loaded = await loadDeploymentConfiguration(root);
+    const disclosure = effectiveConfigurationDisclosure(loaded);
+    const serialized = JSON.stringify(disclosure);
+
+    expect(loaded.configuration.t3.accessToken).toBe("referenced-t3-secret");
+    expect(loaded.configuration.pushover.applicationToken).toBe(
+      "referenced-application-secret",
+    );
+    expect(loaded.configuration.pushover.userKey).toBe(
+      "referenced-user-secret",
+    );
+    expect(loaded.configurationProvenance).toMatchObject({
+      "/pushover/applicationToken": workerPath,
+      "/pushover/userKey": join(root, "config.yml"),
+      "/t3/accessToken": join(root, "config.yml"),
+    });
+    expect(disclosure.configuration).toMatchObject({
+      pushover: { applicationToken: "[REDACTED]", userKey: "[REDACTED]" },
+      t3: { accessToken: "[REDACTED]" },
+    });
+    for (const secret of [
+      "referenced-t3-secret",
+      "referenced-application-secret",
+      "referenced-user-secret",
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+
+    await Promise.all(
+      [coreAccessToken, coreUserKey, workerApplicationToken].map((path) =>
+        rm(path),
+      ),
+    );
+    expect(loaded.configuration).toMatchObject({
+      pushover: { applicationToken: "referenced-application-secret" },
+      t3: { accessToken: "referenced-t3-secret" },
+    });
+  });
+
+  it.each([
+    ["/t3/accessToken", "t3", "accessToken"],
+    ["/pushover/applicationToken", "pushover", "applicationToken"],
+    ["/pushover/userKey", "pushover", "userKey"],
+  ] as const)(
+    "rejects a missing secret file for %s with its field and path",
+    async (pointer, section, field) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-secret-file-config-"));
+      await prepareBlueprintRepository(root);
+      const path = join(root, "missing-secret");
+      const configuration = globalThis.structuredClone(
+        fixture(root),
+      ) as unknown as Record<string, Record<string, unknown>>;
+      configuration[section]![field] = { file: path };
+      await writeFile(join(root, "config.yml"), stringify(configuration));
+
+      await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+        `field '${pointer}' secret file '${path}'`,
+      );
+    },
+  );
+
+  it.each([
+    ["empty", 0o600],
+    ["group-readable", 0o640],
+    ["world-readable", 0o604],
+    ["unreadable", 0o000],
+  ] as const)(
+    "rejects a referenced secret file that is %s without exposing its content",
+    async (_kind, mode) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-secret-file-config-"));
+      await prepareBlueprintRepository(root);
+      const path = join(root, "secret");
+      await writeFile(path, _kind === "empty" ? "" : "file-secret-value");
+      await chmod(path, mode);
+      const configuration = globalThis.structuredClone(
+        fixture(root),
+      ) as unknown as {
+        t3: Record<string, unknown>;
+      };
+      configuration.t3["accessToken"] = { file: path };
+      await writeFile(join(root, "config.yml"), stringify(configuration));
+
+      const error = await loadDeploymentConfiguration(root).catch(
+        (candidate: unknown) => String(candidate),
+      );
+      expect(error).toContain(`field '/t3/accessToken' secret file '${path}'`);
+      expect(error).not.toContain("file-secret-value");
+    },
+  );
+
+  it("keeps each referenced secret out of an entry-point failure before composition", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-secret-file-config-"));
+    await prepareBlueprintRepository(root);
+    const paths = {
+      applicationToken: join(root, "application-token"),
+      accessToken: join(root, "access-token"),
+      userKey: join(root, "user-key"),
+    };
+    const secrets = {
+      applicationToken: "referenced-application-secret",
+      accessToken: "referenced-t3-secret",
+      userKey: "referenced-user-secret",
+    };
+    await Promise.all(
+      Object.entries(paths).map(async ([key, path]) => {
+        await writeFile(path, secrets[key as keyof typeof secrets]);
+        await chmod(path, 0o600);
+      }),
+    );
+    const configuration = globalThis.structuredClone(
+      fixture(root),
+    ) as unknown as {
+      pushover: Record<string, unknown>;
+      session: Record<string, unknown>;
+      stateDirectory: string;
+      t3: Record<string, unknown>;
+    };
+    configuration.t3["accessToken"] = { file: paths.accessToken };
+    configuration.pushover["applicationToken"] = {
+      file: paths.applicationToken,
+    };
+    configuration.pushover["userKey"] = { file: paths.userKey };
+    configuration.session["defaultProviderAlias"] = "unconfigured";
+    await writeFile(join(root, "config.yml"), stringify(configuration));
+
+    const failure = await execute(
+      process.execPath,
+      ["bin/heddle-server.mjs", "--config", root],
+      { env: process.env },
+    ).catch((error: unknown) => error as { code: number; stderr: string });
+
+    expect(failure).toMatchObject({ code: 1 });
+    expect(failure.stderr).toContain("session.defaultProviderAlias");
+    for (const secret of Object.values(secrets)) {
+      expect(failure.stderr).not.toContain(secret);
+    }
+    await expect(
+      access(configuration.stateDirectory, constants.F_OK),
+    ).rejects.toThrow();
+  });
+
+  it.each([
+    ["/t3/accessToken", { file: "" }],
+    [
+      "/pushover/applicationToken",
+      { file: "secrets/application", unexpected: true },
+    ],
+  ])(
+    "rejects an invalid secret-reference object at %s through schema validation before composition",
+    async (pointer, reference) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-secret-file-config-"));
+      await prepareBlueprintRepository(root);
+      const configuration = globalThis.structuredClone(
+        fixture(root),
+      ) as unknown as {
+        pushover: Record<string, unknown>;
+        t3: Record<string, unknown>;
+      };
+      if (pointer === "/t3/accessToken") {
+        configuration.t3["accessToken"] = reference;
+      } else {
+        configuration.pushover["applicationToken"] = reference;
+      }
+      await writeFile(join(root, "config.yml"), stringify(configuration));
+
+      await expect(loadDeploymentConfiguration(root)).rejects.toThrow(pointer);
+    },
+  );
+
   it("loads a stable conventional configuration when source omits worker-local defaults", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-conventional-config-"));
     await prepareBlueprintRepository(root);

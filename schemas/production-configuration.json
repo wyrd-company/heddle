@@ -188,7 +188,7 @@
           "format": "uri",
           "pattern": "^https?://"
         },
-        "applicationToken": { "type": "string", "minLength": 1 },
+        "applicationToken": { "$ref": "#/$defs/secretValue" },
         "consoleBaseUrl": {
           "type": "string",
           "format": "uri",
@@ -199,7 +199,7 @@
           "minLength": 1,
           "pattern": "\\S"
         },
-        "userKey": { "type": "string", "minLength": 1 }
+        "userKey": { "$ref": "#/$defs/secretValue" }
       }
     },
     "session": {
@@ -257,7 +257,7 @@
       "additionalProperties": false,
       "required": ["accessToken", "baseUrl"],
       "properties": {
-        "accessToken": { "type": "string", "minLength": 1 },
+        "accessToken": { "$ref": "#/$defs/secretValue" },
         "baseUrl": {
           "type": "string",
           "format": "uri",
@@ -267,6 +267,19 @@
     }
   },
   "$defs": {
+    "secretValue": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file"],
+          "properties": {
+            "file": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        }
+      ]
+    },
     "providerAliasCandidate": {
       "type": "object",
       "additionalProperties": false,
