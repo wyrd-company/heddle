@@ -132,10 +132,10 @@ describe("question node", () => {
   it("asks at each of two question nodes and binds each answer to its own node", async () => {
     const run: string[] = [];
     const blueprint = questionBlueprint();
-    const second = structuredClone(
-      blueprint.nodes.find(({ id }) => id === "ask")!,
-    );
-    second.id = "ask-again";
+    const second = {
+      ...blueprint.nodes.find(({ id }) => id === "ask")!,
+      id: "ask-again",
+    };
     blueprint.nodes.push(second);
     blueprint.edges = [
       { source: "mix", target: "ask" },
