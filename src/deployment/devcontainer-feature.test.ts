@@ -358,6 +358,25 @@ describe("Heddle devcontainer feature", () => {
     expect(featureQualification).toContain(
       'repository_directory="${tools_directory}/sample-repository"',
     );
+    expect(featureQualification).toContain(
+      "Qualification command failed with status %s:",
+    );
+    expect(featureQualification).toContain("Container state: status=");
+    for (const assertion of [
+      "service-registration-count",
+      "kanban-version",
+      "python-absence",
+      "packaged-console-asset",
+      "loopback-console-readiness",
+      "loopback-console-title",
+      "board-projection",
+      "mcp-unauthorized-status",
+      "mcp-unauthorized-body",
+      "caddy-console-readiness",
+      "caddy-console-title",
+    ]) {
+      expect(featureQualification).toContain(assertion);
+    }
     const t3Qualification = await readFile(
       "scripts/deployment/qualification-t3.mjs",
       "utf8",

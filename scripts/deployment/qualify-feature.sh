@@ -325,8 +325,9 @@ up() {
 }
 
 inside() {
-    HEDDLE_QUALIFICATION_STATE="${state_directory}" \
-    HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+    local status
+    if HEDDLE_QUALIFICATION_STATE="${state_directory}" \
+        HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_TOOLS="${tools_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
@@ -335,7 +336,34 @@ inside() {
         --workspace-folder "${repository}" \
         --config "${configuration}" \
         --id-label "heddle.qualification=${qualification_label}" \
-        "$@"
+        "$@"; then
+        return 0
+    else
+        status="$?"
+    fi
+    printf 'Qualification command failed with status %s:' "${status}" >&2
+    printf ' %q' "$@" >&2
+    printf '\n' >&2
+    docker inspect \
+        --format 'Container state: status={{.State.Status}} running={{.State.Running}} exitCode={{.State.ExitCode}} oomKilled={{.State.OOMKilled}} error={{json .State.Error}}' \
+        "${container_id}" >&2 || true
+    return "${status}"
+}
+
+inside_assert_equal() {
+    local name="$1"
+    local expected="$2"
+    local observed
+    shift 2
+
+    observed="$(inside "$@")" || return "$?"
+    if [ "${observed}" != "${expected}" ]; then
+        printf "Qualification assertion '%s' failed: expected '%s', observed '%s'.\n" \
+            "${name}" "${expected}" "${observed}" >&2
+        return 1
+    fi
+    printf "Qualification assertion '%s' passed: observed '%s'.\n" \
+        "${name}" "${observed}"
 }
 
 write_configuration() {
@@ -614,29 +642,78 @@ inside jq -e '(.dependencies | keys | sort) == [
   "zod"
 ]' /usr/local/lib/node_modules/@wyrd-company/heddle/package.json >/dev/null
 
-inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" bash -lc '
-set -euo pipefail
-test "$(/command/s6-rc -a list | awk '\''$1 == "heddle" { count += 1 } END { print count + 0 }'\'')" -eq 1
-test "$(kanban-md --version)" = "kanban-md version 0.38.0-fork+794efef"
-! command -v python3 >/dev/null 2>&1
-test -f /usr/local/lib/node_modules/@wyrd-company/heddle/assets/console-viewer/lifecycle.js
+inside_assert_equal \
+    service-registration-count \
+    1 \
+    bash -lc "/command/s6-rc -a list | awk '\$1 == \"heddle\" { count += 1 } END { print count + 0 }'"
+inside_assert_equal \
+    kanban-version \
+    "kanban-md version 0.38.0-fork+794efef" \
+    kanban-md --version
+inside_assert_equal \
+    python-absence \
+    absent \
+    bash -lc 'if command -v python3 >/dev/null 2>&1; then printf present; else printf absent; fi'
+inside_assert_equal \
+    packaged-console-asset \
+    present \
+    bash -lc 'if test -f /usr/local/lib/node_modules/@wyrd-company/heddle/assets/console-viewer/lifecycle.js; then printf present; else printf absent; fi'
+inside_assert_equal \
+    loopback-console-readiness \
+    ready \
+    bash -lc '
 for attempt in $(seq 1 100); do
-    if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then break; fi
-    [ "${attempt}" -lt 100 ] || exit 1
+    if curl --fail --silent http://127.0.0.1:4317/ >/tmp/heddle-console.html; then
+        printf ready
+        exit 0
+    fi
+    [ "${attempt}" -lt 100 ] || {
+        printf unavailable
+        exit 0
+    }
     sleep 0.1
 done
-grep -q "<title>Heddle Console</title>" /tmp/heddle-console.html
-projection="$(curl --fail --silent http://127.0.0.1:4317/api/projection)"
-printf "%s" "${projection}" | jq -e --arg task_id "${HEDDLE_QUALIFICATION_TASK_ID}" '\''[.columns[].tasks[]] == [{blocked:false,dependencies:[],id:($task_id | tonumber),priority:"medium",status:"in-progress",tags:[],title:"Sample Record"}]'\'' >/dev/null
-test "$(curl --silent --output /tmp/heddle-mcp.json --write-out "%{http_code}" --request POST http://127.0.0.1:4317/mcp)" = 401
-grep -q "Unauthorized" /tmp/heddle-mcp.json
-for attempt in $(seq 1 100); do
-    if curl --insecure --fail --silent https://heddle.localhost/ >/tmp/heddle-caddy.html; then break; fi
-    [ "${attempt}" -lt 100 ] || exit 1
-    sleep 0.1
-done
-grep -q "<title>Heddle Console</title>" /tmp/heddle-caddy.html
 '
+inside_assert_equal \
+    loopback-console-title \
+    present \
+    bash -lc 'if grep -q "<title>Heddle Console</title>" /tmp/heddle-console.html; then printf present; else printf absent; fi'
+expected_projection="$(
+    jq -ncS --arg task_id "${qualification_task_id}" \
+        '[{blocked:false,dependencies:[],id:($task_id | tonumber),priority:"medium",status:"in-progress",tags:[],title:"Sample Record"}]'
+)"
+inside_assert_equal \
+    board-projection \
+    "${expected_projection}" \
+    bash -lc 'curl --fail --silent http://127.0.0.1:4317/api/projection | jq -cS "[.columns[].tasks[]]"'
+inside_assert_equal \
+    mcp-unauthorized-status \
+    401 \
+    bash -lc 'curl --silent --output /tmp/heddle-mcp.json --write-out "%{http_code}" --request POST http://127.0.0.1:4317/mcp'
+inside_assert_equal \
+    mcp-unauthorized-body \
+    present \
+    bash -lc 'if grep -q "Unauthorized" /tmp/heddle-mcp.json; then printf present; else printf absent; fi'
+inside_assert_equal \
+    caddy-console-readiness \
+    ready \
+    bash -lc '
+for attempt in $(seq 1 100); do
+    if curl --insecure --fail --silent https://heddle.localhost/ >/tmp/heddle-caddy.html; then
+        printf ready
+        exit 0
+    fi
+    [ "${attempt}" -lt 100 ] || {
+        printf unavailable
+        exit 0
+    }
+    sleep 0.1
+done
+'
+inside_assert_equal \
+    caddy-console-title \
+    present \
+    bash -lc 'if grep -q "<title>Heddle Console</title>" /tmp/heddle-caddy.html; then printf present; else printf absent; fi'
 
 inside env HEDDLE_QUALIFICATION_TASK_ID="${qualification_task_id}" \
 node --input-type=module -e '
