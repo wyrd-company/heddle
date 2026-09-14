@@ -28,7 +28,7 @@
     "configDirectory": {
       "type": "string",
       "default": "/home/vscode/.heddle",
-      "description": "Absolute operator-owned directory containing required config.yml."
+      "description": "Absolute configuration bundle containing shared config.yml, optional worker.yml, and blueprints."
     },
     "dnsName": {
       "type": "string",

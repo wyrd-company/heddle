@@ -171,7 +171,7 @@ describe("configured production service entry point", () => {
     await fixture?.cleanup();
   });
 
-  it("runs scheduler, lifecycle resume, and token-authenticated MCP from config.yml only", async () => {
+  it("runs scheduler, lifecycle resume, and token-authenticated MCP from the layered configuration", async () => {
     fixture = await prepareProductionFixture();
     const configurationDirectory = join(fixture.root, "configuration");
     const configurationPath = join(configurationDirectory, "config.yml");
@@ -304,17 +304,42 @@ describe("configured production service entry point", () => {
     void _defaultProvider;
     void _defaultSelection;
     void _resolvedSelections;
-    const configured = {
+    const configuredCore = {
       ...fixture.configuration,
+      boardDirectory: join(fixture.root, "core-board-must-not-be-used"),
       pacing: configuredPacing,
       server: { host: "127.0.0.1", port: servicePort },
       session: configuredSession,
+      stateDirectory: join(fixture.root, "core-state-must-not-be-used"),
+      t3: {
+        accessToken: "core-t3-secret-must-not-be-used",
+        baseUrl: "http://127.0.0.1:1",
+      },
+    };
+    const configuredWorker = {
+      boardDirectory: fixture.configuration.boardDirectory,
+      providerAliases: {
+        primary: [
+          {
+            model: "missing-model",
+            providerDisplayName: "Unavailable Workbench",
+          },
+          {
+            model: "sample-model",
+            providerDisplayName: "Workbench Alpha",
+          },
+        ],
+      },
+      stateDirectory: fixture.configuration.stateDirectory,
       t3: {
         accessToken: "t3-secret-value",
         baseUrl: `http://127.0.0.1:${t3Port}`,
       },
     };
-    await writeFile(configurationPath, stringify(configured));
+    const coreSource = stringify(configuredCore);
+    const workerSource = stringify(configuredWorker);
+    await writeFile(configurationPath, coreSource);
+    await writeFile(join(configurationDirectory, "worker.yml"), workerSource);
 
     service = spawn(
       process.execPath,
@@ -463,5 +488,9 @@ describe("configured production service entry point", () => {
     expect(disclosureSurface).not.toContain("application-token");
     expect(disclosureSurface).not.toContain("operator-key");
     expect(disclosureSurface).not.toContain("deprecated-");
+    expect(await readFile(configurationPath, "utf8")).toBe(coreSource);
+    expect(
+      await readFile(join(configurationDirectory, "worker.yml"), "utf8"),
+    ).toBe(workerSource);
   }, 20_000);
 });

@@ -2,6 +2,7 @@
   "$id": "https://wyrd.company/heddle/production-configuration.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "relationships": { "implements": "heddle" },
+  "$comment": "This schema validates the effective configuration after config.yml and optional worker.yml are layered over built-in defaults. Source documents may be partial and use null to restore a built-in value or remove an inherited optional value.",
   "type": "object",
   "additionalProperties": false,
   "allOf": [
@@ -46,7 +47,8 @@
         "approvalSettlementMilliseconds": {
           "description": "How long a sanctioned approval may remain pending after Heddle durably issues its response.",
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "default": 60000
         },
         "policyPath": {
           "type": "string",
@@ -94,6 +96,7 @@
         "maxConcurrentSessions": { "type": "integer", "minimum": 0 },
         "providerBudgets": {
           "type": "object",
+          "default": {},
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,
@@ -259,7 +262,11 @@
         },
         "interactionMode": { "type": "string", "minLength": 1 },
         "skillPointer": { "type": "string", "minLength": 1 },
-        "worktreesRoot": { "type": "string", "pattern": "^/" }
+        "worktreesRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/workspaces/worktrees"
+        }
       }
     },
     "server": {

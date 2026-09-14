@@ -17,9 +17,16 @@ import {
   validateProductionConfiguration,
   type ProductionConfiguration,
 } from "../production/index.js";
+import {
+  completeConfigurationProvenance,
+  layerConfiguration,
+  sourceForConfigurationPointer,
+  type ConfigurationProvenance,
+} from "./configuration-layering.js";
 
 const defaultConfigurationDirectory = "/home/vscode/.heddle";
 const configurationFileName = "config.yml";
+const workerConfigurationFileName = "worker.yml";
 const blueprintsDirectoryName = "blueprints";
 const execute = promisify(execFile);
 
@@ -33,10 +40,13 @@ export type DeploymentServerConfiguration = {
 export type LoadedDeploymentConfiguration = {
   blueprintsRepositoryRoot: string;
   configuration: ProductionConfiguration;
+  configurationClearedBy?: ConfigurationProvenance;
   configurationDirectory: string;
   configurationPath: string;
+  configurationProvenance?: ConfigurationProvenance;
   providerUsage?: ExecutableProviderUsageConfiguration;
   server: DeploymentServerConfiguration;
+  workerConfigurationPath?: string;
 };
 
 export type ExecutableProviderUsageConfiguration = {
@@ -46,8 +56,19 @@ export type ExecutableProviderUsageConfiguration = {
 };
 
 export type HeddleServerArguments = {
-  command: "help" | "launch-settings" | "serve";
+  command: "effective-configuration" | "help" | "launch-settings" | "serve";
   configurationDirectory?: string;
+};
+
+export type EffectiveConfigurationDisclosure = {
+  cleared: ConfigurationProvenance;
+  configuration: unknown;
+  provenance: ConfigurationProvenance;
+  sources: {
+    builtIn: "built-in";
+    core: string;
+    worker?: string;
+  };
 };
 
 type ConfigurationDocument = Omit<ProductionConfiguration, "session"> & {
@@ -99,10 +120,24 @@ export const parseHeddleServerArguments = (
   if (arguments_.length === 1 && arguments_[0] === "--help") {
     return { command: "help" };
   }
-  const launchSettingsIndex = arguments_.indexOf("--print-launch-settings");
-  const command = launchSettingsIndex === -1 ? "serve" : "launch-settings";
+  const diagnosticFlags = arguments_.filter((argument) =>
+    ["--print-effective-configuration", "--print-launch-settings"].includes(
+      argument,
+    ),
+  );
+  if (diagnosticFlags.length > 1) {
+    throw new HeddleConfigurationError(
+      "Choose one configuration diagnostic output",
+    );
+  }
+  const command =
+    diagnosticFlags[0] === "--print-launch-settings"
+      ? "launch-settings"
+      : diagnosticFlags[0] === "--print-effective-configuration"
+        ? "effective-configuration"
+        : "serve";
   const configurationArguments = arguments_.filter(
-    (_, index) => index !== launchSettingsIndex,
+    (argument) => argument !== diagnosticFlags[0],
   );
   return {
     command,
@@ -153,13 +188,78 @@ const redact = (message: string, secrets: readonly string[]): string =>
     message,
   );
 
-const firstSchemaError = (error: ErrorObject | undefined): string => {
-  if (error === undefined) return "configuration does not match its schema";
+const redactedConfiguration = (
+  value: unknown,
+  secrets: readonly string[],
+): unknown => {
+  if (typeof value === "string") return redact(value, secrets);
+  if (Array.isArray(value))
+    return value.map((child) => redactedConfiguration(child, secrets));
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      ["accessToken", "applicationToken", "userKey"].includes(key)
+        ? "[REDACTED]"
+        : redactedConfiguration(child, secrets),
+    ]),
+  );
+};
+
+export const effectiveConfigurationDisclosure = (
+  loaded: LoadedDeploymentConfiguration,
+): EffectiveConfigurationDisclosure => {
+  const configuration = {
+    ...loaded.configuration,
+    ...(loaded.providerUsage === undefined
+      ? {}
+      : { providerUsage: loaded.providerUsage }),
+    server: loaded.server,
+  };
+  return {
+    cleared: loaded.configurationClearedBy ?? {},
+    configuration: redactedConfiguration(
+      configuration,
+      secretValues(configuration),
+    ),
+    provenance: loaded.configurationProvenance ?? {},
+    sources: {
+      builtIn: "built-in",
+      core: loaded.configurationPath,
+      ...(loaded.workerConfigurationPath === undefined
+        ? {}
+        : { worker: loaded.workerConfigurationPath }),
+    },
+  };
+};
+
+const firstSchemaError = (
+  error: ErrorObject | undefined,
+): { detail: string; pointer: string } => {
+  if (error === undefined) {
+    return {
+      detail: "configuration does not match its schema",
+      pointer: "",
+    };
+  }
   const location = error.instancePath === "" ? "/" : error.instancePath;
   const detail = Object.values(error.params).find(
     (value): value is string => typeof value === "string" && value !== "",
   );
-  return `${location} ${error.message ?? "is invalid"}${detail === undefined ? "" : `: ${detail}`}`;
+  const property =
+    error.keyword === "required"
+      ? error.params["missingProperty"]
+      : error.keyword === "additionalProperties"
+        ? error.params["additionalProperty"]
+        : undefined;
+  const pointer =
+    typeof property === "string"
+      ? `${error.instancePath}/${property.replaceAll("~", "~0").replaceAll("/", "~1")}`
+      : error.instancePath;
+  return {
+    detail: `${location} ${error.message ?? "is invalid"}${detail === undefined ? "" : `: ${detail}`}`,
+    pointer,
+  };
 };
 
 const readConfigurationSchema = async (): Promise<AnySchema> =>
@@ -232,6 +332,45 @@ const preflightBlueprintRepository = async (
   }
 };
 
+const readConfigurationDocument = async (
+  path: string,
+  required: boolean,
+): Promise<unknown | undefined> => {
+  let source: string;
+  try {
+    source = await readFile(path, "utf8");
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "";
+    if (!required && code === "ENOENT") return undefined;
+    const description = code === "ENOENT" ? "is missing" : "cannot be read";
+    throw new HeddleConfigurationError(
+      `Configuration file '${path}' ${description}`,
+    );
+  }
+  try {
+    const document = parseDocument(source, {
+      prettyErrors: false,
+      uniqueKeys: true,
+    });
+    if (document.errors.length > 0) throw new Error("invalid YAML");
+    return document.toJS({ maxAliasCount: 100 }) as unknown;
+  } catch {
+    throw new HeddleConfigurationError(
+      `Configuration file '${path}' is invalid YAML`,
+    );
+  }
+};
+
+const runtimeValidationPointer = (message: string): string => {
+  const field = /^([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*)/.exec(
+    message,
+  )?.[1];
+  return field === undefined ? "" : `/${field.replaceAll(".", "/")}`;
+};
+
 export const loadDeploymentConfiguration = async (
   configurationDirectory: string,
 ): Promise<LoadedDeploymentConfiguration> => {
@@ -240,34 +379,20 @@ export const loadDeploymentConfiguration = async (
     "configuration directory",
   );
   const configurationPath = join(directory, configurationFileName);
-  let source: string;
-  try {
-    source = await readFile(configurationPath, "utf8");
-  } catch (error) {
-    const code =
-      typeof error === "object" && error !== null && "code" in error
-        ? String(error.code)
-        : "";
-    const description = code === "ENOENT" ? "is missing" : "cannot be read";
-    throw new HeddleConfigurationError(
-      `Configuration file '${configurationPath}' ${description}`,
-    );
-  }
-
-  let value: unknown;
-  try {
-    const document = parseDocument(source, {
-      prettyErrors: false,
-      uniqueKeys: true,
-    });
-    if (document.errors.length > 0) throw new Error("invalid YAML");
-    value = document.toJS({ maxAliasCount: 100 }) as unknown;
-  } catch {
-    throw new HeddleConfigurationError(
-      `Configuration file '${configurationPath}' is invalid YAML`,
-    );
-  }
-  const secrets = secretValues(value);
+  const workerConfigurationPath = join(directory, workerConfigurationFileName);
+  const core = await readConfigurationDocument(configurationPath, true);
+  const worker = await readConfigurationDocument(
+    workerConfigurationPath,
+    false,
+  );
+  const layered = layerConfiguration([
+    { source: configurationPath, value: core },
+    ...(worker === undefined
+      ? []
+      : [{ source: workerConfigurationPath, value: worker }]),
+  ]);
+  const value = layered.value;
+  const secrets = [...secretValues(core), ...secretValues(worker)];
   try {
     const validator = new Ajv2020({
       allErrors: true,
@@ -276,27 +401,69 @@ export const loadDeploymentConfiguration = async (
       useDefaults: true,
     }).compile(await readConfigurationSchema());
     if (!validator(value)) {
-      throw new TypeError(firstSchemaError(validator.errors?.[0]));
+      const failure = firstSchemaError(validator.errors?.[0]);
+      const source =
+        validator.errors?.[0]?.keyword === "required" &&
+        layered.clearedBy[failure.pointer] === undefined
+          ? "effective configuration"
+          : sourceForConfigurationPointer(failure.pointer, layered);
+      throw new TypeError(
+        `field '${failure.pointer || "/"}' from '${source}': ${failure.detail}`,
+      );
     }
+    const configurationProvenance = completeConfigurationProvenance(
+      value,
+      layered.provenance,
+    );
     const document = value as ConfigurationDocument;
     const { providerUsage, server, ...root } = document;
     const configuration: ProductionConfiguration = {
       ...root,
       session: document.session,
     };
+    const invalidField = (pointer: string, message: string): TypeError =>
+      new TypeError(
+        `field '${pointer}' from '${sourceForConfigurationPointer(pointer, { ...layered, provenance: configurationProvenance })}': ${message}`,
+      );
     if (server.host.trim() === "") {
-      throw new TypeError("/server/host must not be empty");
+      throw invalidField("/server/host", "server.host must not be empty");
     }
-    const validated = validateProductionConfiguration(configuration);
-    validateProviderUsageConfiguration(validated, providerUsage);
-    await preflightExecutable("providerUsage", providerUsage);
+    let validated: ProductionConfiguration;
+    try {
+      validated = validateProductionConfiguration(configuration);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      const pointer = runtimeValidationPointer(message);
+      throw invalidField(pointer || "/", message);
+    }
+    try {
+      validateProviderUsageConfiguration(validated, providerUsage);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      throw invalidField(
+        message.startsWith("providerUsage is required")
+          ? "/pacing/providerBudgets"
+          : "/providerUsage",
+        message,
+      );
+    }
+    try {
+      await preflightExecutable("providerUsage", providerUsage);
+    } catch (error) {
+      throw invalidField(
+        "/providerUsage/executable",
+        error instanceof Error ? error.message : "unknown error",
+      );
+    }
     const blueprintsRepositoryRoot =
       await preflightBlueprintRepository(directory);
     return {
       blueprintsRepositoryRoot,
       configuration: validated,
+      configurationClearedBy: layered.clearedBy,
       configurationDirectory: directory,
       configurationPath,
+      configurationProvenance,
       ...(providerUsage === undefined
         ? {}
         : {
@@ -306,6 +473,7 @@ export const loadDeploymentConfiguration = async (
             },
           }),
       server: { ...server, host: server.host.trim() },
+      ...(worker === undefined ? {} : { workerConfigurationPath }),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";

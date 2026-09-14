@@ -9,6 +9,7 @@ import process from "node:process";
 
 import {
   deploymentLaunchSettings,
+  effectiveConfigurationDisclosure,
   loadDeploymentConfiguration,
   parseHeddleServerArguments,
 } from "../dist/deployment/configuration.js";
@@ -18,7 +19,7 @@ const main = async () => {
   const input = parseHeddleServerArguments(process.argv.slice(2), process.env);
   if (input.command === "help") {
     process.stdout.write(
-      "Usage: heddle-server [--config <configuration-directory>] [--print-launch-settings]\n",
+      "Usage: heddle-server [--config <configuration-directory>] [--print-launch-settings | --print-effective-configuration]\n",
     );
     return;
   }
@@ -28,6 +29,12 @@ const main = async () => {
   if (input.command === "launch-settings") {
     process.stdout.write(
       `${JSON.stringify(deploymentLaunchSettings(loaded))}\n`,
+    );
+    return;
+  }
+  if (input.command === "effective-configuration") {
+    process.stdout.write(
+      `${JSON.stringify(effectiveConfigurationDisclosure(loaded), null, 2)}\n`,
     );
     return;
   }

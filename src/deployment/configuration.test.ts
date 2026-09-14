@@ -11,6 +11,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -26,6 +27,7 @@ import { stringify } from "yaml";
 import type { ProductionConfiguration } from "../production/index.js";
 import {
   deploymentLaunchSettings,
+  effectiveConfigurationDisclosure,
   loadDeploymentConfiguration,
   parseHeddleServerArguments,
   resolveConfigurationDirectory,
@@ -172,9 +174,24 @@ describe("deployed configuration directory", () => {
       command: "serve",
       configurationDirectory: "/home/vscode/.heddle",
     });
+    expect(
+      parseHeddleServerArguments(
+        ["--print-effective-configuration", "--config", "/tmp/sample-config"],
+        {},
+      ),
+    ).toEqual({
+      command: "effective-configuration",
+      configurationDirectory: "/tmp/sample-config",
+    });
     expect(parseHeddleServerArguments(["--help"], {})).toEqual({
       command: "help",
     });
+    expect(() =>
+      parseHeddleServerArguments(
+        ["--print-launch-settings", "--print-effective-configuration"],
+        {},
+      ),
+    ).toThrow("Choose one configuration diagnostic output");
   });
 
   it("keeps config.yml as configuration authority while prompt discovery stays at dispatch", async () => {
@@ -184,13 +201,199 @@ describe("deployed configuration directory", () => {
     await writeFile(join(root, "operator-note.txt"), "ignored\n");
     await prepareBlueprintRepository(root);
 
-    await expect(loadDeploymentConfiguration(root)).resolves.toEqual({
+    await expect(loadDeploymentConfiguration(root)).resolves.toMatchObject({
       configuration: fixture(root),
       blueprintsRepositoryRoot: join(root, "blueprints"),
       configurationDirectory: root,
       configurationPath: join(root, "config.yml"),
       server: { host: "127.0.0.1", port: 3774 },
     });
+  });
+
+  it("layers shared core and an optional worker source without changing mounted inputs", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
+    const shared = join(root, "shared");
+    const workerA = join(root, "worker-a");
+    const workerB = join(root, "worker-b");
+    await mkdir(shared);
+    await Promise.all([mkdir(workerA), mkdir(workerB)]);
+    await prepareBlueprintRepository(shared);
+
+    const executable = join(shared, "provider-usage-command");
+    await writeFile(executable, "#!/bin/sh\nexit 0\n");
+    await chmod(executable, 0o755);
+    const core = fixture(shared);
+    core.adjudication = {
+      policyPath: "adjudication/policy.json",
+      providerAlias: "primary",
+    };
+    core.pacing.providerBudgets = { primary: { usageLimit: 80 } };
+    core.providerAliases.primary = [
+      {
+        model: "sample-model-a",
+        providerDisplayName: "Workbench Alpha",
+      },
+      {
+        model: "sample-model-b",
+        providerDisplayName: "Workbench Beta",
+      },
+    ];
+    const coreSource = stringify({
+      ...core,
+      providerUsage: { executable },
+    });
+    const sharedCorePath = join(shared, "config.yml");
+    await writeFile(sharedCorePath, coreSource);
+    await chmod(sharedCorePath, 0o444);
+
+    for (const worker of [workerA, workerB]) {
+      await symlink(sharedCorePath, join(worker, "config.yml"));
+      await symlink(join(shared, "blueprints"), join(worker, "blueprints"));
+    }
+    const workerAPath = join(workerA, "worker.yml");
+    const workerASource = stringify({
+      adjudication: null,
+      boardDirectory: join(root, "board-a"),
+      pacing: { providerBudgets: null },
+      providerAliases: {
+        primary: [
+          {
+            model: "sample-model-b",
+            providerDisplayName: "Workbench Beta",
+          },
+          {
+            model: "sample-model-a",
+            providerDisplayName: "Workbench Alpha",
+          },
+        ],
+      },
+      providerUsage: null,
+      stateDirectory: join(root, "state-a"),
+      t3: {
+        accessToken: "worker-a-t3-secret",
+        baseUrl: "http://127.0.0.1:4101",
+      },
+    });
+    await writeFile(workerAPath, workerASource);
+    await chmod(workerAPath, 0o444);
+
+    const [loadedA, loadedB] = await Promise.all([
+      loadDeploymentConfiguration(workerA),
+      loadDeploymentConfiguration(workerB),
+    ]);
+
+    expect(loadedA.configuration.boardDirectory).toBe(join(root, "board-a"));
+    expect(loadedA.configuration.stateDirectory).toBe(join(root, "state-a"));
+    expect(loadedA.configuration.t3.baseUrl).toBe("http://127.0.0.1:4101");
+    expect(loadedA.configuration.adjudication).toBeUndefined();
+    expect(loadedA.configuration.pacing.providerBudgets).toEqual({});
+    expect(loadedA.providerUsage).toBeUndefined();
+    expect(loadedA.configuration.providerAliases.primary).toEqual([
+      {
+        model: "sample-model-b",
+        providerDisplayName: "Workbench Beta",
+      },
+      {
+        model: "sample-model-a",
+        providerDisplayName: "Workbench Alpha",
+      },
+    ]);
+    expect(loadedA.configurationProvenance).toMatchObject({
+      "/boardDirectory": workerAPath,
+      "/pacing/providerBudgets": "built-in",
+      "/server/port": "built-in",
+      "/t3/accessToken": workerAPath,
+    });
+    expect(loadedA.configurationClearedBy).toMatchObject({
+      "/adjudication": workerAPath,
+      "/pacing/providerBudgets": workerAPath,
+      "/providerUsage": workerAPath,
+    });
+
+    expect(loadedB.workerConfigurationPath).toBeUndefined();
+    expect(loadedB.configuration.boardDirectory).toBe(join(shared, "board"));
+    expect(
+      loadedB.configuration.adjudication?.approvalSettlementMilliseconds,
+    ).toBe(60_000);
+    expect(loadedB.configuration.stateDirectory).toBe(join(shared, "state"));
+    expect(loadedB.configuration.t3.baseUrl).toBe("http://127.0.0.1:3999");
+    expect(loadedB.configuration.pacing.providerBudgets).toEqual({
+      primary: { usageLimit: 80 },
+    });
+    expect(loadedB.providerUsage?.executable).toBe(executable);
+    expect(
+      loadedB.configurationProvenance?.[
+        "/adjudication/approvalSettlementMilliseconds"
+      ],
+    ).toBe("built-in");
+    expect(loadedB.configuration.session.worktreesRoot).toBe(
+      "/workspaces/worktrees",
+    );
+    expect(await readFile(sharedCorePath, "utf8")).toBe(coreSource);
+    expect(await readFile(workerAPath, "utf8")).toBe(workerASource);
+    const { stdout: blueprintStatus } = await execute(
+      "git",
+      ["status", "--porcelain"],
+      { cwd: join(shared, "blueprints") },
+    );
+    expect(blueprintStatus).toBe("");
+  });
+
+  it("names the worker source and field when an override is invalid", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const workerPath = join(root, "worker.yml");
+    await writeFile(workerPath, stringify({ boardDirectory: "relative" }));
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `field '/boardDirectory' from '${workerPath}'`,
+    );
+
+    await writeFile(workerPath, "boardDirectory: [\n");
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `Configuration file '${workerPath}' is invalid YAML`,
+    );
+  });
+
+  it("prints redacted effective values, provenance, and explicit clears", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const workerPath = join(root, "worker.yml");
+    await writeFile(
+      workerPath,
+      stringify({
+        boardDirectory: join(root, "worker-board"),
+        incident: { immediateEscalationCodes: ["worker-t3-secret"] },
+        t3: { accessToken: "worker-t3-secret" },
+      }),
+    );
+
+    const disclosure = effectiveConfigurationDisclosure(
+      await loadDeploymentConfiguration(root),
+    );
+    const serialized = JSON.stringify(disclosure);
+
+    expect(disclosure.sources).toEqual({
+      builtIn: "built-in",
+      core: join(root, "config.yml"),
+      worker: workerPath,
+    });
+    expect(disclosure.provenance).toMatchObject({
+      "/boardDirectory": workerPath,
+      "/server/host": "built-in",
+      "/t3/baseUrl": join(root, "config.yml"),
+    });
+    expect(disclosure.configuration).toMatchObject({
+      boardDirectory: join(root, "worker-board"),
+      incident: { immediateEscalationCodes: ["[REDACTED]"] },
+      server: { host: "127.0.0.1", port: 3774 },
+      t3: { accessToken: "[REDACTED]" },
+    });
+    expect(serialized).not.toContain("worker-t3-secret");
+    expect(serialized).not.toContain("application-secret-value");
+    expect(serialized).not.toContain("operator-secret-value");
   });
 
   it("loads explicit server settings without reading deprecated HEDDLE variables", async () => {
@@ -312,7 +515,7 @@ describe("deployed configuration directory", () => {
       ),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining(
-        `Configuration file '${path}' is invalid: /server/port must be >= 1`,
+        `field '/server/port' from '${path}': /server/port must be >= 1`,
       ),
       stdout: "",
     });
@@ -371,6 +574,81 @@ describe("deployed configuration directory", () => {
     expect(result.stdout).not.toContain("deprecated");
   });
 
+  it("prints the redacted layered configuration through the packaged entry point", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const workerPath = join(root, "worker.yml");
+    await writeFile(
+      workerPath,
+      stringify({ boardDirectory: join(root, "worker-board") }),
+    );
+
+    const result = await execute(
+      process.execPath,
+      [
+        "bin/heddle-server.mjs",
+        "--config",
+        root,
+        "--print-effective-configuration",
+      ],
+      { env: process.env },
+    );
+    const disclosure = JSON.parse(result.stdout) as {
+      configuration: Record<string, unknown>;
+      provenance: Record<string, string>;
+      sources: Record<string, string>;
+    };
+
+    expect(disclosure.sources["worker"]).toBe(workerPath);
+    expect(disclosure.provenance["/boardDirectory"]).toBe(workerPath);
+    expect(disclosure.configuration["boardDirectory"]).toBe(
+      join(root, "worker-board"),
+    );
+    expect(result.stdout).not.toContain("secret-value");
+    expect(result.stderr).toBe("");
+  });
+
+  it("reloads worker overrides when the packaged process restarts", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const workerPath = join(root, "worker.yml");
+    const printEffective = () =>
+      execute(
+        process.execPath,
+        [
+          "bin/heddle-server.mjs",
+          "--config",
+          root,
+          "--print-effective-configuration",
+        ],
+        { env: process.env },
+      );
+
+    await writeFile(
+      workerPath,
+      stringify({ boardDirectory: join(root, "board-before-restart") }),
+    );
+    const before = JSON.parse((await printEffective()).stdout) as {
+      configuration: { boardDirectory: string };
+    };
+    await writeFile(
+      workerPath,
+      stringify({ boardDirectory: join(root, "board-after-restart") }),
+    );
+    const after = JSON.parse((await printEffective()).stdout) as {
+      configuration: { boardDirectory: string };
+    };
+
+    expect(before.configuration.boardDirectory).toBe(
+      join(root, "board-before-restart"),
+    );
+    expect(after.configuration.boardDirectory).toBe(
+      join(root, "board-after-restart"),
+    );
+  });
+
   it("fails missing, unreadable, malformed, and schema-invalid config.yml with the exact path", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const path = join(root, "config.yml");
@@ -385,7 +663,7 @@ describe("deployed configuration directory", () => {
 
     await writeFile(path, stringify({ ...fixture(root), products: [] }));
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `Configuration file '${path}' is invalid: /products must NOT have fewer than 1 items`,
+      `field '/products' from '${path}': /products must NOT have fewer than 1 items`,
     );
 
     await rm(path);
@@ -464,7 +742,7 @@ describe("deployed configuration directory", () => {
     );
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `Configuration file '${path}' is invalid: providerUsage.executable '${executable}' must be an available executable file`,
+      `field '/providerUsage/executable' from '${path}': providerUsage.executable '${executable}' must be an available executable file`,
     );
   });
 
@@ -523,8 +801,10 @@ describe("deployed configuration directory", () => {
     for (const guide of [operatorGuide, featureGuide]) {
       expect(guide).toContain("/home/vscode/.heddle");
       expect(guide).toContain("config.yml");
+      expect(guide).toContain("worker.yml");
       expect(guide).toContain("0600");
       expect(guide).toContain("HEDDLE_CONFIG");
+      expect(guide).toContain("--print-effective-configuration");
       expect(guide).toContain("1 through 65535");
       expect(guide).toContain("503 Service Unavailable");
     }

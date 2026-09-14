@@ -42,9 +42,9 @@ npm install --global @wyrd-company/heddle@<version>
 heddle-server --config /path/to/configuration
 ```
 
-`heddle-server` requires the same `config.yml`, `blueprints` clone, and
-dedicated `stateDirectory` mount that the Feature requires; those contracts
-are in the sections below. `heddle-server --config <directory>
+`heddle-server` requires the same configuration bundle, `blueprints` clone,
+and dedicated `stateDirectory` mount that the Feature requires; those
+contracts are in the sections below. `heddle-server --config <directory>
 --print-launch-settings` prints the nonsecret state directory, host, and port
 the service will use. The supported `kanban-md` fork recorded in
 `deployment/supported-versions.json` must be on `PATH`; the Feature's service
@@ -93,12 +93,26 @@ registry resolution; it is not the remote installation proof.
 
 ## Configuration directory
 
-`--config <directory>` selects the configuration directory. Without that
-argument, `HEDDLE_CONFIG` selects it; the default is `/home/vscode/.heddle`.
-The required file name is `config.yml`. The service reads this file, validates
-the schema and runtime agreements, and fails before composition or network bind
-when it is missing, unreadable, or invalid. Errors name the exact file and first
-validation failure while redacting configured T3 and Pushover secrets.
+`--config <directory>` selects one configuration bundle. Without that argument,
+`HEDDLE_CONFIG` selects it; the default is `/home/vscode/.heddle`. The bundle
+contains required shared core settings in `config.yml`, optional worker
+overrides in `worker.yml`, and the organization blueprint clone. A worker with
+no differences has no `worker.yml`.
+
+Heddle layers built-in defaults, `config.yml`, then `worker.yml`, and validates
+the effective result. Objects and maps merge by key. Arrays replace the whole
+inherited array so provider fallback and executable argument order cannot change
+by concatenation. A YAML `null` restores the built-in value when one exists; it
+otherwise removes the inherited optional value. For example,
+`pacing.providerBudgets: null` restores the built-in empty map and
+`adjudication: null` disables inherited adjudication. An empty map only merges
+no entries; it does not clear inherited map entries.
+
+Both source files are read-only inputs. A missing `config.yml`, an unreadable
+present `worker.yml`, invalid YAML, or an invalid effective value fails before
+composition or network bind. Errors name the source file and JSON-pointer field
+while redacting configured T3 and Pushover secrets.
+
 The loopback server port must be from 1 through 65535; an ephemeral port cannot
 be projected into the fixed Caddy upstream.
 
@@ -107,15 +121,21 @@ constructs or starts the production composition. The bound endpoint returns
 `503 Service Unavailable` until composition startup completes. A bind failure
 therefore leaves the board, T3, Pushover, and production persistence untouched.
 
-`config.yml` is the sole deployed runtime authority. `HEDDLE_BOARD_PATH`,
-`HEDDLE_HOST`, `HEDDLE_PORT`, and `HEDDLE_STATE_PATH` do not affect deployed
-configuration. Configuration changes require service restart. Heddle does not
-write, migrate, or reformat the file. The operator owns the directory and must make
-`config.yml` readable only by that account, normally mode `0600`.
+The layered effective configuration is the sole deployed runtime authority.
+`HEDDLE_BOARD_PATH`, `HEDDLE_HOST`, `HEDDLE_PORT`, and `HEDDLE_STATE_PATH` do not
+affect deployed configuration. Configuration changes require service restart. Heddle does not
+write, migrate, or reformat either source. The operator owns the bundle and must
+make both source files readable only by that account, normally mode `0600`.
+
+`heddle-server --print-effective-configuration` prints the effective values,
+their source provenance and explicit clears as JSON. T3 and Pushover credential
+values are replaced with `[REDACTED]`. This command performs the same parsing,
+layering, validation, executable preflight and blueprint preflight as service
+startup, but does not bind a network endpoint or start production work.
 
 The directory may also contain `heddle.md` and the required organization
 blueprint clone at `blueprints/`. Unknown entries are ignored. Neither entry is
-a `config.yml` field.
+a configuration field.
 
 The service-user and agent-session `PATH` must provide `git`, `gh`, `gitpr`,
 and `kanban-md`.
@@ -124,8 +144,8 @@ status mirroring invoke these tools without a shell. Incident finalization uses
 `gh` as the authenticated bot identity for an accepted GitHub issue. Startup
 does not replace or infer their locations.
 
-This complete single-product example uses one single-candidate provider alias
-and no provider budget, so it omits the provider-usage executable:
+This complete shared `config.yml` example uses one single-candidate provider
+alias and no provider budget, so it omits the provider-usage executable:
 
 ```yaml
 adHocProject:
@@ -194,6 +214,21 @@ t3:
   baseUrl: http://127.0.0.1:3773
 ```
 
+A worker file contains only differences. This one binds local runtime data and
+T3 while disabling core adjudication and provider budgets:
+
+```yaml
+adjudication: null
+boardDirectory: /workspaces/sample-board
+pacing:
+  providerBudgets: null
+providerUsage: null
+stateDirectory: /var/lib/heddle
+t3:
+  accessToken: replace-with-worker-secret
+  baseUrl: http://127.0.0.1:3773
+```
+
 The optional `adjudication` block enables the top-level escalation tier.
 `providerAlias` must name an entry in `providerAliases` and can select a model
 independently of lifecycle stages. `policyPath` names the decision-boundary
@@ -241,9 +276,8 @@ Other required values are the absolute board and state directories, optional
 worktree root, reconciliation cadence, bounded stop timeout, provider aliases,
 provider pacing, session defaults, observation and per-stage staleness
 thresholds, and Pushover routing. The server port is a fixed integer from 1
-through 65535. T3
-and Pushover secrets enter only through operator-owned
-`config.yml`; Heddle does not log, emit, or persist them. Every lifecycle and
+through 65535. T3 and Pushover secrets enter only through operator-owned
+configuration sources; Heddle does not log, emit, or persist them. Every lifecycle and
 delegated session resolves an allowed alias before it enters pacing or T3.
 T3, Pushover API, and console endpoints must be absolute HTTP or HTTPS URLs;
 the runtime validator and configuration schema reject other schemes.

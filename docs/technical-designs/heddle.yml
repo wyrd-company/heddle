@@ -1318,16 +1318,22 @@ proposed-design:
     worktrees, its T3 server — and each workspace container is a
     complete, self-contained installation.
 
-    The deployed entry point reads required `config.yml` from the
-    operator-owned configuration directory selected by `--config`, then
-    `HEDDLE_CONFIG`, then `/home/vscode/.heddle`. That file is the only
-    authority for board, state, server, T3, Pushover, pacing, session,
-    threshold, product, project, and secret settings. Other `HEDDLE_*`
-    values do not affect deployed configuration. Invalid configuration fails
-    before composition or network bind and reports a secret-redacted first
-    validation failure. The fixed loopback server port is restricted to 1
-    through 65535 so the same value can be projected into Caddy. The operator
-    owns the file with mode `0600`; Heddle never writes or reformats it.
+    The deployed entry point selects one operator-owned configuration bundle
+    through `--config`, then `HEDDLE_CONFIG`, then
+    `/home/vscode/.heddle`. It layers built-in defaults, required shared core
+    settings from `config.yml`, then optional worker differences from
+    `worker.yml`. Objects and maps merge by key, arrays replace wholesale, and
+    `null` restores a built-in value or removes an inherited optional value.
+    The validated effective result is the authority for board, state, server,
+    T3, Pushover, pacing, session, threshold, product, project, and secret
+    settings. Other `HEDDLE_*` values do not affect deployed configuration.
+    Invalid configuration fails before composition or network bind and names
+    the source file and JSON-pointer field in a secret-redacted first
+    validation failure. The effective-configuration diagnostic returns
+    redacted values, value provenance and explicit clears without starting the
+    service. The fixed loopback server port is restricted to 1 through 65535
+    so the same value can be projected into Caddy. The operator owns both
+    source files with mode `0600`; Heddle never writes or reformats them.
 
     The configuration directory also contains the organization blueprint clone
     at the hard-coded `blueprints` subdirectory. It is not a `config.yml` field.
@@ -1346,8 +1352,9 @@ proposed-design:
     leaves existing repository attention untouched; on the first pass, this
     failure prevents Heddle from starting.
 
-    The root s6 launcher validates the same file, derives only its nonsecret
-    state mount target and loopback host and port, writes the Caddy snippet,
+    The root s6 launcher validates the same effective configuration, derives
+    only its nonsecret state mount target and loopback host and port, writes
+    the Caddy snippet,
     completes a bounded Caddy reload handshake, and then starts Heddle as the
     service user from the same directory. The handshake removes the startup
     race between snippet creation and watcher registration; the Caddy watcher
