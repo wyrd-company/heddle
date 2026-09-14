@@ -24,7 +24,7 @@ import type {
 import type { ReconcilerAttentionQueue } from "../reconciler/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 import { createProductionErrorAttention } from "./error-visibility.js";
-import { classifyRetainedProjectCreateError } from "./project-create-conflict.js";
+import { retainedProjectRecreationError } from "./project-create-conflict.js";
 import type { TaskRepositoryRouter } from "./repository-routing.js";
 import { stableUuid } from "./stable-uuid.js";
 
@@ -64,21 +64,47 @@ export class EpicProjectCoordinator {
     this.routing.update(tasks);
     const actions: EpicProjectAction[] = [];
     const epics = tasks
-      .filter(({ tags }) => tags.includes("type:epic"))
+      .filter(
+        ({ status, tags }) =>
+          status === "in-progress" && tags.includes("type:epic"),
+      )
       .sort((left, right) => left.id - right.id);
-    const shell = await this.t3.getShell();
+    if (epics.length === 0) return actions;
+    let shell: T3ShellSnapshot;
+    const snapshotAttentionId =
+      "production:epic-project-snapshot-failed:global:shell";
+    try {
+      shell = await this.t3.getShell();
+    } catch (error) {
+      if (this.attention === undefined) throw error;
+      if (!(await this.attention.has(snapshotAttentionId))) {
+        await this.attention.raise(
+          createProductionErrorAttention({
+            attentionId: snapshotAttentionId,
+            code: "epic-project-snapshot-failed",
+            error,
+            message: `Epic project shell snapshot failed: ${describeError(error)}`,
+          }),
+        );
+      }
+      return actions;
+    }
+    if (
+      this.attention !== undefined &&
+      (await this.attention.has(snapshotAttentionId))
+    ) {
+      this.attention.resolve(snapshotAttentionId);
+    }
     for (const epic of epics) {
       const attentionId = `production:epic-project-reconciliation-failed:task:${epic.id}`;
       try {
-        if (epic.status === "in-progress") {
-          const created = await this.ensureActive(epic, shell);
-          if (created !== undefined) actions.push(created);
-          if (
-            this.attention !== undefined &&
-            (await this.attention.has(attentionId))
-          ) {
-            this.attention.resolve(attentionId);
-          }
+        const created = await this.ensureActive(epic, shell);
+        if (created !== undefined) actions.push(created);
+        if (
+          this.attention !== undefined &&
+          (await this.attention.has(attentionId))
+        ) {
+          this.attention.resolve(attentionId);
         }
       } catch (error) {
         if (this.attention === undefined) throw error;
@@ -215,7 +241,7 @@ export class EpicProjectCoordinator {
         });
       } catch (error) {
         throw retainedIdentity
-          ? classifyRetainedProjectCreateError(error, record.projectId)
+          ? retainedProjectRecreationError(error, record.projectId)
           : error;
       }
       project = {

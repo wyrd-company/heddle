@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { BoardTask } from "../board-adapter/index.js";
 import type { T3DispatchCommand } from "../control-plane/index.js";
+import { describeError } from "../error-details.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import type { ProductionConfiguration } from "./configuration.js";
 import { EpicProjectCoordinator } from "./epic-projects.js";
@@ -83,7 +84,38 @@ describe("EpicProjectCoordinator", () => {
     persistence.close();
   });
 
-  it("reports one shell snapshot failure for the reconciliation", async () => {
+  it("does not read the shell when no epic is in progress", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    class SnapshotCountingT3 extends SyntheticT3 {
+      shellReads = 0;
+
+      override async getShell() {
+        this.shellReads += 1;
+        return super.getShell();
+      }
+    }
+    const t3 = new SnapshotCountingT3();
+    const coordinator = new EpicProjectCoordinator(
+      configuration(root),
+      persistence,
+      new TaskRepositoryRouter(root),
+      t3,
+      undefined,
+      async () => undefined,
+    );
+
+    await expect(coordinator.reconcile([])).resolves.toEqual([]);
+    await expect(coordinator.reconcile([task("todo")])).resolves.toEqual([]);
+
+    expect(t3.shellReads).toBe(0);
+    persistence.close();
+  });
+
+  it("contains one shell snapshot failure and resolves it after recovery", async () => {
     const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
     scratch.push(root);
     const persistence = new SqlitePersistence({
@@ -91,14 +123,19 @@ describe("EpicProjectCoordinator", () => {
     });
     class UnavailableT3 extends SyntheticT3 {
       shellReads = 0;
+      unavailable = true;
 
       override async getShell(): ReturnType<SyntheticT3["getShell"]> {
         this.shellReads += 1;
-        throw new Error("control-plane snapshot unavailable");
+        if (this.unavailable)
+          throw new Error("control-plane snapshot unavailable");
+        return super.getShell();
       }
     }
     const t3 = new UnavailableT3();
     const raised: unknown[] = [];
+    const activeAttentionIds = new Set<string>();
+    const resolved: string[] = [];
     const coordinator = new EpicProjectCoordinator(
       configuration(root),
       persistence,
@@ -107,20 +144,75 @@ describe("EpicProjectCoordinator", () => {
       undefined,
       async () => undefined,
       {
-        has: async () => false,
-        raise: async (attention) => void raised.push(attention),
+        has: async (attentionId) => activeAttentionIds.has(attentionId),
+        raise: async (attention) => {
+          raised.push(attention);
+          activeAttentionIds.add(attention.attentionId);
+        },
         reopen: () => false,
-        resolve: () => false,
+        resolve: (attentionId) => {
+          resolved.push(attentionId);
+          return activeAttentionIds.delete(attentionId);
+        },
       },
     );
+    let laterWork = 0;
 
-    await expect(
-      coordinator.reconcile([task("in-progress"), task("in-progress", 202)]),
-    ).rejects.toThrow("control-plane snapshot unavailable");
+    await coordinator.reconcile([
+      task("in-progress"),
+      task("in-progress", 202),
+    ]);
+    laterWork += 1;
 
     expect(t3.shellReads).toBe(1);
-    expect(raised).toEqual([]);
+    expect(raised).toEqual([
+      expect.objectContaining({
+        attentionId: "production:epic-project-snapshot-failed:global:shell",
+        code: "epic-project-snapshot-failed",
+        taskId: null,
+      }),
+    ]);
     expect(persistence.listEpicProjects()).toEqual([]);
+    expect(laterWork).toBe(1);
+
+    t3.unavailable = false;
+    await expect(
+      coordinator.reconcile([task("in-progress"), task("in-progress", 202)]),
+    ).resolves.toHaveLength(2);
+    laterWork += 1;
+
+    expect(t3.shellReads).toBe(2);
+    expect(raised).toHaveLength(1);
+    expect(resolved).toEqual([
+      "production:epic-project-snapshot-failed:global:shell",
+    ]);
+    expect(laterWork).toBe(2);
+    persistence.close();
+  });
+
+  it("throws a shell snapshot failure without an attention queue", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    class UnavailableT3 extends SyntheticT3 {
+      override async getShell(): ReturnType<SyntheticT3["getShell"]> {
+        throw new Error("control-plane snapshot unavailable");
+      }
+    }
+    const coordinator = new EpicProjectCoordinator(
+      configuration(root),
+      persistence,
+      new TaskRepositoryRouter(root),
+      new UnavailableT3(),
+      undefined,
+      async () => undefined,
+    );
+
+    await expect(coordinator.reconcile([task("in-progress")])).rejects.toThrow(
+      "control-plane snapshot unavailable",
+    );
     persistence.close();
   });
 
@@ -247,6 +339,41 @@ describe("EpicProjectCoordinator", () => {
     persistence.close();
   });
 
+  it("leaves a T3 UI title until the next epic-title change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
+    scratch.push(root);
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(root, "state"),
+    });
+    const t3 = new SyntheticT3();
+    const coordinator = new EpicProjectCoordinator(
+      configuration(root),
+      persistence,
+      new TaskRepositoryRouter(root),
+      t3,
+      undefined,
+      async () => undefined,
+      undefined,
+      () => "generated-epic-project",
+    );
+    await coordinator.reconcile([task("in-progress")]);
+    const retained = persistence.getEpicProject(101)!;
+    const project = t3.projects.get(retained.projectId)!;
+    t3.projects.set(retained.projectId, {
+      ...project,
+      title: "External presentation title",
+    });
+    t3.commands.length = 0;
+
+    await coordinator.reconcile([task("in-progress")]);
+
+    expect(
+      t3.commands.filter(({ type }) => type === "project.meta.update"),
+    ).toEqual([]);
+    expect(persistence.getEpicProject(101)).toEqual(retained);
+    persistence.close();
+  });
+
   it("rejects a surviving same-workspace project when Heddle state is fresh", async () => {
     const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
     scratch.push(root);
@@ -334,7 +461,7 @@ describe("EpicProjectCoordinator", () => {
     persistence.close();
   });
 
-  it("names a retained identity that T3 keeps soft-deleted", async () => {
+  it("reports a failed recreation when the retained identity is absent from the active shell", async () => {
     const root = await mkdtemp(join(tmpdir(), "heddle-epic-project-"));
     scratch.push(root);
     const persistence = new SqlitePersistence({
@@ -352,20 +479,18 @@ describe("EpicProjectCoordinator", () => {
       repositoryNames: ["sample-repository"],
       state: "active",
     });
-    class SoftDeletedProjectT3 extends SyntheticT3 {
+    class RejectedRecreationT3 extends SyntheticT3 {
       createAttempts = 0;
 
       override async dispatch(command: T3DispatchCommand) {
         if (command.type === "project.create") {
           this.createAttempts += 1;
-          throw new Error(
-            "Project 'retained-project' already exists and cannot be created twice.",
-          );
+          throw new Error("synthetic T3 dispatch failure");
         }
         return super.dispatch(command);
       }
     }
-    const t3 = new SoftDeletedProjectT3();
+    const t3 = new RejectedRecreationT3();
     const coordinator = new EpicProjectCoordinator(
       configuration(root),
       persistence,
@@ -375,9 +500,14 @@ describe("EpicProjectCoordinator", () => {
       async () => undefined,
     );
 
-    await expect(coordinator.reconcile([task("in-progress")])).rejects.toThrow(
-      "T3 retains a deleted project with this identity (retained-project)",
+    const failure = await coordinator
+      .reconcile([task("in-progress")])
+      .catch((error: unknown) => error);
+
+    expect(describeError(failure)).toContain(
+      "T3 rejected recreation of retained project identity 'retained-project' while it was absent from the active shell; T3 may retain hidden or non-active history for this identity",
     );
+    expect(describeError(failure)).toContain("synthetic T3 dispatch failure");
 
     expect(t3.createAttempts).toBe(1);
     expect(persistence.getEpicProject(101)).toMatchObject({

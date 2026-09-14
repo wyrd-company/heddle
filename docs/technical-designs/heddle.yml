@@ -181,14 +181,15 @@ proposed-design:
 
     Fresh Heddle state fails closed when T3 has an active project at the same
     workspace root. Ordinary reconciliation does not adopt partial external
-    history. If the shell hides a soft-deleted project and T3 refuses creation
-    of its retained ID, Heddle names the retained deleted identity and fails
-    closed without undeleting, adopting, or regenerating it. Adoption requires a
-    future explicit operation that imports the complete paired state. This
-    project-level rule does not repair or redefine archived stage-thread
-    identity; archived-thread recovery remains within the stage archive evidence
-    boundary. Heddle never infers repository scope from a diff, branch, session,
-    or filesystem scan.
+    history. If T3 rejects recreation while the retained identity is absent from
+    the active shell, Heddle reports that T3 may retain hidden or non-active
+    history for this identity and preserves the original T3 failure and trace as
+    its cause. Heddle fails closed without undeleting, adopting, or regenerating
+    the identity. Adoption requires a future explicit operation that imports the
+    complete paired state. This project-level rule does not repair or redefine
+    archived stage-thread identity; archived-thread recovery remains within the
+    stage archive evidence boundary. Heddle never infers repository scope from a
+    diff, branch, session, or filesystem scan.
 
     Heddle is the single writer of child-task status on the board:
     instance state mirrors to the task's column, and nothing else

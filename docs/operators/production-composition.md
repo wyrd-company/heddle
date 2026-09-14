@@ -298,14 +298,15 @@ the title is last-writer presentation state, not identity.
 
 Heddle reuses an existing SQLite project identity after restart and recreates
 that exact identity when the control plane does not expose the retained active
-identity. If T3 hides a soft-deleted project but refuses creation of its retained
-ID, Heddle reports that T3 retains a deleted project with this identity and
-fails closed. It does not undelete, adopt, or regenerate the project. Fresh
-Heddle state fails closed when T3 still has another active project at the same
-workspace root. Restore the paired Heddle state instead of treating partial T3
-history as authority. Importing or adopting a project requires a future explicit
-operation that imports the complete paired state; ordinary startup does not
-adopt it.
+identity. If T3 rejects recreation while the retained identity is absent from
+the active shell, Heddle reports that T3 may retain hidden or non-active history
+for this identity and preserves the original T3 failure and trace as its cause.
+Heddle fails closed. It does not undelete, adopt, or regenerate the project.
+Fresh Heddle state fails closed when T3 still has another active project at the
+same workspace root. Restore the paired Heddle state instead of treating partial
+T3 history as authority. Importing or adopting a project requires a future
+explicit operation that imports the complete paired state; ordinary startup
+does not adopt it.
 
 A top-level ad-hoc task or epic declares its complete repository scope in the
 typed `repos` front-matter array. Each entry must be a logical,

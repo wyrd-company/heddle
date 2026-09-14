@@ -5,10 +5,15 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { T3DispatchCommand } from "../control-plane/index.js";
+import {
+  T3ControlPlaneClient,
+  type T3DispatchCommand,
+} from "../control-plane/index.js";
+import { describeError } from "../error-details.js";
 import {
   createProductionComposition,
   type ProductionComposition,
+  type ProductionT3Client,
 } from "./composition.js";
 import {
   prepareProductionFixture,
@@ -27,7 +32,7 @@ describe("production shared-project reconciliation", () => {
 
   const open = (
     fixture: Awaited<ReturnType<typeof prepareProductionFixture>>,
-    t3: SyntheticT3,
+    t3: ProductionT3Client,
   ): ProductionComposition => {
     const created = createProductionComposition({
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -217,23 +222,30 @@ describe("production shared-project reconciliation", () => {
     });
   });
 
-  it("names a retained identity that T3 keeps soft-deleted", async () => {
+  it("preserves a released T3 failure when a retained identity is absent from the active shell", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
-    class SoftDeletedProjectT3 extends SyntheticT3 {
-      createAttempts = 0;
-
-      override async dispatch(command: T3DispatchCommand) {
-        if (command.type === "project.create") {
-          this.createAttempts += 1;
-          throw new Error(
-            "Project 'retained-project' already exists and cannot be created twice.",
-          );
-        }
-        return super.dispatch(command);
-      }
-    }
-    const t3 = new SoftDeletedProjectT3();
+    const releasedFailure = {
+      _tag: "EnvironmentInternalError",
+      code: "internal_error",
+      reason: "orchestration_dispatch_failed",
+      traceId: "00000000000000000000000000000001",
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      const body =
+        init?.method === "POST"
+          ? releasedFailure
+          : { projects: [], threads: [] };
+      return new globalThis.Response(JSON.stringify(body), {
+        headers: { "content-type": "application/json" },
+        status: init?.method === "POST" ? 500 : 200,
+      });
+    });
+    const t3 = new T3ControlPlaneClient({
+      accessToken: "sample-access-token",
+      baseUrl: "http://t3.test",
+      fetch,
+    });
     const started = open(fixture, t3);
     started.persistence.writeSharedProject({
       createCommandId: "create-retained-project",
@@ -246,11 +258,15 @@ describe("production shared-project reconciliation", () => {
       workspaceRoot: fixture.configuration.adHocProject.workspaceRoot,
     });
 
-    await expect(started.start()).rejects.toThrow(
-      "T3 retains a deleted project with this identity (retained-project)",
-    );
+    const failure = await started.start().catch((error: unknown) => error);
 
-    expect(t3.createAttempts).toBe(1);
+    expect(describeError(failure)).toContain(
+      "T3 rejected recreation of retained project identity 'retained-project' while it was absent from the active shell; T3 may retain hidden or non-active history for this identity",
+    );
+    expect(describeError(failure)).toContain(
+      'reason orchestration_dispatch_failed; trace ID "00000000000000000000000000000001"',
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(started.persistence.getSharedProject()).toMatchObject({
       projectId: "retained-project",
       state: "active",
@@ -307,6 +323,31 @@ describe("production shared-project reconciliation", () => {
       projectTitleApplied: true,
       projectTitleRevision: 1,
     });
+  });
+
+  it("leaves a T3 UI title until the next Heddle label change", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new SyntheticT3();
+    const first = open(fixture, t3);
+    await first.start();
+    const retained = first.persistence.getSharedProject()!;
+    const project = t3.projects.get(retained.projectId)!;
+    t3.projects.set(retained.projectId, {
+      ...project,
+      title: "External presentation title",
+    });
+    await first.close();
+    composition = undefined;
+    t3.commands.length = 0;
+
+    const restarted = open(fixture, t3);
+    await restarted.start();
+
+    expect(
+      t3.commands.filter(({ type }) => type === "project.meta.update"),
+    ).toEqual([]);
+    expect(restarted.persistence.getSharedProject()).toEqual(retained);
   });
 
   it("completes an ambiguously applied title revision without dispatching it twice", async () => {

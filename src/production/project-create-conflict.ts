@@ -3,16 +3,11 @@
 //   implements: heddle
 // ---
 
-import { describeError } from "../error-details.js";
-
-export const classifyRetainedProjectCreateError = (
+export const retainedProjectRecreationError = (
   error: unknown,
   projectId: string,
-): unknown => {
-  const conflict = `Project '${projectId}' already exists and cannot be created twice.`;
-  if (!describeError(error).includes(conflict)) return error;
-  return new Error(
-    `T3 retains a deleted project with this identity (${projectId}); project recreation is unavailable`,
+): Error =>
+  new Error(
+    `T3 rejected recreation of retained project identity '${projectId}' while it was absent from the active shell; T3 may retain hidden or non-active history for this identity`,
     { cause: error },
   );
-};

@@ -16,7 +16,7 @@ import type {
   SqlitePersistence,
 } from "../persistence/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
-import { classifyRetainedProjectCreateError } from "./project-create-conflict.js";
+import { retainedProjectRecreationError } from "./project-create-conflict.js";
 import { stableUuid } from "./stable-uuid.js";
 
 export interface SharedProjectT3Client {
@@ -88,7 +88,7 @@ export class SharedProjectCoordinator {
           });
         } catch (error) {
           throw retainedIdentity
-            ? classifyRetainedProjectCreateError(error, retained.projectId)
+            ? retainedProjectRecreationError(error, retained.projectId)
             : error;
         }
         project = {
