@@ -1641,13 +1641,19 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         throw new Error("Lifecycle questions are not configured");
       }
       await this.questions.ask({ instanceId, node: awaited, task });
-      writeRuntime({
+      // The runtime waits on a role; the previous stage's session, thread,
+      // and provider do not describe it.
+      const asked: ReconcilerRuntimeRecord = {
         ...starting,
         boardStatus,
         stageEnteredAt: this.now(),
         stageId,
         state: "waiting",
-      });
+      };
+      delete asked.provider;
+      delete asked.sessionKey;
+      delete asked.threadId;
+      writeRuntime(asked);
       if (mirrorBoardStatus) await this.mirrorBoardStatus(task.id, boardStatus);
       return;
     }

@@ -174,11 +174,14 @@ describe("production question node", () => {
     expect(
       composition.attention.list().filter(({ kind }) => kind === "escalation"),
     ).toHaveLength(1);
-    expect(
-      composition.persistence
-        .listReconcilerRuntime()
-        .find((runtime) => runtime.instanceId === instanceId),
-    ).toMatchObject({ stageId: "confirm", state: "waiting" });
+    const waiting = composition.persistence
+      .listReconcilerRuntime()
+      .find((runtime) => runtime.instanceId === instanceId);
+    expect(waiting).toMatchObject({ stageId: "confirm", state: "waiting" });
+    // The runtime waits on a role, not on the implement stage's session.
+    expect(waiting?.sessionKey).toBeUndefined();
+    expect(waiting?.threadId).toBeUndefined();
+    expect(waiting?.provider).toBeUndefined();
     expect(
       composition.persistence
         .listSessionRuntime()
