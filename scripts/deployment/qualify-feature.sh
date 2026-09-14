@@ -162,6 +162,13 @@ for attempt in $(seq 1 100); do
 done
 
 install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
+repository_directory="${tools_directory}/sample-repository"
+git init --initial-branch=main "${repository_directory}" >/dev/null
+git -C "${repository_directory}" config user.name "Qualification Fixture"
+git -C "${repository_directory}" config user.email "fixture@example.invalid"
+printf '# Qualification repository\n' >"${repository_directory}/README.md"
+git -C "${repository_directory}" add -- README.md
+git -C "${repository_directory}" commit -m "Initialize qualification repository" >/dev/null
 
 git init --bare --initial-branch=main "${config_directory}/blueprints-origin.git" >/dev/null
 git clone "${config_directory}/blueprints-origin.git" "${config_directory}/blueprints" >/dev/null
@@ -215,8 +222,6 @@ cat >"${config_directory}/config.yml" <<'EOF'
 adHocProject:
   name: Shared records
   projectId: shared-project
-  workspaceRoot: /workspaces/heddle
-boardDirectory: /workspaces/kanban
 cadenceMilliseconds: 60000
 incident:
   approvalSeverityThreshold: high
@@ -235,7 +240,6 @@ pacing:
   subagents:
     maxDepth: 1
     maxFanOut: 1
-  usageWindowHours: 5
 providerAliases:
   default:
     providerDisplayName: Workbench Alpha
@@ -246,7 +250,6 @@ pushover:
   consoleBaseUrl: https://console.example.invalid/
   userKey: sample-user-key
 server:
-  host: 127.0.0.1
   port: 4317
 session:
   baseRef: main
@@ -256,7 +259,6 @@ session:
   skillPointer: skill://sample
 stageThresholds:
   inspect: 60000
-stateDirectory: /var/lib/heddle
 stopTimeoutMilliseconds: 1000
 t3:
   accessToken: sample-access-token
@@ -296,6 +298,7 @@ up() {
     log_file="$(mktemp)"
     if ! HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+        HEDDLE_QUALIFICATION_TOOLS="${tools_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         DOCKER_CONFIG="${docker_config}" \
@@ -324,6 +327,7 @@ up() {
 inside() {
     HEDDLE_QUALIFICATION_STATE="${state_directory}" \
     HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+        HEDDLE_QUALIFICATION_TOOLS="${tools_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         DOCKER_CONFIG="${docker_config}" \
@@ -374,6 +378,7 @@ expect_feature_install_failure() {
 
     if HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
+        HEDDLE_QUALIFICATION_TOOLS="${tools_directory}" \
         HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         DOCKER_CONFIG="${docker_config}" \

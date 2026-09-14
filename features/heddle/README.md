@@ -51,20 +51,24 @@ layers built-in defaults, shared `config.yml`, then optional `worker.yml`.
 Objects and maps merge, arrays replace, and `null` restores a built-in value or
 removes an inherited optional value. The validated effective result is the sole
 source for board, state, loopback server, T3, Pushover, pacing, session,
-threshold, product, project, and secret settings.
+threshold, project, and secret settings.
 Only `HEDDLE_CONFIG` may select a different directory; other `HEDDLE_*` values do
 not configure the deployed service. Configuration changes require service
 restart. The configured loopback port must be from 1 through 65535 so that the
 same fixed endpoint can be used by Heddle and Caddy.
 
-Shared core may use the same board, state, worktree, and local T3 URL paths for
-every worker. Each container can bind different host data at those same target
-paths and runs its own T3 server. Those worker-local mounts do not require the
-paths to be repeated in `worker.yml`.
+Heddle defaults to `/workspaces`, `/workspaces/kanban`,
+`/workspaces/worktrees`, `/var/lib/heddle`, the local T3 server at
+`http://127.0.0.1:3773`, and the Pushover service API. It binds its own listener
+to loopback and accepts only the optional `server.port` override. Each
+container can bind different host data at those same target paths and runs its
+own T3 server. Those worker-local mounts do not require the paths to be
+repeated in `worker.yml`.
 
-The configured `stateDirectory` must be a dedicated bind-mount target. Give
-every workspace its own host source so that a rebuild replaces the container
-without replacing SQLite history:
+The conventional `/var/lib/heddle` state directory, or an explicit
+`stateDirectory` override, must be a dedicated bind-mount target. Give every
+workspace its own host source so that a rebuild replaces the container without
+replacing SQLite history:
 
 ```json
 {

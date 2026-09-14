@@ -22,6 +22,8 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
+import { layerConfiguration } from "./configuration-layering.js";
+
 const featureDirectory = "features/heddle";
 const execute = promisify(execFile);
 
@@ -335,6 +337,32 @@ describe("Heddle devcontainer feature", () => {
         target: "/home/vscode/.heddle",
       }),
     );
+    expect(qualificationConfiguration.mounts).toContainEqual(
+      expect.objectContaining({
+        source: "${localEnv:HEDDLE_QUALIFICATION_STATE}",
+        target: "/var/lib/heddle",
+      }),
+    );
+    expect(qualificationConfiguration.mounts).toContainEqual(
+      expect.objectContaining({
+        source: "${localEnv:HEDDLE_QUALIFICATION_BOARD}",
+        target: "/workspaces/kanban",
+      }),
+    );
+    expect(qualificationConfiguration.mounts).toContainEqual(
+      expect.objectContaining({
+        source: "${localEnv:HEDDLE_QUALIFICATION_TOOLS}",
+        target: "/workspaces/tools",
+      }),
+    );
+    expect(featureQualification).toContain(
+      'repository_directory="${tools_directory}/sample-repository"',
+    );
+    const t3Qualification = await readFile(
+      "scripts/deployment/qualification-t3.mjs",
+      "utf8",
+    );
+    expect(t3Qualification).toContain('workspaceRoot: "/workspaces"');
   });
 
   it("keeps the deployment qualification fixture aligned with the production schema", async () => {
@@ -352,20 +380,29 @@ describe("Heddle devcontainer feature", () => {
 
     const configuration = parse(
       fixture!.replace("T3_MOCK_PORT", "3999"),
-    ) as object;
+    ) as Record<string, unknown>;
     const schema = JSON.parse(
       await readFile("schemas/production-configuration.json", "utf8"),
     );
+    expect(schema.properties.server.properties).not.toHaveProperty("host");
     const validate = new Ajv2020({
       allErrors: true,
       formats: { uri: true },
       strict: false,
     }).compile(schema);
+    const effective = layerConfiguration([
+      { source: "qualification config.yml", value: configuration },
+    ]).value;
 
     expect(
-      validate(configuration),
+      validate(effective),
       `deployment qualification config violates the production schema: ${JSON.stringify(validate.errors)}`,
     ).toBe(true);
+    expect(configuration).not.toHaveProperty("boardDirectory");
+    expect(configuration).not.toHaveProperty("stateDirectory");
+    expect(configuration["adHocProject"]).not.toHaveProperty("workspaceRoot");
+    expect(configuration["pacing"]).not.toHaveProperty("usageWindowHours");
+    expect(configuration["server"]).not.toHaveProperty("host");
 
     const themeFixture = qualification.match(
       /cat >"\$\{config_directory\}\/blueprints\/themes\/sample-team\.yml" <<'EOF'\n(?<yaml>[\s\S]*?)\nEOF/u,

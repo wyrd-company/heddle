@@ -236,7 +236,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "host": { "const": "127.0.0.1" },
         "port": {
           "type": "integer",
           "minimum": 1,

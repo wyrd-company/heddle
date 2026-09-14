@@ -43,8 +43,10 @@ heddle-server --config /path/to/configuration
 ```
 
 `heddle-server` requires the same configuration bundle, shared `blueprints`
-source, and dedicated worker `stateDirectory` mount that the Feature requires; those
-contracts are in the sections below. `heddle-server --config <directory>
+source, and durable worker state directory that the Feature requires. The
+conventional state directory is `/var/lib/heddle`; those contracts are in the
+sections below.
+`heddle-server --config <directory>
 --print-launch-settings` prints the nonsecret state directory, host, and port
 the service will use. The supported `kanban-md` fork recorded in
 `deployment/supported-versions.json` must be on `PATH`; the Feature's service
@@ -112,6 +114,31 @@ otherwise removes the inherited optional value. For example,
 `adjudication: null` disables inherited adjudication. An empty map only merges
 no entries; it does not clear inherited map entries.
 
+The built-in worker conventions are:
+
+| Effective field              | Built-in value                             |
+| ---------------------------- | ------------------------------------------ |
+| `adHocProject.workspaceRoot` | `/workspaces`                              |
+| `boardDirectory`             | `/workspaces/kanban`                       |
+| `pacing.usageWindowHours`    | `5`                                        |
+| `pushover.apiUrl`            | `https://api.pushover.net/1/messages.json` |
+| `server.port`                | `3774`                                     |
+| `session.worktreesRoot`      | `/workspaces/worktrees`                    |
+| `stateDirectory`             | `/var/lib/heddle`                          |
+| `t3.baseUrl`                 | `http://127.0.0.1:3773`                    |
+
+Each conventional field remains an optional source setting within its validated
+domain; `pacing.usageWindowHours` still accepts only `5`. Heddle always binds
+its listener to `127.0.0.1`; `server.host` is not a configuration field. Keep
+`pushover.apiUrl` at its built-in value for Pushover. Set it only for an
+explicit test or proxy endpoint. `pushover.consoleBaseUrl` remains a separate,
+public console link and is not the message API endpoint. Each worker has its
+own T3 server, so the T3 default names that worker's local server.
+
+These defaults do not make credentials, provider choice, incident authority,
+or the remaining lifecycle settings optional. They do not create an identity:
+the configured project ID and the existing durable state remain authoritative.
+
 Both source files are read-only inputs. A missing `config.yml`, an unreadable
 present `worker.yml`, invalid YAML, or an invalid effective value fails before
 composition or network bind. Errors name the source file and JSON-pointer field
@@ -132,12 +159,12 @@ Heddle does not write, migrate, or reformat either source. The operator owns the
 bundle and must make both source files readable only by that account, normally
 mode `0600`.
 
-Configuration ownership is independent from mount ownership. Shared core may
-declare the same `boardDirectory`, `stateDirectory`, `session.worktreesRoot`,
-and local T3 URL for every worker. Each container can bind a different host
-source at those same in-container paths and runs its own T3 server. A worker
-file contains only values that differ, such as a worker-specific credential;
-it does not repeat a path merely because the mounted data is worker-local.
+Configuration ownership is independent from mount ownership. The built-in
+board, state, worktree, and local T3 paths are the same in every worker. Each
+container can bind a different host source at those in-container paths and
+runs its own T3 server. Shared core or `worker.yml` overrides a path only when
+the in-container path differs; it does not repeat a path merely because the
+mounted data is worker-local.
 
 `heddle-server --print-effective-configuration` prints the effective values,
 their source provenance and explicit clears as JSON. T3 and Pushover credential
@@ -157,15 +184,14 @@ status mirroring invoke these tools without a shell. Incident finalization uses
 `gh` as the authenticated bot identity for an accepted GitHub issue. Startup
 does not replace or infer their locations.
 
-This complete shared `config.yml` example uses one single-candidate provider
-alias and no provider budget, so it omits the provider-usage executable:
+This minimal shared `config.yml` uses the worker conventions, one
+single-candidate provider alias, and no provider budget, so it omits both the
+conventional values and the provider-usage executable:
 
 ```yaml
 adHocProject:
   name: Shared records
   projectId: shared-project
-  workspaceRoot: /workspaces/sample-workspace
-boardDirectory: /workspaces/sample-board
 cadenceMilliseconds: 60000
 adjudication:
   approvalSettlementMilliseconds: 60000
@@ -188,7 +214,6 @@ pacing:
   subagents:
     maxDepth: 2
     maxFanOut: 2
-  usageWindowHours: 5
 providerAliases:
   adjudicator:
     - providerDisplayName: Workbench Alpha
@@ -197,35 +222,28 @@ providerAliases:
     - providerDisplayName: Workbench Alpha
       model: model-alpha
 pushover:
-  apiUrl: https://notify.example.invalid/messages
   applicationToken: replace-with-operator-secret
   consoleBaseUrl: https://console.example.invalid/
   recipientLabel: Primary operator
   userKey: replace-with-operator-secret
-server:
-  host: 127.0.0.1
-  port: 3774
 session:
   baseRef: main
   defaultProviderAlias: primary
   defaultRuntimeMode: auto
   interactionMode: default
   skillPointer: skill://sample
-  worktreesRoot: /workspaces/worktrees
 stageThresholds:
   implement: 900000
   review: 900000
-stateDirectory: /var/lib/heddle
 stopTimeoutMilliseconds: 10000
 t3:
   accessToken: replace-with-operator-secret
-  baseUrl: http://127.0.0.1:3773
 ```
 
-A worker file contains only differences. This one binds local runtime data and
-credentials while disabling core adjudication and provider budgets. It inherits
-the core board, state, worktree, and local T3 URL values because those paths have
-worker-local mounts inside this container:
+A worker file contains only differences. This one binds its local T3
+credential while disabling core adjudication and provider budgets. It uses the
+conventional board, state, worktree, and local T3 paths because those paths
+have worker-local mounts inside this container:
 
 ```yaml
 adjudication: null

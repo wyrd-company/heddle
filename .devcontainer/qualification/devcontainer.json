@@ -20,6 +20,11 @@
       "type": "bind"
     },
     {
+      "source": "${localEnv:HEDDLE_QUALIFICATION_TOOLS}",
+      "target": "/workspaces/tools",
+      "type": "bind"
+    },
+    {
       "source": "${localEnv:HEDDLE_QUALIFICATION_KANBAN}",
       "target": "/usr/local/bin/kanban-md",
       "type": "bind"

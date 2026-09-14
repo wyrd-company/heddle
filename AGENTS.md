@@ -246,9 +246,10 @@ Pinned dependencies:
   the observed version as diagnostic and qualification evidence and keeps no
   driver-name or CLI-version allowlist.
 
-The service requires a dedicated bind mount for its state directory and refuses
-to start otherwise. Configuration is operator-owned and carries secrets; read
-only the keys you need and never log it.
+The service requires a dedicated bind mount for its conventional
+`/var/lib/heddle` state directory, or for its explicit state-directory
+override, and refuses to start otherwise. Configuration is operator-owned and
+carries secrets; read only the keys you need and never log it.
 
 ## How it works
 

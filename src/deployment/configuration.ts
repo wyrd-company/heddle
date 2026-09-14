@@ -77,9 +77,11 @@ export type HeddleServerArguments = {
 
 type ConfigurationDocument = Omit<ProductionConfiguration, "session"> & {
   providerUsage?: ExecutableProviderUsageConfiguration;
-  server: DeploymentServerConfiguration;
+  server: Pick<DeploymentServerConfiguration, "port">;
   session: ProductionConfiguration["session"];
 };
+
+const deploymentServerHost = "127.0.0.1";
 
 export class HeddleConfigurationError extends Error {
   public constructor(message: string) {
@@ -298,6 +300,19 @@ const runtimeValidationPointer = (message: string): string => {
   return field === undefined ? "" : `/${field.replaceAll(".", "/")}`;
 };
 
+const declaresServerHost = (value: unknown): boolean => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const server = (value as Record<string, unknown>)["server"];
+  return (
+    typeof server === "object" &&
+    server !== null &&
+    !Array.isArray(server) &&
+    Object.hasOwn(server, "host")
+  );
+};
+
 export const loadDeploymentConfiguration = async (
   configurationDirectory: string,
 ): Promise<LoadedDeploymentConfiguration> => {
@@ -320,15 +335,24 @@ export const loadDeploymentConfiguration = async (
       ),
     );
   }
-  const layered = layerConfiguration([
+  const configurationLayers = [
     { source: configurationPath, value: core },
     ...(worker === undefined || worker === null
       ? []
       : [{ source: workerConfigurationPath, value: worker }]),
-  ]);
+  ];
+  const layered = layerConfiguration(configurationLayers);
   const value = layered.value;
   const secrets = [...coreSecrets, ...configurationSecretValues(worker)];
   try {
+    const serverHostSource = configurationLayers.find(({ value }) =>
+      declaresServerHost(value),
+    );
+    if (serverHostSource !== undefined) {
+      throw new TypeError(
+        `field '/server/host' from '${serverHostSource.source}': server.host is internal and cannot be configured`,
+      );
+    }
     const validator = new Ajv2020({
       allErrors: true,
       formats: { uri: true },
@@ -356,10 +380,10 @@ export const loadDeploymentConfiguration = async (
         `field '${failure.pointer || "/"}' from '${source}': ${failure.detail}`,
       );
     }
-    const configurationProvenance = completeConfigurationProvenance(
-      value,
-      layered.provenance,
-    );
+    const configurationProvenance = {
+      ...completeConfigurationProvenance(value, layered.provenance),
+      "/server/host": "built-in",
+    };
     const document = value as ConfigurationDocument;
     const { providerUsage, server, ...root } = document;
     const configuration: ProductionConfiguration = {
@@ -370,9 +394,6 @@ export const loadDeploymentConfiguration = async (
       new TypeError(
         `field '${pointer}' from '${sourceForConfigurationPointer(pointer, { ...layered, provenance: configurationProvenance })}': ${message}`,
       );
-    if (server.host.trim() === "") {
-      throw invalidField("/server/host", "server.host must not be empty");
-    }
     let validated: ProductionConfiguration;
     try {
       validated = validateProductionConfiguration(configuration);
@@ -440,7 +461,7 @@ export const loadDeploymentConfiguration = async (
               arguments: [...providerUsage.arguments],
             },
           }),
-      server: { ...server, host: server.host.trim() },
+      server: { host: deploymentServerHost, port: server.port },
       ...(worker === undefined || worker === null
         ? {}
         : { workerConfigurationPath }),

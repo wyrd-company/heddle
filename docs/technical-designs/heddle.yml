@@ -1337,19 +1337,27 @@ proposed-design:
     `null` restores a built-in value or removes an inherited optional value.
     The validated effective result is the authority for board, state, server,
     T3, Pushover, pacing, session, threshold, project, and secret
-    settings. Other `HEDDLE_*` values do not affect deployed configuration.
+    settings. Built-ins supply `/workspaces` for the ad-hoc workspace,
+    `/workspaces/kanban` for the board, `/workspaces/worktrees` for task
+    worktrees, `/var/lib/heddle` for durable state, the five-hour provider
+    usage window, the Pushover service API, and the worker-local T3 server at
+    `http://127.0.0.1:3773`. Each field remains an explicit override; the usage
+    window still supports only five hours. The Heddle listener host is internal
+    and fixed to `127.0.0.1`; only its port is an optional setting.
+    Other `HEDDLE_*` values do not affect deployed configuration.
     Invalid configuration fails before composition or network bind and names
     the source file and JSON-pointer field in a secret-redacted first
     validation failure. The effective-configuration diagnostic returns
     redacted values, value provenance and explicit clears without starting the
-    service. The fixed loopback server port is restricted to 1 through 65535
+    service. The configured server port is restricted to 1 through 65535
     so the same value can be projected into Caddy. The operator owns both
     source files with mode `0600`; Heddle never writes or reformats them.
-    Configuration ownership is independent from mount ownership. Shared core
-    may declare identical in-container board, state, worktree, and local T3 URL
-    paths for every worker while each container binds different worker-local
-    data at those paths and runs its own T3 server. A worker source repeats only
-    values that differ, such as a worker-specific credential.
+    Configuration ownership is independent from mount ownership. The
+    conventional in-container board, state, worktree, and local T3 URL paths
+    can be shared as built-ins while each container binds different
+    worker-local data at those paths and runs its own T3 server. A source
+    overrides only values that differ, such as a worker-specific credential or
+    a nonconventional in-container path.
     A relative secret-file reference resolves against the directory containing
     the configuration source that supplied the effective field; an absolute
     reference remains absolute. Per-field source provenance survives layering

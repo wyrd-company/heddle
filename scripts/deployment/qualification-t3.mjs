@@ -24,7 +24,7 @@ const server = createServer((request, response) => {
           {
             id: "shared-project",
             title: "Shared records",
-            workspaceRoot: "/workspaces/heddle",
+            workspaceRoot: "/workspaces",
           },
         ],
         threads: [],

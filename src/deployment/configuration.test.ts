@@ -202,6 +202,162 @@ describe("deployed configuration directory", () => {
     });
   });
 
+  it("loads a stable conventional configuration when source omits worker-local defaults", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-conventional-config-"));
+    await prepareBlueprintRepository(root);
+    const source = globalThis.structuredClone(
+      fixture(root),
+    ) as unknown as Record<string, unknown>;
+    delete (source["adHocProject"] as Record<string, unknown>)["workspaceRoot"];
+    delete source["boardDirectory"];
+    delete (source["pacing"] as Record<string, unknown>)["usageWindowHours"];
+    delete (source["pushover"] as Record<string, unknown>)["apiUrl"];
+    delete source["stateDirectory"];
+    delete (source["t3"] as Record<string, unknown>)["baseUrl"];
+    expect(source).not.toHaveProperty("server");
+    expect(source["session"]).not.toHaveProperty("worktreesRoot");
+    await writeFile(join(root, "config.yml"), stringify(source));
+
+    const first = await loadDeploymentConfiguration(root);
+    const second = await loadDeploymentConfiguration(root);
+
+    expect(first.configuration).toMatchObject({
+      adHocProject: { workspaceRoot: "/workspaces" },
+      boardDirectory: "/workspaces/kanban",
+      pacing: { usageWindowHours: 5 },
+      pushover: { apiUrl: "https://api.pushover.net/1/messages.json" },
+      session: { worktreesRoot: "/workspaces/worktrees" },
+      stateDirectory: "/var/lib/heddle",
+      t3: { baseUrl: "http://127.0.0.1:3773" },
+    });
+    expect(first.server).toEqual({ host: "127.0.0.1", port: 3774 });
+    expect(first.configurationProvenance).toMatchObject({
+      "/adHocProject/workspaceRoot": "built-in",
+      "/boardDirectory": "built-in",
+      "/pacing/usageWindowHours": "built-in",
+      "/pushover/apiUrl": "built-in",
+      "/server/host": "built-in",
+      "/server/port": "built-in",
+      "/session/worktreesRoot": "built-in",
+      "/stateDirectory": "built-in",
+      "/t3/baseUrl": "built-in",
+    });
+    expect(second.configuration).toEqual(first.configuration);
+    expect(second.server).toEqual(first.server);
+  });
+
+  it("retains explicit overrides for every conventional worker value", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-conventional-overrides-"));
+    await prepareBlueprintRepository(root);
+    const source = fixture(root);
+    source.adHocProject.workspaceRoot = join(root, "workspace-override");
+    source.boardDirectory = join(root, "board-override");
+    source.pushover.apiUrl = "https://proxy.example.invalid/messages";
+    source.session.worktreesRoot = join(root, "worktrees-override");
+    source.stateDirectory = join(root, "state-override");
+    source.t3.baseUrl = "http://127.0.0.1:4173";
+    await writeFile(
+      join(root, "config.yml"),
+      stringify({ ...source, server: { port: 4174 } }),
+    );
+
+    const loaded = await loadDeploymentConfiguration(root);
+
+    expect(loaded.configuration).toMatchObject(source);
+    expect(loaded.server).toEqual({ host: "127.0.0.1", port: 4174 });
+    for (const pointer of [
+      "/adHocProject/workspaceRoot",
+      "/boardDirectory",
+      "/pacing/usageWindowHours",
+      "/pushover/apiUrl",
+      "/server/port",
+      "/session/worktreesRoot",
+      "/stateDirectory",
+      "/t3/baseUrl",
+    ]) {
+      expect(loaded.configurationProvenance?.[pointer]).toBe(
+        join(root, "config.yml"),
+      );
+    }
+  });
+
+  it.each([
+    {
+      name: "adHocProject.workspaceRoot",
+      pointer: "/adHocProject/workspaceRoot",
+      mutate: (value: Record<string, unknown>) => {
+        (value["adHocProject"] as Record<string, unknown>)["workspaceRoot"] =
+          "relative";
+      },
+    },
+    {
+      name: "boardDirectory",
+      pointer: "/boardDirectory",
+      mutate: (value: Record<string, unknown>) => {
+        value["boardDirectory"] = "relative";
+      },
+    },
+    {
+      name: "pacing.usageWindowHours",
+      pointer: "/pacing/usageWindowHours",
+      mutate: (value: Record<string, unknown>) => {
+        (value["pacing"] as Record<string, unknown>)["usageWindowHours"] = 4;
+      },
+    },
+    {
+      name: "pushover.apiUrl",
+      pointer: "/pushover/apiUrl",
+      mutate: (value: Record<string, unknown>) => {
+        (value["pushover"] as Record<string, unknown>)["apiUrl"] =
+          "local-notifier";
+      },
+    },
+    {
+      name: "session.worktreesRoot",
+      pointer: "/session/worktreesRoot",
+      mutate: (value: Record<string, unknown>) => {
+        (value["session"] as Record<string, unknown>)["worktreesRoot"] =
+          "relative";
+      },
+    },
+    {
+      name: "stateDirectory",
+      pointer: "/stateDirectory",
+      mutate: (value: Record<string, unknown>) => {
+        value["stateDirectory"] = "relative";
+      },
+    },
+    {
+      name: "t3.baseUrl",
+      pointer: "/t3/baseUrl",
+      mutate: (value: Record<string, unknown>) => {
+        (value["t3"] as Record<string, unknown>)["baseUrl"] = "local-t3";
+      },
+    },
+    {
+      name: "server.port",
+      pointer: "/server/port",
+      mutate: (value: Record<string, unknown>) => {
+        value["server"] = { port: 0 };
+      },
+    },
+  ])(
+    "rejects invalid conventional override $name at the deployed boundary",
+    async ({ mutate, pointer }) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-conventional-invalid-"));
+      await prepareBlueprintRepository(root);
+      const source = globalThis.structuredClone(
+        fixture(root),
+      ) as unknown as Record<string, unknown>;
+      mutate(source);
+      await writeFile(join(root, "config.yml"), stringify(source));
+
+      await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+        `field '${pointer}'`,
+      );
+    },
+  );
+
   it("layers shared core and an optional worker source without changing mounted inputs", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
     const shared = join(root, "shared");
@@ -369,7 +525,7 @@ describe("deployed configuration directory", () => {
     );
   });
 
-  it("attributes a required root field cleared by a worker to the worker source", async () => {
+  it("attributes a cleared required object to the worker source after defaults reapply", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
     await prepareBlueprintRepository(root);
     await writeFile(join(root, "config.yml"), stringify(fixture(root)));
@@ -377,7 +533,7 @@ describe("deployed configuration directory", () => {
     await writeFile(workerPath, stringify({ adHocProject: null }));
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `field '/adHocProject' from '${workerPath}'`,
+      `field '/adHocProject/name' from '${workerPath}'`,
     );
   });
 
@@ -492,7 +648,7 @@ describe("deployed configuration directory", () => {
       join(root, "config.yml"),
       stringify({
         ...fixture(root),
-        server: { host: "127.0.0.1", port: 4171 },
+        server: { port: 4171 },
       }),
     );
 
@@ -503,8 +659,8 @@ describe("deployed configuration directory", () => {
     expect(loaded.configuration.stateDirectory).toBe(join(root, "state"));
   });
 
-  it.each(["0.0.0.0", "::", "192.0.2.10"])(
-    "rejects non-loopback server host %s at configuration load",
+  it.each(["127.0.0.1", "0.0.0.0", "::", "192.0.2.10", null])(
+    "rejects the internal server.host setting when configured as %s",
     async (host) => {
       root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
       await prepareBlueprintRepository(root);
@@ -517,10 +673,22 @@ describe("deployed configuration directory", () => {
       );
 
       await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-        "/server/host must be equal to constant: 127.0.0.1",
+        `field '/server/host' from '${join(root, "config.yml")}': server.host is internal and cannot be configured`,
       );
     },
   );
+
+  it("rejects a worker attempt to clear the internal server.host setting", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const workerPath = join(root, "worker.yml");
+    await writeFile(workerPath, stringify({ server: { host: null } }));
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `field '/server/host' from '${workerPath}': server.host is internal and cannot be configured`,
+    );
+  });
 
   it("fails closed when the derived blueprint directory is absent or not the tracked clone root", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
@@ -634,7 +802,7 @@ describe("deployed configuration directory", () => {
       path,
       stringify({
         ...fixture(root),
-        server: { host: "127.0.0.1", port: 0 },
+        server: { port: 0 },
       }),
     );
 
@@ -796,11 +964,11 @@ describe("deployed configuration directory", () => {
       `Configuration file '${path}' is invalid YAML`,
     );
 
-    const withoutBoardDirectory: Record<string, unknown> = { ...fixture(root) };
-    delete withoutBoardDirectory["boardDirectory"];
-    await writeFile(path, stringify(withoutBoardDirectory));
+    const withoutCadence: Record<string, unknown> = { ...fixture(root) };
+    delete withoutCadence["cadenceMilliseconds"];
+    await writeFile(path, stringify(withoutCadence));
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `field '/boardDirectory' from '${path}'`,
+      `field '/cadenceMilliseconds' from '${path}'`,
     );
 
     await rm(path);
@@ -955,6 +1123,17 @@ describe("deployed configuration directory", () => {
     expect(technicalDesign.replace(/\s+/g, " ")).toContain(
       "Configuration ownership is independent from mount ownership.",
     );
+    for (const guide of [operatorGuide, featureGuide, technicalDesign]) {
+      for (const conventionalValue of [
+        "/workspaces/kanban",
+        "/workspaces/worktrees",
+        "/var/lib/heddle",
+        "http://127.0.0.1:3773",
+      ]) {
+        expect(guide).toContain(conventionalValue);
+      }
+    }
+    expect(operatorGuide).toContain("https://api.pushover.net/1/messages.json");
     expect(operatorGuide).toContain("providerUsage");
     expect(operatorGuide).not.toContain("session.launchPreparation");
     expect(operatorGuide).toContain(

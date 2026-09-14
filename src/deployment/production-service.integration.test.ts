@@ -307,6 +307,8 @@ describe("configured production service entry point", () => {
     await closeServer(portProbe);
     const { defaultProvider: _defaultProvider, ...configuredPacing } =
       fixture.configuration.pacing;
+    const { usageWindowHours: _usageWindowHours, ...sourcePacing } =
+      configuredPacing;
     const {
       defaultSelection: _defaultSelection,
       resolvedSelections: _resolvedSelections,
@@ -315,11 +317,12 @@ describe("configured production service entry point", () => {
     void _defaultProvider;
     void _defaultSelection;
     void _resolvedSelections;
+    void _usageWindowHours;
     const configuredCore = {
       ...fixture.configuration,
       boardDirectory: join(fixture.root, "core-board-must-not-be-used"),
-      pacing: configuredPacing,
-      server: { host: "127.0.0.1", port: servicePort },
+      pacing: sourcePacing,
+      server: { port: servicePort },
       session: configuredSession,
       stateDirectory: join(fixture.root, "core-state-must-not-be-used"),
       t3: {
@@ -327,6 +330,8 @@ describe("configured production service entry point", () => {
         baseUrl: "http://127.0.0.1:1",
       },
     };
+    expect(configuredCore.pacing).not.toHaveProperty("usageWindowHours");
+    expect(configuredCore.server).not.toHaveProperty("host");
     const configuredWorker = {
       boardDirectory: fixture.configuration.boardDirectory,
       providerAliases: {
