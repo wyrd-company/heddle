@@ -34,7 +34,7 @@ const dispositionSchema = (
         .literal(name)
         .describe(
           outputContract === undefined
-            ? description
+            ? `${description}\nThis disposition declares no output contract: pass no output.`
             : `${description}\nOutput must satisfy contract ${JSON.stringify(outputContract)}: ${JSON.stringify(outputSchema)}`,
         ),
   );

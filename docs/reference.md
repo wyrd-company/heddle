@@ -225,7 +225,8 @@ prints each contract's schema in the description. Output is validated against
 the contract before the lifecycle records the transition; a violation reports
 every schema error. A contract is closed: a property it does not declare
 cannot be in the output, so `additionalProperties` is `false` or absent and
-Heddle enforces `false`. A completed stage keeps `advance` for replay and loses
+Heddle enforces `false`. A disposition without a contract accepts an empty
+output or none; a stage that hands anything forward declares a contract. A completed stage keeps `advance` for replay and loses
 every other tool.
 
 ## Validation

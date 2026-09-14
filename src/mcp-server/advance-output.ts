@@ -42,21 +42,27 @@ const validationMessage = (errors: ErrorObject[] | null | undefined): string =>
 
 /**
  * Validates an `advance` output against the disposition's pinned output
- * contract. A disposition without a contract accepts any object or none.
+ * contract. What a contract does not declare cannot be in the output, so a
+ * disposition without a contract accepts an empty output or none.
  */
 export const assertAdvanceOutput = (
   disposition: string,
   contract: AdvanceOutputContract | undefined,
   output: Record<string, JsonValue> | undefined,
 ): void => {
-  if (contract === undefined) return;
-  if (output === undefined) {
-    throw new TypeError(
-      `Advance disposition ${JSON.stringify(disposition)} requires output contract ${JSON.stringify(contract.name)}: output is missing`,
-    );
+  if (contract === undefined) {
+    const undeclared = Object.keys(output ?? {});
+    if (undeclared.length > 0) {
+      throw new TypeError(
+        `Advance disposition ${JSON.stringify(disposition)} declares no output contract: output must be empty, got ${undeclared.map((key) => JSON.stringify(key)).join(", ")}`,
+      );
+    }
+    return;
   }
+  // An omitted output is an empty object; the contract says whether that is
+  // enough.
   const validate = validatorFor(contract);
-  if (validate(output)) return;
+  if (validate(output ?? {})) return;
   const detail = validationMessage(validate.errors);
   throw new TypeError(
     `Advance disposition ${JSON.stringify(disposition)} requires output contract ${JSON.stringify(contract.name)}${detail === "" ? "" : `: ${detail}`}`,

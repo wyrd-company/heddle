@@ -17,18 +17,21 @@ const findings = {
 };
 
 describe("advance output contract", () => {
-  it("accepts omitted and arbitrary output when the disposition has no contract", () => {
+  it("accepts only an omitted or empty output when the disposition has no contract", () => {
     expect(() =>
       assertAdvanceOutput("approve", undefined, undefined),
     ).not.toThrow();
+    expect(() => assertAdvanceOutput("approve", undefined, {})).not.toThrow();
     expect(() =>
-      assertAdvanceOutput("complete", undefined, { count: 3 }),
-    ).not.toThrow();
+      assertAdvanceOutput("complete", undefined, { count: 3, note: "x" }),
+    ).toThrow(
+      /complete.*declares no output contract: output must be empty, got "count", "note"/,
+    );
   });
 
   it("validates output against the pinned schema and names the contract", () => {
     expect(() => assertAdvanceOutput("reject", findings, undefined)).toThrow(
-      /reject.*review-findings.*output is missing/,
+      /reject.*review-findings.*output must have required property 'findings'/,
     );
     expect(() =>
       assertAdvanceOutput("reject", findings, { findings: [] }),

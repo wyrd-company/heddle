@@ -1758,6 +1758,9 @@ describe("workflow MCP HTTP server", () => {
       betaBefore,
     );
 
+    // An instance id smuggled into the output is an undeclared property of a
+    // contract-less disposition: refused before anything moves.
+    const alphaBefore = fixture.persistence.getInstance("instance-alpha");
     await expect(
       alpha.callTool({
         name: "advance",
@@ -1765,6 +1768,28 @@ describe("workflow MCP HTTP server", () => {
           disposition: "accept",
           output: { instanceId: "instance-beta" },
         },
+      }),
+    ).resolves.toMatchObject({
+      content: [
+        expect.objectContaining({
+          text: expect.stringMatching(
+            /declares no output contract: output must be empty, got "instanceId"/,
+          ),
+        }),
+      ],
+      isError: true,
+    });
+    expect(fixture.persistence.getInstance("instance-alpha")).toEqual(
+      alphaBefore,
+    );
+    expect(fixture.persistence.getInstance("instance-beta")).toEqual(
+      betaBefore,
+    );
+
+    await expect(
+      alpha.callTool({
+        name: "advance",
+        arguments: { disposition: "accept" },
       }),
     ).resolves.toMatchObject({
       structuredContent: { instanceId: "instance-alpha", status: "completed" },

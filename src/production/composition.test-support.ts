@@ -283,6 +283,18 @@ export const prepareProductionFixture =
       join(
         blueprintsRepositoryRoot,
         "output-contracts",
+        "implementation-evidence.json",
+      ),
+      `${JSON.stringify(
+        { properties: { evidence: { type: "string" } }, type: "object" },
+        null,
+        2,
+      )}\n`,
+    );
+    await writeFile(
+      join(
+        blueprintsRepositoryRoot,
+        "output-contracts",
         "review-findings.json",
       ),
       `${JSON.stringify(
@@ -398,6 +410,7 @@ bystanders: [sample-bystander]
             description: "Complete the sample",
             disposition: "complete",
             source: "implement",
+            "output-contract": "implementation-evidence",
             target: "review",
           },
           {
