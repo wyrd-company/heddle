@@ -3,6 +3,9 @@
 //   verifies: heddle
 // ---
 
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqlitePersistence } from "../persistence/index.js";
@@ -188,6 +191,65 @@ const fanOutEffects = () =>
       async () => ({ effect: name }),
     ]),
   );
+
+describe("lifecycle projection after a rebase", () => {
+  afterEach(cleanupFixtures);
+
+  it("keeps only predecessor outputs, no current node, and no routing slots", async () => {
+    const fixture = await makeFixture();
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "rebased",
+    });
+    await fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "rebased",
+      operationId: "round-1",
+    });
+    expect(
+      Object.keys(projection(fixture.persistence, "rebased").outputs).sort(),
+    ).toEqual(["mix", "season", "taste"]);
+
+    // The next version inserts `inspect` between mix and taste.
+    const blueprint = sampleBlueprint();
+    blueprint.nodes.push({
+      id: "inspect",
+      uses: "wait",
+      config: { joinStrategy: "any" },
+    });
+    blueprint.edges.find(
+      ({ source, target }) => source === "mix" && target === "taste",
+    )!.target = "inspect";
+    blueprint.edges.push({
+      condition: "result.output.dispositions.approve",
+      description: "Approve the sample",
+      disposition: "approve",
+      source: "inspect",
+      target: "taste",
+    });
+    const artifact = { ...blueprint } as Partial<typeof blueprint>;
+    delete artifact.id;
+    await writeFile(
+      join(fixture.repositoryRoot, fixture.blueprintPath),
+      JSON.stringify(artifact),
+    );
+    await fixture.engine.rebase({
+      instanceId: "rebased",
+      targetState: "inspect",
+    });
+
+    const rebased = projection(fixture.persistence, "rebased");
+    expect(rebased.current).toBeNull();
+    expect(Object.keys(rebased.outputs)).toEqual(["mix"]);
+    expect(rebased.visits).toEqual({ mix: 1, season: 1, taste: 1 });
+    const context = JSON.parse(
+      readLifecycleContext(fixture.persistence.getInstance("rebased")!)
+        .serializedContext!,
+    ) as Record<string, unknown>;
+    expect(context).not.toHaveProperty("heddleEdges");
+    fixture.persistence.close();
+  });
+});
 
 describe("lifecycle projection under fan-out", () => {
   afterEach(cleanupFixtures);

@@ -10,6 +10,8 @@ import type {
   InstanceState,
   JsonValue,
 } from "../persistence/index.js";
+import { edgeRoutingKey } from "./edge-conditions.js";
+import { lifecycleContextKey, projectionFrom } from "./lifecycle-projection.js";
 import type {
   CompletedLifecycleOperation,
   LifecycleAttention,
@@ -137,11 +139,26 @@ export const serializedContextForRebase = (
     delete rebased[`_outputs.${nodeId}`];
     delete rebased[nodeId];
   }
-  for (const nodeId of predecessorIds(nextBlueprint, targetState)) {
+  const predecessors = predecessorIds(nextBlueprint, targetState);
+  for (const nodeId of predecessors) {
     const output = previous[`_outputs.${nodeId}`] ?? null;
     rebased[`_outputs.${nodeId}`] = output;
     rebased[nodeId] = previous[nodeId] ?? output;
   }
+  // The projection is guard and template input: it keeps only what the
+  // rebased instance's predecessors produced, names no current node, and
+  // carries no routing slots indexed by the previous blueprint's edges.
+  const projection = projectionFrom(previous);
+  rebased[lifecycleContextKey] = {
+    ...projection,
+    current: null,
+    outputs: Object.fromEntries(
+      Object.entries(projection.outputs).filter(([nodeId]) =>
+        predecessors.has(nodeId),
+      ),
+    ),
+  };
+  delete rebased[edgeRoutingKey];
   delete rebased._executionId;
   rebased._awaitingNodeIds = [targetState];
   rebased._awaitingDetails = {
