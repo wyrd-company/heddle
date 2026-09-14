@@ -37,7 +37,9 @@ const sourceUses = (
 
 /**
  * The condition an edge routes on: its own; the disposition default for an
- * `advance` edge; `true` for the one unconditional edge of a question node.
+ * `advance` edge, narrowed to the else branch when sibling edges of the same
+ * disposition carry conditions; `true` for the one unconditional edge of a
+ * question node.
  */
 export const effectiveCondition = (
   blueprint: LifecycleBlueprint,
@@ -45,7 +47,18 @@ export const effectiveCondition = (
 ): string | undefined => {
   if (edge.condition !== undefined) return edge.condition;
   if (edge.disposition !== undefined) {
-    return defaultDispositionCondition(edge.disposition);
+    const gate = defaultDispositionCondition(edge.disposition);
+    const conditionedSiblings = blueprint.edges.flatMap((sibling) =>
+      sibling !== edge &&
+      sibling.source === edge.source &&
+      sibling.disposition === edge.disposition &&
+      sibling.condition !== undefined
+        ? [`(${sibling.condition})`]
+        : [],
+    );
+    return conditionedSiblings.length === 0
+      ? gate
+      : `${gate} and $not(${conditionedSiblings.join(" or ")})`;
   }
   return sourceUses(blueprint, edge) === questionNodeUse ? "true" : undefined;
 };

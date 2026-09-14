@@ -225,6 +225,30 @@ describe("question node", () => {
     fixture.persistence.close();
   });
 
+  it("fails closed with the edges named when an answer satisfies several", async () => {
+    const run: string[] = [];
+    const fixture = await makeFixture(questionBlueprint(), effects(run));
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "multi",
+    });
+    await expect(
+      fixture.engine.resume({
+        disposition: "answered",
+        instanceId: "multi",
+        operationId: "ask:1",
+        output: {
+          ...answer("yes"),
+          selected: { confirm: { no: true, yes: true } },
+        },
+      }),
+    ).rejects.toThrow(
+      'Disposition "answered" from node "ask" matched more than one edge: ask->serve, ask->discard',
+    );
+    expect(run).toEqual(["mix"]);
+    fixture.persistence.close();
+  });
+
   it("lets one unconditional edge fire for any answer", async () => {
     const blueprint = questionBlueprint();
     blueprint.edges = [

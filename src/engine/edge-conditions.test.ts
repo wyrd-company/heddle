@@ -170,6 +170,41 @@ describe("edge conditions", () => {
     fixture.persistence.close();
   });
 
+  it("routes an unconditioned sibling as the else branch of its disposition", async () => {
+    // One conditioned edge and one without a condition share `adjust`; the
+    // bare edge fires only when no conditioned sibling does.
+    const blueprint = guardedAdjust(
+      "result.output.dispositions.adjust and result.output.round < 3",
+      "",
+    );
+    delete blueprint.edges.at(-1)!.condition;
+    const fixture = await makeFixture(blueprint);
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "else-branch",
+    });
+    const early = await fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "else-branch",
+      operationId: "round-1",
+      output: { round: 1 },
+    });
+    expect(early).toMatchObject({ awaitingNodeIds: ["taste"] });
+    const late = await fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "else-branch",
+      operationId: "round-3",
+      output: { round: 3 },
+    });
+    expect(late).toMatchObject({ awaitingNodeIds: [], status: "completed" });
+    expect(fixture.invocations.map(({ effect }) => effect)).toEqual([
+      "mix",
+      "season",
+      "serve",
+    ]);
+    fixture.persistence.close();
+  });
+
   it("fails closed with attention when a disposition matches no edge", async () => {
     const fixture = await makeFixture(
       guardedAdjust(
