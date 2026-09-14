@@ -279,7 +279,7 @@
       },
       "dependentRequired": {
         "output-contract": ["disposition"],
-        "disposition": ["condition", "description"]
+        "disposition": ["description"]
       }
     }
   }

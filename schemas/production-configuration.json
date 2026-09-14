@@ -135,16 +135,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "approvalSeverityThreshold",
         "failureThreshold",
         "githubIssueRepository",
         "retryDelayMilliseconds",
         "workspaceRoot"
       ],
       "properties": {
-        "approvalSeverityThreshold": {
-          "enum": ["low", "moderate", "high", "critical"]
-        },
         "failureThreshold": { "type": "integer", "minimum": 1 },
         "githubIssueRepository": {
           "type": "string",

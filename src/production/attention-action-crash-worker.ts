@@ -38,7 +38,6 @@ const configuration: ResolvedProductionConfiguration = {
   boardDirectory: join(root, "board"),
   cadenceMilliseconds: 60_000,
   incident: {
-    approvalSeverityThreshold: "high",
     failureThreshold: 3,
     githubIssueRepository: "sample-owner/sample-repository",
     immediateEscalationCodes: [],

@@ -21,7 +21,6 @@ const fixture = (): ProductionConfiguration => ({
   boardDirectory: "/tmp/sample-board",
   cadenceMilliseconds: 1_000,
   incident: {
-    approvalSeverityThreshold: "high",
     failureThreshold: 3,
     githubIssueRepository: "sample-owner/sample-repository",
     immediateEscalationCodes: [],
@@ -200,7 +199,6 @@ describe("production configuration", () => {
       await readFile("schemas/production-configuration.json", "utf8"),
     );
     const incident = {
-      approvalSeverityThreshold: "high" as const,
       failureThreshold: 3,
       githubIssueRepository: "sample-owner/sample-repository",
       immediateEscalationCodes: ["known-fatal-shape"],

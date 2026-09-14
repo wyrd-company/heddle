@@ -550,8 +550,6 @@ export const createProductionComposition = (
           failureThreshold: configuration.incident.failureThreshold,
           retryDelayMilliseconds: configuration.incident.retryDelayMilliseconds,
         },
-        approvalSeverityThreshold:
-          configuration.incident.approvalSeverityThreshold,
         authority: {
           blueprintRepositoryRoot: blueprintRepository.repositoryRoot,
           boardDirectory: configuration.boardDirectory,

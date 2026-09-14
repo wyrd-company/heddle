@@ -7,10 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import {
-  bootstrapStageSession,
-  builtInSystemPrompt,
-} from "../control-plane/index.js";
+import { builtInSystemPrompt } from "../control-plane/index.js";
 import { readLifecycleContext } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
@@ -1087,89 +1084,6 @@ version: 1
       },
       { timeout: 3_000 },
     );
-    await composition.close();
-  });
-
-  it("rejects handoff input that disagrees with pinned stage metadata", async () => {
-    const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
-    const t3 = new SyntheticT3();
-    const composition = createProductionComposition({
-      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
-      blueprintsRepositoryRoot,
-      configuration,
-      providerUsage: {
-        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
-      },
-      pushoverTransport: { send: vi.fn(async () => undefined) },
-      t3,
-    });
-    await composition.start();
-    const sharedProjectId =
-      composition.persistence.getSharedProject()!.projectId;
-    const commandsBeforeMismatch = t3.commands.length;
-
-    await expect(
-      bootstrapStageSession(
-        {
-          handoff: {
-            skillPointer: configuration.session.skillPointer,
-            stage: {
-              name: "implement",
-              review: { findings: [] },
-            },
-            taskContract: { title: "Example Item" },
-          },
-          instanceId: `task-${taskId}`,
-          interactionMode:
-            configuration.session.defaultSelection.interactionMode,
-          modelSelection: {
-            instanceId:
-              configuration.session.defaultSelection.providerInstanceId,
-            model: configuration.session.defaultSelection.model.slug,
-          },
-          projectId: sharedProjectId,
-          providerContext: {
-            cliVersion:
-              configuration.session.defaultSelection.observedCliVersion,
-            driver: configuration.session.defaultSelection.driverKind,
-            lifecycle: "independent",
-            providerInstanceId:
-              configuration.session.defaultSelection.providerInstanceId,
-          },
-          runtimeMode: configuration.session.defaultSelection.runtimeMode,
-          sessionKey: `task-${taskId}:mismatch:1`,
-          task: { id: taskId, title: "Example Item" },
-          taskId,
-          title: "Metadata agreement probe",
-          worktree: {
-            baseRef: configuration.session.baseRef,
-            branch: `heddle/task-${taskId}`,
-            repositoryName: "sample-repository",
-            repositoryRoot: join(
-              configuration.adHocProject.workspaceRoot,
-              "tools",
-              "sample-repository",
-            ),
-            worktreeName: String(taskId),
-            worktreesRoot: configuration.session.worktreesRoot,
-          },
-        },
-        {
-          persistence: composition.persistence,
-          templateAuthority: {
-            readHandoffTemplate: async () => {
-              throw new Error("Unexpected template read");
-            },
-            repositoryRoot: blueprintsRepositoryRoot,
-          },
-          t3,
-          workflowMcpEndpoint,
-        },
-      ),
-    ).rejects.toThrow(
-      "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
-    );
-    expect(t3.commands).toHaveLength(commandsBeforeMismatch);
     await composition.close();
   });
 

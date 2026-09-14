@@ -54,15 +54,12 @@ export interface DurableAttentionRecord {
 }
 
 export interface IncidentRuntimeRecord {
-  accepted: boolean;
   attentionId: string;
   code: string;
   createdAt: number;
-  diagnosis?: JsonValue;
   incidentId: string;
   occurrence: number;
   provider?: string;
-  rejectionOperationIds: string[];
   sessionKey?: string;
   sourceInstanceId?: string;
   stageEnteredAt?: number;

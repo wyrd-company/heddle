@@ -20,9 +20,6 @@ const incidentRuntimeTable = `
     stage_entered_at INTEGER,
     session_key TEXT,
     thread_id TEXT,
-    diagnosis_json TEXT,
-    accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
-    rejection_operation_ids_json TEXT NOT NULL DEFAULT '[]',
     UNIQUE(attention_id, occurrence)
   );
 `;
@@ -287,12 +284,10 @@ export const initializePersistenceSchema = (
         INSERT INTO heddle_incident_runtime
           (incident_id, attention_id, occurrence, code, task_id,
            source_instance_id, created_at, state, provider, stage_id,
-           stage_entered_at, session_key, thread_id, diagnosis_json, accepted,
-           rejection_operation_ids_json)
+           stage_entered_at, session_key, thread_id)
         SELECT incident_id, attention_id, 1, code, task_id,
                source_instance_id, created_at, state, provider, stage_id,
-               stage_entered_at, session_key, thread_id, diagnosis_json,
-               accepted, rejection_operation_ids_json
+               stage_entered_at, session_key, thread_id
         FROM heddle_incident_runtime_without_occurrence;
         DROP TABLE heddle_incident_runtime_without_occurrence;
         ${incidentRuntimeCodeIndex}

@@ -11,7 +11,6 @@ import {
   type ConsoleAttentionActionPort,
 } from "../console/index.js";
 import type { SessionObserver } from "../control-plane/index.js";
-import { readLifecycleContext } from "../engine/index.js";
 import type {
   EscalationAnswers,
   EscalationCoordinator,
@@ -20,10 +19,6 @@ import { harnessAnswers } from "../mcp-server/escalation-contract.js";
 import type { JsonValue, SqlitePersistence } from "../persistence/index.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
 import { schedulerPassAttentionId } from "./scheduler-pass-attention.js";
-import {
-  incidentProductionMutationApproved,
-  incidentProposalDigest,
-} from "./incident-approval.js";
 
 const effectKind = "console-attention-action";
 
@@ -185,15 +180,6 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
   ): Promise<boolean> {
     const contract = input.action.contract;
     if (contract.kind === "attention.resolve") return false;
-    if (contract.kind === "incident.production-mutation.approve") {
-      const runtime = this.persistence
-        .listIncidentRuntime()
-        .find(({ incidentId }) => incidentId === contract.instanceId);
-      return (
-        runtime !== undefined &&
-        incidentProductionMutationApproved(this.persistence, runtime)
-      );
-    }
     if (contract.kind === "notification.retry") {
       const failure = this.#notificationFailure(
         input.attention.attentionId,
@@ -224,38 +210,6 @@ export class ProductionAttentionActions implements ConsoleAttentionActionPort {
   async #apply(input: Parameters<ConsoleAttentionActionPort["execute"]>[0]) {
     const contract = input.action.contract;
     if (contract.kind === "attention.resolve") return;
-    if (contract.kind === "incident.production-mutation.approve") {
-      const runtime = this.persistence
-        .listIncidentRuntime()
-        .find(({ incidentId }) => incidentId === contract.instanceId);
-      const record = this.persistence.getInstance(contract.instanceId);
-      const lifecycle =
-        record === undefined ? undefined : readLifecycleContext(record);
-      if (
-        runtime === undefined ||
-        lifecycle === undefined ||
-        lifecycle.status !== "awaiting" ||
-        lifecycle.awaitingNodeIds.length !== 1 ||
-        lifecycle.awaitingNodeIds[0] !== "finalize" ||
-        runtime.state === "done" ||
-        runtime.state === "failed" ||
-        !runtime.accepted ||
-        incidentProposalDigest(runtime) !== contract.proposalDigest
-      ) {
-        throw new Error(
-          "Incident production mutation proposal is no longer current",
-        );
-      }
-      this.persistence.appendEvent(
-        runtime.incidentId,
-        "operator:incident-production-mutation-approved",
-        {
-          attentionId: input.attention.attentionId,
-          proposalDigest: contract.proposalDigest,
-        },
-      );
-      return;
-    }
     if (contract.kind === "notification.retry") {
       const failure = this.#notificationFailure(
         input.attention.attentionId,

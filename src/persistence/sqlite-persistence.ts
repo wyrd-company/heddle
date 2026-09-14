@@ -602,13 +602,11 @@ export class SqlitePersistence {
         return { kind: "suppressed", reason: "concurrency-cap" };
       }
       const runtime: IncidentRuntimeRecord = {
-        accepted: false,
         attentionId: input.attentionId,
         code: input.code,
         createdAt: input.createdAt,
         incidentId: input.incidentId,
         occurrence: input.occurrence,
-        rejectionOperationIds: [],
         ...(input.sourceInstanceId === undefined
           ? {}
           : { sourceInstanceId: input.sourceInstanceId }),
@@ -737,21 +735,17 @@ export class SqlitePersistence {
       .prepare(
         `SELECT incident_id, attention_id, occurrence, code, task_id,
                 source_instance_id, created_at, state, provider, stage_id,
-                stage_entered_at, session_key, thread_id, diagnosis_json,
-                accepted, rejection_operation_ids_json
+                stage_entered_at, session_key, thread_id
          FROM heddle_incident_runtime
          ORDER BY created_at, attention_id, occurrence`,
       )
       .all() as Array<{
-      accepted: number;
       attention_id: string;
       code: string;
       created_at: number;
-      diagnosis_json: string | null;
       incident_id: string;
       occurrence: number;
       provider: string | null;
-      rejection_operation_ids_json: string;
       session_key: string | null;
       source_instance_id: string | null;
       stage_entered_at: number | null;
@@ -761,19 +755,12 @@ export class SqlitePersistence {
       thread_id: string | null;
     }>;
     return rows.map((row) => ({
-      accepted: row.accepted === 1,
       attentionId: row.attention_id,
       code: row.code,
       createdAt: row.created_at,
-      ...(row.diagnosis_json === null
-        ? {}
-        : { diagnosis: JSON.parse(row.diagnosis_json) as JsonValue }),
       incidentId: row.incident_id,
       occurrence: row.occurrence,
       ...(row.provider === null ? {} : { provider: row.provider }),
-      rejectionOperationIds: JSON.parse(
-        row.rejection_operation_ids_json,
-      ) as string[],
       ...(row.session_key === null ? {} : { sessionKey: row.session_key }),
       ...(row.source_instance_id === null
         ? {}
@@ -825,19 +812,15 @@ export class SqlitePersistence {
         `INSERT INTO heddle_incident_runtime
            (incident_id, attention_id, occurrence, code, task_id,
             source_instance_id, created_at, state, provider, stage_id,
-            stage_entered_at, session_key, thread_id, diagnosis_json,
-            accepted, rejection_operation_ids_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            stage_entered_at, session_key, thread_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(incident_id) DO UPDATE SET
            state = excluded.state,
            provider = excluded.provider,
            stage_id = excluded.stage_id,
            stage_entered_at = excluded.stage_entered_at,
            session_key = excluded.session_key,
-           thread_id = excluded.thread_id,
-           diagnosis_json = excluded.diagnosis_json,
-           accepted = excluded.accepted,
-           rejection_operation_ids_json = excluded.rejection_operation_ids_json`,
+           thread_id = excluded.thread_id`,
       )
       .run(
         record.incidentId,
@@ -853,9 +836,6 @@ export class SqlitePersistence {
         record.stageEnteredAt ?? null,
         record.sessionKey ?? null,
         record.threadId ?? null,
-        record.diagnosis === undefined ? null : serialize(record.diagnosis),
-        record.accepted ? 1 : 0,
-        serialize(record.rejectionOperationIds),
       );
   }
 

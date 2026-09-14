@@ -461,6 +461,21 @@ describe("organization lifecycle blueprint artifacts", () => {
     );
   });
 
+  it("accepts a disposition edge that leaves its condition to the default", async () => {
+    const root = await repository();
+    const value = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    delete (value.edges[1] as Record<string, unknown>)["condition"];
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(value, null, 2)}\n`,
+    );
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+  });
+
   it("rejects an output contract artifact that is not a JSON Schema", async () => {
     const root = await withOutputContract("sample-findings");
     await writeFile(

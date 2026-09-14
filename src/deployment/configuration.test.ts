@@ -49,7 +49,6 @@ const fixture = (root: string): ProductionConfiguration => ({
   boardDirectory: join(root, "board"),
   cadenceMilliseconds: 1_000,
   incident: {
-    approvalSeverityThreshold: "high",
     failureThreshold: 3,
     githubIssueRepository: "sample-owner/sample-repository",
     immediateEscalationCodes: [],

@@ -1172,6 +1172,14 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       }
     }
     await this.prepareAgentNames(runtime.incidentId);
+    // A question node waits on a role, not a session: nothing to bind.
+    const awaited =
+      this.persistence.getInstance(runtime.incidentId) === undefined
+        ? undefined
+        : await this.lifecycle.awaitingNode(runtime.incidentId);
+    if (awaited?.uses === questionNodeUse) {
+      return { ...runtime, stageId, state: "starting" };
+    }
     const priorSessions = this.persistence
       .listSessionRuntime()
       .filter(

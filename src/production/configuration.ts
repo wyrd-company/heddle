@@ -61,16 +61,7 @@ export type AdjudicationConfiguration = {
 /** Applied when `adjudication.approvalSettlementMilliseconds` is absent. */
 export const defaultApprovalSettlementMilliseconds = 60_000;
 
-export const incidentSeverityLevels = [
-  "low",
-  "moderate",
-  "high",
-  "critical",
-] as const;
-export type IncidentSeverity = (typeof incidentSeverityLevels)[number];
-
 export type IncidentConfiguration = {
-  approvalSeverityThreshold: IncidentSeverity;
   failureThreshold: number;
   githubIssueRepository: string;
   immediateEscalationCodes?: string[];
@@ -191,15 +182,6 @@ const validateCommonProductionConfiguration = (
     "incident.retryDelayMilliseconds",
     configuration.incident.retryDelayMilliseconds,
   );
-  if (
-    !incidentSeverityLevels.includes(
-      configuration.incident.approvalSeverityThreshold,
-    )
-  ) {
-    throw new TypeError(
-      `incident.approvalSeverityThreshold must be one of '${incidentSeverityLevels.join("', '")}'`,
-    );
-  }
   if (
     configuration.adjudication !== undefined &&
     !Object.hasOwn(

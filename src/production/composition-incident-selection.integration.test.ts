@@ -58,7 +58,6 @@ describe("production incident provider selection", () => {
       providerDisplayName: "Sample Task Workbench",
     };
     fixture.configuration.incident = {
-      approvalSeverityThreshold: "high",
       failureThreshold: 1,
       githubIssueRepository: "sample-owner/sample-repository",
       retryDelayMilliseconds: 1_000,

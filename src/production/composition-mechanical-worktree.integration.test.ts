@@ -69,7 +69,7 @@ const installStandardDelivery = async (
     node.tools = ["advance"];
     node["todo-template"] = "sample-stage";
     node["handoff-template"] =
-      node.handoff === "remediation"
+      node.id === "remediate"
         ? {
             commitSha: templateCommitSha,
             path: "handoff-templates/remediation.md",

@@ -217,7 +217,6 @@ next_id: 1
       boardDirectory,
       cadenceMilliseconds: 60_000,
       incident: {
-        approvalSeverityThreshold: "high",
         failureThreshold: 3,
         githubIssueRepository: "sample-owner/sample-repository",
         immediateEscalationCodes: [],
@@ -519,7 +518,6 @@ next_id: 1
       boardDirectory,
       cadenceMilliseconds: 60_000,
       incident: {
-        approvalSeverityThreshold: "high",
         failureThreshold: 3,
         githubIssueRepository: "sample-owner/sample-repository",
         immediateEscalationCodes: [],
@@ -633,7 +631,6 @@ next_id: 1
     const changedConfiguration: ResolvedProductionConfiguration = {
       ...configuration,
       incident: {
-        approvalSeverityThreshold: "high",
         failureThreshold: 3,
         githubIssueRepository: "sample-owner/sample-repository",
         immediateEscalationCodes: [],

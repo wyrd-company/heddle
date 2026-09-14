@@ -31,12 +31,10 @@ import type {
 } from "./error-visibility.js";
 import { productionErrorIncidentEligible } from "./error-visibility.js";
 import { sanitizeIncidentValue } from "./incident-redaction.js";
-import type { IncidentProductionMutationApproval } from "./incident-approval.js";
 
 export type DurableAttention =
   | BlueprintRepositoryAttention
   | EscalationAttention
-  | IncidentProductionMutationApproval
   | ProductionErrorAttention
   | ReconcilerAttention
   | SessionObservationAttention;

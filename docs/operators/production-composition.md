@@ -225,7 +225,6 @@ observationThresholds:
   failedMilliseconds: 60000
   stalledMilliseconds: 60000
 incident:
-  approvalSeverityThreshold: high
   failureThreshold: 3
   githubIssueRepository: sample-owner/sample-repository
   immediateEscalationCodes: []
@@ -365,16 +364,9 @@ including the worker blueprint checkout, Heddle and T3 configuration,
 durable data, and installed components. It must not contain a source checkout
 whose build and deployment the running service cannot observe.
 
-`approvalSeverityThreshold` uses `low`, `moderate`, `high`, or `critical`.
-An accepted production mutation at or above the threshold waits for the
-operator's exact proposal approval. A proposal below the threshold proceeds;
-an absent or unknown proposal severity fails closed to approval. Set the
-threshold so disabling one broken provider can proceed unattended while a
-lifecycle change that governs future work still requires approval.
-`githubIssueRepository` is the `owner/name` sink for code findings that the
-incident cannot deploy and verify. The finalizer records whether delivery
-succeeded. An undelivered report remains durable local attention and uses the
-ordinary notification route; it does not fail the repaired incident.
+Which incident actions wait for the operator, and at what severity, is the
+incident blueprint's own decision: its `question` node and the guard in front
+of it read the threshold from the blueprint's metadata.
 
 ## Provider and session selection
 
@@ -1288,11 +1280,11 @@ cannot verify.
 
 Diagnosis records `live`, `cleared`, or `undetermined`, root cause, and proposed
 GitHub issue, operator escalation, or production mutation actions with severity.
-Review can return it at most three times. A production mutation at or above
-`incident.approvalSeverityThreshold` waits for **Approve production mutation**;
-a lower-severity mutation proceeds without that card. Missing or unknown
-severity requires approval. Mutation intent is durable before activation and
-completion is durable afterward.
+How many times review may return it, and which proposals wait for the
+operator on a question card, are guards in the incident blueprint that read
+its metadata. The occurrence of the question binds the approval: a restart
+re-raises the same question, and an answer for an earlier occurrence cannot
+move a later one.
 
 A Heddle or T3 fork code fix is reported to
 `incident.githubIssueRepository`, not performed. The running service cannot

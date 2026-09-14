@@ -221,7 +221,6 @@ chmod -R a+rX "${board_directory}"
 cat >"${config_directory}/config.yml" <<'EOF'
 cadenceMilliseconds: 60000
 incident:
-  approvalSeverityThreshold: high
   failureThreshold: 3
   githubIssueRepository: sample-owner/sample-repository
   immediateEscalationCodes: []
