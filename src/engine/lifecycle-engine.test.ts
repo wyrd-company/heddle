@@ -355,7 +355,7 @@ describe("LifecycleEngine", () => {
     const conditionBlueprint = sampleBlueprint();
     conditionBlueprint.edges[1] = {
       ...conditionBlueprint.edges[1]!,
-      condition: "result.output.adjust",
+      condition: "result.output.dispositions.adjust and (",
     };
     const conditionFixture = await makeFixture(conditionBlueprint);
     await expect(

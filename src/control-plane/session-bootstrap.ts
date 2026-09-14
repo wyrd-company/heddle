@@ -269,11 +269,17 @@ const resolveWorkflowMcpStageContract = async (
       "Stage session bootstrap requires matching wait-stage handoff metadata and tools",
     );
   }
-  const dispositions = blueprint.edges
-    .filter(
-      ({ disposition, source }) =>
-        source === stage.id && disposition !== undefined,
-    )
+  // Several edges may share one disposition; the agent sees it once.
+  const dispositions = [
+    ...new Map(
+      blueprint.edges
+        .filter(
+          ({ disposition, source }) =>
+            source === stage.id && disposition !== undefined,
+        )
+        .map((edge) => [edge.disposition, edge] as const),
+    ).values(),
+  ]
     .map((edge) => {
       const { description, disposition, target } = edge;
       if (

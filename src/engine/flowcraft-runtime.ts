@@ -15,6 +15,12 @@ import {
 import { errorDetail } from "../error-details.js";
 import type { FlowcraftHistory } from "../persistence/index.js";
 import { internalNodeIdParameter } from "./blueprint.js";
+import {
+  edgeRoutingKey,
+  evaluateOutgoingConditions,
+  mergeRouting,
+  routedBlueprint,
+} from "./edge-conditions.js";
 import { BlueprintValidationError } from "./errors.js";
 import type {
   ExpectedLandings,
@@ -46,8 +52,7 @@ export const executionIdFrom = (serialized: string): string | undefined => {
 export const prepareRuntimeBlueprint = (
   blueprint: LifecycleBlueprint,
 ): LifecycleBlueprint => ({
-  ...blueprint,
-  edges: blueprint.edges.map((edge) => ({ ...edge })),
+  ...routedBlueprint(blueprint),
   nodes: blueprint.nodes.map((node) => ({
     ...node,
     params: {
@@ -184,6 +189,28 @@ export const createLifecycleRuntime = (
   };
   return new FlowRuntime({
     eventBus: new PersistentEventBusAdapter(eventStore),
+    middleware: [
+      {
+        // Heddle evaluates the authored JSONata conditions of the finished
+        // node's outgoing edges here, before Flowcraft routes on the booleans.
+        // A resumed wait node never executes, so the engine routes it before
+        // calling resume.
+        afterNode: async (context, nodeId, result, error) => {
+          if (error !== undefined || result === undefined) return;
+          if (blueprint.nodes.find(({ id }) => id === nodeId)?.uses === "wait")
+            return;
+          const data = await context.toJSON();
+          const routing = await evaluateOutgoingConditions(blueprint, nodeId, {
+            ...data,
+            result,
+          });
+          await context.set(
+            edgeRoutingKey,
+            mergeRouting(data, routing)[edgeRoutingKey],
+          );
+        },
+      },
+    ],
     registry,
   });
 };

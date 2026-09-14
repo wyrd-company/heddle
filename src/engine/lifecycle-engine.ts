@@ -10,19 +10,23 @@ import { attentionFor, flushPendingAttentions } from "./attention-outbox.js";
 import {
   agentNameThemeKindForBlueprint,
   dispositionsForNode,
-  edgeForDisposition,
+  edgesForDisposition,
   expectedLanding,
   startLanding,
   validateBlueprint,
   validateTaskProviderAliases,
 } from "./blueprint.js";
 import type { AgentNameThemeKind } from "../agent-names/index.js";
+import { errorDetail } from "../error-details.js";
+import { createHash } from "node:crypto";
+import { routeResume } from "./edge-conditions.js";
 import {
   BlueprintValidationError,
   InvalidDispositionError,
   TransitionConflictError,
   UnexpectedLandingError,
 } from "./errors.js";
+import { combineExclusiveLandings } from "./landing-combinations.js";
 import {
   awaitingNodeIdsFrom,
   createLifecycleRuntime,
@@ -283,8 +287,8 @@ export class LifecycleEngine {
       throw new InvalidDispositionError(input.disposition, []);
     }
     const validDispositions = dispositionsForNode(blueprint, waitNodeId);
-    const edge = edgeForDisposition(blueprint, waitNodeId, input.disposition);
-    if (edge === undefined) {
+    const edges = edgesForDisposition(blueprint, waitNodeId, input.disposition);
+    if (edges.length === 0) {
       throw new InvalidDispositionError(input.disposition, validDispositions);
     }
     if (
@@ -335,7 +339,9 @@ export class LifecycleEngine {
     return this.execute(
       record,
       blueprint,
-      expectedLanding(blueprint, [edge.target]),
+      combineExclusiveLandings(
+        edges.map(({ target }) => expectedLanding(blueprint, [target])),
+      ),
     );
   }
 
@@ -403,16 +409,28 @@ export class LifecycleEngine {
       if (waitNodeId === undefined || pending.disposition === null) {
         throw new Error("Pending resume does not identify a wait disposition");
       }
+      const output = {
+        ...(pending.output ?? {}),
+        disposition: pending.disposition,
+        dispositions: { [pending.disposition]: true },
+      };
+      let routedContext: string;
+      try {
+        routedContext = await routeResume(
+          blueprint,
+          lifecycleContext.serializedContext,
+          waitNodeId,
+          pending.disposition,
+          output,
+        );
+      } catch (error) {
+        this.recordRoutingFailure(record, pending, waitNodeId, expected, error);
+        throw error;
+      }
       result = await runtime.resume(
         runtimeBlueprint,
-        lifecycleContext.serializedContext,
-        {
-          output: {
-            ...(pending.output ?? {}),
-            disposition: pending.disposition,
-            dispositions: { [pending.disposition]: true },
-          },
-        },
+        routedContext,
+        { output },
         waitNodeId,
       );
     }
@@ -481,6 +499,56 @@ export class LifecycleEngine {
         : this.contextForCompletedOperation(nextContext, completedOperation),
       blueprint,
     );
+  }
+
+  /**
+   * A resume whose disposition selects zero or several edges, or whose
+   * condition fails to evaluate, stops before Flowcraft runs. The transition
+   * stays pending and the cause is durable attention naming the edge.
+   */
+  private recordRoutingFailure(
+    record: InstanceRecord,
+    pending: PendingTransition,
+    waitNodeId: string,
+    expected: ExpectedLandings,
+    error: unknown,
+  ): void {
+    const detail = errorDetail(error);
+    persistExecution(
+      this.persistence,
+      record.instanceId,
+      pending.id,
+      undefined,
+      undefined,
+      {
+        actualAwaitingNodeIds: [waitNodeId],
+        actualStatus: "awaiting",
+        attentionId: createHash("sha256")
+          .update(
+            JSON.stringify([
+              record.instanceId,
+              pending.id,
+              "routing",
+              detail.message,
+            ]),
+          )
+          .digest("hex"),
+        errors: [detail],
+        executionId: null,
+        expectedAwaitingNodeIds: [
+          ...new Set(
+            expected.flatMap(({ awaitingNodeIds }) => awaitingNodeIds),
+          ),
+        ].sort(),
+        expectedTerminalNodeIds: [
+          ...new Set(
+            expected.flatMap(({ terminalNodeIds }) => terminalNodeIds),
+          ),
+        ].sort(),
+        transitionId: pending.id,
+      },
+    );
+    flushPendingAttentions(this.persistence, record.instanceId);
   }
 
   private contextForCompletedOperation(

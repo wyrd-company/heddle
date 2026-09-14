@@ -10,6 +10,7 @@ import {
   type NodeFunction,
 } from "flowcraft";
 
+import { assertConditionsCompile, edgeLabel } from "./edge-conditions.js";
 import { BlueprintValidationError } from "./errors.js";
 import {
   agentNameListNames,
@@ -318,7 +319,7 @@ export const validateBlueprint = (
         `Node ${JSON.stringify(node.id)} has invalid repository metadata`,
       );
     }
-    const dispositions = new Set<string>();
+    const dispositions = new Map<string, LifecycleEdge>();
     const edges = outgoingEdges(blueprint, node.id);
     const usesDispositionRouting = edges.some(
       ({ disposition }) => disposition !== undefined,
@@ -341,20 +342,32 @@ export const validateBlueprint = (
           `Node ${JSON.stringify(node.id)} has an invalid disposition`,
         );
       }
-      if (dispositions.has(disposition)) {
+      // Several edges may share a disposition and route on their conditions.
+      // The agent sees one disposition, so every edge must describe it the
+      // same way and demand the same output.
+      const sibling = dispositions.get(disposition);
+      if (
+        sibling !== undefined &&
+        (sibling.description !== edge.description ||
+          sibling["output-contract"] !== edge["output-contract"])
+      ) {
         throw new BlueprintValidationError(
-          `Node ${JSON.stringify(node.id)} repeats disposition ${JSON.stringify(disposition)}`,
+          `Node ${JSON.stringify(node.id)} disposition ${JSON.stringify(disposition)} edges disagree on description or output contract`,
         );
       }
-      dispositions.add(disposition);
-      const expectedCondition = `result.output.dispositions.${disposition}`;
-      if (edge.condition !== expectedCondition) {
+      if (
+        sibling !== undefined &&
+        edge.condition === undefined &&
+        sibling.condition === undefined
+      ) {
         throw new BlueprintValidationError(
-          `Disposition ${JSON.stringify(disposition)} from wait node ${JSON.stringify(node.id)} must use condition ${JSON.stringify(expectedCondition)}`,
+          `Node ${JSON.stringify(node.id)} disposition ${JSON.stringify(disposition)} has more than one edge without a condition: ${edgeLabel(edge)}`,
         );
       }
+      dispositions.set(disposition, sibling ?? edge);
     }
   }
+  assertConditionsCompile(blueprint);
 
   for (const edge of blueprint.edges) {
     if (edge.action !== undefined) {
@@ -387,17 +400,20 @@ export const dispositionsForNode = (
   blueprint: LifecycleBlueprint,
   nodeId: string,
 ): string[] =>
-  outgoingEdges(blueprint, nodeId)
-    .map(({ disposition }) => disposition)
-    .filter((value): value is string => value !== undefined)
-    .sort();
+  [
+    ...new Set(
+      outgoingEdges(blueprint, nodeId)
+        .map(({ disposition }) => disposition)
+        .filter((value): value is string => value !== undefined),
+    ),
+  ].sort();
 
-export const edgeForDisposition = (
+export const edgesForDisposition = (
   blueprint: LifecycleBlueprint,
   nodeId: string,
   disposition: string,
-): LifecycleEdge | undefined =>
-  outgoingEdges(blueprint, nodeId).find(
+): LifecycleEdge[] =>
+  outgoingEdges(blueprint, nodeId).filter(
     (edge) => edge.disposition === disposition,
   );
 
