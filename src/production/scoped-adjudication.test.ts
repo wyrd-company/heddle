@@ -203,6 +203,21 @@ describe("scoped adjudication sanctioned approvals", () => {
     expect(approvals).toEqual([]);
   });
 
+  it("requires a stored handoff for an adjudication runtime", async () => {
+    const { adjudication, approvals } = build({
+      activities: [sanctionedRequest("request-without-authority")],
+      handoffs: [],
+      runtimeKind: "adjudication",
+      stageId: "unused",
+    });
+
+    expect(adjudication.isAdjudicationSession(sessionKey)).toBe(false);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
+    expect(approvals).toEqual([]);
+  });
+
   it("defers the pass after answering rather than reading the result back at once", async () => {
     // The response is delivered by a separate reactor, so the request is still
     // pending when the dispatch returns. Reading it back here would see no
