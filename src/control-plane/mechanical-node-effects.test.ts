@@ -830,9 +830,9 @@ describe("delivery mechanical nodes", () => {
     const second = await prepareCommittedChange("sample-beta");
     const firstSnapshot = await ensureReviewSnapshot(first.change);
     const secondSnapshot = await ensureReviewSnapshot(second.change);
-    await writeFile(join(first.sourcePath, "catalog.txt"), "published\n");
-    await git(first.sourcePath, "add", "catalog.txt");
-    await git(first.sourcePath, "commit", "--quiet", "-m", "publish catalog");
+    await writeFile(join(second.sourcePath, "catalog.txt"), "published\n");
+    await git(second.sourcePath, "add", "catalog.txt");
+    await git(second.sourcePath, "commit", "--quiet", "-m", "publish catalog");
     const effects = createMechanicalNodeEffects();
     const input = {
       context: {
@@ -850,15 +850,15 @@ describe("delivery mechanical nodes", () => {
       dispositions: { merged: false, remediate: true },
       remediationCause: {
         kind: "review-basis-drift",
-        repositoryName: "sample-alpha",
+        repositoryName: "sample-beta",
       },
       repositories: [
-        { dispositions: { merged: false, remediate: true } },
         { dispositions: { merged: true, remediate: false }, merged: true },
+        { dispositions: { merged: false, remediate: true } },
       ],
     });
-    expect(await git(second.sourcePath, "rev-parse", "main")).toBe(
-      `${secondSnapshot.sourceHead}\n`,
+    expect(await git(first.sourcePath, "rev-parse", "main")).toBe(
+      `${firstSnapshot.sourceHead}\n`,
     );
   });
 
