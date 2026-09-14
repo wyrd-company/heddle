@@ -120,6 +120,56 @@ describe("edge conditions", () => {
     fixture.persistence.close();
   });
 
+  it("evaluates only the chosen disposition's edges on resume", async () => {
+    // An author condition on the non-chosen disposition that omits the
+    // disposition gate is true after any visit; it must not fire its branch.
+    const blueprint = sampleBlueprint();
+    blueprint.edges[1]!.condition = "lifecycle.visits.taste >= 1";
+    const fixture = await makeFixture(blueprint);
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "ungated",
+    });
+    const snapshot = await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "ungated",
+      operationId: "accept",
+    });
+    expect(snapshot).toMatchObject({
+      awaitingNodeIds: [],
+      status: "completed",
+    });
+    expect(fixture.invocations.map(({ effect }) => effect)).toEqual([
+      "mix",
+      "serve",
+    ]);
+    fixture.persistence.close();
+  });
+
+  it("ignores a throwing condition on a disposition that was not chosen", async () => {
+    const blueprint = sampleBlueprint();
+    blueprint.edges[1]!.condition = '$error("boom")';
+    const fixture = await makeFixture(blueprint);
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "other-throws",
+    });
+    const snapshot = await fixture.engine.resume({
+      disposition: "accept",
+      instanceId: "other-throws",
+      operationId: "accept",
+    });
+    expect(snapshot).toMatchObject({
+      awaitingNodeIds: [],
+      status: "completed",
+    });
+    expect(fixture.invocations.map(({ effect }) => effect)).toEqual([
+      "mix",
+      "serve",
+    ]);
+    fixture.persistence.close();
+  });
+
   it("fails closed with attention when a disposition matches no edge", async () => {
     const fixture = await makeFixture(
       guardedAdjust(

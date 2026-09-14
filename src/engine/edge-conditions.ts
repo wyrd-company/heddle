@@ -138,13 +138,18 @@ export const evaluateOutgoingConditions = async (
   blueprint: LifecycleBlueprint,
   sourceNodeId: string,
   data: Record<string, unknown>,
+  candidate: (edge: LifecycleEdge) => boolean = () => true,
 ): Promise<EdgeRouting> => {
   const routing: EdgeRouting = {};
   for (const [index, edge] of blueprint.edges.entries()) {
     if (edge.source !== sourceNodeId) continue;
     const expression = effectiveCondition(blueprint, edge);
     if (expression === undefined) continue;
-    routing[edgeRoutingSlot(index)] = await evaluate(edge, expression, data);
+    // An edge that is not a candidate is never evaluated: its author condition
+    // may be true, or may throw, without bearing on the chosen route.
+    routing[edgeRoutingSlot(index)] = candidate(edge)
+      ? await evaluate(edge, expression, data)
+      : false;
   }
   return routing;
 };
@@ -181,7 +186,8 @@ export const mergeRouting = (
 
 /**
  * Pre-evaluates the outgoing conditions of a resumed wait node and proves the
- * chosen disposition selects exactly one edge.
+ * chosen disposition selects exactly one edge. Edges of other dispositions are
+ * written false without evaluation.
  */
 export const routeResume = async (
   blueprint: LifecycleBlueprint,
@@ -195,17 +201,19 @@ export const routeResume = async (
     waitNodeId,
     output,
   );
-  const routing = await evaluateOutgoingConditions(blueprint, waitNodeId, {
-    ...context,
-    result: { output },
-  });
   const question =
     blueprint.nodes.find(({ id }) => id === waitNodeId)?.uses ===
     questionNodeUse;
+  // A wait node routes on the chosen disposition alone; a question node has
+  // no disposition of its own and routes on the answer across every edge.
+  const routing = await evaluateOutgoingConditions(
+    blueprint,
+    waitNodeId,
+    { ...context, result: { output } },
+    (edge) => question || edge.disposition === disposition,
+  );
   const matched = blueprint.edges.flatMap((edge, index) =>
-    edge.source === waitNodeId &&
-    (question || edge.disposition === disposition) &&
-    routing[edgeRoutingSlot(index)] === true
+    edge.source === waitNodeId && routing[edgeRoutingSlot(index)] === true
       ? [edgeLabel(edge)]
       : [],
   );
