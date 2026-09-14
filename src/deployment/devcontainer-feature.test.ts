@@ -386,6 +386,28 @@ describe("Heddle devcontainer feature", () => {
       `deployment qualification theme violates the agent-name theme schema: ${JSON.stringify(validateTheme.errors)}`,
     ).toBe(true);
 
+    const blueprintFixture = qualification.match(
+      /cat >"\$\{config_directory\}\/blueprints\/blueprints\/qualification\.json" <<'EOF'\n(?<json>[\s\S]*?)\nEOF/u,
+    )?.groups?.["json"];
+    expect(
+      blueprintFixture,
+      "deployment qualification lifecycle blueprint fixture is missing",
+    ).toBeDefined();
+    const blueprintSchema = JSON.parse(
+      await readFile("schemas/lifecycle-blueprint.json", "utf8"),
+    );
+    const validateBlueprint = new Ajv2020({
+      allErrors: true,
+      strict: false,
+    }).compile(blueprintSchema);
+    expect(
+      validateBlueprint(JSON.parse(blueprintFixture!)),
+      `deployment qualification blueprint violates the lifecycle blueprint schema: ${JSON.stringify(validateBlueprint.errors)}`,
+    ).toBe(true);
+    expect(qualification).toContain(
+      'git -C "${config_directory}/blueprints" add -- README.md blueprints themes',
+    );
+
     const fixturePreflight = qualification.indexOf(
       "await themeCatalog.validateCurrent();",
     );

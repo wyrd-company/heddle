@@ -183,7 +183,18 @@ allies: [sample-ally]
 antagonists: [sample-antagonist]
 neutrals: [sample-neutral]
 EOF
-git -C "${config_directory}/blueprints" add -- README.md themes
+cat >"${config_directory}/blueprints/blueprints/qualification.json" <<'EOF'
+{
+  "$schema": "https://wyrd.company/heddle/lifecycle-blueprint.schema.json",
+  "relationships": { "implements": "heddle" },
+  "nodes": [
+    { "id": "prepare", "uses": "prepare" },
+    { "id": "finish", "uses": "finish" }
+  ],
+  "edges": [{ "source": "prepare", "target": "finish" }]
+}
+EOF
+git -C "${config_directory}/blueprints" add -- README.md blueprints themes
 git -C "${config_directory}/blueprints" commit -m "Initialize qualification repository" >/dev/null
 git -C "${config_directory}/blueprints" push --set-upstream origin main >/dev/null
 
