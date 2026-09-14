@@ -371,6 +371,18 @@ describe("deployed configuration directory", () => {
     );
   });
 
+  it("attributes a required root field cleared by a worker to the worker source", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
+    await prepareBlueprintRepository(root);
+    await writeFile(join(root, "config.yml"), stringify(fixture(root)));
+    const workerPath = join(root, "worker.yml");
+    await writeFile(workerPath, stringify({ adHocProject: null }));
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      `field '/adHocProject' from '${workerPath}'`,
+    );
+  });
+
   it("keeps inherited map entries for an empty map and clears them with null", () => {
     const core = {
       pacing: { providerBudgets: { primary: { usageLimit: 80 } } },

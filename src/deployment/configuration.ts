@@ -340,6 +340,9 @@ export const loadDeploymentConfiguration = async (
         if (validator.errors?.[0]?.keyword !== "required") {
           return sourceForConfigurationPointer(failure.pointer, layered);
         }
+        if (layered.clearedBy[failure.pointer] !== undefined) {
+          return sourceForConfigurationPointer(failure.pointer, layered);
+        }
         const parentPointer = failure.pointer.slice(
           0,
           failure.pointer.lastIndexOf("/"),
