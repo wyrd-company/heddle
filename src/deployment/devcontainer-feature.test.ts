@@ -391,7 +391,8 @@ describe("Heddle devcontainer feature", () => {
       "scripts/deployment/qualification-t3.mjs",
       "utf8",
     );
-    expect(t3Qualification).toContain('workspaceRoot: "/workspaces"');
+    expect(t3Qualification).toContain("projects: [...projects.values()]");
+    expect(t3Qualification).toContain('command.type === "project.create"');
   });
 
   it("keeps the deployment qualification fixture aligned with the production schema", async () => {

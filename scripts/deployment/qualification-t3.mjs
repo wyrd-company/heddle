@@ -11,6 +11,8 @@ import { URL } from "node:url";
 
 const accessToken = "sample-access-token";
 const ticket = "qualification-ticket";
+const projects = new Map();
+let sequence = 0;
 
 const server = createServer((request, response) => {
   if (request.headers.authorization !== `Bearer ${accessToken}`) {
@@ -20,16 +22,44 @@ const server = createServer((request, response) => {
   if (request.method === "GET" && request.url === "/api/orchestration/shell") {
     response.writeHead(200, { "content-type": "application/json" }).end(
       JSON.stringify({
-        projects: [
-          {
-            id: "shared-project",
-            title: "Shared records",
-            workspaceRoot: "/workspaces",
-          },
-        ],
+        projects: [...projects.values()],
         threads: [],
       }),
     );
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    request.url === "/api/orchestration/dispatch"
+  ) {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      const command = JSON.parse(body);
+      if (command.type === "project.create") {
+        projects.set(command.projectId, {
+          createdAt: command.createdAt,
+          id: command.projectId,
+          title: command.title,
+          workspaceRoot: command.workspaceRoot,
+        });
+      } else if (command.type === "project.meta.update") {
+        const project = projects.get(command.projectId);
+        if (project !== undefined && command.title !== undefined) {
+          projects.set(command.projectId, {
+            ...project,
+            title: command.title,
+          });
+        }
+      }
+      sequence += 1;
+      response
+        .writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify({ sequence }));
+    });
     return;
   }
   if (
