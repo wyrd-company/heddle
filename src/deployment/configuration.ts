@@ -5,7 +5,7 @@
 
 import { constants } from "node:fs";
 import { execFile } from "node:child_process";
-import { access, readFile, realpath, stat } from "node:fs/promises";
+import { access, open, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { URL } from "node:url";
 import { promisify } from "node:util";
@@ -363,14 +363,19 @@ const readSecretReference = async (
     ? reference
     : resolve(dirname(source), reference);
   try {
-    const metadata = await stat(path);
-    if (!metadata.isFile()) throw new Error("not a file");
-    if ((metadata.mode & (constants.S_IRGRP | constants.S_IROTH)) !== 0) {
-      throw new Error("readable by group or world");
+    const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    try {
+      const metadata = await file.stat();
+      if (!metadata.isFile()) throw new Error("not a file");
+      if ((metadata.mode & (constants.S_IRGRP | constants.S_IROTH)) !== 0) {
+        throw new Error("readable by group or world");
+      }
+      const value = await file.readFile({ encoding: "utf8" });
+      if (value.trim() === "") throw new Error("empty");
+      return value;
+    } finally {
+      await file.close();
     }
-    const value = await readFile(path, "utf8");
-    if (value.trim() === "") throw new Error("empty");
-    return value;
   } catch {
     throw new TypeError(
       `field '${field}' secret file '${path}' must be a readable, non-empty regular file that is not readable by group or world`,
