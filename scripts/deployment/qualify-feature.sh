@@ -634,6 +634,7 @@ inside jq -e '(.dependencies | keys | sort) == [
   "ajv",
   "better-sqlite3",
   "flowcraft",
+  "jsonata",
   "nunjucks",
   "yaml",
   "zod"
