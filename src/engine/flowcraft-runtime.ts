@@ -6,6 +6,7 @@
 import {
   FlowRuntime,
   PersistentEventBusAdapter,
+  type ContextImplementation,
   type FlowcraftEvent,
   type IEventStore,
   type NodeFunction,
@@ -205,6 +206,31 @@ export const createLifecycleRuntime = (
         executionId,
       ),
   };
+  // Parallel branches finish concurrently and each finish reads, extends, and
+  // writes back the projection and the routing slots. The chain runs one
+  // finish at a time so no branch overwrites another's visits, outputs, or
+  // routing.
+  let finishChain: Promise<void> = Promise.resolve();
+  const recordFinish = async (
+    context: ContextImplementation<Record<string, unknown>>,
+    nodeId: string,
+    result: { output?: unknown },
+  ): Promise<void> => {
+    const data = recordNodeFinish(
+      await context.toJSON(),
+      nodeId,
+      result.output,
+    );
+    await context.set(lifecycleContextKey, data[lifecycleContextKey]);
+    const routing = await evaluateOutgoingConditions(blueprint, nodeId, {
+      ...data,
+      result,
+    });
+    await context.set(
+      edgeRoutingKey,
+      mergeRouting(data, routing)[edgeRoutingKey],
+    );
+  };
   return new FlowRuntime({
     eventBus: new PersistentEventBusAdapter(eventStore),
     middleware: [
@@ -213,24 +239,15 @@ export const createLifecycleRuntime = (
         // node's outgoing edges here, before Flowcraft routes on the booleans.
         // A resumed wait node never executes, so the engine routes it before
         // calling resume.
-        afterNode: async (context, nodeId, result, error) => {
+        afterNode: (context, nodeId, result, error) => {
           if (error !== undefined || result === undefined) return;
           const node = blueprint.nodes.find(({ id }) => id === nodeId);
           if (node !== undefined && isAwaitingNode(node)) return;
-          const data = recordNodeFinish(
-            await context.toJSON(),
-            nodeId,
-            result.output,
+          const finish = finishChain.then(() =>
+            recordFinish(context, nodeId, result),
           );
-          await context.set(lifecycleContextKey, data[lifecycleContextKey]);
-          const routing = await evaluateOutgoingConditions(blueprint, nodeId, {
-            ...data,
-            result,
-          });
-          await context.set(
-            edgeRoutingKey,
-            mergeRouting(data, routing)[edgeRoutingKey],
-          );
+          finishChain = finish.catch(() => undefined);
+          return finish;
         },
       },
     ],

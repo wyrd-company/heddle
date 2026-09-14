@@ -162,3 +162,83 @@ describe("lifecycle projection", () => {
     persistence.close();
   });
 });
+
+/** A mechanical fan-out: mix runs whisk and knead in parallel, each to its own terminal. */
+const fanOutBlueprint = (condition?: string): LifecycleBlueprint => ({
+  id: "fan-out",
+  nodes: [
+    { id: "mix", uses: "mix" },
+    { id: "whisk", uses: "whisk" },
+    { id: "knead", uses: "knead" },
+    { id: "bake", uses: "bake" },
+    { id: "proof", uses: "proof" },
+  ],
+  edges: [
+    { source: "mix", target: "whisk", ...(condition ? { condition } : {}) },
+    { source: "mix", target: "knead", ...(condition ? { condition } : {}) },
+    { source: "whisk", target: "bake" },
+    { source: "knead", target: "proof" },
+  ],
+});
+
+const fanOutEffects = () =>
+  Object.fromEntries(
+    ["mix", "whisk", "knead", "bake", "proof"].map((name) => [
+      name,
+      async () => ({ effect: name }),
+    ]),
+  );
+
+describe("lifecycle projection under fan-out", () => {
+  afterEach(cleanupFixtures);
+
+  it("keeps every parallel branch in visits and outputs", async () => {
+    const fixture = await makeFixture(fanOutBlueprint(), fanOutEffects());
+    const snapshot = await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "fan-out",
+    });
+    expect(snapshot).toMatchObject({ status: "completed" });
+    const projected = projection(fixture.persistence, "fan-out");
+    expect(projected.visits).toEqual({
+      bake: 1,
+      knead: 1,
+      mix: 1,
+      proof: 1,
+      whisk: 1,
+    });
+    expect(Object.keys(projected.outputs).sort()).toEqual([
+      "bake",
+      "knead",
+      "mix",
+      "proof",
+      "whisk",
+    ]);
+    fixture.persistence.close();
+  });
+
+  it("routes every guarded parallel branch to its terminal", async () => {
+    const fixture = await makeFixture(fanOutBlueprint("true"), fanOutEffects());
+    const snapshot = await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "guarded-fan-out",
+    });
+    expect(snapshot).toMatchObject({
+      awaitingNodeIds: [],
+      status: "completed",
+    });
+    expect(
+      fixture.persistence
+        .replayEvents("guarded-fan-out")
+        .filter(({ type }) => type === "lifecycle:attention-required"),
+    ).toHaveLength(0);
+    expect(projection(fixture.persistence, "guarded-fan-out").visits).toEqual({
+      bake: 1,
+      knead: 1,
+      mix: 1,
+      proof: 1,
+      whisk: 1,
+    });
+    fixture.persistence.close();
+  });
+});
