@@ -298,6 +298,61 @@ describe("production question node", () => {
     await composition.close();
   });
 
+  it("holds an adjudicator question when the deployment composes no adjudication", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    delete fixture.configuration.adjudication;
+    await installQuestionBlueprint(fixture, "adjudicator");
+    const composition = compose(fixture);
+    const instanceId = `task-${fixture.taskId}`;
+    await composition.start();
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:implement:1`),
+    });
+    await composition.scheduler.trigger();
+    await composition.escalation.replayPendingRoutes();
+    await composition.scheduler.trigger();
+
+    // Nobody is asked in the adjudicator's place; the operator sees why.
+    expect(composition.escalation.pendingEscalations(instanceId)).toEqual([]);
+    const held = composition.attention
+      .list()
+      .filter(({ kind }) => kind === "production-error");
+    expect(held).toEqual([
+      expect.objectContaining({
+        attentionId: `lifecycle:question-role:${instanceId}:confirm:1`,
+        kind: "production-error",
+        message: expect.stringContaining(
+          'Question node "confirm" asks the adjudicator, and this deployment composes no adjudication.',
+        ),
+      }),
+    ]);
+    expect(
+      readLifecycleContext(composition.persistence.getInstance(instanceId)!),
+    ).toMatchObject({ awaitingNodeIds: ["confirm"], status: "awaiting" });
+    expect(composition.persistence.listIncidentRuntime()).toEqual([]);
+    await composition.close();
+
+    // Composing adjudication and restarting asks the adjudicator.
+    fixture.configuration.adjudication = {
+      policyPath: "adjudication/policy.json",
+      providerAlias: "primary",
+    };
+    const second = compose(fixture);
+    await second.start();
+    await second.scheduler.trigger();
+    await second.escalation.replayPendingRoutes();
+    expect(second.escalation.pendingEscalations(instanceId)).toEqual([
+      expect.objectContaining({
+        answeringAuthority: expect.objectContaining({ kind: "adjudication" }),
+        question: { nodeId: "confirm", visit: 1 },
+      }),
+    ]);
+    await second.close();
+  });
+
   it("asks the adjudicator and takes its answer as the node's output", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

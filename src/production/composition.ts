@@ -346,7 +346,13 @@ export const createProductionComposition = (
         activeSessions: () => productionActiveSessions(persistence!, t3),
         evaluator: pacing,
       },
-      new LifecycleQuestionCoordinator(persistence, () => escalation),
+      new LifecycleQuestionCoordinator(persistence, () => escalation, {
+        adjudication: configuration.adjudication !== undefined,
+        attention: {
+          has: (attentionId) => attention.has(attentionId),
+          raise: (value) => attention.raise(value),
+        },
+      }),
     );
     let escalation!: EscalationCoordinator;
     const lifecycleAttentionBridge = new LifecycleAttentionBridge(

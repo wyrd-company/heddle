@@ -71,7 +71,10 @@ A wait on a role. `params.role` is `operator` or `adjudicator`;
 `question`, `header`, and each option's `description` are templates over the
 [lifecycle projection](#the-lifecycle-projection) and `task`. Question ids are unique within the node. An `operator` question is
 an attention card; an `adjudicator` question opens a scoped adjudication
-session. The answer is the node's output:
+session. A deployment that composes no adjudication does not ask the operator
+in its place: the lifecycle holds at the node and raises
+`lifecycle-question-role-unavailable` once per occurrence, until adjudication
+is configured or the blueprint changes. The answer is the node's output:
 
 ```json
 {

@@ -1524,6 +1524,17 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
     }
     const sameStage = runtime.stageId === stageId;
     if (sameStage && runtime.state === "waiting") {
+      // A question node waits on a role; asking is idempotent per occurrence,
+      // so a pass re-routes an open question and asks one that was held
+      // because the deployment could not supply its role.
+      const awaited = await this.lifecycle.awaitingNode(runtime.instanceId);
+      if (awaited?.uses === questionNodeUse && this.questions !== undefined) {
+        await this.questions.ask({
+          instanceId: runtime.instanceId,
+          node: awaited,
+          task,
+        });
+      }
       const preparedBoardStatus = await this.boardStatusFor(
         runtime.instanceId,
         "prepare-worktree",

@@ -26,6 +26,9 @@ export const operatorOnlyProductionErrorCodes = new Set<string>([
   // A blueprint's own fail node is a decision, not a production error to
   // diagnose; it reaches the operator and never admits an incident.
   "lifecycle-failed",
+  // A blueprint asked a role the deployment does not compose; only the
+  // operator can change the deployment or the blueprint.
+  "lifecycle-question-role-unavailable",
   "provider-alias-exhausted",
   "provider-fallback-active",
   schedulerPassFailureCode,

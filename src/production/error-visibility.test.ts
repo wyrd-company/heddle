@@ -21,6 +21,7 @@ describe("production error visibility", () => {
         "dynamic-task-authority-failed",
         "incident-execution-failed",
         "lifecycle-failed",
+        "lifecycle-question-role-unavailable",
         "provider-alias-exhausted",
         "provider-fallback-active",
         "scheduler-pass-failed",
