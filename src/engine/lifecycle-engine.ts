@@ -44,6 +44,7 @@ import {
   initialInstanceState,
   persistExecution,
   readLifecycleContext,
+  releasePendingTransition,
   resumeOperationFingerprint,
   writeLifecycleContext,
 } from "./lifecycle-state.js";
@@ -557,8 +558,11 @@ export class LifecycleEngine {
 
   /**
    * A resume whose disposition selects zero or several edges, or whose
-   * condition fails to evaluate, stops before Flowcraft runs. The transition
-   * stays pending and the cause is durable attention naming the edge.
+   * condition fails to evaluate, stops before Flowcraft runs. The cause is
+   * durable attention naming the edge, and the transition is released: the
+   * failure is deterministic over the pinned blueprint and the recorded
+   * output, so a replay would fail the same way and only a corrected resume
+   * can move the instance.
    */
   private recordRoutingFailure(
     record: InstanceRecord,
@@ -603,6 +607,7 @@ export class LifecycleEngine {
       },
     );
     flushPendingAttentions(this.persistence, record.instanceId);
+    releasePendingTransition(this.persistence, record.instanceId, pending.id);
   }
 
   private contextForCompletedOperation(

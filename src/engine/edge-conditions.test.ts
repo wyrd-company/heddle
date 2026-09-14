@@ -196,6 +196,42 @@ describe("edge conditions", () => {
     fixture.persistence.close();
   });
 
+  it("accepts a corrected resume after a routing failure", async () => {
+    const fixture = await makeFixture(
+      guardedAdjust(
+        "result.output.dispositions.adjust and result.output.round > 10",
+        "result.output.dispositions.adjust and result.output.round > 20",
+      ),
+    );
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "recovered",
+    });
+    await expect(
+      fixture.engine.resume({
+        disposition: "adjust",
+        instanceId: "recovered",
+        operationId: "round-1",
+        output: { round: 1 },
+      }),
+    ).rejects.toThrow(EdgeRoutingError);
+    const corrected = await fixture.engine.resume({
+      disposition: "adjust",
+      instanceId: "recovered",
+      operationId: "round-2",
+      output: { round: 11 },
+    });
+    expect(corrected).toMatchObject({
+      awaitingNodeIds: ["taste"],
+      status: "awaiting",
+    });
+    expect(fixture.invocations.map(({ effect }) => effect)).toEqual([
+      "mix",
+      "season",
+    ]);
+    fixture.persistence.close();
+  });
+
   it("fails closed with attention when a disposition matches several edges", async () => {
     const fixture = await makeFixture(
       guardedAdjust(

@@ -255,3 +255,34 @@ export const persistExecution = (
     if (claimed !== undefined) return readLifecycleContext(claimed);
   }
 };
+
+/**
+ * Releases the pending transition whose execution never started, so a later
+ * resume can claim the instance. The instance keeps the status and context it
+ * had before the transition was claimed.
+ */
+export const releasePendingTransition = (
+  persistence: LifecyclePersistence,
+  instanceId: string,
+  pendingTransitionId: string,
+): LifecycleContextRecord => {
+  while (true) {
+    const current = persistence.getInstance(instanceId);
+    if (current === undefined) {
+      throw new Error(`Instance does not exist: ${instanceId}`);
+    }
+    const currentContext = readLifecycleContext(current);
+    if (currentContext.pendingTransition?.id !== pendingTransitionId) {
+      return currentContext;
+    }
+    const claimed = persistence.compareAndSwapInstance(
+      instanceId,
+      current.version,
+      writeLifecycleContext(current.state, {
+        ...currentContext,
+        pendingTransition: null,
+      }),
+    );
+    if (claimed !== undefined) return readLifecycleContext(claimed);
+  }
+};
