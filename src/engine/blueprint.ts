@@ -156,6 +156,11 @@ export const validateBlueprint = (
       );
     }
     nodeIds.add(node.id);
+    if (typeof node.uses !== "string" || node.uses === "") {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} declares no uses; its id names nothing`,
+      );
+    }
   }
   const registry: Record<string, NodeFunction | typeof WaitNode> = {
     [questionNodeUse]: placeholderNode,
