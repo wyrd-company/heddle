@@ -287,6 +287,10 @@ describe("deployed configuration directory", () => {
 
     expect(loadedA.configuration.boardDirectory).toBe(join(root, "board-a"));
     expect(loadedA.configuration.stateDirectory).toBe(join(root, "state-a"));
+    expect(loadedA.blueprintsSourceRoot).toBe(join(workerA, "blueprints"));
+    expect(loadedA.blueprintsRepositoryRoot).toBe(
+      join(root, "state-a", "blueprints"),
+    );
     expect(loadedA.configuration.t3.baseUrl).toBe("http://127.0.0.1:4101");
     expect(loadedA.configuration.adjudication).toBeUndefined();
     expect(loadedA.configuration.pacing.providerBudgets).toEqual({});
@@ -319,6 +323,10 @@ describe("deployed configuration directory", () => {
       loadedB.configuration.adjudication?.approvalSettlementMilliseconds,
     ).toBe(defaultApprovalSettlementMilliseconds);
     expect(loadedB.configuration.stateDirectory).toBe(join(shared, "state"));
+    expect(loadedB.blueprintsSourceRoot).toBe(join(workerB, "blueprints"));
+    expect(loadedB.blueprintsRepositoryRoot).toBe(
+      join(shared, "state", "blueprints"),
+    );
     expect(loadedB.configuration.t3.baseUrl).toBe("http://127.0.0.1:3999");
     expect(loadedB.configuration.pacing.providerBudgets).toEqual({
       primary: { usageLimit: 80 },
@@ -575,12 +583,13 @@ describe("deployed configuration directory", () => {
   it("rejects a state path that aliases the shared blueprint source", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
     const configuration = fixture(root);
-    configuration.stateDirectory = root;
     await writeFile(join(root, "config.yml"), stringify(configuration));
+    const workerPath = join(root, "worker.yml");
+    await writeFile(workerPath, stringify({ stateDirectory: root }));
     await prepareBlueprintRepository(root);
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      "The blueprint source and worker synchronization checkout must use disjoint paths",
+      `field '/stateDirectory' from '${workerPath}': blueprint source and worker synchronization checkout must use disjoint paths`,
     );
   });
 
@@ -592,7 +601,7 @@ describe("deployed configuration directory", () => {
     await prepareBlueprintRepository(root);
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      "The blueprint source and worker synchronization checkout must use disjoint paths",
+      `field '/stateDirectory' from '${join(root, "config.yml")}': blueprint source and worker synchronization checkout must use disjoint paths`,
     );
   });
 

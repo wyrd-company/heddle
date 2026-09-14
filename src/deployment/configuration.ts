@@ -419,8 +419,9 @@ export const loadDeploymentConfiguration = async (
         (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`)),
     );
     if (pathsOverlap) {
-      throw new TypeError(
-        "The blueprint source and worker synchronization checkout must use disjoint paths",
+      throw invalidField(
+        "/stateDirectory",
+        "blueprint source and worker synchronization checkout must use disjoint paths",
       );
     }
     const loaded: LoadedDeploymentConfiguration = {

@@ -143,7 +143,8 @@ it does not repeat a path merely because the mounted data is worker-local.
 their source provenance and explicit clears as JSON. T3 and Pushover credential
 values are replaced with `[REDACTED]`. This command performs the same parsing,
 layering, validation, executable preflight and blueprint preflight as service
-startup, but does not bind a network endpoint or start production work.
+startup, but does not bind a network endpoint, create worker state, or start
+production work.
 
 The directory may also contain `heddle.md` and the required shared organization
 blueprint source at `blueprints/`. Unknown entries are ignored. Neither entry is
