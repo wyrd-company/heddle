@@ -363,6 +363,28 @@ describe("edge conditions", () => {
     fixture.persistence.close();
   });
 
+  it("names the edge when a condition yields a non-boolean", async () => {
+    const blueprint = sampleBlueprint();
+    blueprint.edges[1]!.condition = "result.output.round";
+    const fixture = await makeFixture(blueprint);
+    await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "numeric",
+    });
+    await expect(
+      fixture.engine.resume({
+        disposition: "adjust",
+        instanceId: "numeric",
+        operationId: "round-1",
+        output: { round: 2 },
+      }),
+    ).rejects.toThrow(EdgeConditionError);
+    expect(attentionMessages(fixture, "numeric")).toContain(
+      'Edge taste->season (adjust) condition "result.output.round" failed to evaluate: condition must yield a boolean, not number',
+    );
+    fixture.persistence.close();
+  });
+
   it("evaluates JSONata on the edges of a mechanical node", async () => {
     const blueprint = conditionalTerminalBlueprint();
     const leftEdge = blueprint.edges.find(({ target }) => target === "left");

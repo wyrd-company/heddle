@@ -130,20 +130,31 @@ export const assertConditionsCompile = (
   }
 };
 
+/**
+ * A condition yields a boolean, or nothing when its path is absent. Any other
+ * value is an authoring error named by edge and expression rather than a
+ * silent false that would surface later as "matched no edge".
+ */
 const evaluate = async (
   edge: LifecycleEdge,
   expression: string,
   data: Record<string, unknown>,
 ): Promise<boolean> => {
   const label = edgeLabel(edge);
+  let value: unknown;
   try {
-    const value: unknown = await compileCondition(expression, label).evaluate(
-      data,
-    );
-    return value === true;
+    value = await compileCondition(expression, label).evaluate(data);
   } catch (error) {
     throw new EdgeConditionError(label, expression, error);
   }
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new EdgeConditionError(
+      label,
+      expression,
+      new Error(`condition must yield a boolean, not ${typeof value}`),
+    );
+  }
+  return value === true;
 };
 
 export type EdgeRouting = Record<string, boolean>;
