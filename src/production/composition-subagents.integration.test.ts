@@ -3,7 +3,7 @@
 //   verifies: heddle
 // ---
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -602,6 +602,18 @@ describe("production subagent composition", () => {
       t3,
     });
     await composition.start();
+    const secondTaskWorktree = join(
+      fixture.configuration.session.worktreesRoot!,
+      String(fixture.taskId),
+      "second-repository",
+    );
+    await execute(
+      "git",
+      ["worktree", "remove", "--force", secondTaskWorktree],
+      {
+        cwd: secondRepositoryRoot,
+      },
+    );
     await execute(
       "kanban-md",
       [
@@ -689,6 +701,7 @@ describe("production subagent composition", () => {
       kind: "spawned",
     });
     if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    await expect(stat(join(secondTaskWorktree, ".git"))).resolves.toBeDefined();
     expect(readProviderUsage.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(
       readProviderUsage.mock.calls.every(([provider]) => provider === "codex"),
