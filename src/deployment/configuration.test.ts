@@ -227,10 +227,12 @@ describe("deployed configuration directory", () => {
     );
     const core = globalThis.structuredClone(fixture(root)) as unknown as {
       pushover: Record<string, unknown>;
+      stageThresholds: Record<string, unknown>;
       t3: Record<string, unknown>;
     };
     core.t3["accessToken"] = { file: "core-secrets/t3-access-token" };
     core.pushover["userKey"] = { file: "core-secrets/pushover-user-key" };
+    core.stageThresholds["referenced-t3-secret"] = 20_000;
     const workerPath = join(root, "worker.yml");
     await writeFile(join(root, "config.yml"), stringify(core));
     await writeFile(
@@ -262,6 +264,7 @@ describe("deployed configuration directory", () => {
     });
     expect(disclosure.configuration).toMatchObject({
       pushover: { applicationToken: "[REDACTED]", userKey: "[REDACTED]" },
+      stageThresholds: { "[REDACTED]": 20_000 },
       t3: { accessToken: "[REDACTED]" },
     });
     for (const secret of [
