@@ -593,14 +593,21 @@ export class DurablePushoverNotifier {
         `Attention '${page.attentionId}' has neither a production instance nor an explicit scope`,
       );
     }
-    const runtimes = this.persistence
-      .listReconcilerRuntime()
-      .filter(({ instanceId }) => instanceId === page.instanceId);
-    if (runtimes.length !== 1) {
+    // A task lifecycle is scoped by its reconciler runtime; an incident
+    // lifecycle by the incident runtime that owns the same instance id.
+    const owners = [
+      ...this.persistence
+        .listReconcilerRuntime()
+        .filter(({ instanceId }) => instanceId === page.instanceId),
+      ...this.persistence
+        .listIncidentRuntime()
+        .filter(({ incidentId }) => incidentId === page.instanceId),
+    ];
+    if (owners.length !== 1) {
       throw new Error(
         `Attention '${page.attentionId}' does not resolve to one production task`,
       );
     }
-    return `task:${runtimes[0]!.taskId}`;
+    return `task:${owners[0]!.taskId}`;
   }
 }

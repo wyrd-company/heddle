@@ -92,6 +92,46 @@ describe("durable production adapters", () => {
     persistence.close();
   });
 
+  it("emits the lifecycle route of the task an incident instance belongs to", async () => {
+    directory = await mkdtemp(
+      join(tmpdir(), "heddle-pushover-incident-route-"),
+    );
+    const persistence = new SqlitePersistence({ stateDirectory: directory });
+    persistence.writeIncidentRuntime({
+      attentionId: "source-18",
+      code: "sample-condition-observed",
+      createdAt: 1,
+      incidentId: "incident:sample",
+      occurrence: 1,
+      state: "waiting",
+      taskId: 18,
+    });
+    const transport = { send: vi.fn(async () => undefined) };
+
+    await new DurablePushoverNotifier(
+      persistence,
+      {
+        apiUrl: "https://notify.invalid/messages",
+        applicationToken: "application-token",
+        consoleBaseUrl: "https://console.invalid/",
+        userKey: "operator-key",
+      },
+      transport,
+    ).send({
+      attentionId: "attention-18",
+      instanceId: "incident:sample",
+      message: "An incident question needs an operator",
+    });
+
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stableId: "attention-18",
+        url: "https://console.invalid/?view=lifecycle&task=18&scope=all&attention=attention-18",
+      }),
+    );
+    persistence.close();
+  });
+
   it("retains the all-work Pushover attention route", async () => {
     directory = await mkdtemp(join(tmpdir(), "heddle-pushover-all-route-"));
     const persistence = new SqlitePersistence({ stateDirectory: directory });
