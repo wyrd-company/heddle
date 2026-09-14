@@ -15,13 +15,10 @@ export const sampleHandoffTemplate = {
 
 export const readSampleHandoffTemplate: HandoffTemplateResolver = async (
   reference,
-  _skillNames,
-  input,
 ) => ({
   ...reference,
   body: "# {{ task.title }}\n\nStage: {{ handoff.stage.name }}\n",
   includes: {},
-  kind: input.handoff.stage.kind,
   skills: {},
 });
 

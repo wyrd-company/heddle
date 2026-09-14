@@ -126,7 +126,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: standard
 ---
 # Incident {{ handoff.taskContract.incident.incidentId }}
 `,
@@ -194,7 +193,6 @@ kind: standard
           nodes: [
             { id: "begin", uses: "complete" },
             {
-              handoff: "standard",
               "handoff-template": {
                 commitSha: templateCommit,
                 path: "handoff-templates/incident.md",
@@ -208,7 +206,6 @@ kind: standard
               config: { joinStrategy: "any" },
             },
             {
-              handoff: "standard",
               "handoff-template": {
                 commitSha: templateCommit,
                 path: "handoff-templates/incident.md",
@@ -220,7 +217,6 @@ kind: standard
               config: { joinStrategy: "any" },
             },
             {
-              handoff: "standard",
               "handoff-template": {
                 commitSha: templateCommit,
                 path: "handoff-templates/incident.md",

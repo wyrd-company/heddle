@@ -236,8 +236,7 @@ export const renderStageHandoff = (input: HandoffRenderInput): string => {
     typeof stage !== "object" ||
     stage === null ||
     Array.isArray(stage) ||
-    stage["name"] !== input.stage ||
-    stage["kind"] !== input.template.kind
+    stage["name"] !== input.stage
   ) {
     throw new HandoffRenderError(
       "Stored handoff and pinned template stage metadata disagree",

@@ -85,7 +85,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: standard
 ---
 # Incident {{ handoff.taskContract.incident.incidentId }}
 
@@ -125,7 +124,6 @@ Stage {{ handoff.stage.name }}
     ...(id === "implement" || id === "review"
       ? { config: { joinStrategy: "any" } }
       : {}),
-    handoff: "standard",
     "handoff-template": {
       commitSha: templateCommit,
       path: "handoff-templates/incident.md",

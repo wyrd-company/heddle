@@ -14,7 +14,6 @@ export type HandoffStageEntry = {
 export type HandoffStage = {
   agentName?: string;
   entry?: HandoffStageEntry | null;
-  kind: string;
   name: string;
   priorStageOutputs: JsonValue[];
   skills?: string[];
@@ -47,7 +46,6 @@ export const assembleStageHandoff = (input: StageHandoffInput): string => {
       ? {}
       : { agentName: input.stage.agentName }),
     entry: input.stage.entry ?? null,
-    kind: input.stage.kind,
     name: input.stage.name,
     priorStageOutputs: input.stage.priorStageOutputs,
     skills: input.stage.skills ?? [],

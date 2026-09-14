@@ -28,7 +28,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: standard
 ---
 # {{ task.title }}
 
@@ -47,7 +46,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: remediation
 ---
 # {{ task.title }}
 
@@ -426,7 +424,6 @@ bystanders: [sample-bystander]
         ],
         nodes: [
           {
-            handoff: "standard",
             "handoff-template": {
               commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",
@@ -446,7 +443,6 @@ bystanders: [sample-bystander]
           },
           {
             id: "review",
-            handoff: "standard",
             "handoff-template": {
               commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",
@@ -466,7 +462,6 @@ bystanders: [sample-bystander]
           },
           {
             id: "remediate",
-            handoff: "remediation",
             "handoff-template": {
               commitSha: templateCommitSha,
               path: "handoff-templates/remediation.md",
@@ -513,7 +508,6 @@ bystanders: [sample-bystander]
         nodes: [
           { id: "prepare-worktree", uses: "prepare-worktree" },
           {
-            handoff: "standard",
             "handoff-template": {
               commitSha: templateCommitSha,
               path: "handoff-templates/standard.md",

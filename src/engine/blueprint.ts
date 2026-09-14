@@ -245,19 +245,6 @@ export const validateBlueprint = (
         `Non-wait node ${JSON.stringify(node.id)} must not assign an agent name`,
       );
     }
-    if (
-      node.handoff !== undefined &&
-      !/^[a-z]+(?:-[a-z]+)*$/.test(node.handoff)
-    ) {
-      throw new BlueprintValidationError(
-        `Node ${JSON.stringify(node.id)} has invalid handoff metadata`,
-      );
-    }
-    if (isAgentWait && node.handoff === undefined) {
-      throw new BlueprintValidationError(
-        `Agent wait node ${JSON.stringify(node.id)} has no handoff metadata`,
-      );
-    }
     const handoffTemplate = node["handoff-template"] as
       Record<string, unknown> | undefined;
     if (
@@ -280,11 +267,6 @@ export const validateBlueprint = (
     ) {
       throw new BlueprintValidationError(
         `Agent wait node ${JSON.stringify(node.id)} has no valid pinned handoff template`,
-      );
-    }
-    if (node.uses !== "wait" && node.handoff !== undefined) {
-      throw new BlueprintValidationError(
-        `Non-wait node ${JSON.stringify(node.id)} must not declare handoff metadata`,
       );
     }
     if (node.uses !== "wait" && node["handoff-template"] !== undefined) {

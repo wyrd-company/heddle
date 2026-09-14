@@ -84,7 +84,7 @@ export const readProductionHandoffStage = async (input: {
     context.blueprintPath,
   );
   const node = blueprint.nodes.find(({ id }) => id === input.stageId);
-  if (node?.uses !== "wait" || typeof node.handoff !== "string") {
+  if (node?.uses !== "wait") {
     throw new Error(
       `Stage ${JSON.stringify(input.stageId)} has no valid handoff metadata`,
     );
@@ -128,7 +128,6 @@ export const readProductionHandoffStage = async (input: {
       : { agentNameList: node["assign-agent-name"] }),
     handoff: {
       entry,
-      kind: node.handoff,
       name: input.stageId,
       priorStageOutputs: [
         ...outputs.map(({ output }) => output),

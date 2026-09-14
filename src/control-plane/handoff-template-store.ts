@@ -20,9 +20,6 @@ const validSkillName = (name: string): boolean =>
   name.length <= 64 && artifactId.test(name);
 const schemaId = "https://wyrd.company/heddle/handoff-template.schema.json";
 
-/** Any kebab-case word; a stage's `handoff` must name the same kind. */
-export type HandoffTemplateKind = string;
-
 export type PinnedHandoffTemplateReference = {
   commitSha: string;
   path: string;
@@ -31,7 +28,6 @@ export type PinnedHandoffTemplateReference = {
 export type PinnedHandoffTemplate = PinnedHandoffTemplateReference & {
   body: string;
   includes: Readonly<Record<string, string>>;
-  kind: HandoffTemplateKind;
   skills: Readonly<Record<string, PinnedSkill>>;
 };
 
@@ -90,13 +86,11 @@ const parseTemplate = (
     metadata === null ||
     Array.isArray(metadata) ||
     Object.keys(metadata).sort().join(",") !==
-      "$schema,format,kind,relationships,version" ||
+      "$schema,format,relationships,version" ||
     (metadata as Record<string, unknown>)["$schema"] !== schemaId ||
     (metadata as Record<string, unknown>)["format"] !==
       "heddle.handoff-template" ||
     (metadata as Record<string, unknown>)["version"] !== 1 ||
-    typeof (metadata as Record<string, unknown>)["kind"] !== "string" ||
-    !artifactId.test((metadata as Record<string, unknown>)["kind"] as string) ||
     JSON.stringify((metadata as Record<string, unknown>)["relationships"]) !==
       JSON.stringify({ implements: "heddle" })
   ) {
@@ -111,7 +105,6 @@ const parseTemplate = (
   return {
     ...reference,
     body,
-    kind: (metadata as { kind: HandoffTemplateKind }).kind,
   };
 };
 

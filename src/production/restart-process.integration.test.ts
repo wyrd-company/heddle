@@ -347,7 +347,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: standard
 ---
 # {{ task.title }}
 `;
@@ -411,7 +410,6 @@ kind: standard
         nodes: [
           { id: "prepare-worktree", uses: "prepare-worktree" },
           {
-            handoff: "standard",
             "handoff-template": {
               commitSha: handoffTemplateCommitSha,
               path: "handoff-templates/standard.md",

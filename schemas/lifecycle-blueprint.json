@@ -97,9 +97,6 @@
             "pattern": "^[a-z]+(?:_[a-z]+)*$"
           }
         },
-        "handoff": {
-          "$ref": "#/$defs/artifact-id"
-        },
         "handoff-template": {
           "type": "object",
           "additionalProperties": false,
@@ -214,12 +211,7 @@
             "required": ["uses"]
           },
           "then": {
-            "required": [
-              "handoff",
-              "handoff-template",
-              "tools",
-              "todo-template"
-            ]
+            "required": ["handoff-template", "tools", "todo-template"]
           },
           "else": {
             "not": {
@@ -229,9 +221,6 @@
                 },
                 {
                   "required": ["todo-template"]
-                },
-                {
-                  "required": ["handoff"]
                 },
                 {
                   "required": ["handoff-template"]

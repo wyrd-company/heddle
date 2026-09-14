@@ -46,7 +46,6 @@ export {
   GitHandoffTemplateStore,
   HandoffTemplateError,
   validateAgentSkillSource,
-  type HandoffTemplateKind,
   type PinnedHandoffTemplate,
   type PinnedHandoffTemplateReference,
 } from "./handoff-template-store.js";

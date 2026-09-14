@@ -65,7 +65,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: standard
 ---
 # {{ task.title }}
 
@@ -124,7 +123,6 @@ const blueprint = (
     { id: "prepare", uses: "prepare" },
     {
       id: "assess",
-      handoff: "standard",
       "handoff-template": {
         commitSha: handoffTemplateCommitSha,
         path: "handoff-templates/standard.md",
@@ -135,7 +133,6 @@ const blueprint = (
     },
     {
       id: "inspect",
-      handoff: "standard",
       "handoff-template": {
         commitSha: handoffTemplateCommitSha,
         path: "handoff-templates/standard.md",
@@ -356,7 +353,6 @@ const makeFixture = async () => {
         handoff: {
           skillPointer: "skills/sample.md",
           stage: {
-            kind: "standard",
             name: stage,
             priorStageOutputs: [],
           },
@@ -1331,7 +1327,7 @@ describe("workflow MCP HTTP server", () => {
     const handoff = assembleStageHandoff({
       correlationToken: "child-token",
       skillPointer: "skills/sample.md",
-      stage: { kind: "standard", name: "assess", priorStageOutputs: [] },
+      stage: { name: "assess", priorStageOutputs: [] },
       taskContract: { id: 11, title: "Prepare a sample" },
       todoList: record.state.todoState,
     });
@@ -1556,7 +1552,6 @@ describe("workflow MCP HTTP server", () => {
         correlationToken: token,
         skillPointer: "skills/sample.md",
         stage: {
-          kind: "standard" as const,
           name: "assess",
           priorStageOutputs: [],
         },

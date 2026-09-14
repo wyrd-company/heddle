@@ -623,7 +623,6 @@ export class SubagentCoordinator {
           skillPointer: this.#skillPointer(parent),
           stage: {
             agentName: this.#childAgentName(parent, assignment.sessionKey),
-            kind: "standard",
             name: parent.stage.id,
             priorStageOutputs: [],
             skills: [...parent.stage.skills],

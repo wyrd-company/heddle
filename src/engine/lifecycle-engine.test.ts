@@ -37,7 +37,6 @@ describe("LifecycleEngine", () => {
       blueprint.nodes.find(({ id }) => id === "taste")!,
       {
         "assign-agent-name": "heroes",
-        handoff: "standard",
         "handoff-template": {
           commitSha: "a".repeat(40),
           path: "handoff-templates/sample.md",
@@ -56,7 +55,6 @@ describe("LifecycleEngine", () => {
       changed.nodes.find(({ id }) => id === "taste")!,
       {
         "assign-agent-name": "allies",
-        handoff: "standard",
         "handoff-template": {
           commitSha: "a".repeat(40),
           path: "handoff-templates/sample.md",

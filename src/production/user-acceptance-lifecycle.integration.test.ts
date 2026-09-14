@@ -34,7 +34,6 @@ const installUserAcceptanceLifecycle = async (
   if (template === undefined) throw new Error("Sample handoff is absent");
   const wait = (id: string) => ({
     "assign-agent-name": "heroes",
-    handoff: "standard",
     "handoff-template": template,
     id,
     "provider-alias": "primary",

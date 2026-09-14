@@ -20,7 +20,6 @@ const blueprint = (): LifecycleBlueprint => ({
   ],
   nodes: [
     {
-      handoff: "standard",
       "handoff-template": {
         commitSha: "a".repeat(40),
         path: "handoff-templates/standard.md",
@@ -38,24 +37,6 @@ const validate = (value: LifecycleBlueprint): void =>
   validateBlueprint(value, { finish: async () => null });
 
 describe("lifecycle blueprint handoff metadata", () => {
-  it("rejects an agent wait with missing handoff metadata", () => {
-    const value = blueprint();
-    delete value.nodes[0]!.handoff;
-
-    expect(() => validate(value)).toThrow(
-      'Agent wait node "prepare" has no handoff metadata',
-    );
-  });
-
-  it("rejects invalid handoff metadata", () => {
-    const value = blueprint();
-    value.nodes[0]!.handoff = "Private Handoff";
-
-    expect(() => validate(value)).toThrow(
-      'Node "prepare" has invalid handoff metadata',
-    );
-  });
-
   it("rejects an agent wait without a pinned handoff template", () => {
     const value = blueprint();
     delete value.nodes[0]!["handoff-template"];
@@ -140,15 +121,6 @@ describe("lifecycle blueprint handoff metadata", () => {
       );
     },
   );
-
-  it("rejects handoff metadata on a non-wait node", () => {
-    const value = blueprint();
-    value.nodes[1]!.handoff = "standard";
-
-    expect(() => validate(value)).toThrow(
-      'Non-wait node "finish" must not declare handoff metadata',
-    );
-  });
 
   it("accepts a declared repository only on a wait node", () => {
     const value = blueprint();

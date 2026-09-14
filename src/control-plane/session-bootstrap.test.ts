@@ -94,7 +94,6 @@ describe("stage session bootstrap", () => {
           handoff: {
             skillPointer: "skill://prepare",
             stage: {
-              kind: "standard",
               name: "prepare",
               priorStageOutputs: [],
             },
@@ -176,7 +175,6 @@ describe("stage session bootstrap", () => {
           handoff: {
             skillPointer: "skill://prepare",
             stage: {
-              kind: "standard",
               name: "prepare",
               priorStageOutputs: [],
             },
@@ -262,7 +260,6 @@ describe("stage session bootstrap", () => {
             handoff: {
               skillPointer: "skill://prepare",
               stage: {
-                kind: "standard",
                 name: "prepare",
                 priorStageOutputs: [],
               },
@@ -325,7 +322,6 @@ describe("stage session bootstrap", () => {
             handoff: {
               skillPointer: "skill://prepare",
               stage: {
-                kind: "standard",
                 name: "prepare",
                 priorStageOutputs: [],
               },
@@ -436,7 +432,6 @@ describe("stage session bootstrap", () => {
       handoff: {
         skillPointer: "skill://prepare",
         stage: {
-          kind: "standard" as const,
           name: "prepare",
           priorStageOutputs: [],
         },
@@ -518,7 +513,6 @@ describe("stage session bootstrap", () => {
       handoff: {
         skillPointer: "skill://prepare",
         stage: {
-          kind: "standard" as const,
           name: "prepare",
           priorStageOutputs: [],
         },
@@ -611,7 +605,6 @@ describe("stage session bootstrap", () => {
       handoff: {
         skillPointer: "skill://prepare",
         stage: {
-          kind: "standard" as const,
           name: "prepare",
           priorStageOutputs: [],
         },
@@ -774,7 +767,7 @@ describe("stage session bootstrap", () => {
       {
         handoff: {
           skillPointer: "skill://prepare",
-          stage: { kind: "standard", name: "prepare", priorStageOutputs: [] },
+          stage: { name: "prepare", priorStageOutputs: [] },
           taskContract: { title: "Prepare inventory" },
         },
         instanceId: "instance-1",
@@ -890,7 +883,7 @@ describe("stage session bootstrap", () => {
       {
         handoff: {
           skillPointer: "skill://prepare",
-          stage: { kind: "standard", name: "prepare", priorStageOutputs: [] },
+          stage: { name: "prepare", priorStageOutputs: [] },
           taskContract: { title: "Prepare inventory" },
         },
         instanceId: "instance-projected",

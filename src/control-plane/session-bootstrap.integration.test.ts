@@ -211,7 +211,7 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
       {
         handoff: {
           skillPointer: "skill://prepare",
-          stage: { kind: "standard", name: "prepare", priorStageOutputs: [] },
+          stage: { name: "prepare", priorStageOutputs: [] },
           taskContract: { title: "Prepare inventory" },
         },
         instanceId: "instance-1",

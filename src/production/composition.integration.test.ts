@@ -3211,7 +3211,6 @@ describe("production composition", () => {
       body: expectedTemplateBytes.slice(bodyBoundary + "\n---\n".length),
       includes: {},
       skills: {},
-      kind: "standard" as const,
     };
     const task = await composition.board.readTask(fixture.taskId);
     const expectedHandoff = renderStageHandoff({

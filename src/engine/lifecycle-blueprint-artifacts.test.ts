@@ -55,7 +55,6 @@ const artifact = (commitSha = "a".repeat(40)) => ({
   nodes: [
     { id: "prepare", uses: "prepare" },
     {
-      handoff: "standard",
       "handoff-template": {
         commitSha,
         path: "handoff-templates/sample-handoff.md",
@@ -462,27 +461,6 @@ describe("organization lifecycle blueprint artifacts", () => {
     );
   });
 
-  it("accepts any kebab-case handoff kind and rejects other spellings", async () => {
-    const withKind = async (kind: string): Promise<string> => {
-      const root = await repository();
-      const value = JSON.parse(
-        await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
-      ) as ReturnType<typeof artifact>;
-      (value.nodes[1] as Record<string, unknown>)["handoff"] = kind;
-      await writeFile(
-        join(root, "blueprints/sample-process.json"),
-        `${JSON.stringify(value, null, 2)}\n`,
-      );
-      return root;
-    };
-    await expect(
-      validateBlueprintRepository(await withKind("repair-instructions")),
-    ).resolves.toEqual(["sample-process"]);
-    await expect(
-      validateBlueprintRepository(await withKind("Repair Instructions")),
-    ).rejects.toThrow(/violates the lifecycle schema/);
-  });
-
   it("rejects an output contract artifact that is not a JSON Schema", async () => {
     const root = await withOutputContract("sample-findings");
     await writeFile(
@@ -491,22 +469,6 @@ describe("organization lifecycle blueprint artifacts", () => {
     );
     await expect(validateBlueprintRepository(root)).rejects.toThrow(
       /output contract 'sample-findings' is not a valid JSON Schema/,
-    );
-  });
-
-  it("rejects a handoff kind that is not a kebab-case word at the interpreter", () => {
-    const invalid = deliveryBlueprintFixture("trivial");
-    invalid.nodes.find(({ id }) => id === "implement")!.handoff =
-      "Repair Instructions";
-    const blueprint = { ...invalid, id: "trivial" } as LifecycleBlueprint;
-    const effects = Object.fromEntries(
-      blueprint.nodes
-        .filter(({ uses }) => uses !== "wait")
-        .map(({ uses }) => [uses, async () => ({})]),
-    ) as Record<string, LifecycleEffect>;
-
-    expect(() => validateBlueprint(blueprint, effects)).toThrow(
-      'Node "implement" has invalid handoff metadata',
     );
   });
 
@@ -702,18 +664,6 @@ describe("organization lifecycle blueprint artifacts", () => {
       "names todo template 'sample-checklist' that has no artifact in todo-templates/",
     );
   });
-
-  it.each(["standard-delivery", "trivial"] as const)(
-    "rejects inconsistent %s wait-stage handoff metadata",
-    async (artifactId) => {
-      const invalid = deliveryArtifact(artifactId);
-      invalid.nodes.find(({ id }) => id === "remediate")!.handoff = "standard";
-
-      await expect(
-        validateBlueprintRepository(await repository(invalid, artifactId)),
-      ).rejects.toThrow("inconsistent delivery handoff metadata");
-    },
-  );
 
   it.each(["standard-delivery", "trivial"] as const)(
     "rejects a %s merge reached by the reject disposition",

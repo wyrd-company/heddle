@@ -39,7 +39,6 @@ const waitNode = (
   id: "implement" | "review" | "remediate" | "retrospective",
   todoTemplate: string,
 ): LifecycleNode => ({
-  handoff: id === "remediate" ? "remediation" : "standard",
   "handoff-template":
     id === "remediate" ? remediationTemplate : standardTemplate,
   id,

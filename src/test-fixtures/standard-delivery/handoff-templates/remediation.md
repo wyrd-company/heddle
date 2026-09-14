@@ -4,7 +4,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: remediation
 ---
 
 # {{ task.title }}

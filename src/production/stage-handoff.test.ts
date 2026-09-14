@@ -239,7 +239,6 @@ describe("production stage handoff", () => {
     expect(review).toMatchObject({
       agentNameList: "antagonists",
       handoff: {
-        kind: "standard",
         name: "review",
         priorStageOutputs: [
           { result: "ready" },
@@ -337,7 +336,6 @@ describe("production stage handoff", () => {
             transcript: ["private review discussion"],
           },
         },
-        kind: "remediation",
         name: "remediate",
       },
     });
@@ -368,7 +366,6 @@ describe("production stage handoff", () => {
           node: "merge",
           output: { merged: false, remediationCause: driftCause },
         },
-        kind: "remediation",
       },
     });
     persistence.close();

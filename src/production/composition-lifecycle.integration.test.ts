@@ -278,7 +278,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: standard
 ---
 {% include "handoff-templates/includes/../outside.md" %}
 `;
@@ -1115,7 +1114,6 @@ kind: standard
           handoff: {
             skillPointer: configuration.session.skillPointer,
             stage: {
-              kind: "remediation",
               name: "implement",
               review: { findings: [] },
             },

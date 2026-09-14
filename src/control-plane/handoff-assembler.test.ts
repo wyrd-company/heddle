@@ -14,7 +14,6 @@ describe("assembleStageHandoff", () => {
     const first = assembleStageHandoff({
       correlationToken: "correlation-token",
       stage: {
-        kind: "standard",
         name: "prepare",
         priorStageOutputs: [{ result: "ready", count: 2 }],
         skills: ["evidence-review"],
@@ -36,7 +35,6 @@ describe("assembleStageHandoff", () => {
       stage: {
         priorStageOutputs: [{ count: 2, result: "ready" }],
         name: "prepare",
-        kind: "standard",
         skills: ["evidence-review"],
       },
       correlationToken: "correlation-token",
@@ -48,7 +46,7 @@ describe("assembleStageHandoff", () => {
     });
   });
 
-  it("carries the entry node and its output for any handoff kind", () => {
+  it("carries the entry node and its output", () => {
     const handoff = assembleStageHandoff({
       correlationToken: "correlation-token",
       stage: {
@@ -59,7 +57,6 @@ describe("assembleStageHandoff", () => {
             findings: [{ code: "P1", summary: "The total is not checked" }],
           },
         },
-        kind: "repair-instructions",
         name: "repair",
         priorStageOutputs: [{ result: "ready" }],
       },
@@ -77,7 +74,6 @@ describe("assembleStageHandoff", () => {
             findings: [{ code: "P1", summary: "The total is not checked" }],
           },
         },
-        kind: "repair-instructions",
         name: "repair",
         priorStageOutputs: [{ result: "ready" }],
         skills: [],

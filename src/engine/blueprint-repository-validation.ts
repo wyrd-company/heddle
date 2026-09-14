@@ -207,29 +207,6 @@ const assertTemplateArtifacts = async (
   }
 };
 
-const assertDeliveryHandoffs = (
-  artifactId: string,
-  nodes: LifecycleNode[],
-): void => {
-  if (artifactId !== "standard-delivery" && artifactId !== "trivial") return;
-  const handoffs = nodes
-    .filter(({ uses }) => uses === "wait")
-    .map(({ handoff, id }) => ({ handoff, id }));
-  const expected = [
-    { handoff: "standard", id: "implement" },
-    { handoff: "standard", id: "review" },
-    { handoff: "remediation", id: "remediate" },
-    ...(artifactId === "standard-delivery"
-      ? [{ handoff: "standard" as const, id: "retrospective" }]
-      : []),
-  ];
-  if (JSON.stringify(handoffs) !== JSON.stringify(expected)) {
-    throw new BlueprintValidationError(
-      `Blueprint '${artifactId}' has inconsistent delivery handoff metadata`,
-    );
-  }
-};
-
 const assertAgentNameThemeAvailability = (
   artifactId: string,
   blueprint: LifecycleBlueprint,
@@ -302,7 +279,6 @@ export const validateBlueprintRepository = async (
       artifact as Record<string, unknown>,
       blueprint,
     );
-    assertDeliveryHandoffs(artifactId, blueprint.nodes);
     await assertTemplateArtifacts(artifactId, blueprint.nodes, root);
     await assertOutputContractArtifacts(artifactId, blueprint, root);
   }

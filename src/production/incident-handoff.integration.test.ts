@@ -36,7 +36,6 @@ relationships:
   implements: heddle
 format: heddle.handoff-template
 version: 1
-kind: standard
 ---
 # Incident {{ handoff.taskContract.incident.incidentId }}
 
@@ -129,7 +128,6 @@ describe("production incident handoff", () => {
         nodes: [
           { id: "begin", uses: "complete" },
           {
-            handoff: "standard",
             "handoff-template": {
               commitSha: templateCommit,
               path: "handoff-templates/incident.md",

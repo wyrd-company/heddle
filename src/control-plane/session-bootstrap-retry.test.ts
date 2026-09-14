@@ -21,7 +21,7 @@ import {
 const input: SessionBootstrapInput = {
   handoff: {
     skillPointer: "skill://prepare",
-    stage: { kind: "standard", name: "prepare", priorStageOutputs: [] },
+    stage: { name: "prepare", priorStageOutputs: [] },
     taskContract: { title: "Prepare inventory" },
   },
   instanceId: "instance-1",
@@ -243,7 +243,6 @@ describe("stage session cold retry guards", () => {
             ...reference,
             body,
             includes,
-            kind: "standard",
             skills: {},
           }),
         },
@@ -297,7 +296,6 @@ describe("stage session cold retry guards", () => {
               ...reference,
               body: '{{ skill("evidence-review").description }}',
               includes: {},
-              kind: "standard",
               skills: {
                 "evidence-review": {
                   description: "Inspect evidence.",

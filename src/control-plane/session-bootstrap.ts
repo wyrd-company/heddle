@@ -289,7 +289,6 @@ const resolveWorkflowMcpStageContract = async (
   }
   if (
     stage?.uses !== "wait" ||
-    stage.handoff !== input.handoff.stage.kind ||
     !Array.isArray(stage.tools) ||
     typeof stage["todo-template"] !== "string" ||
     typeof stage["handoff-template"] !== "object" ||

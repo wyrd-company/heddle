@@ -40,7 +40,6 @@ const artifact = {
   nodes: [
     { id: "prepare", uses: "prepare" },
     {
-      handoff: "standard",
       "handoff-template": {
         commitSha: "a".repeat(40),
         path: "handoff-templates/sample.md",
