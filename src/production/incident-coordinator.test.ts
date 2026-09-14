@@ -73,6 +73,7 @@ class IncidentHarness {
 
   constructor(readonly persistence: SqlitePersistence) {
     this.lifecycle = {
+      endedInFailure: vi.fn(async () => false),
       plannedStartStage: vi.fn(async () => "implement"),
       start: vi.fn(async ({ instanceId }: { instanceId: string }) => {
         if (this.persistence.getInstance(instanceId) === undefined) {
@@ -101,6 +102,16 @@ class IncidentHarness {
                 : runtime.stageId === "review" && input.disposition === "reject"
                   ? "implement"
                   : undefined;
+          if (
+            runtime.stageId === "finalize" &&
+            input.disposition === "complete"
+          ) {
+            this.persistence.updateInstance(
+              input.instanceId,
+              lifecycleState(undefined),
+            );
+            return this.snapshot(input.instanceId, undefined);
+          }
           this.persistence.updateInstance(
             input.instanceId,
             lifecycleState(next),
@@ -545,8 +556,11 @@ describe("production incident coordinator", () => {
     expect(persistence!.listIncidentRuntime()).toHaveLength(1);
   });
 
-  it("does not reactivate a failed incident from its retained source attention", async () => {
-    const { attention, coordinator, harness } = await createSubject();
+  it("holds a failed incident's source until the operator reopens it", async () => {
+    let clock = 10_000;
+    const { attention, coordinator, harness } = await createSubject({
+      now: () => clock,
+    });
     const source = await raise(attention);
     await coordinator.reconcile([task()]);
     await coordinator.resume({
@@ -571,9 +585,79 @@ describe("production incident coordinator", () => {
     expect(persistence!.listIncidentRuntime()[0]?.state).toBe("failed");
     expect(harness.instances.activateIncident).toHaveBeenCalledTimes(3);
 
+    // The per-code cooldown elapses; the failed occurrence still holds its
+    // source, so no later occurrence is admitted.
+    clock += incidentAdmissionPolicy.cooldownMilliseconds + 1;
+    await coordinator.reconcile([task()]);
     await coordinator.reconcile([task()]);
     expect(harness.instances.activateIncident).toHaveBeenCalledTimes(3);
+    expect(persistence!.listIncidentRuntime()).toHaveLength(1);
     expect(persistence!.hasAttention(source.attentionId)).toBe(true);
+
+    // The operator resolves the source and later reopens it.
+    expect(attention.resolve(source.attentionId)).toBe(true);
+    expect(attention.reopen(source.attentionId)).toBe(true);
+    expect(
+      persistence!.getAttention(source.attentionId)?.reopenedAt,
+    ).toBeDefined();
+    clock += incidentAdmissionPolicy.cooldownMilliseconds + 1;
+    await coordinator.reconcile([task()]);
+    expect(persistence!.listIncidentRuntime()).toEqual([
+      expect.objectContaining({ occurrence: 1, state: "failed" }),
+      expect.objectContaining({ occurrence: 2, state: "waiting" }),
+    ]);
+    expect(harness.instances.activateIncident).toHaveBeenCalledTimes(4);
+  });
+
+  it("fails an incident that completes while its source attention is active", async () => {
+    const { attention, coordinator } = await createSubject();
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    for (const [disposition, operationId] of [
+      ["diagnosed", "diagnose"],
+      ["approve", "approve"],
+      ["complete", "complete"],
+    ] as const) {
+      await coordinator.resume({
+        disposition,
+        instanceId: source.incidentId!,
+        operationId,
+      });
+    }
+    expect(persistence!.listIncidentRuntime()[0]).toMatchObject({
+      state: "failed",
+    });
+    const failure = persistence!.getAttention(
+      `production:incident-execution-failed:task:17:${source.incidentId!}`,
+    );
+    expect(JSON.stringify(failure?.payload)).toContain("resolve-attention");
+    expect(persistence!.hasAttention(source.attentionId)).toBe(true);
+  });
+
+  it("records an incident done once its lifecycle resolved the source attention", async () => {
+    const { attention, coordinator } = await createSubject();
+    const source = await raise(attention);
+    await coordinator.reconcile([task()]);
+    for (const [disposition, operationId] of [
+      ["diagnosed", "diagnose"],
+      ["approve", "approve"],
+    ] as const) {
+      await coordinator.resume({
+        disposition,
+        instanceId: source.incidentId!,
+        operationId,
+      });
+    }
+    // The blueprint's resolve-attention node resolves the source before closing.
+    expect(attention.resolve(source.attentionId)).toBe(true);
+    await coordinator.resume({
+      disposition: "complete",
+      instanceId: source.incidentId!,
+      operationId: "complete",
+    });
+    expect(persistence!.listIncidentRuntime()[0]).toMatchObject({
+      state: "done",
+    });
   });
 
   it("removes correlation tokens, configured secrets, and credential-bearing URLs from incident values", () => {

@@ -179,6 +179,13 @@ const taskForIncident = (
   return { ...base, frontMatter: {}, incident } as BoardTask;
 };
 
+/** Whether the source attention was reopened after `createdAt` (epoch ms). */
+const reopenedSince = (
+  record: { reopenedAt?: string },
+  createdAt: number,
+): boolean =>
+  record.reopenedAt !== undefined && Date.parse(record.reopenedAt) >= createdAt;
+
 export class ProductionIncidentCoordinator {
   public constructor(
     private readonly persistence: SqlitePersistence,
@@ -225,6 +232,15 @@ export class ProductionIncidentCoordinator {
       const latest = sourceIndex.latestIncidentByAttentionId.get(
         source.attentionId,
       );
+      // A lifecycle that ended at a fail node is terminal for its source: the
+      // operator declined or the blueprint gave up. Nothing is admitted for
+      // that source until the operator has resolved it and it reopened.
+      if (
+        latest?.state === "failed" &&
+        !reopenedSince(record, latest.createdAt)
+      ) {
+        continue;
+      }
       const occurrence =
         latest === undefined
           ? 1
@@ -382,12 +398,18 @@ export class ProductionIncidentCoordinator {
         throw new Error("Incident lifecycle stopped without completion");
       }
       // The blueprint resolves its source attention with a resolve-attention
-      // node; Heddle records only how the lifecycle ended.
+      // node; Heddle records only how the lifecycle ended. A path that
+      // completes while the source is still active would be re-admitted after
+      // the cooldown, so it is a failure of the blueprint, not a done incident.
+      const failed = await this.lifecycle.endedInFailure(runtime.incidentId);
+      if (!failed && this.#sourceIsActive(runtime.attentionId)) {
+        throw new Error(
+          `Incident ${runtime.incidentId} completed without resolving its source attention ${runtime.attentionId}; the blueprint path that completes needs a resolve-attention node`,
+        );
+      }
       this.persistence.writeIncidentRuntime({
         ...runtime,
-        state: (await this.lifecycle.endedInFailure(runtime.incidentId))
-          ? "failed"
-          : "done",
+        state: failed ? "failed" : "done",
       });
       return;
     }
@@ -416,6 +438,11 @@ export class ProductionIncidentCoordinator {
             task,
           );
     await this.instances.activateIncident(task, starting, stageId);
+  }
+
+  #sourceIsActive(attentionId: string): boolean {
+    const record = this.persistence.getAttention(attentionId);
+    return record !== undefined && record.resolvedAt === undefined;
   }
 
   #sourceAttention(runtime: IncidentRuntimeRecord): ProductionErrorAttention {

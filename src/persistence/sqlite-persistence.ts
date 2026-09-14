@@ -420,7 +420,7 @@ export class SqlitePersistence {
   listAttention(): DurableAttentionRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT attention_id, payload_json, recorded_at
+        `SELECT attention_id, payload_json, recorded_at, reopened_at
          FROM heddle_attention
          WHERE resolved_at IS NULL
          ORDER BY recorded_at, attention_id`,
@@ -429,11 +429,13 @@ export class SqlitePersistence {
       attention_id: string;
       payload_json: string;
       recorded_at: string;
+      reopened_at: string | null;
     }>;
     return rows.map((row) => ({
       attentionId: row.attention_id,
       payload: JSON.parse(row.payload_json) as JsonValue,
       recordedAt: row.recorded_at,
+      ...(row.reopened_at === null ? {} : { reopenedAt: row.reopened_at }),
     }));
   }
 
@@ -442,7 +444,7 @@ export class SqlitePersistence {
     const row = this.database
       .prepare(
         `SELECT attention_id, payload_json, recorded_at, resolved_at,
-                resolution_justification
+                resolution_justification, reopened_at
          FROM heddle_attention
          WHERE attention_id = ?`,
       )
@@ -451,6 +453,7 @@ export class SqlitePersistence {
           attention_id: string;
           payload_json: string;
           recorded_at: string;
+          reopened_at: string | null;
           resolution_justification: string | null;
           resolved_at: string | null;
         }
@@ -461,6 +464,7 @@ export class SqlitePersistence {
           attentionId: row.attention_id,
           payload: JSON.parse(row.payload_json) as JsonValue,
           recordedAt: row.recorded_at,
+          ...(row.reopened_at === null ? {} : { reopenedAt: row.reopened_at }),
           ...(row.resolution_justification === null
             ? {}
             : { resolutionJustification: row.resolution_justification }),
@@ -503,10 +507,11 @@ export class SqlitePersistence {
       this.database
         .prepare(
           `UPDATE heddle_attention
-           SET resolved_at = NULL, resolution_justification = NULL
+           SET resolved_at = NULL, resolution_justification = NULL,
+               reopened_at = ?
            WHERE attention_id = ? AND resolved_at IS NOT NULL`,
         )
-        .run(attentionId).changes > 0;
+        .run(new Date().toISOString(), attentionId).changes > 0;
     if (reopened) return true;
     if (this.hasAttention(attentionId)) return false;
     throw new Error(`Attention ${JSON.stringify(attentionId)} does not exist`);

@@ -49,6 +49,8 @@ export interface DurableAttentionRecord {
   attentionId: string;
   payload: JsonValue;
   recordedAt: string;
+  /** When the attention was last reopened after a resolution, if ever. */
+  reopenedAt?: string;
   resolutionJustification?: string;
   resolvedAt?: string;
 }

@@ -96,7 +96,8 @@ export const initializePersistenceSchema = (
       attention_id TEXT PRIMARY KEY,
       payload_json TEXT NOT NULL,
       recorded_at TEXT NOT NULL,
-      resolved_at TEXT
+      resolved_at TEXT,
+      reopened_at TEXT
     );
 
     ${incidentRuntimeTable}
@@ -307,6 +308,9 @@ export const initializePersistenceSchema = (
     database.exec(
       "ALTER TABLE heddle_attention ADD COLUMN resolution_justification TEXT",
     );
+  }
+  if (!attentionColumns.some(({ name }) => name === "reopened_at")) {
+    database.exec("ALTER TABLE heddle_attention ADD COLUMN reopened_at TEXT");
   }
   const effectColumns = database
     .prepare("PRAGMA table_info(heddle_completed_effects)")
