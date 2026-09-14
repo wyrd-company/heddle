@@ -173,29 +173,33 @@ We record here _non-obvious_ repeated failure modes specific to this repo.
 
 2. **The live T3Code on `127.0.0.1:3773`.** That is the operator's real
    control plane, with real provider accounts and real threads. The conventional
-   `t3.baseUrl` default resolves to it in this devcontainer. Never point a
-   composition, a test, or a configuration at that default. Executable tests
-   and direct-composition fixtures use an isolated T3 endpoint instead; a
-   production operator keeps the valid conventional default and does not
-   override it to satisfy a test.
+   `t3.baseUrl` default resolves to it in this devcontainer. Never let a
+   composition, a test, or a fixture perform effects against that live
+   endpoint. Executable tests and direct-composition fixtures use an isolated
+   T3 endpoint instead. A test may resolve the conventional default to prove
+   its identity. A production operator keeps the valid conventional T3 default
+   and does not override it to satisfy a test.
 
 3. **Writing to the live board.** `/workspaces/kanban` is the real operational
    board, in use while you work. The conventional `boardDirectory` default
    resolves to it in this devcontainer. Reading it is fine and the best source
    of realistic fixtures. Executable tests and direct-composition fixtures use
    an explicit disposable board path or a disposable bind mount at
-   `/workspaces/kanban`; never let a test resolve the conventional default and
-   never clean up the live board. A production operator keeps the valid
-   conventional default and does not override it to satisfy a test.
+   `/workspaces/kanban`; never read, write, or clean up the live board through
+   that default. A test may resolve the conventional default to qualify its
+   identity. A production operator keeps the valid conventional board default
+   and does not override it to satisfy a test.
 
 4. **Reaching the operator's real services.** The conventional
    `pushover.apiUrl` default resolves to the real Pushover endpoint in this
    devcontainer, and the configured credentials deliver to the operator's real
    phone. Executable tests and direct-composition fixtures use an isolated
-   notification endpoint and disposable credentials. Git remotes in a product
-   configuration are real remotes and a mechanical stage will push to them. A
-   production operator keeps the valid conventional default and does not
-   override it to satisfy a test.
+   notification endpoint and disposable credentials; they never send through
+   that live endpoint. A test may resolve the conventional default to qualify
+   its identity. A production operator keeps the valid conventional Pushover
+   default and does not override it to satisfy a test. Git remotes in a
+   product configuration are real remotes and a mechanical stage will push to
+   them.
 
 5. **The correlation token is a live credential.** It is the bearer credential
    for the MCP boundary. Heddle sends it only through T3's authenticated

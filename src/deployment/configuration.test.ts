@@ -4,6 +4,7 @@
 // ---
 
 import { constants } from "node:fs";
+import { createServer } from "node:http";
 import {
   access,
   chmod,
@@ -245,7 +246,7 @@ describe("deployed configuration directory", () => {
     expect(second.server).toEqual(first.server);
   });
 
-  it("keeps live-resource defaults paired with isolated fixture guidance", async () => {
+  it("keeps T3 live-resource guidance paired with isolated effects", async () => {
     const guidance = await readFile(join(process.cwd(), "AGENTS.md"), "utf8");
     const normalized = guidance.replace(/\s+/g, " ");
 
@@ -253,22 +254,46 @@ describe("deployed configuration directory", () => {
       "The conventional `t3.baseUrl` default resolves to it in this devcontainer.",
     );
     expect(normalized).toContain(
+      "Never let a composition, a test, or a fixture perform effects against that live endpoint.",
+    );
+    expect(normalized).toContain(
+      "Executable tests and direct-composition fixtures use an isolated T3 endpoint instead.",
+    );
+    expect(normalized).toContain(
+      "A test may resolve the conventional default to prove its identity. A production operator keeps the valid conventional T3 default and does not override it to satisfy a test.",
+    );
+  });
+
+  it("keeps board live-resource guidance paired with disposable effects", async () => {
+    const guidance = await readFile(join(process.cwd(), "AGENTS.md"), "utf8");
+    const normalized = guidance.replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
       "The conventional `boardDirectory` default resolves to it in this devcontainer.",
-    );
-    expect(normalized).toContain(
-      "The conventional `pushover.apiUrl` default resolves to the real Pushover endpoint in this devcontainer",
-    );
-    expect(normalized).toContain(
-      "Executable tests and direct-composition fixtures use an isolated T3 endpoint instead",
     );
     expect(normalized).toContain(
       "an explicit disposable board path or a disposable bind mount at `/workspaces/kanban`",
     );
     expect(normalized).toContain(
-      "Executable tests and direct-composition fixtures use an isolated notification endpoint and disposable credentials.",
+      "never read, write, or clean up the live board through that default.",
     );
     expect(normalized).toContain(
-      "A production operator keeps the valid conventional default and does not override it to satisfy a test.",
+      "A test may resolve the conventional default to qualify its identity. A production operator keeps the valid conventional board default and does not override it to satisfy a test.",
+    );
+  });
+
+  it("keeps Pushover live-resource guidance paired with isolated effects", async () => {
+    const guidance = await readFile(join(process.cwd(), "AGENTS.md"), "utf8");
+    const normalized = guidance.replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
+      "The conventional `pushover.apiUrl` default resolves to the real Pushover endpoint in this devcontainer",
+    );
+    expect(normalized).toContain(
+      "Executable tests and direct-composition fixtures use an isolated notification endpoint and disposable credentials; they never send through that live endpoint.",
+    );
+    expect(normalized).toContain(
+      "A test may resolve the conventional default to qualify its identity. A production operator keeps the valid conventional Pushover default and does not override it to satisfy a test.",
     );
   });
 
@@ -603,11 +628,70 @@ describe("deployed configuration directory", () => {
       await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
         `field '${pointer}' from '${provenancePath}'`,
       );
+    },
+  );
+
+  it("rejects invalid configuration at the production service entry without resource effects", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-service-entry-rejection-"));
+    const boardDirectory = join(root, "board");
+    await mkdir(boardDirectory, { recursive: true });
+    const boardMarker = join(boardDirectory, "fixture-marker");
+    await writeFile(boardMarker, "untouched\n");
+
+    const requests: string[] = [];
+    const endpoint = createServer((request, response) => {
+      requests.push(request.url ?? "");
+      response.statusCode = 500;
+      response.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      endpoint.once("error", reject);
+      endpoint.listen(0, "127.0.0.1", resolve);
+    });
+    const address = endpoint.address();
+    if (address === null || typeof address === "string") {
+      endpoint.close();
+      throw new Error("Disposable service endpoint did not bind a TCP port");
+    }
+
+    try {
+      const source = globalThis.structuredClone(
+        fixture(root),
+      ) as unknown as Record<string, unknown>;
+      const t3 = source["t3"] as Record<string, unknown>;
+      delete t3["accessToken"];
+      t3["baseUrl"] = `http://127.0.0.1:${address.port}/t3`;
+      const pushover = source["pushover"] as Record<string, unknown>;
+      pushover["apiUrl"] = `http://127.0.0.1:${address.port}/messages`;
+      await writeFile(join(root, "config.yml"), stringify(source));
+
+      let failure: { code?: number; stderr?: string } | undefined;
+      try {
+        await execute(
+          process.execPath,
+          ["bin/heddle-server.mjs", "--config", root],
+          { cwd: process.cwd() },
+        );
+      } catch (error) {
+        failure = error as { code?: number; stderr?: string };
+      }
+      expect(failure?.code).toBe(1);
+      expect(failure?.stderr).toContain(
+        `field '/t3/accessToken' from '${join(root, "config.yml")}'`,
+      );
+      expect(await readFile(boardMarker, "utf8")).toBe("untouched\n");
       await expect(access(join(root, "state"))).rejects.toMatchObject({
         code: "ENOENT",
       });
-    },
-  );
+      expect(requests).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        endpoint.close((error) =>
+          error === undefined ? resolve() : reject(error),
+        ),
+      );
+    }
+  });
 
   it("attributes missing required children to a worker-declared parent", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
