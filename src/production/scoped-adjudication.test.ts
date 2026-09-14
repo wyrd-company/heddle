@@ -414,19 +414,52 @@ describe("scoped adjudication sanctioned approvals", () => {
     },
   );
 
-  it("does not replay an invalid durable response issue", async () => {
-    const { adjudication, approvals, events } = build({
-      activities: [sanctionedRequest("request-invalid-issue")],
+  it.each([
+    ["empty command identity", "", new Date(now).toISOString()],
+    ["unreadable issuance time", "recorded-command", "not-a-timestamp"],
+  ])(
+    "does not replay a durable response issue with %s",
+    async (_invalidField, commandId, issuedAt) => {
+      const { adjudication, approvals, events } = build({
+        activities: [sanctionedRequest("request-invalid-issue")],
+        handoffs: [adjudicationHandoff],
+        stageId: "adjudication",
+      });
+      events.push({
+        instanceId,
+        payload: {
+          commandId,
+          instanceId,
+          issuedAt,
+          requestId: "request-invalid-issue",
+          sessionKey,
+          threadId,
+        },
+        recordedAt: new Date(now).toISOString(),
+        sequence: 1,
+        type: "adjudication:approval-response-issued",
+      });
+
+      expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+        kind: "none",
+      });
+      expect(approvals).toEqual([]);
+    },
+  );
+
+  it("reuses the durable response command identity after restart", async () => {
+    const { adjudication, approvalCommands, events } = build({
+      activities: [sanctionedRequest("request-recorded-command")],
       handoffs: [adjudicationHandoff],
       stageId: "adjudication",
     });
     events.push({
       instanceId,
       payload: {
-        commandId: "",
+        commandId: "recorded-command",
         instanceId,
-        issuedAt: "not-a-timestamp",
-        requestId: "request-invalid-issue",
+        issuedAt: new Date(now).toISOString(),
+        requestId: "request-recorded-command",
         sessionKey,
         threadId,
       },
@@ -436,9 +469,9 @@ describe("scoped adjudication sanctioned approvals", () => {
     });
 
     expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
-      kind: "none",
+      kind: "deferred",
     });
-    expect(approvals).toEqual([]);
+    expect(approvalCommands).toEqual(["recorded-command"]);
   });
 
   it("approves its sanctioned tool while its own routed question is open", async () => {
