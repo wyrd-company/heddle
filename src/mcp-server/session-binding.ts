@@ -264,9 +264,14 @@ export const resolveWorkflowMcpSessionBinding = (
   ) {
     throw new CorrelationTokenError();
   }
-  const tools = isCompletedStage
-    ? stageContract.tools.filter((tool) => tool === "advance")
-    : stageContract.tools;
+  // A delegated child works its assigned subtree; the stage disposition
+  // stays with the session the stage was activated for.
+  const isDelegatedChild = storedHandoffs[0]!.parentSessionKey !== undefined;
+  const tools = isDelegatedChild
+    ? stageContract.tools.filter((tool) => tool !== "advance")
+    : isCompletedStage
+      ? stageContract.tools.filter((tool) => tool === "advance")
+      : stageContract.tools;
   const todoAssignment = storedHandoffs[0]!.todoAssignment;
   if (todoAssignment !== undefined) {
     try {
@@ -287,9 +292,11 @@ export const resolveWorkflowMcpSessionBinding = (
   }
 
   return {
-    dispositions: stageContract.dispositions.map((disposition) => ({
-      ...disposition,
-    })),
+    dispositions: isDelegatedChild
+      ? []
+      : stageContract.dispositions.map((disposition) => ({
+          ...disposition,
+        })),
     instance: match.instance,
     ...(storedHandoffs[0]!.parentSessionKey === undefined
       ? {}

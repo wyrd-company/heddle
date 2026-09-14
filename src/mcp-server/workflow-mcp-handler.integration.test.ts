@@ -33,6 +33,7 @@ import {
 } from "../control-plane/index.js";
 import {
   LifecycleEngine,
+  readLifecycleContext,
   type LifecycleBlueprint,
   type LifecycleEffect,
 } from "../engine/index.js";
@@ -45,6 +46,7 @@ import {
   stopTodoAssignmentTree,
   type SubagentCoordinator,
 } from "../subagents/index.js";
+import type { StoredWorkflowMcpStageContract } from "./types.js";
 import { createWorkflowMcpHttpHandler } from "./workflow-mcp-handler.js";
 
 const registerWorkflowMcpProviderSession = async (): Promise<void> => undefined;
@@ -1233,6 +1235,90 @@ describe("workflow MCP HTTP server", () => {
         expect.objectContaining({ sessionKey: "stage-inspect" }),
       ]),
     );
+  });
+
+  it("gives a delegated child its subtree without the stage disposition", async () => {
+    const fixture = await makeFixture();
+    const parent = await connect(
+      fixture.url,
+      fixture.alphaToken,
+      "delegating-parent-client",
+    );
+    claimTodoAssignment(fixture.persistence, {
+      binding: resolvedSessionBindingFixture({
+        sessionKey: "child-session",
+        threadId: "child-thread",
+      }),
+      bootstrap: {
+        createCommandId: "create-child",
+        createdAt: new Date(0).toISOString(),
+        messageId: "message-child",
+        turnCommandId: "turn-child",
+      },
+      correlationToken: "child-token",
+      depth: 1,
+      instanceId: "instance-alpha",
+      listSessionKey: "stage-alpha",
+      model: "sample-model",
+      operationId: "spawn-child",
+      parentSessionKey: "stage-alpha",
+      parentThreadId: "parent-thread",
+      provider: "sample-provider",
+      rootItemId: "orient",
+      sessionKey: "child-session",
+      stage: "assess",
+      threadId: "child-thread",
+    });
+    const record = fixture.persistence.getInstance("instance-alpha");
+    if (record === undefined) throw new Error("alpha fixture is missing");
+    const parentStored = record.state.handoffs[0] as {
+      workflowMcp: StoredWorkflowMcpStageContract;
+    };
+    fixture.persistence.updateInstance("instance-alpha", {
+      ...record.state,
+      handoffs: [
+        ...record.state.handoffs,
+        {
+          correlationToken: "child-token",
+          handoff: assembleStageHandoff({
+            correlationToken: "child-token",
+            skillPointer: "skills/sample.md",
+            stage: { name: "assess", priorStageOutputs: [] },
+            taskContract: { id: 11, title: "Prepare a sample" },
+            todoList: record.state.todoState,
+          }),
+          kind: "stage-handoff",
+          parentSessionKey: "stage-alpha",
+          sessionKey: "child-session",
+          todoAssignment: {
+            listSessionKey: "stage-alpha",
+            rootItemId: "orient",
+          },
+          workflowMcp: parentStored.workflowMcp,
+        },
+      ],
+    });
+    const child = await connect(fixture.url, "child-token", "child-client");
+
+    // The pinned stage contract lists advance; the child's binding does not.
+    expect(parentStored.workflowMcp.tools).toContain("advance");
+    expect((await child.listTools()).tools.map(({ name }) => name)).toEqual(
+      parentStored.workflowMcp.tools.filter((tool) => tool !== "advance"),
+    );
+    await expect(
+      child.callTool({ name: "advance", arguments: { disposition: "accept" } }),
+    ).rejects.toThrow(/Tool advance not found/);
+    expect(fixture.accepted).not.toHaveBeenCalled();
+    expect(
+      readLifecycleContext(fixture.persistence.getInstance("instance-alpha")!)
+        .awaitingNodeIds,
+    ).toEqual(["assess"]);
+    // The parent keeps the disposition it was activated with.
+    await parent.callTool({
+      name: "advance",
+      arguments: { disposition: "accept" },
+    });
+    expect(fixture.accepted).toHaveBeenCalledTimes(1);
   });
 
   it("limits child todo reads and writes to its durable assigned subtree", async () => {
