@@ -509,6 +509,79 @@ describe("deployed configuration directory", () => {
     }
   });
 
+  it.each([
+    {
+      name: "omitted T3 object",
+      mutate: (source: Record<string, unknown>) => {
+        delete source["t3"];
+      },
+      pointer: "/t3/accessToken",
+      source: "config",
+    },
+    {
+      name: "omitted Pushover object",
+      mutate: (source: Record<string, unknown>) => {
+        delete source["pushover"];
+      },
+      pointer: "/pushover/applicationToken",
+      source: "config",
+    },
+    {
+      name: "partial T3 object",
+      mutate: (source: Record<string, unknown>) => {
+        source["t3"] = { baseUrl: "http://127.0.0.1:3999" };
+      },
+      pointer: "/t3/accessToken",
+      source: "config",
+    },
+    {
+      name: "partial Pushover object",
+      mutate: (source: Record<string, unknown>) => {
+        source["pushover"] = {
+          apiUrl: "https://notify.invalid/messages",
+          applicationToken: "application-secret-value",
+          consoleBaseUrl: "https://console.invalid/",
+        };
+      },
+      pointer: "/pushover/userKey",
+      source: "config",
+    },
+    {
+      name: "worker-cleared T3 object",
+      worker: { t3: null },
+      pointer: "/t3/accessToken",
+      source: "worker",
+    },
+    {
+      name: "worker-cleared Pushover object",
+      worker: { pushover: null },
+      pointer: "/pushover/applicationToken",
+      source: "worker",
+    },
+  ])(
+    "rejects $name credentials before any disposable service effect",
+    async ({ mutate, worker, pointer, source }) => {
+      root = await mkdtemp(join(tmpdir(), "heddle-missing-credential-"));
+      const configurationPath = join(root, "config.yml");
+      const workerPath = join(root, "worker.yml");
+      const sourceValue = globalThis.structuredClone(
+        fixture(root),
+      ) as unknown as Record<string, unknown>;
+      mutate?.(sourceValue);
+      await writeFile(configurationPath, stringify(sourceValue));
+      if (worker !== undefined) await writeFile(workerPath, stringify(worker));
+
+      const provenancePath =
+        source === "config" ? configurationPath : workerPath;
+      await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+        `field '${pointer}' from '${provenancePath}'`,
+      );
+      await expect(access(join(root, "state"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    },
+  );
+
   it("attributes missing required children to a worker-declared parent", async () => {
     root = await mkdtemp(join(tmpdir(), "heddle-layered-config-"));
     await prepareBlueprintRepository(root);

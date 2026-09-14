@@ -372,9 +372,9 @@ export const loadDeploymentConfiguration = async (
           0,
           failure.pointer.lastIndexOf("/"),
         );
-        return parentPointer === ""
-          ? configurationPath
-          : sourceForConfigurationPointer(parentPointer, layered);
+        if (parentPointer === "") return configurationPath;
+        const source = sourceForConfigurationPointer(parentPointer, layered);
+        return source === "built-in" ? configurationPath : source;
       })();
       throw new TypeError(
         `field '${failure.pointer || "/"}' from '${source}': ${failure.detail}`,
