@@ -48,7 +48,6 @@ export {
 export { mechanicalNodeUses } from "../engine/index.js";
 
 export const mechanicalChangeContextKey = "_heddleMechanicalChange";
-const reviewSnapshotOutputKey = "_outputs.review-snapshot";
 
 export interface MechanicalBoardMirror {
   mirrorTaskStatus(taskId: number, status: string): Promise<void>;
@@ -122,13 +121,34 @@ const requireChanges = async (
   return changes as MechanicalChangeContext[];
 };
 
+/**
+ * The snapshot a merge lands and a finalize cleans up is the output of the
+ * pinned blueprint's review-snapshot node, whatever that node is called.
+ */
 const requireSnapshotOutputs = async (
   input: LifecycleEffectInput,
 ): Promise<ReviewSnapshot[]> => {
-  const value = await input.context.get(reviewSnapshotOutputKey);
-  if (typeof value !== "object" || value === null) {
-    throw new Error("Review snapshot output is missing");
+  const snapshotNodeIds = input.blueprint.nodes
+    .filter(({ uses }) => uses === "review-snapshot")
+    .map(({ id }) => id);
+  const outputs: Array<[string, unknown]> = [];
+  for (const nodeId of snapshotNodeIds) {
+    const output = await input.context.get(`_outputs.${nodeId}`);
+    if (typeof output === "object" && output !== null) {
+      outputs.push([nodeId, output]);
+    }
   }
+  if (outputs.length === 0) {
+    throw new Error(
+      `Review snapshot output is missing; review-snapshot nodes: ${JSON.stringify(snapshotNodeIds)}`,
+    );
+  }
+  if (outputs.length > 1) {
+    throw new Error(
+      `Several review-snapshot nodes have outputs: ${JSON.stringify(outputs.map(([nodeId]) => nodeId))}`,
+    );
+  }
+  const value = outputs[0]![1];
   const snapshots = (
     Array.isArray(value) ? value : [value]
   ) as Partial<ReviewSnapshot>[];

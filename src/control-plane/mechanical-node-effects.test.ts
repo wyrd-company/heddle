@@ -198,6 +198,16 @@ const makeLifecycle = async (
   return { ...fixture, engine, persistence };
 };
 
+/** A pinned graph whose review-snapshot capability lives on `nodeId`. */
+const snapshotBlueprint = (nodeId: string) => ({
+  edges: [],
+  id: "sample",
+  nodes: [
+    { id: nodeId, uses: "review-snapshot" },
+    { id: "review-snapshot-in-name-only", uses: "complete" },
+  ],
+});
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories
@@ -786,6 +796,7 @@ describe("delivery mechanical nodes", () => {
           get: async (key: string) =>
             key === mechanicalChangeContextKey ? fixture.change : snapshot,
         },
+        blueprint: snapshotBlueprint("review-snapshot"),
         idempotencyKey: "sample-effect",
         input: null,
         params: {},
@@ -814,6 +825,7 @@ describe("delivery mechanical nodes", () => {
               ? [fixture.change, fixture.change]
               : [snapshot],
         },
+        blueprint: snapshotBlueprint("review-snapshot"),
         idempotencyKey: "sample-effect",
         input: null,
         params: {},
@@ -824,6 +836,44 @@ describe("delivery mechanical nodes", () => {
       );
     },
   );
+
+  it("reads the review snapshot from the node with the capability, not from a familiar name", async () => {
+    const fixture = await prepareCommittedChange();
+    const snapshot = await ensureReviewSnapshot(fixture.change);
+    const effects = createMechanicalNodeEffects();
+    const input = (outputs: Record<string, unknown>) =>
+      ({
+        blueprint: {
+          edges: [],
+          id: "sample",
+          nodes: [
+            { id: "plate", uses: "review-snapshot" },
+            { id: "review-snapshot", uses: "complete" },
+          ],
+        },
+        context: {
+          get: async (key: string) =>
+            key === mechanicalChangeContextKey ? fixture.change : outputs[key],
+        },
+        idempotencyKey: "sample-effect",
+        input: null,
+        params: {},
+      }) as unknown as LifecycleEffectInput;
+
+    // A node that merely carries the familiar name has no snapshot to land.
+    await expect(
+      effects.merge(input({ "_outputs.review-snapshot": snapshot })),
+    ).rejects.toThrow(/review-snapshot nodes: \["plate"\]/);
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).not.toBe(
+      `${snapshot.sourceHead}\n`,
+    );
+    await expect(
+      effects.merge(input({ "_outputs.plate": snapshot })),
+    ).resolves.toMatchObject({ dispositions: { merged: true } });
+    expect(await git(fixture.sourcePath, "rev-parse", "main")).toBe(
+      `${snapshot.sourceHead}\n`,
+    );
+  });
 
   it("identifies the repository that requires remediation in a multi-repository merge", async () => {
     const first = await prepareCommittedChange("sample-alpha");
@@ -841,6 +891,7 @@ describe("delivery mechanical nodes", () => {
             ? [first.change, second.change]
             : [firstSnapshot, secondSnapshot],
       },
+      blueprint: snapshotBlueprint("review-snapshot"),
       idempotencyKey: "sample-effect",
       input: null,
       params: {},
