@@ -2718,7 +2718,7 @@ describe("production composition", () => {
 
       override async getShell() {
         this.reads += 1;
-        if (this.reads === 1) return super.getShell();
+        if (this.reads <= 3) return super.getShell();
         throw new Error("synthetic observation rejection");
       }
     }
