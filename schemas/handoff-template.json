@@ -30,7 +30,8 @@
       "const": 1
     },
     "kind": {
-      "enum": ["standard", "remediation"]
+      "type": "string",
+      "pattern": "^[a-z]+(?:-[a-z]+)*$"
     }
   }
 }

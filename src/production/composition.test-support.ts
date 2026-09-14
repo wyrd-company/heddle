@@ -53,18 +53,17 @@ kind: remediation
 
 Stage: {{ handoff.stage.name }}
 
-{% if handoff.stage.remediationCause and handoff.stage.remediationCause.kind == "review-basis-drift" %}
+{% set cause = handoff.stage.entry.output.remediationCause %}
+{% if cause and cause.kind == "review-basis-drift" %}
 The reviewed basis changed before merge.
-{% elif handoff.stage.remediationCause and handoff.stage.remediationCause.kind == "review-source-behind" %}
+{% elif cause and cause.kind == "review-source-behind" %}
 The reviewed source did not contain the target when the review snapshot was captured.
 {% endif %}
-{% if handoff.stage.remediationCause and (handoff.stage.remediationCause.kind == "review-basis-drift" or handoff.stage.remediationCause.kind == "review-source-behind") %}
-Rebase source branch {{ handoff.stage.remediationCause.sourceBranch }} at {{ handoff.stage.remediationCause.currentSourceHead }} onto target branch {{ handoff.stage.remediationCause.targetBranch }} at exact head {{ handoff.stage.remediationCause.currentTargetHead }} without creating a merge commit. Preserve task-scoped changes, resolve conflicts, validate, commit only task-scoped changes, verify the exact target head is an ancestor of the current source HEAD, and verify the worktree is clean before calling advance.
+{% if cause and (cause.kind == "review-basis-drift" or cause.kind == "review-source-behind") %}
+Rebase source branch {{ cause.sourceBranch }} at {{ cause.currentSourceHead }} onto target branch {{ cause.targetBranch }} at exact head {{ cause.currentTargetHead }} without creating a merge commit. Preserve task-scoped changes, resolve conflicts, validate, commit only task-scoped changes, verify the exact target head is an ancestor of the current source HEAD, and verify the worktree is clean before calling advance.
 {% endif %}
 
-Review findings: {{ handoff.stage.reviewFindings | stableJson }}
-
-Remediation cause: {{ handoff.stage.remediationCause | stableJson }}
+Entry: {{ handoff.stage.entry.node }} {{ handoff.stage.entry.output | stableJson }}
 
 {% for list in handoff.todoList.lists %}{% for item in list.items %}- [{% if item.checked %}x{% else %} {% endif %}] {{ item.text }}
 {% endfor %}{% endfor %}`;

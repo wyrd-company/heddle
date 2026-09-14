@@ -20,7 +20,8 @@ const validSkillName = (name: string): boolean =>
   name.length <= 64 && artifactId.test(name);
 const schemaId = "https://wyrd.company/heddle/handoff-template.schema.json";
 
-export type HandoffTemplateKind = "remediation" | "standard";
+/** Any kebab-case word; a stage's `handoff` must name the same kind. */
+export type HandoffTemplateKind = string;
 
 export type PinnedHandoffTemplateReference = {
   commitSha: string;
@@ -94,8 +95,8 @@ const parseTemplate = (
     (metadata as Record<string, unknown>)["format"] !==
       "heddle.handoff-template" ||
     (metadata as Record<string, unknown>)["version"] !== 1 ||
-    ((metadata as Record<string, unknown>)["kind"] !== "standard" &&
-      (metadata as Record<string, unknown>)["kind"] !== "remediation") ||
+    typeof (metadata as Record<string, unknown>)["kind"] !== "string" ||
+    !artifactId.test((metadata as Record<string, unknown>)["kind"] as string) ||
     JSON.stringify((metadata as Record<string, unknown>)["relationships"]) !==
       JSON.stringify({ implements: "heddle" })
   ) {

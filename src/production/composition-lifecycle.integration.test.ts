@@ -940,8 +940,9 @@ kind: standard
       .text;
     expect(remediationText).toContain("Stage: remediate");
     expect(remediationText).toContain("The recorded count is unchecked");
-    expect(remediationText).not.toContain("private discussion");
-    expect(remediationText).not.toContain("transcript");
+    // The entry is the reviewer's complete advance output; what the template
+    // shows of it is the author's choice, not Heddle's.
+    expect(remediationText).toContain("private discussion");
     await composition.lifecycle.resume({
       disposition: "complete",
       instanceId: `task-${taskId}`,
@@ -977,7 +978,7 @@ kind: standard
     await composition.close();
   });
 
-  it("raises durable attention and activates remediation for a legacy findings-less review", async () => {
+  it("activates remediation with the review output as the stage entry", async () => {
     const { blueprintsRepositoryRoot, configuration, taskId } = await prepare();
     const composition = createProductionComposition({
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
@@ -1003,23 +1004,7 @@ kind: standard
     });
 
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
-    expect(composition.attention.list()).toEqual([
-      expect.objectContaining({
-        attentionId: `task-${taskId}:remediate:1:advance-output:findings`,
-        instanceId: `task-${taskId}`,
-        message: expect.stringContaining(
-          'Remediation stage "remediate" received no findings field from stage "review"',
-        ),
-        taskId,
-      }),
-    ]);
-    expect(composition.persistence.listAttention()).toEqual([
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          code: "advance-output-contract-missing",
-        }),
-      }),
-    ]);
+    expect(composition.attention.list()).toEqual([]);
     expect(
       composition.persistence
         .listReconcilerRuntime()
@@ -1031,7 +1016,9 @@ kind: standard
       .at(-1);
     expect(remediationTurn).toMatchObject({
       payload: expect.objectContaining({
-        renderedDocument: expect.stringContaining("Review findings: []"),
+        renderedDocument: expect.stringContaining(
+          'Entry: review {\n  "disposition": "reject",',
+        ),
         stage: "remediate",
       }),
     });

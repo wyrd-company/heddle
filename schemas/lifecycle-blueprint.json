@@ -98,7 +98,7 @@
           }
         },
         "handoff": {
-          "enum": ["standard", "remediation"]
+          "$ref": "#/$defs/artifact-id"
         },
         "handoff-template": {
           "type": "object",

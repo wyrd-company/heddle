@@ -767,10 +767,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
         stage: opened.stage,
       },
       policy: { blobHash: policy.blobHash, path: policy.path },
-      priorStageOutputs:
-        "priorStageOutputs" in prior.handoff
-          ? prior.handoff.priorStageOutputs
-          : [prior.handoff.review],
+      priorStageOutputs: prior.handoff.priorStageOutputs,
     };
     return sanitizeIncidentValue(context, this.#secrets()) as JsonValue;
   }

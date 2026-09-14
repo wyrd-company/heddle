@@ -33,7 +33,8 @@ export interface LifecycleEdge extends EdgeDefinition {
 
 export interface LifecycleNode extends NodeDefinition {
   "assign-agent-name"?: AgentNameListName;
-  handoff?: "remediation" | "standard";
+  /** The kind of handoff template this stage renders; any kebab-case word. */
+  handoff?: string;
   "handoff-template"?: {
     commitSha: string;
     path: string;

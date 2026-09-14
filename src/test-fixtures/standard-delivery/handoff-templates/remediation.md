@@ -17,10 +17,12 @@ Remediate task {{ task.id }} at stage `{{ handoff.stage.name }}`. Use the stage 
 {{ handoff.taskContract | stableJson }}
 ```
 
-## Review findings
+## Entry
+
+Routed from `{{ handoff.stage.entry.node }}`.
 
 ```json
-{{ handoff.stage.reviewFindings | stableJson }}
+{{ handoff.stage.entry.output | stableJson }}
 ```
 
 ## Todo

@@ -1,9 +1,8 @@
 export {
   assembleStageHandoff,
-  type RemediationHandoffStage,
-  type ReviewStageOutput,
+  type HandoffStage,
+  type HandoffStageEntry,
   type StageHandoffInput,
-  type StandardHandoffStage,
 } from "./handoff-assembler.js";
 export {
   ensureCorrelationToken,

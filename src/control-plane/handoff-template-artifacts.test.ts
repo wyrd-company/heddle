@@ -44,6 +44,16 @@ describe("handoff template artifacts", () => {
     },
   );
 
+  it("accepts any kebab-case kind and rejects other spellings", async () => {
+    const schema = JSON.parse(await readFile(schemaPath, "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true, strict: false }).compile(
+      schema,
+    );
+    const value = await metadata(templatePaths[0]);
+    expect(validate({ ...value, kind: "repair-instructions" })).toBe(true);
+    expect(validate({ ...value, kind: "Repair Instructions" })).toBe(false);
+  });
+
   it("binds one template to each handoff kind", async () => {
     await expect(Promise.all(templatePaths.map(metadata))).resolves.toEqual([
       expect.objectContaining({ kind: "standard" }),

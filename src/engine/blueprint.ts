@@ -239,8 +239,7 @@ export const validateBlueprint = (
     }
     if (
       node.handoff !== undefined &&
-      node.handoff !== "standard" &&
-      node.handoff !== "remediation"
+      !/^[a-z]+(?:-[a-z]+)*$/.test(node.handoff)
     ) {
       throw new BlueprintValidationError(
         `Node ${JSON.stringify(node.id)} has invalid handoff metadata`,

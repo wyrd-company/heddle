@@ -1685,23 +1685,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
             threadId,
           )
         : { ...replacementBinding, sessionKey, threadId });
-    if (stage.contractIssue !== undefined) {
-      const attentionId = `${sessionKey}:advance-output:${stage.contractIssue.field}`;
-      if (!(await this.attention.has(attentionId))) {
-        const priorStage =
-          stage.contractIssue.priorStageId === undefined
-            ? "the prior stage"
-            : `stage ${JSON.stringify(stage.contractIssue.priorStageId)}`;
-        await this.attention.raise({
-          attentionId,
-          code: "advance-output-contract-missing",
-          instanceId,
-          kind: "lifecycle-resolution",
-          message: `Remediation stage ${JSON.stringify(stageId)} received no ${stage.contractIssue.field} field from ${priorStage}; activation continues with no reviewer findings`,
-          taskId: task.id,
-        });
-      }
-    }
     const lifecycleRecord = this.persistence.getInstance(instanceId);
     if (lifecycleRecord === undefined) {
       throw new Error(`Instance ${instanceId} has no retained task contract`);

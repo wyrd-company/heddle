@@ -4,34 +4,26 @@
 // ---
 
 import type { JsonValue } from "../persistence/index.js";
-import type { ReviewIntegrationRemediationCause } from "./review-landing.js";
 
-export type ReviewStageOutput = {
-  findings: JsonValue[];
-  transcript?: JsonValue;
+/** The node whose finish routed the lifecycle into this stage, and its output. */
+export type HandoffStageEntry = {
+  node: string;
+  output: JsonValue;
 };
 
-export type StandardHandoffStage = {
+export type HandoffStage = {
   agentName?: string;
-  kind: "standard";
+  entry?: HandoffStageEntry | null;
+  kind: string;
   name: string;
   priorStageOutputs: JsonValue[];
-  skills?: string[];
-};
-
-export type RemediationHandoffStage = {
-  agentName?: string;
-  cause?: { kind: "review-findings" } | ReviewIntegrationRemediationCause;
-  kind: "remediation";
-  name: string;
-  review: ReviewStageOutput;
   skills?: string[];
 };
 
 export type StageHandoffInput = {
   correlationToken: string;
   skillPointer: string;
-  stage: RemediationHandoffStage | StandardHandoffStage;
+  stage: HandoffStage;
   taskContract: JsonValue;
   todoList: JsonValue;
 };
@@ -50,27 +42,16 @@ export const canonicalJson = (value: JsonValue): string => {
 };
 
 export const assembleStageHandoff = (input: StageHandoffInput): string => {
-  const stage: JsonValue =
-    input.stage.kind === "remediation"
-      ? {
-          ...(input.stage.agentName === undefined
-            ? {}
-            : { agentName: input.stage.agentName }),
-          remediationCause: input.stage.cause ?? null,
-          kind: input.stage.kind,
-          name: input.stage.name,
-          reviewFindings: input.stage.review.findings,
-          skills: input.stage.skills ?? [],
-        }
-      : {
-          ...(input.stage.agentName === undefined
-            ? {}
-            : { agentName: input.stage.agentName }),
-          kind: input.stage.kind,
-          name: input.stage.name,
-          priorStageOutputs: input.stage.priorStageOutputs,
-          skills: input.stage.skills ?? [],
-        };
+  const stage: JsonValue = {
+    ...(input.stage.agentName === undefined
+      ? {}
+      : { agentName: input.stage.agentName }),
+    entry: input.stage.entry ?? null,
+    kind: input.stage.kind,
+    name: input.stage.name,
+    priorStageOutputs: input.stage.priorStageOutputs,
+    skills: input.stage.skills ?? [],
+  };
 
   return canonicalJson({
     format: "heddle.stage-handoff",

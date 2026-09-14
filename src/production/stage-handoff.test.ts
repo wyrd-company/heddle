@@ -27,20 +27,6 @@ const driftCause = {
   sourceBranch: "task/change",
   targetBranch: "main",
 };
-const laterDriftCause = {
-  ...driftCause,
-  currentSourceHead: "e".repeat(40),
-  currentTargetHead: "f".repeat(40),
-  reviewedBaseHead: "d".repeat(40),
-  reviewedSourceHead: "e".repeat(40),
-  snapshotId: "SAMPLE2",
-};
-const sourceBehindCause = {
-  ...driftCause,
-  currentSourceHead: driftCause.reviewedSourceHead,
-  currentTargetHead: driftCause.reviewedBaseHead,
-  kind: "review-source-behind" as const,
-};
 
 const executeFile = promisify(execFile);
 const temporaryDirectories: string[] = [];
@@ -228,10 +214,10 @@ describe("production stage handoff", () => {
       instanceId,
     });
     persistence.writeSessionRuntime({
+      kind: "stage",
       activation: 1,
       binding: binding(sessionKey, "sample-thread"),
       instanceId,
-      kind: "stage",
       sessionKey,
       stageId: "implement",
       threadId: "sample-thread",
@@ -265,323 +251,126 @@ describe("production stage handoff", () => {
     persistence.close();
   });
 
-  it.each([
-    {
-      firstDisposition: "approve",
-      firstOutput: undefined,
-      driftCauses: [driftCause],
-      label: "later review findings over stale drift",
-      secondDisposition: "reject",
-      secondOutput: {
-        findings: [{ code: "P1", summary: "A recorded value is unchecked" }],
-      },
-      expectedCause: { kind: "review-findings" },
-      expectedFindings: [
-        { code: "P1", summary: "A recorded value is unchecked" },
-      ],
-    },
-    {
-      firstDisposition: "reject",
-      firstOutput: {
-        findings: [{ code: "P1", summary: "A recorded value is unchecked" }],
-      },
-      driftCauses: [laterDriftCause],
-      label: "current drift over earlier review findings",
-      secondDisposition: "approve",
-      secondOutput: undefined,
-      expectedCause: laterDriftCause,
-      expectedFindings: [],
-    },
-    {
-      firstDisposition: "approve",
-      firstOutput: undefined,
-      driftCauses: [driftCause, laterDriftCause],
-      label: "latest drift across consecutive mechanical drift loops",
-      secondDisposition: "approve",
-      secondOutput: undefined,
-      expectedCause: laterDriftCause,
-      expectedFindings: [],
-    },
-    {
-      firstDisposition: "approve",
-      firstOutput: undefined,
-      driftCauses: [sourceBehindCause],
-      label: "current already-behind integration cause",
-      secondDisposition: "approve",
-      secondOutput: undefined,
-      expectedCause: sourceBehindCause,
-      expectedFindings: [],
-    },
-  ])(
-    "selects $label across remediation loops",
-    async ({
-      expectedCause,
-      expectedFindings,
-      firstDisposition,
-      firstOutput,
-      driftCauses,
-      secondDisposition,
-      secondOutput,
-    }) => {
-      const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-handoff-"));
-      temporaryDirectories.push(repositoryRoot);
-      await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
-      await mkdir(join(repositoryRoot, "blueprints"));
-      await writeDeliveryBlueprintFixture(repositoryRoot, "standard-delivery");
-      const persistence = new SqlitePersistence({
-        stateDirectory: join(repositoryRoot, "state"),
-      });
-      let mergeActivation = 0;
-      let reviewSnapshotActivation = 0;
-      const engine = new LifecycleEngine({
-        effects: {
-          finalize: async () => ({}),
-          merge: async () => {
-            const cause =
-              driftCauses[Math.min(mergeActivation, driftCauses.length - 1)]!;
-            mergeActivation += 1;
-            return {
-              alreadyMerged: false,
-              dispositions: { merged: false, remediate: true },
-              merged: false,
-              remediationCause: cause,
-              snapshotId: cause.snapshotId,
-            };
-          },
-          "prepare-worktree": async () => ({ prepared: true }),
-          "review-snapshot": async () => {
-            reviewSnapshotActivation += 1;
-            return {
-              snapshotId:
-                reviewSnapshotActivation === 1 ? "SAMPLE1" : "SAMPLE2",
-            };
-          },
+  it("hands a stage the output of the node that routed into it", async () => {
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-handoff-"));
+    temporaryDirectories.push(repositoryRoot);
+    await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
+    await mkdir(join(repositoryRoot, "blueprints"));
+    await writeDeliveryBlueprintFixture(repositoryRoot, "standard-delivery");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(repositoryRoot, "state"),
+    });
+    let mergeActivation = 0;
+    const engine = new LifecycleEngine({
+      effects: {
+        finalize: async () => ({}),
+        merge: async () => {
+          mergeActivation += 1;
+          return mergeActivation === 1
+            ? {
+                alreadyMerged: false,
+                dispositions: { merged: false, remediate: true },
+                merged: false,
+                remediationCause: driftCause,
+                snapshotId: driftCause.snapshotId,
+              }
+            : {
+                alreadyMerged: false,
+                dispositions: { merged: true },
+                merged: true,
+              };
         },
-        persistence,
-        repositoryRoot,
-      });
-      const instanceId = "sample-instance";
-      await engine.start({
-        blueprintPath: "blueprints/standard-delivery.json",
+        "prepare-worktree": async () => ({ prepared: true }),
+        "review-snapshot": async () => ({ snapshotId: "SAMPLE1" }),
+      },
+      persistence,
+      repositoryRoot,
+    });
+    const instanceId = "sample-instance";
+    await engine.start({
+      blueprintPath: "blueprints/standard-delivery.json",
+      instanceId,
+    });
+    const recordSession = (stageId: string, activation: number): string => {
+      const sessionKey = `${instanceId}:${stageId}:${activation}`;
+      persistence.writeSessionRuntime({
+        kind: "stage",
+        activation,
+        binding: binding(sessionKey, `${stageId}-thread-${activation}`),
         instanceId,
+        sessionKey,
+        stageId,
+        threadId: `${stageId}-thread-${activation}`,
       });
-      const recordSession = (stageId: string, activation: number): string => {
-        const sessionKey = `${instanceId}:${stageId}:${activation}`;
-        persistence.writeSessionRuntime({
-          activation,
-          binding: binding(sessionKey, `${stageId}-thread-${activation}`),
-          instanceId,
-          kind: "stage",
-          sessionKey,
-          stageId,
-          threadId: `${stageId}-thread-${activation}`,
-        });
-        return sessionKey;
-      };
-      const implement = recordSession("implement", 1);
-      await engine.resume({
-        disposition: "complete",
-        instanceId,
-        operationId: advanceOperationId(implement),
-      });
-      const firstReview = recordSession("review", 1);
-      await engine.resume({
-        disposition: firstDisposition,
-        instanceId,
-        operationId: advanceOperationId(firstReview),
-        ...(firstOutput === undefined ? {} : { output: firstOutput }),
-      });
-      const firstRemediation = recordSession("remediate", 1);
-      await engine.resume({
-        disposition: "complete",
-        instanceId,
-        operationId: advanceOperationId(firstRemediation),
-      });
-      const secondReview = recordSession("review", 2);
-      await engine.resume({
-        disposition: secondDisposition,
-        instanceId,
-        operationId: advanceOperationId(secondReview),
-        ...(secondOutput === undefined ? {} : { output: secondOutput }),
-      });
-      recordSession("remediate", 2);
+      return sessionKey;
+    };
+    await engine.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(recordSession("implement", 1)),
+    });
+    const findings = [{ code: "P1", summary: "A recorded value is unchecked" }];
+    await engine.resume({
+      disposition: "reject",
+      instanceId,
+      operationId: advanceOperationId(recordSession("review", 1)),
+      output: { findings, transcript: ["private review discussion"] },
+    });
+    recordSession("remediate", 1);
 
-      await expect(
-        readProductionHandoffStage({
-          instanceId,
-          persistence,
-          repositoryRoot,
-          stageId: "remediate",
-        }),
-      ).resolves.toMatchObject({
-        handoff: {
-          cause: expectedCause,
-          kind: "remediation",
-          review: { findings: expectedFindings },
-        },
-      });
-      persistence.close();
-    },
-  );
-
-  it.each([
-    {
-      label: "a missing current source",
-      mechanicalOutput: {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        remediationCause: {
-          ...driftCause,
-          currentSourceHead: null,
-        },
-        snapshotId: driftCause.snapshotId,
-      },
-    },
-    {
-      label: "a missing current target",
-      mechanicalOutput: {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        remediationCause: {
-          ...driftCause,
-          currentTargetHead: null,
-        },
-        snapshotId: driftCause.snapshotId,
-      },
-    },
-    {
-      label: "a numeric snapshot identity",
-      mechanicalOutput: {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        remediationCause: {
-          ...driftCause,
-          snapshotId: 1,
-        },
-        snapshotId: 1,
-      },
-    },
-    {
-      label: "an invalid current target",
-      mechanicalOutput: {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        remediationCause: {
-          ...driftCause,
-          currentTargetHead: "not-an-object-id",
-        },
-        snapshotId: driftCause.snapshotId,
-      },
-    },
-    {
-      label: "a mismatched outer snapshot identity",
-      mechanicalOutput: {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        remediationCause: driftCause,
-        snapshotId: "SAMPLE2",
-      },
-    },
-    {
-      label: "an unknown integration cause",
-      mechanicalOutput: {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        remediationCause: {
-          ...sourceBehindCause,
-          kind: "unclassified-integration",
-        },
-        snapshotId: sourceBehindCause.snapshotId,
-      },
-    },
-    {
-      label: "a source-behind cause with a moved current target",
-      mechanicalOutput: {
-        alreadyMerged: false,
-        dispositions: { merged: false, remediate: true },
-        merged: false,
-        remediationCause: {
-          ...sourceBehindCause,
-          currentTargetHead: "f".repeat(40),
-        },
-        snapshotId: sourceBehindCause.snapshotId,
-      },
-    },
-  ])(
-    "keeps the legacy missing-findings fallback for $label",
-    async ({ mechanicalOutput }) => {
-      const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-handoff-"));
-      temporaryDirectories.push(repositoryRoot);
-      await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
-      await mkdir(join(repositoryRoot, "blueprints"));
-      await writeDeliveryBlueprintFixture(repositoryRoot, "standard-delivery");
-      const persistence = new SqlitePersistence({
-        stateDirectory: join(repositoryRoot, "state"),
-      });
-      const engine = new LifecycleEngine({
-        effects: {
-          finalize: async () => ({}),
-          merge: async () => mechanicalOutput,
-          "prepare-worktree": async () => ({ prepared: true }),
-          "review-snapshot": async () => ({ snapshotId: "SAMPLE1" }),
-        },
-        persistence,
-        repositoryRoot,
-      });
-      const instanceId = "sample-instance";
-      await engine.start({
-        blueprintPath: "blueprints/standard-delivery.json",
-        instanceId,
-      });
-      for (const [stageId, disposition, activation] of [
-        ["implement", "complete", 1],
-        ["review", "approve", 1],
-      ] as const) {
-        const sessionKey = `${instanceId}:${stageId}:${activation}`;
-        persistence.writeSessionRuntime({
-          activation,
-          binding: binding(sessionKey, `${stageId}-thread-${activation}`),
-          instanceId,
-          kind: "stage",
-          sessionKey,
-          stageId,
-          threadId: `${stageId}-thread-${activation}`,
-        });
-        await engine.resume({
-          disposition,
-          instanceId,
-          operationId: advanceOperationId(sessionKey),
-        });
-      }
-
-      await expect(
-        readProductionHandoffStage({
-          instanceId,
-          persistence,
-          repositoryRoot,
-          stageId: "remediate",
-        }),
-      ).resolves.toMatchObject({
-        contractIssue: { field: "findings", priorStageId: "review" },
-        handoff: {
-          kind: "remediation",
-          review: { findings: [] },
-        },
-      });
-      const handoff = await readProductionHandoffStage({
+    // Routed from the review stage: the entry is the reviewer's own output.
+    await expect(
+      readProductionHandoffStage({
         instanceId,
         persistence,
         repositoryRoot,
         stageId: "remediate",
-      });
-      expect(handoff.handoff).not.toHaveProperty("cause");
-      persistence.close();
-    },
-  );
+      }),
+    ).resolves.toMatchObject({
+      handoff: {
+        entry: {
+          node: "review",
+          output: {
+            disposition: "reject",
+            dispositions: { reject: true },
+            findings,
+            transcript: ["private review discussion"],
+          },
+        },
+        kind: "remediation",
+        name: "remediate",
+      },
+    });
+
+    await engine.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:remediate:1`),
+    });
+    await engine.resume({
+      disposition: "approve",
+      instanceId,
+      operationId: advanceOperationId(recordSession("review", 2)),
+    });
+    recordSession("remediate", 2);
+
+    // Routed from the merge node: the entry is the merge output with its cause.
+    await expect(
+      readProductionHandoffStage({
+        instanceId,
+        persistence,
+        repositoryRoot,
+        stageId: "remediate",
+      }),
+    ).resolves.toMatchObject({
+      handoff: {
+        entry: {
+          node: "merge",
+          output: { merged: false, remediationCause: driftCause },
+        },
+        kind: "remediation",
+      },
+    });
+    persistence.close();
+  });
 });

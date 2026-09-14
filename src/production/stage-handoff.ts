@@ -3,14 +3,10 @@
 //   implements: heddle
 // ---
 
-import type { FlowcraftEvent } from "flowcraft";
-
-import type {
-  ReviewIntegrationRemediationCause,
-  StageHandoffInput,
-} from "../control-plane/index.js";
+import type { StageHandoffInput } from "../control-plane/index.js";
 import {
   GitBlueprintStore,
+  lifecycleProjectionOf,
   readCompletedStageOutputs,
   readLifecycleContext,
   type LifecycleBlueprint,
@@ -25,105 +21,12 @@ import type { ResolvedSessionRuntimeMode } from "../persistence/index.js";
 import type { AgentNameListName } from "../agent-names/index.js";
 
 export type ProductionHandoffStage = StageHandoffInput["stage"];
-export type ProductionHandoffContractIssue = {
-  field: "findings";
-  priorStageId?: string;
-};
 export type ProductionStageMetadata = {
   agentNameList?: AgentNameListName;
-  contractIssue?: ProductionHandoffContractIssue;
   handoff: ProductionHandoffStage;
   providerAlias?: string;
   repositoryName?: string;
   runtimeMode?: ResolvedSessionRuntimeMode;
-};
-
-const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-
-const reviewObjectId = (value: unknown): value is string =>
-  typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
-
-const nonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value !== "";
-
-const reviewIntegrationCause = (
-  value: unknown,
-): ReviewIntegrationRemediationCause | undefined => {
-  const candidate = asRecord(value);
-  const snapshotId = candidate?.["snapshotId"];
-  if (
-    (candidate?.["kind"] !== "review-basis-drift" &&
-      candidate?.["kind"] !== "review-source-behind") ||
-    !nonEmptyString(snapshotId) ||
-    !/^[0-9A-Z]+$/.test(snapshotId) ||
-    !nonEmptyString(candidate["sourceBranch"]) ||
-    !nonEmptyString(candidate["targetBranch"]) ||
-    !reviewObjectId(candidate["reviewedSourceHead"]) ||
-    !reviewObjectId(candidate["reviewedBaseHead"]) ||
-    !reviewObjectId(candidate["currentSourceHead"]) ||
-    !reviewObjectId(candidate["currentTargetHead"])
-  ) {
-    return undefined;
-  }
-  if (
-    candidate["kind"] === "review-source-behind" &&
-    (candidate["currentSourceHead"] !== candidate["reviewedSourceHead"] ||
-      candidate["currentTargetHead"] !== candidate["reviewedBaseHead"])
-  ) {
-    return undefined;
-  }
-  return candidate as ReviewIntegrationRemediationCause;
-};
-
-const reviewIntegrationCauseFromMechanicalOutput = (
-  value: unknown,
-): ReviewIntegrationRemediationCause | undefined => {
-  const output = asRecord(value);
-  const dispositions = asRecord(output?.["dispositions"]);
-  const cause = reviewIntegrationCause(output?.["remediationCause"]);
-  return cause !== undefined &&
-    output?.["alreadyMerged"] === false &&
-    output["merged"] === false &&
-    dispositions?.["merged"] === false &&
-    dispositions["remediate"] === true &&
-    output["snapshotId"] === cause.snapshotId
-    ? cause
-    : undefined;
-};
-
-const currentMechanicalOutputsForStage = async (
-  blueprint: LifecycleBlueprint,
-  persistence: SqlitePersistence,
-  serializedContext: string | null,
-  stageId: string,
-): Promise<unknown[]> => {
-  if (serializedContext === null) return [];
-  const serialized = asRecord(JSON.parse(serializedContext) as unknown);
-  const executionId = serialized?.["_executionId"];
-  if (!nonEmptyString(executionId)) return [];
-  const nodesById = new Map(blueprint.nodes.map((node) => [node.id, node]));
-  const directMechanicalPredecessors = new Set(
-    blueprint.edges.flatMap((edge) => {
-      const source = nodesById.get(edge.source);
-      return edge.target === stageId &&
-        source !== undefined &&
-        source.uses !== "wait"
-        ? [edge.source]
-        : [];
-    }),
-  );
-  const events = (await persistence.flowcraftHistory.replay(
-    executionId,
-  )) as FlowcraftEvent[];
-  return events.flatMap((event) =>
-    event.type === "node:finish" &&
-    directMechanicalPredecessors.has(event.payload.nodeId)
-      ? [event.payload.result.output]
-      : [],
-  );
 };
 
 const mechanicalOutputsForStage = (
@@ -181,10 +84,7 @@ export const readProductionHandoffStage = async (input: {
     context.blueprintPath,
   );
   const node = blueprint.nodes.find(({ id }) => id === input.stageId);
-  if (
-    node?.uses !== "wait" ||
-    (node.handoff !== "standard" && node.handoff !== "remediation")
-  ) {
+  if (node?.uses !== "wait" || typeof node.handoff !== "string") {
     throw new Error(
       `Stage ${JSON.stringify(input.stageId)} has no valid handoff metadata`,
     );
@@ -212,77 +112,28 @@ export const readProductionHandoffStage = async (input: {
     context.serializedContext,
     input.stageId,
   );
-  if (node.handoff === "standard") {
-    return {
-      ...(node["assign-agent-name"] === undefined
-        ? {}
-        : { agentNameList: node["assign-agent-name"] }),
-      handoff: {
-        kind: "standard",
-        name: input.stageId,
-        priorStageOutputs: [
-          ...outputs.map(({ output }) => output),
-          ...mechanicalOutputs,
-        ],
-        skills: node.skills ?? [],
-      },
-      ...(node["provider-alias"] === undefined
-        ? {}
-        : { providerAlias: node["provider-alias"] }),
-      ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
-      ...(node["runtime-mode"] === undefined
-        ? {}
-        : { runtimeMode: node["runtime-mode"] }),
-    };
-  }
-  const currentMechanicalOutputs = await currentMechanicalOutputsForStage(
-    blueprint,
-    input.persistence,
-    context.serializedContext,
-    input.stageId,
-  );
-  const integrationCause = currentMechanicalOutputs
-    .map(reviewIntegrationCauseFromMechanicalOutput)
-    .find((cause) => cause !== undefined);
-  const priorStage = outputs.at(-1);
-  const review = priorStage?.output;
-  const reviewFindings =
-    review !== undefined && Array.isArray(review["findings"])
-      ? review["findings"]
-      : undefined;
-  const hasReviewFindings = reviewFindings !== undefined;
-  // One resume either runs merge after approval or carries rejection findings.
-  // The conjunct makes that lifecycle exclusivity explicit for decoded data.
-  const findings =
-    integrationCause === undefined && hasReviewFindings ? reviewFindings : [];
+  // The node that finished last is the one whose edge routed the lifecycle
+  // into this stage; its output is what the stage was handed.
+  const projection = lifecycleProjectionOf(context);
+  const entry =
+    projection.current === null
+      ? null
+      : {
+          node: projection.current.node,
+          output: projection.outputs[projection.current.node] ?? null,
+        };
   return {
     ...(node["assign-agent-name"] === undefined
       ? {}
       : { agentNameList: node["assign-agent-name"] }),
-    ...(integrationCause !== undefined || hasReviewFindings
-      ? {}
-      : {
-          contractIssue: {
-            field: "findings" as const,
-            ...(priorStage === undefined
-              ? {}
-              : { priorStageId: priorStage.stageId }),
-          },
-        }),
     handoff: {
-      ...(integrationCause === undefined
-        ? hasReviewFindings
-          ? { cause: { kind: "review-findings" as const } }
-          : {}
-        : { cause: integrationCause }),
-      kind: "remediation",
+      entry,
+      kind: node.handoff,
       name: input.stageId,
-      review: {
-        findings,
-        ...(review?.["transcript"] === undefined
-          ? {}
-          : { transcript: review["transcript"] }),
-      },
+      priorStageOutputs: [
+        ...outputs.map(({ output }) => output),
+        ...mechanicalOutputs,
+      ],
       skills: node.skills ?? [],
     },
     ...(node["provider-alias"] === undefined

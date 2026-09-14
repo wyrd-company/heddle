@@ -44,21 +44,24 @@ describe("assembleStageHandoff", () => {
 
     expect(Buffer.from(first)).toEqual(Buffer.from(second));
     expect(JSON.parse(first)).toMatchObject({
-      stage: { skills: ["evidence-review"] },
+      stage: { entry: null, skills: ["evidence-review"] },
     });
   });
 
-  it("carries remediation findings without carrying the review transcript", () => {
+  it("carries the entry node and its output for any handoff kind", () => {
     const handoff = assembleStageHandoff({
       correlationToken: "correlation-token",
       stage: {
-        cause: { kind: "review-findings" },
-        kind: "remediation",
-        name: "repair",
-        review: {
-          findings: [{ code: "P1", summary: "The total is not checked" }],
-          transcript: ["private review discussion"],
+        entry: {
+          node: "inspect",
+          output: {
+            disposition: "reject",
+            findings: [{ code: "P1", summary: "The total is not checked" }],
+          },
         },
+        kind: "repair-instructions",
+        name: "repair",
+        priorStageOutputs: [{ result: "ready" }],
       },
       skillPointer: "skill://repair",
       taskContract: { title: "Prepare inventory" },
@@ -67,46 +70,19 @@ describe("assembleStageHandoff", () => {
 
     expect(JSON.parse(handoff)).toMatchObject({
       stage: {
-        kind: "remediation",
-        remediationCause: { kind: "review-findings" },
+        entry: {
+          node: "inspect",
+          output: {
+            disposition: "reject",
+            findings: [{ code: "P1", summary: "The total is not checked" }],
+          },
+        },
+        kind: "repair-instructions",
         name: "repair",
-        reviewFindings: [{ code: "P1", summary: "The total is not checked" }],
+        priorStageOutputs: [{ result: "ready" }],
+        skills: [],
       },
     });
-    expect(handoff).not.toContain("private review discussion");
-    expect(handoff).not.toContain("transcript");
     expect(handoff).not.toContain("correlation-token");
   });
-
-  it.each(["review-basis-drift", "review-source-behind"] as const)(
-    "carries an exact %s integration cause",
-    (kind) => {
-      const cause = {
-        currentSourceHead: "c".repeat(40),
-        currentTargetHead: "d".repeat(40),
-        kind,
-        reviewedBaseHead: "b".repeat(40),
-        reviewedSourceHead: "a".repeat(40),
-        snapshotId: "SAMPLE1",
-        sourceBranch: "task/change",
-        targetBranch: "main",
-      };
-      const handoff = assembleStageHandoff({
-        correlationToken: "correlation-token",
-        skillPointer: "skill://repair",
-        stage: {
-          cause,
-          kind: "remediation",
-          name: "repair",
-          review: { findings: [] },
-        },
-        taskContract: { title: "Prepare inventory" },
-        todoList: [{ complete: false, text: "Check total" }],
-      });
-
-      expect(JSON.parse(handoff)).toMatchObject({
-        stage: { remediationCause: cause, reviewFindings: [] },
-      });
-    },
-  );
 });
