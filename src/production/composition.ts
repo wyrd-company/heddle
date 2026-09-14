@@ -118,6 +118,7 @@ export type ProductionCompositionOptions = {
   ) => Promise<void> | void;
   afterDynamicTaskBoardEffect?: (taskId: number) => Promise<void> | void;
   afterDynamicTaskIntentRecorded?: () => Promise<void> | void;
+  blueprintsSourceRoot?: string;
   blueprintsRepositoryRoot: string;
   configuration: ResolvedProductionConfiguration;
   onSchedulerError?: (error: unknown) => void;
@@ -249,6 +250,7 @@ export const createProductionComposition = (
       resolve(options.blueprintsRepositoryRoot),
       persistence,
       attention,
+      options.blueprintsSourceRoot,
     );
     const handoffTemplateStore = new GitHandoffTemplateStore(
       blueprintRepository.repositoryRoot,

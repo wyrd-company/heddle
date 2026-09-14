@@ -320,10 +320,20 @@ describe("Heddle devcontainer feature", () => {
     expect(exactInstall).toBeGreaterThan(latestInstall);
     const qualificationConfiguration = JSON.parse(
       await readFile(".devcontainer/qualification/devcontainer.json", "utf8"),
-    ) as { runArgs: string[] };
+    ) as {
+      mounts: Array<{ readonly?: boolean; source: string; target: string }>;
+      runArgs: string[];
+    };
     // Feature installation runs in docker build, where runArgs do not apply.
     expect(qualificationConfiguration.runArgs).not.toContain(
       "npm.qualification:host-gateway",
+    );
+    expect(qualificationConfiguration.mounts).toContainEqual(
+      expect.objectContaining({
+        readonly: true,
+        source: "${localEnv:HEDDLE_QUALIFICATION_CONFIG}",
+        target: "/home/vscode/.heddle",
+      }),
     );
   });
 
@@ -384,9 +394,7 @@ describe("Heddle devcontainer feature", () => {
     );
     expect(fixturePreflight).toBeGreaterThan(-1);
     expect(fixturePreflight).toBeLessThan(packageGate);
-    expect(qualification).toContain(
-      'loaded.blueprintsRepositoryRoot,\n  "HEAD",',
-    );
+    expect(qualification).toContain('loaded.blueprintsSourceRoot,\n  "HEAD",');
   });
 
   it("routes every qualification container removal through verified identity", async () => {

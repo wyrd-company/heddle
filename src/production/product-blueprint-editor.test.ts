@@ -8,18 +8,26 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BlueprintPushError } from "./blueprint-repository.js";
+import { SqlitePersistence } from "../persistence/index.js";
+import {
+  BlueprintPushError,
+  OrganizationBlueprintRepository,
+} from "./blueprint-repository.js";
 import {
   prepareBlueprintRepositoryFixture,
   type BlueprintRepositoryFixture,
   executeGit,
 } from "./blueprint-repository.test-support.js";
 import { OrganizationBlueprintArtifactEditor } from "./product-blueprint-editor.js";
+import { DurableAttentionQueue } from "./durable-adapters.js";
 
 describe("organization blueprint artifact editor", () => {
   let fixture: BlueprintRepositoryFixture | undefined;
+  let workerPersistence: SqlitePersistence | undefined;
 
   afterEach(async () => {
+    workerPersistence?.close();
+    workerPersistence = undefined;
     await fixture?.cleanup();
     fixture = undefined;
   });
@@ -34,6 +42,84 @@ describe("organization blueprint artifact editor", () => {
       repository: fixture.repository,
     });
   };
+
+  it("edits and pushes only through the worker synchronization checkout", async () => {
+    fixture = await prepareBlueprintRepositoryFixture();
+    const pushRemote = join(fixture.root, "worker-push.git");
+    await executeGit("git", ["init", "--quiet", "--bare", pushRemote], {
+      cwd: fixture.root,
+    });
+    await executeGit("git", ["push", "--quiet", pushRemote, "main"], {
+      cwd: fixture.repositoryRoot,
+    });
+    await executeGit(
+      "git",
+      ["remote", "set-url", "--push", "origin", pushRemote],
+      { cwd: fixture.repositoryRoot },
+    );
+    const sourceBytes = await readFile(
+      join(fixture.repositoryRoot, "blueprints", "sample-process.json"),
+      "utf8",
+    );
+    const workerRoot = join(fixture.root, "worker", "blueprints");
+    workerPersistence = new SqlitePersistence({
+      stateDirectory: join(fixture.root, "worker-state"),
+    });
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      workerPersistence,
+      new DurableAttentionQueue(workerPersistence),
+      fixture.repositoryRoot,
+    );
+    await repository.synchronize();
+    const subject = new OrganizationBlueprintArtifactEditor({
+      effects: {
+        finish: async () => ({}),
+        prepare: async () => ({}),
+      },
+      repository,
+    });
+    const loaded = await subject.load("sample-process");
+
+    await subject.save({
+      artifactId: "sample-process",
+      edges: loaded.blueprint.edges,
+      expectedBlobHash: loaded.blobHash,
+      nodes: loaded.blueprint.nodes,
+      positions: { inspect: { x: 360, y: 240 } },
+    });
+
+    expect(
+      await readFile(
+        join(workerRoot, "blueprints", "sample-process.json"),
+        "utf8",
+      ),
+    ).toContain('"x": 360');
+    expect(
+      await readFile(
+        join(fixture.repositoryRoot, "blueprints", "sample-process.json"),
+        "utf8",
+      ),
+    ).toBe(sourceBytes);
+    expect(
+      (
+        await executeGit(
+          "git",
+          ["show", "main:blueprints/sample-process.json"],
+          { cwd: pushRemote },
+        )
+      ).stdout,
+    ).toContain('"x": 360');
+    expect(
+      (
+        await executeGit(
+          "git",
+          ["show", "main:blueprints/sample-process.json"],
+          { cwd: fixture.remoteRoot },
+        )
+      ).stdout,
+    ).not.toContain('"x": 360');
+  });
 
   it("commits and pushes one validated edit through the central repository", async () => {
     const subject = await editor();

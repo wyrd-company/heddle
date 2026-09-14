@@ -94,6 +94,7 @@ const productionOptions = (
   return {
     ...compositionDependencies,
     blueprintsRepositoryRoot: loaded.blueprintsRepositoryRoot,
+    blueprintsSourceRoot: loaded.blueprintsSourceRoot,
     configuration: inputs.configuration,
     providerUsage: providerUsageSource(loaded),
     providerResolver: inputs.providerResolver,

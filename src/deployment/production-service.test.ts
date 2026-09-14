@@ -970,6 +970,82 @@ describe("configured production composition", () => {
     );
   });
 
+  it("keeps two workers' boards, state, T3 clients, and blueprint checkouts isolated around one shared source", async () => {
+    fixture = await prepareProductionFixture();
+    const other = await prepareProductionFixture();
+    let otherProduction: ProductionComposition | undefined;
+    try {
+      const sharedSource = fixture.blueprintsRepositoryRoot;
+      const sourceBefore = await directorySnapshot(sharedSource);
+      const workerConfiguration = (
+        source: ResolvedProductionConfiguration,
+        identity: "alpha" | "beta",
+      ): ProductionConfiguration => ({
+        ...configuredConfiguration(source),
+        pushover: {
+          ...source.pushover,
+          applicationToken: `application-${identity}`,
+          userKey: `operator-${identity}`,
+        },
+        t3: {
+          accessToken: `t3-${identity}`,
+          baseUrl: `http://127.0.0.1:${identity === "alpha" ? 4101 : 4102}`,
+        },
+      });
+      const alphaT3 = new SyntheticT3();
+      const betaT3 = new SyntheticT3();
+      const alphaRoot = join(
+        fixture.configuration.stateDirectory,
+        "blueprints",
+      );
+      const betaRoot = join(other.configuration.stateDirectory, "blueprints");
+      production = await createConfiguredProductionComposition(
+        {
+          blueprintsRepositoryRoot: alphaRoot,
+          blueprintsSourceRoot: sharedSource,
+          configuration: workerConfiguration(fixture.configuration, "alpha"),
+          configurationDirectory: fixture.root,
+          configurationPath: join(fixture.root, "config.yml"),
+          server: { host: "127.0.0.1", port: 4101 },
+        },
+        { t3: alphaT3 },
+      );
+      otherProduction = await createConfiguredProductionComposition(
+        {
+          blueprintsRepositoryRoot: betaRoot,
+          blueprintsSourceRoot: sharedSource,
+          configuration: workerConfiguration(other.configuration, "beta"),
+          configurationDirectory: other.root,
+          configurationPath: join(other.root, "config.yml"),
+          server: { host: "127.0.0.1", port: 4102 },
+        },
+        { t3: betaT3 },
+      );
+
+      await Promise.all([production.start(), otherProduction.start()]);
+
+      expect(await directorySnapshot(sharedSource)).toBe(sourceBefore);
+      await expect(access(join(alphaRoot, ".git"))).resolves.toBeUndefined();
+      await expect(access(join(betaRoot, ".git"))).resolves.toBeUndefined();
+      expect(alphaRoot).not.toBe(betaRoot);
+      expect(fixture.configuration.boardDirectory).not.toBe(
+        other.configuration.boardDirectory,
+      );
+      expect(fixture.configuration.stateDirectory).not.toBe(
+        other.configuration.stateDirectory,
+      );
+      expect(
+        alphaT3.commands.some(({ type }) => type === "thread.turn.start"),
+      ).toBe(true);
+      expect(
+        betaT3.commands.some(({ type }) => type === "thread.turn.start"),
+      ).toBe(true);
+    } finally {
+      await otherProduction?.close();
+      await other.cleanup();
+    }
+  });
+
   it("dispatches the wholesale override without prompt-source path or provenance", async () => {
     fixture = await prepareProductionFixture();
     const override =

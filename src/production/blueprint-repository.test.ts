@@ -3,8 +3,15 @@
 //   verifies: heddle
 // ---
 
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  readFile,
+  readdir,
+  realpath,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { join, relative } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -13,6 +20,9 @@ import {
   MAXIMUM_CONSOLE_ATTENTION_IDENTIFIER_LENGTH,
 } from "../console/index.js";
 import { InvalidDispositionError, LifecycleEngine } from "../engine/index.js";
+import { SqlitePersistence } from "../persistence/index.js";
+import { OrganizationBlueprintRepository } from "./blueprint-repository.js";
+import { DurableAttentionQueue } from "./durable-adapters.js";
 import {
   executeGit,
   prepareBlueprintRepositoryFixture,
@@ -21,8 +31,10 @@ import {
 
 describe("organization blueprint repository", () => {
   let fixture: BlueprintRepositoryFixture | undefined;
+  const workerPersistence: SqlitePersistence[] = [];
 
   afterEach(async () => {
+    for (const persistence of workerPersistence.splice(0)) persistence.close();
     await fixture?.cleanup();
     fixture = undefined;
   });
@@ -31,6 +43,299 @@ describe("organization blueprint repository", () => {
     fixture = await prepareBlueprintRepositoryFixture();
     return fixture;
   };
+
+  const directorySnapshot = async (root: string): Promise<string> => {
+    const files: Array<[string, string]> = [];
+    const visit = async (directory: string): Promise<void> => {
+      const entries = await readdir(directory, { withFileTypes: true });
+      entries.sort((left, right) => left.name.localeCompare(right.name));
+      for (const entry of entries) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          await visit(path);
+        } else {
+          files.push([
+            relative(root, path),
+            (await readFile(path)).toString("base64"),
+          ]);
+        }
+      }
+    };
+    await visit(root);
+    return JSON.stringify(files);
+  };
+
+  it("seeds isolated worker checkouts from one shared source without writing it", async () => {
+    const setup = await prepare();
+    await executeGit("git", ["remote", "set-url", "origin", "../origin.git"], {
+      cwd: setup.repositoryRoot,
+    });
+    const sourceBefore = await directorySnapshot(setup.repositoryRoot);
+    const workerRoots = [
+      join(setup.root, "worker-alpha", "blueprints"),
+      join(setup.root, "worker-beta", "blueprints"),
+    ];
+    const workers = workerRoots.map((repositoryRoot, index) => {
+      const persistence = new SqlitePersistence({
+        stateDirectory: join(setup.root, `worker-${index}-state`),
+      });
+      workerPersistence.push(persistence);
+      return new OrganizationBlueprintRepository(
+        repositoryRoot,
+        persistence,
+        new DurableAttentionQueue(persistence),
+        setup.repositoryRoot,
+      );
+    });
+
+    await Promise.all(workers.map((worker) => worker.synchronize()));
+
+    const sourceCommit = (
+      await executeGit("git", ["rev-parse", "HEAD"], {
+        cwd: setup.repositoryRoot,
+      })
+    ).stdout.trim();
+    const sourceObject = await stat(
+      join(
+        setup.repositoryRoot,
+        ".git",
+        "objects",
+        sourceCommit.slice(0, 2),
+        sourceCommit.slice(2),
+      ),
+    );
+    const workerObject = await stat(
+      join(
+        workerRoots[0]!,
+        ".git",
+        "objects",
+        sourceCommit.slice(0, 2),
+        sourceCommit.slice(2),
+      ),
+    );
+    expect(`${workerObject.dev}:${workerObject.ino}`).not.toBe(
+      `${sourceObject.dev}:${sourceObject.ino}`,
+    );
+
+    const effects = {
+      finish: async () => ({ finished: true }),
+      prepare: async () => ({ prepared: true }),
+    };
+    const lifecycles = workerRoots.map(
+      (repositoryRoot, index) =>
+        new LifecycleEngine({
+          effects,
+          persistence: workerPersistence[index]!,
+          repositoryRoot,
+          sourceRef: workers[index]!.sourceRef,
+        }),
+    );
+    const oldInstances = await Promise.all(
+      lifecycles.map((lifecycle, index) =>
+        lifecycle.start({
+          blueprintPath: "blueprints/sample-process.json",
+          instanceId: `old-${index}`,
+        }),
+      ),
+    );
+
+    const upstream = await publisher(setup);
+    const upstreamPath = join(upstream, "blueprints", "sample-process.json");
+    const artifact = JSON.parse(await readFile(upstreamPath, "utf8")) as {
+      "board-statuses": Record<string, string>;
+    };
+    artifact["board-statuses"]["prepare-worktree"] = "verification";
+    await writeFile(upstreamPath, `${JSON.stringify(artifact, null, 2)}\n`);
+    await executeGit("git", ["add", "blueprints/sample-process.json"], {
+      cwd: upstream,
+    });
+    await executeGit("git", ["commit", "--quiet", "-m", "Revise sample"], {
+      cwd: upstream,
+    });
+    await executeGit("git", ["push", "--quiet"], { cwd: upstream });
+
+    await Promise.all(workers.map((worker) => worker.synchronize()));
+    const newInstances = await Promise.all(
+      lifecycles.map((lifecycle, index) =>
+        lifecycle.start({
+          blueprintPath: "blueprints/sample-process.json",
+          instanceId: `new-${index}`,
+        }),
+      ),
+    );
+
+    expect(await directorySnapshot(setup.repositoryRoot)).toBe(sourceBefore);
+    expect(await realpath(join(workerRoots[0]!, ".git"))).not.toBe(
+      await realpath(join(workerRoots[1]!, ".git")),
+    );
+    for (const workerRoot of workerRoots) {
+      expect(
+        (
+          await executeGit("git", ["remote", "get-url", "origin"], {
+            cwd: workerRoot,
+          })
+        ).stdout.trim(),
+      ).toBe(setup.remoteRoot);
+    }
+    for (const [index, lifecycle] of lifecycles.entries()) {
+      expect(newInstances[index]!.blueprintBlobHash).not.toBe(
+        oldInstances[index]!.blueprintBlobHash,
+      );
+      await expect(
+        lifecycle.boardStatusFor(`old-${index}`, "prepare-worktree"),
+      ).resolves.toBe("in-progress");
+      await expect(
+        lifecycle.boardStatusFor(`new-${index}`, "prepare-worktree"),
+      ).resolves.toBe("verification");
+    }
+    const rebased = await lifecycles[0]!.rebase({
+      instanceId: "old-0",
+      targetState: "inspect",
+    });
+    expect(rebased.blueprintBlobHash).toBe(newInstances[0]!.blueprintBlobHash);
+    await expect(
+      lifecycles[1]!.boardStatusFor("old-1", "prepare-worktree"),
+    ).resolves.toBe("in-progress");
+
+    await writeFile(join(workerRoots[0]!, "worker-note.txt"), "local\n");
+    expect(
+      await readFile(
+        join(workerRoots[1]!, "blueprints", "sample-process.json"),
+        "utf8",
+      ),
+    ).toBe(
+      await readFile(
+        join(setup.repositoryRoot, "blueprints", "sample-process.json"),
+        "utf8",
+      ),
+    );
+    await expect(
+      readFile(join(setup.repositoryRoot, "worker-note.txt"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(join(workerRoots[1]!, "worker-note.txt"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("raises durable attention when a worker checkout no longer matches its shared source", async () => {
+    const setup = await prepare();
+    const workerRoot = join(setup.root, "worker", "blueprints");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(setup.root, "worker-state"),
+    });
+    workerPersistence.push(persistence);
+    const attention = new DurableAttentionQueue(persistence);
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      attention,
+      setup.repositoryRoot,
+    );
+    await repository.synchronize();
+    await executeGit(
+      "git",
+      ["remote", "set-url", "origin", join(setup.root, "other.git")],
+      { cwd: workerRoot },
+    );
+
+    const restarted = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      attention,
+      setup.repositoryRoot,
+    );
+    await expect(restarted.synchronize()).rejects.toThrow(
+      "does not match the shared source's origin and upstream branch",
+    );
+
+    expect(attention.list()).toEqual([
+      expect.objectContaining({
+        attentionId: "blueprint-repository:state:checkout-unavailable",
+        message: expect.stringContaining(
+          "does not match the shared source's origin and upstream branch",
+        ),
+      }),
+    ]);
+    expect(persistence.listAttention()).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          code: "blueprint-repository-checkout-unavailable",
+          repositoryRoot: workerRoot,
+        }),
+      }),
+    ]);
+  });
+
+  it("leaves worker-irrelevant shared working-tree changes untouched", async () => {
+    const setup = await prepare();
+    await writeFile(join(setup.repositoryRoot, "uncommitted.txt"), "draft\n");
+    const sourceBefore = await directorySnapshot(setup.repositoryRoot);
+    const workerRoot = join(setup.root, "worker", "blueprints");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(setup.root, "worker-state"),
+    });
+    workerPersistence.push(persistence);
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      new DurableAttentionQueue(persistence),
+      setup.repositoryRoot,
+    );
+
+    await expect(repository.synchronize()).resolves.toBeUndefined();
+
+    expect(await directorySnapshot(setup.repositoryRoot)).toBe(sourceBefore);
+    await expect(
+      readFile(join(workerRoot, "uncommitted.txt"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(persistence.listAttention()).toEqual([]);
+  });
+
+  it("rejects a worker path whose parent alias resolves back to the shared source", async () => {
+    const setup = await prepare();
+    const aliasedParent = join(setup.root, "aliased-parent");
+    await symlink(setup.root, aliasedParent, "dir");
+    const workerRoot = join(aliasedParent, "organization-blueprints");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(setup.root, "worker-state"),
+    });
+    workerPersistence.push(persistence);
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      new DurableAttentionQueue(persistence),
+      setup.repositoryRoot,
+    );
+
+    await expect(repository.synchronize()).rejects.toThrow(
+      "must resolve to distinct directories",
+    );
+
+    expect(await realpath(workerRoot)).toBe(
+      await realpath(setup.repositoryRoot),
+    );
+  });
+
+  it("accepts a shared source reached through a read-only mount-style alias", async () => {
+    const setup = await prepare();
+    const sourceAlias = join(setup.root, "shared-blueprints");
+    await symlink(setup.repositoryRoot, sourceAlias, "dir");
+    const workerRoot = join(setup.root, "worker", "blueprints");
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(setup.root, "worker-state"),
+    });
+    workerPersistence.push(persistence);
+    const repository = new OrganizationBlueprintRepository(
+      workerRoot,
+      persistence,
+      new DurableAttentionQueue(persistence),
+      sourceAlias,
+    );
+
+    await expect(repository.synchronize()).resolves.toBeUndefined();
+
+    expect(await realpath(workerRoot)).not.toBe(await realpath(sourceAlias));
+  });
 
   const publisher = async (setup: BlueprintRepositoryFixture) => {
     const path = join(setup.root, "publisher");

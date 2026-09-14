@@ -6,7 +6,7 @@
 import { constants } from "node:fs";
 import { execFile } from "node:child_process";
 import { access, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { URL } from "node:url";
 import { promisify } from "node:util";
 
@@ -51,6 +51,7 @@ export type DeploymentServerConfiguration = {
 };
 
 export type LoadedDeploymentConfiguration = {
+  blueprintsSourceRoot: string;
   blueprintsRepositoryRoot: string;
   configuration: ProductionConfiguration;
   configurationClearedBy?: ConfigurationProvenance;
@@ -227,7 +228,7 @@ const preflightExecutable = async (
   }
 };
 
-const preflightBlueprintRepository = async (
+const preflightBlueprintSource = async (
   configurationDirectory: string,
 ): Promise<string> => {
   const repositoryRoot = join(configurationDirectory, blueprintsDirectoryName);
@@ -253,7 +254,7 @@ const preflightBlueprintRepository = async (
     return repositoryRoot;
   } catch {
     throw new TypeError(
-      `Blueprint repository '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
+      `Blueprint source '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
     );
   }
 };
@@ -399,9 +400,18 @@ export const loadDeploymentConfiguration = async (
         error instanceof Error ? error.message : "unknown error",
       );
     }
-    const blueprintsRepositoryRoot =
-      await preflightBlueprintRepository(directory);
+    const blueprintsSourceRoot = await preflightBlueprintSource(directory);
+    const blueprintsRepositoryRoot = join(
+      validated.stateDirectory,
+      blueprintsDirectoryName,
+    );
+    if (resolve(blueprintsRepositoryRoot) === resolve(blueprintsSourceRoot)) {
+      throw new TypeError(
+        "The blueprint source and worker synchronization checkout must use distinct paths",
+      );
+    }
     const loaded: LoadedDeploymentConfiguration = {
+      blueprintsSourceRoot,
       blueprintsRepositoryRoot,
       configuration: validated,
       configurationClearedBy: layered.clearedBy,

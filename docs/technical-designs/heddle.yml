@@ -52,16 +52,18 @@ proposed-design:
     is implement → review → remediate loop → merge → retrospective →
     finalize; other lifecycles are shorter or different blueprints
     (a trivial lifecycle omits retrospective). Blueprints are schema'd
-    artifacts in one organization repository cloned at
-    `<HEDDLE_CONFIG>/blueprints`; Heddle retains the schema and interpreter
-    validation authority. Each blueprint maps every mechanical node `uses`
+    artifacts in one organization repository supplied read-only at
+    `<HEDDLE_CONFIG>/blueprints` and synchronized independently in each worker's
+    state directory; Heddle retains the schema and interpreter validation
+    authority. Each blueprint maps every mechanical node `uses`
     value to the board status that the completed stage mirrors. Heddle rejects
     missing or unknown mechanical uses and statuses absent from the live board
     configuration before an effect or board write. An agent-only lifecycle may
     declare the known `prepare-worktree` and `finalize` mappings without those
     mechanical nodes. Heddle uses them as the initial and terminal task-status
-    boundaries without executing either mechanical effect. Each reconciliation pass fetches `origin` without
-    changing the clone's branch, working tree, or held refs. New instances and
+    boundaries without executing either mechanical effect. Each reconciliation
+    pass fetches `origin` in the worker checkout without changing its branch,
+    working tree, or held refs. New instances and
     explicit rebases resolve artifacts from the fetched upstream commit. An
     instance records the Git blob hash of the blueprint it started from, holds
     that blob under a Heddle ref, and runs that version to completion. The
@@ -1345,22 +1347,33 @@ proposed-design:
     so secret resolution does not depend on which layer supplied neighboring
     values.
 
-    The configuration directory also contains the organization blueprint clone
-    at the hard-coded `blueprints` subdirectory. It is not a `config.yml` field.
-    Startup requires an exact Git worktree whose current branch tracks
-    `origin`. Fetch updates remote-tracking refs only. A dirty, unpushed,
-    behind, or diverged branch raises durable repository attention; Heddle
-    never merges, rebases, or resets it automatically. That attention names the
-    local and origin commits and takes its stable identity from the repository
-    condition code and a digest of the condition code, local commit, and origin
-    commit. One unchanged condition keeps one identity across passes, and the
-    repository attention identity stays inside the 128-character console
-    attention identity bound. Each successful pass replaces every other
-    repository attention, including a stale identity outside the bound. The
-    deployed server returns 503 while the first pass runs and serves console
-    reads only after that pass completes. A repository state read that throws
-    leaves existing repository attention untouched; on the first pass, this
-    failure prevents Heddle from starting.
+    The configuration directory also contains an organization blueprint clone
+    at the hard-coded `blueprints` subdirectory. It is shared read-only
+    source content, not a `config.yml` field. The worker owns a writable
+    synchronization checkout at `<stateDirectory>/blueprints`. The first
+    reconciliation pass seeds it from the shared source without hard-linked Git
+    objects, preserves the source clone's origin fetch URL, push URL, and
+    upstream branch, and then fetches origin. Source working-tree changes are
+    outside this committed-state transfer. Every later fetch and every
+    editor write operates on that worker checkout. A source/checkout identity
+    mismatch fails reconciliation with durable repository attention rather
+    than silently redirecting existing Git state. No worker writes the shared
+    source or uses another worker's checkout.
+
+    Fetch updates worker-local remote-tracking refs only. A dirty, unpushed,
+    behind, or diverged worker branch raises durable repository attention;
+    Heddle never merges, rebases, or resets it automatically. That attention
+    names the local and origin commits and takes its stable identity from the
+    repository condition code and a digest of the condition code, local commit,
+    and origin commit. One unchanged condition keeps one identity across
+    passes, and the repository attention identity stays inside the
+    128-character console attention identity bound. Each successful pass
+    replaces every other repository attention, including a stale identity
+    outside the bound. The deployed server returns 503 while the first pass
+    creates or validates the worker checkout and serves console reads only after
+    that pass completes. A repository state read that throws leaves existing
+    repository attention untouched; on the first pass, this failure prevents
+    Heddle from starting.
 
     The root s6 launcher validates the same effective configuration, derives
     only its nonsecret state mount target and loopback host and port, writes
@@ -1395,11 +1408,12 @@ proposed-design:
     with a 503 response until composition startup succeeds. A bind failure
     therefore cannot mutate the board, create production persistence, or
     contact T3 or Pushover.
-    The editor uses the same organization blueprint repository and mechanical
+    The editor uses the same worker synchronization checkout and mechanical
     effect registry as the lifecycle engine. A validated replace, exact-path
-    commit, and push execute under the repository writer lease. The service-user
-    SSH agent or scoped deploy key supplies Git credentials outside Heddle
-    configuration. The supported service-user SSH-agent path is qualified by a
+    commit, and push execute under the repository writer lease. The shared
+    source is never an editor target. The service-user SSH agent or scoped
+    deploy key supplies Git credentials outside Heddle configuration. The
+    supported service-user SSH-agent path is qualified by a
     successful dry-run push to a unique scratch ref that leaves no durable
     remote ref. A failed push retains the local commit and raises durable
     attention identifying that commit. Supplying separate board, console state,

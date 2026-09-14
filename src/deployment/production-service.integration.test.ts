@@ -11,7 +11,7 @@ import {
 import { Buffer } from "node:buffer";
 import { createServer, type Server as HttpServer } from "node:http";
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { URL } from "node:url";
@@ -195,6 +195,17 @@ describe("configured production service entry point", () => {
       ],
       { cwd: configurationDirectory },
     );
+    const blueprintSourceRoot = join(configurationDirectory, "blueprints");
+    const sourceHeadBefore = (
+      await execute("git", ["rev-parse", "HEAD"], {
+        cwd: blueprintSourceRoot,
+      })
+    ).stdout.trim();
+    const sourceOriginBefore = (
+      await execute("git", ["rev-parse", "origin/main"], {
+        cwd: blueprintSourceRoot,
+      })
+    ).stdout.trim();
     const threads = new Set<string>();
     const projects = new Map<
       string,
@@ -410,6 +421,20 @@ describe("configured production service entry point", () => {
         model: "sample-model",
       },
     });
+    const workerBlueprintRoot = join(
+      fixture.configuration.stateDirectory,
+      "blueprints",
+    );
+    await expect(
+      access(join(workerBlueprintRoot, ".git")),
+    ).resolves.toBeUndefined();
+    expect(
+      (
+        await execute("git", ["remote", "get-url", "origin"], {
+          cwd: workerBlueprintRoot,
+        })
+      ).stdout.trim(),
+    ).toBe(blueprintOrigin.trim());
 
     const database = new Database(
       join(fixture.configuration.stateDirectory, "heddle-state.sqlite"),
@@ -480,6 +505,27 @@ describe("configured production service entry point", () => {
     expect(exitCode).toBe(0);
     expect(standardOutput).toBe("");
     expect(standardError).toBe("");
+    expect(
+      (
+        await execute("git", ["status", "--porcelain=v1"], {
+          cwd: blueprintSourceRoot,
+        })
+      ).stdout,
+    ).toBe("");
+    expect(
+      (
+        await execute("git", ["rev-parse", "HEAD"], {
+          cwd: blueprintSourceRoot,
+        })
+      ).stdout.trim(),
+    ).toBe(sourceHeadBefore);
+    expect(
+      (
+        await execute("git", ["rev-parse", "origin/main"], {
+          cwd: blueprintSourceRoot,
+        })
+      ).stdout.trim(),
+    ).toBe(sourceOriginBefore);
     const persisted = await readFile(
       join(fixture.configuration.stateDirectory, "heddle-state.sqlite"),
     );

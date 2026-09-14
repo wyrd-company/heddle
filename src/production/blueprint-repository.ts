@@ -16,6 +16,7 @@ import {
 import { acquireRepositoryWriterLease } from "../engine/repository-writer-lease.js";
 import type { RepositoryWriterLease } from "../engine/repository-writer-lease.js";
 import type { SqlitePersistence } from "../persistence/index.js";
+import { prepareBlueprintRepositoryCheckout } from "./blueprint-repository-checkout.js";
 import type { DurableAttentionQueue } from "./durable-adapters.js";
 
 const execute = promisify(execFile);
@@ -84,11 +85,13 @@ const parseCounts = (value: string): { ahead: number; behind: number } => {
 export class OrganizationBlueprintRepository {
   public readonly repositoryRoot: string;
   public readonly sourceRef = sourceRef;
+  private prepared = false;
 
   public constructor(
     repositoryRoot: string,
     private readonly persistence: SqlitePersistence,
     private readonly attention: DurableAttentionQueue,
+    private readonly sharedSourceRoot?: string,
   ) {
     this.repositoryRoot = resolve(repositoryRoot);
   }
@@ -102,6 +105,30 @@ export class OrganizationBlueprintRepository {
   }
 
   async synchronize(): Promise<void> {
+    try {
+      if (!this.prepared) {
+        await prepareBlueprintRepositoryCheckout({
+          repositoryRoot: this.repositoryRoot,
+          ...(this.sharedSourceRoot === undefined
+            ? {}
+            : { sourceRoot: this.sharedSourceRoot }),
+        });
+        this.prepared = true;
+      }
+    } catch (error) {
+      await this.replaceRepositoryAttention({
+        attentionId: `${stateAttentionPrefix}checkout-unavailable`,
+        category: "state",
+        code: "blueprint-repository-checkout-unavailable",
+        kind: "blueprint-repository",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The organization blueprint worker synchronization checkout is unavailable",
+        repositoryRoot: this.repositoryRoot,
+      });
+      throw error;
+    }
     const lease = await acquireRepositoryWriterLease(this.repositoryRoot);
     try {
       await lease.assertOwned();

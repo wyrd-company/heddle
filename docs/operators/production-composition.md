@@ -13,9 +13,9 @@ loads the operator configuration, constructs that composition, and uses it for
 the server, console, MCP endpoint, scheduler, attention queue, repository
 blueprint editor, and persistence lifetime. The no-composition server boundary
 exists only for tests and console-specific composition. The editor is the
-accepted `BlueprintArtifactEditor` over the organization blueprint clone and
-the same mechanical effect registry as the lifecycle engine. The factory
-rejects a second live composition for the same board directory.
+accepted `BlueprintArtifactEditor` over the worker's blueprint synchronization
+checkout and the same mechanical effect registry as the lifecycle engine. The
+factory rejects a second live composition for the same board directory.
 
 ## Package distribution
 
@@ -42,8 +42,8 @@ npm install --global @wyrd-company/heddle@<version>
 heddle-server --config /path/to/configuration
 ```
 
-`heddle-server` requires the same configuration bundle, `blueprints` clone,
-and dedicated `stateDirectory` mount that the Feature requires; those
+`heddle-server` requires the same configuration bundle, shared `blueprints`
+source, and dedicated worker `stateDirectory` mount that the Feature requires; those
 contracts are in the sections below. `heddle-server --config <directory>
 --print-launch-settings` prints the nonsecret state directory, host, and port
 the service will use. The supported `kanban-md` fork recorded in
@@ -145,8 +145,8 @@ values are replaced with `[REDACTED]`. This command performs the same parsing,
 layering, validation, executable preflight and blueprint preflight as service
 startup, but does not bind a network endpoint or start production work.
 
-The directory may also contain `heddle.md` and the required organization
-blueprint clone at `blueprints/`. Unknown entries are ignored. Neither entry is
+The directory may also contain `heddle.md` and the required shared organization
+blueprint source at `blueprints/`. Unknown entries are ignored. Neither entry is
 a configuration field.
 
 The service-user and agent-session `PATH` must provide `git`, `gh`, `gitpr`,
@@ -301,7 +301,7 @@ pass can count a new attempt; it never sleeps or holds that pass open.
 `immediateEscalationCodes` may short-circuit known failure shapes, but an
 unlisted failure still reaches the breaker. `workspaceRoot` is the root from
 which the incident agent can inspect and change observable production state,
-including the organization blueprint clone, Heddle and T3 configuration,
+including the worker blueprint checkout, Heddle and T3 configuration,
 durable data, and installed components. It must not contain a source checkout
 whose build and deployment the running service cannot observe.
 
@@ -570,13 +570,25 @@ qualification incomplete.
 ## Organization blueprint repository
 
 Clone the organization's blueprint repository into
-`<HEDDLE_CONFIG>/blueprints` before service startup. The directory must be the
-exact root of a Git worktree, and its current branch must track `origin`.
-Provision the service user with a forwarded SSH agent socket or a scoped deploy
-key that can fetch and push that repository. Heddle stores no Git credential in
-`config.yml`, logs, attention payloads, or instance state. The supported
-service-user SSH-agent path is qualified with `git push --dry-run` to a unique
-scratch ref; the dry run leaves no remote ref.
+`<HEDDLE_CONFIG>/blueprints` before service startup. This shared source can be a
+read-only bind mount used by every worker. It must be a Git worktree at the
+clone root, and its current branch must track `origin`. Worker initialization
+uses committed Git state and ignores source working-tree changes.
+
+Each worker owns a writable synchronization checkout at
+`<stateDirectory>/blueprints`. Heddle creates it from the shared source during
+the first reconciliation pass without hard-linking Git objects. It then binds
+that checkout to the shared source's `origin` fetch URL, push URL, and upstream
+branch. A later source/checkout binding mismatch fails reconciliation and raises
+durable repository attention; Heddle does not rewrite an existing checkout's
+Git identity. The checkout persists with the rest of that worker's state. Do
+not mount or copy it into another worker.
+
+Provision each service user with a forwarded SSH agent socket or a scoped
+deploy key that can fetch and push the configured origin. Heddle stores no Git
+credential in configuration, logs, attention payloads, or instance state. The
+supported service-user SSH-agent path is qualified with `git push --dry-run` to
+a unique scratch ref; the dry run leaves no remote ref.
 
 Each lifecycle blueprint with mechanical nodes maps every mechanical node's
 `uses` value in `board-statuses` to a status from the live board configuration.
@@ -589,11 +601,13 @@ mechanical key, or an absent live-board status before it performs a mechanical
 effect or writes a board status. The diagnostic names the invalid mechanical
 use and, for a missing live status, the selected status.
 
-Each reconciliation pass runs `git fetch --no-tags --prune origin` under the
-repository writer lease. Fetch changes remote-tracking refs only. New instances
-and explicit instance rebases read the fetched upstream commit. Running
-instances keep their held blueprint blob and do not change version. Heddle does
-not merge, rebase, reset, switch, or modify the working branch during fetch.
+Each reconciliation pass runs `git fetch --no-tags --prune origin` in the
+worker synchronization checkout under its repository writer lease. Fetch
+changes that worker's remote-tracking refs only. It never changes the shared
+source or another worker's Git state. New instances and explicit instance
+rebases read the fetched upstream commit. Running instances keep their held
+blueprint blob and do not change version. Heddle does not merge, rebase, reset,
+switch, or modify the working branch during fetch.
 
 Open a running task's lifecycle view to inspect rebase availability. The view
 reports `current` when the inspected upstream artifact is the pinned blob and
@@ -612,21 +626,23 @@ selected state and new blob. A stale, unavailable-target, or rejected action
 reports the error and leaves the instance pinned. Fetching a newer artifact
 without using this action never moves the instance.
 
-The console editor requires a clean working tree with the current branch equal
-to upstream. One successful save validates and atomically replaces the artifact,
+The console editor operates only on that worker's synchronization checkout and
+requires its working tree to be clean with the current branch equal to
+upstream. One successful save validates and atomically replaces the artifact,
 commits only that artifact, and pushes the commit while holding the same writer
 lease. A push failure leaves the commit local and raises durable attention with
-the repository and commit. Dirty, unpushed, behind, or diverged state also
-raises one durable repository attention entry. Resolve the state manually, then
-allow a later reconciliation pass to clear the entry; do not expect Heddle to
-integrate commits.
+the checkout and commit. Dirty, unpushed, behind, or diverged state also raises
+one durable repository attention entry. Resolve the state manually, then allow
+a later reconciliation pass to clear the entry; do not expect Heddle to
+integrate commits. The shared source remains unchanged by editing and
+synchronization.
 
-To migrate an existing workspace, copy its authored blueprint changes into the
-organization repository, validate and commit them there, clone that repository
-at `<HEDDLE_CONFIG>/blueprints`, and then restart Heddle. Remove legacy
-per-product or Heddle-source blueprint copies only after the organization commit
-contains the required artifact bytes. Validate a clone from the blueprint
-repository with:
+To prepare a workspace, copy its authored blueprint changes into the
+organization repository, validate and commit them there, and mount a
+clone at `<HEDDLE_CONFIG>/blueprints`. Heddle creates the worker checkout under
+`stateDirectory` when it starts. Remove other blueprint copies only after the
+organization commit contains the required artifact bytes. Validate the shared
+source from the blueprint repository with:
 
 ```console
 task validate HEDDLE_REPOSITORY_ROOT=/absolute/path/to/heddle
@@ -783,7 +799,7 @@ Agent wait nodes declare `handoff: standard` or `handoff: remediation` in the
 pinned lifecycle blueprint. Each wait node also declares a `handoff-template`
 with a repository-relative Markdown path and exact Git commit SHA. Heddle reads
 the entry file and `handoff-templates/includes/` files from that commit in the
-organization blueprint clone, retains the commit under
+worker blueprint checkout, retains the commit under
 `refs/heddle/handoff-templates/<commit-sha>`, and does not read mutable
 working-tree files during session activation. Product repositories receive no
 template-retention refs.
@@ -1189,9 +1205,9 @@ Dead and stalled session attention offers **Resolve** as an operator fallback.
 After admission, its console card links to the most recently admitted incident
 occurrence.
 
-The incident handoff identifies `incident.workspaceRoot`, the blueprint clone,
-board and state paths, T3 endpoint, configured GitHub sink, source condition,
-approval threshold, and prohibitions. The agent may change organization
+The incident handoff identifies `incident.workspaceRoot`, the worker blueprint
+checkout, board and state paths, T3 endpoint, configured GitHub sink, source
+condition, approval threshold, and prohibitions. The agent may change organization
 blueprints, Heddle or T3 configuration and data, provider enablement, installed
 component versions, and service processes when it can observe the result before
 closure. It must not suppress detection, handle secrets, push a real remote or

@@ -41,10 +41,12 @@ not install a compiler or fall back to a source build.
 
 Create shared core settings as `config.yml` and set mode `0600`. A worker with
 different bindings adds `worker.yml`; a worker with no differences does not
-need that file. Mount both at `configDirectory`. Clone the organization
-blueprint repository into the hard-coded `blueprints` subdirectory and give the
-service user fetch and push credentials through its SSH agent or a scoped deploy
-key. The clone path and Git credentials are not configuration fields. Heddle
+need that file. Mount both at `configDirectory`. Clone the shared organization
+blueprint source into the hard-coded `blueprints` subdirectory. The configuration
+files and blueprint source may use read-only bind mounts shared by every worker.
+Give each service user fetch and push credentials through its SSH agent or a
+scoped deploy key. The source path and Git credentials are not configuration
+fields. Heddle
 layers built-in defaults, shared `config.yml`, then optional `worker.yml`.
 Objects and maps merge, arrays replace, and `null` restores a built-in value or
 removes an inherited optional value. The validated effective result is the sole
@@ -89,6 +91,7 @@ without replacing SQLite history:
     {
       "source": "${localWorkspaceFolder}/.devcontainer/config/heddle/blueprints",
       "target": "/home/vscode/.heddle/blueprints",
+      "readonly": true,
       "type": "bind"
     },
     {
@@ -101,15 +104,19 @@ without replacing SQLite history:
 ```
 
 The service validates the effective layered configuration, derives its Caddy
-upstream and state target from that result, and requires the `blueprints`
-directory to be the exact root of a Git worktree whose current branch tracks
-`origin`. It refuses to start when `stateDirectory` is not a mount point. The
-root launcher writes only the nonsecret Caddy snippet, completes a bounded Caddy
-reload handshake, and then drops privileges. The watcher owns later Caddy
-reloads. The launcher never prints or copies raw YAML.
+upstream and state target from that result, and requires the shared `blueprints`
+source to be a Git
+worktree whose current branch tracks `origin`. On its first reconciliation
+pass, each worker creates an independent writable checkout at
+`<stateDirectory>/blueprints`. Fetch, pinned-content retention, repository
+attention, and console editing use that worker checkout. Heddle never writes the
+shared source. The service refuses to start when `stateDirectory` is not a mount
+point. The root launcher writes only the nonsecret Caddy snippet, completes a
+bounded Caddy reload handshake, and then drops privileges. The watcher owns
+later Caddy reloads. The launcher never prints or copies raw YAML. One Heddle
+service, one worker checkout, and one state source belong to one workspace.
 `heddle-server --print-effective-configuration` prints redacted values with
-source provenance and explicit clears. One Heddle service, one blueprint clone,
-and one state source belong to one workspace.
+source provenance and explicit clears without creating worker state.
 
 Heddle binds the configured loopback endpoint before production composition
 startup. The endpoint returns `503 Service Unavailable` until startup succeeds;

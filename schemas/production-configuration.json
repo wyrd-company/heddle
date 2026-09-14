@@ -283,7 +283,11 @@
       "type": "object",
       "additionalProperties": { "type": "integer", "minimum": 1 }
     },
-    "stateDirectory": { "type": "string", "pattern": "^/" },
+    "stateDirectory": {
+      "description": "Worker-owned writable state root. Heddle keeps this worker's blueprint synchronization checkout in its blueprints subdirectory.",
+      "type": "string",
+      "pattern": "^/"
+    },
     "stopTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
     "t3": {
       "type": "object",

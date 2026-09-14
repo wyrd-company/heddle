@@ -205,7 +205,8 @@ describe("deployed configuration directory", () => {
 
     await expect(loadDeploymentConfiguration(root)).resolves.toMatchObject({
       configuration: fixture(root),
-      blueprintsRepositoryRoot: join(root, "blueprints"),
+      blueprintsRepositoryRoot: join(root, "state", "blueprints"),
+      blueprintsSourceRoot: join(root, "blueprints"),
       configurationDirectory: root,
       configurationPath: join(root, "config.yml"),
       server: { host: "127.0.0.1", port: 3774 },
@@ -531,13 +532,13 @@ describe("deployed configuration directory", () => {
     await writeFile(configurationPath, stringify(fixture(root)));
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `Blueprint repository '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
+      `Blueprint source '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
     );
 
     await mkdir(repositoryRoot);
     await writeFile(join(repositoryRoot, "sample.txt"), "not a clone\n");
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `Blueprint repository '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
+      `Blueprint source '${repositoryRoot}' must be a git clone root whose current branch tracks origin`,
     );
   });
 
@@ -550,7 +551,36 @@ describe("deployed configuration directory", () => {
     });
 
     await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
-      `Blueprint repository '${join(root, "blueprints")}' must be a git clone root whose current branch tracks origin`,
+      `Blueprint source '${join(root, "blueprints")}' must be a git clone root whose current branch tracks origin`,
+    );
+  });
+
+  it("derives worker synchronization state outside the shared blueprint source", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const configuration = fixture(root);
+    await writeFile(join(root, "config.yml"), stringify(configuration));
+    await prepareBlueprintRepository(root);
+
+    const loaded = await loadDeploymentConfiguration(root);
+
+    expect(loaded.blueprintsSourceRoot).toBe(join(root, "blueprints"));
+    expect(loaded.blueprintsRepositoryRoot).toBe(
+      join(configuration.stateDirectory, "blueprints"),
+    );
+    await expect(
+      access(loaded.blueprintsRepositoryRoot, constants.F_OK),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects a state path that aliases the shared blueprint source", async () => {
+    root = await mkdtemp(join(tmpdir(), "heddle-config-directory-"));
+    const configuration = fixture(root);
+    configuration.stateDirectory = root;
+    await writeFile(join(root, "config.yml"), stringify(configuration));
+    await prepareBlueprintRepository(root);
+
+    await expect(loadDeploymentConfiguration(root)).rejects.toThrow(
+      "The blueprint source and worker synchronization checkout must use distinct paths",
     );
   });
 

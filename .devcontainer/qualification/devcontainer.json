@@ -25,6 +25,7 @@
       "type": "bind"
     },
     {
+      "readonly": true,
       "source": "${localEnv:HEDDLE_QUALIFICATION_CONFIG}",
       "target": "/home/vscode/.heddle",
       "type": "bind"
