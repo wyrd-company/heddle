@@ -108,6 +108,7 @@ import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
 export type ProductionT3Client = SessionT3Client & SessionObservationT3Client;
 
 export type ProductionCompositionOptions = {
+  adjudicationNow?: () => number;
   afterEscalationEffect?: (
     effect: "attention" | "pushover",
     attentionId: string,
@@ -371,6 +372,9 @@ export const createProductionComposition = (
             board,
             blueprintRepository,
             configuration,
+            ...(options.adjudicationNow === undefined
+              ? {}
+              : { now: options.adjudicationNow }),
             pacing,
             persistence,
             providerResolver,

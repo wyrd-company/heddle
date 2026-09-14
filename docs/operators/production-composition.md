@@ -135,6 +135,7 @@ adHocProject:
 boardDirectory: /workspaces/sample-board
 cadenceMilliseconds: 60000
 adjudication:
+  approvalSettlementMilliseconds: 60000
   policyPath: adjudication/policy.json
   providerAlias: adjudicator
 observationThresholds:
@@ -202,6 +203,15 @@ runtime mode and the session interaction mode. It counts against
 `pacing.maxConcurrentSessions` and the selected provider's usage budget. A
 pacing denial routes the original question to the operator instead of parking
 it.
+
+`approvalSettlementMilliseconds` optionally sets how long a sanctioned tool
+approval may remain pending after Heddle durably issues its response. It
+defaults to `60000`. Request age does not consume this interval: a request first
+observed after a long delay still receives the full settlement interval after
+Heddle answers it. The issuance record is keyed by the adjudication session,
+T3 thread, and request occurrence, and survives service restart. Reconciliation
+reuses its command identity and starting time until T3 records the resolution
+or the interval expires.
 
 Configuration conforms to `schemas/production-configuration.json`. The
 `products` inventory is the authority for product and repository routing. Each

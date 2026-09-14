@@ -485,6 +485,110 @@ describe("production composition", () => {
     await composition.close();
   });
 
+  it("starts an old request's settlement clock at its durable production response", async () => {
+    const fixture = await prepare();
+    configureAdjudication(fixture);
+    fixture.configuration.adjudication!.approvalSettlementMilliseconds = 60_000;
+    let clock = 1_000_000;
+    const t3 = new SyntheticT3();
+    const notify = vi.fn(async () => undefined);
+    const options = {
+      adjudicationNow: () => clock,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: notify },
+      t3,
+    };
+    const first = createProductionComposition(options);
+    await first.start();
+    const { adjudication, runtime } = await openProductionEscalation(first);
+    t3.threadActivities.set(adjudication.threadId, [
+      {
+        createdAt: "2000-01-01T00:00:00.000Z",
+        kind: "approval.requested",
+        payload: {
+          appName: "external",
+          detail: 'Allow the external MCP server to run tool "answer"?',
+          requestId: "request-first-observed-late",
+          requestKind: "mcp-elicitation",
+        },
+      },
+    ]);
+    vi.spyOn(t3, "getShell").mockImplementation(async () => ({
+      projects: [...t3.projects.values()],
+      threads: [
+        {
+          id: runtime.threadId!,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+        {
+          hasPendingApprovals: true,
+          id: adjudication.threadId,
+          latestTurn: { state: "running" },
+          session: { status: "running" },
+        },
+      ],
+    }));
+
+    await first.scheduler.trigger();
+
+    expect(t3.approvalResponses).toContainEqual(
+      expect.objectContaining({
+        decision: "accept",
+        requestId: "request-first-observed-late",
+        threadId: adjudication.threadId,
+      }),
+    );
+    const responseIssues = first.persistence
+      .replayEvents(runtime.instanceId)
+      .filter(({ type }) => type === "adjudication:approval-response-issued");
+    expect(responseIssues).toHaveLength(1);
+    expect(
+      first.attention
+        .list()
+        .filter(({ kind }) => kind === "approval" || kind === "escalation"),
+    ).toEqual([]);
+    expect(notify).not.toHaveBeenCalled();
+    const firstCommandId = t3.approvalResponses[0]?.commandId;
+    expect(firstCommandId).toEqual(expect.any(String));
+    expect(responseIssues[0]?.payload).toEqual({
+      commandId: firstCommandId,
+      instanceId: runtime.instanceId,
+      issuedAt: new Date(clock).toISOString(),
+      requestId: "request-first-observed-late",
+      sessionKey: adjudication.sessionKey,
+      threadId: adjudication.threadId,
+    });
+    await first.close();
+
+    clock += 60_001;
+    const restarted = createProductionComposition(options);
+    await restarted.start();
+    await restarted.scheduler.trigger();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+
+    expect(t3.approvalResponses.at(-1)?.commandId).toBe(firstCommandId);
+    expect(
+      restarted.persistence
+        .replayEvents(runtime.instanceId)
+        .filter(({ type }) => type === "adjudication:approval-response-issued"),
+    ).toHaveLength(1);
+    expect(restarted.attention.list()).toContainEqual(
+      expect.objectContaining({
+        adjudication: expect.objectContaining({
+          cause: "Adjudication tool approval did not settle within 60000ms",
+        }),
+        kind: "escalation",
+      }),
+    );
+    await restarted.close();
+  });
+
   it("fails closed on an approval that is not a sanctioned tool request", async () => {
     const fixture = await prepare();
     configureAdjudication(fixture);

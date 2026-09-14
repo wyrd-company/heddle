@@ -62,8 +62,8 @@ export type PushoverConfiguration = {
 
 export type AdjudicationConfiguration = {
   /**
-   * How long a sanctioned tool approval may stay pending after Heddle answers
-   * it before the adjudication is abandoned to the operator.
+   * How long a sanctioned tool approval may stay pending after Heddle durably
+   * issues its response before the adjudication is abandoned to the operator.
    */
   approvalSettlementMilliseconds?: number;
   policyPath: string;

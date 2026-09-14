@@ -44,6 +44,7 @@
       "required": ["policyPath", "providerAlias"],
       "properties": {
         "approvalSettlementMilliseconds": {
+          "description": "How long a sanctioned approval may remain pending after Heddle durably issues its response.",
           "type": "integer",
           "minimum": 1
         },

@@ -5,7 +5,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SqlitePersistence } from "../persistence/index.js";
+import type {
+  JsonValue,
+  PersistedEvent,
+  SqlitePersistence,
+} from "../persistence/index.js";
 import type { ProductionT3Client } from "./composition.js";
 import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
 
@@ -56,9 +60,11 @@ describe("scoped adjudication sanctioned approvals", () => {
   }) => {
     const activities = [...input.activities];
     const approvals: string[] = [];
+    const approvalCommands: string[] = [];
     const reactor: Array<() => void> = [];
     return {
       activities,
+      approvalCommands,
       approvals,
       runReactor: () => {
         for (const deliver of reactor.splice(0)) deliver();
@@ -77,8 +83,14 @@ describe("scoped adjudication sanctioned approvals", () => {
           ],
         }),
         getThread: async () => ({ thread: { activities: [...activities] } }),
-        respondToApproval: async (_threadId: string, requestId: string) => {
+        respondToApproval: async (
+          _threadId: string,
+          requestId: string,
+          _decision: "accept" | "reject",
+          commandId?: string,
+        ) => {
           approvals.push(requestId);
+          approvalCommands.push(commandId ?? "");
           const recorded = input.onRespond?.(requestId);
           if (recorded !== undefined) {
             reactor.push(() => activities.push(recorded as never));
@@ -98,9 +110,27 @@ describe("scoped adjudication sanctioned approvals", () => {
     stageId: string;
   }) => {
     const synthetic = syntheticT3(input);
+    let clock = now;
+    const events: PersistedEvent[] = [];
     const persistence = {
+      appendEvent: (
+        eventInstanceId: string,
+        type: string,
+        payload: JsonValue,
+      ) => {
+        const event = {
+          instanceId: eventInstanceId,
+          payload,
+          recordedAt: new Date(clock).toISOString(),
+          sequence: events.length + 1,
+          type,
+        };
+        events.push(event);
+        return event;
+      },
       getInstance: () => ({ state: { handoffs: input.handoffs } }),
       listSessionRuntime: () => [runtimeRow(input.stageId)],
+      replayEvents: () => [...events],
     } as unknown as SqlitePersistence;
     const construct = () =>
       new ProductionScopedAdjudication({
@@ -116,13 +146,21 @@ describe("scoped adjudication sanctioned approvals", () => {
             providerAlias: "primary",
           },
         },
-        now: () => now,
+        now: () => clock,
         persistence,
         t3: synthetic.t3,
       } as unknown as ConstructorParameters<
         typeof ProductionScopedAdjudication
       >[0]);
-    return { ...synthetic, adjudication: construct(), construct };
+    return {
+      ...synthetic,
+      adjudication: construct(),
+      advance: (milliseconds: number) => {
+        clock += milliseconds;
+      },
+      construct,
+      events,
+    };
   };
 
   const resolved = (requestId: string) => ({
@@ -172,6 +210,25 @@ describe("scoped adjudication sanctioned approvals", () => {
     });
   });
 
+  it("accepts settlement delivered later within the answer-time bound", async () => {
+    const { adjudication, advance, construct, runReactor } = build({
+      activities: [sanctionedRequest("request-delayed", now - 90_000)],
+      approvalSettlementMilliseconds: 60_000,
+      handoffs: [adjudicationHandoff],
+      onRespond: resolved,
+      stageId: "adjudication",
+    });
+
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    advance(59_000);
+    runReactor();
+    expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
+  });
+
   it("drains a stale request stacked under a live one", async () => {
     // The provider forgot the older request across a restart, so it stays
     // counted as pending. Answering it is what clears it.
@@ -206,8 +263,7 @@ describe("scoped adjudication sanctioned approvals", () => {
     });
   });
 
-  it("abandons the adjudication with a visible cause when an answer never settles", async () => {
-    // The reactor never delivers, so the request stays pending for good.
+  it("starts the settlement bound when first answering an old unanswered request", async () => {
     const { adjudication, approvals } = build({
       activities: [sanctionedRequest("request-stuck", now - 90_000)],
       approvalSettlementMilliseconds: 60_000,
@@ -216,53 +272,67 @@ describe("scoped adjudication sanctioned approvals", () => {
     });
 
     expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
-      cause: "Adjudication tool approval did not settle within 60000ms",
-      kind: "abandoned",
+      kind: "deferred",
     });
-    // The request was answered before the bound was weighed.
     expect(approvals).toEqual(["request-stuck"]);
   });
 
-  it("keeps deferring only while the answer is inside the settlement bound", async () => {
-    const { adjudication, approvals } = build({
+  it("expires only after the answer has remained unsettled beyond the bound", async () => {
+    const { adjudication, advance, approvals } = build({
       activities: [sanctionedRequest("request-slow", now - 30_000)],
       approvalSettlementMilliseconds: 60_000,
       handoffs: [adjudicationHandoff],
       stageId: "adjudication",
     });
 
-    // Answering again is harmless, so a pass inside the bound defers again.
     expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
       kind: "deferred",
     });
+    advance(60_001);
     expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
-      kind: "deferred",
+      cause: "Adjudication tool approval did not settle within 60000ms",
+      kind: "abandoned",
     });
     expect(approvals).toEqual(["request-slow", "request-slow"]);
   });
 
-  it("permits no unbounded deferral across restarts when nothing settles", async () => {
-    // The bound is read from the request the control plane recorded, so
-    // reconstructing the object cannot extend it.
-    const { construct, approvals } = build({
+  it("retains the answer-time settlement bound across repeated reconciliation and restart", async () => {
+    const {
+      adjudication,
+      advance,
+      approvalCommands,
+      construct,
+      events,
+      approvals,
+    } = build({
       activities: [sanctionedRequest("request-stuck", now - 90_000)],
       approvalSettlementMilliseconds: 60_000,
       handoffs: [adjudicationHandoff],
       stageId: "adjudication",
     });
 
-    const outcomes: string[] = [];
-    for (let restart = 0; restart < 25; restart += 1) {
-      outcomes.push(
-        (await construct().settleSanctionedApprovals(sessionKey)).kind,
-      );
-    }
-
-    expect(outcomes.every((kind) => kind === "abandoned")).toBe(true);
-    expect(approvals).toHaveLength(25);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    advance(30_000);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    advance(30_001);
+    expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
+      cause: "Adjudication tool approval did not settle within 60000ms",
+      kind: "abandoned",
+    });
+    expect(
+      events.filter(
+        ({ type }) => type === "adjudication:approval-response-issued",
+      ),
+    ).toHaveLength(1);
+    expect(approvals).toHaveLength(3);
+    expect(new Set(approvalCommands).size).toBe(1);
   });
 
-  it("treats an unreadable request timestamp as outside the bound", async () => {
+  it("does not use an unreadable request timestamp as the settlement clock", async () => {
     const { adjudication } = build({
       activities: [
         {
@@ -278,9 +348,97 @@ describe("scoped adjudication sanctioned approvals", () => {
       stageId: "adjudication",
     });
 
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+  });
+
+  it("binds durable response issuance to each request occurrence across restart", async () => {
+    const { activities, adjudication, construct, events, runReactor } = build({
+      activities: [sanctionedRequest("request-first", now - 90_000)],
+      approvalSettlementMilliseconds: 60_000,
+      handoffs: [adjudicationHandoff],
+      onRespond: resolved,
+      stageId: "adjudication",
+    });
+
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    runReactor();
+    expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
+
+    activities.push(sanctionedRequest("request-second", now - 90_000));
+    expect(await construct().settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
     expect(
-      (await adjudication.settleSanctionedApprovals(sessionKey)).kind,
-    ).toBe("abandoned");
+      events
+        .filter(({ type }) => type === "adjudication:approval-response-issued")
+        .map(({ payload }) => (payload as { requestId: string }).requestId),
+    ).toEqual(["request-first", "request-second"]);
+  });
+
+  it.each([
+    ["session", "other-session", threadId],
+    ["thread", sessionKey, "other-thread"],
+  ])(
+    "does not reuse a response issue from another %s namespace",
+    async (_namespace, recordedSessionKey, recordedThreadId) => {
+      const { adjudication, events } = build({
+        activities: [sanctionedRequest("request-namespaced")],
+        handoffs: [adjudicationHandoff],
+        stageId: "adjudication",
+      });
+      events.push({
+        instanceId,
+        payload: {
+          commandId: "other-command",
+          instanceId,
+          issuedAt: new Date(now).toISOString(),
+          requestId: "request-namespaced",
+          sessionKey: recordedSessionKey,
+          threadId: recordedThreadId,
+        },
+        recordedAt: new Date(now).toISOString(),
+        sequence: 1,
+        type: "adjudication:approval-response-issued",
+      });
+
+      expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+        kind: "deferred",
+      });
+      expect(events).toHaveLength(2);
+    },
+  );
+
+  it("does not replay an invalid durable response issue", async () => {
+    const { adjudication, approvals, events } = build({
+      activities: [sanctionedRequest("request-invalid-issue")],
+      handoffs: [adjudicationHandoff],
+      stageId: "adjudication",
+    });
+    events.push({
+      instanceId,
+      payload: {
+        commandId: "",
+        instanceId,
+        issuedAt: "not-a-timestamp",
+        requestId: "request-invalid-issue",
+        sessionKey,
+        threadId,
+      },
+      recordedAt: new Date(now).toISOString(),
+      sequence: 1,
+      type: "adjudication:approval-response-issued",
+    });
+
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "none",
+    });
+    expect(approvals).toEqual([]);
   });
 
   it("approves its sanctioned tool while its own routed question is open", async () => {
@@ -392,19 +550,22 @@ describe("scoped adjudication sanctioned approvals", () => {
     expect(dispatches).toEqual([]);
   });
 
-  it("answers a request at least once before abandoning it under default configuration", async () => {
-    // The scheduler visits a session on a cadence, so a request recorded just
-    // after one pass can exceed the default bound before a pass reaches it.
-    const { adjudication, approvals } = build({
+  it("uses the default bound after issuing an answer", async () => {
+    const { adjudication, advance, approvals } = build({
       activities: [sanctionedRequest("request-late", now - 120_000)],
       handoffs: [adjudicationHandoff],
       stageId: "adjudication",
     });
 
-    const outcome = await adjudication.settleSanctionedApprovals(sessionKey);
-
-    expect(outcome.kind).toBe("abandoned");
-    expect(approvals).toEqual(["request-late"]);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      kind: "deferred",
+    });
+    advance(60_001);
+    expect(await adjudication.settleSanctionedApprovals(sessionKey)).toEqual({
+      cause: "Adjudication tool approval did not settle within 60000ms",
+      kind: "abandoned",
+    });
+    expect(approvals).toEqual(["request-late", "request-late"]);
   });
 
   it("keeps a shell read from escaping into the scheduler pass", async () => {

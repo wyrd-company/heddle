@@ -726,12 +726,16 @@ proposed-design:
     on a later read. A pass therefore ends after answering and a later pass
     reads whether the request cleared, rather than waiting inside the pass and
     stalling every remaining session in the walk. Answering again is harmless
-    because the command identity is derived from the request. Every request is
-    answered before the bound is weighed, so no request is abandoned without a
-    response attempt whatever the scheduler cadence. A request still pending
-    beyond the configured approval settlement bound, measured from the request
-    the control plane recorded rather than from anything Heddle remembers,
-    abandons the adjudication and carries that cause into attention. An answerer
+    because the command identity is derived from the request. Before sending a
+    response, Heddle records its issuance with the stable T3 command identity,
+    adjudication session, thread, request ID, and issuance time. The configured
+    approval settlement bound starts at that durable issuance. Replay and
+    restart reuse the same record and command identity, so neither scheduler
+    cadence nor the age of an unanswered request consumes the settlement
+    interval. T3 request IDs identify approval occurrences; a later approval
+    has a different request ID and cannot inherit the earlier response record.
+    A request still pending beyond the bound abandons the adjudication and
+    carries that cause into attention. An answerer
     asking its own question is awaiting that answer; its request follows the
     same routing rule. Each answer releases one link of the chain.
     Every other approval request fails closed to the operator. An accepted
