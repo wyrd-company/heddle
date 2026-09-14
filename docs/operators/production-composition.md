@@ -128,6 +128,13 @@ Heddle does not write, migrate, or reformat either source. The operator owns the
 bundle and must make both source files readable only by that account, normally
 mode `0600`.
 
+Configuration ownership is independent from mount ownership. Shared core may
+declare the same `boardDirectory`, `stateDirectory`, `session.worktreesRoot`,
+and local T3 URL for every worker. Each container can bind a different host
+source at those same in-container paths and runs its own T3 server. A worker
+file contains only values that differ, such as a worker-specific credential;
+it does not repeat a path merely because the mounted data is worker-local.
+
 `heddle-server --print-effective-configuration` prints the effective values,
 their source provenance and explicit clears as JSON. T3 and Pushover credential
 values are replaced with `[REDACTED]`. This command performs the same parsing,
@@ -216,18 +223,17 @@ t3:
 ```
 
 A worker file contains only differences. This one binds local runtime data and
-T3 while disabling core adjudication and provider budgets:
+credentials while disabling core adjudication and provider budgets. It inherits
+the core board, state, worktree, and local T3 URL values because those paths have
+worker-local mounts inside this container:
 
 ```yaml
 adjudication: null
-boardDirectory: /workspaces/sample-board
 pacing:
   providerBudgets: null
 providerUsage: null
-stateDirectory: /var/lib/heddle
 t3:
   accessToken: replace-with-worker-secret
-  baseUrl: http://127.0.0.1:3773
 ```
 
 The optional `adjudication` block enables the top-level escalation tier.

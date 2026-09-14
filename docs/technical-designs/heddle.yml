@@ -1334,6 +1334,11 @@ proposed-design:
     service. The fixed loopback server port is restricted to 1 through 65535
     so the same value can be projected into Caddy. The operator owns both
     source files with mode `0600`; Heddle never writes or reformats them.
+    Configuration ownership is independent from mount ownership. Shared core
+    may declare identical in-container board, state, worktree, and local T3 URL
+    paths for every worker while each container binds different worker-local
+    data at those paths and runs its own T3 server. A worker source repeats only
+    values that differ, such as a worker-specific credential.
     A relative secret-file reference resolves against the directory containing
     the configuration source that supplied the effective field; an absolute
     reference remains absolute. Per-field source provenance survives layering

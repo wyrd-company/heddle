@@ -831,9 +831,10 @@ describe("deployed configuration directory", () => {
   });
 
   it("keeps operator and Feature configuration guidance on the deployed contract", async () => {
-    const [operatorGuide, featureGuide] = await Promise.all([
+    const [operatorGuide, featureGuide, technicalDesign] = await Promise.all([
       readFile("docs/operators/production-composition.md", "utf8"),
       readFile("features/heddle/README.md", "utf8"),
+      readFile("docs/technical-designs/heddle.yml", "utf8"),
     ]);
 
     for (const guide of [operatorGuide, featureGuide]) {
@@ -846,6 +847,15 @@ describe("deployed configuration directory", () => {
       expect(guide).toContain("1 through 65535");
       expect(guide).toContain("503 Service Unavailable");
     }
+    expect(operatorGuide.replace(/\s+/g, " ")).toContain(
+      "Configuration ownership is independent from mount ownership.",
+    );
+    expect(featureGuide.replace(/\s+/g, " ")).toContain(
+      "Those worker-local mounts do not require the paths to be repeated in `worker.yml`.",
+    );
+    expect(technicalDesign.replace(/\s+/g, " ")).toContain(
+      "Configuration ownership is independent from mount ownership.",
+    );
     expect(operatorGuide).toContain("providerUsage");
     expect(operatorGuide).not.toContain("session.launchPreparation");
     expect(operatorGuide).toContain(

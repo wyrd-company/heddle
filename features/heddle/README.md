@@ -55,6 +55,11 @@ not configure the deployed service. Configuration changes require service
 restart. The configured loopback port must be from 1 through 65535 so that the
 same fixed endpoint can be used by Heddle and Caddy.
 
+Shared core may use the same board, state, worktree, and local T3 URL paths for
+every worker. Each container can bind different host data at those same target
+paths and runs its own T3 server. Those worker-local mounts do not require the
+paths to be repeated in `worker.yml`.
+
 The configured `stateDirectory` must be a dedicated bind-mount target. Give
 every workspace its own host source so that a rebuild replaces the container
 without replacing SQLite history:
