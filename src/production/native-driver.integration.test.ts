@@ -209,7 +209,7 @@ describe.skipIf(!t3Binary || !nativeDrivers)(
             timeoutMilliseconds: 10_000,
           },
           providerAliases,
-          server: { host: "127.0.0.1", port: servicePort },
+          server: { port: servicePort },
           session: {
             ...configuredSession,
             defaultProviderAlias: providerAlias,
