@@ -96,7 +96,6 @@
         "maxConcurrentSessions": { "type": "integer", "minimum": 0 },
         "providerBudgets": {
           "type": "object",
-          "default": {},
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,
@@ -264,22 +263,19 @@
         "skillPointer": { "type": "string", "minLength": 1 },
         "worktreesRoot": {
           "type": "string",
-          "pattern": "^/",
-          "default": "/workspaces/worktrees"
+          "pattern": "^/"
         }
       }
     },
     "server": {
       "type": "object",
       "additionalProperties": false,
-      "default": {},
       "properties": {
-        "host": { "const": "127.0.0.1", "default": "127.0.0.1" },
+        "host": { "const": "127.0.0.1" },
         "port": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 65535,
-          "default": 3774
+          "maximum": 65535
         }
       }
     },

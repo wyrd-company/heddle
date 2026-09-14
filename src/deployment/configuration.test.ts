@@ -24,6 +24,7 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
 
+import { defaultApprovalSettlementMilliseconds } from "../production/configuration.js";
 import type { ProductionConfiguration } from "../production/index.js";
 import {
   deploymentLaunchSettings,
@@ -314,7 +315,7 @@ describe("deployed configuration directory", () => {
     expect(loadedB.configuration.boardDirectory).toBe(join(shared, "board"));
     expect(
       loadedB.configuration.adjudication?.approvalSettlementMilliseconds,
-    ).toBe(60_000);
+    ).toBe(defaultApprovalSettlementMilliseconds);
     expect(loadedB.configuration.stateDirectory).toBe(join(shared, "state"));
     expect(loadedB.configuration.t3.baseUrl).toBe("http://127.0.0.1:3999");
     expect(loadedB.configuration.pacing.providerBudgets).toEqual({
