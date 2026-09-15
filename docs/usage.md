@@ -149,11 +149,31 @@ Findings from `{{ handoff.stage.entry.node }}`:
 {% endif %}
 ```
 
+A stage also declares the handoff `kind` it expects, and the template declares
+that kind in its front matter. The vocabulary is yours: Heddle checks that the
+two agree and reads nothing else from it, so a lifecycle can introduce a kind
+no Heddle release has seen. Because no handoff is assembled by kind, a template
+that wants review findings or a remediation cause reads them from the context
+above rather than receiving a different shape.
+
+One template can serve a family of stages and reach each stage's own
+instructions by name:
+
+```njk
+{% include "includes/delivery/" + handoff.stage.name + ".md" %}
+```
+
+An include names any Markdown artifact in the pinned `handoff-templates/` tree,
+written as the repository-relative path or relative to that directory, and it
+may be an expression. An included template renders its instructions, not its
+front matter.
+
 ## Validating and pinning
 
 Every wait stage pins its template by commit. Heddle reads the template, every
-include, the stage's skills, and the output contracts its edges name at that
-commit, so a change to any of them is a new pin. The blueprint repository's
+other Markdown artifact in the `handoff-templates/` tree, the stage's skills,
+and the output contracts its edges name at that commit, so a change to any of
+them is a new pin. The blueprint repository's
 `task validate HEDDLE_REPOSITORY_ROOT=<heddle checkout>` runs the authoritative
 schema and interpreter over the catalog; `task blueprints:validate` in a Heddle
 checkout does the same for one repository.
