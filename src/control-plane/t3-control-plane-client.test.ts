@@ -182,6 +182,87 @@ describe("resolveT3AwarenessPhase", () => {
 });
 
 describe("T3ControlPlaneClient", () => {
+  it("carries each model's provider option metadata into the catalog", async () => {
+    const { constructor: webSocket, sockets } = catalogSocketFactory();
+    const client = new T3ControlPlaneClient({
+      accessToken: "access-token",
+      baseUrl: "https://t3.test",
+      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+        jsonResponse({
+          expiresAt: "2026-09-07T00:05:00.000Z",
+          ticket: "ticket",
+        }),
+      ),
+      webSocket,
+    });
+
+    const reading = client.readProviderCatalog();
+    const socket = await waitForSocket(sockets);
+    socket.open();
+    const request = await waitForRequest(socket);
+    socket.message({
+      _tag: "Exit",
+      requestId: request.id,
+      exit: {
+        _tag: "Success",
+        value: {
+          providers: [
+            {
+              displayName: "Workbench Alpha",
+              driver: "sample-driver",
+              enabled: true,
+              installed: true,
+              instanceId: "instance-alpha",
+              models: [
+                {
+                  capabilities: {
+                    optionDescriptors: [
+                      {
+                        id: "reasoningEffort",
+                        label: "Reasoning",
+                        options: [
+                          { id: "low", label: "Low" },
+                          { id: "high", label: "High", isDefault: true },
+                        ],
+                        type: "select",
+                      },
+                      { id: "fastMode", label: "Fast", type: "boolean" },
+                    ],
+                  },
+                  isCustom: false,
+                  name: "Model Alpha",
+                  slug: "model-alpha",
+                },
+              ],
+              status: "ready",
+              version: "1.2.3",
+            },
+          ],
+        },
+      },
+    });
+
+    await expect(reading).resolves.toEqual([
+      expect.objectContaining({
+        models: [
+          {
+            isCustom: false,
+            name: "Model Alpha",
+            optionDescriptors: [
+              {
+                id: "reasoningEffort",
+                options: [{ id: "low" }, { id: "high" }],
+                type: "select",
+              },
+              { id: "fastMode", type: "boolean" },
+            ],
+            slug: "model-alpha",
+          },
+        ],
+      }),
+    ]);
+  });
+
   it("reads only the non-secret provider catalog and defaults omitted availability to available", async () => {
     const { constructor: webSocket, sockets } = catalogSocketFactory();
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(

@@ -299,6 +299,52 @@ describe("organization lifecycle blueprint artifacts", () => {
     );
   });
 
+  it("accepts a lifecycle-header and wait-node reasoning effort", async () => {
+    const root = await repository();
+    const blueprintPath = join(root, "blueprints", "sample-process.json");
+    const valid = JSON.parse(await readFile(blueprintPath, "utf8")) as Record<
+      string,
+      unknown
+    > & { nodes: Record<string, unknown>[] };
+    valid["reasoning-effort"] = "medium";
+    valid.nodes[1]!["reasoning-effort"] = "xhigh";
+    await writeFile(blueprintPath, `${JSON.stringify(valid, null, 2)}\n`);
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+  });
+
+  it.each(["", " medium", "medium ", 3])(
+    "rejects an invalid lifecycle-header reasoning effort %o",
+    async (value) => {
+      const invalid = artifact() as Record<string, unknown>;
+      invalid["reasoning-effort"] = value;
+
+      await expect(
+        validateBlueprintRepository(await repository(invalid)),
+      ).rejects.toThrow("violates the lifecycle schema");
+    },
+  );
+
+  it("rejects an interpreter-invalid lifecycle-header reasoning effort", () => {
+    const invalid = deliveryBlueprintFixture("trivial") as Record<
+      string,
+      unknown
+    >;
+    invalid["reasoning-effort"] = " medium";
+    const blueprint = { ...invalid, id: "trivial" } as LifecycleBlueprint;
+    const effects = Object.fromEntries(
+      blueprint.nodes
+        .filter(({ uses }) => uses !== "wait")
+        .map(({ uses }) => [uses, async () => ({})]),
+    ) as Record<string, LifecycleEffect>;
+
+    expect(() => validateBlueprint(blueprint, effects)).toThrow(
+      "Blueprint reasoning-effort must be a non-empty scalar",
+    );
+  });
+
   it("rejects an unknown agent-name list through the lifecycle schema", async () => {
     const invalid = artifact();
     (invalid.nodes[1] as Record<string, unknown>)["assign-agent-name"] =
@@ -315,6 +361,10 @@ describe("organization lifecycle blueprint artifacts", () => {
     ["provider-alias", "Not-Valid"],
     ["provider-alias", "a".repeat(65)],
     ["runtime-mode", "unrestricted"],
+    ["reasoning-effort", ""],
+    ["reasoning-effort", " high"],
+    ["reasoning-effort", "high "],
+    ["reasoning-effort", 3],
   ])(
     "rejects an invalid wait-node %s through the lifecycle schema",
     async (field, value) => {
@@ -327,12 +377,16 @@ describe("organization lifecycle blueprint artifacts", () => {
     },
   );
 
-  it.each(["provider-alias", "runtime-mode"])(
+  it.each(["provider-alias", "runtime-mode", "reasoning-effort"])(
     "rejects mechanical-node %s through the lifecycle schema",
     async (field) => {
       const invalid = artifact();
       (invalid.nodes[0] as Record<string, unknown>)[field] =
-        field === "provider-alias" ? "primary" : "auto";
+        field === "provider-alias"
+          ? "primary"
+          : field === "runtime-mode"
+            ? "auto"
+            : "high";
 
       await expect(
         validateBlueprintRepository(await repository(invalid)),
@@ -356,12 +410,16 @@ describe("organization lifecycle blueprint artifacts", () => {
     );
   });
 
-  it.each(["provider-alias", "runtime-mode"])(
+  it.each(["provider-alias", "runtime-mode", "reasoning-effort"])(
     "rejects interpreter-invalid mechanical-node %s",
     (field) => {
       const invalid = deliveryBlueprintFixture("trivial");
       (invalid.nodes[0] as Record<string, unknown>)[field] =
-        field === "provider-alias" ? "primary" : "auto";
+        field === "provider-alias"
+          ? "primary"
+          : field === "runtime-mode"
+            ? "auto"
+            : "high";
       const blueprint = { ...invalid, id: "trivial" } as LifecycleBlueprint;
       const effects = Object.fromEntries(
         blueprint.nodes
@@ -378,6 +436,7 @@ describe("organization lifecycle blueprint artifacts", () => {
   it.each([
     ["provider-alias", "Not-Valid", "provider-alias"],
     ["runtime-mode", "unrestricted", "runtime-mode"],
+    ["reasoning-effort", " high", "reasoning-effort"],
   ])("rejects interpreter-invalid wait-node %s", (field, value, message) => {
     const invalid = deliveryBlueprintFixture("trivial");
     (

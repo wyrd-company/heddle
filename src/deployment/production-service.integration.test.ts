@@ -136,6 +136,20 @@ const acceptProviderCatalogSocket = (
                 instanceId: "provider-alpha",
                 models: [
                   {
+                    capabilities: {
+                      optionDescriptors: [
+                        {
+                          id: "effort",
+                          label: "Reasoning",
+                          options: [
+                            { id: "low", label: "Low" },
+                            { id: "high", label: "High", isDefault: true },
+                            { id: "max", label: "Max" },
+                          ],
+                          type: "select",
+                        },
+                      ],
+                    },
                     isCustom: false,
                     name: "Sample Model",
                     slug: "sample-model",
@@ -323,7 +337,7 @@ describe("configured production service entry point", () => {
       boardDirectory: join(fixture.root, "core-board-must-not-be-used"),
       pacing: sourcePacing,
       server: { port: servicePort },
-      session: configuredSession,
+      session: { ...configuredSession, defaultReasoningEffort: "low" },
       stateDirectory: join(fixture.root, "core-state-must-not-be-used"),
       t3: {
         accessToken: "core-t3-secret-must-not-be-used",
@@ -343,6 +357,7 @@ describe("configured production service entry point", () => {
           {
             model: "sample-model",
             providerDisplayName: "Workbench Alpha",
+            reasoningEffort: "max",
           },
         ],
       },
@@ -424,7 +439,14 @@ describe("configured production service entry point", () => {
       modelSelection: {
         instanceId: "provider-alpha",
         model: "sample-model",
+        // The alias candidate's effort overrides session.defaultReasoningEffort,
+        // and the option id is the one this model's capabilities publish.
+        options: [{ id: "effort", value: "max" }],
       },
+    });
+    expect(commands[2]).toMatchObject({
+      modelSelection: { options: [{ id: "effort", value: "max" }] },
+      type: "thread.turn.start",
     });
     const workerBlueprintRoot = join(
       fixture.configuration.stateDirectory,

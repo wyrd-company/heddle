@@ -370,4 +370,74 @@ describe("production stage handoff", () => {
     });
     persistence.close();
   });
+
+  it.each([
+    {
+      header: "medium",
+      expected: "xhigh",
+      name: "prefers the stage's reasoning effort over the lifecycle header's",
+      stage: "xhigh",
+    },
+    {
+      header: "medium",
+      expected: "medium",
+      name: "falls back to the lifecycle header's reasoning effort",
+      stage: undefined,
+    },
+    {
+      header: undefined,
+      expected: undefined,
+      name: "reads no reasoning effort when the blueprint sets none",
+      stage: undefined,
+    },
+  ])("$name", async ({ expected, header, stage }) => {
+    const repositoryRoot = await mkdtemp(join(tmpdir(), "stage-effort-"));
+    temporaryDirectories.push(repositoryRoot);
+    await executeFile("git", ["init", "--quiet"], { cwd: repositoryRoot });
+    await mkdir(join(repositoryRoot, "blueprints"));
+    const blueprintPath = await writeDeliveryBlueprintFixture(
+      repositoryRoot,
+      "standard-delivery",
+    );
+    const blueprint = JSON.parse(
+      await readFile(join(repositoryRoot, blueprintPath), "utf8"),
+    ) as Record<string, unknown> & {
+      nodes: Array<Record<string, unknown> & { id: string }>;
+    };
+    if (header !== undefined) blueprint["reasoning-effort"] = header;
+    const review = blueprint.nodes.find(({ id }) => id === "review")!;
+    if (stage !== undefined) review["reasoning-effort"] = stage;
+    await writeFile(
+      join(repositoryRoot, blueprintPath),
+      `${JSON.stringify(blueprint, null, 2)}\n`,
+    );
+    const persistence = new SqlitePersistence({
+      stateDirectory: join(repositoryRoot, "state"),
+    });
+    const engine = new LifecycleEngine({
+      effects: {
+        finalize: async () => ({}),
+        merge: async () => ({}),
+        "prepare-worktree": async () => ({}),
+        "review-snapshot": async () => ({}),
+      },
+      persistence,
+      repositoryRoot,
+    });
+    await engine.start({ blueprintPath, instanceId: "sample-instance" });
+
+    const metadata = await readProductionHandoffStage({
+      instanceId: "sample-instance",
+      persistence,
+      repositoryRoot,
+      stageId: "review",
+    });
+
+    if (expected === undefined) {
+      expect(metadata).not.toHaveProperty("reasoningEffort");
+    } else {
+      expect(metadata.reasoningEffort).toBe(expected);
+    }
+    persistence.close();
+  });
 });
