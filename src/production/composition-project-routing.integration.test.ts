@@ -13,9 +13,10 @@ import { advanceOperationId } from "../mcp-server/operations.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
+  SyntheticT3,
   execute,
   prepareProductionEpicFixture,
-  SyntheticT3,
+  setBoardTaskRepositories,
 } from "./composition.test-support.js";
 
 class TerminalT3 extends SyntheticT3 {
@@ -77,17 +78,10 @@ describe("production project routing", () => {
       ],
       { cwd: secondRepositoryRoot },
     );
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "edit",
-        String(fixture.epicId),
-        "--repos",
-        "sample-repository,second-repository",
-      ],
-      { cwd: fixture.root },
+    await setBoardTaskRepositories(
+      fixture.configuration.boardDirectory,
+      Number(String(fixture.epicId)),
+      "sample-repository,second-repository".split(","),
     );
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({
@@ -294,17 +288,10 @@ describe("production project routing", () => {
       "tools",
       "second-repository",
     );
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "edit",
-        String(fixture.epicId),
-        "--repos",
-        "sample-repository,second-repository",
-      ],
-      { cwd: fixture.root },
+    await setBoardTaskRepositories(
+      fixture.configuration.boardDirectory,
+      Number(String(fixture.epicId)),
+      "sample-repository,second-repository".split(","),
     );
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({

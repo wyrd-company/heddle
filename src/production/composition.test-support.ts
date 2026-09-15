@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { KanbanBoardStore } from "../board-store/index.js";
+import { writeTaskFile } from "../board-store/task-file.js";
 import type {
   T3DispatchCommand,
   T3ProviderDispatchContext,
@@ -21,6 +23,44 @@ import type { ResolvedProductionConfiguration } from "./configuration.js";
 import type { ProductionT3Client } from "./composition.js";
 
 export const execute = promisify(execFile);
+
+export interface BoardTaskFixture {
+  dependsOn?: number[];
+  parent?: number;
+  priority?: string;
+  repos?: string[];
+  status?: string;
+  tags?: string[];
+  title: string;
+}
+
+/**
+ * Authors a board task through Heddle's own board layer. Repository scope is
+ * ordinary front matter here, so a qualification board needs no kanban-md —
+ * forked or otherwise — on PATH.
+ */
+export const createBoardTask = async (
+  boardDirectory: string,
+  fixture: BoardTaskFixture,
+): Promise<number> => {
+  const { repos, ...rest } = fixture;
+  const created = await new KanbanBoardStore(boardDirectory).createTask({
+    ...rest,
+    ...(repos === undefined ? {} : { properties: { repos } }),
+  });
+  return created.id;
+};
+
+/** Replaces the repository scope a board task declares. */
+export const setBoardTaskRepositories = async (
+  boardDirectory: string,
+  taskId: number,
+  repos: string[],
+): Promise<void> => {
+  const task = await new KanbanBoardStore(boardDirectory).readTask(taskId);
+  task.document.frontMatter.set("repos", repos);
+  await writeTaskFile(task);
+};
 
 const standardHandoffTemplate = `---
 $schema: https://wyrd.company/heddle/handoff-template.schema.json
@@ -626,26 +666,16 @@ tui:
 next_id: 1
 `,
     );
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        boardDirectory,
-        "create",
-        "Example Item",
-        "--status",
-        "todo",
-        "--priority",
-        "medium",
-        "--tags",
-        "lifecycle:sample",
-        "--repos",
-        "sample-repository",
-        "--json",
-      ],
-      { cwd: root },
-    );
-    const taskId = (JSON.parse(created.stdout) as { id: number }).id;
+    // Repository scope is written by Heddle's own board layer, so building a
+    // qualification board needs no forked kanban-md on PATH.
+    const created = await new KanbanBoardStore(boardDirectory).createTask({
+      priority: "medium",
+      properties: { repos: ["sample-repository"] },
+      status: "todo",
+      tags: ["lifecycle:sample"],
+      title: "Example Item",
+    });
+    const taskId = created.id;
     return {
       blueprintsRepositoryRoot,
       cleanup: () => rm(root, { force: true, recursive: true }),
@@ -773,24 +803,15 @@ export const prepareProductionEpicFixture =
       ],
       { cwd: fixture.root },
     );
-    const epic = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "create",
-        "Sample Delivery",
-        "--status",
-        "in-progress",
-        "--tags",
-        "type:epic",
-        "--repos",
-        "sample-repository",
-        "--json",
-      ],
-      { cwd: fixture.root },
-    );
-    const epicId = (JSON.parse(epic.stdout) as { id: number }).id;
+    const epic = await new KanbanBoardStore(
+      fixture.configuration.boardDirectory,
+    ).createTask({
+      properties: { repos: ["sample-repository"] },
+      status: "in-progress",
+      tags: ["type:epic"],
+      title: "Sample Delivery",
+    });
+    const epicId = epic.id;
     const child = await execute(
       "kanban-md",
       [

@@ -44,10 +44,11 @@ import { ProductionScopedAdjudication } from "./scoped-adjudication.js";
 import { bindResolvedSession } from "./session-binding.js";
 import { stableUuid } from "./stable-uuid.js";
 import {
+  SyntheticT3,
+  createBoardTask,
   execute,
   prepareProductionEpicFixture,
   prepareProductionFixture,
-  SyntheticT3,
 } from "./composition.test-support.js";
 
 const fetchedAttentionIds = (
@@ -2331,24 +2332,15 @@ describe("production composition", () => {
     );
     await first.close();
 
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "create",
-        "Later Item",
-        "--status",
-        "todo",
-        "--repos",
-        "sample-repository",
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: fixture.root },
+    const laterTaskId = await createBoardTask(
+      fixture.configuration.boardDirectory,
+      {
+        repos: "sample-repository".split(","),
+        status: "todo",
+        tags: "lifecycle:sample".split(","),
+        title: "Later Item",
+      },
     );
-    const laterTaskId = (JSON.parse(created.stdout) as { id: number }).id;
     accepted = true;
     fixture.configuration.pushover.applicationToken =
       "replacement-application-token";
@@ -2490,24 +2482,15 @@ describe("production composition", () => {
         stage: runtime.stageId!,
       },
     );
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "create",
-        "Independent Item",
-        "--status",
-        "todo",
-        "--repos",
-        "sample-repository",
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: fixture.root },
+    const independentTaskId = await createBoardTask(
+      fixture.configuration.boardDirectory,
+      {
+        repos: "sample-repository".split(","),
+        status: "todo",
+        tags: "lifecycle:sample".split(","),
+        title: "Independent Item",
+      },
     );
-    const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
 
     await expect(composition.scheduler.trigger()).resolves.toBeUndefined();
     expect(
@@ -3560,24 +3543,15 @@ describe("production composition", () => {
 
   it("keeps scheduler dispatch moving after one task activation fails", async () => {
     const fixture = await prepare();
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "create",
-        "Secondary Item",
-        "--status",
-        "todo",
-        "--repos",
-        "sample-repository",
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: fixture.root },
+    const secondTaskId = await createBoardTask(
+      fixture.configuration.boardDirectory,
+      {
+        repos: "sample-repository".split(","),
+        status: "todo",
+        tags: "lifecycle:sample".split(","),
+        title: "Secondary Item",
+      },
     );
-    const secondTaskId = (JSON.parse(created.stdout) as { id: number }).id;
     class FirstTaskFailureT3 extends SyntheticT3 {
       override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {
         if (

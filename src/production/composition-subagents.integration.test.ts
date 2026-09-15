@@ -16,10 +16,11 @@ import { resolvedSessionBindingFixture } from "../persistence/resolved-session-b
 import { isTodoState } from "../todo/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
+  SyntheticT3,
   execute,
   prepareProductionEpicFixture,
   prepareProductionFixture,
-  SyntheticT3,
+  setBoardTaskRepositories,
 } from "./composition.test-support.js";
 import { productionSessionTargets } from "./subagent-composition.js";
 import {
@@ -527,17 +528,10 @@ describe("production subagent composition", () => {
       ],
       { cwd: secondRepositoryRoot },
     );
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "edit",
-        String(fixture.epicId),
-        "--repos",
-        "sample-repository,second-repository",
-      ],
-      { cwd: fixture.root },
+    await setBoardTaskRepositories(
+      fixture.configuration.boardDirectory,
+      Number(String(fixture.epicId)),
+      "sample-repository,second-repository".split(","),
     );
     const blueprintPath = join(
       fixture.blueprintsRepositoryRoot,
@@ -644,17 +638,10 @@ describe("production subagent composition", () => {
         cwd: secondRepositoryRoot,
       },
     );
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "edit",
-        String(fixture.taskId),
-        "--repos",
-        "sample-repository",
-      ],
-      { cwd: fixture.root },
+    await setBoardTaskRepositories(
+      fixture.configuration.boardDirectory,
+      Number(String(fixture.taskId)),
+      "sample-repository".split(","),
     );
     const instanceId = `task-${fixture.taskId}`;
     const parentRecord = composition.persistence.getInstance(instanceId)!;

@@ -11,9 +11,9 @@ import {
   type ProductionComposition,
 } from "./composition.js";
 import {
-  execute,
-  prepareProductionFixture,
   SyntheticT3,
+  createBoardTask,
+  prepareProductionFixture,
 } from "./composition.test-support.js";
 import { NotificationDeliveryError } from "./durable-adapters.js";
 import {
@@ -172,24 +172,15 @@ describe("production notification failure projection", () => {
       "secondary-choice",
       "Which alternate sample should be selected?",
     );
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "create",
-        "Independent Item",
-        "--status",
-        "todo",
-        "--repos",
-        "sample-repository",
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: fixture.root },
+    const independentTaskId = await createBoardTask(
+      fixture.configuration.boardDirectory,
+      {
+        repos: "sample-repository".split(","),
+        status: "todo",
+        tags: "lifecycle:sample".split(","),
+        title: "Independent Item",
+      },
     );
-    const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
 
     await first.scheduler.trigger();
     expect(
@@ -468,24 +459,15 @@ describe("production notification failure projection", () => {
       "later-route",
       "Which later-route sample should be retained?",
     );
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "create",
-        "Later Independent Item",
-        "--status",
-        "todo",
-        "--repos",
-        "sample-repository",
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: fixture.root },
+    const independentTaskId = await createBoardTask(
+      fixture.configuration.boardDirectory,
+      {
+        repos: "sample-repository".split(","),
+        status: "todo",
+        tags: "lifecycle:sample".split(","),
+        title: "Later Independent Item",
+      },
     );
-    const independentTaskId = (JSON.parse(created.stdout) as { id: number }).id;
 
     now = 15_000;
     await first.scheduler.trigger();

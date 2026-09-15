@@ -14,12 +14,13 @@ import { readLifecycleContext } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
+  SyntheticT3,
   execute,
   prepareProductionEpicFixture,
   prepareProductionFixture,
-  SyntheticT3,
-  useMechanicalLifecycle,
+  setBoardTaskRepositories,
   type ProductionFixture,
+  useMechanicalLifecycle,
 } from "./composition.test-support.js";
 
 const git = async (cwd: string, ...arguments_: string[]): Promise<string> =>
@@ -645,17 +646,10 @@ describe("production mechanical worktree preparation", () => {
       ],
       { cwd: secondRepositoryRoot },
     );
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "edit",
-        String(fixture.taskId),
-        "--repos",
-        "sample-repository,second-repository",
-      ],
-      { cwd: fixture.root },
+    await setBoardTaskRepositories(
+      fixture.configuration.boardDirectory,
+      Number(String(fixture.taskId)),
+      "sample-repository,second-repository".split(","),
     );
     const t3 = new SyntheticT3();
     const composition = compose(fixture, t3);
@@ -704,17 +698,10 @@ describe("production mechanical worktree preparation", () => {
     expect(firstTurnText).toContain("Repositories:");
     expect(firstTurnText).toContain('"sample-repository"');
     expect(firstTurnText).toContain('"second-repository"');
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "edit",
-        String(fixture.taskId),
-        "--repos",
-        "second-repository",
-      ],
-      { cwd: fixture.root },
+    await setBoardTaskRepositories(
+      fixture.configuration.boardDirectory,
+      Number(String(fixture.taskId)),
+      "second-repository".split(","),
     );
 
     const instanceId = `task-${fixture.taskId}`;

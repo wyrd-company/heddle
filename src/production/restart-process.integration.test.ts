@@ -22,6 +22,7 @@ import {
 } from "../control-plane/mechanical-process-termination-fixture.js";
 import { terminateAtBoundary } from "../control-plane/mechanical-process-termination-client.js";
 import { readLifecycleContext } from "../engine/index.js";
+import { createBoardTask } from "./composition.test-support.js";
 import { SqlitePersistence } from "../persistence/index.js";
 import type { ResolvedProductionConfiguration } from "./configuration.js";
 
@@ -134,24 +135,12 @@ tui: { title_lines: 2, age_thresholds: [] }
 next_id: 1
 `,
     );
-    const created = await execute(
-      "kanban-md",
-      [
-        "--dir",
-        boardDirectory,
-        "create",
-        "Example Item",
-        "--status",
-        "in-progress",
-        "--repos",
-        fixture.change.repositoryName,
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: root },
-    );
-    const taskId = (JSON.parse(created.stdout) as { id: number }).id;
+    const taskId = await createBoardTask(boardDirectory, {
+      repos: fixture.change.repositoryName.split(","),
+      status: "in-progress",
+      tags: "lifecycle:sample".split(","),
+      title: "Example Item",
+    });
     await execute(
       "git",
       [
@@ -491,25 +480,13 @@ tui: { title_lines: 2, age_thresholds: [] }
 next_id: 1
 `;
     await writeFile(join(boardDirectory, "config.yml"), boardConfiguration);
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        boardDirectory,
-        "create",
-        "Example Item",
-        "--status",
-        "todo",
-        "--priority",
-        "medium",
-        "--repos",
-        "sample-repository",
-        "--tags",
-        "lifecycle:sample",
-        "--json",
-      ],
-      { cwd: root },
-    );
+    await createBoardTask(boardDirectory, {
+      priority: "medium",
+      repos: "sample-repository".split(","),
+      status: "todo",
+      tags: "lifecycle:sample".split(","),
+      title: "Example Item",
+    });
     const configuration: ResolvedProductionConfiguration = {
       adHocProject: {
         label: "Sample worker",

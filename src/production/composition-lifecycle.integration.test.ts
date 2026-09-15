@@ -12,9 +12,10 @@ import { readLifecycleContext } from "../engine/index.js";
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
-  prepareProductionFixture,
   SyntheticT3,
   execute,
+  prepareProductionFixture,
+  setBoardTaskRepositories,
 } from "./composition.test-support.js";
 
 const workflowMcpEndpoint = "http://127.0.0.1:4774/mcp";
@@ -58,17 +59,10 @@ describe("production lifecycle composition", () => {
       ],
       { cwd: secondRepositoryRoot },
     );
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        configuration.boardDirectory,
-        "edit",
-        String(taskId),
-        "--repos",
-        "sample-secondary,sample-repository",
-      ],
-      { cwd: root },
+    await setBoardTaskRepositories(
+      configuration.boardDirectory,
+      Number(String(taskId)),
+      "sample-secondary,sample-repository".split(","),
     );
     const blueprintPath = join(
       blueprintsRepositoryRoot,
