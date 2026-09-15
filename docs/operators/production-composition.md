@@ -725,10 +725,12 @@ kanban-md --dir /workspaces/sample-board create "Arrange sample records" \
   --tags lifecycle:standard-delivery
 ```
 
+Then add the scope to that task file's front matter:
+
 ```yaml
 repos:
-    - sample-alpha
-    - sample-beta
+  - sample-alpha
+  - sample-beta
 ```
 
 Author an epic with the same property, then omit it from every child:

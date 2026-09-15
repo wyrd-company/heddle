@@ -30,5 +30,4 @@ export type BoardStoreErrorCode =
   | "task-not-found"
   | "dependency-not-found"
   | "self-reference"
-  | "wip-limit-exceeded"
-  | "id-allocation-failed";
+  | "wip-limit-exceeded";

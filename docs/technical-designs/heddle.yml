@@ -290,6 +290,13 @@ proposed-design:
     state the CLI would have refused: a task under a live claim is off-limits,
     and a column configured to require a claim can be neither entered nor left.
 
+    One refusal is deliberately not reproduced. kanban-md enforces column and
+    class WIP limits when it creates a task; Heddle enforces them when it moves
+    a task but not when it creates one, so a Heddle record can enter a column
+    the CLI would have refused to create into. The records Heddle creates are
+    findings and follow-ups it raised itself, and refusing them would discard
+    the observation rather than defer it.
+
     A task file is published by writing a temporary file beside it, flushing,
     and renaming over the target, so a concurrent reader sees either the whole
     previous file or the whole new one. This makes Heddle's writer atomic and
@@ -297,12 +304,28 @@ proposed-design:
 
     Task ids come from the board's `next_id`, floored at one above the highest
     id already on disk so a `next_id` that has fallen behind cannot reissue a
-    live id. kanban-md takes an exclusive lock across allocation, which Heddle
-    cannot join from Node, so two writers can still choose one id before either
-    writes. They resolve it afterwards without coordinating: each writer keeps
-    the id only when its own file is first in path order, and otherwise removes
-    its file and retries higher. Exactly one writer keeps each id and the rest
-    make progress.
+    live id. `next_id` is raised before the new task file exists, so a writer
+    that reads the config after that reservation cannot choose the same id, and
+    it is raised from the value read at the moment of writing, never from an
+    earlier read — kanban-md's create trusts `next_id` without consulting the
+    files, so one lowered value reissues a live id.
+
+    The file is published with a link, which refuses an occupied name rather
+    than replacing it. Heddle then re-reads the board and keeps the id only if
+    the bytes under its name are the ones it wrote and no other file carries
+    that id; on any mismatch it yields its own attempt and retries higher. It
+    never decides by comparing paths, because kanban-md performs no check after
+    writing and so would never yield in turn.
+
+    What this guarantees: Heddle never destroys or renumbers another writer's
+    task, and never leaves a duplicate id of its own making. What it does not
+    guarantee: kanban-md holds an exclusive `flock` across its own allocation
+    that Heddle cannot join, so a CLI create that read `next_id` before Heddle
+    reserved and writes its file after Heddle verified can still place a second
+    file on Heddle's id. Heddle yields wherever it can observe the collision;
+    outside that window the duplicate is left for kanban-md's own consistency
+    repair, which renumbers it. Closing the window needs a shared lock, which
+    is a decision above this layer.
 
   provider-selection: >
     Production configuration owns a provider-alias allowlist. Each lower-kebab
