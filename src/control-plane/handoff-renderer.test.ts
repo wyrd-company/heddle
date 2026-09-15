@@ -1083,7 +1083,15 @@ describe("GitHandoffTemplateStore", () => {
         "",
       ].join("\n"),
     );
-    const partial = ["---", "", "Ruled guidance.", ""].join("\n");
+    // Two thematic breaks: the bytes between them look exactly like front
+    // matter, and they are not.
+    const partial = [
+      "---",
+      "Ruled guidance.",
+      "---",
+      "More guidance.",
+      "",
+    ].join("\n");
     await writeFile(
       join(root, "handoff-templates", "includes", "rule.md"),
       partial,
