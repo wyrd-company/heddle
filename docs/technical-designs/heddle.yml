@@ -624,14 +624,20 @@ proposed-design:
     stable lifecycle-resolution attention entry.
 
     Every agent wait node declares a `handoff-template`
-    path and exact Git commit SHA; the template's path is its only
-    declaration, and the template decides what it renders from the
-    projection. Heddle reads the entry file and every file
-    under `handoff-templates/includes/` from that commit in the organization
+    path, exact Git commit SHA, and the handoff `kind` it expects; the template
+    declares that kind in its own front matter, and Heddle refuses only when
+    the two disagree. The kinds are the blueprint catalog's vocabulary: Heddle
+    enumerates none, assembles no handoff by kind, and hands every stage the
+    same context, so the template decides what it renders from the projection.
+    Heddle reads the entry file and every Markdown artifact
+    under `handoff-templates/` from that commit in the organization
     blueprint repository and retains the commit under
-    `refs/heddle/handoff-templates/<commit-sha>`. Include directives use the
-    full repository-relative form
-    `handoff-templates/includes/<path>`. Paths outside that directory and the
+    `refs/heddle/handoff-templates/<commit-sha>`. An include names an artifact
+    in that tree by its repository-relative path or by a path relative to the
+    tree, and the specifier may be an expression, so one shared template
+    reaches a per-stage template by the stage's own name. An included template
+    renders its instructions, not its front matter. Specifiers that leave the
+    tree, name anything but Markdown, or use the
     Nunjucks `extends` and `import` directives fail closed. Heddle verifies the
     entry schema and never substitutes mutable working-tree content. A wait node can declare a unique, non-empty array of
     kebab-case `skills` names no longer than 64 characters. Each name resolves from
@@ -832,8 +838,14 @@ proposed-design:
     confirmed adjudication replay retains its stored binding. Each newly
     selected candidate is paced against the alias budget and its actual
     provider instance before dispatch. Its decide-versus-escalate boundary
-    comes from an
-    organization blueprint repository policy pinned by Git blob at activation.
+    comes from the conventional `adjudication/policy.json` in the organization
+    blueprint repository, pinned by Git blob at activation; a deployment names
+    a different artifact there only to keep a second boundary beside it.
+    Composing adjudication is what enables the tier, so omitting the capability
+    holds an adjudicator question rather than answering it. The boundary is
+    instructions rendered into the adjudicator's handoff, telling that session
+    which decisions are its own; it grants and withholds no access, which comes
+    from the session's runtime mode and tools.
     The session receives a constructed, token-free view of the current epic and
     child statuses, escalating instance and stage, prior stage outputs, and
     offered questions. It counts against both the session concurrency limit and
