@@ -19,6 +19,7 @@ import { internalNodeIdParameter } from "./blueprint.js";
 import {
   edgeRoutingKey,
   evaluateOutgoingConditions,
+  effectiveCondition,
   mergeRouting,
   routedBlueprint,
 } from "./edge-conditions.js";
@@ -79,7 +80,7 @@ export const landedAsExpected = (
     { edgeKeys: Set<string>; exclusive: boolean }
   >();
   for (const edge of blueprint.edges) {
-    if (edge.condition === undefined) continue;
+    if (effectiveCondition(blueprint, edge) === undefined) continue;
     const source = blueprint.nodes.find(({ id }) => id === edge.source);
     if (source !== undefined && isAwaitingNode(source)) continue;
     const conditional = conditionalEdgesBySource.get(edge.source) ?? {

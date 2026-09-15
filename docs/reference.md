@@ -238,8 +238,8 @@ The interpreter refuses, naming the node or edge:
 - a wait node without disposition edges, or with an action edge
 - a blank disposition, or one whose edges disagree on description or output
   contract, or that has more than one unconditioned edge
-- a node that mixes disposition edges with ordinary edges, or conditional edges
-  with unconditional ones
+- a node that mixes disposition edges with ordinary edges, or edges with and
+  without effective conditions
 - a question node without params, with an unknown role, without questions, or
   with a blank or repeated question id, blank text, or an option without a label
 - a question node whose edges declare a disposition

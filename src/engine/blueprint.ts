@@ -10,7 +10,11 @@ import {
   type NodeFunction,
 } from "flowcraft";
 
-import { assertConditionsCompile, edgeLabel } from "./edge-conditions.js";
+import {
+  assertConditionsCompile,
+  edgeLabel,
+  effectiveCondition,
+} from "./edge-conditions.js";
 import { BlueprintValidationError } from "./errors.js";
 import {
   answeredDisposition,
@@ -460,7 +464,7 @@ export const expectedLanding = (
     const nextActive = new Set(active).add(nodeId);
     const groups = edges.map(({ target }) => visit(target, nextActive));
     const conditionalCount = edges.filter(
-      ({ condition }) => condition !== undefined,
+      (edge) => effectiveCondition(blueprint, edge) !== undefined,
     ).length;
     const dispositionCount = edges.filter(
       ({ disposition }) => disposition !== undefined,

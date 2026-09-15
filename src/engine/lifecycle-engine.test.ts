@@ -16,6 +16,7 @@ import {
   InvalidDispositionError,
   TransitionConflictError,
   UnexpectedLandingError,
+  type LifecycleBlueprint,
   type LifecycleEffect,
 } from "./index.js";
 import {
@@ -25,6 +26,31 @@ import {
 } from "./lifecycle-engine.test-support.js";
 
 const execFileAsync = promisify(execFile);
+
+const mechanicalDispositionBlueprint = (): LifecycleBlueprint => ({
+  "board-statuses": { "prepare-worktree": "in-progress" },
+  id: "mechanical-dispositions",
+  nodes: [
+    { id: "prepare", uses: "prepare-worktree" },
+    { id: "left", uses: "left" },
+    { id: "right", uses: "right" },
+  ],
+  edges: [
+    {
+      condition: "result.output.dispositions.left",
+      description: "Take the left route",
+      disposition: "left",
+      source: "prepare",
+      target: "left",
+    },
+    {
+      description: "Take the right route",
+      disposition: "right",
+      source: "prepare",
+      target: "right",
+    },
+  ],
+});
 
 afterEach(async () => {
   await cleanupFixtures();
@@ -448,6 +474,52 @@ describe("LifecycleEngine", () => {
         disposition: "accept",
       },
     });
+    fixture.persistence.close();
+  });
+
+  it("routes a mechanical disposition edge with an omitted effective condition", async () => {
+    const applied: string[] = [];
+    const record =
+      (effect: string, output: Record<string, unknown> = {}): LifecycleEffect =>
+      async () => {
+        applied.push(effect);
+        return output;
+      };
+    const fixture = await makeFixture(mechanicalDispositionBlueprint(), {
+      left: record("left"),
+      "prepare-worktree": record("prepare", {
+        dispositions: { right: true },
+      }),
+      right: record("right"),
+    });
+
+    const completed = await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "mechanical-dispositions",
+    });
+
+    expect(completed.status).toBe("completed");
+    expect(applied).toEqual(["prepare", "right"]);
+    fixture.persistence.close();
+  });
+
+  it("rejects a mechanical node that mixes effective and truly unconditional edges", async () => {
+    const blueprint = mechanicalDispositionBlueprint();
+    for (const edge of blueprint.edges) delete edge.disposition;
+    const fixture = await makeFixture(blueprint, {
+      left: async () => ({}),
+      right: async () => ({}),
+      "prepare-worktree": async () => ({}),
+    });
+
+    await expect(
+      fixture.engine.start({
+        blueprintPath: fixture.blueprintPath,
+        instanceId: "mixed-conditions",
+      }),
+    ).rejects.toThrow(
+      'Node "prepare" mixes conditional and unconditional edges',
+    );
     fixture.persistence.close();
   });
 
