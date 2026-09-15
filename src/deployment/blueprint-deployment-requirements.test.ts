@@ -4,9 +4,18 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { URL } from "node:url";
 import process from "node:process";
 import { promisify } from "node:util";
 
@@ -22,6 +31,27 @@ import { parseHeddleServerArguments } from "./configuration.js";
 
 const execute = promisify(execFile);
 const roots: string[] = [];
+
+/** Every file under a root with its content hash, for a read-only comparison. */
+const tree = async (root: string): Promise<[string, string][]> => {
+  const entries = await readdir(root, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  const files: [string, string][] = [];
+  for (const entry of entries) {
+    const path = join(entry.parentPath, entry.name);
+    files.push([
+      relative(root, path),
+      entry.isFile()
+        ? createHash("sha256")
+            .update(await readFile(path))
+            .digest("hex")
+        : "<directory>",
+    ]);
+  }
+  return files.sort(([left], [right]) => (left < right ? -1 : 1));
+};
 
 const handoffTemplate = "# {{ task.title }}\n";
 const todoTemplate = `${JSON.stringify(
@@ -284,6 +314,26 @@ describe("blueprint requirements the deployment must supply", () => {
     );
   });
 
+  it("does not accept a directory in place of the policy artifact", async () => {
+    const root = await blueprintRepository({
+      policyArtifactPath: "adjudication/policy.json",
+      providerAlias: "primary",
+    });
+    await mkdir(join(root, "adjudication", "house-rules.json"));
+
+    const report = blueprintDeploymentReport(
+      await validateBlueprintDeployment({
+        blueprintsRepositoryRoot: root,
+        configuration: configuration({
+          adjudicationPolicyPath: "adjudication/house-rules.json",
+        }),
+      }),
+    );
+
+    expect(report.exitCode).toBe(1);
+    expect(report.stderr).toContain("adjudication.policyPath");
+  });
+
   it("names the alias key when a stage selects an alias the deployment does not define", async () => {
     const root = await blueprintRepository({
       policyArtifactPath: "adjudication/policy.json",
@@ -454,6 +504,33 @@ describe("the deployed validate-blueprints command", () => {
     });
   });
 
+  it("leaves the catalog and the deployment exactly as it found them", async () => {
+    const catalog = await blueprintRepository({
+      policyArtifactPath: "adjudication/policy.json",
+      providerAlias: "second-kitchen",
+    });
+    const deployment = await installedDeployment({
+      adjudicationPolicyPath: "adjudication/policy.json",
+    });
+    const before = await Promise.all([tree(catalog), tree(deployment)]);
+
+    await execute(
+      process.execPath,
+      [
+        "bin/heddle-server.mjs",
+        "validate-blueprints",
+        catalog,
+        "--config",
+        deployment,
+      ],
+      { env: process.env },
+    ).catch(() => undefined);
+
+    expect(await Promise.all([tree(catalog), tree(deployment)])).toEqual(
+      before,
+    );
+  });
+
   it("writes one line per mismatch and exits non-zero", async () => {
     const catalog = await blueprintRepository({
       providerAlias: "second-kitchen",
@@ -480,6 +557,24 @@ describe("the deployed validate-blueprints command", () => {
       "catering-run node 'taste': selects provider alias 'second-kitchen'; the deployment defines no such alias; configure 'providerAliases.second-kitchen'",
       "catering-run node 'approve': asks the adjudicator; this deployment composes no adjudication; configure 'adjudication'",
     ]);
+  });
+});
+
+describe("the documented mismatch line", () => {
+  it("is the line the command actually writes", async () => {
+    const root = await blueprintRepository({ providerAlias: "primary" });
+    const report = blueprintDeploymentReport(
+      await validateBlueprintDeployment({
+        blueprintsRepositoryRoot: root,
+        configuration: configuration({}),
+      }),
+    );
+
+    const documented = await readFile(
+      new URL("../../docs/usage.md", import.meta.url),
+      "utf8",
+    );
+    expect(documented).toContain(report.stderr.trim());
   });
 });
 
