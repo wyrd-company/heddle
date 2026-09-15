@@ -20,8 +20,10 @@ export {
 } from "./blueprint-artifact-editor.js";
 export { isBlueprintArtifactId } from "./blueprint-artifact.js";
 export {
+  readBlueprintArtifacts,
   validateBlueprintRepository,
   validateBlueprintToolRegistry,
+  type BlueprintRepositoryArtifact,
 } from "./blueprint-repository-validation.js";
 export { GitBlueprintStore } from "./git-blueprint-store.js";
 export type {

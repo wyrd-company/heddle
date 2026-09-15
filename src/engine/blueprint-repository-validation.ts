@@ -43,18 +43,44 @@ const json = async (path: string): Promise<unknown> =>
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const validateBlueprintToolRegistry = async (
+/** One `blueprints/<id>.json` artifact, read as written. */
+export type BlueprintRepositoryArtifact = {
+  artifact: unknown;
+  artifactId: string;
+  filename: string;
+};
+
+/**
+ * The repository's blueprint artifacts in filename order. Every reader of the
+ * catalog goes through here, so no two of them can disagree on which files are
+ * blueprints.
+ */
+export const readBlueprintArtifacts = async (
   repositoryRoot: string,
-  registeredTools: ReadonlySet<string>,
-): Promise<void> => {
+): Promise<BlueprintRepositoryArtifact[]> => {
   const directory = join(resolve(repositoryRoot), "blueprints");
   const filenames = (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && extname(entry.name) === ".json")
     .map(({ name }) => name)
     .sort();
+  const artifacts: BlueprintRepositoryArtifact[] = [];
   for (const filename of filenames) {
-    const artifactId = basename(filename, ".json");
-    const artifact = await json(join(directory, filename));
+    artifacts.push({
+      artifact: await json(join(directory, filename)),
+      artifactId: basename(filename, ".json"),
+      filename,
+    });
+  }
+  return artifacts;
+};
+
+export const validateBlueprintToolRegistry = async (
+  repositoryRoot: string,
+  registeredTools: ReadonlySet<string>,
+): Promise<void> => {
+  for (const { artifact, artifactId } of await readBlueprintArtifacts(
+    repositoryRoot,
+  )) {
     if (!record(artifact) || !Array.isArray(artifact["nodes"])) continue;
     for (const candidate of artifact["nodes"]) {
       if (!record(candidate) || candidate["uses"] !== "wait") continue;
@@ -292,12 +318,8 @@ export const validateBlueprintRepository = async (
 ): Promise<string[]> => {
   const root = resolve(repositoryRoot);
   const themes = await validateAgentNameThemeRepository(root);
-  const directory = join(root, "blueprints");
-  const filenames = (await readdir(directory, { withFileTypes: true }))
-    .filter((entry) => entry.isFile() && extname(entry.name) === ".json")
-    .map(({ name }) => name)
-    .sort();
-  if (filenames.length === 0) {
+  const catalog = await readBlueprintArtifacts(root);
+  if (catalog.length === 0) {
     throw new BlueprintValidationError(
       "Blueprint repository must contain at least one JSON artifact",
     );
@@ -306,14 +328,12 @@ export const validateBlueprintRepository = async (
   const validator = new Ajv2020({ allErrors: true, strict: false }).compile(
     schema as object,
   );
-  for (const filename of filenames) {
-    const artifactId = basename(filename, ".json");
+  for (const { artifact, artifactId, filename } of catalog) {
     if (!isBlueprintArtifactId(artifactId)) {
       throw new BlueprintValidationError(
         `Blueprint filename '${filename}' must be a kebab artifact ID`,
       );
     }
-    const artifact = await json(join(directory, filename));
     if (!validator(artifact)) {
       throw new BlueprintValidationError(
         `Blueprint '${artifactId}' violates the lifecycle schema: ${JSON.stringify(validator.errors)}`,
@@ -333,7 +353,7 @@ export const validateBlueprintRepository = async (
     await assertTemplateArtifacts(artifactId, blueprint.nodes, root);
     await assertOutputContractArtifacts(artifactId, blueprint, root);
   }
-  const artifacts = filenames.map((filename) => basename(filename, ".json"));
+  const artifacts = catalog.map(({ artifactId }) => artifactId);
   const adjudicationPath = join(root, "adjudication", "policy.json");
   const adjudication = await stat(adjudicationPath).catch(() => undefined);
   if (adjudication !== undefined) {
