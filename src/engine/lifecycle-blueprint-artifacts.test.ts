@@ -242,6 +242,18 @@ describe("organization lifecycle blueprint artifacts", () => {
     ]);
   });
 
+  it("reads only JSON artifacts from the blueprints directory", async () => {
+    const root = await repository();
+    await writeFile(
+      join(root, "blueprints/README.md"),
+      "# Catalog notes, not a blueprint\n",
+    );
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
+  });
+
   it("accepts an agent-name list on an agent wait node", async () => {
     const root = await repository();
     const valid = JSON.parse(
