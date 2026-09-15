@@ -226,19 +226,26 @@ export const isTerminalStatus = (
 };
 
 /**
- * Rewrites `next_id` in place, leaving every other byte of the config document
- * as the operator (or the CLI) wrote it.
+ * Raises `next_id` to at least `nextId`, leaving every other byte of the
+ * config document as the operator (or the CLI) wrote it.
  *
- * The caller allocates above both the recorded `next_id` and the highest id on
- * disk, re-reading both on every attempt, so the value written here already
- * accounts for an id another writer has taken.
+ * The value read here is the value written back, so a `next_id` another writer
+ * raised between this caller's read and this call is never lowered. Lowering
+ * it hands a live id to the next allocator, and kanban-md's create trusts
+ * `next_id` without checking the files, so it would reissue that id.
+ *
+ * Returns the value now on disk.
  */
-export const persistNextId = async (
+export const raiseNextId = async (
   boardDirectory: string,
   nextId: number,
-): Promise<void> => {
+): Promise<number> => {
   const path = configPath(boardDirectory);
   const document: Document = parseDocument(await readFile(path, "utf8"));
-  document.set("next_id", nextId);
+  const current = document.get("next_id");
+  const raised =
+    typeof current === "number" ? Math.max(current, nextId) : nextId;
+  document.set("next_id", raised);
   await writeFileAtomic(path, document.toString({ indent: 4 }));
+  return raised;
 };

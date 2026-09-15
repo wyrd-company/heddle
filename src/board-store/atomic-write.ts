@@ -4,7 +4,7 @@
 // ---
 
 import { randomBytes } from "node:crypto";
-import { open, rename, unlink } from "node:fs/promises";
+import { link, open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 /**
@@ -39,5 +39,44 @@ export const writeFileAtomic = async (
     if (!published) {
       await unlink(temporaryPath).catch(() => undefined);
     }
+  }
+};
+
+/**
+ * Creates `path` with `contents`, refusing to disturb an existing file.
+ *
+ * `rename` would replace whatever is already there, which on a shared board
+ * destroys a task another writer created and reported as created. `link`
+ * publishes the finished bytes under the target name in one step and fails
+ * with `EEXIST` instead, so a losing writer loses only its own attempt.
+ *
+ * Returns false when the target already exists.
+ */
+export const createFileAtomic = async (
+  path: string,
+  contents: string,
+): Promise<boolean> => {
+  const directory = dirname(path);
+  const temporaryPath = join(
+    directory,
+    `.${randomBytes(8).toString("hex")}.tmp`,
+  );
+  try {
+    const handle = await open(temporaryPath, "wx", 0o600);
+    try {
+      await handle.writeFile(contents, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    try {
+      await link(temporaryPath, path);
+    } catch (error) {
+      if ((error as { code?: string }).code === "EEXIST") return false;
+      throw error;
+    }
+    return true;
+  } finally {
+    await unlink(temporaryPath).catch(() => undefined);
   }
 };

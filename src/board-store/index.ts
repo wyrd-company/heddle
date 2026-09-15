@@ -3,7 +3,7 @@
 //   implements: heddle
 // ---
 
-import { unlink } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { Document } from "yaml";
@@ -11,7 +11,7 @@ import { Document } from "yaml";
 import {
   ARCHIVED_STATUS,
   boardStatusNames,
-  persistNextId,
+  raiseNextId,
   readBoardConfig,
   statusNames,
   statusRequiresClaim,
@@ -29,14 +29,11 @@ import {
   writeTaskFile,
   type StoredTask,
 } from "./task-file.js";
-import { writeFileAtomic } from "./atomic-write.js";
+import { createFileAtomic } from "./atomic-write.js";
 
 export { BoardStoreError, type BoardStoreErrorCode } from "./errors.js";
 export { ARCHIVED_STATUS } from "./config.js";
 export type { StoredTask } from "./task-file.js";
-
-/** How many ids to try before giving up when the CLI keeps winning the race. */
-const ID_ALLOCATION_ATTEMPTS = 16;
 
 /** The frontmatter key order kanban-md emits for a task it writes itself. */
 const CANONICAL_KEY_ORDER = [
@@ -89,6 +86,13 @@ export const appendBody = (existing: string, text: string): string =>
  * the file, in place, so a board field Heddle adds needs no change to the CLI.
  */
 export class KanbanBoardStore {
+  /**
+   * Creates against one board are serialized process-wide, so two Heddle
+   * writers never contend for an id. Only foreign writers remain, and those
+   * are what the allocation loop verifies against.
+   */
+  private static createQueues = new Map<string, Promise<unknown>>();
+
   public constructor(private readonly boardDirectory: string) {}
 
   public async readBoardStatuses(): Promise<string[]> {
@@ -183,7 +187,21 @@ export class KanbanBoardStore {
     }
     await this.requireReferencesExist(config, parameters);
 
-    return this.allocateAndWrite(config, parameters, priority, status);
+    const queue =
+      KanbanBoardStore.createQueues.get(this.boardDirectory) ??
+      Promise.resolve();
+    const write = queue.then(
+      () => this.allocateAndWrite(config, parameters, priority, status),
+      () => this.allocateAndWrite(config, parameters, priority, status),
+    );
+    KanbanBoardStore.createQueues.set(
+      this.boardDirectory,
+      write.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return write;
   }
 
   private async config(): Promise<BoardConfig> {
@@ -283,15 +301,21 @@ export class KanbanBoardStore {
   }
 
   /**
-   * Allocates the next id, writes the task, then confirms no other file claims
-   * that id.
+   * Allocates an id, creates the task file, and confirms the result is the
+   * file it wrote and the only file carrying that id.
    *
-   * The CLI takes an exclusive lock for this section, which Heddle cannot join
-   * from Node. Two writers can therefore choose the same id before either has
-   * written. They resolve it after the fact and without coordinating: every
-   * writer that finds another file on its id keeps the id only if its own path
-   * is the first in order, and otherwise removes its file and retries higher.
-   * Exactly one writer keeps each id, and the others make progress.
+   * The order matters. `next_id` is raised before the task file exists, so a
+   * writer that reads the config after the reservation cannot choose this id.
+   * The file is published by `link`, which refuses an occupied name instead of
+   * replacing it, so a losing attempt costs only itself. The verification then
+   * re-reads the board: on any mismatch this writer yields its own attempt and
+   * retries higher, never deciding by path order — the CLI performs no
+   * post-write check, so nothing makes it yield in turn.
+   *
+   * Every attempt re-reads `next_id` and the highest id on disk, so the
+   * candidate strictly increases and the loop ends as soon as foreign writes
+   * stop. It is not bounded: a bound would refuse a valid create rather than
+   * wait out contention.
    */
   private async allocateAndWrite(
     config: BoardConfig,
@@ -302,44 +326,46 @@ export class KanbanBoardStore {
     const directory = this.tasks(config);
     const slug = generateSlug(parameters.title);
 
-    for (let attempt = 0; attempt < ID_ALLOCATION_ATTEMPTS; attempt += 1) {
+    for (let floor = 0; ; floor += 1) {
       const current = await readBoardConfig(this.boardDirectory);
       const existing = await readAllTasksLenient(directory);
       const highest = existing.reduce((left, { id }) => Math.max(left, id), 0);
-      const id = Math.max(current.nextId, highest + 1) + attempt;
+      const id = Math.max(current.nextId, highest + 1, floor);
       const path = join(directory, generateFilename(id, slug));
 
-      if (existing.some((candidate) => candidate.file === path)) continue;
+      // Reserve before the file exists, so a reader after this point is past us.
+      await raiseNextId(this.boardDirectory, id + 1);
 
-      const now = new Date();
       const document = this.composeTask(
         current,
         parameters,
         { id, priority, status },
-        now,
+        new Date(),
       );
-      await writeFileAtomic(path, renderTaskFile(document));
-
-      const owners = (await readAllTasksLenient(directory))
-        .filter((candidate) => candidate.id === id)
-        .map(({ file }) => file)
-        .sort();
-      if (owners[0] !== path) {
-        await unlink(path).catch(() => undefined);
+      const contents = renderTaskFile(document);
+      if (!(await createFileAtomic(path, contents))) {
+        floor = id;
         continue;
       }
 
-      await persistNextId(
-        this.boardDirectory,
-        Math.max(current.nextId, id + 1),
+      const landed = await readFile(path, "utf8").catch(() => undefined);
+      if (landed !== contents) {
+        // Another writer replaced the name after we published it. The file is
+        // theirs now, so leave it and take a higher id.
+        floor = id;
+        continue;
+      }
+      const carriers = (await readAllTasksLenient(directory)).filter(
+        (candidate) => candidate.id === id,
       );
+      if (carriers.length !== 1) {
+        await unlink(path).catch(() => undefined);
+        floor = id;
+        continue;
+      }
+
       return readTaskFile(path);
     }
-
-    throw new BoardStoreError(
-      "id-allocation-failed",
-      "could not allocate a free task id",
-    );
   }
 
   private composeTask(
