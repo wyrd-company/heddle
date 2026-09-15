@@ -331,6 +331,29 @@ describe("KanbanBoardStore", () => {
       );
     });
 
+    it("refuses to append activity to a task in a column that requires a claim", async () => {
+      const created = await store.createTask({
+        status: "todo",
+        title: "Record locations",
+      });
+      await kanban(
+        "edit",
+        String(created.id),
+        "--claim",
+        "other-agent",
+        "--status",
+        "in-progress",
+      );
+      await kanban("edit", String(created.id), "--release");
+      const before = await taskSource(created.id);
+
+      await expect(
+        store.appendTaskBody(created.id, "Appended line."),
+      ).rejects.toThrow('status "in-progress" requires a claim');
+
+      await expect(taskSource(created.id)).resolves.toBe(before);
+    });
+
     it("refuses to create a task directly into a column that requires a claim", async () => {
       await expect(
         store.createTask({ status: "in-progress", title: "Record locations" }),
