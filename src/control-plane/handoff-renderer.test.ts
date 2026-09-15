@@ -25,6 +25,7 @@ const cleanup: string[] = [];
 const pinnedKindFixture = async (
   fileBase: string,
   declaredKind: string | undefined,
+  schemaId = "https://wyrd.company/heddle/handoff-template.schema.json",
 ): Promise<{ commitSha: string; root: string }> => {
   const root = await mkdtemp(join(tmpdir(), "pinned-kind-store-"));
   cleanup.push(root);
@@ -33,7 +34,7 @@ const pinnedKindFixture = async (
     join(root, "handoff-templates", `${fileBase}.md`),
     [
       "---",
-      "$schema: https://wyrd.company/heddle/handoff-template.schema.json",
+      `$schema: ${schemaId}`,
       "relationships:",
       "  implements: heddle",
       "format: heddle.handoff-template",
@@ -1161,6 +1162,24 @@ describe("GitHandoffTemplateStore", () => {
       }),
     ).rejects.toThrow(
       `Stage expects handoff kind "steward-briefing", but template handoff-templates/steward-briefing.md at commit ${commitSha} declares "standard"`,
+    );
+  });
+
+  it("refuses a template that declares another artifact's schema", async () => {
+    const { commitSha, root } = await pinnedKindFixture(
+      "steward-briefing",
+      "steward-briefing",
+      "https://wyrd.company/heddle/todo-template.schema.json",
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read({
+        commitSha,
+        kind: "steward-briefing",
+        path: "handoff-templates/steward-briefing.md",
+      }),
+    ).rejects.toThrow(
+      "Handoff template front matter does not match its artifact contract",
     );
   });
 
