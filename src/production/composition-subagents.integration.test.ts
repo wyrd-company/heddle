@@ -171,6 +171,55 @@ describe("production subagent composition", () => {
     );
   });
 
+  it("renders a delegated child's instructions from the pinned stage template", async () => {
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    const t3 = new PhaseSyntheticT3();
+    const composition = createProductionComposition({
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration: fixture.configuration,
+      providerUsage: {
+        readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
+      },
+      pushoverTransport: { send: vi.fn(async () => undefined) },
+      t3,
+      workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
+    });
+    cleanup = async () => {
+      await composition.close();
+      await fixture.cleanup();
+    };
+    await composition.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+    const parent = await resolver.resolve(
+      storedCorrelationToken(
+        composition.persistence.getInstance(instanceId)!.state.handoffs,
+      ),
+    );
+
+    const spawned = await composition.subagents.spawn(parent, {
+      operationId: "spawn-instructed-child",
+      providerAlias: "primary",
+      rootItemId: "deliver",
+    });
+    if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+
+    const childDispatch = t3.commands.find(
+      (command) =>
+        command["type"] === "thread.turn.start" &&
+        command["threadId"] === spawned.assignment.threadId,
+    );
+    const text = (childDispatch!["message"] as { text: string } | undefined)
+      ?.text;
+    // The child is briefed by the stage's own pinned template, not by a
+    // pointer to instructions kept somewhere else.
+    expect(text).toContain(`Stage: ${parent.stage.id}`);
+    expect(text).not.toContain("skill://");
+    expect(text).not.toContain("skillPointer");
+    await composition.close();
+  });
+
   it("delivers a parent answer to the completed child thread without replacing the parent stage", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
