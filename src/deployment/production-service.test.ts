@@ -3,6 +3,7 @@
 //   verifies: heddle
 // ---
 
+import { createConnection } from "node:net";
 import { createServer, type Server as HttpServer } from "node:http";
 import {
   access,
@@ -930,6 +931,96 @@ describe("configured production composition", () => {
     );
     expect(readProviderCatalog).toHaveBeenCalledTimes(1);
     expect(notifications).toEqual([]);
+  });
+
+  it("refuses to bind when the configured default alias has no usable candidate", async () => {
+    fixture = await prepareProductionFixture();
+    const configuration = configuredConfiguration(fixture.configuration);
+    configuration.providerAliases = {
+      primary: {
+        model: "missing-model",
+        providerDisplayName: "Unavailable Workbench",
+      },
+    };
+    const portProbe = createServer();
+    const servicePort = await listen(portProbe);
+    await new Promise<void>((resolve, reject) => {
+      portProbe.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      );
+    });
+    const boundDuringResolution = async (): Promise<boolean> =>
+      new Promise((resolve) => {
+        const socket = createConnection({
+          host: "127.0.0.1",
+          port: servicePort,
+        });
+        socket.once("connect", () => {
+          socket.destroy();
+          resolve(true);
+        });
+        socket.once("error", () => resolve(false));
+        socket.setTimeout(100, () => {
+          socket.destroy();
+          resolve(false);
+        });
+      });
+    const catalog = {
+      readProviderCatalog: vi.fn(async () => {
+        expect(await boundDuringResolution()).toBe(false);
+        return [
+          {
+            availability: "available" as const,
+            displayName: "Unavailable Workbench",
+            driverKind: "codex",
+            enabled: true,
+            installed: true,
+            instanceId: "provider-alpha",
+            models: [
+              {
+                isCustom: false,
+                name: "Sample Model",
+                slug: "sample-model",
+              },
+            ],
+            observedCliVersion: "0.91.0",
+            state: "ready",
+          },
+        ];
+      }),
+    };
+    const loaded: LoadedDeploymentConfiguration = {
+      blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
+      configuration,
+      configurationDirectory: fixture.root,
+      configurationPath: join(fixture.root, "config.yml"),
+      server: { host: "127.0.0.1", port: servicePort },
+    };
+
+    await expect(
+      startConfiguredProductionService(loaded, {
+        providerCatalog: catalog,
+        t3: new SyntheticT3(),
+      }),
+    ).rejects.toMatchObject({
+      name: "ProviderAliasUnusableError",
+      reason: "provider-model-not-found",
+    });
+    expect(catalog.readProviderCatalog).toHaveBeenCalledTimes(1);
+
+    const bindProbe = createServer();
+    await new Promise<void>((resolve, reject) => {
+      bindProbe.once("error", reject);
+      bindProbe.listen(servicePort, "127.0.0.1", resolve);
+    });
+    await new Promise<void>((resolve, reject) => {
+      bindProbe.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      );
+    });
+    await expect(
+      access(fixture.configuration.stateDirectory),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("writes a scheduler-owned production failure to stderr", async () => {
