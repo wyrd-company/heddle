@@ -23,7 +23,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { KanbanBoardStore } from "./index.js";
 import { writeFileAtomic } from "./atomic-write.js";
-import { generateFilename, generateSlug } from "./task-file.js";
 
 const execute = promisify(execFile);
 
@@ -339,6 +338,65 @@ describe("KanbanBoardStore", () => {
       await expect(
         store.createTask({ parent: 99, title: "Record locations" }),
       ).rejects.toThrow("dependency task #99 not found");
+      await expect(readdir(join(boardDirectory, "tasks"))).resolves.toEqual([]);
+    });
+  });
+
+  describe("columns that require a claim", () => {
+    const CLAIMED_COLUMN_CONFIG = BOARD_CONFIG.replace(
+      "    - name: in-progress\n",
+      "    - name: in-progress\n      require_claim: true\n",
+    );
+
+    beforeEach(async () => {
+      await writeFile(
+        join(boardDirectory, "config.yml"),
+        CLAIMED_COLUMN_CONFIG,
+      );
+    });
+
+    it("refuses to move a task into a column that requires a claim", async () => {
+      const created = await store.createTask({
+        status: "todo",
+        title: "Record locations",
+      });
+      const before = await taskSource(created.id);
+
+      await expect(
+        store.editTaskStatus(created.id, "in-progress"),
+      ).rejects.toThrow('status "in-progress" requires a claim');
+
+      await expect(taskSource(created.id)).resolves.toBe(before);
+      // The CLI refuses the same unclaimed edit.
+      await expect(
+        kanban("edit", String(created.id), "--status", "in-progress"),
+      ).rejects.toThrow(/requires --claim/);
+    });
+
+    it("refuses to move a task out of a column that requires a claim", async () => {
+      const created = await store.createTask({
+        status: "todo",
+        title: "Record locations",
+      });
+      await kanban(
+        "edit",
+        String(created.id),
+        "--claim",
+        "other-agent",
+        "--status",
+        "in-progress",
+      );
+      await kanban("edit", String(created.id), "--release");
+
+      await expect(store.editTaskStatus(created.id, "done")).rejects.toThrow(
+        'status "in-progress" requires a claim',
+      );
+    });
+
+    it("refuses to create a task directly into a column that requires a claim", async () => {
+      await expect(
+        store.createTask({ status: "in-progress", title: "Record locations" }),
+      ).rejects.toThrow('status "in-progress" requires a claim');
       await expect(readdir(join(boardDirectory, "tasks"))).resolves.toEqual([]);
     });
   });
