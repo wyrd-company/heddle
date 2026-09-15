@@ -429,7 +429,8 @@ adjudication replay retains its stored binding. Selection failures use one of
 these safe reasons:
 `provider-catalog-unavailable`, `provider-alias-not-allowed`,
 `provider-alias-exhausted`, `provider-name-not-found`, `provider-name-ambiguous`,
-`provider-not-ready`, `provider-unavailable`, or `provider-model-not-found`.
+`provider-not-ready`, `provider-unavailable`, `provider-model-not-found`, or
+`provider-reasoning-effort-unsupported`.
 For new session selection, these candidate configuration and catalog failures
 advance to the next candidate in declared order. `list_providers` reports the
 first configured candidate's failure without advancing its projection. An
@@ -492,6 +493,49 @@ vocabulary: `approval-required`, `auto-accept-edits`, `auto`, and
 `full-access`. `full-access` is selectable for every configured provider and is
 forwarded unchanged. It is not mandatory; the operator chooses the default.
 
+### Reasoning effort
+
+Reasoning effort is a provider option. Heddle carries the provider's own
+vocabulary — the option identifier the driver publishes and the value tokens
+that option offers — and defines no scale of its own.
+
+Four layers can set it, each narrower layer overriding the one before it:
+
+1. `session.defaultReasoningEffort`, the floor for every session.
+2. A provider alias candidate's `reasoningEffort`.
+3. A blueprint's lifecycle-header `reasoning-effort`.
+4. A wait node's `reasoning-effort`, the narrowest and the one that wins.
+
+```yaml
+session:
+  defaultReasoningEffort: low
+providerAliases:
+  reviewer:
+    providerDisplayName: Workbench Alpha
+    model: sample-model
+    reasoningEffort: high
+```
+
+Setting none of them dispatches no provider option, so each session runs at
+whatever default its provider applies.
+
+The option identifier differs between drivers, so Heddle reads it from the
+selected model's own capability metadata in the T3 provider catalog rather than
+assuming one. The resolved value is dispatched as one `modelSelection.options`
+selection under that identifier, and appears on the session binding beside the
+model slug and provider instance.
+
+A value the selected model does not offer is refused before any session effect,
+naming the layer, the model, and the values the model offers. The configuration
+default and every alias candidate are refused at startup, before the server
+binds; a blueprint header or stage value is refused when the stage resolves its
+session, before any worktree, registration, thread, or dispatch effect. The
+selection reason is `provider-reasoning-effort-unsupported`. A model that offers
+no reasoning option refuses any configured effort the same way.
+
+The adjudication session takes its effort from its configured `providerAlias`,
+with no separate setting.
+
 Heddle pins the lifecycle blueprint source ref and persists the pending start
 with that blueprint path and blob hash before it resolves the session binding.
 Planning, lifecycle execution, and recovery use this same snapshot even when
@@ -506,8 +550,10 @@ initial route with only terminal landings needs no session binding.
 The binding records the session and occurrence identity, selected alias,
 candidate position, skipped candidates and their catalog-selection, collision,
 or start-failure causes, display-name snapshot, provider instance ID, open
-driver kind, observed provider CLI version, model slug, runtime mode, and
-interaction mode. It contains no provider setting or credential. The binding
+driver kind, observed provider CLI version, model slug, runtime mode,
+interaction mode, and, when a layer configured one, the resolved reasoning
+effort with the provider option identifier it dispatches under. It contains no
+provider setting or credential. The binding
 is provisional until T3 reports that its session or turn started. Dispatch may
 advance a provisional binding after a start failure.
 Observation, steering, stop, retry, restart, replay, and a cold replacement
@@ -536,7 +582,8 @@ The existing instance runtime response includes a sorted `sessionBindings`
 array for each instance. Each entry contains only `sessionKey`, `threadId`,
 `alias`, `providerDisplayName`, `providerInstanceId`, `driverKind`,
 `observedCliVersion`, `modelSlug`, `runtimeMode`, `interactionMode`,
-`candidatePosition`, and `skippedCandidates`. This is
+`candidatePosition`, `skippedCandidates`, and the `reasoningEffort` and
+`reasoningEffortOptionId` pair when one is configured. This is
 the operator-safe projection used to diagnose routing. It never contains T3 or
 provider credentials, provider settings, correlation tokens, or handoff
 content.
