@@ -12,6 +12,8 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { readFileSync, readdirSync } from "node:fs";
+import { setImmediate } from "node:timers";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -164,6 +166,39 @@ describe("concurrent kanban-md and Heddle creates", () => {
     },
     240_000,
   );
+
+  it("raises next_id before the task file it reserves exists", async () => {
+    // The reservation's purpose is ordering: a writer reading the config after
+    // it cannot choose this id. Sample both facts synchronously in one tick, so
+    // the observation cannot straddle the window, and assert the invariant at
+    // the first moment the raise is visible.
+    await populate(300);
+    const configPath = join(boardDirectory, "config.yml");
+    const reservedId = 301;
+    let fileExistedWhenRaised: boolean | undefined;
+
+    const watch = (async () => {
+      while (fileExistedWhenRaised === undefined) {
+        const next = Number(
+          /next_id:\s*(\d+)/.exec(readFileSync(configPath, "utf8"))?.[1],
+        );
+        if (next > reservedId) {
+          fileExistedWhenRaised = readdirSync(tasksDirectory()).some((name) =>
+            name.startsWith(`${reservedId}-`),
+          );
+          return;
+        }
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    })();
+
+    const created = await store.createTask({ title: "Reserved Item" });
+    await watch;
+
+    expect(created.id).toBe(reservedId);
+    // Observed the raise, and the file it reserves was not on disk yet.
+    expect(fileExistedWhenRaised).toBe(false);
+  }, 120_000);
 
   it("refuses to lower next_id a foreign writer already raised", async () => {
     await populate(300);
