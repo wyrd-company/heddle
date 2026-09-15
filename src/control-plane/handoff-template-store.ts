@@ -136,14 +136,29 @@ const templateDirectory = "handoff-templates";
 
 /**
  * A per-stage template is a template in its own right, so it declares front
- * matter. Including one renders its instructions, never its metadata.
+ * matter. Including one renders its instructions, never its metadata. Only a
+ * block that identifies itself as this artifact's front matter is removed: a
+ * partial whose first line is a thematic break keeps every byte.
  */
 const withoutFrontMatter = (serialized: string): string => {
   if (!serialized.startsWith("---\n")) return serialized;
   const boundary = serialized.indexOf("\n---\n", 4);
-  return boundary === -1
-    ? serialized
-    : serialized.slice(boundary + "\n---\n".length);
+  if (boundary === -1) return serialized;
+  let metadata: unknown;
+  try {
+    metadata = parse(serialized.slice(4, boundary));
+  } catch {
+    return serialized;
+  }
+  if (
+    typeof metadata !== "object" ||
+    metadata === null ||
+    Array.isArray(metadata) ||
+    (metadata as Record<string, unknown>)["$schema"] !== schemaId
+  ) {
+    return serialized;
+  }
+  return serialized.slice(boundary + "\n---\n".length);
 };
 
 const readPinnedPath = async (

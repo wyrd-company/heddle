@@ -388,6 +388,24 @@ describe("renderStageHandoff", () => {
     expect(rendered).toContain("Per-stage arrange");
   });
 
+  it("fails closed when a template includes itself", () => {
+    const base = input();
+
+    expect(() =>
+      renderStageHandoff(
+        input({
+          template: {
+            ...base.template,
+            body: '{% include "standard.md" %}',
+            includes: {
+              "handoff-templates/standard.md": '{% include "standard.md" %}',
+            },
+          },
+        }),
+      ),
+    ).toThrow(HandoffRenderError);
+  });
+
   it("resolves the same pinned file by expression and by repository path", () => {
     const base = input();
     const includes = {
@@ -1041,6 +1059,68 @@ describe("GitHandoffTemplateStore", () => {
       }),
     ).rejects.toThrow(
       "Handoff template path must name a direct kebab-case Markdown artifact",
+    );
+  });
+
+  it("keeps a partial whose first line is a thematic break", async () => {
+    const root = await mkdtemp(join(tmpdir(), "handoff-template-store-"));
+    cleanup.push(root);
+    await mkdir(join(root, "handoff-templates", "includes"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(root, "handoff-templates", "standard.md"),
+      [
+        "---",
+        "$schema: https://wyrd.company/heddle/handoff-template.schema.json",
+        "relationships:",
+        "  implements: heddle",
+        "format: heddle.handoff-template",
+        "kind: standard",
+        "version: 1",
+        "---",
+        '{% include "includes/rule.md" %}',
+        "",
+      ].join("\n"),
+    );
+    const partial = ["---", "", "Ruled guidance.", ""].join("\n");
+    await writeFile(
+      join(root, "handoff-templates", "includes", "rule.md"),
+      partial,
+    );
+    await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+      cwd: root,
+    });
+    await execute("git", ["add", "handoff-templates"], { cwd: root });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Sample User",
+        "-c",
+        "user.email=sample@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "add a ruled partial",
+      ],
+      { cwd: root },
+    );
+    const commitSha = (
+      await execute("git", ["rev-parse", "HEAD"], { cwd: root })
+    ).stdout.trim();
+
+    const template = await new GitHandoffTemplateStore(root).read({
+      commitSha,
+      kind: "standard",
+      path: "handoff-templates/standard.md",
+    });
+
+    expect(template.includes["handoff-templates/includes/rule.md"]).toBe(
+      partial,
+    );
+    expect(renderStageHandoff(input({ template }))).toContain(
+      "Ruled guidance.",
     );
   });
 
