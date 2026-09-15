@@ -471,7 +471,7 @@ describe("production question node", () => {
     await composition.close();
   });
 
-  it("keeps an open adjudication on the boundary it opened with", async () => {
+  it("records the policy blob an adjudication opened with, not its path", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
     fixture.configuration.adjudication = { providerAlias: "primary" };
@@ -496,6 +496,11 @@ describe("production question node", () => {
           stored["kind"] === "adjudication-handoff",
       );
     expect(opened).toBeDefined();
+    const openedBlobHash = (
+      await execute("git", ["rev-parse", "HEAD:adjudication/policy.json"], {
+        cwd: fixture.blueprintsRepositoryRoot,
+      })
+    ).stdout.trim();
     await first.close();
 
     // The boundary moves under the open occurrence.
@@ -544,7 +549,21 @@ describe("production question node", () => {
           !Array.isArray(stored) &&
           stored["kind"] === "adjudication-handoff",
       );
+    // One occurrence, one boundary: the record names the blob it opened with,
+    // so a later edit at the same path cannot become this occurrence's policy.
     expect(retained).toEqual([opened]);
+    const document = JSON.parse(
+      (opened as Record<string, string>)["handoff"]!,
+    ) as { policy: { blobHash: string; path: string } };
+    expect(document.policy.path).toBe("adjudication/policy.json");
+    expect(document.policy.blobHash).toBe(openedBlobHash);
+    expect(openedBlobHash).not.toBe(
+      (
+        await execute("git", ["rev-parse", "HEAD:adjudication/policy.json"], {
+          cwd: fixture.blueprintsRepositoryRoot,
+        })
+      ).stdout.trim(),
+    );
     expect(JSON.stringify(retained)).not.toContain(
       "A different decision test.",
     );
