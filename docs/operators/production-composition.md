@@ -48,10 +48,8 @@ conventional state directory is `/var/lib/heddle`; those contracts are in the
 sections below.
 `heddle-server --config <directory>
 --print-launch-settings` prints the nonsecret state directory, host, and port
-the service will use. The supported `kanban-md` fork recorded in
-`deployment/supported-versions.json` must be on `PATH`; the Feature's service
-launcher checks that version before each start, and a command-line operator
-owns that check. `better-sqlite3` installs from a prebuilt binary; a platform
+the service will use. The service needs no `kanban-md` on `PATH` and checks no `kanban-md` version.
+`better-sqlite3` installs from a prebuilt binary; a platform
 without a matching prebuild needs a compiler toolchain on the command-line
 path, which the Feature does not provide.
 
@@ -203,10 +201,11 @@ The directory may also contain `heddle.md` and the required shared organization
 blueprint source at `blueprints/`. Unknown entries are ignored. Neither entry is
 a configuration field.
 
-The service-user and agent-session `PATH` must provide `git`, `gh`, `gitpr`,
-and `kanban-md`.
-Mechanical worktree preparation, review snapshots, review landing, and board
-status mirroring invoke these tools without a shell. Incident finalization uses
+The service-user and agent-session `PATH` must provide `git`, `gh`, and
+`gitpr`.
+Mechanical worktree preparation, review snapshots, and review landing invoke
+these tools without a shell. Board status mirroring needs no tool: the service
+writes the board's task files itself. Incident finalization uses
 `gh` as the authenticated bot identity for an accepted GitHub issue. Startup
 does not replace or infer their locations.
 
@@ -715,24 +714,35 @@ commit and path or named todo template does not resolve in the repository
 being validated, or when a bound output contract is missing or is not an
 object JSON Schema.
 
+Repository scope is the task's `repos` front-matter property. `kanban-md` does
+not own that property and preserves it through every task mutation, so a board
+task carries it whether the CLI knows the field or not.
+
 Author an ad-hoc task with its repository scope:
 
 ```console
 kanban-md --dir /workspaces/sample-board create "Arrange sample records" \
-  --repos sample-alpha,sample-beta \
   --tags lifecycle:standard-delivery
 ```
 
-Author an epic with the same field, then omit it from every child:
+```yaml
+repos:
+    - sample-alpha
+    - sample-beta
+```
+
+Author an epic with the same property, then omit it from every child:
 
 ```console
 kanban-md --dir /workspaces/sample-board create "Coordinate sample delivery" \
-  --repos sample-alpha,sample-beta \
   --tags type:epic
 kanban-md --dir /workspaces/sample-board create "Prepare sample output" \
   --parent 101 \
   --tags lifecycle:standard-delivery
 ```
+
+A `kanban-md` build that does carry a typed `--repos` flag writes the same
+property, and either way Heddle reads it from the task file.
 
 The organization blueprint repository's `skills/task-authoring/` directory is
 the canonical Heddle-specific task-authoring guide and task-body template.

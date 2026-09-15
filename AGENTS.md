@@ -64,8 +64,10 @@ not go:
 
 Heddle does not live on its own. It leverages tools already in use:
 
-- **`kanban-md`** provides the board and the operator's way of interacting with
-  it. Heddle reads task intent from the board and writes child task status back.
+- **`kanban-md`** is the operator's way of interacting with the board. Heddle
+  reads task intent from the board and writes child task status back, through
+  its own implementation of the task-file format rather than the executable, so
+  the two work against one board without Heddle depending on the CLI.
 - **T3Code** is the control plane that actually runs coding-agent sessions. It
   owns provider accounts, threads, and turns. Heddle dispatches to it and never
   launches a harness itself.
@@ -284,10 +286,12 @@ orchestrating agents.
 
 Pinned dependencies:
 
-- **`wyrd-company/kanban-md`** at `0.38.0-fork+794efef`, which preserves
-  supported extra front-matter properties through every task mutation and
-  provides typed repository scope. The service verifies this at startup and
-  refuses to run against another build.
+- **`wyrd-company/kanban-md`** at `0.38.0-fork+794efef` is a qualification pin,
+  not a deployment requirement. The qualification suites build this exact
+  commit so that interoperation evidence names one build. The service needs no
+  `kanban-md` on `PATH` at all, checks no version, and works against any build
+  that preserves front-matter properties it does not own. No stock release
+  carries that preservation yet; upstream PR #18 is accepted and unshipped.
 - **Wyrd Company T3Code fork `0.0.38-wyrd.2`** is a qualification pin, not a
   deployment requirement. The qualification suites install this exact public
   release tarball so that test evidence names one T3 build. The service does

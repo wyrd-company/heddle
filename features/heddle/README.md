@@ -5,10 +5,10 @@ service binds only to loopback. An optional Caddy route serves both the console
 at `/` and the Streamable HTTP MCP endpoint at `/mcp`.
 
 The Feature requires a Debian/Ubuntu image with s6-overlay 3. Node.js 24 is
-supplied through the official Dev Container Node Feature. The service requires
-the supported front-matter-preserving `kanban-md` fork on `PATH`; its exact
-version is recorded in `deployment/supported-versions.json`. When `dnsName` is
-set, add the Wyrd Company Caddy Feature to the same devcontainer.
+supplied through the official Dev Container Node Feature. The service reads and
+writes the board's task files itself, so it requires no `kanban-md` on `PATH`
+and no particular build of one. When `dnsName` is set, add the Wyrd Company
+Caddy Feature to the same devcontainer.
 
 The supported Feature reference is
 `ghcr.io/wyrd-company/heddle/heddle:0`. The published Feature contains the

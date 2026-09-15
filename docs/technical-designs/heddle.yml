@@ -268,6 +268,42 @@ proposed-design:
     authoritative in their existing components. Every admitted lifecycle or
     delegated session carries one resolved provider-instance identity through
     the shared pacing and T3 boundaries.
+  board-access: >
+    Heddle reads and writes the board's task files itself. The on-disk shape is
+    kanban-md's, unchanged: humans and agents keep driving the same board with
+    the CLI, and the service needs no kanban-md on PATH, pins no build, and
+    checks no version. It works against any kanban-md that preserves the
+    front-matter properties it does not own.
+
+    That preservation is what lets the board carry a Heddle field without the
+    CLI knowing the field exists. Repository scope is the clearest case: `repos`
+    is an ordinary front-matter property that Heddle writes and reads, and a
+    kanban-md that has never heard of it leaves it intact through a task
+    mutation. The guarantee covers scalars, lists, and recursively
+    string-keyed maps. Formatting, comments, key order, anchors, aliases, merge
+    keys, and explicit tags are outside it, so nothing depends on them.
+
+    The layer covers only what the service consumes: listing the board, reading
+    the board's columns, reading one task, changing a task's status, appending
+    to a task's activity body, and creating a task. It reproduces the refusals
+    kanban-md gives a caller holding no claim, so Heddle cannot reach a board
+    state the CLI would have refused: a task under a live claim is off-limits,
+    and a column configured to require a claim can be neither entered nor left.
+
+    A task file is published by writing a temporary file beside it, flushing,
+    and renaming over the target, so a concurrent reader sees either the whole
+    previous file or the whole new one. This makes Heddle's writer atomic and
+    says nothing about the CLI's, which remains a separate defect.
+
+    Task ids come from the board's `next_id`, floored at one above the highest
+    id already on disk so a `next_id` that has fallen behind cannot reissue a
+    live id. kanban-md takes an exclusive lock across allocation, which Heddle
+    cannot join from Node, so two writers can still choose one id before either
+    writes. They resolve it afterwards without coordinating: each writer keeps
+    the id only when its own file is first in path order, and otherwise removes
+    its file and retries higher. Exactly one writer keeps each id and the rest
+    make progress.
+
   provider-selection: >
     Production configuration owns a provider-alias allowlist. Each lower-kebab
     alias maps to a non-empty ordered candidate list. Each candidate names one
