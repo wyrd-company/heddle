@@ -14,7 +14,10 @@ import {
   type LifecycleBlueprint,
   type LifecycleNode,
 } from "../engine/index.js";
-import type { ProductionConfiguration } from "../production/index.js";
+import {
+  conventionalAdjudicationPolicyPath,
+  type ProductionConfiguration,
+} from "../production/index.js";
 
 /**
  * One thing a blueprint node asks of the deployment that runs it. `unmet`
@@ -137,15 +140,19 @@ export const deploymentCapabilitiesOf = async (
   repositoryRoot: string,
 ): Promise<DeploymentCapabilities> => {
   const adjudication = configuration.adjudication;
+  // A configuration the loader produced carries the conventional path already;
+  // one composed in code may omit it, and both resolve to the same artifact.
+  const policyPath =
+    adjudication?.policyPath ?? conventionalAdjudicationPolicyPath;
   return {
     ...(adjudication === undefined
       ? {}
       : {
           adjudication: {
             policyArtifactPresent: await isFile(
-              join(repositoryRoot, adjudication.policyPath),
+              join(repositoryRoot, policyPath),
             ),
-            policyPath: adjudication.policyPath,
+            policyPath,
           },
         }),
     providerAliases: Object.keys(configuration.providerAliases),

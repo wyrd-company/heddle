@@ -10,6 +10,7 @@ export {
   type ProductionT3Client,
 } from "./composition.js";
 export {
+  conventionalAdjudicationPolicyPath,
   type ProductionConfiguration,
   type ProductionSessionConfiguration,
   type ResolvedProductionConfiguration,

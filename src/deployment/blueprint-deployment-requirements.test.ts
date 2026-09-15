@@ -53,7 +53,16 @@ const tree = async (root: string): Promise<[string, string][]> => {
   return files.sort(([left], [right]) => (left < right ? -1 : 1));
 };
 
-const handoffTemplate = "# {{ task.title }}\n";
+const handoffTemplate = `---
+$schema: https://wyrd.company/heddle/handoff-template.schema.json
+relationships:
+  implements: heddle
+format: heddle.handoff-template
+kind: sample-handoff
+version: 1
+---
+# {{ task.title }}
+`;
 const todoTemplate = `${JSON.stringify(
   { items: [{ id: "measure", text: "Measure {{task.title}}" }] },
   null,
@@ -98,6 +107,7 @@ const cateringBlueprint = (
     {
       "handoff-template": {
         commitSha,
+        kind: "sample-handoff",
         path: "handoff-templates/sample-handoff.md",
       },
       id: "taste",
@@ -457,7 +467,6 @@ const installedDeployment = async (options: {
         defaultProviderAlias: "primary",
         defaultRuntimeMode: "auto",
         interactionMode: "default",
-        skillPointer: "skill://sample",
       },
       stageThresholds: { taste: 10_000 },
       stateDirectory: join(root, "state"),
