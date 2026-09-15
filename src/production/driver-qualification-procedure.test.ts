@@ -125,6 +125,7 @@ printf '%s\\n' "$@" >> "$HEDDLE_QUALIFICATION_INVOCATION"
         "run",
         "src/production/",
         "src/control-plane/",
+        "src/subagents/",
         "--maxWorkers=1",
       ]);
 
