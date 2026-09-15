@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
+import { validateResolvedProductionConfiguration } from "./configuration.js";
 import { createProductionComposition } from "./composition.js";
 import {
   prepareProductionFixture,
@@ -258,6 +259,30 @@ describe("production reasoning effort", () => {
       expect(modelSelection).not.toHaveProperty("options");
     }
     await composition.close();
+  });
+
+  it("refuses a resolved configuration whose default selection effort disagrees", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    const { defaultSelection, resolvedSelections } =
+      fixture.configuration.session;
+
+    expect(() =>
+      validateResolvedProductionConfiguration({
+        ...fixture.configuration,
+        session: {
+          ...fixture.configuration.session,
+          defaultSelection: {
+            ...defaultSelection,
+            reasoningEffort: "xhigh",
+            reasoningEffortOptionId: "reasoningEffort",
+          },
+          resolvedSelections,
+        },
+      }),
+    ).toThrow(
+      "session.defaultSelection must be the default alias entry in session.resolvedSelections",
+    );
   });
 
   it("makes an effort the model does not offer visible to the operator", async () => {
