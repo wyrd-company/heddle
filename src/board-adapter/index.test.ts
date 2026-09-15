@@ -4,7 +4,14 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -17,7 +24,6 @@ import {
   boardRecordIdentity,
   boardTaskMatchesRecord,
   type BoardTask,
-  type KanbanCommandRunner,
 } from "./index.js";
 import { TaskProviderAliasError } from "../provider-alias.js";
 
@@ -25,14 +31,12 @@ const execute = promisify(execFile);
 
 describe("KanbanBoardAdapter", () => {
   let boardDirectory: string;
-  let commands: string[][];
   let adapter: KanbanBoardAdapter;
 
-  const runKanban: KanbanCommandRunner = async (arguments_) => {
-    commands.push(arguments_);
-    const result = await execute("kanban-md", arguments_);
-    return result.stdout;
-  };
+  // The real kanban-md binary authors and inspects the same board the adapter
+  // uses, so every fixture below is also interoperation coverage.
+  const runKanban = async (arguments_: string[]): Promise<string> =>
+    (await execute("kanban-md", arguments_)).stdout;
 
   const createTask = async (...arguments_: string[]): Promise<number> => {
     const output = await runKanban([
@@ -45,9 +49,40 @@ describe("KanbanBoardAdapter", () => {
     return (JSON.parse(output) as { id: number }).id;
   };
 
+  const taskFile = async (taskId: number): Promise<string> =>
+    (
+      JSON.parse(
+        await runKanban([
+          "--dir",
+          boardDirectory,
+          "show",
+          String(taskId),
+          "--json",
+        ]),
+      ) as { file: string }
+    ).file;
+
+  /**
+   * Adds a property kanban-md does not own to a task the CLI authored. This is
+   * how a Heddle field reaches a board task without a change to the CLI.
+   */
+  const declareProperty = async (
+    taskId: number,
+    declaration: string,
+  ): Promise<void> => {
+    const path = await taskFile(taskId);
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      source.replace(
+        "class: standard\n---",
+        `class: standard\n${declaration}\n---`,
+      ),
+    );
+  };
+
   beforeEach(async () => {
     boardDirectory = await mkdtemp(join(tmpdir(), "board-adapter-test-"));
-    commands = [];
     await mkdir(join(boardDirectory, "tasks"));
     await writeFile(
       join(boardDirectory, "config.yml"),
@@ -90,8 +125,7 @@ tui:
 next_id: 1
 `,
     );
-    commands = [];
-    adapter = new KanbanBoardAdapter(boardDirectory, runKanban);
+    adapter = new KanbanBoardAdapter(boardDirectory);
   });
 
   afterEach(async () => {
@@ -184,23 +218,7 @@ next_id: 1
       "sample,lifecycle:ignored-fallback",
     );
 
-    const display = JSON.parse(
-      await runKanban([
-        "--dir",
-        boardDirectory,
-        "show",
-        String(displayId),
-        "--json",
-      ]),
-    ) as { file: string };
-    const source = await readFile(display.file, "utf8");
-    await writeFile(
-      display.file,
-      source.replace(
-        "class: standard\n---",
-        "class: standard\nlifecycle: exhibit-preparation\n---",
-      ),
-    );
+    await declareProperty(displayId, "lifecycle: exhibit-preparation");
 
     const tasks = await adapter.readBoard();
 
@@ -224,28 +242,11 @@ next_id: 1
     );
   });
 
-  it("reads typed repository scope while retaining raw front matter", async () => {
-    const taskId = await createTask(
-      "Arrange sample items",
-      "--repos",
-      "sample-alpha,sample-beta",
-    );
-    const task = JSON.parse(
-      await runKanban([
-        "--dir",
-        boardDirectory,
-        "show",
-        String(taskId),
-        "--json",
-      ]),
-    ) as { file: string };
-    const source = await readFile(task.file, "utf8");
-    await writeFile(
-      task.file,
-      source.replace(
-        "class: standard\n---",
-        "class: standard\nproduct: sample-product\n---",
-      ),
+  it("reads declared repository scope while retaining raw front matter", async () => {
+    const taskId = await createTask("Arrange sample items");
+    await declareProperty(
+      taskId,
+      "product: sample-product\nrepos:\n    - sample-alpha\n    - sample-beta",
     );
 
     await expect(adapter.readTask(taskId)).resolves.toMatchObject({
@@ -259,55 +260,9 @@ next_id: 1
     });
   });
 
-  it.each([
-    ["omits", undefined],
-    ["changes", ["sample-beta"]],
-  ])(
-    "rejects a typed repository scope that %s declared front matter",
-    async (_, typedRepos) => {
-      const taskId = await createTask(
-        "Arrange sample items",
-        "--repos",
-        "sample-alpha",
-      );
-      const disagreeingAdapter = new KanbanBoardAdapter(
-        boardDirectory,
-        async (arguments_) => {
-          const value = JSON.parse(await runKanban(arguments_)) as Record<
-            string,
-            unknown
-          >;
-          if (typedRepos === undefined) delete value["repos"];
-          else value["repos"] = typedRepos;
-          return JSON.stringify(value);
-        },
-      );
-
-      await expect(disagreeingAdapter.readTask(taskId)).rejects.toThrow(
-        `kanban-md typed repository scope disagrees with task ${taskId} front matter`,
-      );
-    },
-  );
-
   it("normalizes and preserves a stage provider-alias map through supported board mutations", async () => {
     const taskId = await createTask("Arrange sample items");
-    const task = JSON.parse(
-      await runKanban([
-        "--dir",
-        boardDirectory,
-        "show",
-        String(taskId),
-        "--json",
-      ]),
-    ) as { file: string };
-    const source = await readFile(task.file, "utf8");
-    await writeFile(
-      task.file,
-      source.replace(
-        "class: standard\n---",
-        "class: standard\nprovider-alias:\n  implement: specialist\n---",
-      ),
-    );
+    await declareProperty(taskId, "provider-alias:\n    implement: specialist");
 
     await adapter.mirrorTaskStatus(taskId, "in-progress");
     await runKanban([
@@ -338,23 +293,7 @@ next_id: 1
     "rejects a non-map task provider-alias shape with a named cause: %s",
     async (declaration) => {
       const taskId = await createTask("Arrange sample items");
-      const task = JSON.parse(
-        await runKanban([
-          "--dir",
-          boardDirectory,
-          "show",
-          String(taskId),
-          "--json",
-        ]),
-      ) as { file: string };
-      const source = await readFile(task.file, "utf8");
-      await writeFile(
-        task.file,
-        source.replace(
-          "class: standard\n---",
-          `class: standard\n${declaration}\n---`,
-        ),
-      );
+      await declareProperty(taskId, declaration);
 
       await expect(adapter.readTask(taskId)).rejects.toMatchObject({
         message: expect.stringMatching(
@@ -381,23 +320,7 @@ next_id: 1
     "rejects a present %s alias map value without fallback",
     async (_, declaration) => {
       const taskId = await createTask("Arrange sample items");
-      const task = JSON.parse(
-        await runKanban([
-          "--dir",
-          boardDirectory,
-          "show",
-          String(taskId),
-          "--json",
-        ]),
-      ) as { file: string };
-      const source = await readFile(task.file, "utf8");
-      await writeFile(
-        task.file,
-        source.replace(
-          "class: standard\n---",
-          `class: standard\n${declaration}\n---`,
-        ),
-      );
+      await declareProperty(taskId, declaration);
 
       await expect(adapter.readTask(taskId)).rejects.toMatchObject({
         message: expect.stringContaining(
@@ -411,26 +334,21 @@ next_id: 1
   );
 
   it.each([
-    ["empty", []],
-    ["duplicate", ["sample-alpha", "sample-alpha"]],
-    ["scalar", "sample-alpha"],
-    ["invalid identifier", ["../outside"]],
-  ])("rejects invalid typed repository scope: %s", async (_, repos) => {
-    const taskId = await createTask("Arrange sample items");
-    const typedAdapter = new KanbanBoardAdapter(
-      boardDirectory,
-      async (arguments_) => {
-        const output = await runKanban(arguments_);
-        const value = JSON.parse(output) as Record<string, unknown>;
-        value.repos = repos;
-        return JSON.stringify(value);
-      },
-    );
+    ["empty", "repos: []"],
+    ["duplicate", "repos:\n    - sample-alpha\n    - sample-alpha"],
+    ["scalar", "repos: sample-alpha"],
+    ["invalid identifier", "repos:\n    - ../outside"],
+  ])(
+    "rejects an invalid declared repository scope: %s",
+    async (_, declaration) => {
+      const taskId = await createTask("Arrange sample items");
+      await declareProperty(taskId, declaration);
 
-    await expect(typedAdapter.readTask(taskId)).rejects.toThrow(
-      "kanban-md returned an invalid task repository scope",
-    );
-  });
+      await expect(adapter.readTask(taskId)).rejects.toThrow(
+        "board task declares an invalid repository scope",
+      );
+    },
+  );
 
   it("reads every configured board column in board order", async () => {
     await expect(adapter.readBoardStatuses()).resolves.toEqual([
@@ -493,12 +411,12 @@ next_id: 1
     await expect(adapter.transitionEpicStatus(childId, "done")).rejects.toThrow(
       "is not an epic task",
     );
-    commands = [];
+    const beforeRefusal = await readFile(await taskFile(standaloneId), "utf8");
     await expect(
       adapter.transitionEpicStatus(standaloneId, "done"),
     ).rejects.toThrow("is not an epic task");
-    expect(commands).not.toContainEqual(
-      expect.arrayContaining(["edit", String(standaloneId)]),
+    await expect(readFile(await taskFile(standaloneId), "utf8")).resolves.toBe(
+      beforeRefusal,
     );
   });
 
@@ -541,14 +459,14 @@ next_id: 1
         "--tags",
         "type:epic",
       );
-      commands = [];
+      const before = await readFile(await taskFile(collectionId), "utf8");
 
       await expect(
         adapter.setEpicInProgress(collectionId, inProgress),
       ).rejects.toBeInstanceOf(EpicStatusConflictError);
-      expect(commands).not.toContainEqual(
-        expect.arrayContaining(["edit", String(collectionId)]),
-      );
+      await expect(
+        readFile(await taskFile(collectionId), "utf8"),
+      ).resolves.toBe(before);
       await expect(adapter.readTask(collectionId)).resolves.toMatchObject({
         status,
       });
@@ -567,20 +485,23 @@ next_id: 1
       String(collectionId),
     );
     const standaloneId = await createTask("Repair reading-room lamp");
-    commands = [];
+    const beforeChild = await readFile(await taskFile(childId), "utf8");
+    const beforeStandalone = await readFile(
+      await taskFile(standaloneId),
+      "utf8",
+    );
 
-    commands = [];
     await expect(adapter.setEpicInProgress(childId, true)).rejects.toThrow(
       "is not an epic task",
     );
     await expect(adapter.setEpicInProgress(standaloneId, true)).rejects.toThrow(
       "is not an epic task",
     );
-    expect(commands).not.toContainEqual(
-      expect.arrayContaining(["edit", String(childId)]),
+    await expect(readFile(await taskFile(childId), "utf8")).resolves.toBe(
+      beforeChild,
     );
-    expect(commands).not.toContainEqual(
-      expect.arrayContaining(["edit", String(standaloneId)]),
+    await expect(readFile(await taskFile(standaloneId), "utf8")).resolves.toBe(
+      beforeStandalone,
     );
   });
 
@@ -634,7 +555,7 @@ next_id: 1
     expect(finding.replayed).toBe(false);
   });
 
-  it("authors repository scope through the typed kanban create field", async () => {
+  it("authors repository scope as ordinary front matter the CLI preserves", async () => {
     const collectionId = await createTask(
       "Seasonal collection",
       "--tags",
@@ -665,7 +586,7 @@ next_id: 1
   ])(
     "rejects invalid repository scope before board authoring: %s",
     async (_, repos) => {
-      commands = [];
+      const before = await readdir(join(boardDirectory, "tasks"));
       await expect(
         adapter.createRecord({
           body: "Record the selected storage locations.",
@@ -677,8 +598,10 @@ next_id: 1
           status: "backlog",
           title: "Record storage locations",
         }),
-      ).rejects.toThrow("invalid task repository scope");
-      expect(commands).toEqual([]);
+      ).rejects.toThrow("board task declares an invalid repository scope");
+      await expect(readdir(join(boardDirectory, "tasks"))).resolves.toEqual(
+        before,
+      );
     },
   );
 
@@ -729,16 +652,7 @@ next_id: 1
     ]);
 
     expect(results.sort()).toEqual([false, true]);
-    const task = JSON.parse(
-      await runKanban([
-        "--dir",
-        boardDirectory,
-        "show",
-        String(taskId),
-        "--json",
-      ]),
-    ) as { file: string };
-    const source = await readFile(task.file, "utf8");
+    const source = await readFile(await taskFile(taskId), "utf8");
     expect(source.match(/\*\*SAMPLE DECISION\*\*/g)).toHaveLength(1);
     expect(source.match(/<!-- heddle-activity:/g)).toHaveLength(1);
   });

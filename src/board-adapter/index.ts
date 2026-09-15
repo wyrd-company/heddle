@@ -3,13 +3,9 @@
 //   implements: heddle
 // ---
 
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { promisify } from "node:util";
 
-import { parse } from "yaml";
-
+import { KanbanBoardStore, type StoredTask } from "../board-store/index.js";
 import type { JsonValue } from "../persistence/index.js";
 import {
   parseTaskProviderAliasMap,
@@ -17,11 +13,8 @@ import {
 } from "../provider-alias.js";
 import { epicControlForStatus } from "./epic-control.js";
 
-const executeFile = promisify(execFile);
 const lifecycleName = /^[a-z][a-z-]*$/;
 const repositoryIdentifier = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-
-export type KanbanCommandRunner = (arguments_: string[]) => Promise<string>;
 
 export interface BoardTask {
   blocked: boolean;
@@ -74,50 +67,6 @@ export class EpicStatusConflictError extends Error {
   }
 }
 
-interface KanbanTaskJson {
-  blocked?: boolean;
-  id: number;
-  title: string;
-  status: string;
-  priority: string;
-  tags?: string[];
-  parent?: number;
-  depends_on?: number[];
-  repos?: string[];
-  file: string;
-}
-
-interface KanbanBoardJson {
-  statuses: Array<{ status: string }>;
-}
-
-const defaultRunner: KanbanCommandRunner = async (arguments_) => {
-  const result = await executeFile("kanban-md", arguments_, {
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return result.stdout;
-};
-
-const parseJson = (output: string): unknown => JSON.parse(output) as unknown;
-
-const requireTask = (value: unknown): KanbanTaskJson => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    typeof (value as KanbanTaskJson).id !== "number" ||
-    typeof (value as KanbanTaskJson).title !== "string" ||
-    typeof (value as KanbanTaskJson).status !== "string" ||
-    typeof (value as KanbanTaskJson).priority !== "string" ||
-    typeof (value as KanbanTaskJson).file !== "string" ||
-    ((value as KanbanTaskJson).blocked !== undefined &&
-      typeof (value as KanbanTaskJson).blocked !== "boolean")
-  ) {
-    throw new Error("kanban-md returned an invalid task");
-  }
-  requireRepositories((value as KanbanTaskJson).repos);
-  return value as KanbanTaskJson;
-};
-
 export const isRepositoryScope = (value: unknown): value is string[] =>
   Array.isArray(value) &&
   value.length > 0 &&
@@ -130,28 +79,9 @@ export const isRepositoryScope = (value: unknown): value is string[] =>
 const requireRepositories = (value: unknown): string[] | undefined => {
   if (value === undefined) return undefined;
   if (!isRepositoryScope(value)) {
-    throw new Error("kanban-md returned an invalid task repository scope");
+    throw new Error("board task declares an invalid repository scope");
   }
   return value;
-};
-
-const requireBoardStatuses = (value: unknown): string[] => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("statuses" in value) ||
-    !Array.isArray(value.statuses) ||
-    !value.statuses.every(
-      (item) =>
-        typeof item === "object" &&
-        item !== null &&
-        "status" in item &&
-        typeof item.status === "string",
-    )
-  ) {
-    throw new Error("kanban-md returned an invalid board");
-  }
-  return (value as KanbanBoardJson).statuses.map(({ status }) => status);
 };
 
 const lifecycleFromTag = (tags: string[]): string | undefined => {
@@ -162,25 +92,6 @@ const lifecycleFromTag = (tags: string[]): string | undefined => {
     throw new Error("task has more than one lifecycle tag");
   }
   return values[0];
-};
-
-const unquoteScalar = (value: string): string => {
-  const trimmed = value.trim();
-  if (
-    trimmed.length >= 2 &&
-    ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'")))
-  ) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-};
-
-const frontMatterFrom = (source: string): string | undefined => {
-  if (!source.startsWith("---\n")) return undefined;
-  const end = source.indexOf("\n---", 4);
-  if (end === -1) return undefined;
-  return source.slice(4, end);
 };
 
 const isJsonValue = (value: unknown): value is JsonValue => {
@@ -201,29 +112,23 @@ const isJsonValue = (value: unknown): value is JsonValue => {
   );
 };
 
-const rawFrontMatter = (serialized: string | undefined): JsonValue => {
-  if (serialized === undefined) {
-    throw new Error("task has no YAML front matter");
-  }
-  let value: unknown;
-  try {
-    value = parse(serialized);
-  } catch (error) {
-    throw new Error(
-      `task front matter is invalid YAML: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+/**
+ * Exposes the whole front matter, including properties Heddle does not own, so
+ * callers read a board field without the board layer having to know about it.
+ */
+const taskFrontMatter = (task: StoredTask): Record<string, JsonValue> => {
+  const value = task.document.frontMatter.toJSON() as unknown;
   if (!isJsonValue(value) || Array.isArray(value) || value === null) {
     throw new Error("task front matter must be a JSON-compatible object");
   }
-  return value;
+  return value as Record<string, JsonValue>;
 };
 
-const lifecycleFromFrontMatter = (source: string): string | undefined => {
-  const frontMatter = frontMatterFrom(source);
-  if (frontMatter === undefined) return undefined;
-  const match = /^lifecycle:\s*(.*?)\s*$/m.exec(frontMatter);
-  return match?.[1] === undefined ? undefined : unquoteScalar(match[1]);
+const lifecycleFromFrontMatter = (
+  frontMatter: Record<string, JsonValue>,
+): string | undefined => {
+  const value = frontMatter["lifecycle"];
+  return typeof value === "string" ? value.trim() : undefined;
 };
 
 const validateLifecycle = (value: string | undefined): string | undefined => {
@@ -287,31 +192,24 @@ export class KanbanBoardAdapter {
   private activityWriteQueue: Promise<void> = Promise.resolve();
   private recordWriteQueue: Promise<void> = Promise.resolve();
 
-  public constructor(
-    private readonly boardDirectory: string,
-    private readonly run: KanbanCommandRunner = defaultRunner,
-  ) {}
+  private readonly store: KanbanBoardStore;
+
+  public constructor(boardDirectory: string) {
+    this.store = new KanbanBoardStore(boardDirectory);
+  }
 
   public async readBoard(): Promise<BoardTask[]> {
-    const output = await this.command("list", "--json");
-    const value = parseJson(output);
-    if (!Array.isArray(value)) {
-      throw new Error("kanban-md returned an invalid task list");
-    }
-    return Promise.all(
-      value.map((task) => this.normalizeTask(requireTask(task))),
+    return (await this.store.listTasks()).map((task) =>
+      this.normalizeTask(task),
     );
   }
 
   public async readBoardStatuses(): Promise<string[]> {
-    return requireBoardStatuses(
-      parseJson(await this.command("board", "--json")),
-    );
+    return this.store.readBoardStatuses();
   }
 
   public async readTask(taskId: number): Promise<BoardTask> {
-    const output = await this.command("show", String(taskId), "--json");
-    return this.normalizeTask(requireTask(parseJson(output)));
+    return this.normalizeTask(await this.store.readTask(taskId));
   }
 
   public async mirrorTaskStatus(taskId: number, status: string): Promise<void> {
@@ -319,7 +217,7 @@ export class KanbanBoardAdapter {
     if (task.tags.includes("type:epic")) {
       throw new Error(`task ${taskId} is an epic task`);
     }
-    await this.command("edit", String(taskId), "--status", status, "--json");
+    await this.store.editTaskStatus(taskId, status);
   }
 
   public appendTaskActivity(
@@ -355,7 +253,7 @@ export class KanbanBoardAdapter {
     if (task.parent !== undefined || !task.tags.includes("type:epic")) {
       throw new Error(`task ${taskId} is not an epic task`);
     }
-    await this.command("edit", String(taskId), "--status", status, "--json");
+    await this.store.editTaskStatus(taskId, status);
   }
 
   public async setEpicInProgress(
@@ -371,13 +269,7 @@ export class KanbanBoardAdapter {
     if (epicControlForStatus(task.status) !== requestedControl) {
       throw new EpicStatusConflictError(taskId, task.status, requestedStatus);
     }
-    await this.command(
-      "edit",
-      String(taskId),
-      "--status",
-      requestedStatus,
-      "--json",
-    );
+    await this.store.editTaskStatus(taskId, requestedStatus);
   }
 
   public createRecord(
@@ -434,32 +326,28 @@ export class KanbanBoardAdapter {
         );
       }
     }
-    const arguments_ = [
-      "create",
-      record.title,
-      "--body",
-      record.body,
-      "--parent",
-      String(record.parent),
-      "--tags",
-      `type:${record.kind},lifecycle:${record.lifecycle},${occurrenceTag},${requestTag}`,
-    ];
-    if (record.dependsOn !== undefined && record.dependsOn.length > 0) {
-      arguments_.push("--depends-on", record.dependsOn.join(","));
-    }
-    if (record.repos !== undefined) {
-      arguments_.push("--repos", record.repos.join(","));
-    }
-    if (record.priority !== undefined) {
-      arguments_.push("--priority", record.priority);
-    }
-    if (record.status !== undefined) {
-      arguments_.push("--status", record.status);
-    }
-    arguments_.push("--json");
-
-    const created = requireTask(parseJson(await this.command(...arguments_)));
-    return { replayed: false, task: await this.normalizeTask(created) };
+    // Repository scope is an ordinary front-matter property Heddle writes and
+    // reads; the board format does not have to know the field exists.
+    const created = await this.store.createTask({
+      body: record.body,
+      parent: record.parent,
+      tags: [
+        `type:${record.kind}`,
+        `lifecycle:${record.lifecycle}`,
+        occurrenceTag,
+        requestTag,
+      ],
+      title: record.title,
+      ...(record.dependsOn === undefined || record.dependsOn.length === 0
+        ? {}
+        : { dependsOn: record.dependsOn }),
+      ...(record.priority === undefined ? {} : { priority: record.priority }),
+      ...(record.repos === undefined
+        ? {}
+        : { properties: { repos: record.repos } }),
+      ...(record.status === undefined ? {} : { status: record.status }),
+    });
+    return { replayed: false, task: this.normalizeTask(created) };
   }
 
   private async writeTaskActivity(
@@ -468,64 +356,35 @@ export class KanbanBoardAdapter {
     activity: string,
   ): Promise<boolean> {
     const marker = `<!-- heddle-activity:${sha256(operationKey)} -->`;
-    const task = requireTask(
-      parseJson(await this.command("show", String(taskId), "--json")),
-    );
-    const source = await readFile(task.file, "utf8");
-    if (source.includes(marker)) return false;
-    await this.command(
-      "edit",
-      String(taskId),
-      "--append-body",
-      `${activity.trim()}\n${marker}`,
-      "--json",
-    );
+    const task = await this.store.readTask(taskId);
+    if (task.document.body.includes(marker)) return false;
+    await this.store.appendTaskBody(taskId, `${activity.trim()}\n${marker}`);
     return true;
   }
 
-  private async normalizeTask(task: KanbanTaskJson): Promise<BoardTask> {
-    const tags = task.tags ?? [];
-    const source = await readFile(task.file, "utf8");
-    const frontMatter = frontMatterFrom(source);
+  private normalizeTask(task: StoredTask): BoardTask {
+    const frontMatter = taskFrontMatter(task);
     const lifecycle = validateLifecycle(
-      lifecycleFromFrontMatter(source) ?? lifecycleFromTag(tags),
+      lifecycleFromFrontMatter(frontMatter) ?? lifecycleFromTag(task.tags),
     );
-    const parsedFrontMatter = rawFrontMatter(frontMatter);
     const providerAlias = parseTaskProviderAliasMap(
-      (parsedFrontMatter as Record<string, JsonValue>)["provider-alias"],
+      frontMatter["provider-alias"],
       task.id,
     );
-    const declaredRepos = requireRepositories(
-      (parsedFrontMatter as Record<string, JsonValue>)["repos"],
-    );
-    const repos = task.repos;
-    if (
-      (declaredRepos ?? []).length !== (repos ?? []).length ||
-      !(declaredRepos ?? []).every(
-        (repository, index) => repository === (repos ?? [])[index],
-      )
-    ) {
-      throw new Error(
-        `kanban-md typed repository scope disagrees with task ${task.id} front matter`,
-      );
-    }
+    const repos = requireRepositories(frontMatter["repos"]);
     return {
-      blocked: task.blocked ?? false,
-      frontMatter: parsedFrontMatter,
+      blocked: task.blocked,
+      frontMatter,
       id: task.id,
       title: task.title,
       status: task.status,
       priority: task.priority,
-      tags,
-      dependencies: task.depends_on ?? [],
-      parent: task.parent,
+      tags: task.tags,
+      dependencies: task.dependsOn,
+      ...(task.parent === undefined ? {} : { parent: task.parent }),
       lifecycle,
       ...(providerAlias === undefined ? {} : { providerAlias }),
       ...(repos === undefined ? {} : { repos }),
     };
-  }
-
-  private command(...arguments_: string[]): Promise<string> {
-    return this.run(["--dir", this.boardDirectory, ...arguments_]);
   }
 }
