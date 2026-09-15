@@ -9,9 +9,14 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveProductionConfiguration,
   validateProductionConfiguration,
   type ProductionConfiguration,
 } from "./configuration.js";
+import {
+  ProviderSelectionResolver,
+  type T3ProviderCatalog,
+} from "../control-plane/index.js";
 
 const fixture = (): ProductionConfiguration => ({
   adHocProject: {
@@ -137,6 +142,114 @@ describe("production configuration", () => {
     expect(validate(ordered), JSON.stringify(validate.errors)).toBe(true);
     expect(validateProductionConfiguration(legacy)).toBe(legacy);
     expect(validateProductionConfiguration(ordered)).toBe(ordered);
+  });
+
+  const effortCatalog = (): T3ProviderCatalog => [
+    {
+      availability: "available",
+      displayName: "Workbench Alpha",
+      driverKind: "sample-driver",
+      enabled: true,
+      installed: true,
+      instanceId: "instance-alpha",
+      models: [
+        {
+          isCustom: false,
+          name: "Sample Model",
+          optionDescriptors: [
+            {
+              id: "reasoningEffort",
+              options: [{ id: "low" }, { id: "high" }],
+              type: "select",
+            },
+          ],
+          slug: "sample-model",
+        },
+        { isCustom: false, name: "Plain Model", slug: "plain-model" },
+      ],
+      observedCliVersion: "1.0.0",
+      state: "ready",
+    },
+  ];
+
+  const resolveWithEffortCatalog = (configuration: ProductionConfiguration) =>
+    resolveProductionConfiguration(
+      configuration,
+      new ProviderSelectionResolver(
+        configuration.providerAliases,
+        { readProviderCatalog: async () => effortCatalog() },
+        configuration.session.defaultReasoningEffort === undefined
+          ? {}
+          : {
+              defaultReasoningEffort:
+                configuration.session.defaultReasoningEffort,
+            },
+      ),
+      { timeoutMilliseconds: 1 },
+    );
+
+  it("refuses to resolve when no candidate of an alias offers the effort", async () => {
+    const invalid: ProductionConfiguration = {
+      ...fixture(),
+      providerAliases: {
+        primary: {
+          model: "plain-model",
+          providerDisplayName: "Workbench Alpha",
+          reasoningEffort: "high",
+        },
+      },
+    };
+
+    await expect(resolveWithEffortCatalog(invalid)).rejects.toThrow(
+      "model 'plain-model' offers no reasoning effort option",
+    );
+  });
+
+  it("refuses to resolve an unsupported configuration default effort", async () => {
+    const invalid: ProductionConfiguration = {
+      ...fixture(),
+      session: { ...fixture().session, defaultReasoningEffort: "ultra" },
+    };
+
+    await expect(resolveWithEffortCatalog(invalid)).rejects.toThrow(
+      "model 'sample-model' offers 'low', 'high'",
+    );
+  });
+
+  it("resolves past a candidate the effort rules out and records the skip", async () => {
+    const configuration: ProductionConfiguration = {
+      ...fixture(),
+      providerAliases: {
+        primary: [
+          {
+            model: "plain-model",
+            providerDisplayName: "Workbench Alpha",
+            reasoningEffort: "high",
+          },
+          {
+            model: "sample-model",
+            providerDisplayName: "Workbench Alpha",
+            reasoningEffort: "high",
+          },
+        ],
+      },
+    };
+
+    const resolved = await resolveWithEffortCatalog(configuration);
+
+    expect(resolved.session.defaultSelection).toMatchObject({
+      model: expect.objectContaining({ slug: "sample-model" }),
+      reasoningEffort: "high",
+    });
+    expect(resolved.session.resolvedSelections[0]).toMatchObject({
+      candidatePosition: 2,
+      skippedCandidates: [
+        expect.objectContaining({
+          candidatePosition: 1,
+          modelSlug: "plain-model",
+        }),
+      ],
+    });
   });
 
   it("accepts a reasoning effort at both configuration layers", async () => {

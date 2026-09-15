@@ -93,8 +93,21 @@ export class ProviderAliasUnusableError extends ProviderSelectionError {
   }
 }
 
+/**
+ * An effort a narrower layer than the alias sets — a blueprint's stage or
+ * lifecycle header. It is applied per candidate, so a candidate whose model
+ * does not offer it is skipped exactly as any other unusable candidate is,
+ * rather than failing the whole selection. `origin` names the layer in the
+ * refusal.
+ */
+export type ReasoningEffortOverride = {
+  readonly origin: string;
+  readonly value: string;
+};
+
 export type ProviderSelectionInputs = {
   readonly interactionMode: string;
+  readonly reasoningEffortOverride?: ReasoningEffortOverride;
   readonly runtimeMode: T3RuntimeMode;
 };
 
@@ -462,29 +475,8 @@ export class ProviderSelectionResolver {
         `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
       );
     }
-    const reasoningEffort =
-      configured.reasoningEffort ?? this.#defaultReasoningEffort;
-    let reasoningEffortOptionId: string | undefined;
-    if (reasoningEffort !== undefined) {
-      try {
-        reasoningEffortOptionId = assertModelOffersReasoningEffort({
-          modelSlug: model.slug,
-          optionDescriptors: model.optionDescriptors,
-          origin:
-            configured.reasoningEffort === undefined
-              ? "session.defaultReasoningEffort"
-              : `providerAliases.${alias}`,
-          reasoningEffort,
-        }).optionId;
-      } catch (error) {
-        if (!(error instanceof ReasoningEffortUnsupportedError)) throw error;
-        throw selectionError(
-          "provider-reasoning-effort-unsupported",
-          alias,
-          error.message,
-        );
-      }
-    }
+    const { reasoningEffort, reasoningEffortOptionId } =
+      this.#resolveReasoningEffort(alias, configured, model, inputs);
     return {
       alias,
       driverKind: provider.driverKind,
@@ -499,6 +491,56 @@ export class ProviderSelectionResolver {
         : { reasoningEffortOptionId }),
       runtimeMode: inputs.runtimeMode,
     };
+  }
+
+  /**
+   * The narrowest layer that set an effort wins: a blueprint override, then the
+   * alias candidate's own value, then the configuration default.
+   */
+  #resolveReasoningEffort(
+    alias: string,
+    configured: ProviderAliasCandidateConfiguration,
+    model: T3ProviderCatalogModel,
+    inputs: ProviderSelectionInputs,
+  ): {
+    reasoningEffort: string | undefined;
+    reasoningEffortOptionId: string | undefined;
+  } {
+    const override = inputs.reasoningEffortOverride;
+    const reasoningEffort =
+      override?.value ??
+      configured.reasoningEffort ??
+      this.#defaultReasoningEffort;
+    if (reasoningEffort === undefined) {
+      return {
+        reasoningEffort: undefined,
+        reasoningEffortOptionId: undefined,
+      };
+    }
+    const origin =
+      override !== undefined
+        ? override.origin
+        : configured.reasoningEffort === undefined
+          ? "session.defaultReasoningEffort"
+          : `providerAliases.${alias}`;
+    try {
+      return {
+        reasoningEffort,
+        reasoningEffortOptionId: assertModelOffersReasoningEffort({
+          modelSlug: model.slug,
+          optionDescriptors: model.optionDescriptors,
+          origin,
+          reasoningEffort,
+        }).optionId,
+      };
+    } catch (error) {
+      if (!(error instanceof ReasoningEffortUnsupportedError)) throw error;
+      throw selectionError(
+        "provider-reasoning-effort-unsupported",
+        alias,
+        error.message,
+      );
+    }
   }
 
   public async resolveStartup(

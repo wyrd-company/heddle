@@ -91,6 +91,33 @@ describe("reasoning effort rejection", () => {
     );
   });
 
+  it("names the select options a model with an unknown vocabulary publishes", () => {
+    expect(() =>
+      assertModelOffersReasoningEffort({
+        modelSlug: "new-driver-model",
+        optionDescriptors: [
+          selectDescriptor("thinkingBudget", ["small", "large"]),
+          { id: "fastMode", type: "boolean" },
+        ],
+        origin: "providerAliases.primary",
+        reasoningEffort: "large",
+      }),
+    ).toThrow(
+      "offers no reasoning effort option; it publishes select options 'thinkingBudget', and this build reads reasoning effort from 'reasoningEffort' or 'effort'",
+    );
+  });
+
+  it("says so when a model publishes no select options at all", () => {
+    expect(() =>
+      assertModelOffersReasoningEffort({
+        modelSlug: "plain-model",
+        optionDescriptors: [],
+        origin: "providerAliases.primary",
+        reasoningEffort: "high",
+      }),
+    ).toThrow("it publishes no select options");
+  });
+
   it("rejects with a recognisable error type", () => {
     expect(() =>
       assertModelOffersReasoningEffort({

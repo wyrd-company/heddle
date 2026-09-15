@@ -182,6 +182,120 @@ describe("layered reasoning effort resolution", () => {
   });
 });
 
+describe("reasoning effort candidate fallback", () => {
+  /**
+   * A stage or header effort must make one candidate unusable, not the stage.
+   * The alias layer already skips such a candidate, so both layers answer the
+   * same provider-reasoning-effort-unsupported reason the same way.
+   */
+  const fallbackResolver = () =>
+    new ProviderSelectionResolver(
+      {
+        primary: [
+          { model: "model-alpha", providerDisplayName: "Workbench Alpha" },
+          { model: "plain-model", providerDisplayName: "Workbench Beta" },
+        ],
+      },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+  it("skips a candidate whose model does not offer the stage effort", async () => {
+    const session = {
+      baseRef: "main",
+      defaultProviderAlias: "primary",
+      defaultRuntimeMode: "auto",
+      interactionMode: "default",
+      skillPointer: "skill://sample",
+    } as unknown as ResolvedProductionSessionConfiguration;
+
+    const selection = await resolveStageSessionSelection(
+      {
+        session,
+        stageId: "implement",
+        stageReasoningEffort: "high",
+        taskId: 1,
+      },
+      fallbackResolver(),
+    );
+
+    expect(selection.model.slug).toBe("model-alpha");
+    expect(selection.reasoningEffort).toBe("high");
+    expect(selection.candidatePosition).toBe(1);
+  });
+
+  it("skips a first candidate the stage effort rules out and records it", async () => {
+    const session = {
+      baseRef: "main",
+      defaultProviderAlias: "reversed",
+      defaultRuntimeMode: "auto",
+      interactionMode: "default",
+      skillPointer: "skill://sample",
+    } as unknown as ResolvedProductionSessionConfiguration;
+    const resolver = new ProviderSelectionResolver(
+      {
+        reversed: [
+          { model: "plain-model", providerDisplayName: "Workbench Beta" },
+          { model: "model-alpha", providerDisplayName: "Workbench Alpha" },
+        ],
+      },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    const selection = await resolveStageSessionSelection(
+      {
+        session,
+        stageId: "implement",
+        stageReasoningEffort: "high",
+        taskId: 1,
+      },
+      resolver,
+    );
+
+    expect(selection.model.slug).toBe("model-alpha");
+    expect(selection.candidatePosition).toBe(2);
+    expect(selection.skippedCandidates).toEqual([
+      expect.objectContaining({
+        candidatePosition: 1,
+        modelSlug: "plain-model",
+        failure: expect.objectContaining({
+          message: expect.stringContaining("offers no reasoning effort option"),
+        }),
+      }),
+    ]);
+  });
+
+  it("fails the stage only when no candidate offers the stage effort", async () => {
+    const session = {
+      baseRef: "main",
+      defaultProviderAlias: "plainOnly",
+      defaultRuntimeMode: "auto",
+      interactionMode: "default",
+      skillPointer: "skill://sample",
+    } as unknown as ResolvedProductionSessionConfiguration;
+    const resolver = new ProviderSelectionResolver(
+      {
+        plainOnly: {
+          model: "plain-model",
+          providerDisplayName: "Workbench Beta",
+        },
+      },
+      { readProviderCatalog: async () => catalog() },
+    );
+
+    await expect(
+      resolveStageSessionSelection(
+        {
+          session,
+          stageId: "implement",
+          stageReasoningEffort: "high",
+          taskId: 1,
+        },
+        resolver,
+      ),
+    ).rejects.toThrow("offers no reasoning effort option");
+  });
+});
+
 describe("unsupported reasoning effort rejection", () => {
   it("rejects a configuration default the model does not offer, naming both", async () => {
     const resolver = new ProviderSelectionResolver(

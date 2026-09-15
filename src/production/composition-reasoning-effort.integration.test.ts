@@ -12,9 +12,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { advanceOperationId } from "../mcp-server/operations.js";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
+import type { JsonValue } from "../persistence/index.js";
 import { validateResolvedProductionConfiguration } from "./configuration.js";
 import { createProductionComposition } from "./composition.js";
 import {
+  prepareProductionEpicFixture,
   prepareProductionFixture,
   SyntheticT3,
   type ProductionFixture,
@@ -42,6 +44,24 @@ const offerReasoningEfforts = (t3: SyntheticT3): void => {
   };
 };
 
+const setLifecycleReasoningEffort = async (
+  fixture: ProductionFixture,
+  reasoningEffort: string,
+): Promise<void> => {
+  const path = join(
+    fixture.blueprintsRepositoryRoot,
+    "blueprints",
+    "sample.json",
+  );
+  const blueprint = JSON.parse(await readFile(path, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  blueprint["reasoning-effort"] = reasoningEffort;
+  await writeFile(path, `${JSON.stringify(blueprint, null, 2)}\n`);
+  await commitBlueprints(fixture, "Set a lifecycle reasoning effort");
+};
+
 const setStageReasoningEffort = async (
   fixture: ProductionFixture,
   reasoningEffort: string,
@@ -58,8 +78,15 @@ const setStageReasoningEffort = async (
   blueprint.nodes.find(({ id }) => id === stageId)!["reasoning-effort"] =
     reasoningEffort;
   await writeFile(path, `${JSON.stringify(blueprint, null, 2)}\n`);
-  // The lifecycle pins blueprint content from git, so an uncommitted edit is
-  // invisible to the running service.
+  await commitBlueprints(fixture, "Set a stage reasoning effort");
+};
+
+// The lifecycle pins blueprint content from git, so an uncommitted edit is
+// invisible to the running service.
+const commitBlueprints = async (
+  fixture: ProductionFixture,
+  message: string,
+): Promise<void> => {
   await execute("git", ["add", "blueprints"], {
     cwd: fixture.blueprintsRepositoryRoot,
   });
@@ -73,7 +100,7 @@ const setStageReasoningEffort = async (
       "commit",
       "--quiet",
       "-m",
-      "Set a stage reasoning effort",
+      message,
     ],
     { cwd: fixture.blueprintsRepositoryRoot },
   );
@@ -307,6 +334,63 @@ describe("production reasoning effort", () => {
     await composition.close();
   });
 
+  it("names the layer that set an unusable effort", async () => {
+    const stageFixture = await prepareProductionFixture();
+    cleanup = stageFixture.cleanup;
+    await setStageReasoningEffort(stageFixture, "ultra", "implement");
+    const stageT3 = new SyntheticT3();
+    offerReasoningEfforts(stageT3);
+    const stageComposition = compose(stageFixture, stageT3);
+
+    await stageComposition.start();
+
+    expect(
+      stageComposition.attention.list().map(({ message }) => message),
+    ).toContainEqual(
+      expect.stringContaining("Stage 'implement' sets reasoning effort"),
+    );
+    await stageComposition.close();
+    await stageFixture.cleanup();
+
+    const headerFixture = await prepareProductionFixture();
+    cleanup = headerFixture.cleanup;
+    await setLifecycleReasoningEffort(headerFixture, "ultra");
+    const headerT3 = new SyntheticT3();
+    offerReasoningEfforts(headerT3);
+    const headerComposition = compose(headerFixture, headerT3);
+
+    await headerComposition.start();
+
+    const headerMessages = headerComposition.attention
+      .list()
+      .map(({ message }) => message);
+    expect(headerMessages).toContainEqual(
+      expect.stringContaining("The lifecycle header sets reasoning effort"),
+    );
+    expect(headerMessages).not.toContainEqual(
+      expect.stringContaining("Stage 'implement' sets reasoning effort"),
+    );
+    await headerComposition.close();
+  });
+
+  it("takes the lifecycle header effort when the stage sets none", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    await setLifecycleReasoningEffort(fixture, "medium");
+    const t3 = new SyntheticT3();
+    offerReasoningEfforts(t3);
+    const composition = compose(fixture, t3);
+
+    await composition.start();
+
+    for (const modelSelection of modelSelectionsOf(t3)) {
+      expect(modelSelection).toMatchObject({
+        options: [{ id: "reasoningEffort", value: "medium" }],
+      });
+    }
+    await composition.close();
+  });
+
   it("refuses a resolved configuration whose default selection effort disagrees", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
@@ -329,6 +413,64 @@ describe("production reasoning effort", () => {
     ).toThrow(
       "session.defaultSelection must be the default alias entry in session.resolvedSelections",
     );
+  });
+
+  it("gives a delegated child its own alias effort, not the stage's", async () => {
+    // The blueprint layers scope one stage session. A child takes the effort of
+    // the alias it is spawned with, so the two are set to different values here
+    // and the child must show its alias's.
+    const fixture = await prepareProductionEpicFixture();
+    cleanup = fixture.cleanup;
+    await setStageReasoningEffort(fixture, "xhigh", "implement");
+    fixture.configuration.providerAliases = {
+      ...fixture.configuration.providerAliases,
+      delegate: {
+        model: "sample-model",
+        providerDisplayName: "Workbench Alpha",
+        reasoningEffort: "low",
+      },
+    };
+    const t3 = new SyntheticT3();
+    offerReasoningEfforts(t3);
+    const composition = compose(fixture, t3);
+    cleanup = async () => {
+      await composition.close();
+      await fixture.cleanup();
+    };
+    await composition.start();
+    const instanceId = `task-${fixture.taskId}`;
+    const resolver = new WorkflowMcpSessionResolver(composition.persistence);
+    const handoffs = composition.persistence.getInstance(instanceId)!.state
+      .handoffs as JsonValue[];
+    const stored = handoffs.find(
+      (value) =>
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        value["kind"] === "stage-handoff" &&
+        typeof value["correlationToken"] === "string",
+    ) as { correlationToken: string };
+    const parent = await resolver.resolve(stored.correlationToken);
+
+    const spawned = await composition.subagents.spawn(parent, {
+      operationId: "spawn-effort-child",
+      providerAlias: "delegate",
+      rootItemId: "deliver",
+    });
+
+    if (spawned.kind !== "spawned") throw new Error("Child was deferred");
+    expect(spawned.assignment.binding).toMatchObject({
+      alias: "delegate",
+      reasoningEffort: "low",
+      reasoningEffortOptionId: "reasoningEffort",
+    });
+    const childSelections = modelSelectionsOf(t3, spawned.assignment.threadId);
+    expect(childSelections).not.toEqual([]);
+    for (const modelSelection of childSelections) {
+      expect(modelSelection).toMatchObject({
+        options: [{ id: "reasoningEffort", value: "low" }],
+      });
+    }
   });
 
   it("makes an effort the model does not offer visible to the operator", async () => {

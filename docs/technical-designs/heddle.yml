@@ -499,22 +499,28 @@ proposed-design:
     identifier that model offers. The resolved value is dispatched as one
     `modelSelection.options` selection carrying that identifier.
 
-    A value the selected model does not offer is refused before any session
-    effect, naming the layer, the model, and the values the model offers. The
-    configuration default and every alias candidate are resolved and refused at
-    startup against one catalog snapshot, before the server binds. A blueprint
-    header or stage value is refused when the stage resolves its session, which
-    precedes every worktree, registration, thread, and dispatch effect. The
-    stable selection reason is `provider-reasoning-effort-unsupported`.
-    Blueprint validation checks the field's shape; the model that will run a
-    stage is known only once its alias resolves.
+    A value the selected model does not offer makes that candidate unusable,
+    whichever layer set it. The candidate is skipped and recorded in declared
+    order exactly as any other candidate failure is, and the alias fails only
+    when no candidate remains. The refusal names the layer that set the value,
+    the model, and the values the model offers, under the stable selection
+    reason `provider-reasoning-effort-unsupported`; where the model publishes no
+    reasoning option, it also names the select options that model does publish.
+    The configured service resolves every alias against one catalog snapshot at
+    startup and does not bind when an alias has no usable candidate. A directly
+    assembled composition resolves at stage selection and raises durable
+    attention there, before any worktree, registration, thread, or dispatch
+    effect. Blueprint validation checks the field's shape; the model that will
+    run a stage is known only once its alias resolves.
 
     The resolved effort and the option identifier it dispatches under are part
     of the durable resolved session binding, so the operator reads what a
     session is running at beside its model and provider instance. The
     adjudication session takes its effort through its configured provider
-    alias, with no separate mechanism. A binding carries both fields or
-    neither.
+    alias, with no separate mechanism. A delegated child session does the same:
+    the blueprint layers scope one stage session and are not inherited by the
+    children it spawns, so a child's effort follows the alias it is spawned
+    with. A binding carries both fields or neither.
   agent-names: >
     Agent names are organization blueprint data. YAML artifacts under the
     organization repository's `themes/` directory use their filename stem as

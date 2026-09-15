@@ -86,8 +86,14 @@ export const assertModelOffersReasoningEffort = (input: {
 }): ModelReasoningEffortCapability => {
   const capability = modelReasoningEffortCapability(input.optionDescriptors);
   if (capability === undefined) {
+    // A driver publishing its reasoning select under an id this build does not
+    // know looks identical to a model with no reasoning option, so name the
+    // select options the model does publish: that is the difference.
+    const published = (input.optionDescriptors ?? [])
+      .filter(({ type }) => type === "select")
+      .map(({ id }) => id);
     throw new ReasoningEffortUnsupportedError(
-      `${input.origin} sets reasoning effort '${input.reasoningEffort}', but model '${input.modelSlug}' offers no reasoning effort option`,
+      `${input.origin} sets reasoning effort '${input.reasoningEffort}', but model '${input.modelSlug}' offers no reasoning effort option; it publishes ${published.length === 0 ? "no select options" : `select options '${published.join("', '")}'`}, and this build reads reasoning effort from '${wellKnownReasoningEffortOptionIds.join("' or '")}'`,
     );
   }
   if (!capability.offeredValues.includes(input.reasoningEffort)) {
@@ -111,6 +117,6 @@ export const reasoningEffortOptionSelections = (
     ? []
     : [{ id: reasoningEffortOptionId, value: reasoningEffort }];
 
-/** A configured or authored effort token: a non-empty, untrimmed-free scalar. */
+/** A configured or authored effort token: non-empty, with no leading or trailing whitespace. */
 export const isReasoningEffort = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "" && value.trim() === value;

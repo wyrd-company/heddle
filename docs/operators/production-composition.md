@@ -525,16 +525,28 @@ assuming one. The resolved value is dispatched as one `modelSelection.options`
 selection under that identifier, and appears on the session binding beside the
 model slug and provider instance.
 
-A value the selected model does not offer is refused before any session effect,
-naming the layer, the model, and the values the model offers. The configuration
-default and every alias candidate are refused at startup, before the server
-binds; a blueprint header or stage value is refused when the stage resolves its
-session, before any worktree, registration, thread, or dispatch effect. The
-selection reason is `provider-reasoning-effort-unsupported`. A model that offers
-no reasoning option refuses any configured effort the same way.
+A value the selected model does not offer makes that candidate unusable. It is
+skipped and recorded in `skippedCandidates` in declared order, exactly as any
+other candidate failure is, whichever layer set the value; the alias fails only
+when no candidate is left. The refusal names the layer that set the value, the
+model, and the values that model offers, under the selection reason
+`provider-reasoning-effort-unsupported`. A model publishing no reasoning option
+refuses a configured effort the same way, and the refusal also names the select
+options that model does publish, so a driver using a vocabulary this build does
+not read is diagnosable from the message.
+
+Where that refusal surfaces depends on the entry point. The configured service
+resolves every alias against one catalog snapshot at startup and does not bind
+if an alias has no usable candidate left. A composition assembled directly
+resolves at stage selection instead, and an unusable alias raises durable
+attention there, before any worktree, registration, thread, or dispatch effect.
 
 The adjudication session takes its effort from its configured `providerAlias`,
-with no separate setting.
+with no separate setting. A delegated child session resolves the same way: it
+takes the effort of the alias it is spawned with, or the configuration default.
+The blueprint's stage and lifecycle-header layers scope one stage session and
+are not inherited by the children that stage spawns, so a child's effort is an
+alias decision rather than a stage one.
 
 Heddle pins the lifecycle blueprint source ref and persists the pending start
 with that blueprint path and blob hash before it resolves the session binding.

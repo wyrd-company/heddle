@@ -27,9 +27,25 @@ export type ProductionStageMetadata = {
   providerAlias?: string;
   /** The stage's effort, or the blueprint header's when the stage sets none. */
   reasoningEffort?: string;
+  /** Which layer set `reasoningEffort`, so a refusal can name it. */
+  reasoningEffortOrigin?: "lifecycle-header" | "stage";
   repositoryName?: string;
   runtimeMode?: ResolvedSessionRuntimeMode;
 };
+
+/**
+ * How a refusal names the layer that set the effort. The operator needs to
+ * know which document to edit, and the two layers live in different places.
+ */
+export const reasoningEffortOriginLabel = (
+  stage: Pick<ProductionStageMetadata, "reasoningEffortOrigin">,
+  stageId: string,
+): string | undefined =>
+  stage.reasoningEffortOrigin === undefined
+    ? undefined
+    : stage.reasoningEffortOrigin === "stage"
+      ? `Stage '${stageId}'`
+      : "The lifecycle header";
 
 const mechanicalOutputsForStage = (
   blueprint: LifecycleBlueprint,
@@ -120,6 +136,8 @@ export const readProductionHandoffStage = async (input: {
   // header's, then whatever the resolved alias carries.
   const reasoningEffort =
     node["reasoning-effort"] ?? blueprint["reasoning-effort"];
+  const reasoningEffortOrigin =
+    node["reasoning-effort"] === undefined ? "lifecycle-header" : "stage";
   const projection = lifecycleProjectionOf(context);
   const entry =
     projection.current === null
@@ -144,7 +162,9 @@ export const readProductionHandoffStage = async (input: {
     ...(node["provider-alias"] === undefined
       ? {}
       : { providerAlias: node["provider-alias"] }),
-    ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+    ...(reasoningEffort === undefined
+      ? {}
+      : { reasoningEffort, reasoningEffortOrigin }),
     ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
     ...(node["runtime-mode"] === undefined
       ? {}

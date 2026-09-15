@@ -67,7 +67,10 @@ import {
   modelSelectionFromBinding,
   providerContextFromBinding,
 } from "./session-binding.js";
-import { readProductionHandoffStage } from "./stage-handoff.js";
+import {
+  readProductionHandoffStage,
+  reasoningEffortOriginLabel,
+} from "./stage-handoff.js";
 import type { LifecycleQuestionCoordinator } from "./lifecycle-questions.js";
 import {
   resolveStageSessionSelection,
@@ -852,6 +855,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
               stageId,
               stageProviderAlias: stage.providerAlias,
               stageReasoningEffort: stage.reasoningEffort,
+                stageReasoningEffortOrigin: reasoningEffortOriginLabel(
+                  stage,
+                  stageId,
+                ),
               stageRuntimeMode: stage.runtimeMode,
               taskId: input.task.id,
               taskProviderAliases: input.task.providerAlias,
@@ -1209,6 +1216,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           stageId,
           stageProviderAlias: stage.providerAlias,
           stageReasoningEffort: stage.reasoningEffort,
+                stageReasoningEffortOrigin: reasoningEffortOriginLabel(
+                  stage,
+                  stageId,
+                ),
           stageRuntimeMode: stage.runtimeMode,
           taskId: task?.id ?? runtime.taskId,
           taskProviderAliases: task?.providerAlias,
@@ -1741,6 +1752,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
                 stageId,
                 stageProviderAlias: stage.providerAlias,
                 stageReasoningEffort: stage.reasoningEffort,
+                stageReasoningEffortOrigin: reasoningEffortOriginLabel(
+                  stage,
+                  stageId,
+                ),
                 stageRuntimeMode: stage.runtimeMode,
                 taskId: task.id,
                 taskProviderAliases: task.providerAlias,
