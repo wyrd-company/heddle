@@ -331,6 +331,7 @@ describe("Heddle devcontainer feature", () => {
     for (const assertion of [
       "service-registration-count",
       "kanban-md-absent",
+      "koffi-prebuild-loads",
       "packaged-console-asset",
       "loopback-console-readiness",
       "loopback-console-title",

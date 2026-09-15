@@ -30,6 +30,7 @@ import {
   type StoredTask,
 } from "./task-file.js";
 import { createFileAtomic } from "./atomic-write.js";
+import { withBoardLock } from "./board-lock.js";
 
 export { BoardStoreError, type BoardStoreErrorCode } from "./errors.js";
 export { ARCHIVED_STATUS } from "./config.js";
@@ -301,8 +302,33 @@ export class KanbanBoardStore {
   }
 
   /**
+   * Allocates and publishes under kanban-md's own board lock, so the CLI
+   * cannot allocate while Heddle does.
+   *
+   * Acquisition is asynchronous and unbounded: waiting for the CLI to finish
+   * never blocks the event loop, and a bound would refuse valid work rather
+   * than wait out contention. The lock covers the whole section — reading
+   * `next_id`, reserving it, publishing the task file, and verifying — because
+   * the CLI's own lock covers exactly the same span.
+   */
+  private async allocateAndWrite(
+    config: BoardConfig,
+    parameters: CreateTaskParameters,
+    priority: string,
+    status: string,
+  ): Promise<StoredTask> {
+    return withBoardLock(this.boardDirectory, () =>
+      this.allocateAndPublish(config, parameters, priority, status),
+    );
+  }
+
+  /**
    * Allocates an id, creates the task file, and confirms the result is the
    * file it wrote and the only file carrying that id.
+   *
+   * These steps no longer carry the outcome alone — the board lock above does
+   * — but they remain correct, and they keep holding against any writer that
+   * does not take that lock.
    *
    * The order matters. `next_id` is raised before the task file exists, so a
    * writer that reads the config after the reservation cannot choose this id.
@@ -317,7 +343,7 @@ export class KanbanBoardStore {
    * stop. It is not bounded: a bound would refuse a valid create rather than
    * wait out contention.
    */
-  private async allocateAndWrite(
+  private async allocateAndPublish(
     config: BoardConfig,
     parameters: CreateTaskParameters,
     priority: string,

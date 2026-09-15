@@ -633,6 +633,7 @@ inside jq -e '(.dependencies | keys | sort) == [
   "better-sqlite3",
   "flowcraft",
   "jsonata",
+  "koffi",
   "nunjucks",
   "yaml",
   "zod"
@@ -646,6 +647,10 @@ inside_assert_equal \
     kanban-md-absent \
     absent \
     bash -lc 'if command -v kanban-md >/dev/null 2>&1; then printf present; else printf absent; fi'
+inside_assert_equal \
+    koffi-prebuild-loads \
+    ok \
+    bash -lc 'cd /usr/local/lib/node_modules/@wyrd-company/heddle && node -e "require(\"koffi\").load(\"libc.so.6\").func(\"int flock(int, int)\"); process.stdout.write(\"ok\")"'
 inside_assert_equal \
     packaged-console-asset \
     present \
