@@ -58,6 +58,7 @@ const commit = async (root: string, paths: string[], message: string) => {
  */
 const installIncidentBlueprint = async (
   fixture: ProductionFixture,
+  reasoningEffort?: string,
 ): Promise<void> => {
   const root = fixture.blueprintsRepositoryRoot;
   await writeFile(
@@ -80,6 +81,9 @@ const installIncidentBlueprint = async (
   ).stdout.trim();
   const stage = (id: string) => ({
     config: { joinStrategy: "any" },
+    ...(reasoningEffort === undefined
+      ? {}
+      : { "reasoning-effort": reasoningEffort }),
     "handoff-template": {
       commitSha: templateCommit,
       path: "handoff-templates/incident.md",
@@ -205,7 +209,7 @@ const installIncidentBlueprint = async (
   await execute("git", ["push", "--quiet"], { cwd: root });
 };
 
-const raiseIncident = async () => {
+const raiseIncident = async (reasoningEffort?: string) => {
   const fixture = await prepareProductionFixture();
   cleanup = fixture.cleanup;
   fixture.configuration.incident = {
@@ -216,7 +220,14 @@ const raiseIncident = async () => {
   };
   // Synthetic threads stay active, so the WIP limit must admit every stage.
   fixture.configuration.pacing.maxConcurrentSessions = 10;
-  await installIncidentBlueprint(fixture);
+  await installIncidentBlueprint(fixture, reasoningEffort);
+  const t3 = new SyntheticT3();
+  t3.providerCatalog[0]!.models[0] = {
+    ...t3.providerCatalog[0]!.models[0]!,
+    optionDescriptors: [
+      { id: "reasoningEffort", options: [{ id: "xhigh" }], type: "select" },
+    ],
+  };
   const compose = () =>
     createProductionComposition({
       blueprintsRepositoryRoot: fixture.blueprintsRepositoryRoot,
@@ -225,7 +236,7 @@ const raiseIncident = async () => {
         readFiveHourWindow: async () => ({ used: 0, windowStartedAt: 0 }),
       },
       pushoverTransport: { send: vi.fn(async () => undefined) },
-      t3: new SyntheticT3(),
+      t3,
       workflowMcpEndpoint: "http://127.0.0.1:4774/mcp",
     });
   const composition = compose();
@@ -293,10 +304,36 @@ const raiseIncident = async () => {
     runtime,
     settle,
     source,
+    t3,
   };
 };
 
 describe("production incident lifecycle", () => {
+  it("runs its stage sessions at the stage's configured reasoning effort", async () => {
+    const { composition, incident, t3 } = await raiseIncident("xhigh");
+
+    const session = composition.persistence
+      .listSessionRuntime()
+      .find(({ instanceId }) => instanceId === incident.incidentId)!;
+    expect(session.binding).toMatchObject({
+      reasoningEffort: "xhigh",
+      reasoningEffortOptionId: "reasoningEffort",
+    });
+    const dispatched = t3.commands.filter(
+      (command) =>
+        command["threadId"] === session.threadId &&
+        (command["type"] === "thread.create" ||
+          command["type"] === "thread.turn.start"),
+    );
+    expect(dispatched).not.toEqual([]);
+    for (const command of dispatched) {
+      expect(command["modelSelection"]).toMatchObject({
+        options: [{ id: "reasoningEffort", value: "xhigh" }],
+      });
+    }
+    await composition.close();
+  });
+
   it("runs diagnosis, assessment, and action, then resolves its source attention", async () => {
     const { advance, composition, diagnosis, incident, runtime, source } =
       await raiseIncident();

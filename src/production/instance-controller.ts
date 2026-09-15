@@ -742,7 +742,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
         session: this.configuration.session,
         stageId,
         stageProviderAlias: stage.providerAlias,
-        stageReasoningEffort: stage.reasoningEffort,
         stageRuntimeMode: stage.runtimeMode,
         taskId: task.id,
         taskProviderAliases: task.providerAlias,

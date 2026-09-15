@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { advanceOperationId } from "../mcp-server/operations.js";
 import { WorkflowMcpSessionResolver } from "../mcp-server/index.js";
 import { validateResolvedProductionConfiguration } from "./configuration.js";
 import { createProductionComposition } from "./composition.js";
@@ -44,6 +45,7 @@ const offerReasoningEfforts = (t3: SyntheticT3): void => {
 const setStageReasoningEffort = async (
   fixture: ProductionFixture,
   reasoningEffort: string,
+  stageId = "implement",
 ): Promise<void> => {
   const path = join(
     fixture.blueprintsRepositoryRoot,
@@ -53,7 +55,7 @@ const setStageReasoningEffort = async (
   const blueprint = JSON.parse(await readFile(path, "utf8")) as {
     nodes: Array<Record<string, unknown> & { id: string }>;
   };
-  blueprint.nodes.find(({ id }) => id === "implement")!["reasoning-effort"] =
+  blueprint.nodes.find(({ id }) => id === stageId)!["reasoning-effort"] =
     reasoningEffort;
   await writeFile(path, `${JSON.stringify(blueprint, null, 2)}\n`);
   // The lifecycle pins blueprint content from git, so an uncommitted edit is
@@ -257,6 +259,50 @@ describe("production reasoning effort", () => {
     // The owner's own session keeps the effort its alias configures — none.
     for (const modelSelection of modelSelectionsOf(t3, runtime.threadId!)) {
       expect(modelSelection).not.toHaveProperty("options");
+    }
+    await composition.close();
+  });
+
+  it("gives each stage its own effort as the lifecycle advances", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    await setStageReasoningEffort(fixture, "xhigh", "implement");
+    await setStageReasoningEffort(fixture, "low", "review");
+    const t3 = new SyntheticT3();
+    offerReasoningEfforts(t3);
+    const composition = compose(fixture, t3);
+    const instanceId = `task-${fixture.taskId}`;
+    await composition.start();
+    const implementSession = composition.persistence
+      .listSessionRuntime()
+      .find(({ stageId }) => stageId === "implement")!;
+
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:implement:1`),
+      output: { evidence: "sample" },
+    });
+    await composition.scheduler.trigger();
+
+    const reviewSession = composition.persistence
+      .listSessionRuntime()
+      .find(({ stageId }) => stageId === "review");
+    expect(reviewSession?.binding.reasoningEffort).toBe("low");
+    for (const modelSelection of modelSelectionsOf(
+      t3,
+      implementSession.threadId,
+    )) {
+      expect(modelSelection).toMatchObject({
+        options: [{ id: "reasoningEffort", value: "xhigh" }],
+      });
+    }
+    const reviewSelections = modelSelectionsOf(t3, reviewSession!.threadId);
+    expect(reviewSelections).not.toEqual([]);
+    for (const modelSelection of reviewSelections) {
+      expect(modelSelection).toMatchObject({
+        options: [{ id: "reasoningEffort", value: "low" }],
+      });
     }
     await composition.close();
   });
