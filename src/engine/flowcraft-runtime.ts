@@ -87,7 +87,9 @@ export const landedAsExpected = (
       edgeKeys: new Set<string>(),
       exclusive: false,
     };
-    conditional.edgeKeys.add(JSON.stringify([edge.target, edge.condition]));
+    conditional.edgeKeys.add(
+      JSON.stringify([edge.target, effectiveCondition(blueprint, edge)]),
+    );
     conditional.exclusive ||= edge.disposition !== undefined;
     conditionalEdgesBySource.set(edge.source, conditional);
   }

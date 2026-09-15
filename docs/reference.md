@@ -170,7 +170,8 @@ non-identifier name the same way, or through a backtick segment:
 disposition; they must agree on description and output contract, and at most
 one may omit its condition. An edge that omits its condition while a sibling of
 the same disposition carries one is the else branch: it fires when the
-disposition is chosen and no conditioned sibling is true. When a wait or
+disposition is chosen and no conditioned sibling is true. “Effective condition”
+in the validation list includes this disposition default. When a wait or
 question node resumes, exactly one edge out of it must fire; none or several
 is a routing failure that raises attention and stops the instance. Only the
 chosen disposition's edges are evaluated on resume. A mechanical node's edges

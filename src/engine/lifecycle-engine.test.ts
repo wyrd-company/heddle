@@ -503,6 +503,39 @@ describe("LifecycleEngine", () => {
     fixture.persistence.close();
   });
 
+  it("tracks distinct effective disposition edges that converge on one target", async () => {
+    const applied: string[] = [];
+    const blueprint = mechanicalDispositionBlueprint();
+    blueprint.id = "converging-dispositions";
+    blueprint.nodes = [
+      { id: "prepare", uses: "prepare-worktree" },
+      { id: "done", uses: "done" },
+    ];
+    for (const edge of blueprint.edges) {
+      edge.target = "done";
+      delete edge.condition;
+    }
+    const fixture = await makeFixture(blueprint, {
+      done: async () => {
+        applied.push("done");
+        return {};
+      },
+      "prepare-worktree": async () => {
+        applied.push("prepare");
+        return { dispositions: { right: true } };
+      },
+    });
+
+    const completed = await fixture.engine.start({
+      blueprintPath: fixture.blueprintPath,
+      instanceId: "converging-dispositions",
+    });
+
+    expect(completed.status).toBe("completed");
+    expect(applied).toEqual(["prepare", "done"]);
+    fixture.persistence.close();
+  });
+
   it("rejects a mechanical node that mixes effective and truly unconditional edges", async () => {
     const blueprint = mechanicalDispositionBlueprint();
     for (const edge of blueprint.edges) delete edge.disposition;
