@@ -132,7 +132,19 @@ const parseTemplate = (
   };
 };
 
-const includeDirectory = "handoff-templates/includes/";
+const templateDirectory = "handoff-templates";
+
+/**
+ * A per-stage template is a template in its own right, so it declares front
+ * matter. Including one renders its instructions, never its metadata.
+ */
+const withoutFrontMatter = (serialized: string): string => {
+  if (!serialized.startsWith("---\n")) return serialized;
+  const boundary = serialized.indexOf("\n---\n", 4);
+  return boundary === -1
+    ? serialized
+    : serialized.slice(boundary + "\n---\n".length);
+};
 
 const readPinnedPath = async (
   repositoryRoot: string,
@@ -146,6 +158,11 @@ const readPinnedPath = async (
     })
   ).stdout;
 
+/**
+ * Every Markdown artifact in the pinned `handoff-templates/` tree, so a
+ * template can include a partial or another stage's template by path or by
+ * expression without a second repository read.
+ */
 const readPinnedIncludes = async (
   repositoryRoot: string,
   commitSha: string,
@@ -160,17 +177,21 @@ const readPinnedIncludes = async (
       "--name-only",
       commitSha,
       "--",
-      includeDirectory,
+      templateDirectory,
     ],
     { cwd: repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
   );
-  const paths = stdout.split("\0").filter((path) => path !== "");
+  const paths = stdout
+    .split("\0")
+    .filter((path) => path !== "" && extname(path) === ".md");
   return Object.freeze(
     Object.fromEntries(
       await Promise.all(
         paths.map(async (path) => [
           path,
-          await readPinnedPath(repositoryRoot, commitSha, path),
+          withoutFrontMatter(
+            await readPinnedPath(repositoryRoot, commitSha, path),
+          ),
         ]),
       ),
     ),

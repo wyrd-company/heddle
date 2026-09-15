@@ -219,9 +219,14 @@ A wait stage's template is strict Nunjucks Markdown rendered with:
 - `lifecycle` — the projection above.
 - `task` — the board task's raw front matter, display input only.
 
-`{% include "handoff-templates/includes/<path>" %}` reads partials at the pinned
-commit; `extends` and `import` are refused, as are the `random` and `date`
-filters. `stableJson` renders a value as canonical JSON; `skill(name)` returns
+`{% include %}` reads any Markdown artifact in the pinned `handoff-templates/`
+tree at the template's own commit. The specifier is the repository-relative
+path, or a path relative to that directory, and it may be an expression — so a
+shared template reaches a per-stage one with
+`{% include handoff.stage.name + ".md" %}`. An included template renders its
+instructions, not its front matter. A specifier that leaves the directory, or
+names anything but Markdown, is refused; `extends` and `import` are refused, as
+are the `random` and `date` filters. `stableJson` renders a value as canonical JSON; `skill(name)` returns
 `{ name, path, description }` for a declared skill. An undefined value, a
 render that differs on repeat, or a template that disagrees with its stage
 fails before any session effect and raises one durable attention entry.

@@ -349,10 +349,12 @@ describe("renderStageHandoff", () => {
   });
 
   it.each([
-    "handoff-templates/includes/../outside.md",
-    "handoff-templates/outside.md",
+    "handoff-templates/includes/../../outside.md",
+    "../outside.md",
+    "/etc/outside.md",
     "handoff-templates/includes/nested\\..\\outside.md",
     "handoff-templates/includes/",
+    "handoff-templates/includes/summary.txt",
   ])("rejects contained-include violation %s", (includePath) => {
     expect(() =>
       renderStageHandoff(
@@ -365,8 +367,53 @@ describe("renderStageHandoff", () => {
         }),
       ),
     ).toThrow(
-      "Handoff include must use a repository-relative path inside handoff-templates/includes/",
+      "Handoff include must name a Markdown artifact inside the pinned handoff-templates/ tree",
     );
+  });
+
+  it("includes a per-stage template by expression", () => {
+    const base = input();
+    const rendered = renderStageHandoff(
+      input({
+        template: {
+          ...base.template,
+          body: '{% include handoff.stage.name + ".md" %}',
+          includes: {
+            "handoff-templates/arrange.md":
+              "Per-stage {{ handoff.stage.name }}",
+          },
+        },
+      }),
+    );
+
+    expect(rendered).toContain("Per-stage arrange");
+  });
+
+  it("resolves the same pinned file by expression and by repository path", () => {
+    const base = input();
+    const includes = {
+      "handoff-templates/includes/summary.md": "One pinned partial",
+    };
+    const byRepositoryPath = renderStageHandoff(
+      input({
+        template: {
+          ...base.template,
+          body: '{% include "handoff-templates/includes/summary.md" %}',
+          includes,
+        },
+      }),
+    );
+    const byDirectoryRelativePath = renderStageHandoff(
+      input({
+        template: {
+          ...base.template,
+          body: '{% include "includes/" + "summary.md" %}',
+          includes,
+        },
+      }),
+    );
+
+    expect(byDirectoryRelativePath).toBe(byRepositoryPath);
   });
 
   it.each([
@@ -879,6 +926,15 @@ describe("GitHandoffTemplateStore", () => {
     expect(template.includes).toEqual({
       "handoff-templates/includes/summary.md": "Pinned {{ task.title }}\n",
       "handoff-templates/includes/nested/detail.md": "Nested pinned content\n",
+      // Every pinned Markdown artifact in the tree, so a shared template can
+      // include a per-stage one; a template's own front matter is not part of
+      // what an include renders.
+      "handoff-templates/standard.md": [
+        '{% include "handoff-templates/includes/summary.md" %}',
+        '{% include "handoff-templates/includes/nested/detail.md" %}',
+        '{{ skill("evidence-review").description }}',
+        "",
+      ].join("\n"),
     });
     expect(template.skills["evidence-review"]).toMatchObject({
       description: "Inspect pinned evidence.",
@@ -949,6 +1005,13 @@ describe("GitHandoffTemplateStore", () => {
       "handoff-templates/includes/summary.md":
         "Live changed {{ task.title }}\n",
       "handoff-templates/includes/nested/detail.md": "Nested live content\n",
+      "handoff-templates/standard.md": [
+        "Live entry changed",
+        '{% include "handoff-templates/includes/summary.md" %}',
+        '{% include "handoff-templates/includes/nested/detail.md" %}',
+        '{{ skill("evidence-review").description }}',
+        "",
+      ].join("\n"),
     });
     const changedRender = renderStageHandoff(input({ template: changed }));
     expect(changedRender).toContain("Live entry changed");

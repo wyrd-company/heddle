@@ -202,11 +202,12 @@ describe("stage session cold retry guards", () => {
 
   it.each([
     {
-      body: '{% include "handoff-templates/includes/../outside.md" %}',
+      body: '{% include "../outside.md" %}',
       case: "an escaping include",
-      diagnostic: "repository-relative path inside handoff-templates/includes/",
+      diagnostic:
+        "Handoff include must name a Markdown artifact inside the pinned handoff-templates/ tree",
       includes: {
-        "handoff-templates/includes/../outside.md": "Outside content",
+        "../outside.md": "Outside content",
       },
     },
     {

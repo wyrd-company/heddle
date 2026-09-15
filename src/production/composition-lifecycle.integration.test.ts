@@ -357,7 +357,7 @@ version: 1
       expect.objectContaining({
         kind: "lifecycle-resolution",
         message: expect.stringContaining(
-          "repository-relative path inside handoff-templates/includes/",
+          "Handoff include must name a Markdown artifact inside the pinned handoff-templates/ tree",
         ),
       }),
     ]);

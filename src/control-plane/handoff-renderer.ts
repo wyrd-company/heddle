@@ -80,19 +80,32 @@ const sortedJson = (value: JsonValue): JsonValue => {
   );
 };
 
-const includeDirectory = "handoff-templates/includes/";
+const templateDirectory = "handoff-templates/";
 
-const assertIncludeSpecifier = (name: string): void => {
+/**
+ * An include names a Markdown artifact inside the pinned `handoff-templates/`
+ * tree. A template may write the repository-relative path, or a path relative
+ * to that directory — which is what lets the specifier be an expression, as in
+ * `{% include handoff.stage.name + ".md" %}`. Either spelling resolves to the
+ * same pinned file, and neither can leave the directory.
+ */
+export const resolveIncludeSpecifier = (name: string): string => {
+  const candidate = name.startsWith(templateDirectory)
+    ? name
+    : `${templateDirectory}${name}`;
   if (
     name.includes("\\") ||
-    posix.normalize(name) !== name ||
-    !name.startsWith(includeDirectory) ||
-    name === includeDirectory
+    name.startsWith("/") ||
+    posix.normalize(candidate) !== candidate ||
+    !candidate.startsWith(templateDirectory) ||
+    candidate === templateDirectory ||
+    posix.extname(candidate) !== ".md"
   ) {
     throw new HandoffRenderError(
-      `Handoff include must use a repository-relative path inside ${includeDirectory}: ${JSON.stringify(name)}`,
+      `Handoff include must name a Markdown artifact inside the pinned ${templateDirectory} tree: ${JSON.stringify(name)}`,
     );
   }
+  return candidate;
 };
 
 type NunjucksSyntaxNode = {
@@ -137,15 +150,15 @@ class PinnedIncludeLoader extends nunjucks.Loader {
   }
 
   getSource(name: string): nunjucks.LoaderSource {
-    assertIncludeSpecifier(name);
-    const source = this.includes[name];
+    const path = resolveIncludeSpecifier(name);
+    const source = this.includes[path];
     if (source === undefined) {
       throw new HandoffRenderError(
-        `Pinned handoff include is unavailable: ${name}`,
+        `Pinned handoff include is unavailable: ${path}`,
       );
     }
-    assertSupportedTemplateSyntax(source, name);
-    return { noCache: true, path: name, src: source };
+    assertSupportedTemplateSyntax(source, path);
+    return { noCache: true, path, src: source };
   }
 }
 
