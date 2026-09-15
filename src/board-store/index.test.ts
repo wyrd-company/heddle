@@ -187,22 +187,25 @@ describe("KanbanBoardStore", () => {
       ).toMatchObject({ id: 7 });
     });
 
-    it("skips an id the CLI already materialized but did not record", async () => {
-      // A board whose next_id lags the files on disk: the CLI would reissue an
-      // id that is already taken, so Heddle takes the next free one instead.
-      await kanban("create", "CLI item", "--json");
+    it("allocates above every existing file when next_id has fallen behind", async () => {
+      // A board whose next_id lags the files on disk by more than any retry
+      // budget: the id has to be derived from the files, not from next_id.
+      for (let index = 0; index < 20; index += 1) {
+        await store.createTask({ title: `Existing item ${index}` });
+      }
       const config = await readFile(join(boardDirectory, "config.yml"), "utf8");
       await writeFile(
         join(boardDirectory, "config.yml"),
-        config.replace("next_id: 2", "next_id: 1"),
+        config.replace("next_id: 21", "next_id: 1"),
       );
 
-      const created = await store.createTask({ title: "Heddle item" });
+      const created = await store.createTask({ title: "Arriving item" });
 
-      expect(created.id).toBe(2);
+      expect(created.id).toBe(21);
       await expect(
         readFile(join(boardDirectory, "config.yml"), "utf8"),
-      ).resolves.toContain("next_id: 3");
+      ).resolves.toContain("next_id: 22");
+      expect(await readdir(join(boardDirectory, "tasks"))).toHaveLength(21);
     });
 
     it("gives concurrent writers distinct ids and one file each", async () => {
