@@ -41,6 +41,87 @@ const selection = (
   runtimeMode,
 });
 
+const offering = (
+  base: ResolvedProviderSelection,
+  values: readonly string[],
+): ResolvedProviderSelection => ({
+  ...base,
+  model: {
+    ...base.model,
+    optionDescriptors: [
+      {
+        id: "reasoningEffort",
+        options: values.map((value) => ({ id: value })),
+        type: "select",
+      },
+    ],
+  },
+});
+
+describe("startup selections under a blueprint reasoning effort", () => {
+  it("skips a pre-resolved candidate whose model does not offer the value", async () => {
+    const resolver = new StartupProviderSelectionResolver([
+      { ...selection("default", "auto"), providerInstanceId: "plain-instance" },
+      offering(
+        { ...selection("default", "auto"), providerInstanceId: "offering" },
+        ["low", "high"],
+      ),
+    ]);
+
+    const resolved = await resolveStageSessionSelection(
+      {
+        session: session(),
+        stageId: "implement",
+        stageReasoningEffort: "high",
+        taskId: 17,
+      },
+      resolver,
+    );
+
+    expect(resolved).toMatchObject({
+      candidatePosition: 2,
+      providerInstanceId: "offering",
+      reasoningEffort: "high",
+      reasoningEffortOptionId: "reasoningEffort",
+    });
+    expect(resolved.skippedCandidates).toEqual([
+      expect.objectContaining({ candidatePosition: 1 }),
+    ]);
+  });
+
+  it("fails the stage only when no pre-resolved candidate offers the value", async () => {
+    const resolver = new StartupProviderSelectionResolver([
+      selection("default", "auto"),
+    ]);
+
+    await expect(
+      resolveStageSessionSelection(
+        {
+          session: session(),
+          stageId: "implement",
+          stageReasoningEffort: "high",
+          taskId: 17,
+        },
+        resolver,
+      ),
+    ).rejects.toThrow("offers no reasoning effort option");
+  });
+
+  it("leaves a pre-resolved selection untouched when no layer sets a value", async () => {
+    const resolver = new StartupProviderSelectionResolver([
+      selection("default", "auto"),
+    ]);
+
+    const resolved = await resolveStageSessionSelection(
+      { session: session(), stageId: "implement", taskId: 17 },
+      resolver,
+    );
+
+    expect(resolved).not.toHaveProperty("reasoningEffort");
+    expect(resolved).not.toHaveProperty("reasoningEffortOverride");
+  });
+});
+
 describe("stage session selection", () => {
   it("keeps the task stage override scoped while returning its ordered candidates", async () => {
     const resolver = new StartupProviderSelectionResolver([
