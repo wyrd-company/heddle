@@ -855,10 +855,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
               stageId,
               stageProviderAlias: stage.providerAlias,
               stageReasoningEffort: stage.reasoningEffort,
-                stageReasoningEffortOrigin: reasoningEffortOriginLabel(
-                  stage,
-                  stageId,
-                ),
+              stageReasoningEffortOrigin: reasoningEffortOriginLabel(
+                stage,
+                stageId,
+              ),
               stageRuntimeMode: stage.runtimeMode,
               taskId: input.task.id,
               taskProviderAliases: input.task.providerAlias,
@@ -1216,10 +1216,10 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
           stageId,
           stageProviderAlias: stage.providerAlias,
           stageReasoningEffort: stage.reasoningEffort,
-                stageReasoningEffortOrigin: reasoningEffortOriginLabel(
-                  stage,
-                  stageId,
-                ),
+          stageReasoningEffortOrigin: reasoningEffortOriginLabel(
+            stage,
+            stageId,
+          ),
           stageRuntimeMode: stage.runtimeMode,
           taskId: task?.id ?? runtime.taskId,
           taskProviderAliases: task?.providerAlias,
