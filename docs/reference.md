@@ -264,6 +264,26 @@ stage's pinned commit (object schemas bound in `relationships.uses`; the
 working tree's copy is not consulted), agent-name themes, and the tool
 registry.
 
+### Deployment requirements
+
+A blueprint can be valid and still ask for something the deployment running it
+does not supply; the lifecycle then holds at the node instead of routing.
+`heddle-server validate-blueprints <blueprints-repository-root>` reads the
+installed configuration the way the service does, runs repository validation,
+and then names each requirement a node makes of the deployment:
+
+| Node declares                              | The deployment must supply                                          | Configuration key         |
+| ------------------------------------------ | ------------------------------------------------------------------- | ------------------------- |
+| `question` with `params.role: adjudicator` | composed adjudication                                               | `adjudication`            |
+| `question` with `params.role: adjudicator` | the configured policy artifact, present in the blueprint repository | `adjudication.policyPath` |
+| `provider-alias`                           | that alias in the allowlist                                         | `providerAliases.<alias>` |
+
+Each unmet requirement is one line on standard error naming the blueprint, the
+node, the requirement, and the key that would satisfy it, and the command exits
+non-zero. A catalog this deployment can run exits zero with a JSON summary of
+the artifacts validated and every requirement found. The command reads; it
+changes no configuration, board, or state.
+
 ## Pinning and replay
 
 An instance records the Git blob of its blueprint at activation and runs that

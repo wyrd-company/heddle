@@ -1482,7 +1482,16 @@ proposed-design:
     the source file and JSON-pointer field in a secret-redacted first
     validation failure. The effective-configuration diagnostic returns
     redacted values, value provenance and explicit clears without starting the
-    service. The configured server port is restricted to 1 through 65535
+    service. The validate-blueprints diagnostic takes one blueprint repository
+    root, loads the same effective configuration, runs repository validation,
+    and then names every requirement that repository's nodes make of this
+    deployment. A `question` node whose role is `adjudicator` requires composed
+    adjudication and the configured policy artifact present in that repository;
+    a node's `provider-alias` requires that alias in the allowlist. Each unmet
+    requirement is one line naming the blueprint, the node, the requirement,
+    and the configuration key that would satisfy it, and the diagnostic exits
+    non-zero; a repository this deployment can run exits zero with a JSON
+    summary. Both diagnostics read and perform no effect. The configured server port is restricted to 1 through 65535
     so the same value can be projected into Caddy. The operator owns both
     source files with mode `0600`; Heddle never writes or reformats them.
     Configuration ownership is independent from mount ownership. The

@@ -160,3 +160,18 @@ checkout does the same for one repository.
 
 A running instance keeps the blueprint blob it started from. Editing the
 catalog affects new instances and explicit rebases only.
+
+Schema and interpreter validity is not the same as runnability. A stage can
+name a provider alias, or a question can ask the adjudicator, that the
+deployment you are pinning into does not supply — valid catalog, held
+lifecycle. Ask that deployment before you pin:
+
+```console
+$ heddle-server validate-blueprints ~/catalog --config ~/.heddle
+catering-run node 'approve': asks the adjudicator; this deployment composes no adjudication; configure 'adjudication'
+```
+
+It exits non-zero with one such line per mismatch, and exits zero with a JSON
+summary when every requirement is met. See
+[Deployment requirements](reference.md#deployment-requirements) for what it
+checks.
