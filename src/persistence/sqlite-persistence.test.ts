@@ -156,6 +156,78 @@ describe("SqlitePersistence", () => {
     restarted.close();
   });
 
+  it("refuses a confirmed occurrence whose reasoning effort changes", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const persistence = new SqlitePersistence({ stateDirectory });
+    const binding = resolvedSessionBindingFixture({
+      reasoningEffort: "medium",
+      reasoningEffortOptionId: "reasoningEffort",
+      sessionKey: "session-retarget",
+      threadId: "thread-retarget",
+    });
+    const record = {
+      activation: 1,
+      binding,
+      instanceId: "instance-retarget",
+      kind: "stage" as const,
+      sessionKey: binding.sessionKey,
+      stageId: "implement",
+      threadId: binding.threadId,
+    };
+    persistence.writeSessionRuntime(record);
+
+    try {
+      expect(() =>
+        persistence.writeSessionRuntime({
+          ...record,
+          binding: { ...binding, reasoningEffort: "xhigh" },
+        }),
+      ).toThrow("changed durable identity");
+    } finally {
+      persistence.close();
+    }
+  });
+
+  it("rejects a stored binding whose reasoning effort is blank", async () => {
+    const stateDirectory = await makeStateDirectory();
+    const first = new SqlitePersistence({ stateDirectory });
+    const binding = resolvedSessionBindingFixture({
+      reasoningEffort: "medium",
+      reasoningEffortOptionId: "reasoningEffort",
+      sessionKey: "session-blank",
+      threadId: "thread-blank",
+    });
+    first.writeSessionRuntime({
+      activation: 1,
+      binding,
+      instanceId: "instance-blank",
+      kind: "stage",
+      sessionKey: binding.sessionKey,
+      stageId: "implement",
+      threadId: binding.threadId,
+    });
+    first.close();
+    const database = new Database(join(stateDirectory, "heddle-state.sqlite"));
+    database
+      .prepare(
+        "UPDATE heddle_session_runtime SET binding_json = ? WHERE session_key = ?",
+      )
+      .run(
+        JSON.stringify({ ...binding, reasoningEffort: "" }),
+        binding.sessionKey,
+      );
+    database.close();
+
+    const restarted = new SqlitePersistence({ stateDirectory });
+    try {
+      expect(() => restarted.listSessionRuntime()).toThrow(
+        "binding has an invalid non-secret field set",
+      );
+    } finally {
+      restarted.close();
+    }
+  });
+
   it("rejects a stored binding that carries only half the reasoning effort pair", async () => {
     const stateDirectory = await makeStateDirectory();
     const first = new SqlitePersistence({ stateDirectory });
