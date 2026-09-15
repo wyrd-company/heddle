@@ -19,6 +19,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { KanbanBoardStore } from "./index.js";
+import { raiseNextId } from "./config.js";
 import { interpretTaskFile } from "./task-file.js";
 
 const execute = promisify(execFile);
@@ -163,6 +164,37 @@ describe("concurrent kanban-md and Heddle creates", () => {
     },
     240_000,
   );
+
+  it("refuses to lower next_id a foreign writer already raised", async () => {
+    await populate(300);
+    // The caller computed its value from an earlier read; the board moved on.
+    await writeFile(join(boardDirectory, "config.yml"), BOARD_CONFIG(900));
+
+    await expect(raiseNextId(boardDirectory, 302)).resolves.toBe(900);
+
+    await expect(
+      readFile(join(boardDirectory, "config.yml"), "utf8"),
+    ).resolves.toContain("next_id: 900");
+  });
+
+  it("yields its own id when another writer already carries it", async () => {
+    // Two writers that do not share the in-process create queue, as two Heddle
+    // processes would not. Distinct directory spellings resolve to one board.
+    await populate(300);
+    const other = new KanbanBoardStore(`${boardDirectory}/`);
+
+    const results = await Promise.all([
+      store.createTask({ status: "todo", title: "Alpha Contender" }),
+      other.createTask({ status: "todo", title: "Zulu Contender" }),
+    ]);
+
+    const board = await survey();
+    expect(new Set(results.map(({ id }) => id)).size).toBe(2);
+    expect(board.duplicateIds).toEqual([]);
+    expect(board.titles).toContain("Alpha Contender");
+    expect(board.titles).toContain("Zulu Contender");
+    expect(board.fileCount).toBe(302);
+  }, 120_000);
 
   it("never lowers next_id below the highest id on disk", async () => {
     await populate(300);
