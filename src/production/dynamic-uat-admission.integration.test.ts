@@ -7,9 +7,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createProductionComposition } from "./composition.js";
 import {
+  SyntheticT3,
+  createBoardTaskFromFlags,
   execute,
   prepareProductionFixture,
-  SyntheticT3,
 } from "./composition.test-support.js";
 
 describe("production trusted dynamic work during UAT", () => {
@@ -30,10 +31,11 @@ describe("production trusted dynamic work during UAT", () => {
         { cwd: fixture.root },
       );
     await command(["edit", String(fixture.taskId), "--status", "done"]);
-    const create = async (arguments_: string[]): Promise<number> => {
-      const result = await command(["create", ...arguments_, "--json"]);
-      return (JSON.parse(result.stdout) as { id: number }).id;
-    };
+    const create = (arguments_: string[]): Promise<number> =>
+      createBoardTaskFromFlags(
+        fixture.configuration.boardDirectory,
+        arguments_,
+      );
     const epicId = await create([
       "Example Collection",
       "--status",
@@ -249,10 +251,11 @@ describe("production trusted dynamic work during UAT", () => {
         { cwd: fixture.root },
       );
     await command(["edit", String(fixture.taskId), "--status", "done"]);
-    const create = async (arguments_: string[]): Promise<number> => {
-      const result = await command(["create", ...arguments_, "--json"]);
-      return (JSON.parse(result.stdout) as { id: number }).id;
-    };
+    const create = (arguments_: string[]): Promise<number> =>
+      createBoardTaskFromFlags(
+        fixture.configuration.boardDirectory,
+        arguments_,
+      );
     const epicId = await create([
       "Example Schedule",
       "--status",
@@ -357,10 +360,11 @@ describe("production trusted dynamic work during UAT", () => {
         { cwd: fixture.root },
       );
     await command(["edit", String(fixture.taskId), "--status", "done"]);
-    const create = async (arguments_: string[]): Promise<number> => {
-      const result = await command(["create", ...arguments_, "--json"]);
-      return (JSON.parse(result.stdout) as { id: number }).id;
-    };
+    const create = (arguments_: string[]): Promise<number> =>
+      createBoardTaskFromFlags(
+        fixture.configuration.boardDirectory,
+        arguments_,
+      );
     const epicId = await create([
       "Example Inventory",
       "--status",

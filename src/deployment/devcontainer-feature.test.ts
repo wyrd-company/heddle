@@ -330,7 +330,7 @@ describe("Heddle devcontainer feature", () => {
     expect(featureQualification).toContain("Container state: status=");
     for (const assertion of [
       "service-registration-count",
-      "kanban-version",
+      "kanban-md-absent",
       "packaged-console-asset",
       "loopback-console-readiness",
       "loopback-console-title",

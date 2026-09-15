@@ -20,9 +20,10 @@ import process from "node:process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  SyntheticT3,
+  declareTaskFileProperty,
   execute,
   prepareProductionFixture,
-  SyntheticT3,
 } from "../production/composition.test-support.js";
 import { T3ControlPlaneClient } from "../control-plane/index.js";
 import { readLifecycleContext } from "../engine/index.js";
@@ -220,13 +221,9 @@ describe("configured production composition", () => {
       join(configuration.boardDirectory, "tasks"),
     );
     const taskPath = join(configuration.boardDirectory, "tasks", taskFilename!);
-    const authoredTask = await readFile(taskPath, "utf8");
-    await writeFile(
+    await declareTaskFileProperty(
       taskPath,
-      authoredTask.replace(
-        "class: standard\n---",
-        "class: standard\nprovider-alias:\n  remediate: specialist\n---",
-      ),
+      "provider-alias:\n    remediate: specialist",
     );
     const readProviderCatalog = vi.fn(async () => [
       {
@@ -383,12 +380,9 @@ describe("configured production composition", () => {
           "tasks",
           taskFilename!,
         );
-        await writeFile(
+        await declareTaskFileProperty(
           taskPath,
-          (await readFile(taskPath, "utf8")).replace(
-            "class: standard\n---",
-            "class: standard\nprovider-alias:\n  implement: unknown\n---",
-          ),
+          "provider-alias:\n    implement: unknown",
         );
       } else {
         const blueprintPath = join(
@@ -512,13 +506,7 @@ describe("configured production composition", () => {
         "tasks",
         taskFilename!,
       );
-      await writeFile(
-        taskPath,
-        (await readFile(taskPath, "utf8")).replace(
-          "class: standard\n---",
-          `class: standard\n${declaration}\n---`,
-        ),
-      );
+      await declareTaskFileProperty(taskPath, declaration);
       const t3 = new SyntheticT3();
       production = await createConfiguredProductionComposition(
         {

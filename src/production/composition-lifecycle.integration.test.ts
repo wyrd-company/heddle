@@ -13,6 +13,7 @@ import { advanceOperationId } from "../mcp-server/operations.js";
 import { createProductionComposition } from "./composition.js";
 import {
   SyntheticT3,
+  declareTaskFileProperty,
   execute,
   prepareProductionFixture,
   setBoardTaskRepositories,
@@ -532,12 +533,9 @@ version: 1
       join(configuration.boardDirectory, "tasks"),
     );
     const taskPath = join(configuration.boardDirectory, "tasks", taskFilename!);
-    await writeFile(
+    await declareTaskFileProperty(
       taskPath,
-      (await readFile(taskPath, "utf8")).replace(
-        "class: standard\n---",
-        "class: standard\nprovider-alias:\n  implement: specialist\n---",
-      ),
+      "provider-alias:\n    implement: specialist",
     );
     class InterruptedT3 extends SyntheticT3 {
       override async dispatch(command: Parameters<SyntheticT3["dispatch"]>[0]) {

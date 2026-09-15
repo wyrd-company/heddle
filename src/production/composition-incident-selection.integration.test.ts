@@ -3,16 +3,17 @@
 //   verifies: heddle
 // ---
 
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createProductionComposition } from "./composition.js";
 import {
+  SyntheticT3,
+  declareTaskFileProperty,
   execute,
   prepareProductionFixture,
-  SyntheticT3,
   type ProductionFixture,
 } from "./composition.test-support.js";
 import { productionErrorAttention } from "./error-visibility.js";
@@ -261,14 +262,11 @@ version: 1
         "tasks",
         taskFilename!,
       );
-      await writeFile(
+      await declareTaskFileProperty(
         taskPath,
-        (await readFile(taskPath, "utf8")).replace(
-          "class: standard\n---",
-          `class: standard\nprovider-alias:\n${Object.entries(input.taskAliases)
-            .map(([stageId, alias]) => `  ${stageId}: ${alias}`)
-            .join("\n")}\n---`,
-        ),
+        `provider-alias:\n${Object.entries(input.taskAliases)
+          .map(([stageId, alias]) => `    ${stageId}: ${alias}`)
+          .join("\n")}`,
       );
     }
     await execute(

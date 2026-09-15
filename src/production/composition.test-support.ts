@@ -4,7 +4,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -49,6 +49,77 @@ export const createBoardTask = async (
     ...(repos === undefined ? {} : { properties: { repos } }),
   });
   return created.id;
+};
+
+/**
+ * Inserts a raw declaration at the end of a task file's front matter, so a
+ * fixture can author a property the board layer would refuse to build. The
+ * anchor is the front-matter terminator rather than any particular property,
+ * because a task file's last property is not fixed.
+ */
+export const declareTaskFileProperty = async (
+  taskPath: string,
+  declaration: string,
+): Promise<void> => {
+  const source = await readFile(taskPath, "utf8");
+  const end = source.indexOf("\n---\n", "---\n".length);
+  if (end === -1) {
+    throw new Error(`task file has no front matter: ${taskPath}`);
+  }
+  const written = `${source.slice(0, end)}\n${declaration}${source.slice(end)}`;
+  await writeFile(taskPath, written);
+  // A fixture that silently declares nothing tests nothing.
+  if (!written.includes(declaration)) {
+    throw new Error(`declaration did not land in ${taskPath}`);
+  }
+};
+
+/** Removes the repository scope a board task declares. */
+export const clearBoardTaskRepositories = async (
+  boardDirectory: string,
+  taskId: number,
+): Promise<void> => {
+  const task = await new KanbanBoardStore(boardDirectory).readTask(taskId);
+  task.document.frontMatter.delete("repos");
+  await writeTaskFile(task);
+};
+
+/**
+ * Authors a board task from a kanban-md-shaped flag list, for fixtures that
+ * build several tasks from one list.
+ */
+export const createBoardTaskFromFlags = async (
+  boardDirectory: string,
+  flags: string[],
+): Promise<number> => {
+  const [title, ...rest] = flags;
+  const fixture: BoardTaskFixture = { title: title! };
+  for (let index = 0; index < rest.length; index += 2) {
+    const value = rest[index + 1]!;
+    switch (rest[index]) {
+      case "--status":
+        fixture.status = value;
+        break;
+      case "--priority":
+        fixture.priority = value;
+        break;
+      case "--parent":
+        fixture.parent = Number(value);
+        break;
+      case "--depends-on":
+        fixture.dependsOn = value.split(",").map(Number);
+        break;
+      case "--tags":
+        fixture.tags = value.split(",");
+        break;
+      case "--repos":
+        fixture.repos = value.split(",");
+        break;
+      default:
+        throw new Error(`unsupported board fixture flag: ${rest[index]}`);
+    }
+  }
+  return createBoardTask(boardDirectory, fixture);
 };
 
 /** Replaces the repository scope a board task declares. */

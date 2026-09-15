@@ -14,6 +14,7 @@ import { SqlitePersistence } from "../persistence/index.js";
 import { createProductionComposition } from "./composition.js";
 import {
   SyntheticT3,
+  clearBoardTaskRepositories,
   execute,
   prepareProductionEpicFixture,
   setBoardTaskRepositories,
@@ -460,16 +461,9 @@ describe("production project routing", () => {
   it("turns an unrouted epic into attention without freezing the scheduler", async () => {
     const fixture = await prepareProductionEpicFixture();
     cleanup = fixture.cleanup;
-    await execute(
-      "kanban-md",
-      [
-        "--dir",
-        fixture.configuration.boardDirectory,
-        "edit",
-        String(fixture.epicId),
-        "--clear-repos",
-      ],
-      { cwd: fixture.root },
+    await clearBoardTaskRepositories(
+      fixture.configuration.boardDirectory,
+      Number(fixture.epicId),
     );
     const t3 = new SyntheticT3();
     const composition = createProductionComposition({

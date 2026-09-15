@@ -72,13 +72,13 @@ describe("KanbanBoardAdapter", () => {
   ): Promise<void> => {
     const path = await taskFile(taskId);
     const source = await readFile(path, "utf8");
-    await writeFile(
-      path,
-      source.replace(
-        "class: standard\n---",
-        `class: standard\n${declaration}\n---`,
-      ),
-    );
+    const end = source.indexOf("\n---\n", "---\n".length);
+    if (end === -1) throw new Error(`task file has no front matter: ${path}`);
+    const written = `${source.slice(0, end)}\n${declaration}${source.slice(end)}`;
+    await writeFile(path, written);
+    if (!written.includes(declaration)) {
+      throw new Error(`declaration did not land in ${path}`);
+    }
   };
 
   beforeEach(async () => {

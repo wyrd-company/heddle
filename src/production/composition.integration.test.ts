@@ -46,6 +46,7 @@ import { stableUuid } from "./stable-uuid.js";
 import {
   SyntheticT3,
   createBoardTask,
+  createBoardTaskFromFlags,
   execute,
   prepareProductionEpicFixture,
   prepareProductionFixture,
@@ -3748,20 +3749,8 @@ describe("production composition", () => {
   it("preserves epic, blocked, absent-dependency, standalone, and write boundaries", async () => {
     const { blueprintsRepositoryRoot, configuration, root } = await prepare();
     configuration.pacing.maxConcurrentSessions = 10;
-    const create = async (arguments_: string[]): Promise<number> => {
-      const result = await execute(
-        "kanban-md",
-        [
-          "--dir",
-          configuration.boardDirectory,
-          "create",
-          ...arguments_,
-          "--json",
-        ],
-        { cwd: root },
-      );
-      return (JSON.parse(result.stdout) as { id: number }).id;
-    };
+    const create = (arguments_: string[]): Promise<number> =>
+      createBoardTaskFromFlags(configuration.boardDirectory, arguments_);
     const epicId = await create([
       "Sample Epic",
       "--status",
