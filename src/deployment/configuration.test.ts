@@ -25,7 +25,10 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
 
-import { defaultApprovalSettlementMilliseconds } from "../production/configuration.js";
+import {
+  conventionalAdjudicationPolicyPath,
+  defaultApprovalSettlementMilliseconds,
+} from "../production/configuration.js";
 import type { ProductionConfiguration } from "../production/index.js";
 import {
   deploymentLaunchSettings,
@@ -704,10 +707,8 @@ describe("deployed configuration directory", () => {
     await writeFile(executable, "#!/bin/sh\nexit 0\n");
     await chmod(executable, 0o755);
     const core = fixture(shared);
-    core.adjudication = {
-      policyPath: "adjudication/policy.json",
-      providerAlias: "primary",
-    };
+    // No policyPath: the loaded configuration carries the conventional one.
+    core.adjudication = { providerAlias: "primary" };
     core.pacing.providerBudgets = { primary: { usageLimit: 80 } };
     core.providerAliases.primary = [
       {
@@ -800,6 +801,9 @@ describe("deployed configuration directory", () => {
     expect(
       loadedB.configuration.adjudication?.approvalSettlementMilliseconds,
     ).toBe(defaultApprovalSettlementMilliseconds);
+    expect(loadedB.configuration.adjudication?.policyPath).toBe(
+      conventionalAdjudicationPolicyPath,
+    );
     expect(loadedB.configuration.stateDirectory).toBe(join(shared, "state"));
     expect(loadedB.blueprintsSourceRoot).toBe(join(workerB, "blueprints"));
     expect(loadedB.blueprintsRepositoryRoot).toBe(
@@ -815,6 +819,9 @@ describe("deployed configuration directory", () => {
         "/adjudication/approvalSettlementMilliseconds"
       ],
     ).toBe("built-in");
+    // The worker that composes no adjudication gets no policy path and no
+    // adjudication: a default inside the block cannot enable the block.
+    expect(loadedA.configuration.adjudication).toBeUndefined();
     expect(loadedB.configuration.session.worktreesRoot).toBe(
       "/workspaces/worktrees",
     );

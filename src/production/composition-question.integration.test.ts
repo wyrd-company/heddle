@@ -471,6 +471,86 @@ describe("production question node", () => {
     await composition.close();
   });
 
+  it("keeps an open adjudication on the boundary it opened with", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    fixture.configuration.adjudication = { providerAlias: "primary" };
+    await installQuestionBlueprint(fixture, "adjudicator");
+    const first = compose(fixture);
+    const instanceId = `task-${fixture.taskId}`;
+    await first.start();
+    await first.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:implement:1`),
+    });
+    await first.scheduler.trigger();
+    await first.escalation.replayPendingRoutes();
+    const opened = first.persistence
+      .getInstance(instanceId)!
+      .state.handoffs.find(
+        (stored) =>
+          typeof stored === "object" &&
+          stored !== null &&
+          !Array.isArray(stored) &&
+          stored["kind"] === "adjudication-handoff",
+      );
+    expect(opened).toBeDefined();
+    await first.close();
+
+    // The boundary moves under the open occurrence.
+    const policyPath = join(
+      fixture.blueprintsRepositoryRoot,
+      "adjudication",
+      "policy.json",
+    );
+    const policy = JSON.parse(await readFile(policyPath, "utf8")) as {
+      "decision-boundary": { test: string };
+    };
+    policy["decision-boundary"].test = "A different decision test.";
+    await writeFile(policyPath, `${JSON.stringify(policy, null, 2)}\n`);
+    await execute("git", ["add", "adjudication"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture User",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "Change the decision boundary",
+      ],
+      { cwd: fixture.blueprintsRepositoryRoot },
+    );
+    await execute("git", ["push", "--quiet"], {
+      cwd: fixture.blueprintsRepositoryRoot,
+    });
+
+    const second = compose(fixture);
+    await second.start();
+    await second.scheduler.trigger();
+    await second.escalation.replayPendingRoutes();
+
+    const retained = second.persistence
+      .getInstance(instanceId)!
+      .state.handoffs.filter(
+        (stored) =>
+          typeof stored === "object" &&
+          stored !== null &&
+          !Array.isArray(stored) &&
+          stored["kind"] === "adjudication-handoff",
+      );
+    expect(retained).toEqual([opened]);
+    expect(JSON.stringify(retained)).not.toContain(
+      "A different decision test.",
+    );
+    await second.close();
+  });
+
   it("re-raises the pending question after a restart and accepts one answer", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;

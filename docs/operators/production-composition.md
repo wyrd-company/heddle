@@ -282,7 +282,10 @@ select a model independently of lifecycle stages.
 The decision boundary is read from `adjudication/policy.json` in the
 organization blueprint repository. `policyPath` optionally names a different
 artifact there, for a deployment that keeps a second boundary beside the
-conventional one; it is not how adjudication is turned on. Heddle pins that
+conventional one; it is not how adjudication is turned on. An omitted
+`policyPath` is filled in with the conventional one as the configuration
+loads, so the effective-configuration surface shows the path every reader
+resolves, with `built-in` provenance. Heddle pins that
 artifact's Git blob for each escalation occurrence, so one occurrence keeps the
 boundary it opened with however the file moves afterwards.
 

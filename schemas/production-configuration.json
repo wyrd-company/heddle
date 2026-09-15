@@ -50,9 +50,10 @@
           "default": 60000
         },
         "policyPath": {
-          "$comment": "Where the decision boundary lives in the blueprint repository. Omitted reads the conventional adjudication/policy.json.",
+          "description": "Where the decision boundary lives in the blueprint repository.",
           "type": "string",
-          "pattern": "^adjudication/[a-z][a-z-]*\\.json$"
+          "pattern": "^adjudication/[a-z][a-z-]*\\.json$",
+          "default": "adjudication/policy.json"
         },
         "providerAlias": { "type": "string", "minLength": 1 }
       }
