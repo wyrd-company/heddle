@@ -139,6 +139,76 @@ describe("production configuration", () => {
     expect(validateProductionConfiguration(ordered)).toBe(ordered);
   });
 
+  it("accepts a reasoning effort at both configuration layers", async () => {
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+    const configured: ProductionConfiguration = {
+      ...fixture(),
+      pacing: { ...fixture().pacing, providerBudgets: {} },
+      providerAliases: {
+        primary: {
+          ...(fixture().providerAliases["primary"] as {
+            model: string;
+            providerDisplayName: string;
+          }),
+          reasoningEffort: "high",
+        },
+      },
+      session: { ...fixture().session, defaultReasoningEffort: "low" },
+    };
+
+    expect(validate(configured), JSON.stringify(validate.errors)).toBe(true);
+    expect(validateProductionConfiguration(configured)).toBe(configured);
+  });
+
+  it.each([
+    ["session.defaultReasoningEffort", "session.defaultReasoningEffort"],
+    [
+      "providerAliases.primary.reasoningEffort",
+      "providerAliases.primary.reasoningEffort",
+    ],
+  ])(
+    "rejects a blank %s through both configuration boundaries",
+    async (field, message) => {
+      const schema = JSON.parse(
+        await readFile("schemas/production-configuration.json", "utf8"),
+      );
+      const validate = new Ajv2020({
+        allErrors: true,
+        formats: { uri: true },
+        strict: false,
+      }).compile(schema);
+      const invalid: ProductionConfiguration = {
+        ...fixture(),
+        pacing: { ...fixture().pacing, providerBudgets: {} },
+        ...(field === "session.defaultReasoningEffort"
+          ? { session: { ...fixture().session, defaultReasoningEffort: "   " } }
+          : {
+              providerAliases: {
+                primary: {
+                  ...(fixture().providerAliases["primary"] as {
+                    model: string;
+                    providerDisplayName: string;
+                  }),
+                  reasoningEffort: "   ",
+                },
+              },
+            }),
+      };
+
+      expect(validate(invalid)).toBe(false);
+      expect(() => validateProductionConfiguration(invalid)).toThrow(
+        `${message} must not be empty`,
+      );
+    },
+  );
+
   it("rejects an empty candidate list through both configuration boundaries", async () => {
     const schema = JSON.parse(
       await readFile("schemas/production-configuration.json", "utf8"),
