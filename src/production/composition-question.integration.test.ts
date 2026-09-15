@@ -387,6 +387,12 @@ describe("production question node", () => {
           session.instanceId === instanceId && session.kind === "adjudication",
       );
     expect(adjudication).toBeDefined();
+    // Adjudication decides; it does not change a repository, so it runs
+    // approval-required whatever the configured default runtime mode is.
+    expect(adjudication!.binding.runtimeMode).toBe("approval-required");
+    expect(fixture.configuration.session.defaultRuntimeMode).not.toBe(
+      "approval-required",
+    );
     const binding = await new WorkflowMcpSessionResolver(
       composition.persistence,
     ).resolve(
