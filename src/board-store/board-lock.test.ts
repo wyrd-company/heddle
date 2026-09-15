@@ -114,6 +114,31 @@ next_id: 1
     ).resolves.toBe("acquired");
   }, 60_000);
 
+  it("makes a production board create wait for the board lock", async () => {
+    // The production path must take the lock, not merely tolerate it. Hold the
+    // lock from outside and assert createTask cannot finish until it is freed.
+    const store = new KanbanBoardStore(boardDirectory);
+    let created: number | undefined;
+    let pending: Promise<unknown> | undefined;
+
+    await withBoardLock(boardDirectory, async () => {
+      pending = store.createTask({ title: "Waiting Item" }).then((task) => {
+        created = task.id;
+      });
+      await delay(1_500);
+      // A create that did not take the lock would already be done.
+      expect(created).toBeUndefined();
+      expect(
+        (await readdir(join(boardDirectory, "tasks"))).filter((name) =>
+          name.endsWith(".md"),
+        ),
+      ).toHaveLength(0);
+    });
+
+    await pending;
+    expect(created).toBeDefined();
+  }, 60_000);
+
   it("serializes a production board create against a real CLI create", async () => {
     const store = new KanbanBoardStore(boardDirectory);
 
