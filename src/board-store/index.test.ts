@@ -143,6 +143,20 @@ describe("KanbanBoardStore", () => {
       );
     });
 
+    it("never lowers next_id that another writer already raised", async () => {
+      await store.createTask({ title: "Existing item" });
+      const raised = (
+        await readFile(join(boardDirectory, "config.yml"), "utf8")
+      ).replace("next_id: 2", "next_id: 50");
+      await writeFile(join(boardDirectory, "config.yml"), raised);
+
+      await store.createTask({ title: "Arriving item" });
+
+      await expect(
+        readFile(join(boardDirectory, "config.yml"), "utf8"),
+      ).resolves.toContain("next_id: 51");
+    });
+
     it("changes nothing in the board config except next_id", async () => {
       await store.createTask({ title: "Record locations" });
 

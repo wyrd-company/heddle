@@ -228,6 +228,10 @@ export const isTerminalStatus = (
 /**
  * Rewrites `next_id` in place, leaving every other byte of the config document
  * as the operator (or the CLI) wrote it.
+ *
+ * The caller allocates above both the recorded `next_id` and the highest id on
+ * disk, re-reading both on every attempt, so the value written here already
+ * accounts for an id another writer has taken.
  */
 export const persistNextId = async (
   boardDirectory: string,
