@@ -950,7 +950,7 @@ describe("configured production composition", () => {
       );
     });
     const boundDuringResolution = async (): Promise<boolean> =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
         const socket = createConnection({
           host: "127.0.0.1",
           port: servicePort,
@@ -962,12 +962,13 @@ describe("configured production composition", () => {
         socket.once("error", () => resolve(false));
         socket.setTimeout(100, () => {
           socket.destroy();
-          resolve(false);
+          reject(new Error("Configured service port probe was inconclusive"));
         });
       });
+    const bindObservations: boolean[] = [];
     const catalog = {
       readProviderCatalog: vi.fn(async () => {
-        expect(await boundDuringResolution()).toBe(false);
+        bindObservations.push(await boundDuringResolution());
         return [
           {
             availability: "available" as const,
@@ -1007,6 +1008,7 @@ describe("configured production composition", () => {
       reason: "provider-model-not-found",
     });
     expect(catalog.readProviderCatalog).toHaveBeenCalledTimes(1);
+    expect(bindObservations).toEqual([false]);
 
     const bindProbe = createServer();
     await new Promise<void>((resolve, reject) => {
