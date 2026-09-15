@@ -11,8 +11,10 @@ import {
   type ModelOptionDescriptor,
 } from "./reasoning-effort.js";
 import {
+  RESOLVED_SESSION_INTERACTION_MODES,
   RESOLVED_SESSION_RUNTIME_MODES,
   type SkippedProviderCandidate,
+  type ResolvedSessionInteractionMode,
   type ResolvedSessionRuntimeMode,
 } from "../persistence/types.js";
 
@@ -69,6 +71,10 @@ export type ProviderSelectionReason =
   | "provider-reasoning-effort-unsupported";
 
 export const T3_RUNTIME_MODES = RESOLVED_SESSION_RUNTIME_MODES;
+
+export const T3_INTERACTION_MODES = RESOLVED_SESSION_INTERACTION_MODES;
+
+export type T3InteractionMode = ResolvedSessionInteractionMode;
 
 export type T3RuntimeMode = ResolvedSessionRuntimeMode;
 

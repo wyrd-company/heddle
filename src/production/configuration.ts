@@ -7,8 +7,10 @@ import { URL } from "node:url";
 
 import {
   ProviderSelectionError,
+  T3_INTERACTION_MODES,
   T3_RUNTIME_MODES,
   type ProviderAliasCatalog,
+  type T3InteractionMode,
   type ProviderSelectionReason,
   type ProviderSelectionResolver,
   type ResolvedProviderSelection,
@@ -29,7 +31,8 @@ export type ProductionSessionConfiguration = {
    */
   defaultReasoningEffort?: string;
   defaultRuntimeMode: T3RuntimeMode;
-  interactionMode: string;
+  /** One of the interaction modes T3 publishes; `default` when unset. */
+  interactionMode: T3InteractionMode;
   worktreesRoot?: string;
 };
 
@@ -229,10 +232,11 @@ const validateCommonProductionConfiguration = (
     "session.defaultProviderAlias",
     configuration.session.defaultProviderAlias,
   );
-  requireNonEmpty(
-    "session.interactionMode",
-    configuration.session.interactionMode,
-  );
+  if (!T3_INTERACTION_MODES.includes(configuration.session.interactionMode)) {
+    throw new TypeError(
+      `session.interactionMode must be one of '${T3_INTERACTION_MODES.join("', '")}'`,
+    );
+  }
   if (configuration.session.defaultReasoningEffort !== undefined) {
     requireNonEmpty(
       "session.defaultReasoningEffort",

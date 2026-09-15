@@ -492,6 +492,19 @@ vocabulary: `approval-required`, `auto-accept-edits`, `auto`, and
 `full-access`. `full-access` is selectable for every configured provider and is
 forwarded unchanged. It is not mandatory; the operator chooses the default.
 
+A delegated child inherits its parent session's resolved runtime mode, so a
+stage override reaches the whole subtree that stage spawns. Adjudication is the
+one exception to the configured default: a scoped adjudication session runs
+approval-required whatever `session.defaultRuntimeMode` is, because its work is
+to decide, not to change a repository.
+
+### Interaction mode
+
+`session.interactionMode` is the interaction mode every session starts in,
+again in T3's own vocabulary: `default` or `plan`. Omitting it leaves every
+session at `default`. Stages do not override it; a lifecycle that needs a
+planning session declares it when one is needed.
+
 ### Reasoning effort
 
 Reasoning effort is a provider option. Heddle carries the provider's own

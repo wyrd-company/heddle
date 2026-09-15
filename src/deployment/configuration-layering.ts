@@ -22,7 +22,10 @@ export const builtInDeploymentConfiguration = {
   pacing: { providerBudgets: {}, usageWindowHours: 5 },
   pushover: { apiUrl: "https://api.pushover.net/1/messages.json" },
   server: { port: 3774 },
-  session: { worktreesRoot: "/workspaces/worktrees" },
+  session: {
+    interactionMode: "default",
+    worktreesRoot: "/workspaces/worktrees",
+  },
   stateDirectory: "/var/lib/heddle",
   t3: { baseUrl: "http://127.0.0.1:3773" },
 } as const;

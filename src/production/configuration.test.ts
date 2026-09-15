@@ -111,6 +111,34 @@ describe("production configuration", () => {
     );
   });
 
+  it("accepts only an interaction mode T3 publishes", async () => {
+    const schema = JSON.parse(
+      await readFile("schemas/production-configuration.json", "utf8"),
+    );
+    const validate = new Ajv2020({
+      allErrors: true,
+      formats: { uri: true },
+      strict: false,
+    }).compile(schema);
+
+    for (const interactionMode of ["default", "plan"] as const) {
+      const supported = fixture();
+      supported.pacing.providerBudgets = {};
+      supported.session.interactionMode = interactionMode;
+      expect(validate(supported), JSON.stringify(validate.errors)).toBe(true);
+      expect(validateProductionConfiguration(supported)).toBe(supported);
+    }
+
+    const unsupported = fixture();
+    unsupported.pacing.providerBudgets = {};
+    unsupported.session.interactionMode =
+      "accept-everything" as ProductionConfiguration["session"]["interactionMode"];
+    expect(validate(unsupported)).toBe(false);
+    expect(() => validateProductionConfiguration(unsupported)).toThrow(
+      "session.interactionMode must be one of 'default', 'plan'",
+    );
+  });
+
   it("accepts both the legacy single-object alias and an ordered candidate list", async () => {
     const schema = JSON.parse(
       await readFile("schemas/production-configuration.json", "utf8"),

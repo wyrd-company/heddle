@@ -492,6 +492,7 @@ describe("deployed configuration directory", () => {
     delete source["stateDirectory"];
     delete (source["t3"] as Record<string, unknown>)["baseUrl"];
     expect(source).not.toHaveProperty("server");
+    delete (source["session"] as Record<string, unknown>)["interactionMode"];
     expect(source["session"]).not.toHaveProperty("worktreesRoot");
     await writeFile(join(root, "config.yml"), stringify(source));
 
@@ -503,7 +504,10 @@ describe("deployed configuration directory", () => {
       boardDirectory: "/workspaces/kanban",
       pacing: { usageWindowHours: 5 },
       pushover: { apiUrl: "https://api.pushover.net/1/messages.json" },
-      session: { worktreesRoot: "/workspaces/worktrees" },
+      session: {
+        interactionMode: "default",
+        worktreesRoot: "/workspaces/worktrees",
+      },
       stateDirectory: "/var/lib/heddle",
       t3: { baseUrl: "http://127.0.0.1:3773" },
     });
@@ -515,6 +519,7 @@ describe("deployed configuration directory", () => {
       "/pushover/apiUrl": "built-in",
       "/server/host": "built-in",
       "/server/port": "built-in",
+      "/session/interactionMode": "built-in",
       "/session/worktreesRoot": "built-in",
       "/stateDirectory": "built-in",
       "/t3/baseUrl": "built-in",

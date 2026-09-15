@@ -190,6 +190,20 @@ export const RESOLVED_SESSION_RUNTIME_MODES = [
 export type ResolvedSessionRuntimeMode =
   (typeof RESOLVED_SESSION_RUNTIME_MODES)[number];
 
+/**
+ * The interaction modes T3 publishes on its orchestration contract, where
+ * `ProviderInteractionMode` is the literal union `"default" | "plan"`. Heddle
+ * carries T3's vocabulary rather than one of its own.
+ */
+export const RESOLVED_SESSION_INTERACTION_MODES = ["default", "plan"] as const;
+
+export type ResolvedSessionInteractionMode =
+  (typeof RESOLVED_SESSION_INTERACTION_MODES)[number];
+
+/** What a session runs as when no layer chose an interaction mode. */
+export const defaultSessionInteractionMode: ResolvedSessionInteractionMode =
+  "default";
+
 export interface ProviderCandidateFailureDetail extends Record<
   string,
   JsonValue

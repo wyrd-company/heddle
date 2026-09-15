@@ -201,12 +201,7 @@
     "session": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "baseRef",
-        "defaultProviderAlias",
-        "defaultRuntimeMode",
-        "interactionMode"
-      ],
+      "required": ["baseRef", "defaultProviderAlias", "defaultRuntimeMode"],
       "properties": {
         "baseRef": { "type": "string", "minLength": 1 },
         "defaultProviderAlias": { "type": "string", "minLength": 1 },
@@ -224,7 +219,10 @@
             "full-access"
           ]
         },
-        "interactionMode": { "type": "string", "minLength": 1 },
+        "interactionMode": {
+          "$comment": "One of the interaction modes T3 publishes. Omitted leaves every session at T3's own default.",
+          "enum": ["default", "plan"]
+        },
         "worktreesRoot": {
           "type": "string",
           "pattern": "^/"
