@@ -99,7 +99,7 @@ describe("Heddle devcontainer feature publication", () => {
     expect(manifest.engines).toEqual({ node: "^24.0.0 || ^26.0.0" });
   });
 
-  it("keeps viewer libraries out of the nine runtime dependencies", async () => {
+  it("keeps viewer libraries out of the ten runtime dependencies", async () => {
     const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
       dependencies: Record<string, string>;
       devDependencies: Record<string, string>;
@@ -112,6 +112,7 @@ describe("Heddle devcontainer feature publication", () => {
       "better-sqlite3",
       "flowcraft",
       "jsonata",
+      "koffi",
       "nunjucks",
       "yaml",
       "zod",
