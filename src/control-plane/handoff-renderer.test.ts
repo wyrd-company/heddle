@@ -1062,7 +1062,7 @@ describe("GitHandoffTemplateStore", () => {
     );
   });
 
-  it("keeps a partial whose first line is a thematic break", async () => {
+  it("keeps a partial whose leading block is not this artifact's front matter", async () => {
     const root = await mkdtemp(join(tmpdir(), "handoff-template-store-"));
     cleanup.push(root);
     await mkdir(join(root, "handoff-templates", "includes"), {
@@ -1083,11 +1083,11 @@ describe("GitHandoffTemplateStore", () => {
         "",
       ].join("\n"),
     );
-    // Two thematic breaks: the bytes between them look exactly like front
-    // matter, and they are not.
+    // A delimited block that parses as a YAML mapping and is not this
+    // artifact's front matter: keeping it whole is the contract.
     const partial = [
       "---",
-      "Ruled guidance.",
+      "Ruled guidance: kept",
       "---",
       "More guidance.",
       "",
@@ -1128,7 +1128,7 @@ describe("GitHandoffTemplateStore", () => {
       partial,
     );
     expect(renderStageHandoff(input({ template }))).toContain(
-      "Ruled guidance.",
+      "Ruled guidance: kept",
     );
   });
 
