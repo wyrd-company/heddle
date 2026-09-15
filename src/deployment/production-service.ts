@@ -74,6 +74,12 @@ const configuredCompositionInputs = async (
   const providerResolver = new ProviderSelectionResolver(
     loaded.configuration.providerAliases,
     providerCatalog,
+    loaded.configuration.session.defaultReasoningEffort === undefined
+      ? {}
+      : {
+          defaultReasoningEffort:
+            loaded.configuration.session.defaultReasoningEffort,
+        },
   );
   const configuration = await resolveProductionConfiguration(
     loaded.configuration,

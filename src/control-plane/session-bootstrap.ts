@@ -78,7 +78,11 @@ export type SessionBootstrapInput = {
   handoff: Omit<StageHandoffInput, "correlationToken" | "todoList">;
   instanceId: string;
   interactionMode: string;
-  modelSelection: { instanceId: string; model: string };
+  modelSelection: {
+    instanceId: string;
+    model: string;
+    options?: readonly { readonly id: string; readonly value: string }[];
+  };
   parentSessionKey?: string;
   projectId: string;
   providerContext: T3ProviderDispatchContext;

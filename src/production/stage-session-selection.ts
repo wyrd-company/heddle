@@ -4,10 +4,12 @@
 // ---
 
 import {
+  assertModelOffersReasoningEffort,
   ProviderSelectionError,
   type ProviderSelectionInputs,
   type ProviderSelectionReason,
   type ResolvedProviderCandidateSelection,
+  ReasoningEffortUnsupportedError,
   type ResolvedProviderSelection,
 } from "../control-plane/index.js";
 import type { ResolvedSessionRuntimeMode } from "../persistence/index.js";
@@ -42,7 +44,11 @@ export class StageSessionSelectionError extends Error {
     );
     this.name = "StageSessionSelectionError";
     this.reason =
-      cause instanceof ProviderSelectionError ? cause.reason : undefined;
+      cause instanceof ProviderSelectionError
+        ? cause.reason
+        : cause instanceof ReasoningEffortUnsupportedError
+          ? "provider-reasoning-effort-unsupported"
+          : undefined;
   }
 }
 
@@ -56,11 +62,36 @@ const aliasForStage = (input: {
   input.stageProviderAlias ??
   input.session.defaultProviderAlias;
 
+/**
+ * The blueprint's stage and header efforts are the narrowest layers, so they
+ * replace whatever the alias candidate resolved. The value is checked against
+ * the candidate's own model, which is only known once the alias resolves.
+ */
+const withStageReasoningEffort = (
+  candidate: ResolvedProviderCandidateSelection,
+  stageReasoningEffort: string | undefined,
+  stageId: string,
+): ResolvedProviderCandidateSelection => {
+  if (stageReasoningEffort === undefined) return candidate;
+  const { optionId } = assertModelOffersReasoningEffort({
+    modelSlug: candidate.model.slug,
+    optionDescriptors: candidate.model.optionDescriptors,
+    origin: `Stage '${stageId}'`,
+    reasoningEffort: stageReasoningEffort,
+  });
+  return {
+    ...candidate,
+    reasoningEffort: stageReasoningEffort,
+    reasoningEffortOptionId: optionId,
+  };
+};
+
 export const resolveStageSessionCandidates = async (
   input: {
     session: ResolvedProductionSessionConfiguration;
     stageId: string;
     stageProviderAlias?: string;
+    stageReasoningEffort?: string;
     stageRuntimeMode?: ResolvedSessionRuntimeMode;
     taskId: number;
     taskProviderAliases?: TaskProviderAliasMap;
@@ -73,16 +104,24 @@ export const resolveStageSessionCandidates = async (
     runtimeMode: input.stageRuntimeMode ?? input.session.defaultRuntimeMode,
   };
   try {
-    return resolver.resolveCandidates === undefined
-      ? [
-          {
-            ...(await resolver.resolve(alias, inputs)),
-            candidatePosition: 1,
-            catalogFailures: [],
-            skippedCandidates: [],
-          },
-        ]
-      : await resolver.resolveCandidates(alias, inputs);
+    const candidates =
+      resolver.resolveCandidates === undefined
+        ? [
+            {
+              ...(await resolver.resolve(alias, inputs)),
+              candidatePosition: 1,
+              catalogFailures: [],
+              skippedCandidates: [],
+            },
+          ]
+        : await resolver.resolveCandidates(alias, inputs);
+    return candidates.map((candidate) =>
+      withStageReasoningEffort(
+        candidate,
+        input.stageReasoningEffort,
+        input.stageId,
+      ),
+    );
   } catch (error) {
     throw new StageSessionSelectionError(input.taskId, input.stageId, error);
   }

@@ -50,6 +50,17 @@ export {
   type PinnedHandoffTemplateReference,
 } from "./handoff-template-store.js";
 export {
+  assertModelOffersReasoningEffort,
+  isReasoningEffort,
+  modelReasoningEffortCapability,
+  reasoningEffortOptionSelections,
+  ReasoningEffortUnsupportedError,
+  wellKnownReasoningEffortOptionIds,
+  type ModelOptionChoice,
+  type ModelOptionDescriptor,
+  type ModelReasoningEffortCapability,
+} from "./reasoning-effort.js";
+export {
   ensureWorktree,
   type GitRunner,
   type PreparedWorktree,

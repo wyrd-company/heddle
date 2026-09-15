@@ -29,6 +29,7 @@ import {
   type AgentNameThemeKind,
 } from "../agent-names/index.js";
 import { RESOLVED_SESSION_RUNTIME_MODES } from "../persistence/index.js";
+import { isReasoningEffort } from "../control-plane/reasoning-effort.js";
 import {
   isProviderAlias,
   TaskProviderAliasError,
@@ -203,6 +204,15 @@ export const validateBlueprint = (
       );
     }
   }
+  const blueprintReasoningEffort = blueprint["reasoning-effort"] as unknown;
+  if (
+    blueprintReasoningEffort !== undefined &&
+    !isReasoningEffort(blueprintReasoningEffort)
+  ) {
+    throw new BlueprintValidationError(
+      "Blueprint reasoning-effort must be a non-empty scalar without surrounding whitespace",
+    );
+  }
   for (const node of blueprint.nodes) {
     if (node.params?.[internalNodeIdParameter] !== undefined) {
       throw new BlueprintValidationError(
@@ -243,9 +253,17 @@ export const validateBlueprint = (
         `Node ${JSON.stringify(node.id)} runtime-mode is invalid`,
       );
     }
+    const reasoningEffort = node["reasoning-effort"] as unknown;
+    if (reasoningEffort !== undefined && !isReasoningEffort(reasoningEffort)) {
+      throw new BlueprintValidationError(
+        `Node ${JSON.stringify(node.id)} reasoning-effort must be a non-empty scalar without surrounding whitespace`,
+      );
+    }
     if (
       node.uses !== "wait" &&
-      (providerAlias !== undefined || runtimeMode !== undefined)
+      (providerAlias !== undefined ||
+        runtimeMode !== undefined ||
+        reasoningEffort !== undefined)
     ) {
       throw new BlueprintValidationError(
         `Non-wait node ${JSON.stringify(node.id)} must not declare session selection`,

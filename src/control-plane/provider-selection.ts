@@ -6,6 +6,11 @@
 import type { ProviderUsageBudget } from "../pacing/index.js";
 import { errorDetail } from "../error-details.js";
 import {
+  assertModelOffersReasoningEffort,
+  ReasoningEffortUnsupportedError,
+  type ModelOptionDescriptor,
+} from "./reasoning-effort.js";
+import {
   RESOLVED_SESSION_RUNTIME_MODES,
   type SkippedProviderCandidate,
   type ResolvedSessionRuntimeMode,
@@ -14,6 +19,8 @@ import {
 export type ProviderAliasCandidateConfiguration = {
   readonly model: string;
   readonly providerDisplayName: string;
+  /** The provider's own effort token, overriding the configuration default. */
+  readonly reasoningEffort?: string;
 };
 
 export type ProviderAliasConfiguration =
@@ -27,6 +34,8 @@ export type ProviderAliasCatalog = Readonly<
 export type T3ProviderCatalogModel = {
   readonly isCustom: boolean;
   readonly name: string;
+  /** The provider option metadata T3 publishes for this model, when it does. */
+  readonly optionDescriptors?: readonly ModelOptionDescriptor[];
   readonly slug: string;
 };
 
@@ -56,7 +65,8 @@ export type ProviderSelectionReason =
   | "provider-name-ambiguous"
   | "provider-not-ready"
   | "provider-unavailable"
-  | "provider-model-not-found";
+  | "provider-model-not-found"
+  | "provider-reasoning-effort-unsupported";
 
 export const T3_RUNTIME_MODES = RESOLVED_SESSION_RUNTIME_MODES;
 
@@ -96,6 +106,10 @@ export type ResolvedProviderSelection = {
   readonly observedCliVersion: string | null;
   readonly providerDisplayName: string;
   readonly providerInstanceId: string;
+  /** The provider's own effort token, absent when no layer configured one. */
+  readonly reasoningEffort?: string;
+  /** The option id the selected model publishes for reasoning effort. */
+  readonly reasoningEffortOptionId?: string;
   readonly runtimeMode: T3RuntimeMode;
 };
 
@@ -127,6 +141,7 @@ export type ProviderAliasAvailability = {
   readonly model: T3ProviderCatalogModel;
   readonly providerDisplayName: string;
   readonly reason: ProviderAliasAvailabilityReason | null;
+  readonly reasoningEffort?: string;
   readonly selectable: boolean;
 };
 
@@ -166,17 +181,25 @@ const selectionError = (
     `Provider alias '${alias}' cannot be selected: ${detail}`,
   );
 
+export type ProviderSelectionResolverOptions = {
+  /** The configuration-wide effort floor every alias candidate inherits. */
+  readonly defaultReasoningEffort?: string;
+};
+
 export class ProviderSelectionResolver {
   readonly #aliases: ReadonlyMap<
     string,
     readonly ProviderAliasCandidateConfiguration[]
   >;
   readonly #catalog: T3ProviderCatalogReader;
+  readonly #defaultReasoningEffort: string | undefined;
 
   public constructor(
     aliases: ProviderAliasCatalog,
     catalog: T3ProviderCatalogReader,
+    options: ProviderSelectionResolverOptions = {},
   ) {
+    this.#defaultReasoningEffort = options.defaultReasoningEffort;
     this.#aliases = new Map(
       Object.entries(aliases).map(([alias, configuration]) => [
         alias,
@@ -249,6 +272,9 @@ export class ProviderSelectionResolver {
           model: { ...current.model },
           providerDisplayName: current.providerDisplayName,
           reason: null,
+          ...(current.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: current.reasoningEffort }),
           selectable: true,
         } satisfies ProviderAliasAvailability;
       } catch (error) {
@@ -436,6 +462,29 @@ export class ProviderSelectionResolver {
         `T3 provider '${configured.providerDisplayName}' has no model slug '${configured.model}'`,
       );
     }
+    const reasoningEffort =
+      configured.reasoningEffort ?? this.#defaultReasoningEffort;
+    let reasoningEffortOptionId: string | undefined;
+    if (reasoningEffort !== undefined) {
+      try {
+        reasoningEffortOptionId = assertModelOffersReasoningEffort({
+          modelSlug: model.slug,
+          optionDescriptors: model.optionDescriptors,
+          origin:
+            configured.reasoningEffort === undefined
+              ? "session.defaultReasoningEffort"
+              : `providerAliases.${alias}`,
+          reasoningEffort,
+        }).optionId;
+      } catch (error) {
+        if (!(error instanceof ReasoningEffortUnsupportedError)) throw error;
+        throw selectionError(
+          "provider-reasoning-effort-unsupported",
+          alias,
+          error.message,
+        );
+      }
+    }
     return {
       alias,
       driverKind: provider.driverKind,
@@ -444,6 +493,10 @@ export class ProviderSelectionResolver {
       observedCliVersion: provider.observedCliVersion,
       providerDisplayName: configured.providerDisplayName,
       providerInstanceId: provider.instanceId,
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      ...(reasoningEffortOptionId === undefined
+        ? {}
+        : { reasoningEffortOptionId }),
       runtimeMode: inputs.runtimeMode,
     };
   }

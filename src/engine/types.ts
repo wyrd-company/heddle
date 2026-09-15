@@ -39,6 +39,7 @@ export interface LifecycleNode extends NodeDefinition {
   };
   repo?: string;
   "provider-alias"?: string;
+  "reasoning-effort"?: string;
   "runtime-mode"?: ResolvedSessionRuntimeMode;
   skills?: string[];
   "todo-template"?: string;
@@ -47,6 +48,8 @@ export interface LifecycleNode extends NodeDefinition {
 
 export interface LifecycleBlueprint extends WorkflowBlueprint {
   "board-statuses"?: Partial<Record<MechanicalNodeUse, string>>;
+  /** The lifecycle-wide reasoning effort every stage starts from. */
+  "reasoning-effort"?: string;
   edges: LifecycleEdge[];
   nodes: LifecycleNode[];
 }

@@ -211,6 +211,12 @@
       "properties": {
         "baseRef": { "type": "string", "minLength": 1 },
         "defaultProviderAlias": { "type": "string", "minLength": 1 },
+        "defaultReasoningEffort": {
+          "$comment": "The provider's own reasoning effort token every session starts from. Omitted leaves each provider at its own default.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$"
+        },
         "defaultRuntimeMode": {
           "enum": [
             "approval-required",
@@ -286,7 +292,13 @@
           "minLength": 1,
           "pattern": "\\S"
         },
-        "model": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        "model": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "reasoningEffort": {
+          "$comment": "The provider's own reasoning effort token for this candidate's model. Overrides session.defaultReasoningEffort.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$"
+        }
       }
     }
   }

@@ -23,6 +23,11 @@ import { isProviderAlias } from "../provider-alias.js";
 export type ProductionSessionConfiguration = {
   baseRef: string;
   defaultProviderAlias: string;
+  /**
+   * The provider's own effort token every session starts from. Absent leaves
+   * every session at the provider's own default, as before.
+   */
+  defaultReasoningEffort?: string;
   defaultRuntimeMode: T3RuntimeMode;
   interactionMode: string;
   skillPointer: string;
@@ -230,6 +235,26 @@ const validateCommonProductionConfiguration = (
     configuration.session.interactionMode,
   );
   requireNonEmpty("session.skillPointer", configuration.session.skillPointer);
+  if (configuration.session.defaultReasoningEffort !== undefined) {
+    requireNonEmpty(
+      "session.defaultReasoningEffort",
+      configuration.session.defaultReasoningEffort,
+    );
+  }
+  for (const [alias, provider] of Object.entries(
+    configuration.providerAliases,
+  )) {
+    const candidates = Array.isArray(provider) ? provider : [provider];
+    candidates.forEach((candidate, index) => {
+      if (candidate.reasoningEffort === undefined) return;
+      requireNonEmpty(
+        Array.isArray(provider)
+          ? `providerAliases.${alias}[${index}].reasoningEffort`
+          : `providerAliases.${alias}.reasoningEffort`,
+        candidate.reasoningEffort,
+      );
+    });
+  }
   if (configuration.session.worktreesRoot !== undefined) {
     requireNonEmpty(
       "session.worktreesRoot",
@@ -360,6 +385,9 @@ export const validateResolvedProductionConfiguration = (
       defaultSelection.observedCliVersion ||
     resolvedDefault.providerInstanceId !==
       defaultSelection.providerInstanceId ||
+    resolvedDefault.reasoningEffort !== defaultSelection.reasoningEffort ||
+    resolvedDefault.reasoningEffortOptionId !==
+      defaultSelection.reasoningEffortOptionId ||
     resolvedDefault.runtimeMode !== defaultSelection.runtimeMode
   ) {
     throw new TypeError(

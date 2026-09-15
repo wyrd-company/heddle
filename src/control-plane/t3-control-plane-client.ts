@@ -22,6 +22,7 @@ import type {
   T3ProviderCatalogModel,
   T3ProviderCatalogReader,
 } from "./provider-selection.js";
+import type { ModelOptionDescriptor } from "./reasoning-effort.js";
 
 export {
   resolveT3AwarenessPhase,
@@ -180,6 +181,72 @@ const releasedDispatchFailureDetail = (
   return `; reason orchestration_dispatch_failed; trace ID ${JSON.stringify(record["traceId"])}`;
 };
 
+/**
+ * Model capability metadata is optional in T3's configuration payload and is
+ * absent for drivers that publish no provider options. An absent or null
+ * `capabilities` is not an error; a malformed one is.
+ */
+const projectCatalogOptionDescriptors = (
+  value: unknown,
+): readonly ModelOptionDescriptor[] | undefined => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned invalid provider model capabilities",
+    );
+  }
+  const descriptors = (value as Record<string, unknown>)["optionDescriptors"];
+  if (descriptors === undefined || descriptors === null) return undefined;
+  if (!Array.isArray(descriptors)) {
+    throw new T3ProviderCatalogReadError(
+      "T3 server.getConfig returned invalid provider model option descriptors",
+    );
+  }
+  return descriptors.map((descriptor) => {
+    if (
+      typeof descriptor !== "object" ||
+      descriptor === null ||
+      Array.isArray(descriptor)
+    ) {
+      throw new T3ProviderCatalogReadError(
+        "T3 server.getConfig returned an invalid provider model option descriptor",
+      );
+    }
+    const entry = descriptor as Record<string, unknown>;
+    const choices = entry["options"];
+    if (choices !== undefined && !Array.isArray(choices)) {
+      throw new T3ProviderCatalogReadError(
+        "T3 server.getConfig returned invalid provider model option choices",
+      );
+    }
+    return {
+      id: requireCatalogString(entry["id"], "provider model option id"),
+      ...(choices === undefined
+        ? {}
+        : {
+            options: choices.map((choice) => {
+              if (
+                typeof choice !== "object" ||
+                choice === null ||
+                Array.isArray(choice)
+              ) {
+                throw new T3ProviderCatalogReadError(
+                  "T3 server.getConfig returned an invalid provider model option choice",
+                );
+              }
+              return {
+                id: requireCatalogString(
+                  (choice as Record<string, unknown>)["id"],
+                  "provider model option choice id",
+                ),
+              };
+            }),
+          }),
+      type: requireCatalogString(entry["type"], "provider model option type"),
+    } satisfies ModelOptionDescriptor;
+  });
+};
+
 const projectCatalogModel = (value: unknown): T3ProviderCatalogModel => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new T3ProviderCatalogReadError(
@@ -192,9 +259,13 @@ const projectCatalogModel = (value: unknown): T3ProviderCatalogModel => {
       "T3 server.getConfig returned an invalid provider model custom flag",
     );
   }
+  const optionDescriptors = projectCatalogOptionDescriptors(
+    model["capabilities"],
+  );
   return {
     isCustom: model["isCustom"],
     name: requireCatalogString(model["name"], "provider model name"),
+    ...(optionDescriptors === undefined ? {} : { optionDescriptors }),
     slug: requireCatalogString(model["slug"], "provider model slug"),
   };
 };

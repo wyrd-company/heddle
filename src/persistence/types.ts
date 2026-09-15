@@ -206,7 +206,7 @@ export interface SkippedProviderCandidate extends Record<string, JsonValue> {
   providerDisplayName: string;
 }
 
-export interface ResolvedSessionBinding extends Record<string, JsonValue> {
+export type ResolvedSessionBinding = Record<string, JsonValue> & {
   alias: string;
   candidatePosition: number;
   driverKind: string;
@@ -215,11 +215,15 @@ export interface ResolvedSessionBinding extends Record<string, JsonValue> {
   observedCliVersion: string | null;
   providerDisplayName: string;
   providerInstanceId: string;
+  /** The provider's own effort token the session was dispatched with. */
+  reasoningEffort?: string;
+  /** The option id the selected model publishes for reasoning effort. */
+  reasoningEffortOptionId?: string;
   runtimeMode: ResolvedSessionRuntimeMode;
   sessionKey: string;
   skippedCandidates: SkippedProviderCandidate[];
   threadId: string;
-}
+};
 
 interface SessionRuntimeRecordBase {
   activation: number;

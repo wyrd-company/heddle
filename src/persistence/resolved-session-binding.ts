@@ -23,6 +23,17 @@ export const resolvedSessionBindingFields = [
   "threadId",
 ] as const;
 
+/**
+ * Reasoning effort is set only when a layer configured one, so a binding
+ * carries both fields or neither. They are stored alongside the required set
+ * rather than inside it, so a session with no configured effort keeps exactly
+ * the shape it has today.
+ */
+export const resolvedSessionBindingReasoningEffortFields = [
+  "reasoningEffort",
+  "reasoningEffortOptionId",
+] as const;
+
 const legacyResolvedSessionBindingFields = resolvedSessionBindingFields.filter(
   (field) => field !== "candidatePosition" && field !== "skippedCandidates",
 );
@@ -77,7 +88,25 @@ export function isResolvedSessionBinding(
     return false;
   }
   const binding = value as Record<string, unknown>;
-  if (!sameFields(binding, resolvedSessionBindingFields)) {
+  const withReasoningEffort = [
+    ...resolvedSessionBindingFields,
+    ...resolvedSessionBindingReasoningEffortFields,
+  ].sort();
+  const carriesReasoningEffort = sameFields(binding, withReasoningEffort);
+  if (
+    !carriesReasoningEffort &&
+    !sameFields(binding, resolvedSessionBindingFields)
+  ) {
+    return false;
+  }
+  if (
+    carriesReasoningEffort &&
+    !resolvedSessionBindingReasoningEffortFields.every(
+      (field) =>
+        typeof binding[field] === "string" &&
+        (binding[field] as string).trim() !== "",
+    )
+  ) {
     return false;
   }
   if (
@@ -143,7 +172,10 @@ export const sameResolvedSessionBinding = (
   left: ResolvedSessionBinding,
   right: ResolvedSessionBinding,
 ): boolean =>
-  resolvedSessionBindingFields.every((field) =>
+  [
+    ...resolvedSessionBindingFields,
+    ...resolvedSessionBindingReasoningEffortFields,
+  ].every((field) =>
     field === "skippedCandidates"
       ? JSON.stringify(left[field]) === JSON.stringify(right[field])
       : left[field] === right[field],

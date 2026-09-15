@@ -188,6 +188,12 @@ export const createProductionComposition = (
       new ProviderSelectionResolver(
         configuration.providerAliases,
         providerCatalog,
+        configuration.session.defaultReasoningEffort === undefined
+          ? {}
+          : {
+              defaultReasoningEffort:
+                configuration.session.defaultReasoningEffort,
+            },
       );
     const resolveSystemPrompt =
       options.resolveSystemPrompt ?? resolveBuiltInSystemPrompt;

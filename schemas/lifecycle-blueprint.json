@@ -19,6 +19,12 @@
     "metadata": {
       "type": "object"
     },
+    "reasoning-effort": {
+      "description": "The provider's own reasoning effort token every stage of this lifecycle starts from.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
     "board-statuses": {
       "type": "object",
       "additionalProperties": false,
@@ -120,6 +126,12 @@
           "type": "string",
           "maxLength": 64,
           "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "reasoning-effort": {
+          "description": "The provider's own reasoning effort token for this stage, the narrowest layer and the one that wins.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$"
         },
         "runtime-mode": {
           "enum": [
@@ -236,6 +248,9 @@
                 },
                 {
                   "required": ["runtime-mode"]
+                },
+                {
+                  "required": ["reasoning-effort"]
                 },
                 {
                   "required": ["assign-agent-name"]

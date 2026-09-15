@@ -7,6 +7,7 @@ import type {
   ResolvedProviderCandidateSelection,
   ResolvedProviderSelection,
 } from "../control-plane/index.js";
+import { reasoningEffortOptionSelections } from "../control-plane/index.js";
 import type { T3ProviderDispatchContext } from "../control-plane/t3-control-plane-client.js";
 import type { ResolvedSessionBinding } from "../persistence/index.js";
 import type { SkippedProviderCandidate } from "../persistence/index.js";
@@ -29,6 +30,12 @@ export const bindResolvedSession = (
     observedCliVersion: selection.observedCliVersion,
     providerDisplayName: selection.providerDisplayName,
     providerInstanceId: selection.providerInstanceId,
+    ...(selection.reasoningEffort === undefined
+      ? {}
+      : { reasoningEffort: selection.reasoningEffort }),
+    ...(selection.reasoningEffortOptionId === undefined
+      ? {}
+      : { reasoningEffortOptionId: selection.reasoningEffortOptionId }),
     runtimeMode: selection.runtimeMode,
     sessionKey,
     skippedCandidates: skipped.map((skippedCandidate) => ({
@@ -41,10 +48,21 @@ export const bindResolvedSession = (
 
 export const modelSelectionFromBinding = (
   binding: ResolvedSessionBinding,
-): { instanceId: string; model: string } => ({
-  instanceId: binding.providerInstanceId,
-  model: binding.modelSlug,
-});
+): {
+  instanceId: string;
+  model: string;
+  options?: readonly { readonly id: string; readonly value: string }[];
+} => {
+  const options = reasoningEffortOptionSelections(
+    binding.reasoningEffort,
+    binding.reasoningEffortOptionId,
+  );
+  return {
+    instanceId: binding.providerInstanceId,
+    model: binding.modelSlug,
+    ...(options.length === 0 ? {} : { options }),
+  };
+};
 
 export const providerContextFromBinding = (
   binding: ResolvedSessionBinding,

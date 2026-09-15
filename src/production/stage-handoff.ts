@@ -25,6 +25,8 @@ export type ProductionStageMetadata = {
   agentNameList?: AgentNameListName;
   handoff: ProductionHandoffStage;
   providerAlias?: string;
+  /** The stage's effort, or the blueprint header's when the stage sets none. */
+  reasoningEffort?: string;
   repositoryName?: string;
   runtimeMode?: ResolvedSessionRuntimeMode;
 };
@@ -114,6 +116,10 @@ export const readProductionHandoffStage = async (input: {
   );
   // The node that finished last is the one whose edge routed the lifecycle
   // into this stage; its output is what the stage was handed.
+  // The narrowest layer wins: the stage's own effort, then the lifecycle
+  // header's, then whatever the resolved alias carries.
+  const reasoningEffort =
+    node["reasoning-effort"] ?? blueprint["reasoning-effort"];
   const projection = lifecycleProjectionOf(context);
   const entry =
     projection.current === null
@@ -138,6 +144,7 @@ export const readProductionHandoffStage = async (input: {
     ...(node["provider-alias"] === undefined
       ? {}
       : { providerAlias: node["provider-alias"] }),
+    ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
     ...(node.repo === undefined ? {} : { repositoryName: node.repo }),
     ...(node["runtime-mode"] === undefined
       ? {}
