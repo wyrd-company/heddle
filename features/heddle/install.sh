@@ -151,17 +151,12 @@ log "Registering the Heddle service"
 printf -v quoted_config '%q' "${CONFIGDIRECTORY}"
 printf -v quoted_dns '%q' "${DNSNAME}"
 printf -v quoted_user '%q' "${service_user}"
-install -D -m 0755 \
-    "$(dirname "$0")/check-kanban-version.sh" \
-    /usr/local/libexec/heddle/check-kanban-version
 cat >/usr/local/bin/heddle-service <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
 config_directory=${quoted_config}
 dns_name=${quoted_dns}
-expected_kanban_version=0.38.0-fork+794efef
-/usr/local/libexec/heddle/check-kanban-version "\${expected_kanban_version}"
 launch_settings="\$(s6-setuidgid ${quoted_user} \
     /usr/local/bin/heddle-server \
     --config "\${config_directory}" \

@@ -25,11 +25,6 @@
       "type": "bind"
     },
     {
-      "source": "${localEnv:HEDDLE_QUALIFICATION_KANBAN}",
-      "target": "/usr/local/bin/kanban-md",
-      "type": "bind"
-    },
-    {
       "readonly": true,
       "source": "${localEnv:HEDDLE_QUALIFICATION_CONFIG}",
       "target": "/home/vscode/.heddle",

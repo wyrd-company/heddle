@@ -10,7 +10,11 @@ import { isMap, isSeq, type Document } from "yaml";
 
 import { writeFileAtomic } from "./atomic-write.js";
 import { BoardStoreError } from "./errors.js";
-import { parseTaskFile, renderTaskFile, type TaskDocument } from "./front-matter.js";
+import {
+  parseTaskFile,
+  renderTaskFile,
+  type TaskDocument,
+} from "./front-matter.js";
 
 const MAX_SLUG_LENGTH = 50;
 const MINIMUM_ID_WIDTH = 3;

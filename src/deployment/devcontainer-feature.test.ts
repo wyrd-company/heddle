@@ -5,14 +5,7 @@
 // ---
 
 import { execFile } from "node:child_process";
-import {
-  chmod,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -134,10 +127,11 @@ describe("Heddle devcontainer feature", () => {
     expect(installer).toContain(
       'port="\\$(jq -er \'.port\' <<<"\\${launch_settings}")"',
     );
-    expect(installer).toContain("expected_kanban_version=0.38.0-fork+794efef");
-    expect(installer).toContain(
-      '/usr/local/libexec/heddle/check-kanban-version "\\${expected_kanban_version}"',
-    );
+    // Heddle reads and writes the board itself, so the service launcher gates
+    // on no kanban-md version and needs no kanban-md at all.
+    expect(installer).not.toContain("expected_kanban_version");
+    expect(installer).not.toContain("check-kanban-version");
+    expect(installer).not.toContain("kanban-md");
     expect(installer).not.toContain("export HEDDLE_BOARD_PATH");
     expect(installer).not.toContain("export HEDDLE_HOST");
     expect(installer).not.toContain("export HEDDLE_PORT");
@@ -163,45 +157,6 @@ describe("Heddle devcontainer feature", () => {
     );
     expect(installer).toContain('"\\${dns_name}" "\\${host}" "\\${port}"');
     expect(installer).not.toContain("reverse_proxy 127.0.0.1:");
-  });
-
-  it("requires the complete supported kanban-md version output", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "heddle-kanban-version-"));
-    const fakeKanban = join(directory, "kanban-md");
-    await writeFile(
-      fakeKanban,
-      '#!/bin/sh\nprintf "%s\\n" "$KANBAN_VERSION_OUTPUT"\n',
-    );
-    await chmod(fakeKanban, 0o755);
-    const environment = {
-      ...process.env,
-      PATH: `${directory}:${process.env.PATH ?? ""}`,
-    };
-    const check = `${featureDirectory}/check-kanban-version.sh`;
-
-    try {
-      await expect(
-        execute(check, ["0.38.0-fork+794efef"], {
-          env: {
-            ...environment,
-            KANBAN_VERSION_OUTPUT: "kanban-md version 0.38.0-fork+794efef",
-          },
-        }),
-      ).resolves.toMatchObject({ stderr: "" });
-      for (const output of [
-        "wrapper kanban-md version 0.38.0-fork+794efef",
-        "kanban-md version 0.38.0-fork+794efef-extra",
-        "kanban-md version 0.38.0-fork+794efef wrapped",
-      ]) {
-        await expect(
-          execute(check, ["0.38.0-fork+794efef"], {
-            env: { ...environment, KANBAN_VERSION_OUTPUT: output },
-          }),
-        ).rejects.toMatchObject({ code: 1 });
-      }
-    } finally {
-      await rm(directory, { force: true, recursive: true });
-    }
   });
 
   it.each(["state", "board", "tools", "config", "publication"])(
@@ -230,7 +185,7 @@ describe("Heddle devcontainer feature", () => {
   it("pins qualification and documents every isolation boundary", async () => {
     const versions = JSON.parse(
       await readFile("deployment/supported-versions.json", "utf8"),
-    ) as { kanbanMd: string; t3: string; t3PackageSource: string };
+    ) as { qualificationKanbanMd: string; t3: string; t3PackageSource: string };
     const readme = await readFile(`${featureDirectory}/README.md`, "utf8");
     const qualification = await readFile(
       "scripts/deployment/qualify-pinned-t3.mjs",
@@ -245,7 +200,7 @@ describe("Heddle devcontainer feature", () => {
     expect(versions.t3PackageSource).toBe(
       "https://github.com/wyrd-company/t3code/releases/download/server/0.0.38-wyrd.2/t3-0.0.38-wyrd.2.tgz",
     );
-    expect(versions.kanbanMd).toBe("0.38.0-fork+794efef");
+    expect(versions.qualificationKanbanMd).toBe("0.38.0-fork+794efef");
     expect(readme).toContain(
       `supports the Wyrd Company T3 fork \`${versions.t3}\``,
     );

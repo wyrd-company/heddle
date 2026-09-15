@@ -78,6 +78,7 @@ export const renderTaskFile = ({ body, frontMatter }: TaskDocument): string => {
     lineWidth: 0,
   });
   const normalized = serialized.endsWith("\n") ? serialized : `${serialized}\n`;
-  const trailer = body === "" ? "" : `\n${body}${body.endsWith("\n") ? "" : "\n"}`;
+  const trailer =
+    body === "" ? "" : `\n${body}${body.endsWith("\n") ? "" : "\n"}`;
   return `---\n${normalized}---\n${trailer}`;
 };

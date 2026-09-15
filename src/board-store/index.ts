@@ -237,7 +237,8 @@ export class KanbanBoardStore {
 
     if (classLimit !== undefined && classLimit.wipLimit > 0) {
       const count = everyTask.filter(
-        (candidate) => candidate.class === taskClass && candidate.id !== task.id,
+        (candidate) =>
+          candidate.class === taskClass && candidate.id !== task.id,
       ).length;
       if (count >= classLimit.wipLimit) {
         throw new BoardStoreError(
@@ -322,7 +323,10 @@ export class KanbanBoardStore {
         continue;
       }
 
-      await persistNextId(this.boardDirectory, Math.max(current.nextId, id + 1));
+      await persistNextId(
+        this.boardDirectory,
+        Math.max(current.nextId, id + 1),
+      );
       return readTaskFile(path);
     }
 
@@ -349,7 +353,8 @@ export class KanbanBoardStore {
     if (parameters.tags !== undefined && parameters.tags.length > 0) {
       fields.set("tags", parameters.tags);
     }
-    if (parameters.parent !== undefined) fields.set("parent", parameters.parent);
+    if (parameters.parent !== undefined)
+      fields.set("parent", parameters.parent);
     if (parameters.dependsOn !== undefined && parameters.dependsOn.length > 0) {
       fields.set("depends_on", parameters.dependsOn);
     }
@@ -367,5 +372,4 @@ export class KanbanBoardStore {
 
     return { body: parameters.body ?? "", frontMatter };
   }
-
 }

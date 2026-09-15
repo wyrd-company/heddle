@@ -161,7 +161,6 @@ for attempt in $(seq 1 100); do
     sleep 0.1
 done
 
-install -m 0755 "$(command -v kanban-md)" "${tools_directory}/kanban-md"
 repository_directory="${tools_directory}/sample-repository"
 git init --initial-branch=main "${repository_directory}" >/dev/null
 git -C "${repository_directory}" config user.name "Qualification Fixture"
@@ -210,12 +209,15 @@ printf 'n\n' | kanban-md init \
     --name "Sample Board" \
     --statuses todo,in-progress,done >/dev/null
 qualification_task_id="$(
-    kanban-md create \
-        --dir "${board_directory}" \
-        --repos sample-repository \
-        --status in-progress \
-        --json \
-        "Sample Record" | jq -er '.id'
+    node --input-type=module -e '
+import { KanbanBoardStore } from "./dist/board-store/index.js";
+const created = await new KanbanBoardStore(process.argv[1]).createTask({
+  properties: { repos: ["sample-repository"] },
+  status: "in-progress",
+  title: "Sample Record",
+});
+process.stdout.write(String(created.id));
+' "${board_directory}"
 )"
 chmod -R a+rX "${board_directory}"
 cat >"${config_directory}/config.yml" <<'EOF'
@@ -295,7 +297,6 @@ up() {
     if ! HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_TOOLS="${tools_directory}" \
-        HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         DOCKER_CONFIG="${docker_config}" \
         devcontainer up \
@@ -325,7 +326,6 @@ inside() {
     if HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_TOOLS="${tools_directory}" \
-        HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         DOCKER_CONFIG="${docker_config}" \
         devcontainer exec \
@@ -403,7 +403,6 @@ expect_feature_install_failure() {
     if HEDDLE_QUALIFICATION_STATE="${state_directory}" \
         HEDDLE_QUALIFICATION_BOARD="${board_directory}" \
         HEDDLE_QUALIFICATION_TOOLS="${tools_directory}" \
-        HEDDLE_QUALIFICATION_KANBAN="${tools_directory}/kanban-md" \
         HEDDLE_QUALIFICATION_CONFIG="${config_directory}" \
         DOCKER_CONFIG="${docker_config}" \
         devcontainer up \
@@ -644,9 +643,9 @@ inside_assert_equal \
     1 \
     bash -lc "/command/s6-rc -a list | awk '\$1 == \"heddle\" { count += 1 } END { print count + 0 }'"
 inside_assert_equal \
-    kanban-version \
-    "kanban-md version 0.38.0-fork+794efef" \
-    kanban-md --version
+    kanban-md-absent \
+    absent \
+    bash -lc 'if command -v kanban-md >/dev/null 2>&1; then printf present; else printf absent; fi'
 inside_assert_equal \
     packaged-console-asset \
     present \

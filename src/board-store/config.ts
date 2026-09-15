@@ -48,7 +48,10 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     : {};
 
 const asStringList = (value: unknown, field: string): string[] => {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === "string")
+  ) {
     return invalid(`${field} must be a list of strings`);
   }
   return value;
@@ -67,7 +70,7 @@ const parseGoDuration = (value: string): number | undefined => {
     ns: 1e-6,
     s: 1000,
     us: 0.001,
-    "µs": 0.001,
+    µs: 0.001,
   };
   let total = 0;
   let consumed = 0;

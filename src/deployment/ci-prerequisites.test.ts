@@ -43,21 +43,21 @@ describe("hosted CI command prerequisites", () => {
     );
   });
 
-  it("builds kanban-md from the exact canonical commit and verifies its supported version", async () => {
+  it("builds the qualification kanban-md from the exact canonical commit and verifies its version", async () => {
     const installer = await readFile(
       "scripts/ci/install-prerequisites.sh",
       "utf8",
     );
     const supportedVersions = JSON.parse(
       await readFile("deployment/supported-versions.json", "utf8"),
-    ) as { kanbanMd: string };
+    ) as { qualificationKanbanMd: string };
 
     expect(installer).toContain('kanban_branch="source/0.38.0-fork-794efef"');
     expect(installer).toContain(
       'kanban_commit="794efef4be7287bcb117059813679d145b9fd388"',
     );
     expect(installer).toContain(
-      `kanban_version="${supportedVersions.kanbanMd}"`,
+      `kanban_version="${supportedVersions.qualificationKanbanMd}"`,
     );
     expect(installer).toContain(
       'test "$(git -C "${working_directory}/kanban-md" rev-parse HEAD)" = "${kanban_commit}"',
