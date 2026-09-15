@@ -356,10 +356,9 @@ describe("production question node", () => {
   it("asks the adjudicator and takes its answer as the node's output", async () => {
     const fixture = await prepareProductionFixture();
     cleanup = fixture.cleanup;
-    fixture.configuration.adjudication = {
-      policyPath: "adjudication/policy.json",
-      providerAlias: "primary",
-    };
+    // No policyPath: the decision boundary comes from the conventional
+    // location in the blueprint repository.
+    fixture.configuration.adjudication = { providerAlias: "primary" };
     await installQuestionBlueprint(fixture, "adjudicator");
     const composition = compose(fixture);
     const instanceId = `task-${fixture.taskId}`;
@@ -412,6 +411,57 @@ describe("production question node", () => {
       },
       selected: { serve: { yes: true } },
     });
+    await composition.close();
+  });
+
+  it("renders the conventional decision boundary into the adjudicator handoff", async () => {
+    const fixture = await prepareProductionFixture();
+    cleanup = fixture.cleanup;
+    fixture.configuration.adjudication = { providerAlias: "primary" };
+    await installQuestionBlueprint(fixture, "adjudicator");
+    const composition = compose(fixture);
+    const instanceId = `task-${fixture.taskId}`;
+    await composition.start();
+    await composition.lifecycle.resume({
+      disposition: "complete",
+      instanceId,
+      operationId: advanceOperationId(`${instanceId}:implement:1`),
+    });
+    await composition.scheduler.trigger();
+    await composition.escalation.replayPendingRoutes();
+
+    const policy = JSON.parse(
+      await readFile(
+        join(fixture.blueprintsRepositoryRoot, "adjudication", "policy.json"),
+        "utf8",
+      ),
+    ) as {
+      "decision-boundary": {
+        decide: string[];
+        escalate: string[];
+        test: string;
+      };
+    };
+    const adjudication = composition.persistence
+      .listSessionRuntime()
+      .find(
+        (session) =>
+          session.instanceId === instanceId && session.kind === "adjudication",
+      );
+    const handoff = composition.persistence
+      .getInstance(instanceId)!
+      .state.handoffs.find(
+        (stored) => stored.sessionKey === adjudication!.sessionKey,
+      );
+    expect(handoff?.renderedHandoff).toContain(
+      policy["decision-boundary"].decide[0]!,
+    );
+    expect(handoff?.renderedHandoff).toContain(
+      policy["decision-boundary"].escalate[0]!,
+    );
+    expect(handoff?.renderedHandoff).toContain(
+      `Decision test: ${policy["decision-boundary"].test}`,
+    );
     await composition.close();
   });
 

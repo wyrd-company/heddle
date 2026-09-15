@@ -217,7 +217,6 @@ conventional values and the provider-usage executable:
 cadenceMilliseconds: 60000
 adjudication:
   approvalSettlementMilliseconds: 60000
-  policyPath: adjudication/policy.json
   providerAlias: adjudicator
 observationThresholds:
   endedMilliseconds: 60000
@@ -275,10 +274,23 @@ t3:
 ```
 
 The optional `adjudication` block enables the top-level escalation tier.
-`providerAlias` must name an entry in `providerAliases` and can select a model
-independently of lifecycle stages. `policyPath` names the decision-boundary
-artifact in the organization blueprint repository. Heddle pins that artifact's
-Git blob for each escalation occurrence. Adjudication uses approval-required
+Composing the block is what enables it: there is no default block, so a
+deployment that omits it composes no adjudication and an adjudicator question
+holds instead. `providerAlias` must name an entry in `providerAliases` and can
+select a model independently of lifecycle stages.
+
+The decision boundary is read from `adjudication/policy.json` in the
+organization blueprint repository. `policyPath` optionally names a different
+artifact there, for a deployment that keeps a second boundary beside the
+conventional one; it is not how adjudication is turned on. Heddle pins that
+artifact's Git blob for each escalation occurrence, so one occurrence keeps the
+boundary it opened with however the file moves afterwards.
+
+The boundary is instructions, not enforcement. Its `decide` and `escalate`
+rules and its `test` are rendered into the adjudicator's handoff, where they
+tell the session which decisions are its own and which belong to the operator.
+Heddle grants an adjudication session no access from that file and withholds
+none: what the session may actually do is its runtime mode and its tools. Adjudication uses approval-required
 runtime mode and the session interaction mode. It counts against
 `pacing.maxConcurrentSessions` and the selected provider's usage budget. A
 pacing denial routes the original question to the operator instead of parking

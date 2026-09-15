@@ -561,11 +561,11 @@ describe("production mechanical worktree preparation", () => {
     };
     fixture.configuration.session.defaultProviderAlias = "changed";
     fixture.configuration.session.defaultRuntimeMode = "full-access";
-    fixture.configuration.session.interactionMode = "review";
+    fixture.configuration.session.interactionMode = "plan";
     fixture.configuration.session.defaultSelection = {
       alias: "changed",
       driverKind: "claudeAgent",
-      interactionMode: "review",
+      interactionMode: "plan",
       model: {
         isCustom: true,
         name: "Model Changed",

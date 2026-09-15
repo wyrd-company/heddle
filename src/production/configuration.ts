@@ -61,9 +61,21 @@ export type AdjudicationConfiguration = {
    * issues its response before the adjudication is abandoned to the operator.
    */
   approvalSettlementMilliseconds?: number;
-  policyPath: string;
+  /**
+   * Where the decision boundary lives in the blueprint repository. Absent
+   * reads the conventional location, so a deployment states a path only to
+   * keep a second boundary beside the conventional one.
+   */
+  policyPath?: string;
   providerAlias: string;
 };
+
+/**
+ * The adjudication policy the blueprint repository keeps by convention.
+ * Enabling adjudication is composing the `adjudication` block; this path is
+ * only where its decision boundary is read from.
+ */
+export const conventionalAdjudicationPolicyPath = "adjudication/policy.json";
 
 /** Applied when `adjudication.approvalSettlementMilliseconds` is absent. */
 export const defaultApprovalSettlementMilliseconds = 60_000;
@@ -158,6 +170,7 @@ const validateCommonProductionConfiguration = (
       );
     }
     if (
+      configuration.adjudication.policyPath !== undefined &&
       !/^adjudication\/[a-z][a-z-]*\.json$/.test(
         configuration.adjudication.policyPath,
       )

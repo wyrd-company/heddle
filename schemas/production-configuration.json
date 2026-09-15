@@ -41,7 +41,7 @@
     "adjudication": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["policyPath", "providerAlias"],
+      "required": ["providerAlias"],
       "properties": {
         "approvalSettlementMilliseconds": {
           "description": "How long a sanctioned approval may remain pending after Heddle durably issues its response.",
@@ -50,6 +50,7 @@
           "default": 60000
         },
         "policyPath": {
+          "$comment": "Where the decision boundary lives in the blueprint repository. Omitted reads the conventional adjudication/policy.json.",
           "type": "string",
           "pattern": "^adjudication/[a-z][a-z-]*\\.json$"
         },

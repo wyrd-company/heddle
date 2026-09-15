@@ -1713,7 +1713,7 @@ describe("production subagent composition", () => {
       {
         alias: "secondary",
         driverKind: "cursor",
-        interactionMode: "review",
+        interactionMode: "plan",
         model: {
           isCustom: false,
           name: "Model Secondary",
@@ -1815,11 +1815,11 @@ describe("production subagent composition", () => {
     };
     fixture.configuration.session.defaultProviderAlias = "changed";
     fixture.configuration.session.defaultRuntimeMode = "approval-required";
-    fixture.configuration.session.interactionMode = "alternate";
+    fixture.configuration.session.interactionMode = "plan";
     fixture.configuration.session.defaultSelection = {
       alias: "changed",
       driverKind: "claudeAgent",
-      interactionMode: "alternate",
+      interactionMode: "plan",
       model: {
         isCustom: true,
         name: "Model Changed",

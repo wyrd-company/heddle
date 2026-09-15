@@ -30,6 +30,7 @@ import type { DispatchPacingEvaluator } from "../pacing/index.js";
 import { errorDetail } from "../error-details.js";
 import { sanitizeIncidentValue } from "./incident-redaction.js";
 import {
+  conventionalAdjudicationPolicyPath,
   defaultApprovalSettlementMilliseconds,
   type ResolvedProductionConfiguration,
 } from "./configuration.js";
@@ -246,7 +247,7 @@ export class ProductionScopedAdjudication implements AdjudicationEscalationRoute
     const { context, policy, prompt } = await this.#activation(
       opened,
       route.task,
-      configuration.policyPath,
+      configuration.policyPath ?? conventionalAdjudicationPolicyPath,
     );
     const { token } = ensureCorrelationToken(
       this.options.persistence,
