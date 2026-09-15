@@ -8,6 +8,10 @@
 import process from "node:process";
 
 import {
+  blueprintDeploymentReport,
+  validateBlueprintDeployment,
+} from "../dist/deployment/blueprint-deployment-requirements.js";
+import {
   deploymentLaunchSettings,
   effectiveConfigurationDisclosure,
   loadDeploymentConfiguration,
@@ -19,7 +23,8 @@ const main = async () => {
   const input = parseHeddleServerArguments(process.argv.slice(2), process.env);
   if (input.command === "help") {
     process.stdout.write(
-      "Usage: heddle-server [--config <configuration-directory>] [--print-launch-settings | --print-effective-configuration]\n",
+      "Usage: heddle-server [--config <configuration-directory>] [--print-launch-settings | --print-effective-configuration]\n" +
+        "       heddle-server validate-blueprints <blueprints-repository-root> [--config <configuration-directory>]\n",
     );
     return;
   }
@@ -30,6 +35,18 @@ const main = async () => {
     process.stdout.write(
       `${JSON.stringify(deploymentLaunchSettings(loaded))}\n`,
     );
+    return;
+  }
+  if (input.command === "validate-blueprints") {
+    const report = blueprintDeploymentReport(
+      await validateBlueprintDeployment({
+        blueprintsRepositoryRoot: input.blueprintsRepositoryRoot,
+        configuration: loaded.configuration,
+      }),
+    );
+    process.stdout.write(report.stdout);
+    process.stderr.write(report.stderr);
+    process.exitCode = report.exitCode;
     return;
   }
   if (input.command === "effective-configuration") {

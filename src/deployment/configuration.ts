@@ -71,7 +71,14 @@ export type ExecutableProviderUsageConfiguration = {
 };
 
 export type HeddleServerArguments = {
-  command: "effective-configuration" | "help" | "launch-settings" | "serve";
+  /** Present for `validate-blueprints`, absent for every other command. */
+  blueprintsRepositoryRoot?: string;
+  command:
+    | "effective-configuration"
+    | "help"
+    | "launch-settings"
+    | "serve"
+    | "validate-blueprints";
   configurationDirectory?: string;
 };
 
@@ -119,12 +126,51 @@ export const resolveConfigurationDirectory = (
     : requireAbsoluteDirectory(configured, "HEDDLE_CONFIG");
 };
 
+export const validateBlueprintsCommand = "validate-blueprints";
+
+const validateBlueprintsUsage = `Usage: heddle-server ${validateBlueprintsCommand} <blueprints-repository-root> [--config <configuration-directory>]`;
+
+/**
+ * Splits `validate-blueprints` arguments into its one positional repository
+ * root and the configuration arguments every command shares. The root is
+ * resolved against the working directory, so an author may name it however
+ * they reached it.
+ */
+const parseValidateBlueprintsArguments = (
+  arguments_: readonly string[],
+  environment: DeploymentEnvironment,
+): HeddleServerArguments => {
+  const positions = arguments_.flatMap((argument, index) =>
+    argument === "--config" || arguments_[index - 1] === "--config"
+      ? []
+      : [index],
+  );
+  if (positions.length !== 1) {
+    throw new HeddleConfigurationError(validateBlueprintsUsage);
+  }
+  const root = arguments_[positions[0]!]!;
+  if (root.trim() === "") {
+    throw new HeddleConfigurationError(validateBlueprintsUsage);
+  }
+  return {
+    blueprintsRepositoryRoot: resolve(root),
+    command: validateBlueprintsCommand,
+    configurationDirectory: resolveConfigurationDirectory(
+      arguments_.filter((_, index) => index !== positions[0]),
+      environment,
+    ),
+  };
+};
+
 export const parseHeddleServerArguments = (
   arguments_: readonly string[],
   environment: DeploymentEnvironment,
 ): HeddleServerArguments => {
   if (arguments_.length === 1 && arguments_[0] === "--help") {
     return { command: "help" };
+  }
+  if (arguments_[0] === validateBlueprintsCommand) {
+    return parseValidateBlueprintsArguments(arguments_.slice(1), environment);
   }
   const diagnosticFlags = arguments_.filter((argument) =>
     ["--print-effective-configuration", "--print-launch-settings"].includes(
