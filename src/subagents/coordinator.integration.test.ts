@@ -18,6 +18,7 @@ import { SessionObserver, steerStageSession } from "../control-plane/index.js";
 import { T3ControlPlaneClient } from "../control-plane/t3-control-plane-client.js";
 import { DispatchPacingGate } from "../pacing/index.js";
 import { SqlitePersistence, type InstanceState } from "../persistence/index.js";
+import { resolvedSessionBindingFixture } from "../persistence/resolved-session-binding.test-support.js";
 import { assignmentForChild } from "./delegation-state.js";
 import { SubagentCoordinator } from "./coordinator.js";
 
@@ -172,6 +173,12 @@ describe.skipIf(!t3Binary)(
             {
               assignments: [
                 {
+                  binding: resolvedSessionBindingFixture({
+                    modelSlug: "default",
+                    providerInstanceId: "cursor",
+                    sessionKey: "child-session",
+                    threadId: childThreadId,
+                  }),
                   bootstrap: {
                     createCommandId: "create-child",
                     createdAt: new Date(0).toISOString(),
@@ -299,6 +306,7 @@ describe.skipIf(!t3Binary)(
         },
         childStops: coordinator,
         escalations: {
+          isAwaitingAnswer: () => false,
           pendingEscalations: () => [],
           requireNoPendingForSession: () => undefined,
         },

@@ -40,4 +40,4 @@ fi
 
 cd "${repository}"
 env -u FORCE_COLOR -u NO_COLOR \
-    npx vitest run src/production/ src/control-plane/ --maxWorkers=1
+    npx vitest run src/production/ src/control-plane/ src/subagents/ --maxWorkers=1
