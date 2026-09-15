@@ -106,11 +106,17 @@
         "handoff-template": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["commitSha", "path"],
+          "required": ["commitSha", "kind", "path"],
           "properties": {
             "commitSha": {
               "type": "string",
               "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+            },
+            "kind": {
+              "description": "The handoff kind this stage expects. Heddle checks that the pinned template declares the same kind; it does not enumerate the kinds a catalog may use.",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z]+(?:-[a-z]+)*$"
             },
             "path": {
               "type": "string",

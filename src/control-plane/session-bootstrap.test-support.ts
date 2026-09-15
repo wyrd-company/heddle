@@ -10,6 +10,7 @@ import type {
 
 export const sampleHandoffTemplate = {
   commitSha: "b".repeat(40),
+  kind: "sample",
   path: "handoff-templates/sample.md",
 };
 

@@ -16,6 +16,7 @@ const contract = () => ({
   dispositions: [{ description: "Complete the sample", name: "complete" }],
   handoffTemplate: {
     commitSha: "b".repeat(40),
+    kind: "standard",
     path: "handoff-templates/standard.md",
   },
   skills: ["evidence-review"],
@@ -90,6 +91,7 @@ describe("stage contract output contracts", () => {
     ],
     handoffTemplate: {
       commitSha: "b".repeat(40),
+      kind: "sample",
       path: "handoff-templates/sample.md",
     },
     skills: [],

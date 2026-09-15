@@ -9,6 +9,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
+import { parse as parseYaml } from "yaml";
 
 import {
   namesForThemeList,
@@ -229,6 +230,31 @@ const assertOutputContractArtifacts = async (
   }
 };
 
+/** The `kind` the pinned template's own front matter declares, if any. */
+const pinnedHandoffKind = async (
+  repositoryRoot: string,
+  commitSha: string,
+  path: string,
+): Promise<string | undefined> => {
+  const { stdout } = await execute(
+    "git",
+    ["cat-file", "-p", `${commitSha}:${path}`],
+    { cwd: repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
+  );
+  if (!stdout.startsWith("---\n")) return undefined;
+  const boundary = stdout.indexOf("\n---\n", 4);
+  if (boundary === -1) return undefined;
+  let metadata: unknown;
+  try {
+    metadata = parseYaml(stdout.slice(4, boundary));
+  } catch {
+    return undefined;
+  }
+  if (typeof metadata !== "object" || metadata === null) return undefined;
+  const kind = (metadata as Record<string, unknown>)["kind"];
+  return typeof kind === "string" ? kind : undefined;
+};
+
 const assertTemplateArtifacts = async (
   artifactId: string,
   nodes: LifecycleNode[],
@@ -264,6 +290,20 @@ const assertTemplateArtifacts = async (
       } catch {
         throw new BlueprintValidationError(
           `Blueprint '${artifactId}' node '${node.id}' pins handoff template '${pinned.path}' that is unavailable at commit ${pinned.commitSha}`,
+        );
+      }
+      // The kinds themselves belong to the catalog. Validation proves only
+      // that the pinned template declares the kind this stage asked for.
+      const declared = await pinnedHandoffKind(
+        repositoryRoot,
+        pinned.commitSha,
+        pinned.path,
+      );
+      if (declared !== pinned.kind) {
+        throw new BlueprintValidationError(
+          `Blueprint '${artifactId}' node '${node.id}' declares handoff kind '${pinned.kind}', but template '${pinned.path}' at commit ${pinned.commitSha} declares ${
+            declared === undefined ? "no kind" : `'${declared}'`
+          }`,
         );
       }
     }

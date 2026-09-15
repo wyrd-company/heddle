@@ -69,6 +69,7 @@ const installIncidentBlueprint = async (
       "relationships:",
       "  implements: heddle",
       "format: heddle.handoff-template",
+      "kind: incident",
       "version: 1",
       "---",
       "# Incident {{ handoff.taskContract.incident.incidentId }} at {{ handoff.stage.name }}",
@@ -86,6 +87,7 @@ const installIncidentBlueprint = async (
       : { "reasoning-effort": reasoningEffort }),
     "handoff-template": {
       commitSha: templateCommit,
+      kind: "incident",
       path: "handoff-templates/incident.md",
     },
     id,

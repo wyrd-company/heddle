@@ -22,6 +22,7 @@ const blueprint = (): LifecycleBlueprint => ({
     {
       "handoff-template": {
         commitSha: "a".repeat(40),
+        kind: "standard",
         path: "handoff-templates/standard.md",
       },
       id: "prepare",
@@ -58,6 +59,33 @@ describe("lifecycle blueprint handoff metadata", () => {
     expect(() => validate(value)).toThrow(
       "uses removed handoff template field 'blobHash'; use 'commitSha'",
     );
+  });
+
+  it("rejects an agent wait whose handoff template declares no kind", () => {
+    const value = blueprint();
+    delete (
+      value.nodes[0]!["handoff-template"] as unknown as Record<string, unknown>
+    )["kind"];
+
+    expect(() => validate(value)).toThrow(
+      'Agent wait node "prepare" has no valid pinned handoff template',
+    );
+  });
+
+  it("rejects a handoff kind that is not a kebab-case artifact id", () => {
+    const value = blueprint();
+    value.nodes[0]!["handoff-template"]!.kind = "Steward Briefing";
+
+    expect(() => validate(value)).toThrow(
+      'Agent wait node "prepare" has no valid pinned handoff template',
+    );
+  });
+
+  it("accepts a handoff kind this build has never seen", () => {
+    const value = blueprint();
+    value.nodes[0]!["handoff-template"]!.kind = "steward-briefing";
+
+    expect(() => validate(value)).not.toThrow();
   });
 
   it("accepts a SHA-256 handoff template commit pin", () => {

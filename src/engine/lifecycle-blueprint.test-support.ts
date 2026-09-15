@@ -12,10 +12,12 @@ type AuthoredLifecycleBlueprint = Omit<LifecycleBlueprint, "id">;
 
 const standardTemplate = {
   commitSha: "8f266fe406517c891633d8ef90ca3716f1356f37",
+  kind: "standard",
   path: "handoff-templates/standard.md",
 };
 const remediationTemplate = {
   commitSha: "3ed4e911f9ea17b7116ca49ea90b2136cdb57817",
+  kind: "remediation",
   path: "handoff-templates/remediation.md",
 };
 const waitTools = [

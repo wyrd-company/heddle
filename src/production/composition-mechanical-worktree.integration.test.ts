@@ -73,10 +73,12 @@ const installStandardDelivery = async (
       node.id === "remediate"
         ? {
             commitSha: templateCommitSha,
+            kind: "remediation",
             path: "handoff-templates/remediation.md",
           }
         : {
             commitSha: templateCommitSha,
+            kind: "standard",
             path: "handoff-templates/standard.md",
           };
   }

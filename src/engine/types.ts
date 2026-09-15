@@ -35,6 +35,8 @@ export interface LifecycleNode extends NodeDefinition {
   "assign-agent-name"?: AgentNameListName;
   "handoff-template"?: {
     commitSha: string;
+    /** The handoff kind this stage expects the pinned template to declare. */
+    kind: string;
     path: string;
   };
   repo?: string;

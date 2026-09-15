@@ -56,6 +56,7 @@ const storedHandoff = (
     ],
     handoffTemplate: {
       commitSha: "b".repeat(40),
+      kind: "sample",
       path: "handoff-templates/sample.md",
     },
     skills: [],

@@ -269,6 +269,7 @@ $schema: https://wyrd.company/heddle/handoff-template.schema.json
 relationships:
   implements: heddle
 format: heddle.handoff-template
+kind: invalid
 version: 1
 ---
 {% include "handoff-templates/includes/../outside.md" %}
@@ -311,6 +312,7 @@ version: 1
     };
     blueprint.nodes[0]!["handoff-template"] = {
       commitSha: invalidCommitSha,
+      kind: "invalid",
       path: "handoff-templates/invalid.md",
     };
     await writeFile(blueprintPath, JSON.stringify(blueprint));
@@ -460,6 +462,7 @@ version: 1
       blueprint.nodes[0]!["skills"] = ["evidence-review"];
       blueprint.nodes[0]!["handoff-template"] = {
         commitSha: skillCommitSha,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       };
       await writeFile(blueprintPath, JSON.stringify(blueprint));

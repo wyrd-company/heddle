@@ -3,6 +3,7 @@ $schema: https://wyrd.company/heddle/handoff-template.schema.json
 relationships:
   implements: heddle
 format: heddle.handoff-template
+kind: remediation
 version: 1
 ---
 

@@ -131,6 +131,7 @@ const spell = (spelling: Spelling, templateCommitSha: string) => {
       ...node,
       "handoff-template": {
         commitSha: templateCommitSha,
+        kind: node.id === "remediate" ? "remediation" : "standard",
         path:
           node.id === "remediate"
             ? "handoff-templates/remediation.md"

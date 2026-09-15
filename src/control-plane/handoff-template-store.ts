@@ -16,12 +16,20 @@ import type { JsonValue } from "../persistence/index.js";
 const execute = promisify(execFile);
 const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const artifactId = /^[a-z]+(?:-[a-z]+)*$/;
+const validKind = (kind: unknown): kind is string =>
+  typeof kind === "string" && kind.length <= 64 && artifactId.test(kind);
 const validSkillName = (name: string): boolean =>
   name.length <= 64 && artifactId.test(name);
 const schemaId = "https://wyrd.company/heddle/handoff-template.schema.json";
 
 export type PinnedHandoffTemplateReference = {
   commitSha: string;
+  /**
+   * The handoff kind the stage declares. Heddle checks that the pinned
+   * template declares the same kind and reads nothing else from it: the set of
+   * kinds belongs to the blueprint catalog, not to this build.
+   */
+  kind: string;
   path: string;
 };
 
@@ -48,6 +56,11 @@ export class HandoffTemplateError extends Error {
 const assertReference = (reference: PinnedHandoffTemplateReference): void => {
   if (!gitObjectId.test(reference.commitSha)) {
     throw new HandoffTemplateError("Handoff template commit SHA is invalid");
+  }
+  if (!validKind(reference.kind)) {
+    throw new HandoffTemplateError(
+      `Handoff kind must be a kebab-case artifact id of at most 64 characters: ${JSON.stringify(reference.kind)}`,
+    );
   }
   if (
     dirname(reference.path) !== "handoff-templates" ||
@@ -86,7 +99,7 @@ const parseTemplate = (
     metadata === null ||
     Array.isArray(metadata) ||
     Object.keys(metadata).sort().join(",") !==
-      "$schema,format,relationships,version" ||
+      "$schema,format,kind,relationships,version" ||
     (metadata as Record<string, unknown>)["$schema"] !== schemaId ||
     (metadata as Record<string, unknown>)["format"] !==
       "heddle.handoff-template" ||
@@ -96,6 +109,17 @@ const parseTemplate = (
   ) {
     throw new HandoffTemplateError(
       "Handoff template front matter does not match its artifact contract",
+    );
+  }
+  const kind = (metadata as Record<string, unknown>)["kind"];
+  if (!validKind(kind)) {
+    throw new HandoffTemplateError(
+      `Handoff template ${reference.path} declares an invalid kind: ${JSON.stringify(kind)}`,
+    );
+  }
+  if (kind !== reference.kind) {
+    throw new HandoffTemplateError(
+      `Stage expects handoff kind ${JSON.stringify(reference.kind)}, but template ${reference.path} at commit ${reference.commitSha} declares ${JSON.stringify(kind)}`,
     );
   }
   const body = serialized.slice(boundary + "\n---\n".length);

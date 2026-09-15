@@ -40,10 +40,12 @@ describe("production concurrent review landing", () => {
         node.id === "remediate"
           ? {
               commitSha: templateCommitSha,
+              kind: "remediation",
               path: "handoff-templates/remediation.md",
             }
           : {
               commitSha: templateCommitSha,
+              kind: "standard",
               path: "handoff-templates/standard.md",
             };
     }
@@ -248,10 +250,12 @@ describe("production concurrent review landing", () => {
         node.id === "remediate"
           ? {
               commitSha: templateCommitSha,
+              kind: "remediation",
               path: "handoff-templates/remediation.md",
             }
           : {
               commitSha: templateCommitSha,
+              kind: "standard",
               path: "handoff-templates/standard.md",
             };
     }

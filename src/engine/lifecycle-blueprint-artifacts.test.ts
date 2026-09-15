@@ -30,7 +30,16 @@ import type { LifecycleBlueprint, LifecycleEffect } from "./types.js";
 const roots: string[] = [];
 const execute = promisify(execFile);
 
-const sampleHandoffTemplate = "# {{ task.title }}\n";
+const sampleHandoffTemplate = `---
+$schema: https://wyrd.company/heddle/handoff-template.schema.json
+relationships:
+  implements: heddle
+format: heddle.handoff-template
+kind: sample-handoff
+version: 1
+---
+# {{ task.title }}
+`;
 const sampleTodoTemplate = `${JSON.stringify(
   { items: [{ id: "orient", text: "Orient on {{task.title}}" }] },
   null,
@@ -57,6 +66,7 @@ const artifact = (commitSha = "a".repeat(40)) => ({
     {
       "handoff-template": {
         commitSha,
+        kind: "sample-handoff",
         path: "handoff-templates/sample-handoff.md",
       },
       id: "inspect",
@@ -532,6 +542,7 @@ describe("organization lifecycle blueprint artifacts", () => {
     ) as ReturnType<typeof artifact>;
     (value.nodes[1] as Record<string, unknown>)["handoff-template"] = {
       commitSha,
+      kind: "sample-handoff",
       path: "handoff-templates/sample-handoff.md",
     };
     await writeFile(
@@ -784,6 +795,70 @@ describe("organization lifecycle blueprint artifacts", () => {
     ).rejects.toThrow(
       `pins unavailable handoff template commit ${"b".repeat(40)}`,
     );
+  });
+
+  it("rejects a node whose kind disagrees with the pinned template front matter", async () => {
+    const root = await repository();
+    const value = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    const pinned = (value.nodes[1] as Record<string, unknown>)[
+      "handoff-template"
+    ] as Record<string, unknown>;
+    pinned["kind"] = "steward-briefing";
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(value, null, 2)}\n`,
+    );
+
+    await expect(validateBlueprintRepository(root)).rejects.toThrow(
+      "declares handoff kind 'steward-briefing', but template 'handoff-templates/sample-handoff.md'",
+    );
+  });
+
+  it("accepts a node and template that agree on a kind this build has never seen", async () => {
+    const root = await repository();
+    await writeFile(
+      join(root, "handoff-templates", "sample-handoff.md"),
+      sampleHandoffTemplate.replace(
+        "kind: sample-handoff",
+        "kind: steward-briefing",
+      ),
+    );
+    await execute("git", ["add", "handoff-templates"], { cwd: root });
+    await execute(
+      "git",
+      [
+        "-c",
+        "user.name=Sample User",
+        "-c",
+        "user.email=sample@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "declare an unfamiliar kind",
+      ],
+      { cwd: root },
+    );
+    const commitSha = (
+      await execute("git", ["rev-parse", "HEAD"], { cwd: root })
+    ).stdout.trim();
+    const value = JSON.parse(
+      await readFile(join(root, "blueprints/sample-process.json"), "utf8"),
+    ) as ReturnType<typeof artifact>;
+    const pinned = (value.nodes[1] as Record<string, unknown>)[
+      "handoff-template"
+    ] as Record<string, unknown>;
+    pinned["commitSha"] = commitSha;
+    pinned["kind"] = "steward-briefing";
+    await writeFile(
+      join(root, "blueprints/sample-process.json"),
+      `${JSON.stringify(value, null, 2)}\n`,
+    );
+
+    await expect(validateBlueprintRepository(root)).resolves.toEqual([
+      "sample-process",
+    ]);
   });
 
   it("ignores changed working-tree template bytes during pin validation", async () => {

@@ -87,6 +87,7 @@ export interface WorkflowMcpStageContract {
   dispositions: WorkflowMcpDisposition[];
   handoffTemplate: {
     commitSha: string;
+    kind: string;
     path: string;
   };
   skills: string[];

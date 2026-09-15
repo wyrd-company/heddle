@@ -22,6 +22,54 @@ import { GitHandoffTemplateStore } from "./handoff-template-store.js";
 const execute = promisify(execFile);
 const cleanup: string[] = [];
 
+const pinnedKindFixture = async (
+  fileBase: string,
+  declaredKind: string | undefined,
+): Promise<{ commitSha: string; root: string }> => {
+  const root = await mkdtemp(join(tmpdir(), "pinned-kind-store-"));
+  cleanup.push(root);
+  await mkdir(join(root, "handoff-templates"));
+  await writeFile(
+    join(root, "handoff-templates", `${fileBase}.md`),
+    [
+      "---",
+      "$schema: https://wyrd.company/heddle/handoff-template.schema.json",
+      "relationships:",
+      "  implements: heddle",
+      "format: heddle.handoff-template",
+      ...(declaredKind === undefined ? [] : [`kind: ${declaredKind}`]),
+      "version: 1",
+      "---",
+      "# {{ task.title }}",
+      "",
+    ].join("\n"),
+  );
+  await execute("git", ["init", "--quiet", "--initial-branch=main"], {
+    cwd: root,
+  });
+  await execute("git", ["add", "handoff-templates"], { cwd: root });
+  await execute(
+    "git",
+    [
+      "-c",
+      "user.name=Sample User",
+      "-c",
+      "user.email=sample@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "add handoff template",
+    ],
+    { cwd: root },
+  );
+  return {
+    commitSha: (
+      await execute("git", ["rev-parse", "HEAD"], { cwd: root })
+    ).stdout.trim(),
+    root,
+  };
+};
+
 const pinnedSkillFixture = async (
   serializedSkill?: string,
   keepSkillFolder = false,
@@ -38,6 +86,7 @@ const pinnedSkillFixture = async (
       "relationships:",
       "  implements: heddle",
       "format: heddle.handoff-template",
+      "kind: standard",
       "version: 1",
       "---",
       '{{ skill("evidence-review").description }}',
@@ -424,6 +473,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -440,6 +490,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -458,6 +509,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -476,6 +528,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -495,6 +548,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -513,6 +567,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -530,6 +585,7 @@ describe("GitHandoffTemplateStore", () => {
     const template = await new GitHandoffTemplateStore(root).read(
       {
         commitSha,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       },
       ["evidence-review"],
@@ -579,6 +635,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -629,6 +686,7 @@ describe("GitHandoffTemplateStore", () => {
         new GitHandoffTemplateStore(root).read(
           {
             commitSha,
+            kind: "standard",
             path: "handoff-templates/standard.md",
           },
           ["evidence-review"],
@@ -646,6 +704,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -678,6 +737,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["evidence-review"],
@@ -693,6 +753,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         ["EvidenceReview"],
@@ -709,6 +770,7 @@ describe("GitHandoffTemplateStore", () => {
       new GitHandoffTemplateStore(root).read(
         {
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         },
         [name],
@@ -743,6 +805,7 @@ describe("GitHandoffTemplateStore", () => {
       "relationships:",
       "  implements: heddle",
       "format: heddle.handoff-template",
+      "kind: standard",
       "version: 1",
       "---",
       '{% include "handoff-templates/includes/summary.md" %}',
@@ -805,6 +868,7 @@ describe("GitHandoffTemplateStore", () => {
     const template = await new GitHandoffTemplateStore(root).read(
       {
         commitSha: firstCommit,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       },
       ["evidence-review"],
@@ -856,6 +920,7 @@ describe("GitHandoffTemplateStore", () => {
     const stillPinned = await new GitHandoffTemplateStore(root).read(
       {
         commitSha: firstCommit,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       },
       ["evidence-review"],
@@ -873,6 +938,7 @@ describe("GitHandoffTemplateStore", () => {
     const changed = await new GitHandoffTemplateStore(root).read(
       {
         commitSha: secondCommit,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       },
       ["evidence-review"],
@@ -897,6 +963,7 @@ describe("GitHandoffTemplateStore", () => {
       await expect(
         new GitHandoffTemplateStore(".").read({
           commitSha,
+          kind: "standard",
           path: "handoff-templates/standard.md",
         }),
       ).rejects.toThrow("Handoff template commit SHA is invalid");
@@ -907,10 +974,72 @@ describe("GitHandoffTemplateStore", () => {
     await expect(
       new GitHandoffTemplateStore(".").read({
         commitSha: "a".repeat(40),
+        kind: "standard",
         path: "handoff-templates/../outside.md",
       }),
     ).rejects.toThrow(
       "Handoff template path must name a direct kebab-case Markdown artifact",
+    );
+  });
+
+  it("reads a template whose kind this build has never seen", async () => {
+    const { commitSha, root } = await pinnedKindFixture(
+      "steward-briefing",
+      "steward-briefing",
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read({
+        commitSha,
+        kind: "steward-briefing",
+        path: "handoff-templates/steward-briefing.md",
+      }),
+    ).resolves.toMatchObject({ kind: "steward-briefing" });
+  });
+
+  it("refuses a template whose declared kind is not the kind the stage asked for", async () => {
+    const { commitSha, root } = await pinnedKindFixture(
+      "steward-briefing",
+      "standard",
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read({
+        commitSha,
+        kind: "steward-briefing",
+        path: "handoff-templates/steward-briefing.md",
+      }),
+    ).rejects.toThrow(
+      `Stage expects handoff kind "steward-briefing", but template handoff-templates/steward-briefing.md at commit ${commitSha} declares "standard"`,
+    );
+  });
+
+  it("refuses a template that declares no kind at all", async () => {
+    const { commitSha, root } = await pinnedKindFixture(
+      "steward-briefing",
+      undefined,
+    );
+
+    await expect(
+      new GitHandoffTemplateStore(root).read({
+        commitSha,
+        kind: "steward-briefing",
+        path: "handoff-templates/steward-briefing.md",
+      }),
+    ).rejects.toThrow(
+      "Handoff template front matter does not match its artifact contract",
+    );
+  });
+
+  it("refuses a stage kind that is not a kebab-case artifact id", async () => {
+    await expect(
+      new GitHandoffTemplateStore(".").read({
+        commitSha: "a".repeat(40),
+        kind: "Steward Briefing",
+        path: "handoff-templates/standard.md",
+      }),
+    ).rejects.toThrow(
+      'Handoff kind must be a kebab-case artifact id of at most 64 characters: "Steward Briefing"',
     );
   });
 
@@ -928,6 +1057,7 @@ describe("GitHandoffTemplateStore", () => {
     await expect(
       new GitHandoffTemplateStore(root).read({
         commitSha: blobHash,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       }),
     ).rejects.toThrow(

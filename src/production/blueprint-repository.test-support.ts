@@ -24,6 +24,7 @@ export const sampleBlueprintArtifact = () => ({
     {
       "handoff-template": {
         commitSha: "a".repeat(40),
+        kind: "sample",
         path: "handoff-templates/sample.md",
       },
       id: "inspect",

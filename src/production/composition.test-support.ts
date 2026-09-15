@@ -138,6 +138,7 @@ $schema: https://wyrd.company/heddle/handoff-template.schema.json
 relationships:
   implements: heddle
 format: heddle.handoff-template
+kind: standard
 version: 1
 ---
 # {{ task.title }}
@@ -156,6 +157,7 @@ $schema: https://wyrd.company/heddle/handoff-template.schema.json
 relationships:
   implements: heddle
 format: heddle.handoff-template
+kind: remediation
 version: 1
 ---
 # {{ task.title }}
@@ -550,6 +552,7 @@ bystanders: [sample-bystander]
           {
             "handoff-template": {
               commitSha: templateCommitSha,
+              kind: "standard",
               path: "handoff-templates/standard.md",
             },
             id: "implement",
@@ -569,6 +572,7 @@ bystanders: [sample-bystander]
             id: "review",
             "handoff-template": {
               commitSha: templateCommitSha,
+              kind: "standard",
               path: "handoff-templates/standard.md",
             },
             config: { joinStrategy: "any" },
@@ -588,6 +592,7 @@ bystanders: [sample-bystander]
             id: "remediate",
             "handoff-template": {
               commitSha: templateCommitSha,
+              kind: "remediation",
               path: "handoff-templates/remediation.md",
             },
             config: { joinStrategy: "any" },
@@ -634,6 +639,7 @@ bystanders: [sample-bystander]
           {
             "handoff-template": {
               commitSha: templateCommitSha,
+              kind: "standard",
               path: "handoff-templates/standard.md",
             },
             id: "implement",

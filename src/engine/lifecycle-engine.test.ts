@@ -65,6 +65,7 @@ describe("LifecycleEngine", () => {
         "assign-agent-name": "heroes",
         "handoff-template": {
           commitSha: "a".repeat(40),
+          kind: "sample",
           path: "handoff-templates/sample.md",
         },
         tools: ["advance"],
@@ -83,6 +84,7 @@ describe("LifecycleEngine", () => {
         "assign-agent-name": "allies",
         "handoff-template": {
           commitSha: "a".repeat(40),
+          kind: "sample",
           path: "handoff-templates/sample.md",
         },
         tools: ["advance"],

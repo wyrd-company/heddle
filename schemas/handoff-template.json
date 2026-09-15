@@ -8,7 +8,7 @@
   "description": "Front matter for a pinned Markdown template rendered when a stage session activates.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "relationships", "format", "version"],
+  "required": ["$schema", "relationships", "format", "kind", "version"],
   "properties": {
     "$schema": {
       "const": "https://wyrd.company/heddle/handoff-template.schema.json"
@@ -25,6 +25,12 @@
     },
     "format": {
       "const": "heddle.handoff-template"
+    },
+    "kind": {
+      "description": "The stage handoff kind this template renders. A blueprint node's handoff-template declares the kind it expects; Heddle checks only that the two agree.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z]+(?:-[a-z]+)*$"
     },
     "version": {
       "const": 1

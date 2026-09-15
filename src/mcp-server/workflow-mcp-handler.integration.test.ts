@@ -66,6 +66,7 @@ $schema: https://wyrd.company/heddle/handoff-template.schema.json
 relationships:
   implements: heddle
 format: heddle.handoff-template
+kind: standard
 version: 1
 ---
 # {{ task.title }}
@@ -127,6 +128,7 @@ const blueprint = (
       id: "assess",
       "handoff-template": {
         commitSha: handoffTemplateCommitSha,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       },
       uses: "wait",
@@ -137,6 +139,7 @@ const blueprint = (
       id: "inspect",
       "handoff-template": {
         commitSha: handoffTemplateCommitSha,
+        kind: "standard",
         path: "handoff-templates/standard.md",
       },
       uses: "wait",

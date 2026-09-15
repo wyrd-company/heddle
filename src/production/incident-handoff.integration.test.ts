@@ -35,6 +35,7 @@ $schema: https://wyrd.company/heddle/handoff-template.schema.json
 relationships:
   implements: heddle
 format: heddle.handoff-template
+kind: incident
 version: 1
 ---
 # Incident {{ handoff.taskContract.incident.incidentId }}
@@ -130,6 +131,7 @@ describe("production incident handoff", () => {
           {
             "handoff-template": {
               commitSha: templateCommit,
+              kind: "incident",
               path: "handoff-templates/incident.md",
             },
             id: "implement",

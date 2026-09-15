@@ -290,6 +290,9 @@ export const validateBlueprint = (
         !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(
           node["handoff-template"].commitSha,
         ) ||
+        typeof node["handoff-template"].kind !== "string" ||
+        node["handoff-template"].kind.length > 64 ||
+        !/^[a-z]+(?:-[a-z]+)*$/.test(node["handoff-template"].kind) ||
         !/^handoff-templates\/[a-z]+(?:-[a-z]+)*\.md$/.test(
           node["handoff-template"].path,
         ))

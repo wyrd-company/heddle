@@ -28,7 +28,7 @@ guard or a template can read, and what validation refuses.
 | `id`                | all                | The node's identifier. It labels sessions, outputs, and attention; Heddle reads no meaning from it                                                                                                                                                          |
 | `uses`              | all                | The capability, from the catalog below                                                                                                                                                                                                                      |
 | `tools`             | `wait`             | The MCP tools the stage's session may call, from `advance`, `answer`, `create_finding`, `create_follow_up`, `get_task_context`, `list_providers`, `liveness`, `report_blocked`, `spawn`, `todo_add`, `todo_check`, `todo_edit`, `todo_list`, `todo_reorder` |
-| `handoff-template`  | `wait`             | `{ path, commitSha }`: the Markdown template under `handoff-templates/` and the exact commit Heddle reads it from                                                                                                                                           |
+| `handoff-template`  | `wait`             | `{ path, commitSha, kind }`: the Markdown template under `handoff-templates/`, the exact commit Heddle reads it from, and the handoff kind the stage expects it to declare                                                                                  |
 | `todo-template`     | `wait`             | The todo template artifact id under `todo-templates/`                                                                                                                                                                                                       |
 | `skills`            | `wait`             | Unique kebab-case skill names resolved from `skills/<name>/SKILL.md` at the template commit                                                                                                                                                                 |
 | `assign-agent-name` | `wait`             | Which list of the task's agent-name theme names this stage's agent                                                                                                                                                                                          |
@@ -202,6 +202,14 @@ Guards, question text, fail messages, and handoff templates all read it.
 
 ## Handoff templates
 
+A template declares its own `kind` in front matter, and a stage declares the
+kind it expects. The catalog owns that vocabulary: Heddle checks that the two
+agree and reads nothing else from it. There is no list of allowed kinds in this
+build, and no kind changes how a handoff is assembled — every stage is handed
+the same context, and the template decides what to say with it. A stage that
+needs review findings, a remediation cause, or any other prior result reads it
+from that context.
+
 A wait stage's template is strict Nunjucks Markdown rendered with:
 
 - `handoff` — `{ format: "heddle.stage-handoff", version: 1, skillPointer, stage, taskContract, todoList }`
@@ -255,7 +263,8 @@ The interpreter refuses, naming the node or edge:
   `board-statuses` key that is not a mechanical capability, or a status absent
   from the live board configuration
 - session selection, agent-name, skills, or handoff-template metadata on a
-  non-wait node; a wait node without a valid pinned template
+  non-wait node; a wait node without a valid pinned template, or one whose
+  declared handoff kind the pinned template does not declare
 - a condition that does not compile
 
 Repository validation adds the schema, template and todo-template resolution at

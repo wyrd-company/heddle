@@ -299,6 +299,7 @@ const resolveWorkflowMcpStageContract = async (
     stage["handoff-template"] === null ||
     Array.isArray(stage["handoff-template"]) ||
     typeof stage["handoff-template"]["commitSha"] !== "string" ||
+    typeof stage["handoff-template"]["kind"] !== "string" ||
     typeof stage["handoff-template"]["path"] !== "string"
   ) {
     throw new Error(
@@ -357,6 +358,7 @@ const resolveWorkflowMcpStageContract = async (
     dispositions,
     handoffTemplate: {
       commitSha: stage["handoff-template"]["commitSha"],
+      kind: stage["handoff-template"]["kind"],
       path: stage["handoff-template"]["path"],
     },
     skills: [...(stage.skills ?? [])],
