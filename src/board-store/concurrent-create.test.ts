@@ -196,6 +196,48 @@ describe("concurrent kanban-md and Heddle creates", () => {
     expect(board.fileCount).toBe(302);
   }, 120_000);
 
+  it("yields to a foreign file that lands on its id after publication", async () => {
+    // Models the residual window: a writer that read next_id before Heddle
+    // reserved, and writes its file after Heddle published but before Heddle
+    // verifies. kanban-md never re-checks, so Heddle must be the one to yield.
+    await populate(300);
+    const foreignPath = join(tasksDirectory(), "301-zulu-foreign.md");
+    const now = new Date().toISOString();
+    let injected = false;
+
+    const inject = (async () => {
+      for (let attempt = 0; attempt < 20_000 && !injected; attempt += 1) {
+        try {
+          await readFile(
+            join(tasksDirectory(), "301-arriving-item.md"),
+            "utf8",
+          );
+        } catch {
+          continue;
+        }
+        await writeFile(
+          foreignPath,
+          `---\nid: 301\ntitle: Zulu Foreign\nstatus: todo\npriority: medium\ncreated: ${now}\nupdated: ${now}\nclass: standard\n---\n\nForeign body.\n`,
+        );
+        injected = true;
+      }
+    })();
+
+    const created = await store.createTask({
+      status: "todo",
+      title: "Arriving Item",
+    });
+    await inject;
+
+    expect(injected).toBe(true);
+    const board = await survey();
+    // Heddle took a higher id; the foreign task was left untouched.
+    expect(created.id).toBeGreaterThan(301);
+    expect(board.duplicateIds).toEqual([]);
+    expect(board.titles).toContain("Arriving Item");
+    expect(board.titles).toContain("Zulu Foreign");
+  }, 120_000);
+
   it("never lowers next_id below the highest id on disk", async () => {
     await populate(300);
 
