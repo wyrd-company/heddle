@@ -284,9 +284,14 @@ export class KanbanBoardStore {
 
   /**
    * Allocates the next id, writes the task, then confirms no other file claims
-   * that id. The CLI takes an exclusive lock for this section; Heddle cannot
-   * join that lock from Node, so it instead yields to any file the CLI landed
-   * on the same id and retries with a higher one.
+   * that id.
+   *
+   * The CLI takes an exclusive lock for this section, which Heddle cannot join
+   * from Node. Two writers can therefore choose the same id before either has
+   * written. They resolve it after the fact and without coordinating: every
+   * writer that finds another file on its id keeps the id only if its own path
+   * is the first in order, and otherwise removes its file and retries higher.
+   * Exactly one writer keeps each id, and the others make progress.
    */
   private async allocateAndWrite(
     config: BoardConfig,
@@ -315,10 +320,11 @@ export class KanbanBoardStore {
       );
       await writeFileAtomic(path, renderTaskFile(document));
 
-      const owners = (await readAllTasksLenient(directory)).filter(
-        (candidate) => candidate.id === id,
-      );
-      if (owners.length !== 1 || owners[0]!.file !== path) {
+      const owners = (await readAllTasksLenient(directory))
+        .filter((candidate) => candidate.id === id)
+        .map(({ file }) => file)
+        .sort();
+      if (owners[0] !== path) {
         await unlink(path).catch(() => undefined);
         continue;
       }

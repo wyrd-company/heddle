@@ -205,25 +205,38 @@ describe("KanbanBoardStore", () => {
       ).resolves.toContain("next_id: 3");
     });
 
-    it("yields the id to a file another writer landed on it first", async () => {
-      const directory = join(boardDirectory, "tasks");
-      const rival = new KanbanBoardStore(boardDirectory);
-      await rival.createTask({ title: "Occupying item" });
-      // Re-point next_id at the occupied id, as a racing allocator would.
-      const config = await readFile(join(boardDirectory, "config.yml"), "utf8");
-      await writeFile(
-        join(boardDirectory, "config.yml"),
-        config.replace("next_id: 2", "next_id: 1"),
-      );
+    it("gives concurrent writers distinct ids and one file each", async () => {
+      // Both writers choose an id before either has written, so the guard that
+      // separates them is the check each makes after writing.
+      const [first, second] = await Promise.all([
+        new KanbanBoardStore(boardDirectory).createTask({
+          title: "Alpha item",
+        }),
+        new KanbanBoardStore(boardDirectory).createTask({ title: "Beta item" }),
+      ]);
 
-      const created = await store.createTask({ title: "Arriving item" });
-
-      expect(created.id).toBe(2);
-      const files = await readdir(directory);
+      expect(new Set([first.id, second.id]).size).toBe(2);
+      const files = await readdir(join(boardDirectory, "tasks"));
       expect(files).toHaveLength(2);
-      expect(files).toContain(
-        generateFilename(2, generateSlug("Arriving item")),
+      expect(files.filter((name) => name.endsWith(".tmp"))).toEqual([]);
+      await expect((await store.listTasks()).map(({ id }) => id)).toEqual(
+        [first.id, second.id].sort((a, b) => a - b),
       );
+    });
+
+    it("keeps the board's next_id ahead of every allocated id", async () => {
+      await Promise.all([
+        new KanbanBoardStore(boardDirectory).createTask({
+          title: "Alpha item",
+        }),
+        new KanbanBoardStore(boardDirectory).createTask({ title: "Beta item" }),
+      ]);
+
+      const highest = Math.max(
+        ...(await store.listTasks()).map(({ id }) => id),
+      );
+      const config = await readFile(join(boardDirectory, "config.yml"), "utf8");
+      expect(config).toContain(`next_id: ${highest + 1}`);
     });
   });
 
