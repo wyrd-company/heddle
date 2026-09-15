@@ -47,7 +47,7 @@ const initialState = (): InstanceState => ({
   handoffs: [
     {
       correlationToken: "parent-token",
-      handoff: JSON.stringify({ skillPointer: "skill://sample" }),
+      handoff: JSON.stringify({ format: "heddle.stage-handoff", version: 1 }),
       kind: "stage-handoff",
       sessionKey: "parent",
     },
@@ -342,7 +342,6 @@ describe("SubagentCoordinator", () => {
       handoff: string;
     };
     stored.handoff = JSON.stringify({
-      skillPointer: "skill://sample",
       stage: { agentName: "sample-agent", name: "implement" },
     });
 

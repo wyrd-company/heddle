@@ -113,7 +113,6 @@ const resolveLayers = async (layers: {
     defaultProviderAlias: "primary",
     defaultRuntimeMode: "auto",
     interactionMode: "default",
-    skillPointer: "skill://sample",
   } as unknown as ResolvedProductionSessionConfiguration;
   return resolveStageSessionSelection(
     {
@@ -205,7 +204,6 @@ describe("reasoning effort candidate fallback", () => {
       defaultProviderAlias: "primary",
       defaultRuntimeMode: "auto",
       interactionMode: "default",
-      skillPointer: "skill://sample",
     } as unknown as ResolvedProductionSessionConfiguration;
 
     const selection = await resolveStageSessionSelection(
@@ -229,7 +227,6 @@ describe("reasoning effort candidate fallback", () => {
       defaultProviderAlias: "reversed",
       defaultRuntimeMode: "auto",
       interactionMode: "default",
-      skillPointer: "skill://sample",
     } as unknown as ResolvedProductionSessionConfiguration;
     const resolver = new ProviderSelectionResolver(
       {
@@ -270,7 +267,6 @@ describe("reasoning effort candidate fallback", () => {
       defaultProviderAlias: "plainOnly",
       defaultRuntimeMode: "auto",
       interactionMode: "default",
-      skillPointer: "skill://sample",
     } as unknown as ResolvedProductionSessionConfiguration;
     const resolver = new ProviderSelectionResolver(
       {

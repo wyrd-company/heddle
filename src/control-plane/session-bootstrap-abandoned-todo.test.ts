@@ -19,7 +19,6 @@ import {
 
 const input: SessionBootstrapInput = {
   handoff: {
-    skillPointer: "skill://prepare",
     stage: { name: "prepare", priorStageOutputs: [] },
     taskContract: { title: "Prepare inventory" },
   },
@@ -168,7 +167,6 @@ describe("abandoned activation todo state", () => {
       ...input,
       handoff: {
         ...input.handoff,
-        skillPointer: "skill://next",
         stage: { name: "next", priorStageOutputs: [] },
       },
       sessionKey: "next-1",

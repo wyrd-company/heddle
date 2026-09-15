@@ -194,7 +194,6 @@ describe("production instance controller", () => {
           defaultSelection: selections[0],
           interactionMode: "default",
           resolvedSelections: selections,
-          skillPointer: "skill://sample",
         },
         t3: { accessToken: "sample-access-token" },
       } as never,

@@ -226,7 +226,6 @@ describe("production incident handoff", () => {
             runtimeMode: "auto-accept-edits" as const,
           },
         ],
-        skillPointer: "skill://sample",
         worktreesRoot: join(root, "worktrees"),
       },
     } as unknown as ResolvedProductionConfiguration;

@@ -205,8 +205,7 @@
         "baseRef",
         "defaultProviderAlias",
         "defaultRuntimeMode",
-        "interactionMode",
-        "skillPointer"
+        "interactionMode"
       ],
       "properties": {
         "baseRef": { "type": "string", "minLength": 1 },
@@ -226,7 +225,6 @@
           ]
         },
         "interactionMode": { "type": "string", "minLength": 1 },
-        "skillPointer": { "type": "string", "minLength": 1 },
         "worktreesRoot": {
           "type": "string",
           "pattern": "^/"

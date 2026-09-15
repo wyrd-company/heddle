@@ -1836,7 +1836,6 @@ export class ProductionInstanceController implements ReconcilerInstanceControlle
       await bootstrapStageSession(
         {
           handoff: {
-            skillPointer: session.skillPointer,
             stage: {
               ...stage.handoff,
               ...(agentName === undefined ? {} : { agentName }),

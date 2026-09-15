@@ -30,7 +30,6 @@ export type ProductionSessionConfiguration = {
   defaultReasoningEffort?: string;
   defaultRuntimeMode: T3RuntimeMode;
   interactionMode: string;
-  skillPointer: string;
   worktreesRoot?: string;
 };
 
@@ -234,7 +233,6 @@ const validateCommonProductionConfiguration = (
     "session.interactionMode",
     configuration.session.interactionMode,
   );
-  requireNonEmpty("session.skillPointer", configuration.session.skillPointer);
   if (configuration.session.defaultReasoningEffort !== undefined) {
     requireNonEmpty(
       "session.defaultReasoningEffort",

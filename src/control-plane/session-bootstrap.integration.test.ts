@@ -210,7 +210,6 @@ describe.skipIf(!t3Binary)("stage session isolated T3 integration", () => {
     const session = await bootstrapStageSession(
       {
         handoff: {
-          skillPointer: "skill://prepare",
           stage: { name: "prepare", priorStageOutputs: [] },
           taskContract: { title: "Prepare inventory" },
         },

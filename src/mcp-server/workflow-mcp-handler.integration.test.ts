@@ -356,7 +356,6 @@ const makeFixture = async () => {
     return bootstrapStageSession(
       {
         handoff: {
-          skillPointer: "skills/sample.md",
           stage: {
             name: stage,
             priorStageOutputs: [],
@@ -1282,7 +1281,6 @@ describe("workflow MCP HTTP server", () => {
           correlationToken: "child-token",
           handoff: assembleStageHandoff({
             correlationToken: "child-token",
-            skillPointer: "skills/sample.md",
             stage: { name: "assess", priorStageOutputs: [] },
             taskContract: { id: 11, title: "Prepare a sample" },
             todoList: record.state.todoState,
@@ -1444,7 +1442,6 @@ describe("workflow MCP HTTP server", () => {
     }
     const handoff = assembleStageHandoff({
       correlationToken: "child-token",
-      skillPointer: "skills/sample.md",
       stage: { name: "assess", priorStageOutputs: [] },
       taskContract: { id: 11, title: "Prepare a sample" },
       todoList: record.state.todoState,
@@ -1668,7 +1665,6 @@ describe("workflow MCP HTTP server", () => {
       correlationToken: token,
       handoff: assembleStageHandoff({
         correlationToken: token,
-        skillPointer: "skills/sample.md",
         stage: {
           name: "assess",
           priorStageOutputs: [],

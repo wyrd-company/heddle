@@ -21,7 +21,6 @@ export type HandoffStage = {
 
 export type StageHandoffInput = {
   correlationToken: string;
-  skillPointer: string;
   stage: HandoffStage;
   taskContract: JsonValue;
   todoList: JsonValue;
@@ -53,7 +52,6 @@ export const assembleStageHandoff = (input: StageHandoffInput): string => {
 
   return canonicalJson({
     format: "heddle.stage-handoff",
-    skillPointer: input.skillPointer,
     stage,
     taskContract: input.taskContract,
     todoList: input.todoList,

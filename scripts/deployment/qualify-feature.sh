@@ -254,7 +254,6 @@ session:
   defaultProviderAlias: default
   defaultRuntimeMode: auto
   interactionMode: default
-  skillPointer: skill://sample
 stageThresholds:
   inspect: 60000
 stopTimeoutMilliseconds: 1000

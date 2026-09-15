@@ -24,7 +24,6 @@ const session = (): ResolvedProductionSessionConfiguration => ({
   defaultSelection: selection("default", "auto"),
   interactionMode: "default",
   resolvedSelections: [selection("default", "auto")],
-  skillPointer: "skill://sample",
 });
 
 const selection = (

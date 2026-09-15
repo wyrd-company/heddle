@@ -20,7 +20,6 @@ import {
 
 const input: SessionBootstrapInput = {
   handoff: {
-    skillPointer: "skill://prepare",
     stage: { name: "prepare", priorStageOutputs: [] },
     taskContract: { title: "Prepare inventory" },
   },

@@ -140,7 +140,6 @@ const input = (
   correlationToken: "opaque-fallback-token",
   handoff: assembleStageHandoff({
     correlationToken: "opaque-fallback-token",
-    skillPointer: "skill://arrange",
     stage: {
       name: "arrange",
       priorStageOutputs: [{ count: 2 }],

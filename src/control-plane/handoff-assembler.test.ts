@@ -18,7 +18,6 @@ describe("assembleStageHandoff", () => {
         priorStageOutputs: [{ result: "ready", count: 2 }],
         skills: ["evidence-review"],
       },
-      skillPointer: "skill://prepare",
       taskContract: { title: "Prepare inventory", priority: "normal" },
       todoList: [
         { text: "Count items", complete: false },
@@ -31,7 +30,6 @@ describe("assembleStageHandoff", () => {
         { complete: false, text: "Count items" },
         { text: "Open container", complete: true },
       ],
-      skillPointer: "skill://prepare",
       stage: {
         priorStageOutputs: [{ count: 2, result: "ready" }],
         name: "prepare",
@@ -44,6 +42,29 @@ describe("assembleStageHandoff", () => {
     expect(JSON.parse(first)).toMatchObject({
       stage: { entry: null, skills: ["evidence-review"] },
     });
+  });
+
+  it("carries no skill pointer: stage instructions come from the pinned blueprint", () => {
+    const handoff = JSON.parse(
+      assembleStageHandoff({
+        correlationToken: "correlation-token",
+        stage: {
+          name: "prepare",
+          priorStageOutputs: [],
+          skills: ["evidence-review"],
+        },
+        taskContract: { title: "Prepare inventory" },
+        todoList: [],
+      }),
+    ) as Record<string, unknown>;
+
+    expect(Object.keys(handoff).sort()).toEqual([
+      "format",
+      "stage",
+      "taskContract",
+      "todoList",
+      "version",
+    ]);
   });
 
   it("carries the entry node and its output", () => {
@@ -60,7 +81,6 @@ describe("assembleStageHandoff", () => {
         name: "repair",
         priorStageOutputs: [{ result: "ready" }],
       },
-      skillPointer: "skill://repair",
       taskContract: { title: "Prepare inventory" },
       todoList: [{ complete: false, text: "Check total" }],
     });

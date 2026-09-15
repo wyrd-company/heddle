@@ -620,7 +620,6 @@ export class SubagentCoordinator {
       {
         ...preparation,
         handoff: {
-          skillPointer: this.#skillPointer(parent),
           stage: {
             agentName: this.#childAgentName(parent, assignment.sessionKey),
             name: parent.stage.id,
@@ -797,20 +796,6 @@ export class SubagentCoordinator {
       throw new Error("The parent session has no canonical handoff");
     }
     return JSON.parse(stored["handoff"]) as unknown;
-  }
-
-  #skillPointer(binding: WorkflowMcpSessionBinding): string {
-    const handoff = this.#parentHandoff(binding);
-    if (
-      typeof handoff !== "object" ||
-      handoff === null ||
-      !("skillPointer" in handoff) ||
-      typeof handoff.skillPointer !== "string" ||
-      handoff.skillPointer.trim() === ""
-    ) {
-      throw new Error("The parent handoff has no skill pointer");
-    }
-    return handoff.skillPointer;
   }
 
   async #notifyStopped(

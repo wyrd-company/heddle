@@ -9,7 +9,7 @@ version: 1
 
 # {{ task.title }}
 
-Work on task {{ task.id }} at stage `{{ handoff.stage.name }}`. Use the stage skill at `{{ handoff.skillPointer }}`.
+Work on task {{ task.id }} at stage `{{ handoff.stage.name }}`.
 
 ## Task contract
 

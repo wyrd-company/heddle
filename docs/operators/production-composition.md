@@ -252,7 +252,6 @@ session:
   defaultProviderAlias: primary
   defaultRuntimeMode: auto
   interactionMode: default
-  skillPointer: skill://sample
 stageThresholds:
   implement: 900000
   review: 900000
@@ -987,12 +986,15 @@ Their YAML front matter declares the Heddle template schema, relationship,
 and format version. Template bodies use
 strict Nunjucks variables. Use `stableJson` for structured values and do not
 use `random` or `date`; Heddle disables both filters and compares two renders.
-Templates can include pinned partials with the full repository-relative form
-`{% include "handoff-templates/includes/<path>" %}`. An include path cannot
-escape that directory. Nunjucks `extends`, `import`, and `from ... import`
+Templates can include any pinned Markdown artifact in the `handoff-templates/`
+tree, named by its repository-relative path or relative to that directory, and
+the specifier may be an expression, so one shared template reaches a per-stage
+template with `{% include handoff.stage.name + ".md" %}`. An included template
+renders its instructions, not its front matter, and no include path can escape
+that tree. Nunjucks `extends`, `import`, and `from ... import`
 directives are not supported in entry files or included files.
 One render context supplies three roots: `handoff` (the normalized task
-contract, prior outputs, the stage entry, stage skill names, skill pointer, and
+contract, prior outputs, the stage entry, stage skill names, and
 persisted todo lists), `lifecycle` (the projection the guards read), and
 `task` (the board task's raw front matter as display input only). Normalized
 `handoff.taskContract` remains the machine authority.

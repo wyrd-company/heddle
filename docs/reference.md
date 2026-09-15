@@ -212,7 +212,7 @@ from that context.
 
 A wait stage's template is strict Nunjucks Markdown rendered with:
 
-- `handoff` — `{ format: "heddle.stage-handoff", version: 1, skillPointer, stage, taskContract, todoList }`
+- `handoff` — `{ format: "heddle.stage-handoff", version: 1, stage, taskContract, todoList }`
   where `stage` is `{ name, agentName?, entry, priorStageOutputs, skills }`.
   `entry` is `{ node, output }` for the node whose edge activated this stage,
   or `null` at the start of the lifecycle.

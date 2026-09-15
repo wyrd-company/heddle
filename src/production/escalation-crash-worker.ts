@@ -100,7 +100,6 @@ const configuration: ResolvedProductionConfiguration = {
       },
     ],
     interactionMode: "default",
-    skillPointer: "skill://sample",
   },
   stageThresholds: { implement: 60_000 },
   stateDirectory: join(root, "state"),

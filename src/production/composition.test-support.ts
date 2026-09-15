@@ -833,7 +833,6 @@ next_id: 1
             },
           ],
           interactionMode: "default",
-          skillPointer: "skill://sample",
           worktreesRoot: join(root, "worktrees"),
         },
         stageThresholds: { implement: 60_000 },

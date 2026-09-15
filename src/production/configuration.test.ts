@@ -61,7 +61,6 @@ const fixture = (): ProductionConfiguration => ({
     defaultProviderAlias: "primary",
     defaultRuntimeMode: "auto",
     interactionMode: "default",
-    skillPointer: "skill://sample",
   },
   stageThresholds: { implement: 10_000 },
   stateDirectory: "/tmp/sample-state",

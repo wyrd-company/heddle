@@ -9,7 +9,7 @@ version: 1
 
 # {{ task.title }}
 
-Remediate task {{ task.id }} at stage `{{ handoff.stage.name }}`. Use the stage skill at `{{ handoff.skillPointer }}`.
+Remediate task {{ task.id }} at stage `{{ handoff.stage.name }}`.
 
 ## Task contract
 

@@ -92,7 +92,6 @@ describe("stage session bootstrap", () => {
       await bootstrapStageSession(
         {
           handoff: {
-            skillPointer: "skill://prepare",
             stage: {
               name: "prepare",
               priorStageOutputs: [],
@@ -173,7 +172,6 @@ describe("stage session bootstrap", () => {
       bootstrapStageSession(
         {
           handoff: {
-            skillPointer: "skill://prepare",
             stage: {
               name: "prepare",
               priorStageOutputs: [],
@@ -258,7 +256,6 @@ describe("stage session bootstrap", () => {
         bootstrapStageSession(
           {
             handoff: {
-              skillPointer: "skill://prepare",
               stage: {
                 name: "prepare",
                 priorStageOutputs: [],
@@ -320,7 +317,6 @@ describe("stage session bootstrap", () => {
         bootstrapStageSession(
           {
             handoff: {
-              skillPointer: "skill://prepare",
               stage: {
                 name: "prepare",
                 priorStageOutputs: [],
@@ -430,7 +426,6 @@ describe("stage session bootstrap", () => {
     };
     const input = {
       handoff: {
-        skillPointer: "skill://prepare",
         stage: {
           name: "prepare",
           priorStageOutputs: [],
@@ -511,7 +506,6 @@ describe("stage session bootstrap", () => {
     const input = {
       createdAt: "2026-01-01T00:00:00.000Z",
       handoff: {
-        skillPointer: "skill://prepare",
         stage: {
           name: "prepare",
           priorStageOutputs: [],
@@ -603,7 +597,6 @@ describe("stage session bootstrap", () => {
     const input = {
       createdAt: "2026-01-01T00:00:00.000Z",
       handoff: {
-        skillPointer: "skill://prepare",
         stage: {
           name: "prepare",
           priorStageOutputs: [],
@@ -766,7 +759,6 @@ describe("stage session bootstrap", () => {
     const result = await bootstrapStageSession(
       {
         handoff: {
-          skillPointer: "skill://prepare",
           stage: { name: "prepare", priorStageOutputs: [] },
           taskContract: { title: "Prepare inventory" },
         },
@@ -882,7 +874,6 @@ describe("stage session bootstrap", () => {
     const result = await bootstrapStageSession(
       {
         handoff: {
-          skillPointer: "skill://prepare",
           stage: { name: "prepare", priorStageOutputs: [] },
           taskContract: { title: "Prepare inventory" },
         },
