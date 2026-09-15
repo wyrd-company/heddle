@@ -147,6 +147,25 @@ describe("KanbanBoardStore", () => {
       ).toEqual(["sample-alpha"]);
     });
 
+    it("keeps an unowned property through a write of Heddle's own", async () => {
+      const created = await store.createTask({
+        properties: { repos: ["sample-alpha"] },
+        status: "todo",
+        title: "Record storage locations",
+      });
+
+      await store.editTaskStatus(created.id, "in-progress");
+      await store.appendTaskBody(created.id, "Appended line.");
+
+      const frontMatter = (
+        await store.readTask(created.id)
+      ).document.frontMatter.toJSON() as Record<string, unknown>;
+      expect(frontMatter["repos"]).toEqual(["sample-alpha"]);
+      expect(
+        JSON.parse(await kanban("show", String(created.id), "--json")),
+      ).toMatchObject({ status: "in-progress" });
+    });
+
     it("keeps a Heddle status edit readable by the CLI", async () => {
       const created = await store.createTask({
         status: "todo",
@@ -224,6 +243,13 @@ describe("KanbanBoardStore", () => {
       await expect((await store.listTasks()).map(({ id }) => id)).toEqual(
         [first.id, second.id].sort((a, b) => a - b),
       );
+    });
+
+    it("changes nothing in the board config except next_id", async () => {
+      await store.createTask({ title: "Record locations" });
+
+      const config = await readFile(join(boardDirectory, "config.yml"), "utf8");
+      expect(config).toBe(BOARD_CONFIG.replace("next_id: 1", "next_id: 2"));
     });
 
     it("keeps the board's next_id ahead of every allocated id", async () => {
