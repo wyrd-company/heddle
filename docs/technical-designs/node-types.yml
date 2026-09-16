@@ -1,0 +1,168 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - engine-and-run-model
+    - agent-tools
+    - github-binding-and-intake
+    - blueprint-authoring
+objective: >
+  Provide the node types a blueprint author composes: the bricks. Each node
+  type has a well-known input and output contract, sensible defaults for the
+  common case, and a full contract for bespoke use. Node types are the only
+  place code touches the world. The catalog is provisional and grows only
+  when a blueprint needs a brick.
+background:
+  current-design: >
+    Blueprint authors compose whatever node types the registry exposes.
+    Without a contract convention, every node type invents its own inputs
+    and outputs, and process blueprints end up wiring low-level detail that
+    should have had a default.
+  problems:
+    - A node type per external operation multiplies the catalog and hides which system is being touched.
+    - Node types that know the user's stage names or statuses cannot be reused.
+    - A stage that reaches into T3 Code directly cannot be swapped for one that reaches somewhere else.
+design-challenges:
+  contract-convention: >
+    Authors must be able to write the common case in a few lines and the
+    unusual case in full, with the same node type.
+  earning-a-place: >
+    The catalog must stay small enough to learn. A brick must be justified by
+    a blueprint that needs it, not by anticipation.
+  operation-parameters: >
+    External systems expose many operations. Adding one must be a change
+    inside a brick, not a new brick.
+proposed-design:
+  high-level-overview: >
+    Every node type declares an input schema and an output schema in JSON
+    Schema, published in the blueprint author reference. Inputs are read from
+    the node's `params`, with references into the run context. Outputs land in
+    the context under the node id, so any later node or edge can read them.
+    Pausing node types record what they wait for in awaiting details, as the
+    engine design describes. The catalog below is the starting set.
+  contract-convention: |
+    - Well-known inputs with defaults: the common case needs only the inputs
+      that vary. A `stage` needs a role and a prompt; everything else
+      defaults.
+    - Sugar inputs: a short form that expands to a full-contract value.
+      `resumeThread: implement` expands to a thread id read from
+      `stages.implement.threadId` in the context.
+    - Full contract: every input can be given explicitly, including references
+      into any context key, so an author can do something the sugar did not
+      anticipate.
+    - Well-known outputs: the node writes a fixed shape under its node id. A
+      pausing node also writes `output.<result>` as `true` for the result that
+      woke it and the wake-up payload under `output.payload`, which is what
+      condition edges read.
+    - Context conventions: a node type may also write to a well-known shared
+      key. `stage` writes `stages.<nodeId>` with the thread id and handoff, so
+      later stages can find prior ones by name.
+  flowcraft-built-ins: |
+    - `wait`: pauses until an external resume. Unchanged.
+    - `sleep`: pauses until a deadline. Wrapped so the deadline is a wake-up
+      row, per the engine design, and survives restarts.
+    - Function nodes: plain glue for computing a value from the context.
+    - Excluded: `subflow` and action edges, for the reasons in the engine
+      design. Lint rejects both.
+  stage: |
+    Starts an agent thread and pauses.
+
+    Inputs: `role`, `prompt` (a template rendered with the run context),
+    `model`, `runtimeMode`, `worktree`, `handoff` (a JSON Schema the handoff
+    tool enforces), `turnEndPolicy`, `resumeThread` (sugar for continuing an
+    existing thread), `tools` (extra MCP registrations).
+
+    Behavior: ensures the T3 Code project for the worktree, ensures the
+    thread (a new one, or the one named by `resumeThread`), registers the
+    Heddle MCP server for the thread with a token bound to this run and
+    node, starts the first turn, writes `stages.<nodeId>.threadId`, and
+    pauses with awaiting details `{ kind: stage, threadId, runId, nodeId }`.
+
+    Results (each is an outgoing condition edge): `handoff` with the payload
+    that satisfied the schema; `escalate` with the agent's question or
+    request; `timeout` when a deadline row fired; `turnEnded` when the turn
+    ended without a handoff and the policy allowed it.
+  question: |
+    Asks a named role and pauses.
+
+    Inputs: `role` (`operator`, `adjudicator`, or a blueprint-defined role),
+    `questions` (id, header, text, options, multi-select), `deadline`.
+
+    Behavior: renders the questions, delivers them to the role's configured
+    channel (console, notify, or a fresh adjudicator thread), and pauses with
+    `{ kind: question, questionId }`.
+
+    Results: `answered` with the answers keyed by question id, plus a
+    `selected.<id>.<label>` projection so edges can route on a choice;
+    `timeout`.
+  child-run: |
+    Starts another blueprint as its own run and pauses until it finishes.
+
+    Inputs: `blueprint` (id), `inputs` (a mapping from the child's initial
+    context keys to values or context references), `outputs` (a mapping from
+    keys under this node's output to the child's final context keys).
+
+    Behavior: starts the child with the mapped initial context and the
+    parent run id, pauses with `{ kind: child-run, childRunId }`.
+
+    Results: `completed` with the mapped outputs; `failed` with the child's
+    failure.
+
+    A stage blueprint is used from a process blueprint through this node.
+    The author reference documents the input and output shape each shipped
+    stage blueprint expects, so a process author writes
+    `child-run` with `blueprint: stage-implement` and the stage's inputs.
+  on-issue-change: |
+    Pauses until the bound issue or its project card changes.
+
+    Inputs: `when` (an optional condition over the changed issue that must be
+    true for the node to wake; otherwise any change wakes it), `deadline`.
+
+    Behavior: pauses with `{ kind: issue-change, issueId, condition }`. The
+    GitHub event intake, webhook or poll, evaluates the condition against
+    the changed issue and resumes matching runs.
+
+    Results: `changed` with the new issue snapshot; `timeout`.
+  github: |
+    One brick, one operation per use.
+
+    Inputs: `operation` and operation-specific parameters. Operations at
+    launch: `set-field` (project card field values), `comment`,
+    `add-labels`, `remove-labels`, `close`, `reopen`, `open-pull-request`,
+    `request-review`, `link`.
+
+    Behavior: idempotent by run id, node id, and visit count; a replayed
+    node finds its prior effect by a marker comment or by reading state
+    before writing.
+
+    Output: the operation's result, such as a pull request number.
+  git: |
+    Inputs: `operation` (`worktree-add`, `worktree-remove`, `branch`,
+    `merge`, `push`) and parameters. Runs through a git library, never a
+    shell. Idempotent: an existing worktree at the expected path and branch
+    is success.
+  notify: |
+    Inputs: `channel` (`pushover` at launch), `title`, `message` (template),
+    `url`. Fire and forget; the output is the delivery receipt.
+  policy: |
+    Inputs: `rules` (a reference to a rules artifact in the blueprint
+    repository), `input` (defaults to the issue).
+
+    Behavior: evaluates the rules and writes a policy object. A later `stage`
+    reads `turnEndPolicy` from it. Rules are data in the blueprint
+    repository; the evaluator is code.
+  resume: |
+    Not placed by authors. The engine-internal operation the MCP tools, the
+    scheduler, the GitHub event intake, and child-run completion call. It is
+    listed here because its contract is what every pausing node's results
+    are defined against.
+  lint-rules: |
+    Lint runs on load and refuses a blueprint that:
+
+    - uses `subflow` or an action edge
+    - has a pausing node with a result that no outgoing edge handles
+    - declares a stage node whose `handoff` is not a valid JSON Schema
+    - names a role in `question` that no configured channel serves
+    - reads a context key that no earlier node or the initial context
+      provides, when that can be determined statically
+    - declares a stage whose name is not a valid project single-select
+      option

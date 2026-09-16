@@ -1,0 +1,72 @@
+$schema: https://refinery.systems/ontology/spike
+relationships: {}
+objective:
+  - Can a Flowcraft subflow that pauses on an awaiting node be resumed through its parent, with the child's outputs mapped back?
+  - Can a wait node and a sleep node race inside one run through an `any` join, and does the sleep survive a process restart?
+  - Do action edges route correctly on resume in the current Flowcraft release?
+  - Do awaiting details written by a custom node survive serialization so an external process can find the paused run?
+background:
+  current-design: >
+    Heddle plans to model a stage as a blueprint composed into process
+    blueprints, to pause runs while agents work, to add deadlines beside
+    those pauses, and to route on the reason a run woke up.
+  problems:
+    - Flowcraft's documentation shows subflows with plain nodes only; pause and resume through a subflow is undocumented.
+    - The documented reminder pattern is wait then sleep in sequence, not a wait with a timer beside it.
+    - A prior spike on Flowcraft 2.10.1 found action edges broken on resume.
+environment:
+  location: spikes/flowcraft-stage-semantics
+  tools:
+    - flowcraft 2.10.1 from npm
+    - Node 24
+  resources:
+    - /workspaces/references/flowcraft at 584967b4
+findings:
+  subflow-pause-resume:
+    rating: RED
+    notes: >
+      A parent with a `subflow` node whose child marks awaiting returns
+      `awaiting`, but `resume(parent, ctx, data, 'stage')` marks the subflow
+      node complete without continuing the child, and the output map is not
+      applied. `runtime/runtime.ts:449` checks `uses === 'SubflowNode'`
+      while the built-in registry name is `subflow`; with the class alias,
+      `runtime/runtime.ts:513` returns the whole child context without the
+      output map. Resuming the extracted child context directly works but
+      does not finish the parent. Flattening the child into the parent
+      works.
+  wait-with-timer-beside-it:
+    rating: RED
+    notes: >
+      Fan-out to `wait` and `sleep` into an `any` join: neither loser is
+      cancelled and the join re-fires on every resume and every scheduler
+      tick (`runtime/runtime.ts:574`, `runtime/traverser.ts:197`,
+      `runtime/scheduler.ts:81`). The sleep deadline persists in
+      `_awaitingDetails` but the scheduler registration is an in-process
+      map; after a restart nothing fires unless `registerAwaitingWorkflow`
+      is called again.
+  action-edges:
+    rating: RED
+    notes: >
+      Still broken in 2.10.1. `resume()` builds `{ output }` and drops
+      `resumeData.action` (`runtime/runtime.ts:537`). With action-only
+      edges no branch runs; with a default edge every branch runs.
+      Condition edges on `result.output.<name>` booleans route correctly.
+  awaiting-details:
+    rating: GREEN
+    notes: >
+      `markAsAwaiting(nodeId, { threadId })` lands in the serialized context
+      as `_awaitingDetails.<nodeId>.threadId`. For a subflow the details are
+      nested inside the `_subflowState.<node>` JSON string. There is no
+      index; the caller must keep one.
+conclusion: >
+  Do not use Flowcraft subflows or action edges. Run every blueprint as its
+  own top-level run and compose through a child-run node that pauses the
+  parent and is resumed on child completion. Route on condition edges over
+  `result.output.<result>`. Put deadlines outside the run as durable rows
+  that resume the waiting node with a `timeout` result, and arbitrate
+  competing wake-ups so exactly one applies. Keep an index from thread id,
+  child run id, and issue id to the paused run.
+next-steps:
+  - Implement child-run composition and the resume arbitration described in the engine design.
+  - Wrap sleep as a durable wake-up row.
+  - Decide later whether to send the subflow and action-edge fixes upstream.

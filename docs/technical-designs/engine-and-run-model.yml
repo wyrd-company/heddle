@@ -1,0 +1,134 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - node-types
+    - agent-tools
+    - github-binding-and-intake
+    - blueprint-authoring
+objective: >
+  Run user-authored blueprints as durable, pausable workflow runs on the
+  Flowcraft engine so that every algorithmic part of moving work through a
+  process happens in code, and an agent is started only where judgment is
+  needed. The engine must survive process death, must never depend on a
+  long-lived agent, and must not know the names of any stage.
+background:
+  current-design: >
+    An orchestrating agent reads a board, dispatches an executor, writes a
+    monitor for handoff detection, dispatches a reviewer, writes another
+    monitor, and watches for questions. Every one of those steps is
+    algorithmic and every one of them costs the orchestrator context. A prior
+    service moved that work into code, but the code switched on stage names
+    and encoded the review loop, so a process change was a code change.
+  problems:
+    - An agent as scheduler forgets in-flight work, compacts under long epics, and burns context on mechanical moves.
+    - Code that names stages cannot serve a second user, and cannot serve the first user once the process changes.
+    - Flowcraft's nested subflow cannot be resumed from outside after a child pauses; resuming the parent skips the child and drops its outputs.
+    - Flowcraft's action edges drop the action on resume; with action-only edges no branch runs, and with a default edge every branch runs.
+    - A wait node and a sleep node fanned out into an `any` join do not race; the join re-fires on every wake-up and sleep timers live only in process memory.
+design-challenges:
+  pausing-without-a-process: >
+    A stage may sit for hours or days while an agent works or a person is
+    away. Nothing may hold a socket, a promise, or a thread open for that
+    time. The paused run must be a row in a database and nothing else.
+  composing-runs-without-nested-subflows: >
+    Stages are reusable blueprints, and process blueprints must compose them
+    as single nodes. Flowcraft's subflow node cannot be resumed through its
+    parent, so composition must be built on a different mechanism that
+    survives pauses.
+  routing-on-wake-up: >
+    A paused stage wakes for one of several reasons: handoff, escalate,
+    timeout, turn ended. Each reason must select exactly one outgoing edge,
+    and Flowcraft's action edges cannot be relied on for that.
+  timeouts-beside-a-wait: >
+    A stage that waits for an agent may also need a deadline. Flowcraft
+    cannot race a wait against a sleep inside one run, so the deadline must
+    come from outside the run and must lose cleanly when the agent wins.
+  arbitrating-competing-wake-ups: >
+    A handoff and a timeout can arrive within the same second from different
+    processes. Exactly one may resume the run; the other must be recorded and
+    ignored, never applied.
+  at-least-once-node-execution: >
+    Flowcraft executes nodes at least once. Every node effect that touches
+    the world must be idempotent under replay.
+proposed-design:
+  high-level-overview: >
+    Heddle is one long-lived mechanical service hosting the in-memory
+    Flowcraft runtime. Every blueprint executes as its own top-level run.
+    A run's serialized context is a row in SQLite, written after every node
+    and read back on resume. The service does four things: execute nodes,
+    accept resumes, tick a scheduler for deadlines, and serve the agent tool
+    surface described in `agent-tools`. It is idle whenever every run is
+    paused, which is nearly always. No queue adapter is used; Flowcraft's
+    adapter seam remains available if a second worker is ever needed, and
+    swapping one in does not touch blueprints.
+  run: >
+    A run is one execution of one blueprint. It has an id, the blueprint's
+    content hash, an initial context, a serialized context, a status
+    (`running`, `awaiting`, `completed`, `failed`, `cancelled`), a parent run
+    id when started by another run, and an append-only event log. Each issue
+    in a bound project has exactly one lifecycle run at a time. Stage runs and
+    helper runs (answer-question, hold-then-attention) are children of that
+    lifecycle run or of each other.
+  pausing: >
+    A node pauses a run by calling Flowcraft's `markAsAwaiting` with a details
+    object. The details always carry a `kind` naming what the node waits for,
+    and the identifiers a resumer needs to find the run: a thread id for a
+    stage, a child run id for a child-run node, an issue id for an issue-change
+    wait, a deadline for a sleep. The serialized context, including the
+    awaiting details, is written to SQLite before the service does anything
+    else. The awaiting details are indexed so a resumer can find a run by
+    thread id, child run id, or issue id without scanning contexts.
+  composition: >
+    A process blueprint composes a stage as a `child-run` node. That node
+    starts a new top-level run of the child blueprint with an initial context
+    mapped from the parent's context, records the child run id in its
+    awaiting details, and pauses. When the child run completes, the engine
+    resumes the parent's `child-run` node with the child's declared outputs.
+    A stage blueprint therefore knows nothing about its parent, and a parent
+    knows nothing about threads. Flowcraft's `subflow` node type is excluded
+    from the registry so it cannot be used by mistake.
+  resume: >
+    A resume is the single entry point for waking a paused run. Its input is
+    a run id, the id of the node to wake, a result name, and a payload. The
+    engine loads the serialized context, verifies the node is awaiting,
+    writes the payload into the node's output under `output.<result name>`
+    as `true` plus the payload under `output.payload`, clears the awaiting
+    state, and continues traversal. Outgoing edges from a pausing node are
+    condition edges of the form `result.output.<result name>`. Action edges
+    are rejected by lint. After traversal the engine asserts the run landed
+    in an expected state (awaiting again, or completed) and raises attention
+    if it did not, because Flowcraft reports a dead end as success.
+  arbitration: >
+    Resume is serialized per run with a database-level claim: an `UPDATE`
+    that moves the run from `awaiting` at a specific node to `resuming`
+    succeeds for exactly one caller. Every other caller records its attempt
+    in the event log as `late-wakeup` and returns. A late handoff after a
+    timeout is therefore visible in the log and in the console, but is never
+    applied to a run that has moved on.
+  deadlines: >
+    Deadlines are rows, not timers. When a node pauses with a deadline in its
+    awaiting details, the service inserts a `wakeup` row with the run id,
+    node id, result name `timeout`, and the due time. A scheduler tick reads
+    due rows and calls resume for each. If the run has already moved on, the
+    resume is a recorded late wake-up and the row is deleted. The Flowcraft
+    `sleep` node is wrapped so it uses the same row instead of an in-process
+    timer, which makes it durable across restarts.
+  recovery: >
+    On start, the service reads every run whose status is `running` or
+    `resuming` and replays it from its last serialized context, then resumes
+    the scheduler. Node effects are idempotent, keyed by run id plus node id
+    plus visit count, so a replayed node that already created a thread or
+    posted a comment finds its prior effect and continues.
+  event-log: >
+    Every node start, node end, pause, resume, late wake-up, and failure is a
+    row with the run id, a sequence number, and a JSON payload. The log is
+    the source for the console, for Flowcraft's replay, and for retention
+    decisions. Retention rules are configuration, not code.
+  blueprint-pinning: >
+    A run pins the content hash of the blueprint it started with. A process
+    blueprint edit does not change running instances. Moving an instance to
+    a newer blueprint is an explicit operator action.
+  what-the-engine-never-knows: >
+    The engine has no notion of a stage name, a status name, a review, or an
+    epic. Those exist only as node ids and blueprint ids, which are user
+    data. Any switch on such a name in engine code is a defect.

@@ -1,0 +1,111 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - engine-and-run-model
+    - node-types
+    - github-binding-and-intake
+objective: >
+  Let a person or an agent author blueprints as YAML in a git repository,
+  with comments that survive every tool that touches the file, validated
+  before they run, and drawable later without a second source of truth.
+background:
+  current-design: >
+    Blueprints are JSON artifacts validated by a schema and an interpreter.
+    JSON has no comments, and an author's reasoning lives in commit messages
+    or nowhere.
+  problems:
+    - JSON blueprints cannot carry the why beside the what.
+    - A visual editor that regenerates the file from the engine's model erases hand-written structure and comments.
+    - Authoring is complex enough that people and agents both need help, and help needs a stable reference.
+design-challenges:
+  non-lossy-translation: >
+    The engine runs Flowcraft JSON. The file is YAML with comments. Every
+    load and every save must round-trip without losing comments, key order,
+    or formatting an author chose.
+  two-kinds-of-blueprint: >
+    Plumbing blueprints (stage, answer-question, hold-then-attention, intake
+    default) ship with Heddle and change on its schedule. Process blueprints
+    belong to the user and change on theirs. Both use one format and one
+    registry, and a user may fork a shipped one.
+  validation-before-harm: >
+    A blueprint that cannot work must fail when it is written or loaded,
+    with a reason, before any project or thread is touched.
+proposed-design:
+  high-level-overview: >
+    A blueprint repository is a git repository the service reads. Each
+    blueprint is one YAML file. The loader parses YAML into a document model
+    that preserves comments, derives a Flowcraft blueprint from it, lints
+    the result with Flowcraft's linter plus Heddle's rules, and caches the
+    JSON by content hash. Writers, whether an agent tool, a console editor,
+    or a future canvas, edit the YAML document model and serialize it, never
+    the JSON.
+  file-shape: |
+    ```yaml
+    # Delivery lifecycle for ordinary feature work.
+    id: task-lifecycle
+    kind: process            # process | stage | helper
+    requires:
+      issue:
+        fields: [Priority]   # project fields this blueprint reads
+    nodes:
+      implement:
+        uses: child-run
+        stage: true          # projected to the project's Status field
+        blueprint: stage-implement
+        inputs:
+          role: software-engineer
+          prompt: prompts/implement.md
+          handoff: contracts/implementation.json
+      review:
+        uses: child-run
+        stage: true
+        blueprint: stage-review
+        inputs:
+          role: reviewer
+          prompt: prompts/review.md
+          handoff: contracts/review.json
+    edges:
+      - from: implement
+        to: review
+        when: result.output.handoff
+      - from: review
+        to: implement
+        when: result.output.handoff && result.output.payload.verdict == 'changes-requested'
+    ```
+
+    Node ids are the keys under `nodes`. Prompts, handoff schemas, and rules
+    are files beside the blueprint, referenced by relative path, so they
+    can be shared and reviewed on their own.
+  translation: >
+    The `yaml` package's document API holds comments and formatting. Loading
+    produces the document and a plain object; the plain object becomes the
+    Flowcraft blueprint. Saving applies edits to the document and serializes
+    it, so untouched lines are byte-identical. A round-trip test on every
+    fixture asserts that load then save changes nothing.
+  edge-conditions: >
+    Edge `when` expressions are evaluated by an adopted, sandboxed expression
+    evaluator over `result` and the run context. Action edges are not
+    written and are rejected. A pausing node's results are booleans under
+    `result.output`, so the common condition is one path, and anything in
+    the payload or the context is available for the uncommon one.
+  validation: >
+    On load: YAML schema for the file shape, Flowcraft's linter for graph
+    validity, Heddle's rules from the node-types design for contracts and
+    results, and a check of every referenced file. On reconciliation:
+    `requires.issue` against the bound project. Failures name the file,
+    the node, and the rule.
+  pinning-and-change: >
+    The service reads the blueprint repository at a commit. A run pins the
+    content hash of its blueprint. A new commit changes what new runs get;
+    running instances keep their pinned version until an operator moves them.
+  authoring-help: >
+    An author reference is generated from the node-type contracts: every
+    node type, its inputs with defaults, its outputs, its results, the
+    context keys it writes, and the lint rules. It is the source for an
+    authoring skill for agents and, later, a console editor. The reference
+    is regenerated in the build so it cannot drift from the code.
+  fixtures: >
+    The repository ships fixture blueprints: the user's real lifecycle, and
+    blueprints that deliberately do things the design did not anticipate, to
+    prove the flexibility claim. Fixtures are run in tests against stubbed
+    node types and are the proof of work for the catalog.

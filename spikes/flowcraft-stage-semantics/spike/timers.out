@@ -1,0 +1,8 @@
+wait initial {"status":"awaiting","awaiting":["gate","timer"],"details":{"gate":{"reason":"external_event"},"timer":{"reason":"timer","wakeUpAt":"2026-09-16T15:47:26.959Z"}},"join":null,"registered":1}
+wait resumed {"status":"awaiting","awaiting":["timer"],"details":{"timer":{"reason":"timer","wakeUpAt":"2026-09-16T15:47:26.959Z"}},"join":"human","calls":["human"],"registered":1}
+wait after timer {"status":"awaiting","awaiting":["gate"],"details":{"gate":{"reason":"external_event"}},"join":"seed","calls":["human","seed"],"registered":1}
+wait next scheduler tick {"status":"awaiting","awaiting":["gate"],"details":{"gate":{"reason":"external_event"}},"join":"seed","calls":["human","seed","seed"],"registered":1}
+sleep initial {"status":"awaiting","awaiting":["gate","timer"],"details":{"gate":{"reason":"external_event"},"timer":{"reason":"timer","wakeUpAt":"2026-09-16T15:47:29.113Z"}},"join":null,"registered":1}
+sleep after timer {"status":"awaiting","awaiting":["gate"],"details":{"gate":{"reason":"external_event"}},"join":"seed","calls":["seed"],"registered":1}
+sleep then late wait {"status":"completed","awaiting":[],"details":{},"join":"late-human","calls":["seed","late-human"]}
+sleep next scheduler tick {"status":"awaiting","awaiting":["gate"],"details":{"gate":{"reason":"external_event"}},"join":"seed","calls":["seed","late-human","seed"],"registered":1}

@@ -1,0 +1,114 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - engine-and-run-model
+    - node-types
+objective: >
+  Give an agent working a stage exactly the tools it needs to report status,
+  escalate, and hand off, so that the stage ends by a tool call the engine
+  can verify rather than by prose the engine must interpret. Keep a turn
+  from ending before its requirements are met when the stage's policy says
+  so, and let that policy change while the thread is live.
+background:
+  current-design: >
+    Agents follow written instructions to hand off, and perform the handoff
+    through shell commands or prose. Under long contexts they get it wrong.
+    Detecting that a handoff happened means watching the thread from
+    outside.
+  problems:
+    - A prose handoff cannot be validated, and a missing one is only discovered by a monitor.
+    - Questions from an agent travel through an orchestrator's context before reaching anyone who can answer.
+    - A turn that ends without a handoff looks the same as a turn that ended on purpose to wait for a person.
+design-challenges:
+  binding-a-tool-call-to-a-run: >
+    The same MCP server serves every live thread. A tool call must resolve to
+    exactly one run and node without the agent naming either.
+  handoff-as-a-typed-tool: >
+    The handoff tool's input schema is declared by the stage, so it differs
+    per stage and per blueprint. The server must expose a different tool
+    definition to each thread.
+  turn-end-enforcement: >
+    T3 Code exposes no hook system, so keeping a turn from ending must be
+    done at the harness level, and each harness does it differently.
+  policy-that-changes-mid-thread: >
+    A thread that started assistive may become autonomous once a person
+    hands the rest off. The turn-end policy must be a runtime value on the
+    stage, changeable without a blueprint edit.
+proposed-design:
+  high-level-overview: >
+    Heddle runs a stateless streamable-HTTP MCP server. When a `stage` node
+    starts a thread it registers that server for the thread through the T3
+    Code client's external MCP registration, with a bearer token minted for
+    that run and node. Every tool call carries the token, so the server
+    knows the run, the node, and the stage's declared contracts without any
+    identifier from the agent. Tool calls become resumes or event-log rows.
+    The token is revoked and the registration cleared when the stage's run
+    reaches a terminal state.
+  tools: |
+    - `status`: appends a progress note to the run's event log and, when the
+      blueprint maps it, to the issue as a comment or field. Never resumes.
+    - `escalate`: takes a question or request in the shared question shape
+      (id, header, text, options, multi-select). Resumes the stage node with
+      result `escalate` when the stage's contract says escalation ends the
+      stage, or starts an answer-question child run that answers the thread
+      directly when it does not. Which of the two is a stage input with a
+      default of answering in place.
+    - `handoff`: takes an input whose JSON Schema is the stage's `handoff`
+      declaration. The server validates the input against that schema and
+      rejects it with the validation errors, so the agent can correct it.
+      A valid call resumes the stage node with result `handoff` and the
+      payload.
+    - `context`: returns the rendered task context for the stage: the issue,
+      prior stage handoffs, and anything the blueprint chose to expose. Read
+      only. Lets a compacted session recover what it was doing.
+  tool-definitions-per-thread: >
+    The server builds the tool list at `tools/list` time from the token's
+    run and node. The `handoff` tool's `inputSchema` is the stage's
+    declaration verbatim, and its description is rendered from the stage's
+    prompt template so the agent sees what a complete handoff means for this
+    stage.
+  turn-end-policy: |
+    A stage has a `turnEndPolicy` input with three values:
+
+    - `require-handoff`: the turn may not end until `handoff` has been called
+      for this stage. The harness-side hook blocks the end of the turn and
+      returns a message naming the missing requirement.
+    - `allow`: the turn may end. The stage resumes with result `turnEnded`
+      and the blueprint decides what happens: wait for a person, start a
+      continuation turn, or time out.
+    - `allow-once`: the first turn may end without a handoff; later turns
+      may not. The orienting pattern for assistive work.
+
+    The policy is stored on the run in the stage node's awaiting details. The
+    hook reads it from the server at turn end through a `policy` endpoint
+    keyed by the same token, so a change takes effect on the next turn end
+    without restarting anything.
+  changing-policy-mid-thread: >
+    The console and an operator MCP tool expose `set-policy` for a live
+    stage. A person who has finished collaborating in a thread sets the
+    policy to `require-handoff` and steps away; the next turn cannot end
+    without a handoff. The change is an event-log row on the run.
+  harness-hooks: >
+    Each supported harness gets an adapter that installs a turn-end hook in
+    the thread's working directory or configuration before the first turn
+    starts. Claude Code uses a `Stop` hook in the worktree's project
+    settings. Other harnesses use their equivalent where one exists; where
+    none exists, the policy is enforced by observation only: a turn that
+    ends without a handoff under `require-handoff` resumes the stage with
+    `turnEnded` and the blueprint's edge for that result decides, which by
+    default starts a continuation turn with a reminder, bounded by a count.
+    Hook installation is the one place Heddle writes into a worktree, and
+    the files it writes are listed in the author reference.
+  answer-question-run: >
+    When an escalation does not end the stage, the server starts a child run
+    of the `answer-question` blueprint with the question and the run
+    context. That blueprint is shipped and replaceable. Its default routes
+    the question to an adjudicator thread with the run's context, then to
+    the operator through `question` if the adjudicator declines, and posts
+    the answer back into the original thread as a new turn. The stage run
+    never wakes for any of this.
+  token-lifecycle: >
+    Tokens are random, stored hashed, bound to run id and node id, and carry
+    no other claims. They are revoked, and the thread's external MCP
+    registration is cleared, when the stage node completes, fails, or is
+    cancelled. A call with a revoked token is rejected and logged.
