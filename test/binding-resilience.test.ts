@@ -202,7 +202,7 @@ it("looks up each discovered card by id without listing all snapshots", async ()
   expect(f.first.transport.callsTo("IssueLoad")).toHaveLength(loads);
 });
 
-it("deduplicates repeated ambiguity and schema attention while preserving distinct issues", async () => {
+it("deduplicates project questions and schema attention while preserving distinct issues", async () => {
   const f = setup();
   f.first.issues.push(recipe(2));
   f.second.issues.splice(0, 1, recipe(), recipe(2));
@@ -210,10 +210,16 @@ it("deduplicates repeated ambiguity and schema attention while preserving distin
   for (let n = 0; n < 3; n++) await f.service.discover();
   const rows = () =>
     f.store.db.prepare("SELECT project,message FROM github_attention").all();
-  expect(rows()).toHaveLength(2);
-  expect(rows().map((r) => r["message"])).toEqual([
-    expect.stringContaining("recipes#1"),
-    expect.stringContaining("recipes#2"),
+  expect(rows()).toEqual([]);
+  expect(
+    f.store.db
+      .prepare(
+        "SELECT issue_id,occurrence_id FROM project_choice_questions ORDER BY issue_id",
+      )
+      .all(),
+  ).toEqual([
+    { issue_id: "I_1", occurrence_id: "project-choice:I_1" },
+    { issue_id: "I_2", occurrence_id: "project-choice:I_2" },
   ]);
   f.first.fields[0] = {
     __typename: "ProjectV2Field",
@@ -225,7 +231,7 @@ it("deduplicates repeated ambiguity and schema attention while preserving distin
   };
   await f.service.reconcile();
   const initial = rows();
-  expect(initial.length).toBeGreaterThan(2);
+  expect(initial.length).toBeGreaterThan(0);
   for (let n = 0; n < 3; n++) await f.service.reconcile();
   expect(rows()).toEqual(initial);
 });

@@ -11,6 +11,9 @@ export {
   type RequestBudget,
 } from "./config.js";
 export { GitHubBindingService } from "./service.js";
+export type { BindingServiceOptions } from "./service.js";
+export type { IntakeResult } from "./intake-service.js";
+export type { ProjectChoiceQuestion } from "./store.js";
 export {
   GitHubEventHandler,
   githubEvents,

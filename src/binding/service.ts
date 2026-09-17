@@ -22,12 +22,18 @@ import { InstanceStore } from "./store.js";
 import { GitHubEventHandler, type GitHubEvent } from "./delivery.js";
 import { BindingEventService } from "./event-service.js";
 import { onIssueChange } from "./issue-change.js";
+import { BindingIntakeService, type IntakeResult } from "./intake-service.js";
+
+export interface BindingServiceOptions {
+  intake?: { blueprintId: string; commit: string };
+}
 
 export class GitHubBindingService {
   readonly instances: InstanceStore;
   readonly engine: WorkflowEngine;
   readonly events: GitHubEventHandler;
   private readonly eventService: BindingEventService;
+  private readonly intakeService: BindingIntakeService;
   private projects = new Map<
     string,
     { project: BoundProject; client: GitHub; binding: ProjectBinding }
@@ -38,6 +44,7 @@ export class GitHubBindingService {
     private readonly clients: ClientFactory,
     private readonly blueprints: () => Promise<readonly Blueprint[]>,
     engineOptions: EngineOptions,
+    private readonly options: BindingServiceOptions = {},
   ) {
     this.instances = new InstanceStore(store.db);
     this.engine = new WorkflowEngine(store, {
@@ -80,6 +87,13 @@ export class GitHubBindingService {
       () => this.discover(),
     );
     this.events = this.eventService.handler;
+    this.intakeService = new BindingIntakeService(
+      store,
+      this.instances,
+      this.engine,
+      () => this.reconcile(),
+      (id) => this.projects.get(id),
+    );
   }
   private bound(context: EngineNodeContext) {
     const issue = context.context["issue"] as IssueSnapshot | undefined;
@@ -117,6 +131,15 @@ export class GitHubBindingService {
   async start(): Promise<void> {
     await this.reconcile();
     await this.discover();
+    this.intakeService.recoverAttachments();
+    if (this.options.intake)
+      for (const instance of this.instances.list())
+        if (!instance.runId)
+          await this.intakeService.start(
+            instance.id,
+            this.options.intake.blueprintId,
+            this.options.intake.commit,
+          );
   }
   async discover(): Promise<void> {
     for (const binding of this.bindings) {
@@ -148,10 +171,7 @@ export class GitHubBindingService {
               },
             });
             if (existing.issue.project.id !== project.id)
-              this.instances.attention(
-                project.id,
-                `Issue ${card.contentRef} belongs to multiple bound projects; select its project`,
-              );
+              this.instances.projectChoice(existing.id);
             continue;
           }
           const issue = await bound.client
@@ -196,6 +216,48 @@ export class GitHubBindingService {
   }
   async resumeInstance(id: string): Promise<void> {
     await this.eventService.setPaused(id, false);
+  }
+  startIntake(
+    id: string,
+    blueprintId: string,
+    commit: string,
+  ): Promise<IntakeResult> {
+    return this.intakeService.start(id, blueprintId, commit);
+  }
+  answerProjectChoice(
+    id: string,
+    occurrenceId: string,
+    projectId: string,
+  ): Promise<void> {
+    return this.intakeService.answerProjectChoice(id, occurrenceId, projectId);
+  }
+  async resolvePermissionAttention(
+    runId: string,
+    nodeId: string,
+    visit: number,
+  ): Promise<"applied" | "late-wakeup" | "held"> {
+    const active = this.store
+      .awaiting(runId)
+      .find(
+        (item) =>
+          item.nodeId === nodeId &&
+          item.visit === visit &&
+          item.details.kind === "github-attention",
+      );
+    if (!active)
+      return this.engine.resume({
+        runId,
+        nodeId,
+        visit,
+        result: "resolved",
+      });
+    return this.engine.resume({
+      runId,
+      nodeId,
+      visit,
+      result: "resolved",
+      payload: { occurrence: [runId, nodeId, visit] },
+    });
   }
   async startInstance(id: string, blueprintId: string, commit: string) {
     await this.reconcile();

@@ -34,6 +34,7 @@ export async function reconcileProject(
   const fields: ProjectSchema["fields"] = {
     Status: { type: "singleSelect", options: stages(blueprints) },
     Paused: { type: "singleSelect", options: ["Yes", "No"] },
+    "Heddle Project": { type: "text" },
   };
   const required = new Set(
     blueprints.flatMap(

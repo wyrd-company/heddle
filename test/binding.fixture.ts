@@ -162,13 +162,19 @@ export function fixture(projectId = "P_1") {
       CreateProjectField: ({ input }) => {
         const i = input as {
           name: string;
-          singleSelectOptions: { name: string }[];
+          dataType: string;
+          singleSelectOptions?: { name: string }[];
         };
-        const f = wireSelectField(
-          `F_${i.name}`,
-          i.name,
-          i.singleSelectOptions.map((o, n) => ({ ...o, id: `N_${String(n)}` })),
-        );
+        const f = i.singleSelectOptions
+          ? wireSelectField(
+              `F_${i.name}`,
+              i.name,
+              i.singleSelectOptions.map((o, n) => ({
+                ...o,
+                id: `N_${String(n)}`,
+              })),
+            )
+          : wireField(`F_${i.name}`, i.name, i.dataType);
         fields.push(f);
         return { createProjectV2Field: { projectV2Field: f } };
       },
