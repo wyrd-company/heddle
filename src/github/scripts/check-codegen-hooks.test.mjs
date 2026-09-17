@@ -24,7 +24,10 @@ describe("GraphQL codegen lifecycle-hook detection", () => {
   });
 
   it("ignores array-form generated output", () => {
-    const config = { generates: { "output/result.ext": ["example-plugin"] } };
+    const outputConfig = Object.assign(["example-plugin"], {
+      hooks: { beforeOneFileWrite: ["example-command"] },
+    });
+    const config = { generates: { "output/result.ext": outputConfig } };
 
     expect(findLifecycleHookLocations(config)).toEqual([]);
   });
