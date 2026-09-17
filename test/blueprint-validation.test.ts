@@ -181,6 +181,38 @@ describe("validation chain", () => {
     expect(validateBlueprintPath(dirname(dirname(file)))).toEqual([]);
   });
 
+  it("finds invalid blueprints recursively in a directory", () => {
+    const file = temporaryFile(
+      "nested/different.yml",
+      passBlueprint()
+        .replace("id: sample-a", "id: different")
+        .replace(
+          "result.output.handoff or result.output.overridden",
+          "result.output.handoff",
+        ),
+    );
+
+    expect(validateBlueprintPath(dirname(dirname(file)))).toContainEqual(
+      expect.objectContaining({
+        file,
+        node: "first",
+        rule: "heddle.unhandled-result",
+      }),
+    );
+  });
+
+  it("reports malformed YAML as a parse finding", () => {
+    const file = temporaryFile("sample-a.yml", "id: [\n");
+
+    expect(validateBlueprintFile(file)).toContainEqual(
+      expect.objectContaining({
+        file,
+        node: "$blueprint",
+        rule: "yaml.parse",
+      }),
+    );
+  });
+
   it("does not follow a referenced-file symlink outside the blueprint directory", () => {
     const source = passBlueprint().replace(
       'prompt: { inline: "Complete the request." }',
@@ -190,6 +222,24 @@ describe("validation chain", () => {
     const outside = join(dirname(dirname(file)), "outside.md");
     writeFileSync(outside, "Outside");
     symlinkSync(outside, join(dirname(file), "prompt.md"));
+
+    expect(
+      validateBlueprintFile(file).some(
+        (item) =>
+          item.node === "first" &&
+          item.rule === "reference.exists" &&
+          item.message.includes("must stay beside"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not resolve a parent-relative reference outside the blueprint directory", () => {
+    const source = passBlueprint().replace(
+      'prompt: { inline: "Complete the request." }',
+      "prompt: ../outside.md",
+    );
+    const file = temporaryFile("nested/sample-a.yml", source);
+    writeFileSync(join(dirname(dirname(file)), "outside.md"), "Outside");
 
     expect(
       validateBlueprintFile(file).some(
@@ -243,6 +293,27 @@ describe("validation chain", () => {
         (item) => item.rule,
       ),
     ).toContain("handoff.schema");
+  });
+
+  it("validates a referenced handoff schema", () => {
+    const source = passBlueprint().replace(
+      "handoff:\n        type: object\n        description: Submit the result.\n        properties:\n          value: { type: string }",
+      "handoff: handoff.yml",
+    );
+    const file = temporaryFile("sample-a.yml", source);
+    writeFileSync(
+      join(dirname(file), "handoff.yml"),
+      "type: string\ndescription: Referenced result.\nproperties: {}\n",
+    );
+
+    expect(validateBlueprintFile(file)).toContainEqual(
+      expect.objectContaining({
+        file: join(dirname(file), "handoff.yml"),
+        node: "first",
+        rule: "handoff.schema",
+        message: "root type must be object",
+      }),
+    );
   });
 
   it("resolves policy rules files", () => {
