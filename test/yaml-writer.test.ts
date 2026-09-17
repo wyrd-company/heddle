@@ -54,7 +54,7 @@ const probes: Probe[] = [
     edit: (d) => {
       node(d, ["a"]).commentBefore = " added";
     },
-    expected: "a: \n  # added\n  1\nb: 2\n",
+    expected: "a:\n  # added\n  1\nb: 2\n",
   },
   {
     name: "commentBefore collection value",
@@ -94,7 +94,7 @@ const probes: Probe[] = [
     edit: (d) => {
       d.set("a", { x: 3 });
     },
-    expected: "a: \n  x: 3\nb: 2\n",
+    expected: "a:\n  x: 3\nb: 2\n",
   },
   {
     name: "replace scalar with block sequence",
@@ -102,7 +102,7 @@ const probes: Probe[] = [
     edit: (d) => {
       d.set("a", ["x", "y"]);
     },
-    expected: "a: \n  - x\n  - y\nb: 2\n",
+    expected: "a:\n  - x\n  - y\nb: 2\n",
   },
   {
     name: "remove final key in a block map",
@@ -195,7 +195,7 @@ const probes: Probe[] = [
       d.set("a", 3);
       node(d, ["b"]).comment = null;
     },
-    expected: "a: 3\nb: 2 \n",
+    expected: "a: 3\nb: 2\n",
   },
   {
     name: "commentBefore on a non-first aligned key",

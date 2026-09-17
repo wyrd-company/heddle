@@ -14,6 +14,7 @@ import {
   type Pair,
 } from "yaml";
 import { reconcileComments, commentSnapshot } from "./yaml-comments.js";
+import { presentationSnapshot, reconcileSpacing } from "./yaml-presentation.js";
 
 import {
   applySourcePatches,
@@ -21,16 +22,12 @@ import {
   type SourcePatch,
 } from "./yaml-source.js";
 
-function shape(value: unknown): unknown {
-  if (isAlias(value)) return { alias: value.source };
-  if (isScalar(value)) return value.value;
-  if (isMap(value))
-    return {
-      map: value.items.map((pair) => [shape(pair.key), shape(pair.value)]),
-    };
-  if (isSeq(value)) return { sequence: value.items.map(shape) };
-  return value;
-}
+import {
+  shape,
+  pairIndex,
+  prepareEdit,
+  flowNodeStarts,
+} from "./yaml-edit-model.js";
 
 function semanticPatches(
   source: string,
@@ -38,6 +35,7 @@ function semanticPatches(
   edited: Document,
 ): SourcePatch[] {
   const patches: SourcePatch[] = [];
+  const flowNodes = flowNodeStarts(original);
   const newline = source.includes("\r\n") ? "\r\n" : "\n";
   const lineStart = (offset: number): number =>
     source.lastIndexOf("\n", offset - 1) + 1;
@@ -47,37 +45,38 @@ function semanticPatches(
     document.contents = node.clone() as Node;
     document.commentBefore = null;
     document.comment = null;
-    if (document.directives) {
-      document.directives.docStart = null;
-      document.directives.docEnd = false;
-    }
+    if (document.directives) document.directives.docEnd = false;
     return document
-      .toString({ lineWidth: 0, verifyAliasOrder: false })
+      .toString({ lineWidth: 0, verifyAliasOrder: false, directives: false })
       .replace(/\n$/u, "")
-      .replaceAll("\n", `\n${" ".repeat(indent)}`)
+      .replace(/\n(?=[^\n])/gu, `\n${" ".repeat(indent)}`)
       .replaceAll("\n", newline);
   }
 
   function replace(before: Node, after: Node): void {
     if (!before.range)
       throw new Error("Cannot preserve YAML source for a node without a range");
-    const [start, end] = before.range;
+    let start = before.range[0];
+    const end = before.range[1];
     const replacement = after.clone() as Node;
+    if (flowNodes.has(start) && (isMap(replacement) || isSeq(replacement)))
+      replacement.flow = true;
+    if (
+      flowNodes.has(start) &&
+      isScalar(replacement) &&
+      (replacement.type === "BLOCK_LITERAL" ||
+        replacement.type === "BLOCK_FOLDED")
+    )
+      replacement.type = "QUOTE_DOUBLE";
     replacement.commentBefore = null;
     replacement.comment = null;
     if (before.srcToken?.type === "block-scalar")
       replacement.comment = after.comment ?? null;
     // Anchors and tags precede the node's range and remain in the source.
-    if (!isAlias(replacement)) delete replacement.anchor;
-    delete replacement.tag;
-    if (isScalar(before) && isScalar(replacement) && before.type !== undefined)
-      replacement.type = before.type;
-    if (
-      (isMap(before) || isSeq(before)) &&
-      (isMap(replacement) || isSeq(replacement)) &&
-      before.flow !== undefined
-    )
-      replacement.flow = before.flow;
+    if (!isAlias(replacement)) {
+      delete replacement.anchor;
+      delete replacement.tag;
+    }
     const block =
       before.srcToken?.type === "block-map" ||
       before.srcToken?.type === "block-seq";
@@ -88,16 +87,27 @@ function semanticPatches(
         : 0;
     const newBlock =
       !block && (isMap(replacement) || isSeq(replacement)) && !replacement.flow;
+    const sequenceScalar =
+      before.srcToken?.type !== "block-scalar" &&
+      /^ *- +$/u.test(source.slice(lineStart(start), start));
     let text = render(
       replacement,
-      before.srcToken?.type === "block-scalar" || newBlock
-        ? indent + 2
+      (isScalar(replacement) &&
+        (replacement.type === "BLOCK_LITERAL" ||
+          replacement.type === "BLOCK_FOLDED" ||
+          (typeof replacement.value === "string" &&
+            replacement.value.includes("\n")))) ||
+        newBlock
+        ? indent + (sequenceScalar ? 0 : 2)
         : indent,
     );
-    if (newBlock) text = `${newline}${" ".repeat(indent + 2)}${text}`;
+    if (newBlock)
+      text = `${newline}${" ".repeat(indent + (sequenceScalar ? 0 : 2))}${text}`;
     if (start === end && source[start - 1] === ":") text = ` ${text}`;
     if (start === end && source[end] === "#") text += " ";
     if (source.slice(start, end).endsWith(newline)) text += newline;
+    if (text.startsWith(newline))
+      while (start > 0 && /[ \t]/u.test(source[start - 1] ?? "")) start -= 1;
     patches.push({ start, end, replacement: text });
   }
 
@@ -119,12 +129,7 @@ function semanticPatches(
     const matches = newItems.map((item, index) => {
       let found = -1;
       if (isMap(before)) {
-        found = oldItems.findIndex((old) =>
-          isDeepStrictEqual(
-            shape((old as Pair).key),
-            shape((item as Pair).key),
-          ),
-        );
+        found = pairIndex(before.items, item as Pair);
       } else if (isNode(item) && item.range) {
         found = oldItems.findIndex(
           (old) => isNode(old) && old.range?.[0] === item.range?.[0],
@@ -198,13 +203,21 @@ function semanticPatches(
     if (!isNode(before))
       throw new Error("Cannot preserve YAML source for a missing node");
     const target = isNode(after) ? after : edited.createNode(after);
+    if (
+      (isMap(before) || isSeq(before)) &&
+      (isMap(target) || isSeq(target)) &&
+      (before.flow === true) !== (target.flow === true)
+    ) {
+      replace(before, target);
+      return;
+    }
     if (blockItems(before, target)) return;
     if (
       isMap(before) &&
       isMap(target) &&
       before.items.length === target.items.length &&
-      before.items.every((pair, index) =>
-        isDeepStrictEqual(shape(pair.key), shape(target.items[index]?.key)),
+      target.items.every(
+        (pair, index) => pairIndex(before.items, pair) === index,
       )
     ) {
       before.items.forEach((pair, index) => {
@@ -220,7 +233,19 @@ function semanticPatches(
       });
     } else replace(before, target);
   }
-  visit(original.contents, edited.contents);
+  if (original.contents === null && edited.contents !== null) {
+    const prefix =
+      source.length > 0
+        ? source.endsWith(newline)
+          ? newline
+          : newline + newline
+        : "";
+    patches.push({
+      start: source.length,
+      end: source.length,
+      replacement: prefix + render(edited.contents, 0) + newline,
+    });
+  } else visit(original.contents, edited.contents);
   return patches;
 }
 
@@ -233,7 +258,11 @@ export function assertPreservedDocument(saved: string, edited: Document): void {
       reparsed.toJS({ mapAsMap: true }),
       expected.toJS({ mapAsMap: true }),
     ) ||
-    !isDeepStrictEqual(commentSnapshot(reparsed), commentSnapshot(expected))
+    !isDeepStrictEqual(commentSnapshot(reparsed), commentSnapshot(expected)) ||
+    !isDeepStrictEqual(
+      presentationSnapshot(reparsed),
+      presentationSnapshot(expected),
+    )
   ) {
     throw new Error("Localized YAML edit did not preserve the edited document");
   }
@@ -246,11 +275,12 @@ export function saveLocalizedYaml(
 ): string {
   if (edited.toString() === formattedSource) return source;
   const original = parseSource(source);
+  const intended = prepareEdit(original, edited);
   const values = applySourcePatches(
     source,
-    semanticPatches(source, original, edited),
+    semanticPatches(source, original, intended),
   );
-  const saved = reconcileComments(values, edited);
-  assertPreservedDocument(saved, edited);
+  const saved = reconcileSpacing(reconcileComments(values, intended), intended);
+  assertPreservedDocument(saved, intended);
   return saved;
 }

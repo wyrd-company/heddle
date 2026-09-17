@@ -16,7 +16,7 @@ interface CommentSlot {
   readonly node?: Node;
 }
 
-function slots(document: Document): CommentSlot[] {
+export function slots(document: Document): CommentSlot[] {
   const result: CommentSlot[] = [];
   function add(
     path: string,
@@ -62,7 +62,7 @@ interface CommentToken {
   readonly source: string;
 }
 
-function commentTokens(source: string): CommentToken[] {
+export function commentTokens(source: string): CommentToken[] {
   const result: CommentToken[] = [];
   function visit(value: unknown): void {
     if (!value || typeof value !== "object") return;
@@ -105,7 +105,12 @@ export function reconcileComments(source: string, edited: Document): string {
       slot.before &&
       slot.path.endsWith(".value.before") &&
       source.slice(lineStart(nodeStart), nodeStart).trim().length > 0;
-    if (inlineValue) indent += "  ";
+    if (inlineValue)
+      indent = " ".repeat(
+        slot.node?.srcToken && "indent" in slot.node.srcToken
+          ? slot.node.srcToken.indent + 2
+          : indent.length + 2,
+      );
     if (
       !slot.before &&
       slot.node &&
@@ -128,17 +133,30 @@ export function reconcileComments(source: string, edited: Document): string {
         if (!slot.node && source.slice(end, end + newline.length) === newline)
           end += newline.length;
       }
+      if (!value && !slot.before)
+        while (
+          start > lineStart(start) &&
+          /[ \t]/u.test(source[start - 1] ?? "")
+        )
+          start -= 1;
       patches.push({ start, end, replacement: text });
     } else if (value) {
       if (slot.before) {
-        const start = inlineValue
+        let start = inlineValue
           ? nodeStart
           : slot.node
             ? lineStart(nodeStart)
             : 0;
+        const end = start;
+        if (inlineValue)
+          while (
+            start > lineStart(start) &&
+            /[ \t]/u.test(source[start - 1] ?? "")
+          )
+            start -= 1;
         patches.push({
           start,
-          end: start,
+          end,
           replacement: inlineValue
             ? `${newline}${indent}${text}${newline}${indent}`
             : `${indent}${text}${newline}${slot.node ? "" : newline}`,
@@ -153,6 +171,22 @@ export function reconcileComments(source: string, edited: Document): string {
             ? header.offset + header.source.length
             : (slot.node?.range?.[1] ?? source.length);
         const terminated = source.slice(0, end).endsWith(newline);
+        if (/^[ \t]*[}\]]/u.test(source.slice(end))) {
+          patches.push({ start: end, end, replacement: ` ${text}${newline}` });
+          continue;
+        }
+        if (source[end] === ",") {
+          let stop = end + 1;
+          while (/[ \t]/u.test(source[stop] ?? "")) stop += 1;
+          const hasNewline =
+            source.slice(stop, stop + newline.length) === newline;
+          patches.push({
+            start: end,
+            end: stop,
+            replacement: `, ${text}${hasNewline ? "" : newline + indent}`,
+          });
+          continue;
+        }
         patches.push({
           start: end,
           end,
