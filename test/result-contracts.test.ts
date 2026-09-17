@@ -16,7 +16,7 @@ import {
 import type { Blueprint } from "../src/blueprints/types.js";
 import { validateNodeParams } from "../src/blueprints/schema-validation.js";
 import { RunStore, WorkflowEngine } from "../src/engine/index.js";
-import { aggregate } from "../src/engine/result-nodes.js";
+import { aggregate, terminalResult } from "../src/engine/result-nodes.js";
 import type { EngineNodeContext } from "../src/engine/types.js";
 
 const valid: Blueprint = {
@@ -47,7 +47,12 @@ it.each([
   ["terminal-result", undefined],
   ["terminal-result", {}],
   ["terminal-result", { value: { from: "x", extra: 1 } }],
+  ["terminal-result", { value: 1, extra: true }],
   ["aggregate", {}],
+  ["aggregate", { bindings: { first: { node: "left" } }, extra: true }],
+  ["aggregate", { bindings: [] }],
+  ["aggregate", { bindings: { first: {} } }],
+  ["aggregate", { bindings: { first: { node: "left", path: 1 } } }],
   ["aggregate", { bindings: {} }],
   ["aggregate", { bindings: { first: "left" } }],
   ["aggregate", { bindings: { first: { node: "left", path: "" } } }],
@@ -208,4 +213,14 @@ it("reads aggregate data from the completed output rather than a mutable context
   await expect(aggregate(context)).resolves.toEqual({
     first: "completed output",
   });
+});
+
+it("terminal execution writes its value before settlement", async () => {
+  const context = {
+    nodeId: "finish",
+    params: { value: { grade: "stable" } },
+    context: {},
+  } as unknown as EngineNodeContext;
+  await expect(terminalResult(context)).resolves.toEqual({ grade: "stable" });
+  expect(context.context["result"]).toEqual({ grade: "stable" });
 });

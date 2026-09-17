@@ -224,6 +224,7 @@ it.each([null, false, 0, "", [], {}])(
     });
     expect(run.status).toBe("completed");
     expect(run.context["result"]).toEqual(value);
+    expect(run.context["finish"]).toEqual(value);
   },
 );
 
