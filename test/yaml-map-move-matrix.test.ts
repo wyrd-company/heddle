@@ -124,10 +124,17 @@ describe("YAML map move source-context and edit matrix", () => {
         });
         const pair = movePair(document, context.from, context.to);
         edit.apply(pair);
+        if (!isScalar(pair.key)) throw new Error("Missing scalar key");
+        const key = pair.key.value;
+        const expectedValue = JSON.stringify(pair.value);
         const saved = saveLocalizedYaml(context.source, document);
         expect(saved).toContain(`${context.indent}${edit.expected}`);
         expect(saved).toContain("tail: 9   # untouched\n");
         expect(saved).not.toMatch(/[ \t]+\r?$/mu);
-        expect(parseDocument(saved).errors).toEqual([]);
+        const parsed = parseDocument(saved);
+        expect(parsed.errors).toEqual([]);
+        const actualValue = parsed.getIn([...context.to, key], true);
+        expect(JSON.stringify(actualValue)).toBe(expectedValue);
+        expect(mapAt(parsed, context.from).has("x")).toBe(false);
       });
 });

@@ -110,7 +110,7 @@ function reindent(
   return text
     .split(newline)
     .map((line) => {
-      if (/^[ \t]*$/u.test(line)) return "";
+      if (line === "") return line;
       if (delta > 0) return `${" ".repeat(delta)}${line}`;
       const available = /^ */u.exec(line)?.[0].length ?? 0;
       return line.slice(Math.min(-delta, available));

@@ -143,6 +143,32 @@ describe("YAML map pair source moves", () => {
     },
   );
 
+  it.each([
+    [
+      "deeper",
+      "a:\n  keep: 0\n  x: |\n    one\n      \n    two\nb:\n  nested:\n    y: 1\n",
+      ["a"],
+      ["b", "nested"],
+      "a:\n  keep: 0\nb:\n  nested:\n    y: 1\n    x: |\n      one\n        \n      two\n",
+    ],
+    [
+      "shallower",
+      "a:\n  nested:\n    keep: 0\n    x: |\n      one\n        \n      two\nb:\n  y: 1\n",
+      ["a", "nested"],
+      ["b"],
+      "a:\n  nested:\n    keep: 0\nb:\n  y: 1\n  x: |\n    one\n      \n    two\n",
+    ],
+  ] as const)(
+    "retains whitespace-only literal-scalar content when moving %s",
+    (_name, source, from, to, expected) => {
+      expect(
+        write(source, (document) => {
+          movePair(document, from, to, 1);
+        }),
+      ).toBe(expected);
+    },
+  );
+
   it("retains non-string keys and aliases", () => {
     const source =
       "base: &keep value\na:\n  keep: 0\n  7: *keep   # alias\nb:\n  y: 1\n";
