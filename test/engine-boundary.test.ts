@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished } from "vitest";
 import { RunStore, WorkflowEngine, type ResumeInput } from "../src/index.js";
 function launch(file: string, args: string[] = []) {
   return fork(fileURLToPath(new URL(file, import.meta.url)), args, {
@@ -53,6 +53,11 @@ it.each([
     const directory = mkdtempSync(join(tmpdir(), "heddle-boundary-"));
     const path = join(directory, "runs.sqlite");
     const children: ChildProcess[] = [];
+    const cleanup = async () => {
+      for (const child of children) await kill(child);
+      rmSync(directory, { recursive: true, force: true });
+    };
+    onTestFinished(cleanup);
     try {
       const first = launch("./engine-boundary.fixture.ts", [
         path,
@@ -97,8 +102,7 @@ it.each([
         expect(result.recovered).toEqual(result.before);
       expect((await exited)[0]).toBe(0);
     } finally {
-      for (const child of children) await kill(child);
-      rmSync(directory, { recursive: true, force: true });
+      await cleanup();
     }
   },
 );
@@ -106,6 +110,12 @@ it("requests from separate processes converge through the single Heddle writer",
   const directory = mkdtempSync(join(tmpdir(), "heddle-requests-"));
   const store = new RunStore(join(directory, "runs.sqlite"));
   const children: ChildProcess[] = [];
+  const cleanup = async () => {
+    for (const child of children) await kill(child);
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  };
+  onTestFinished(cleanup);
   try {
     const engine = new WorkflowEngine(store, {
       resolveBlueprint: () =>
@@ -146,8 +156,6 @@ it("requests from separate processes converge through the single Heddle writer",
     ).toHaveLength(1);
     expect(store.get("shipment-1").status).toBe("completed");
   } finally {
-    for (const child of children) await kill(child);
-    store.close();
-    rmSync(directory, { recursive: true, force: true });
+    await cleanup();
   }
 });

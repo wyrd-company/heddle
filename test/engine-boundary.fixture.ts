@@ -146,6 +146,7 @@ if (mode === "crash") {
       nodeId: "inspect",
       result: "handoff",
     });
+  throw new Error(`Crash boundary was not reached: ${String(boundary)}`);
 } else {
   const before = store
     .list()
