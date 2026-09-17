@@ -23,6 +23,18 @@ export interface NewRun {
   parentId: string | null;
   parentNodeId: string | null;
 }
+export function createRelatedRun(
+  store: RunStore,
+  resolve: EngineOptions["resolveBlueprint"],
+  input: RelatedRun,
+): Promise<Run> {
+  const parent = store.get(input.parentId);
+  return createRun(store, resolve, {
+    ...input,
+    commit: parent.commit,
+    rootId: parent.rootId,
+  });
+}
 function sameRun(existing: Run, input: NewRun): Run {
   if (
     existing.blueprintId !== input.blueprintId ||

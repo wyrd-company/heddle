@@ -168,6 +168,30 @@ it.each(["claude", "codex"] as const)(
   },
 );
 
+it("retains configured validation dispatch beside Stop hook commands", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "heddle-cli-"));
+  cleanups.push(() => {
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const config = join(directory, "invalid.yml");
+  writeFileSync(config, "projects: invalid\n");
+  const child = spawn(
+    process.execPath,
+    [
+      join(process.cwd(), "dist/cli.js"),
+      "validate",
+      "--check-requires-issue",
+      "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+    ],
+    { env: { ...process.env, HEDDLE_CONFIG: config } },
+  );
+  let error = "";
+  child.stderr.on("data", (data) => (error += String(data)));
+  const [code] = (await once(child, "close")) as unknown[];
+  expect(code).toBe(1);
+  expect(error).toContain("projects");
+});
+
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing fixture value");
   return value;

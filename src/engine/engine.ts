@@ -17,7 +17,7 @@ import type {
   Run,
 } from "./types.js";
 import { Wakeups } from "./wakeups.js";
-import { createRun, type RelatedRun } from "./create-run.js";
+import { createRun, createRelatedRun, type RelatedRun } from "./create-run.js";
 import { DurableTraversal } from "./traversal.js";
 
 export class WorkflowEngine {
@@ -50,12 +50,11 @@ export class WorkflowEngine {
   }
   /** A side run shares lineage without installing a parent completion wait. */
   async startRelated(input: RelatedRun): Promise<Run> {
-    const parent = this.store.get(input.parentId);
-    const run = await createRun(this.store, this.options.resolveBlueprint, {
-      ...input,
-      commit: parent.commit,
-      rootId: parent.rootId,
-    });
+    const run = await createRelatedRun(
+      this.store,
+      this.options.resolveBlueprint,
+      input,
+    );
     return run.status === "awaiting" ? run : this.execute(run.id);
   }
   async resume(
