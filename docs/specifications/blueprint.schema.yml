@@ -417,6 +417,12 @@ $defs:
     properties:
       when:
         $ref: "#/$defs/expression"
+      bindings:
+        type: object
+        propertyNames: { $ref: "#/$defs/slug" }
+        additionalProperties:
+          type: string
+          minLength: 1
       deadline:
         $ref: "#/$defs/deadline"
   githubParams:

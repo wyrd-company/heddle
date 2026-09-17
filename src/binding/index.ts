@@ -11,6 +11,12 @@ export {
   type RequestBudget,
 } from "./config.js";
 export { GitHubBindingService } from "./service.js";
+export {
+  GitHubEventHandler,
+  githubEvents,
+  type GitHubEvent,
+  type IssueDelivery,
+} from "./delivery.js";
 export { InstanceStore, type Instance } from "./store.js";
 export { frontMatter, snapshot, type IssueSnapshot } from "./snapshot.js";
 export {

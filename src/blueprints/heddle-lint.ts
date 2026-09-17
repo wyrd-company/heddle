@@ -100,6 +100,27 @@ function contextKeyFindings(
         );
       }
     }
+    if (
+      node.uses === "on-issue-change" &&
+      node.params?.["bindings"] !== null &&
+      typeof node.params?.["bindings"] === "object" &&
+      !Array.isArray(node.params["bindings"])
+    ) {
+      for (const [name, path] of Object.entries(node.params["bindings"])) {
+        if (typeof path !== "string") continue;
+        const root = /^([A-Za-z][\w-]*)(?:\.|$)/u.exec(path)?.[1];
+        if (root !== undefined && !available.has(root)) {
+          findings.push(
+            finding(
+              file,
+              nodeId,
+              "heddle.context-key",
+              `Bound value ${name} cannot be provided: ${root}`,
+            ),
+          );
+        }
+      }
+    }
   }
   return findings;
 }

@@ -15,6 +15,7 @@ export class InstanceStore {
       CREATE TABLE IF NOT EXISTS github_effects (id TEXT PRIMARY KEY, payload TEXT NOT NULL, snapshot TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS issue_projects (issue_id TEXT NOT NULL, project_id TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,project_id));
       CREATE TABLE IF NOT EXISTS project_choices (issue_id TEXT PRIMARY KEY, project_id TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS issue_deliveries (issue_id TEXT NOT NULL, updated_at TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,updated_at));
       CREATE TABLE IF NOT EXISTS github_attention (id INTEGER PRIMARY KEY, project TEXT NOT NULL, message TEXT NOT NULL);
       DELETE FROM github_attention WHERE id NOT IN (SELECT min(id) FROM github_attention GROUP BY project,message);
       CREATE UNIQUE INDEX IF NOT EXISTS github_attention_identity ON github_attention(project,message);`);
@@ -83,6 +84,20 @@ export class InstanceStore {
     this.db
       .prepare("UPDATE instances SET snapshot=? WHERE id=?")
       .run(JSON.stringify(issue), issue.id);
+  }
+  applyDelivery(issue: IssueSnapshot, updatedAt: string): boolean {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const inserted = this.db
+        .prepare("INSERT OR IGNORE INTO issue_deliveries VALUES (?,?,?)")
+        .run(issue.id, updatedAt, JSON.stringify(issue));
+      if (inserted.changes > 0) this.update(issue);
+      this.db.exec("COMMIT");
+      return inserted.changes > 0;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
   completed(key: string, payload: string): IssueSnapshot | undefined {
     const row = this.db

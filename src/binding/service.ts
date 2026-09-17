@@ -19,10 +19,15 @@ import {
   type IssueSnapshot,
 } from "./snapshot.js";
 import { InstanceStore } from "./store.js";
+import { GitHubEventHandler, type GitHubEvent } from "./delivery.js";
+import { BindingEventService } from "./event-service.js";
+import { onIssueChange } from "./issue-change.js";
 
 export class GitHubBindingService {
   readonly instances: InstanceStore;
   readonly engine: WorkflowEngine;
+  readonly events: GitHubEventHandler;
+  private readonly eventService: BindingEventService;
   private projects = new Map<
     string,
     { project: BoundProject; client: GitHub; binding: ProjectBinding }
@@ -39,6 +44,7 @@ export class GitHubBindingService {
       ...engineOptions,
       nodes: {
         ...engineOptions.nodes,
+        "on-issue-change": onIssueChange,
         github: async (context) => {
           try {
             const bound = this.bound(context);
@@ -66,6 +72,14 @@ export class GitHubBindingService {
         }
       },
     });
+    this.eventService = new BindingEventService(
+      store,
+      this.instances,
+      this.engine,
+      (id) => this.projects.get(id),
+      () => this.discover(),
+    );
+    this.events = this.eventService.handler;
   }
   private bound(context: EngineNodeContext) {
     const issue = context.context["issue"] as IssueSnapshot | undefined;
@@ -170,6 +184,18 @@ export class GitHubBindingService {
         );
       }
     }
+  }
+  async poll(): Promise<number> {
+    return this.eventService.poll();
+  }
+  async deliver(event: GitHubEvent, payload: unknown): Promise<boolean> {
+    return this.eventService.deliver(event, payload);
+  }
+  async pauseInstance(id: string): Promise<void> {
+    await this.eventService.setPaused(id, true);
+  }
+  async resumeInstance(id: string): Promise<void> {
+    await this.eventService.setPaused(id, false);
   }
   async startInstance(id: string, blueprintId: string, commit: string) {
     await this.reconcile();
