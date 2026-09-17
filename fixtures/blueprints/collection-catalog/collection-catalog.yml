@@ -28,7 +28,7 @@ nodes:
     params:
       blueprint: stage-assess-collection
       inputs:
-        summary: { from: capture.output.payload.summary }
+        summary: { from: capture.payload.summary }
       outputs:
         decision: stages.assess.handoff.decision
   # Accepted collections produce a message whose template reads process metadata.
