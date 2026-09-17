@@ -274,6 +274,33 @@ describe("blueprint loading", () => {
 });
 
 describe("validation chain", () => {
+  it("keeps the policy catalog aligned with the rule selection contract", () => {
+    const catalog = parseDocument(
+      readFileSync(resolve("docs/technical-designs/node-types.yml"), "utf8"),
+    ).toJS() as { readonly "proposed-design"?: { readonly policy?: unknown } };
+    const schema = parseDocument(
+      readFileSync(
+        resolve("docs/specifications/policy-rule.schema.yml"),
+        "utf8",
+      ),
+    ).toJS() as {
+      readonly $defs?: {
+        readonly rule?: {
+          readonly properties?: Readonly<Record<string, unknown>>;
+          readonly required?: readonly string[];
+        };
+      };
+    };
+    const policy = catalog["proposed-design"]?.policy;
+
+    expect(schema.$defs?.rule?.required).toEqual(["id", "blueprint"]);
+    expect(schema.$defs?.rule?.properties).toHaveProperty("inputs");
+    expect(policy).toContain(
+      "Output: the selected rule id, blueprint id, and bound inputs.",
+    );
+    expect(policy).not.toContain("turnEndPolicy");
+  });
+
   it("accepts every shipped blueprint fixture", () => {
     const fixtureDirectory = resolve("fixtures/blueprints");
 
