@@ -1,0 +1,7 @@
+id: subflow
+kind: helper
+nodes:
+  nested:
+    uses: subflow
+    params:
+      blueprintId: sample-child

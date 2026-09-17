@@ -1,0 +1,20 @@
+id: missing-template
+kind: stage
+nodes:
+  first:
+    uses: pass
+    params:
+      prompt: prompts/missing.md
+      handoff:
+        type: object
+        description: Submit the result.
+        properties: {}
+  done:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Complete" }
+edges:
+  - from: first
+    to: done
+    when: result.output.handoff or result.output.overridden

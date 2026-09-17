@@ -4,6 +4,9 @@
 //     - blueprint-authoring
 //     - agent-tools
 // ---
+import { VALIDATION_RULES } from "./blueprints/rules.js";
+import { validateBlueprintPath } from "./blueprints/validate.js";
+
 export interface CliIo {
   error(message: string): void;
   output(message: string): void;
@@ -28,7 +31,13 @@ const commands = new Map<string, CommandHelp>([
     },
   ],
   ["start", { usage: "Usage: heddle start" }],
-  ["validate", { usage: "Usage: heddle validate <path>" }],
+  [
+    "validate",
+    {
+      usage:
+        "Usage: heddle validate [--json] [--check-requires-issue] <path>\n       heddle validate [--json] --rules",
+    },
+  ],
 ]);
 
 const rootUsage = `Usage: heddle <command>
@@ -70,6 +79,10 @@ export function runCli(arguments_: readonly string[], io: CliIo): number {
     return 0;
   }
 
+  if (commandName === "validate") {
+    return runValidate(commandArguments, io, command.usage);
+  }
+
   if (commandArguments.length === 0 || commandName === "start") {
     io.error(command.usage);
     return 2;
@@ -77,4 +90,56 @@ export function runCli(arguments_: readonly string[], io: CliIo): number {
 
   io.error(`${command.usage}\n\nThis command is not implemented yet.`);
   return 2;
+}
+
+function runValidate(
+  arguments_: readonly string[],
+  io: CliIo,
+  usage: string,
+): number {
+  const json = arguments_.includes("--json");
+  const listRules = arguments_.includes("--rules");
+  const checkRequiresIssue = arguments_.includes("--check-requires-issue");
+  const unknownOptions = arguments_.filter(
+    (argument) =>
+      argument.startsWith("-") &&
+      !["--json", "--rules", "--check-requires-issue"].includes(argument),
+  );
+  const paths = arguments_.filter((argument) => !argument.startsWith("-"));
+
+  if (
+    unknownOptions.length > 0 ||
+    (listRules ? paths.length > 0 : paths.length !== 1)
+  ) {
+    io.error(usage);
+    return 2;
+  }
+
+  if (listRules) {
+    io.output(
+      json
+        ? JSON.stringify(VALIDATION_RULES, undefined, 2)
+        : VALIDATION_RULES.map(
+            (rule) => `${rule.name}\t${rule.description}`,
+          ).join("\n"),
+    );
+    return 0;
+  }
+
+  const path = paths[0];
+  if (path === undefined) {
+    io.error(usage);
+    return 2;
+  }
+  const findings = validateBlueprintPath(path, { checkRequiresIssue });
+  if (json) {
+    io.output(JSON.stringify(findings, undefined, 2));
+  } else if (findings.length === 0) {
+    io.output(`Validated ${path}: no findings.`);
+  } else {
+    for (const item of findings) {
+      io.error(`${item.file}:${item.node} [${item.rule}] ${item.message}`);
+    }
+  }
+  return findings.length === 0 ? 0 : 1;
 }

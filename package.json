@@ -25,7 +25,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "docs/specifications/blueprint.schema.yml"
   ],
   "scripts": {
     "build": "node scripts/clean-dist.mjs && npm run build:types && node scripts/build.mjs",

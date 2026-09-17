@@ -3,8 +3,10 @@
 //   verifies: blueprint-authoring
 // ---
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
 
 import { runCli, type CliIo } from "../src/cli-runner.js";
+import { validateBlueprintPath } from "../src/blueprints/validate.js";
 
 function capture(arguments_: readonly string[]): {
   readonly errors: string[];
@@ -87,7 +89,6 @@ describe("command arguments", () => {
   });
 
   it.each([
-    ["validate", "fixture.yml"],
     ["skill", "list"],
     ["hook", "stop"],
   ])("keeps %s as a non-operational skeleton", (...arguments_) => {
@@ -95,5 +96,68 @@ describe("command arguments", () => {
 
     expect(result.exitCode).not.toBe(0);
     expect(result.errors.join("\n")).toContain("not implemented yet");
+  });
+
+  it("validates a blueprint file offline", () => {
+    const result = capture([
+      "validate",
+      resolve("fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml"),
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.errors).toEqual([]);
+    expect(result.output).toEqual([expect.stringContaining("no findings")]);
+  });
+
+  it("validates a blueprint directory offline", () => {
+    const result = capture(["validate", resolve("fixtures/blueprints")]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("prints human findings with file, node, and rule", () => {
+    const file = resolve(
+      "test/fixtures/blueprints/negative/unhandled-pass-result.yml",
+    );
+    const result = capture(["validate", file]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.errors.join("\n")).toContain(
+      `${file}:first [heddle.pass-result]`,
+    );
+  });
+
+  it("emits the same findings as JSON", () => {
+    const file = resolve(
+      "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+    );
+    const result = capture([
+      "validate",
+      "--json",
+      "--check-requires-issue",
+      file,
+    ]);
+    const findings = JSON.parse(result.output.join("\n")) as unknown[];
+
+    expect(result.exitCode).toBe(1);
+    expect(result.errors).toEqual([]);
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        rule: "requires.issue.live",
+        node: "$blueprint",
+      }),
+    );
+    expect(findings).toEqual(
+      validateBlueprintPath(file, { checkRequiresIssue: true }),
+    );
+  });
+
+  it("lists the data-driven validation rules", () => {
+    const result = capture(["validate", "--rules"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.errors).toEqual([]);
+    expect(result.output.join("\n")).toContain("heddle.no-subflow");
   });
 });

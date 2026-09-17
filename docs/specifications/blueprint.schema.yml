@@ -17,6 +17,12 @@ properties:
   id:
     description: Blueprint id. Also the file's basename without extension.
     $ref: "#/$defs/slug"
+  entry:
+    description: >
+      The node where execution begins when every node has an incoming edge,
+      such as a process with a retry cycle. It must name a key in `nodes`.
+      A blueprint with a natural entry node may omit it.
+    $ref: "#/$defs/slug"
   kind:
     description: >
       `process` blueprints belong to the user and route on stage outcomes.

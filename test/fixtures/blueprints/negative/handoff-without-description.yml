@@ -1,0 +1,19 @@
+id: handoff-without-description
+kind: stage
+nodes:
+  first:
+    uses: pass
+    params:
+      prompt: { inline: "Complete the request." }
+      handoff:
+        type: object
+        properties: {}
+  done:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Complete" }
+edges:
+  - from: first
+    to: done
+    when: result.output.handoff or result.output.overridden

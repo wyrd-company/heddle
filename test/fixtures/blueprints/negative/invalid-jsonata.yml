@@ -1,0 +1,17 @@
+id: invalid-jsonata
+kind: helper
+nodes:
+  first:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "First" }
+  second:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Second" }
+edges:
+  - from: first
+    to: second
+    when: (

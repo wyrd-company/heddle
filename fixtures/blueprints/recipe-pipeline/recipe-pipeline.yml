@@ -2,6 +2,7 @@
 # publication. Rejected drafts go back for another attempt.
 id: recipe-pipeline
 kind: process
+entry: draft
 description: Editorial pipeline for a recipe catalog.
 metadata:
   maxTasteTests: 3          # read by the review loop guard
@@ -40,7 +41,7 @@ nodes:
     uses: notify
     params:
       channel: pushover
-      title: "Recipe needs an editor"
+      title: { inline: "Recipe needs an editor" }
       message: prompts/too-many-tests.md
 edges:
   - from: draft
