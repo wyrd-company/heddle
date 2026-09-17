@@ -3,9 +3,9 @@
 // relationships:
 //   implements: blueprint-authoring
 // ---
-import { runCli } from "./cli-runner.js";
+import { runConfiguredCli } from "./binding/cli.js";
 
-process.exitCode = runCli(process.argv.slice(2), {
+process.exitCode = await runConfiguredCli(process.argv.slice(2), {
   error: (message) => {
     console.error(message);
   },

@@ -39,3 +39,4 @@ export type {
   ValidationOptions,
 } from "./blueprints/types.js";
 export * from "./engine/index.js";
+export * from "./binding/index.js";

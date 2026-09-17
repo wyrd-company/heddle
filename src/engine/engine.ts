@@ -84,6 +84,7 @@ export class WorkflowEngine {
           { ...definition },
           this.options.nodes?.[definition.uses],
           this.clock,
+          this.options.beforeNode,
         ),
       );
       definition.uses = alias;

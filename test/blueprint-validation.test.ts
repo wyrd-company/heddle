@@ -891,7 +891,7 @@ nodes:
         node: "draft",
         rule: "requires.issue.stage-name",
         message:
-          "not checked: live stage-name single-select validation is not implemented",
+          "not checked: configure a bound project for live stage-name validation",
       }),
     );
   });

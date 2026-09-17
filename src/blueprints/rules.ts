@@ -48,6 +48,11 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     description: "Every condition is valid JSONata syntax.",
   },
   {
+    name: "heddle.owned-field",
+    description:
+      "GitHub nodes do not write service-owned Status or Paused fields.",
+  },
+  {
     name: "heddle.no-subflow",
     description: "Blueprints do not use the Flowcraft subflow node.",
   },

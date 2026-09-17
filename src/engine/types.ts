@@ -2,7 +2,7 @@
 // relationships:
 //   implements: engine-and-run-model
 // ---
-import type { WorkflowBlueprint } from "flowcraft";
+import type { NodeDefinition, WorkflowBlueprint } from "flowcraft";
 
 export type Data = Record<string, unknown>;
 export type RunStatus =
@@ -73,6 +73,10 @@ export interface EngineOptions {
   resolveBlueprint: (commit: string, id: string) => Promise<WorkflowBlueprint>;
   nodes?: Record<string, EngineNode>;
   clock?: () => number;
+  beforeNode?: (
+    context: EngineNodeContext,
+    definition: NodeDefinition,
+  ) => Promise<void>;
 }
 export interface RunEvent {
   sequence: number;

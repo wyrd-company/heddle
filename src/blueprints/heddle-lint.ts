@@ -169,6 +169,20 @@ export function lintHeddle(
     );
   }
   for (const [nodeId, node] of Object.entries(blueprint.nodes)) {
+    if (
+      node.uses === "github" &&
+      node.params?.["operation"] === "set-field" &&
+      ["Status", "Paused"].includes(String(node.params["field"]))
+    ) {
+      findings.push(
+        finding(
+          file,
+          nodeId,
+          "heddle.owned-field",
+          "Status and Paused are owned by the service",
+        ),
+      );
+    }
     if (node.uses === "subflow") {
       findings.push(
         finding(file, nodeId, "heddle.no-subflow", "subflow is not supported"),

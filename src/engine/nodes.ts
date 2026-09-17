@@ -5,7 +5,13 @@
 import type { NodeDefinition, NodeFunction } from "flowcraft";
 import type { RunStore } from "./store.js";
 import { DurableRuntime, DispatchHeld, resolveValues } from "./runtime.js";
-import type { AwaitingDetails, Data, EngineNode, Run } from "./types.js";
+import type {
+  AwaitingDetails,
+  Data,
+  EngineNode,
+  EngineOptions,
+  Run,
+} from "./types.js";
 import { duration } from "./timing.js";
 
 export function bindNode(
@@ -15,6 +21,7 @@ export function bindNode(
   definition: NodeDefinition,
   implementation: EngineNode | undefined,
   clock: () => number,
+  beforeNode?: EngineOptions["beforeNode"],
 ): NodeFunction<Data, Data, unknown, unknown> {
   return async (native) => {
     if (store.get(run.id).paused)
@@ -37,7 +44,20 @@ export function bindNode(
     };
     const effectKey = JSON.stringify([run.id, nodeId, visit]);
     let output: unknown;
-    if (definition.uses === "child-run") {
+    const nodeContext = {
+      run,
+      nodeId,
+      visit,
+      effectKey,
+      params,
+      input: native.input,
+      context,
+      await: pause,
+    };
+    await beforeNode?.(nodeContext, definition);
+    if (awaiting) {
+      // The adapter holds dispatch until its attention is resolved.
+    } else if (definition.uses === "child-run") {
       if (typeof params["blueprint"] !== "string")
         throw new Error("child-run requires blueprint");
       await pause({

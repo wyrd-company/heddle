@@ -206,3 +206,74 @@ for the design.
 ## License
 
 Apache-2.0.
+
+## GitHub binding API
+
+`GitHubBindingService` composes the engine with project reconciliation,
+issue discovery, stage projection, and the `github` node. Construct it with a
+`RunStore`, configured projects, `appClients(config.github.credentialFile,
+budget)`, a provider of bound blueprints, and the engine options. `start()`
+reconciles and discovers; `discover()` performs a later discovery pass.
+`reconcile()` also runs before `startInstance(issueId, blueprintId, commit)`.
+The service assembly calls `reconcile()` when the blueprint repository changes.
+Intake chooses the blueprint and supplies its captured commit to
+`startInstance`; discovery records backlog issues without choosing a lifecycle.
+
+The credential file contains `app-id`, an `installations` mapping from owner
+login to installation id, and `private-key`. The binding accepts an App
+credential only. Request counters report GraphQL calls, REST calls, and writes;
+App authentication exchanges are separate from those counters.
+
+Snapshots retain identity, content, organization fields, the bound card's
+fields, relationships, and `frontMatter`. Front matter uses this form at the
+start of the issue body:
+
+```markdown
+<!--
+---
+servings: 4
+---
+-->
+```
+
+Snapshots are cached in the instance store and copied into a run's durable
+initial context. An issue in multiple bound projects raises attention; use
+`instances.chooseProject(issueId, projectId)` before starting its lifecycle.
+The choice is durable. Status options retain their existing order and append
+new stage node ids. Removed stages remain as options. `Paused` is a
+single-select field with `Yes` and `No` options. The service owns both fields.
+Missing organization fields can be mirrored onto a project when declared by
+`requires.issue.fields`; unknown field names raise attention.
+
+The implemented `github` operations accept these params:
+
+- `set-field`: `field`, `value`, and optional `scope: organization`.
+- `comment`: `body`.
+- `add-labels`: `labels`, an array of existing label names.
+
+Writes read current state first. Completed effects retain their input and
+snapshot so replay does not overwrite later changes. Comments also carry an
+invisible effect marker so recovery after a remote write can find them.
+A permission refusal records attention and leaves the node awaiting an
+operator decision; it does not fail the run or retry the request.
+
+For live validation, set `HEDDLE_CONFIG` to the configuration file and run
+`heddle validate --check-requires-issue <path>`. The check reads every bound
+project's fields and Status options, organization issue types, repository
+labels, and open issues' front-matter keys. It performs no writes.
+
+The disposable-project qualification is opt-in:
+
+```sh
+HEDDLE_BINDING_LIVE=1 \
+HEDDLE_BINDING_CREDENTIALS=/path/to/app.yml \
+HEDDLE_BINDING_OWNER=sample-owner \
+HEDDLE_BINDING_REPO=sample-repository \
+npx vitest run --config vitest.github-live.config.ts src/binding/binding.live.test.ts
+```
+
+It creates a project, two issues, a label, and an organization text field in
+the selected sandbox. It closes the issues and deletes the project, label,
+and field at completion. Permission refusal uses a reduced installation grant
+minted by the same App for the field-value mutation; reads use its normal grant. The normal App needs Issues write, Issue fields write,
+Issue types read, and Organization projects administration for this binding.

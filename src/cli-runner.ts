@@ -4,6 +4,7 @@
 //     - blueprint-authoring
 //     - agent-tools
 // ---
+import type { ValidationOptions } from "./blueprints/types.js";
 import { VALIDATION_RULES } from "./blueprints/rules.js";
 import { validateBlueprintPath } from "./blueprints/validate.js";
 
@@ -53,7 +54,11 @@ Run "heddle <command> --help" for command usage.`;
 const isHelp = (value: string | undefined): boolean =>
   value === "--help" || value === "-h";
 
-export function runCli(arguments_: readonly string[], io: CliIo): number {
+export function runCli(
+  arguments_: readonly string[],
+  io: CliIo,
+  options: ValidationOptions = {},
+): number {
   const [commandName, ...commandArguments] = arguments_;
 
   if (isHelp(commandName)) {
@@ -80,7 +85,7 @@ export function runCli(arguments_: readonly string[], io: CliIo): number {
   }
 
   if (commandName === "validate") {
-    return runValidate(commandArguments, io, command.usage);
+    return runValidate(commandArguments, io, command.usage, options);
   }
 
   if (commandArguments.length === 0 || commandName === "start") {
@@ -96,6 +101,7 @@ function runValidate(
   arguments_: readonly string[],
   io: CliIo,
   usage: string,
+  options: ValidationOptions,
 ): number {
   const json = arguments_.includes("--json");
   const listRules = arguments_.includes("--rules");
@@ -131,7 +137,10 @@ function runValidate(
     io.error(usage);
     return 2;
   }
-  const findings = validateBlueprintPath(path, { checkRequiresIssue });
+  const findings = validateBlueprintPath(path, {
+    ...options,
+    checkRequiresIssue,
+  });
   if (json) {
     io.output(JSON.stringify(findings, undefined, 2));
   } else if (findings.length === 0) {

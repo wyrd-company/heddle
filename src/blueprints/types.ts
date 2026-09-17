@@ -61,6 +61,14 @@ export interface ValidationFinding {
 
 export interface ValidationOptions {
   readonly checkRequiresIssue?: boolean;
+  readonly liveIssue?: readonly {
+    name: string;
+    fields: string[];
+    types: string[];
+    labels: string[];
+    stages: string[];
+    issues: { ref: string; frontMatter: string[] }[];
+  }[];
   readonly configuredQuestionRoles?: ReadonlySet<string>;
 }
 
