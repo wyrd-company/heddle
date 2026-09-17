@@ -42,6 +42,12 @@ Read them before adding either.
 - **Do not bake in one person's preferences.** One project per repository,
   labels versus fields, stage names, review paths: these are the user's
   choices, expressed in blueprints and intake, never assumed by code.
+- **Use T3 Code's words.** Thread, turn, session, project, runtime mode,
+  approval, user input, read model. Where T3 Code has no word for a thing,
+  Heddle names it once in the designs and uses that name everywhere.
+- **Two credential tiers.** Heddle is an algorithmic system and holds its
+  own GitHub App with write permissions. Agents hold narrower credentials
+  and never Heddle's.
 
 ## How work runs
 
@@ -49,17 +55,28 @@ Read them before adding either.
   it is discovered, including while it waits in a backlog.
 - An intake blueprint chooses the lifecycle blueprint for a new issue. Intake
   is a blueprint, so the choice is the user's.
-- A stage starts a thread and pauses. It wakes on handoff, escalate, timeout,
-  or turn-ended. Each wake-up picks an edge.
-- A stage is itself a blueprint, run as its own top-level run. A parent run
-  starts a child run and pauses until the child resumes it. Nested Flowcraft
-  subflows are not used.
+- A stage node starts one thread for one try at a stage, an attempt, and
+  pauses. It wakes on handoff, escalate, timeout, idle, turn-ended, or
+  overridden. Each wake-up picks an edge and does nothing else.
+- What happens inside an attempt is code behind the stage node: a read
+  model of the thread built from observed events, deadlines, and the
+  generated tool server. Only the result crosses into the graph.
+- Stage blueprints wrap stage nodes with retry routing and run as their own
+  top-level runs. A parent run starts a child run and pauses until the child
+  resumes it. Nested Flowcraft subflows and action edges are not used.
+- Operator turns sent from the T3 Code UI are ordinary observed turns.
+  Heddle never assumes a turn it did not send cannot exist.
 - Agent questions do not wake a stage. They start a separate small run that
   answers the thread directly.
 - Handoff is a tool defined per stage with JSON Schema. The agent must call it
   to finish the stage.
-- Blueprints are YAML files in a git repository. The engine may use JSON
-  internally. Translation is never lossy and keeps comments.
+- Blueprints are YAML files in a git repository, pinned per instance to a
+  commit. The engine may use JSON internally. Translation is never lossy
+  and keeps comments. Edge conditions are JSONata. Prompts are Nunjucks
+  templates. The file format is `docs/specifications/blueprint.yml`.
+- Timeouts exist only where a blueprint author writes a duration, and a
+  wake-up never stops or destroys anything by itself. Any other timeout
+  mechanic needs the user's explicit approval.
 
 ## Development cycle
 
@@ -84,7 +101,9 @@ one as a finding to design for, not a failure.
   `main` directly.
 - Flowcraft is the engine. Known defects in its subflow resume, action edges,
   and concurrent wait-plus-sleep are worked around, not depended on. See the
-  technical designs before touching resume logic.
+  technical designs and `docs/spikes/` before touching resume logic.
+- `heddle validate` is the authoring loop. Run it after every blueprint edit
+  and read its JSON output.
 - Shelling out to a CLI from service code is a last resort and needs explicit
   approval from the user.
 - Example values in tests and docs are generic and never drawn from the

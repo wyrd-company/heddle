@@ -1,0 +1,96 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - engine-and-run-model
+    - node-types
+    - agent-tools
+objective: >
+  Know, across every Heddle service the operator runs, how much AI usage
+  each provider account has consumed and has left in its current windows,
+  attribute usage to instances, stages, threads, and helper sessions, and
+  hold dispatch when a window is exhausted so work waits instead of failing.
+  Usage is bought as subscriptions with rolling windows, not per call, so
+  budgeting is about windows, not dollars.
+background:
+  current-design: >
+    Nothing budgets. An agent that hits an exhausted window fails its turn,
+    and the operator learns of it as an error. Usage per session is visible
+    only in T3 Code's own view and in harness transcript files on disk.
+  problems:
+    - Several devcontainers on several hosts draw from the same provider accounts, and no one place knows the total.
+    - Providers expose window state with low fidelity and only while a turn is running; a window that reopens while nothing runs announces nothing.
+    - Helper sessions spend from the same window as their parent and are easy to miss.
+design-challenges:
+  fleet-wide-knowledge-from-local-evidence: >
+    Each service sees its own threads. The window is per account and shared
+    by every service. Knowledge must be collected locally, combined
+    centrally, and read back by each service before it dispatches.
+  fidelity-and-lag: >
+    T3 Code pushes usage-limit updates during turns and can probe a
+    provider on request, but a probe can be unsupported or fail. Local token
+    counts are exact but say nothing about the window until calibrated
+    against what the provider reveals.
+  attribution: >
+    Usage must roll up from turn to thread to stage to instance to epic to
+    project, and helper sessions must be charged to the attempt that
+    spawned them.
+  holding-without-losing: >
+    When a window is exhausted mid-stage, the thread and its context are
+    worth keeping if the harness can survive the wait, and not otherwise.
+    The choice is per provider and belongs to the operator.
+proposed-design:
+  high-level-overview: >
+    A separate component Heddle integrates with, not a part of the engine.
+    Each service runs a collector that reads T3 Code's per-turn usage events
+    and usage-limit events, attributes them, and pushes them to a central
+    sink. A query the service calls before dispatch answers "how much of
+    account X's current window is used, and when does it reset". The engine
+    uses that answer as a dispatch gate: Hold. The fleet-wide sink and the
+    query are adopted infrastructure, an OTLP-capable observability store,
+    not a purpose-built service. This design is second slice; the first
+    slice records attribution so the data exists when the gate arrives.
+  sources: |
+    - Token accounting: T3 Code's `thread.token-usage.updated` and per-turn
+      usage on turn completion, by model and token kind, and helper usage
+      from `task.*` events. Exact, immediate, attributed by thread.
+    - Window state: T3 Code's usage-limit events pushed through the server
+      config subscription, and its probe RPCs when nothing is running.
+      Sparse and low fidelity by contract.
+    - Ground truth: the provider's own usage readout where one exists,
+      polled at a low rate for calibration.
+    - Fallback: local harness transcript files, read only when T3 reports
+      partial usage.
+  attribution: >
+    Every usage record carries the thread id, the run id, the stage node
+    id, the instance's issue, and the parent thread id for helpers. The
+    stage's read model in the node-types design is where the per-attempt
+    total lives; the collector is what ships the records out. Rollups by
+    stage, instance, epic, and project are queries over the sink, not state
+    the engine holds.
+  window-ledger: >
+    Per provider account and window: used percent, reset time, last checked
+    time, and which attempts are currently charged to it. Fed by pushed
+    updates while turns run and by probes on a schedule derived from the
+    reset time while nothing runs, so a window that reopens during a hold
+    is noticed.
+  hold: >
+    Before starting a thread or sending a continuation turn, the engine
+    asks the ledger. If the account's window is exhausted, the dispatch is
+    held: the stage node stays paused, a `held` row records why, and the
+    scheduler re-checks at the window's reset time. Hold never ends a
+    thread. Whether an in-flight thread is kept or ended when its window
+    exhausts mid-turn is a per-provider operator setting, defaulting to
+    keep. Consuming a provider reset credit is operator-only.
+  calibration: >
+    A per-provider factor relating local token counts to the provider's
+    window percent, fitted over a running week and refit continuously, so
+    the ledger can estimate the window between provider updates. The
+    residual is reported so the operator can see how much to trust it.
+  operator-view: >
+    The console shows each account's windows, what is charged to them, what
+    is held, and the calibration residual. Usage limits and holds are also
+    attention events when a window exhausts with work waiting.
+  boundary: >
+    The engine knows only the gate: ask before dispatch, hold on no. The
+    collector, sink, query, and calibration are the budgeting component and
+    can be replaced without touching blueprints or the engine.

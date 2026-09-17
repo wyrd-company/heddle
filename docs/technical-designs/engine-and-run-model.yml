@@ -5,6 +5,7 @@ relationships:
     - agent-tools
     - github-binding-and-intake
     - blueprint-authoring
+    - usage-budgeting
 objective: >
   Run user-authored blueprints as durable, pausable workflow runs on the
   Flowcraft engine so that every algorithmic part of moving work through a
@@ -37,7 +38,8 @@ design-challenges:
     survives pauses.
   routing-on-wake-up: >
     A paused stage wakes for one of several reasons: handoff, escalate,
-    timeout, turn ended. Each reason must select exactly one outgoing edge,
+    timeout, idle, turn ended, overridden. Each reason must select exactly
+    one outgoing edge,
     and Flowcraft's action edges cannot be relied on for that.
   timeouts-beside-a-wait: >
     A stage that waits for an agent may also need a deadline. Flowcraft
@@ -62,9 +64,10 @@ proposed-design:
     adapter seam remains available if a second worker is ever needed, and
     swapping one in does not touch blueprints.
   run: >
-    A run is one execution of one blueprint. It has an id, the blueprint's
-    content hash, an initial context, a serialized context, a status
-    (`running`, `awaiting`, `completed`, `failed`, `cancelled`), a parent run
+    A run is one execution of one blueprint. It has an id, the blueprint
+    repository commit it is pinned to, an initial context, a serialized
+    context, a status (`running`, `awaiting`, `completed`, `failed`,
+    `cancelled`, `paused`), a parent run
     id when started by another run, and an append-only event log. Each issue
     in a bound project has exactly one lifecycle run at a time. Stage runs and
     helper runs (answer-question, hold-then-attention) are children of that
@@ -97,7 +100,8 @@ proposed-design:
     condition edges of the form `result.output.<result name>`. Action edges
     are rejected by lint. After traversal the engine asserts the run landed
     in an expected state (awaiting again, or completed) and raises attention
-    if it did not, because Flowcraft reports a dead end as success.
+    if it did not, because Flowcraft reports a dead end as success. Edge
+    conditions are JSONata expressions.
   arbitration: >
     Resume is serialized per run with a database-level claim: an `UPDATE`
     that moves the run from `awaiting` at a specific node to `resuming`
@@ -106,13 +110,20 @@ proposed-design:
     timeout is therefore visible in the log and in the console, but is never
     applied to a run that has moved on.
   deadlines: >
-    Deadlines are rows, not timers. When a node pauses with a deadline in its
-    awaiting details, the service inserts a `wakeup` row with the run id,
-    node id, result name `timeout`, and the due time. A scheduler tick reads
-    due rows and calls resume for each. If the run has already moved on, the
-    resume is a recorded late wake-up and the row is deleted. The Flowcraft
-    `sleep` node is wrapped so it uses the same row instead of an in-process
-    timer, which makes it durable across restarts.
+    Deadlines are rows, not timers, and they exist only where a blueprint
+    author wrote a duration. Two kinds. An elapsed deadline: when a node
+    pauses with `deadline` in its awaiting details, the service inserts a
+    `wakeup` row with the run id, node id, result name `timeout`, and the
+    due time. An inactivity deadline: a stage node with `inactivity` gets a
+    `wakeup` row with result name `idle` whose due time is the last observed
+    thread activity plus the duration, and the row's due time is pushed
+    forward every time the stage's read model records activity, including
+    helper activity. A scheduler tick reads due rows and calls resume for
+    each. If the run has already moved on, the resume is a recorded late
+    wake-up and the row is deleted. A wake-up selects an edge and does
+    nothing else. The Flowcraft `sleep` node is wrapped so it uses the same
+    row instead of an in-process timer, which makes it durable across
+    restarts.
   recovery: >
     On start, the service reads every run whose status is `running` or
     `resuming` and replays it from its last serialized context, then resumes
@@ -125,9 +136,33 @@ proposed-design:
     the source for the console, for Flowcraft's replay, and for retention
     decisions. Retention rules are configuration, not code.
   blueprint-pinning: >
-    A run pins the content hash of the blueprint it started with. A process
-    blueprint edit does not change running instances. Moving an instance to
-    a newer blueprint is an explicit operator action.
+    A run pins the blueprint repository commit it started from, which covers
+    the blueprint and every prompt, handoff schema, and rules file it
+    references. Child runs pin the same commit as their parent. A new
+    commit changes what new instances get; running instances keep their
+    commit until they finish. Moving a running instance to a newer commit
+    is not supported in this version.
+  pause-and-resume: >
+    An operator can pause an instance or an epic. A paused instance keeps
+    its live thread untouched and its paused nodes paused; what it loses is
+    dispatch: no new stage starts, no continuation turn is sent, and
+    deadline wake-ups are held and re-queued on resume rather than applied.
+    Pausing an epic pauses its task-graph run and every child. Pause and
+    resume are event-log rows and are visible on the project as a field the
+    reconciliation design names.
+  read-models: >
+    Every altitude the service tracks is a read model built from what it
+    observed, in T3 Code's sense of the term: the run's state from its own
+    event log, and a stage's attempt from the thread's event stream. The
+    service never records what it commanded as if it had happened; a
+    command is a request, and the event that follows is the fact.
+  command-line: >
+    The service is one binary. `heddle start` runs the service: the engine,
+    generated tool servers, the webhook handler, and the scheduler. Other
+    commands, `validate` and `skill`, work without the service and are
+    described in the blueprint-authoring design. The command surface is
+    specified as a command-line-interface specification when the CLI is
+    built.
   what-the-engine-never-knows: >
     The engine has no notion of a stage name, a status name, a review, or an
     epic. Those exist only as node ids and blueprint ids, which are user

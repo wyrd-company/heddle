@@ -5,6 +5,7 @@ relationships:
     - agent-tools
     - github-binding-and-intake
     - blueprint-authoring
+    - usage-budgeting
 objective: >
   Provide the node types a blueprint author composes: the bricks. Each node
   type has a well-known input and output contract, sensible defaults for the
@@ -31,14 +32,22 @@ design-challenges:
   operation-parameters: >
     External systems expose many operations. Adding one must be a change
     inside a brick, not a new brick.
+  what-a-graph-cannot-hold: >
+    Inside one thread's try at a stage, things happen that a graph of nodes
+    and edges cannot express: a context-fill ratio crossing a limit needs
+    the previous ratio; three consecutive failed test runs is a count over a
+    sequence; inactivity is the absence of an event. These live in code
+    behind the stage node, and only their outcomes reach the graph.
 proposed-design:
   high-level-overview: >
     Every node type declares an input schema and an output schema in JSON
-    Schema, published in the blueprint author reference. Inputs are read from
-    the node's `params`, with references into the run context. Outputs land in
-    the context under the node id, so any later node or edge can read them.
-    Pausing node types record what they wait for in awaiting details, as the
-    engine design describes. The catalog below is the starting set.
+    Schema, published in the blueprint author reference and embedded in the
+    authoring skill. Inputs are read from the node's `params`, with JSONata
+    references into the run context. Outputs land in the context under the
+    node id, so any later node or edge can read them. Pausing node types
+    record what they wait for in awaiting details, as the engine design
+    describes. The file format is the blueprint specification. The catalog
+    below is the starting set.
   contract-convention: |
     The convention is illustrated with an invented node type, `kettle`,
     which does not exist. It is chosen so that nothing about it can be
@@ -59,14 +68,15 @@ proposed-design:
       is the full form.
     - Metadata is not an input. A node's `metadata` bag is arbitrary data the
       author attaches for templates, guards, and downstream nodes to read.
-      Node types do not read their inputs from it.
+      Node types do not read their inputs from it. Keys with the same name on
+      the issue take precedence unless the node lists them in `fixed`.
     - Well-known outputs: the node writes a fixed shape under its node id. A
       pausing node also writes `output.<result>` as `true` for the result that
       woke it and the wake-up payload under `output.payload`, which is what
       condition edges read.
     - Context conventions: a node type may also write to a well-known shared
-      key. `stage` writes `stages.<nodeId>` with the thread id and handoff, so
-      later stages can find prior ones by name.
+      key. `stage` writes `stages.<nodeId>` with the thread id, visit count,
+      and handoff, so later stages can find prior ones by name.
   flowcraft-built-ins: |
     - `wait`: pauses until an external resume. Unchanged.
     - `sleep`: pauses until a deadline. Wrapped so the deadline is a wake-up
@@ -75,28 +85,53 @@ proposed-design:
     - Excluded: `subflow` and action edges, for the reasons in the engine
       design. Lint rejects both.
   stage: |
-    Starts an agent thread and pauses.
+    Starts one thread for one try at a stage and pauses. One stage node
+    execution is one attempt: one thread, from its start to the result the
+    engine records. A retry is a second execution of the same node, with the
+    visit count incremented; the process blueprint never learns how many
+    attempts a stage took unless it reads the count.
 
-    Inputs: `role`, `prompt` (a template rendered with the run context),
-    `model`, `runtimeMode`, `worktree`, `handoff` (a JSON Schema the handoff
-    tool enforces), `turnEndPolicy`, `resumeThread` (sugar for continuing an
-    existing thread), `tools` (extra MCP registrations).
+    Inputs: `prompt` (a Nunjucks template rendered with the task context),
+    `handoff` (the handoff tool definition: a JSON Schema in YAML whose root
+    `description` is the tool description), `turnEndPolicy` (starting value,
+    `require-handoff` or `allow`), `escalation` (`answer-in-place` or
+    `ends-stage`), `model`, `runtimeMode` (default `full-access`),
+    `worktree`, `resumeThread`, `tools`, `deadline`, `inactivity`.
 
     Behavior: ensures the T3 Code project for the worktree, ensures the
-    thread (a new one, or the one named by `resumeThread`), registers the
-    Heddle MCP server for the thread with a token bound to this run and
-    node, starts the first turn, writes `stages.<nodeId>.threadId`, and
-    pauses with awaiting details `{ kind: stage, threadId, runId, nodeId }`.
+    thread (a new one, or the one named by `resumeThread`), generates the
+    thread's tool server as the agent-tools design describes, starts the
+    first turn, writes `stages.<nodeId>`, and pauses with awaiting details
+    `{ kind: stage, threadId, runId, nodeId, turnEndPolicy }`. If a
+    `deadline` or `inactivity` duration is given, the engine inserts the
+    matching wake-up rows.
+
+    Read model: while the node is paused, the service subscribes to the
+    thread and maintains a read model of the attempt from what it observes,
+    never from what it commanded: last activity time, turn count, turns not
+    started by Heddle, token usage by model and by helper, context ratio and
+    the previous ratio, compaction outcomes, helper sessions from T3's
+    `task.*` events with their own usage, open approvals and questions, and
+    the current turn-end policy. The read model feeds inactivity detection,
+    usage budgeting, the console, and the operator operations in the
+    agent-tools design. Operator turns sent from the T3 Code UI are ordinary
+    observed turns; the read model has no belief that a turn it did not send
+    cannot exist.
 
     Results (each is an outgoing condition edge): `handoff` with the payload
-    that satisfied the schema; `escalate` with the agent's question or
-    request; `timeout` when a deadline row fired; `turnEnded` when the turn
-    ended without a handoff and the policy allowed it.
+    that satisfied the schema; `escalate` with the agent's question when
+    `escalation` is `ends-stage`; `timeout` when the elapsed deadline
+    passed; `idle` when no activity was observed for the inactivity
+    duration; `turnEnded` when a turn ended without a handoff under the
+    `allow` policy; `overridden` when the operator moved the issue's Status
+    by hand. A wake-up selects an edge and does nothing else; stopping or
+    ending the thread is a separate node or an operator operation.
   question: |
     Asks a named role and pauses.
 
     Inputs: `role` (`operator`, `adjudicator`, or a blueprint-defined role),
-    `questions` (id, header, text, options, multi-select), `deadline`.
+    `questions` (id, header, text template, options, multi-select),
+    `deadline`.
 
     Behavior: renders the questions, delivers them to the role's configured
     channel (console, notify, or a fresh adjudicator thread), and pauses with
@@ -112,29 +147,33 @@ proposed-design:
     context keys to values or context references), `outputs` (a mapping from
     keys under this node's output to the child's final context keys).
 
-    Behavior: starts the child with the mapped initial context and the
-    parent run id, pauses with `{ kind: child-run, childRunId }`.
+    Behavior: starts the child at the same pinned commit with the mapped
+    initial context and the parent run id, pauses with
+    `{ kind: child-run, childRunId }`.
 
     Results: `completed` with the mapped outputs; `failed` with the child's
     failure.
 
-    A stage blueprint is used from a process blueprint through this node.
-    The author reference documents the input and output shape each shipped
-    stage blueprint expects, so a process author writes
-    `child-run` with `blueprint: stage-implement` and the stage's inputs.
+    A `kind: stage` blueprint is used from a process blueprint through this
+    node. Such a blueprint wraps one or more `stage` nodes with the retry and
+    re-attempt routing the author wants, and ends on the stage result
+    contract. The author reference documents the inputs and outputs each
+    shipped stage blueprint declares.
   on-issue-change: |
     Pauses until the bound issue or its project card changes.
 
-    Inputs: `when` (an optional condition over the changed issue that must be
-    true for the node to wake; otherwise any change wakes it), `deadline`.
+    Inputs: `when` (an optional JSONata condition over the changed issue
+    that must be true for the node to wake; otherwise any change wakes it),
+    `deadline`.
 
     Behavior: pauses with `{ kind: issue-change, issueId, condition }`. The
-    GitHub event intake, webhook or poll, evaluates the condition against
-    the changed issue and resumes matching runs.
+    webhook handler evaluates the condition against the changed issue and
+    resumes matching runs.
 
     Results: `changed` with the new issue snapshot; `timeout`.
   github: |
-    One brick, one operation per use.
+    One brick, one operation per use. Acts with Heddle's own GitHub App,
+    never an agent's credential.
 
     Inputs: `operation` and operation-specific parameters. Operations at
     launch: `set-field` (project card field values), `comment`,
@@ -143,7 +182,8 @@ proposed-design:
 
     Behavior: idempotent by run id, node id, and visit count; a replayed
     node finds its prior effect by a marker comment or by reading state
-    before writing.
+    before writing. A permission refusal is raised as attention, not
+    retried.
 
     Output: the operation's result, such as a pull request number.
   git: |
@@ -152,27 +192,32 @@ proposed-design:
     shell. Idempotent: an existing worktree at the expected path and branch
     is success.
   notify: |
-    Inputs: `channel` (`pushover` at launch), `title`, `message` (template),
-    `url`. Fire and forget; the output is the delivery receipt.
+    Inputs: `channel` (`pushover` at launch), `title` and `message`
+    (templates), `url`. Fire and forget; the output is the delivery receipt.
   policy: |
     Inputs: `rules` (a reference to a rules artifact in the blueprint
     repository), `input` (defaults to the issue).
 
     Behavior: evaluates the rules and writes a policy object. A later `stage`
-    reads `turnEndPolicy` from it. Rules are data in the blueprint
-    repository; the evaluator is code.
+    reads its starting `turnEndPolicy` from it. Rules are data in the
+    blueprint repository; the evaluator is code.
   resume: |
-    Not placed by authors. The engine-internal operation the MCP tools, the
-    scheduler, the GitHub event intake, and child-run completion call. It is
-    listed here because its contract is what every pausing node's results
-    are defined against.
+    Not placed by authors. The engine-internal operation the generated tool
+    servers, the scheduler, the webhook handler, and child-run completion
+    call. It is listed here because its contract is what every pausing
+    node's results are defined against.
   lint-rules: |
-    Lint runs on load and refuses a blueprint that:
+    Lint runs on load, in the `validate` command, and refuses a blueprint
+    that:
 
-    - uses `subflow` or an action edge
+    - uses `subflow` or an edge `action`
     - has a pausing node with a result that no outgoing edge handles
-    - declares a stage node whose `handoff` is not a valid JSON Schema
+    - declares a stage node whose `handoff` is not a valid JSON Schema with
+      an object root, `properties`, and a non-empty `description`
     - names a role in `question` that no configured channel serves
+    - has a `when` expression that is not valid JSONata
+    - references a template, schema, or rules file that does not exist
+      beside the blueprint
     - reads a context key that no earlier node or the initial context
       provides, when that can be determined statically
     - declares a stage whose name is not a valid project single-select

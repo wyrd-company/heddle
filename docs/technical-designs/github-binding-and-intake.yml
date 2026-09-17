@@ -46,10 +46,19 @@ proposed-design:
     the blueprint as the source of truth. Issue and card changes arrive as
     webhook deliveries or poll diffs and become resumes on waiting runs.
   binding: >
-    Service configuration names the bound projects, the GitHub credential,
-    the T3 Code endpoint, and the blueprint repository location. Nothing
-    else. Repositories are not configured; they are discovered from issues.
-    Bob's preferences are not encoded anywhere in the service.
+    Service configuration names the bound projects, Heddle's GitHub App
+    credential, the T3 Code endpoint, and the blueprint repository
+    location. Nothing else. Repositories are not configured; they are
+    discovered from issues. No one user's preferences are encoded in the
+    service.
+  credentials: >
+    Two tiers. Heddle is an algorithmic system and holds its own GitHub App
+    with the write permissions reconciliation and the `github` brick need:
+    projects, issues, organization fields and types. Agents hold narrower
+    credentials of their own and never Heddle's; an agent that wants a
+    GitHub effect either has it in its own narrower App or asks Heddle
+    through a tool that decides whether to perform it. A permission refusal
+    is raised as attention, not retried.
   the-issue-as-input: |
     Every run's initial context includes `issue`:
 
@@ -59,6 +68,9 @@ proposed-design:
     - project card fields and their values for the bound project
     - relationships: parent, sub-issues, blocked-by, blocking, duplicates,
       linked pull requests
+    - front matter: a YAML block carried in a Markdown comment at the top
+      of the issue description, parsed into `issue.frontMatter`, so an issue
+      can carry configuration and data that has no field
 
     Conditions, prompt templates, `policy` rules, the epic task-graph
     builder, and reconciliation read this one shape. The `github` brick
@@ -114,12 +126,17 @@ proposed-design:
     other nodes, planning, UAT pull requests, retrospective, are ordinary
     authored nodes.
   event-delivery: >
-    The service exposes a webhook handler for GitHub `issues`,
+    The service exposes one webhook handler for GitHub `issues`,
     `projects_v2_item`, `issue_comment`, and `pull_request` events, verified
-    by the webhook secret. How deliveries reach it is the host's concern. A
-    poller with the same output contract runs when no webhook is configured
-    or as a safety net at a low rate. Both feed one intake that diffs the
-    issue snapshot, updates the stored copy, and resumes runs waiting on
+    by the webhook secret. How deliveries reach it is the host's concern.
+    The handler has two producers. GitHub calls it over HTTP. The poller,
+    which runs as a safety net at a low rate or as the only producer where
+    no webhook is configured, polls the bound projects, diffs, and on a
+    detected change emits a synthesized delivery in the same webhook payload
+    shape to the handler in-process. The handler does not know which
+    producer called it. It diffs the issue snapshot, updates the stored
+    copy, dedupes on the issue's updated time so a change seen by both
+    producers is applied once, and resumes runs waiting on
     `on-issue-change` whose condition matches.
   service-as-single-writer: >
     The service is the only writer of Status. Agents and people may change
@@ -127,3 +144,8 @@ proposed-design:
     on. A person moving Status by hand is also an event, and the shipped
     lifecycle blueprint treats it as an operator override that resumes the
     current stage with result `overridden`.
+  pause: >
+    Pausing an instance or an epic is an operator operation on the service,
+    projected to the card as a `Paused` field Heddle owns alongside Status,
+    so the state is visible on the board. Setting that field by hand is an
+    issue change the service treats as the same operation.

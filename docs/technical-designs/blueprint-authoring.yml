@@ -23,8 +23,8 @@ design-challenges:
     load and every save must round-trip without losing comments, key order,
     or formatting an author chose.
   two-kinds-of-blueprint: >
-    Plumbing blueprints (stage, answer-question, hold-then-attention, intake
-    default) ship with Heddle and change on its schedule. Process blueprints
+    Plumbing blueprints (shipped stage blueprints, answer-question,
+    hold-then-attention, the default intake) ship with Heddle and change on its schedule. Process blueprints
     belong to the user and change on theirs. Both use one format and one
     registry, and a user may fork a shipped one.
   validation-before-harm: >
@@ -36,7 +36,7 @@ proposed-design:
     blueprint is one YAML file. The loader parses YAML into a document model
     that preserves comments, derives a Flowcraft blueprint from it, lints
     the result with Flowcraft's linter plus Heddle's rules, and caches the
-    JSON by content hash. Writers, whether an agent tool, a console editor,
+    JSON by commit. Writers, whether an agent tool, a console editor,
     or a future canvas, edit the YAML document model and serialize it, never
     the JSON.
   translation: >
@@ -52,21 +52,39 @@ proposed-design:
     `result.output`, so the common condition is one path, and anything in
     the payload or the context is available for the uncommon one.
   validation: >
-    On load: YAML schema for the file shape, Flowcraft's linter for graph
-    validity, Heddle's rules from the node-types design for contracts and
-    results, and a check of every referenced file. On reconciliation:
-    `requires.issue` against the bound project. Failures name the file,
-    the node, and the rule.
+    One check chain, run by the service on load and by the `validate`
+    command offline: YAML parse, the blueprint specification's schema,
+    every referenced template, schema, and rules file, JSONata syntax of
+    every `when`, handoff schema validity and MCP tool constraints,
+    Flowcraft's linter, Heddle's lint rules from the node-types design, and
+    the load-then-save round-trip. None of it needs credentials or a
+    running service. The one live check, `requires.issue` against the bound
+    project, is a separate flag. Failures name the file, the node, and the
+    rule; the command exits non-zero on any finding and offers JSON output
+    beside the readable form so an authoring agent or a CI step can consume
+    it.
+  command-line: >
+    `heddle validate <file or directory>` runs the chain above.
+    `heddle skill list` names the embedded skills and `heddle skill export
+    <name> <dir>` expands one into a folder an agent harness can load. The
+    blueprint authoring skill is one of them. The command surface is
+    specified as a command-line-interface specification when the CLI is
+    built.
   pinning-and-change: >
-    The service reads the blueprint repository at a commit. A run pins the
-    content hash of its blueprint. A new commit changes what new runs get;
-    running instances keep their pinned version until an operator moves them.
+    The service reads the blueprint repository at a commit. A run pins that
+    commit, which covers the blueprint and every file it references. A new
+    commit changes what new instances get; running instances keep their
+    commit until they finish. Moving a running instance to a newer commit
+    is not supported in this version.
   authoring-help: >
     An author reference is generated from the node-type contracts: every
     node type, its inputs with defaults, its outputs, its results, the
-    context keys it writes, and the lint rules. It is the source for an
-    authoring skill for agents and, later, a console editor. The reference
-    is regenerated in the build so it cannot drift from the code.
+    context keys it writes, and the lint rules. The blueprint authoring
+    skill is generated from the same contracts and embedded in the CLI, so
+    the skill, the reference, and the code cannot disagree. The skill tells
+    an agent to run `validate` after every edit and to read its JSON output,
+    so the authoring loop needs no person in it. A console editor, later,
+    reads the same reference.
   fixtures: >
     The repository ships fixture blueprints: the user's real lifecycle, and
     blueprints that deliberately do things the design did not anticipate, to
