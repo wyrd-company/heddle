@@ -4,6 +4,8 @@
 //     - blueprint-authoring
 //     - node-types
 // ---
+import { resultContractFindings } from "./result-contracts.js";
+import { deriveFlowcraftBlueprint } from "./flowcraft.js";
 import { basename, extname, resolve } from "node:path";
 
 import { discoverBlueprintFiles, inputIsDirectory } from "./discovery.js";
@@ -173,6 +175,9 @@ function validateLoaded(
     ...validateExpressions(file, blueprint),
     ...lintHeddle(file, blueprint, options),
     ...flowcraftFindings(file, blueprint),
+    ...resultContractFindings(deriveFlowcraftBlueprint(blueprint)).map((item) =>
+      finding(file, item.node, "heddle.result-contract", item.message),
+    ),
   );
   findings.push(...validateLiveRequirements(file, blueprint, options));
   return findings;

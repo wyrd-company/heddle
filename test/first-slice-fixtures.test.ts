@@ -172,6 +172,13 @@ it.each([
       });
 
       expect(store.get(run.id).status).toBe("completed");
+      expect(
+        notifications.filter((item) => item.blueprintId.startsWith("stage-")),
+      ).toEqual([]);
+      expect(store.get(assessId).context["result"]).toEqual({
+        [result]: true,
+        payload: payload ?? null,
+      });
       expect(notifications).toContainEqual({
         blueprintId: "collection-catalog",
         nodeId: terminal,
@@ -211,6 +218,83 @@ it("starts the fixture policy-selected lifecycle without awaiting its completion
     expect(notifications).toContainEqual({
       blueprintId: "collection-intake",
       nodeId: "catalog-finished",
+    });
+  } finally {
+    store.close();
+  }
+});
+
+it("holds until expiry, sends intended attention, and returns terminal data", async () => {
+  const { engine, store, notifications } = createHarness();
+  try {
+    const run = await engine.start({
+      blueprintId: "hold-then-attention",
+      commit: "commit-a",
+    });
+    await engine.resume({
+      runId: run.id,
+      nodeId: "wait-for-type",
+      result: "timeout",
+    });
+    expect(store.get(run.id)).toMatchObject({
+      status: "completed",
+      context: { result: { status: "attention" } },
+    });
+    expect(notifications).toEqual([
+      { blueprintId: "hold-then-attention", nodeId: "notify-attention" },
+    ]);
+  } finally {
+    store.close();
+  }
+});
+
+it("the parallel appraisal fixture returns named answers without notifications", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "heddle-appraisal-"));
+  temporaryDirectories.push(directory);
+  const store = new RunStore(join(directory, "runs.sqlite"));
+  try {
+    const engine = new WorkflowEngine(store, {
+      resolveBlueprint: () =>
+        Promise.resolve(
+          deriveFlowcraftBlueprint(
+            loadValidatedBlueprint(
+              resolve(
+                "fixtures/blueprints/parallel-appraisal/parallel-appraisal.yml",
+              ),
+            ).blueprint,
+          ),
+        ),
+      nodes: {
+        question: async ({ await: pause }) => {
+          await pause({ kind: "question" });
+        },
+      },
+    });
+    const run = await engine.start({
+      blueprintId: "parallel-appraisal",
+      commit: "commit-a",
+    });
+    await engine.resume({
+      runId: run.id,
+      nodeId: "inspect-history",
+      result: "answered",
+      payload: { history: "sufficient" },
+    });
+    expect(store.get(run.id).status).toBe("awaiting");
+    await engine.resume({
+      runId: run.id,
+      nodeId: "inspect-condition",
+      result: "answered",
+      payload: { condition: "stable" },
+    });
+    expect(store.get(run.id)).toMatchObject({
+      status: "completed",
+      context: {
+        result: {
+          condition: { condition: "stable" },
+          history: { history: "sufficient" },
+        },
+      },
     });
   } finally {
     store.close();

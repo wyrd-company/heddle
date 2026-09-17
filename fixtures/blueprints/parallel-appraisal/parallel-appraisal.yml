@@ -2,6 +2,9 @@
 id: parallel-appraisal
 kind: helper
 description: Collect independent appraisals of a museum object in parallel.
+outputs:
+  result:
+    type: object
 nodes:
   # The operator records the object's visible condition.
   inspect-condition:
@@ -31,17 +34,23 @@ nodes:
               description: The recorded history supports appraisal.
             - label: incomplete
               description: More history is needed before appraisal.
-  # The all-join waits for both paused branches before recording a panel note.
-  record-panel:
-    uses: notify
+  # Named branch results are combined after both answers arrive.
+  combine-panel:
+    uses: aggregate
     config:
       joinStrategy: all
     params:
-      channel: pushover
-      title: { inline: "Appraisal panel answered" }
-      message: prompts/panel.md
+      bindings:
+        condition: { node: inspect-condition, path: payload }
+        history: { node: inspect-history, path: payload }
+  complete:
+    uses: terminal-result
+    params:
+      value: { from: "`combine-panel`" }
 edges:
   - from: inspect-condition
-    to: record-panel
+    to: combine-panel
   - from: inspect-history
-    to: record-panel
+    to: combine-panel
+  - from: combine-panel
+    to: complete

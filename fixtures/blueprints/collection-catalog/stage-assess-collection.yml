@@ -19,18 +19,15 @@ nodes:
       prompt: prompts/assess.md
       handoff: contracts/assess.yml
       turnEndPolicy: require-handoff
-  # A valid handoff completes the stage with an assessment decision.
+  # Return the handoff or interruption through the same stage result contract.
   complete:
-    uses: notify
+    uses: terminal-result
     params:
-      channel: pushover
-      title: { inline: "Collection assessed" }
-  # An operator override or allowed turn end completes without a decision.
+      value: { from: assess }
   incomplete:
-    uses: notify
+    uses: terminal-result
     params:
-      channel: pushover
-      title: { inline: "Collection assessment interrupted" }
+      value: { from: assess }
 edges:
   - from: assess
     to: complete

@@ -21,6 +21,14 @@ description: >-
   the issue is transferred automatically and cannot be replaced by inputs.
   The synchronous started result carries payload.runId without waiting for
   lifecycle completion.
+  `terminal-result` writes params.value to the final context.result and
+  returns it as node output. It has no outgoing edges and does not cancel
+  sibling branches. A second reached terminal fails the run. Declaring
+  outputs.result delivers the value through the child completion payload.
+  `aggregate` binds authored names to every direct predecessor exactly once
+  using params.bindings entries with node and optional path. The path is
+  JSONata relative to that predecessor output. It uses an all join and
+  returns an object in authored binding order; missing values fail.
   A graph in which every node has an incoming edge declares the node where
   execution begins with `entry`. `docs/specifications/blueprint.schema.yml`
   is the machine-readable blueprint definition. Policy nodes reference an

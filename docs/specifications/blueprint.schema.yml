@@ -233,6 +233,16 @@ $defs:
           properties: { params: { $ref: "#/$defs/gitParams" } }
           required: [params]
       - if:
+          properties: { uses: { const: terminal-result } }
+        then:
+          properties: { params: { $ref: "#/$defs/terminalResultParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: aggregate } }
+        then:
+          properties: { params: { $ref: "#/$defs/aggregateParams" } }
+          required: [params]
+      - if:
           properties: { uses: { const: notify } }
         then:
           properties: { params: { $ref: "#/$defs/notifyParams" } }
@@ -467,3 +477,30 @@ $defs:
     properties:
       deadline:
         $ref: "#/$defs/deadline"
+  terminalResultParams:
+    description: Final run data, persisted as context.result and returned through outputs.result.
+    type: object
+    additionalProperties: false
+    required: [value]
+    properties:
+      value:
+        $ref: "#/$defs/valueOrRef"
+  aggregateParams:
+    description: Named results of every direct predecessor, in authored binding order.
+    type: object
+    additionalProperties: false
+    required: [bindings]
+    properties:
+      bindings:
+        type: object
+        minProperties: 1
+        additionalProperties:
+          type: object
+          additionalProperties: false
+          required: [node]
+          properties:
+            node:
+              $ref: "#/$defs/slug"
+            path:
+              description: JSONata expression relative to the predecessor output; absent selects the entire output.
+              $ref: "#/$defs/expression"

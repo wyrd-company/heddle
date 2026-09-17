@@ -2,6 +2,7 @@
 // relationships:
 //   implements: engine-and-run-model
 // ---
+import { terminalResult, aggregate, terminalContext } from "./result-nodes.js";
 import { randomUUID } from "node:crypto";
 import type { WorkflowResult } from "flowcraft";
 import { claimResume, drainQueued } from "./claims.js";
@@ -93,7 +94,11 @@ export class WorkflowEngine {
                   this.options.resolveBlueprint,
                   context,
                 )
-            : this.options.nodes?.[definition.uses],
+            : definition.uses === "terminal-result"
+              ? terminalResult
+              : definition.uses === "aggregate"
+                ? aggregate
+                : this.options.nodes?.[definition.uses],
           this.clock,
           this.options.beforeNode,
         ),
@@ -156,12 +161,13 @@ export class WorkflowEngine {
         `Run landed in ${result.status}: ${result.errors?.map((error) => error.message).join("; ") ?? ""}`,
       );
     this.store.transaction(() => {
+      const context = terminalContext(result.context);
       const status =
         this.store.awaiting(runId).length > 0 ? "awaiting" : result.status;
       this.store.save(
         runId,
-        result.context,
-        { context: result.context, frontier: [] },
+        context,
+        { context, frontier: [] },
         status === "awaiting" ? "awaiting" : "completed",
       );
       if (status === "completed") this.store.event(runId, "completed", {});

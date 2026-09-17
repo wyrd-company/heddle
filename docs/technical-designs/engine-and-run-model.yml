@@ -91,6 +91,25 @@ proposed-design:
     A stage blueprint therefore knows nothing about its parent, and a parent
     knows nothing about threads. Flowcraft's `subflow` node type is excluded
     from the registry so it cannot be used by mistake.
+  terminal-results-and-aggregation: >
+    A terminal-result node writes its resolved value to context.result. Its
+    reached-node marker carries the value; it and the completed-node checkpoint commit
+    together. Recovery retains the result and detects a second reached
+    terminal rather than replacing it. Settlement restores this value to
+    context.result even if a node with that id produced another output.
+    The node has no outgoing edges and
+    does not cancel siblings. Completion still waits for every paused node.
+    Child completion uses the existing output projection: outputs.result
+    returns context.result under the parent's child-node payload.result;
+    explicit mappings to other child context paths remain valid. A missing
+    terminal value fails execution before completion is delivered.
+    Aggregate nodes use all joins and bind every direct predecessor once.
+    They read persisted completed outputs, select each binding's optional
+    JSONata path relative to that output, and build a named object in
+    authored binding order. Missing values and incomplete predecessors fail
+    execution. Completed branch data survives restart while sibling branches
+    remain paused. Notification is a separate external effect and is not
+    required to complete or combine results.
   lifecycle-start: >
     Intake starts a lifecycle through `lifecycle-start`. The target is an
     independent top-level run with its own root id and no parent. A durable

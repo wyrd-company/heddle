@@ -2,6 +2,7 @@
 // relationships:
 //   implements: engine-and-run-model
 // ---
+import { resultContractFindings } from "../blueprints/result-contracts.js";
 import { isDeepStrictEqual } from "node:util";
 import type { WorkflowBlueprint } from "flowcraft";
 import type { RunStore } from "./store.js";
@@ -99,6 +100,13 @@ export async function createRun(
   return sameRun(store, store.get(run.id), input);
 }
 function checkBlueprint(blueprint: WorkflowBlueprint): void {
+  const findings = resultContractFindings(blueprint);
+  if (findings.length)
+    throw new Error(
+      findings
+        .map((finding) => `${finding.node}: ${finding.message}`)
+        .join("; "),
+    );
   if (
     blueprint.nodes.some(
       (node) => node.uses === "subflow" || node.uses === "SubflowNode",

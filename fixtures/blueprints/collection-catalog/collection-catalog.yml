@@ -20,7 +20,7 @@ nodes:
         itemCount: { from: issue.fields.`Item Count` }
         storage: { from: issue.frontMatter.storage }
       outputs:
-        summary: capture.payload
+        summary: result.payload
   # The assessment stage is the real T3 Code pass exercised by the first slice.
   assess:
     uses: child-run
@@ -30,9 +30,9 @@ nodes:
       inputs:
         summary: { from: capture.payload.summary }
       outputs:
-        decision: assess.payload.decision
-        overridden: assess.overridden
-        turnEnded: assess.turnEnded
+        decision: result.payload.decision
+        overridden: result.overridden
+        turnEnded: result.turnEnded
   # Accepted collections produce a message whose template reads process metadata.
   record:
     uses: notify

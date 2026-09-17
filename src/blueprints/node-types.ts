@@ -57,6 +57,16 @@ export const NODE_TYPE_REGISTRY = {
     pausing: false,
     results: [],
   },
+  "terminal-result": {
+    paramsSchema: schemaReference("terminalResultParams"),
+    pausing: false,
+    results: [],
+  },
+  aggregate: {
+    paramsSchema: schemaReference("aggregateParams"),
+    pausing: false,
+    results: [],
+  },
   notify: {
     paramsSchema: schemaReference("notifyParams"),
     pausing: false,

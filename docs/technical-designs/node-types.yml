@@ -218,6 +218,32 @@ proposed-design:
     `merge`, `push`) and parameters. Runs through a git library, never a
     shell. Idempotent: an existing worktree at the expected path and branch
     is success.
+  terminal-result: |
+    Completes a branch with final run data. Params: `value`, a literal or
+    context reference. The value is written to `result` in the run context
+    and returned as the node output. Missing resolved values fail the run;
+    null, false, zero, empty strings, arrays, and objects are valid values.
+    The node has no outgoing edges. It does not cancel other branches or
+    complete a run while a sibling is paused. Exactly one reached terminal
+    result is allowed per run; reaching another fails the run. Alternative
+    terminal nodes may serve mutually exclusive routes. Terminal data owns
+    the final context.result even when another node uses the id result;
+    aggregation reads that node through its completed output.
+    A child blueprint declares `outputs.result` to return this value under
+    the parent's child node `output.payload.result`. Explicit child output
+    mappings can select `result` or any existing child context path.
+  aggregate: |
+    Combines completed branch outputs without effects. Params: `bindings`,
+    an ordered object whose keys name the combined results. Each binding
+    contains `node`, the id of one direct incoming predecessor, and optional
+    `path`, a JSONata expression evaluated with that predecessor's output as
+    its root. Without a path, the complete predecessor output is selected.
+    Every direct predecessor must be bound exactly once. Unknown, duplicate,
+    missing, and malformed bindings fail validation. The node uses an all
+    join; any joins are invalid. Unfinished predecessors and missing resolved
+    values fail execution. The output is an object in authored binding order,
+    independent of branch completion order. Null and other falsy values are
+    retained. A following terminal-result can use this object as final data.
   notify: |
     Inputs: `channel` (`pushover` at launch), `title` and `message`
     (templates), `url`. Fire and forget; the output is the delivery receipt.

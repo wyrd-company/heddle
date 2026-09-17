@@ -29,18 +29,20 @@ nodes:
       channel: pushover
       title: { inline: "Collection request still unmatched" }
       message: prompts/hold-expired.md
-  # A completed intake retry produces an explicit terminal node.
+  # Return retry completion without a notification side effect.
   retry-finished:
-    uses: notify
+    uses: terminal-result
     params:
-      channel: pushover
-      title: { inline: "Collection intake retried" }
-  # A failed intake retry is visible rather than silently completing.
+      value: { status: retried }
+  # A failed intake retry is returned to the waiting caller.
   retry-failed:
-    uses: notify
+    uses: terminal-result
     params:
-      channel: pushover
-      title: { inline: "Collection intake retry failed" }
+      value: { status: failed, details: { from: "`retry-intake`.payload" } }
+  attention-finished:
+    uses: terminal-result
+    params:
+      value: { status: attention }
 edges:
   - from: wait-for-type
     to: retry-intake
@@ -54,3 +56,5 @@ edges:
   - from: retry-intake
     to: retry-failed
     when: result.output.failed
+  - from: notify-attention
+    to: attention-finished
