@@ -99,8 +99,9 @@ $defs:
     additionalProperties: true
   expression:
     description: >
-      An edge condition or value expression evaluated by the sandboxed
-      expression evaluator over `result` and the run context.
+      A JSONata expression evaluated over `result` and the run context.
+      Node ids with hyphens are quoted in paths, as in
+      stages.`taste-test`.visits.
     type: string
     minLength: 1
   jsonSchema:

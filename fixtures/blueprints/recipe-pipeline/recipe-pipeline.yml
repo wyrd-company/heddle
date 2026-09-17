@@ -48,10 +48,10 @@ edges:
     when: result.output.completed
   - from: taste-test
     to: publish
-    when: result.output.completed && result.output.payload.verdict == 'approved'
+    when: result.output.completed and result.output.payload.verdict = 'approved'
   - from: taste-test
     to: draft
-    when: result.output.completed && result.output.payload.verdict == 'rejected' && stages.taste-test.visits < blueprint.metadata.maxTasteTests
+    when: result.output.completed and result.output.payload.verdict = 'rejected' and stages.`taste-test`.visits < blueprint.metadata.maxTasteTests
   - from: taste-test
     to: too-many-tests
-    when: result.output.completed && result.output.payload.verdict == 'rejected' && stages.taste-test.visits >= blueprint.metadata.maxTasteTests
+    when: result.output.completed and result.output.payload.verdict = 'rejected' and stages.`taste-test`.visits >= blueprint.metadata.maxTasteTests

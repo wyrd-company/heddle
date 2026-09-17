@@ -46,8 +46,8 @@ proposed-design:
     it, so untouched lines are byte-identical. A round-trip test on every
     fixture asserts that load then save changes nothing.
   edge-conditions: >
-    Edge `when` expressions are evaluated by an adopted, sandboxed expression
-    evaluator over `result` and the run context. Action edges are not
+    Edge `when` expressions are JSONata, evaluated over `result` and the run
+    context. Action edges are not
     written and are rejected. A pausing node's results are booleans under
     `result.output`, so the common condition is one path, and anything in
     the payload or the context is available for the uncommon one.

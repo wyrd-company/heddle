@@ -24,7 +24,7 @@ validation-criteria: >-
   validates against `docs/specifications/blueprint.schema.yml` interpreted as
   JSON Schema Draft 2020-12. Node ids are the keys of `nodes` and are
   slugs. Every edge names two existing node ids. Every `when` expression
-  parses in the sandboxed expression evaluator. Every path in a
+  is a syntactically valid JSONata expression. Every path in a
   `templateRef`, `schemaRef`, or `policy.rules` resolves to a file beside the
   blueprint. Every `handoff` schema is itself a valid JSON Schema Draft
   2020-12 object whose root is `type: object` with `properties` and a
