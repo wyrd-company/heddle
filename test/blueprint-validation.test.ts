@@ -233,13 +233,17 @@ describe("validation chain", () => {
     ).toBe(true);
   });
 
-  it("does not resolve a parent-relative reference outside the blueprint directory", () => {
-    const source = passBlueprint().replace(
-      'prompt: { inline: "Complete the request." }',
-      "prompt: ../outside.md",
+  it("does not accept an absolute reference", () => {
+    const file = temporaryFile("nested/sample-a.yml", passBlueprint());
+    const prompt = join(dirname(file), "prompt.md");
+    writeFileSync(prompt, "Prompt");
+    writeFileSync(
+      file,
+      passBlueprint().replace(
+        'prompt: { inline: "Complete the request." }',
+        `prompt: ${prompt}`,
+      ),
     );
-    const file = temporaryFile("nested/sample-a.yml", source);
-    writeFileSync(join(dirname(dirname(file)), "outside.md"), "Outside");
 
     expect(
       validateBlueprintFile(file).some(
