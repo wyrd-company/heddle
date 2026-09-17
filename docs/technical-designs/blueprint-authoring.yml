@@ -39,43 +39,6 @@ proposed-design:
     JSON by content hash. Writers, whether an agent tool, a console editor,
     or a future canvas, edit the YAML document model and serialize it, never
     the JSON.
-  file-shape: |
-    ```yaml
-    # Delivery lifecycle for ordinary feature work.
-    id: task-lifecycle
-    kind: process            # process | stage | helper
-    requires:
-      issue:
-        fields: [Priority]   # project fields this blueprint reads
-    nodes:
-      implement:
-        uses: child-run
-        stage: true          # projected to the project's Status field
-        blueprint: stage-implement
-        inputs:
-          role: software-engineer
-          prompt: prompts/implement.md
-          handoff: contracts/implementation.json
-      review:
-        uses: child-run
-        stage: true
-        blueprint: stage-review
-        inputs:
-          role: reviewer
-          prompt: prompts/review.md
-          handoff: contracts/review.json
-    edges:
-      - from: implement
-        to: review
-        when: result.output.handoff
-      - from: review
-        to: implement
-        when: result.output.handoff && result.output.payload.verdict == 'changes-requested'
-    ```
-
-    Node ids are the keys under `nodes`. Prompts, handoff schemas, and rules
-    are files beside the blueprint, referenced by relative path, so they
-    can be shared and reviewed on their own.
   translation: >
     The `yaml` package's document API holds comments and formatting. Loading
     produces the document and a plain object; the plain object becomes the
