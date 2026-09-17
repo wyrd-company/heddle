@@ -67,8 +67,12 @@ and live test commands.
 
 ## Run
 
-The scaffold exposes the planned command groups. They print their usage and
-return a non-zero exit code until their implementations land.
+`heddle validate` checks blueprints. Harnesses invoke `heddle hook stop claude`
+or `heddle hook stop codex` to check the current turn-end policy. See the
+[agent tools and hook reference](docs/reference/agent-tools.md) for installation,
+worktree files, and Codex observation enforcement.
+
+The `start` and `skill` command groups print their usage and return status 2.
 
 ```sh
 heddle --help
