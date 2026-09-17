@@ -13,6 +13,7 @@ export interface ResumeInput {
   result: string;
   payload?: unknown;
   visit?: number;
+  wakeupId?: number;
 }
 export interface Checkpoint {
   context: Data;

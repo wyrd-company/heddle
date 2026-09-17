@@ -50,7 +50,7 @@ export class Wakeups {
   }
   async tick(
     now: number,
-    resume: (input: ResumeInput) => Promise<string>,
+    resume: (input: ResumeInput) => Promise<unknown>,
   ): Promise<void> {
     for (const wakeup of this.due(now)) {
       const current = this.store.db
@@ -60,9 +60,11 @@ export class Wakeups {
         )
         .get(wakeup.id, now);
       if (!current) continue;
-      const outcome = await resume({ ...wakeup, payload: { due: wakeup.due } });
-      if (outcome !== "held")
-        this.store.db.prepare("DELETE FROM wakeups WHERE id=?").run(wakeup.id);
+      await resume({
+        ...wakeup,
+        wakeupId: wakeup.id,
+        payload: { due: wakeup.due },
+      });
     }
   }
 }

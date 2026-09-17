@@ -116,8 +116,11 @@ proposed-design:
     traversal. A request for a visit that no longer awaits is logged as
     late-wakeup. A request for a still-awaiting sibling while the run is busy,
     or while the instance is paused, is queued durably. Settle drains queued
-    requests in arrival order. Dequeue and claim commit together. Due wake-up
-    rows remain until their request applies or becomes late.
+    requests in arrival order. Wake-up row identities are never reused. Repeated
+    scheduler ticks reuse the current row identity and enqueue it once;
+    separate external requests remain distinct.
+    Dequeue, claim, and retirement of the matching wake-up row commit together.
+    Due wake-up rows remain until their request applies or becomes late.
   deadlines: >
     Deadlines are rows, not timers, and they exist only where a blueprint
     author wrote a duration. Two kinds. An elapsed deadline: when a node
@@ -146,13 +149,15 @@ proposed-design:
     or a completed node whose result still needs routing, together with the
     remaining frontier. Flowcraft supplies graph traversal, node execution
     and result routing through its orchestrator extension seam. The engine
-    persists before dispatch and after each routed node. The completed visit
+    persists before dispatch and at node completion. The completed visit
     and its output checkpoint commit together, so replay keeps the effect
     identity and cannot skip an unfinished sibling beside a persisted pause.
     A claimed resume records its result and payload before traversal.
     Child dispatch follows the parent's persisted pause; recovery delivers
     completed children whose parents still await them. A child creation
-    failure raises attention and selects the parent's failed result. Recovery
+    failure or child-output projection failure raises attention and selects the
+    parent's failed result. Paused nodes do not count as completed predecessors
+    for an all join; only their resumed result can satisfy the join. Recovery
     isolates failures per run and continues with other runs. Paused instances
     remain untouched; instance resume recovers only that instance's subtree.
   event-log: >

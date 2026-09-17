@@ -225,31 +225,22 @@ it("recovery isolates a run failure and still recovers later runs", async () => 
       blueprintId: "inspection",
       commit: "commit-a",
     });
-  // A persisted child completion with an invalid projection fails during delivery.
-  const outer = await createRun(store, () => Promise.resolve(parent()), {
-    id: "outer",
-    rootId: "outer",
-    parentId: null,
-    parentNodeId: null,
-    blueprintId: "container",
-    commit: "commit-a",
-  });
-  store.status("broken", "completed");
-  store.db
-    .prepare("UPDATE runs SET parent_id=?,parent_node_id=? WHERE id=?")
-    .run(outer.id, "child", "broken");
+  store.status("broken", "awaiting");
   store.recordAwaiting(
-    {
-      runId: outer.id,
-      nodeId: "child",
-      visit: 1,
-      details: {
-        kind: "child-run",
-        childRunId: "broken",
-        outputs: { answer: "(" },
-      },
-    },
+    { runId: "broken", nodeId: "inspect", visit: 1, details: { kind: "pass" } },
     0,
+  );
+  store.db.prepare("INSERT INTO held_resumes(run_id,request) VALUES (?,?)").run(
+    "broken",
+    JSON.stringify({
+      runId: "broken",
+      nodeId: "inspect",
+      result: "handoff",
+      visit: 1,
+    }),
+  );
+  store.db.exec(
+    "CREATE TRIGGER reject_claim BEFORE UPDATE OF status ON runs WHEN NEW.id='broken' AND NEW.status='resuming' BEGIN SELECT RAISE(ABORT, 'injected claim failure'); END",
   );
   await engine.recover();
   expect(store.get("broken").status).toBe("failed");
@@ -474,14 +465,23 @@ it("rejects a resume for a paused sibling after the run has failed", async () =>
 
 it("queue deletion and resume claim roll back together when the writer cannot delete", async () => {
   const { engine, store } = setup([
-    { id: "inspection", nodes: [{ id: "inspect", uses: "pass" }], edges: [] },
+    {
+      id: "inspection",
+      nodes: [{ id: "inspect", uses: "pass", params: { deadline: 0 } }],
+      edges: [],
+    },
   ]);
   const run = await engine.start({
     blueprintId: "inspection",
     commit: "commit-a",
   });
   engine.pauseInstance(run.id);
-  await engine.resume({ runId: run.id, nodeId: "inspect", result: "handoff" });
+  await engine.resume({
+    runId: run.id,
+    nodeId: "inspect",
+    result: "timeout",
+    wakeupId: Number(store.db.prepare("SELECT id FROM wakeups").get()?.["id"]),
+  });
   store.db.prepare("UPDATE runs SET paused=0 WHERE id=?").run(run.id);
   const before = store.get(run.id);
   store.db.exec(
@@ -492,6 +492,7 @@ it("queue deletion and resume claim roll back together when the writer cannot de
       drainQueued(store, run.id, () => Promise.resolve()),
     ).rejects.toThrow("injected delete failure");
     expect(store.get(run.id)).toEqual(before);
+    expect(store.db.prepare("SELECT * FROM wakeups").all()).toHaveLength(1);
     expect(store.awaiting(run.id)).toHaveLength(1);
     expect(
       store.events(run.id).filter((event) => event.type === "resume"),
@@ -507,4 +508,213 @@ it("queue deletion and resume claim roll back together when the writer cannot de
   expect(
     store.events(run.id).filter((event) => event.type === "resume"),
   ).toHaveLength(1);
+});
+
+it("repeated busy ticks queue one deadline and retire it without a false late wakeup", async () => {
+  const entered = deferred(),
+    release = deferred();
+  let now = 0;
+  const { engine, store } = setup(
+    [fanout()],
+    {
+      slow: async () => {
+        entered.resolve();
+        await release.promise;
+        return null;
+      },
+    },
+    () => now,
+  );
+  const run = await engine.start({
+    blueprintId: "collection",
+    commit: "commit-a",
+  });
+  const work = engine.resume({
+    runId: run.id,
+    nodeId: "first",
+    result: "handoff",
+  });
+  try {
+    await entered.promise;
+    now = 100;
+    await engine.tick();
+    await engine.tick();
+    await engine.tick();
+    expect(store.db.prepare("SELECT * FROM held_resumes").all()).toHaveLength(
+      1,
+    );
+    expect(
+      store.events(run.id).filter((event) => event.type === "held-wakeup"),
+    ).toHaveLength(1);
+    expect(store.db.prepare("SELECT * FROM wakeups").all()).toHaveLength(1);
+  } finally {
+    release.resolve();
+    await work;
+  }
+  expect(store.db.prepare("SELECT * FROM held_resumes").all()).toEqual([]);
+  expect(store.db.prepare("SELECT * FROM wakeups").all()).toEqual([]);
+  await engine.tick();
+  expect(
+    store.events(run.id).filter((event) => event.type === "late-wakeup"),
+  ).toEqual([]);
+  expect(
+    store
+      .events(run.id)
+      .filter(
+        (event) =>
+          event.type === "resume" &&
+          (event.payload as { result: string }).result === "timeout",
+      ),
+  ).toHaveLength(1);
+});
+
+it("settle applies two queued sibling requests in arrival order", async () => {
+  const entered = deferred(),
+    release = deferred();
+  const blueprint = fanout();
+  blueprint.nodes.push({ id: "third", uses: "pass" });
+  blueprint.edges.push({ source: "start", target: "third" });
+  const { engine, store } = setup([blueprint], {
+    slow: async () => {
+      entered.resolve();
+      await release.promise;
+      return null;
+    },
+  });
+  const run = await engine.start({
+    blueprintId: blueprint.id,
+    commit: "commit-a",
+  });
+  const work = engine.resume({
+    runId: run.id,
+    nodeId: "first",
+    result: "handoff",
+  });
+  try {
+    await entered.promise;
+    expect(
+      await engine.resume({
+        runId: run.id,
+        nodeId: "third",
+        result: "handoff",
+      }),
+    ).toBe("held");
+    expect(
+      await engine.resume({
+        runId: run.id,
+        nodeId: "second",
+        result: "timeout",
+      }),
+    ).toBe("held");
+  } finally {
+    release.resolve();
+    await work;
+  }
+  expect(
+    store
+      .events(run.id)
+      .filter((e) => e.type === "resume")
+      .map((e) => (e.payload as { nodeId: string }).nodeId),
+  ).toEqual(["first", "third", "second"]);
+  expect(store.db.prepare("SELECT * FROM held_resumes").all()).toEqual([]);
+  expect(store.get(run.id).status).toBe("completed");
+});
+
+it("a live child output projection failure raises parent attention and routes failed", async () => {
+  const inner: WorkflowBlueprint = {
+    id: "inspection",
+    nodes: [{ id: "work", uses: "pass" }],
+    edges: [],
+  };
+  const outer = parent();
+  const definition = outer.nodes[0];
+  if (!definition) throw new Error("Missing child");
+  definition.params = {
+    blueprint: "inspection",
+    outputs: { total: "$sum(work)" },
+  };
+  const { engine, store } = setup([inner, outer]);
+  const run = await engine.start({
+    blueprintId: "container",
+    commit: "commit-a",
+  });
+  const childId = String(store.awaiting(run.id)[0]?.details.childRunId);
+  expect(
+    await engine.resume({
+      runId: childId,
+      nodeId: "work",
+      result: "handoff",
+      payload: { value: "not a number" },
+    }),
+  ).toBe("applied");
+  expect(store.get(childId).status).toBe("completed");
+  expect(store.get(run.id).status).toBe("completed");
+  expect(store.get(run.id).context["child"]).toMatchObject({
+    failed: true,
+    payload: { message: expect.any(String) as unknown },
+  });
+  expect(
+    store.events(run.id).filter((e) => e.type === "attention"),
+  ).toHaveLength(1);
+  expect(store.awaiting(run.id)).toEqual([]);
+});
+
+it("a retired deadline identity cannot consume a later visit deadline", async () => {
+  let now = 0;
+  const blueprint: WorkflowBlueprint = {
+    id: "rest",
+    nodes: [
+      {
+        id: "rest",
+        uses: "sleep",
+        config: { joinStrategy: "any" },
+        params: { duration: 1 },
+      },
+    ],
+    edges: [
+      { source: "rest", target: "rest", condition: "result.output.completed" },
+    ],
+  };
+  const { engine, store } = setup([blueprint], {}, () => now);
+  const run = await engine.start({ blueprintId: "rest", commit: "commit-a" });
+  const old = engine.wakeups.due(1)[0];
+  if (!old) throw new Error("Missing wakeup");
+  now = 1;
+  await engine.tick();
+  const current = store.db.prepare("SELECT * FROM wakeups").all();
+  expect(current).toHaveLength(1);
+  expect(await engine.resume({ ...old, wakeupId: old.id })).toBe("late-wakeup");
+  expect(store.db.prepare("SELECT * FROM wakeups").all()).toEqual(current);
+  now = 2;
+  await engine.tick();
+  expect(store.awaiting(run.id)[0]?.visit).toBe(3);
+});
+
+it("a failed branch stops dispatch of its unfinished siblings", async () => {
+  let effects = 0;
+  const blueprint = fanout("broken");
+  blueprint.nodes.push({ id: "third", uses: "effect" });
+  blueprint.edges.push({ source: "start", target: "third" });
+  const { engine, store } = setup([blueprint], {
+    broken: () => Promise.reject(new Error("Failed node")),
+    effect: () => {
+      effects++;
+      return Promise.resolve(null);
+    },
+  });
+  const run = await engine.start({
+    blueprintId: blueprint.id,
+    commit: "commit-a",
+  });
+  expect(run.status).toBe("failed");
+  expect(effects).toBe(0);
+  expect(
+    store
+      .events(run.id)
+      .filter(
+        (event) =>
+          event.type === "node-start" &&
+          (event.payload as { nodeId: string }).nodeId === "third",
+      ),
+  ).toEqual([]);
 });

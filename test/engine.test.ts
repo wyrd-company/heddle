@@ -258,6 +258,11 @@ it("holds wakeups and external resumes while paused and requeues them on instanc
   expect(
     store.events(run.id).some((event) => event.type === "late-wakeup"),
   ).toBe(true);
+  await engine.tick();
+  expect(
+    store.events(run.id).filter((event) => event.type === "late-wakeup"),
+  ).toHaveLength(1);
+  expect(store.db.prepare("SELECT * FROM wakeups").all()).toEqual([]);
 });
 it("wraps sleep with a durable row and resumes after constructing a fresh engine", async () => {
   const blueprint: WorkflowBlueprint = {

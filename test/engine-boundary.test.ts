@@ -47,6 +47,7 @@ it.each([
   "before-child",
   "after-child",
   "paused-after-child",
+  "between-join-resumes",
 ])(
   "recovers the durable %s boundary after a real process kill",
   async (boundary) => {
@@ -81,6 +82,8 @@ it.each([
         recovered: unknown;
         effects: { id: string; attempts: number }[];
         activeVisits: unknown[];
+        joinsBefore: number;
+        joined: unknown;
       };
       expect(result.status).toBe("completed");
       expect(result.activeVisits).toEqual([]);
@@ -100,6 +103,10 @@ it.each([
       }
       if (boundary === "paused-after-child")
         expect(result.recovered).toEqual(result.before);
+      if (boundary === "between-join-resumes") {
+        expect(result.joinsBefore).toBe(0);
+        expect(result.joined).toEqual([3, 7]);
+      }
       expect((await exited)[0]).toBe(0);
     } finally {
       await cleanup();

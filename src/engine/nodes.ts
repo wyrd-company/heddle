@@ -72,6 +72,7 @@ export function bindNode(
       if (key === "_awaitingNodeIds" || key === "_awaitingDetails") continue;
       await native.context.set(key, value);
     }
+    if (awaiting) await native.context.delete(`_outputs.${nodeId}`);
     const snapshot = await native.context.toJSON();
     if (awaiting) {
       if (deadline !== undefined) awaiting.deadline = deadline;
@@ -82,10 +83,6 @@ export function bindNode(
         ...(snapshot["_awaitingDetails"] as Data),
         [nodeId]: awaiting,
       };
-    }
-    if (awaiting) {
-      snapshot[`_outputs.${nodeId}`] = output ?? null;
-      snapshot[nodeId] = output ?? null;
     }
     store.transaction(() => {
       const checkpoint = awaiting

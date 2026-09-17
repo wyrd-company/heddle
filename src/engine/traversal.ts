@@ -101,14 +101,9 @@ export class DurableTraversal implements IOrchestrator {
         result?.status === "fulfilled" &&
         result.value.executionResult.status === "success"
       ) {
-        // A persisted pause completes this invocation, but selects no edge.
-        await state.addCompletedNode(
-          node.nodeId,
-          result.value.executionResult.result.output,
-        );
+        // A paused visit is unfinished and cannot satisfy a join.
+        traverser.resetNodeCompletion(node.nodeId);
         this.runtime.pausing.delete(node.nodeId);
-        traverser = GraphTraverser.fromState(blueprint, state);
-        traverser.clearFrontier();
       } else {
         await processResults(
           results,
@@ -128,16 +123,6 @@ export class DurableTraversal implements IOrchestrator {
           ]),
         ).values(),
       ];
-      const snapshot = (await state.getContext().toJSON()) as Data;
-      this.store.save(
-        this.runId,
-        snapshot,
-        {
-          context: snapshot,
-          frontier: ready.map(({ nodeId }) => nodeId),
-        },
-        "running",
-      );
     }
     const result = await state.toResult(
       context.services.serializer,

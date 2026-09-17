@@ -39,10 +39,40 @@ const pass: EngineNode = async ({ await: pause }) => {
 const engine = new WorkflowEngine(store, {
   resolveBlueprint: async (_commit, id) => {
     if (id === "inspection") {
+      if (boundary === "between-join-resumes")
+        return { id, nodes: [{ id: "work", uses: "pass" }], edges: [] };
       if (mode === "crash" && boundary === "before-child")
         await stopAtBoundary();
       return { id, nodes: [{ id: "inspect", uses: "record" }], edges: [] };
     }
+    if (boundary === "between-join-resumes")
+      return {
+        id,
+        nodes: [
+          { id: "start", uses: "record" },
+          ...["left", "right"].map((id) => ({
+            id,
+            uses: "child-run",
+            params: {
+              blueprint: "inspection",
+              outputs: { value: "work.payload.value" },
+            },
+          })),
+          {
+            id: "combine",
+            uses: "combine",
+            config: { joinStrategy: "all" as const },
+          },
+        ],
+        edges: [
+          ...["left", "right"].map((target) => ({ source: "start", target })),
+          ...["left", "right"].map((source) => ({
+            source,
+            target: "combine",
+            condition: "result.output.completed",
+          })),
+        ],
+      };
     if (boundary === "after-node")
       return {
         id,
@@ -95,7 +125,17 @@ const engine = new WorkflowEngine(store, {
       ],
     };
   },
-  nodes: { record, pass },
+  nodes: {
+    record,
+    pass,
+    combine: async (input) => {
+      input.context["joined"] = ["left", "right"].map(
+        (id) =>
+          (input.context[id] as { payload: { value: number } }).payload.value,
+      );
+      return record(input);
+    },
+  },
 });
 if (mode === "crash") {
   if (boundary === "after-node" || boundary === "after-pause") {
@@ -146,8 +186,27 @@ if (mode === "crash") {
       nodeId: "inspect",
       result: "handoff",
     });
+  if (boundary === "between-join-resumes") {
+    const left = store
+      .awaiting("shipment-1")
+      .find((row) => row.nodeId === "left");
+    await engine.resume({
+      runId: String(left?.details.childRunId),
+      nodeId: "work",
+      result: "handoff",
+      payload: { value: 3 },
+    });
+    await stopAtBoundary();
+  }
   throw new Error(`Crash boundary was not reached: ${String(boundary)}`);
 } else {
+  const joinsBefore = store
+    .events("shipment-1")
+    .filter(
+      (event) =>
+        event.type === "node-start" &&
+        (event.payload as { nodeId: string }).nodeId === "combine",
+    ).length;
   const before = store
     .list()
     .map((run) => ({ id: run.id, events: store.events(run.id) }));
@@ -163,12 +222,25 @@ if (mode === "crash") {
       nodeId: "first",
       result: "handoff",
     });
+  if (boundary === "between-join-resumes") {
+    const right = store
+      .awaiting("shipment-1")
+      .find((row) => row.nodeId === "right");
+    await engine.resume({
+      runId: String(right?.details.childRunId),
+      nodeId: "work",
+      result: "handoff",
+      payload: { value: 7 },
+    });
+  }
   process.send?.({
     status: store.get("shipment-1").status,
     before,
     recovered,
     effects: effects.prepare("SELECT * FROM effects ORDER BY id").all(),
     activeVisits: store.db.prepare("SELECT * FROM visits WHERE active=1").all(),
+    joinsBefore,
+    joined: store.get("shipment-1").context["joined"],
   });
   store.close();
   effects.close();

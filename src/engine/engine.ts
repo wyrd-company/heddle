@@ -198,15 +198,27 @@ export class WorkflowEngine {
       return;
     const awaiting = this.store.findAwaiting("childRunId", child.id)[0];
     if (!awaiting) return;
-    const payload =
-      child.status === "failed"
-        ? { runId: child.id, events: this.store.events(child.id) }
-        : await this.childOutputs(child, awaiting);
+    let result = child.status === "completed" ? "completed" : "failed";
+    let payload: Data;
+    try {
+      payload =
+        child.status === "failed"
+          ? { runId: child.id, events: this.store.events(child.id) }
+          : await this.childOutputs(child, awaiting);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.store.event(child.parentId, "attention", {
+        nodeId: awaiting.nodeId,
+        message,
+      });
+      result = "failed";
+      payload = { runId: child.id, message };
+    }
     await this.resume({
       runId: child.parentId,
       nodeId: awaiting.nodeId,
       visit: awaiting.visit,
-      result: child.status === "completed" ? "completed" : "failed",
+      result,
       payload,
     });
   }

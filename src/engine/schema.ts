@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS events (
   PRIMARY KEY(run_id, sequence)
 );
 CREATE TABLE IF NOT EXISTS wakeups (
-  id INTEGER PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
+  id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id),
   node_id TEXT NOT NULL, visit INTEGER NOT NULL, result TEXT NOT NULL, due REAL NOT NULL,
   UNIQUE(run_id, node_id, visit, result)
 );
@@ -39,4 +39,6 @@ CREATE INDEX IF NOT EXISTS wakeups_due ON wakeups(due);
 CREATE TABLE IF NOT EXISTS held_resumes (
   id INTEGER PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id), request TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS held_wakeup ON held_resumes
+  (json_extract(request,'$.wakeupId'));
 `;

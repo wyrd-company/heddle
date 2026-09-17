@@ -19,21 +19,27 @@ export function claimResume(
           item.nodeId === request.nodeId &&
           (request.visit === undefined || item.visit === request.visit),
       );
-    if (!awaiting || run.status === "completed" || run.status === "failed") {
+    const retireWakeup = () => {
+      if (request.wakeupId !== undefined)
+        store.db
+          .prepare("DELETE FROM wakeups WHERE id=?")
+          .run(request.wakeupId);
+    };
+    if (!awaiting || run.status === "failed") {
+      retireWakeup();
       store.event(run.id, "late-wakeup", request);
       return "late-wakeup";
     }
     if (run.paused || run.status !== "awaiting") {
       const bound = { ...request, visit: awaiting.visit };
-      store.db
-        .prepare("INSERT INTO held_resumes(run_id,request) VALUES (?,?)")
+      const inserted = store.db
+        .prepare(
+          "INSERT OR IGNORE INTO held_resumes(run_id,request) VALUES (?,?)",
+        )
         .run(run.id, JSON.stringify(bound));
-      store.event(run.id, "held-wakeup", bound);
+      if (inserted.changes > 0) store.event(run.id, "held-wakeup", bound);
       return "held";
     }
-    store.db
-      .prepare("UPDATE runs SET status='resuming' WHERE id=?")
-      .run(run.id);
     const output = {
       [request.result]: true,
       payload: request.payload ?? null,
@@ -48,6 +54,7 @@ export function claimResume(
       .prepare("DELETE FROM awaiting WHERE run_id=? AND node_id=?")
       .run(run.id, request.nodeId);
     store.event(run.id, "resume", request);
+    retireWakeup();
     return "applied";
   };
   return transaction ? store.transaction(claim) : claim();
