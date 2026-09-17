@@ -14,12 +14,15 @@ nodes:
     uses: child-run
     params:
       blueprint: collection-catalog
+      inputs:
+        issue: { from: issue }
   # An unmatched issue starts the helper that waits for a relevant change.
   start-hold:
     uses: child-run
     params:
       blueprint: hold-then-attention
       inputs:
+        issue: { from: issue }
         expectedType: Collection request
   # Completion of the selected collection process is made visible.
   catalog-finished:

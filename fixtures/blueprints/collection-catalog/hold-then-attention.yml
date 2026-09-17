@@ -20,6 +20,8 @@ nodes:
     uses: child-run
     params:
       blueprint: collection-intake
+      inputs:
+        issue: { from: issue }
   # An expired hold raises attention through the available notification brick.
   notify-attention:
     uses: notify
