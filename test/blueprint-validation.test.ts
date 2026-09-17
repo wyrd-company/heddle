@@ -285,7 +285,10 @@ describe("validation chain", () => {
     ],
     [
       "valid JSON Schema",
-      passBlueprint().replace("type: object", "type: impossible"),
+      passBlueprint().replace(
+        "value: { type: string }",
+        "value: { type: impossible }",
+      ),
     ],
   ])("requires handoff schema %s", (_constraint, source) => {
     expect(
