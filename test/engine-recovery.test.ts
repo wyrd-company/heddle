@@ -15,7 +15,7 @@ function launch(path: string, mode: string): ChildProcess {
     fileURLToPath(new URL("./engine-process.fixture.ts", import.meta.url)),
     [path, mode],
     {
-      execArgv: ["--experimental-transform-types"],
+      execArgv: [],
       stdio: ["ignore", "ignore", "pipe", "ipc"],
     },
   );

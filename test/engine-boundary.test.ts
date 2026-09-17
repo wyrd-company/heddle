@@ -12,7 +12,7 @@ import { expect, it, onTestFinished } from "vitest";
 import { RunStore, WorkflowEngine, type ResumeInput } from "../src/index.js";
 function launch(file: string, args: string[] = []) {
   return fork(fileURLToPath(new URL(file, import.meta.url)), args, {
-    execArgv: ["--experimental-transform-types"],
+    execArgv: [],
     stdio: ["ignore", "ignore", "pipe", "ipc"],
   });
 }
