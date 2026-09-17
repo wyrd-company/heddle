@@ -1,7 +1,13 @@
 import { graphql } from "../generated/gql.js";
 
 export const IssueLoadDocument = graphql(`
-  query IssueLoad($owner: String!, $repo: String!, $number: Int!, $relationshipPageSize: Int!) {
+  query IssueLoad(
+    $owner: String!
+    $repo: String!
+    $number: Int!
+    $labelPageSize: Int!
+    $relationshipPageSize: Int!
+  ) {
     repository(owner: $owner, name: $repo) {
       issue(number: $number) {
         ...IssueCore
@@ -32,6 +38,7 @@ export const IssueListDocument = graphql(`
     $repo: String!
     $states: [IssueState!]
     $after: String
+    $labelPageSize: Int!
     $relationshipPageSize: Int!
   ) {
     repository(owner: $owner, name: $repo) {
@@ -42,6 +49,25 @@ export const IssueListDocument = graphql(`
         }
         nodes {
           ...IssueCore
+        }
+      }
+    }
+  }
+`);
+
+export const IssueLabelsPageDocument = graphql(`
+  query IssueLabelsPage($id: ID!, $first: Int!, $after: String!) {
+    node(id: $id) {
+      __typename
+      ... on Issue {
+        labels(first: $first, after: $after) {
+          nodes {
+            ...IssueLabel
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
         }
       }
     }

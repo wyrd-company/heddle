@@ -12,6 +12,8 @@ export interface GitHubOptions {
   /** Replace the wire. Two adapters exist: Octokit (default) and Scripted (tests). */
   transport?: Transport;
   baseUrl?: string;
+  /** Per-request size for labels attached to an issue. GitHub accepts 1 through 100. */
+  labelPageSize?: number;
   /** Per-request size for issue relationship connections. GitHub accepts 1 through 100. */
   relationshipPageSize?: number;
 }
@@ -40,6 +42,7 @@ export function github(options: GitHubOptions): GitHub {
     transport,
     cache: new NameCache(),
     execute: createExecute(transport),
+    labelPageSize: options.labelPageSize ?? 100,
     relationshipPageSize: options.relationshipPageSize ?? 100,
   };
   return {

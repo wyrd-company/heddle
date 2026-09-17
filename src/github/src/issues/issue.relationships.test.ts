@@ -28,7 +28,7 @@ const issueNode = (overrides: Record<string, unknown> = {}) => ({
   repository: { name: "records", owner: { login: "sample-owner" } },
   issueType: null,
   milestone: null,
-  labels: { nodes: [] },
+  labels: { nodes: [], pageInfo: lastPage },
   assignees: { nodes: [] },
   parent: null,
   subIssues: { nodes: [], pageInfo: lastPage },

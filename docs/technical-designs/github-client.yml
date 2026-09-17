@@ -85,19 +85,20 @@ proposed-design:
     reviews, review threads, reactions, and relationships. Patch planners
     compute mutations from a loaded snapshot and invalidate affected cache
     entries after success.
-  issue-relationship-pagination: >
-    Issue snapshots traverse every page of the sub-issues, blocked-by,
-    blocking, and linked or closing pull-request connections before they are
-    returned. Parent and duplicate-of remain singular relationships. Linked
-    pull-request traversal includes closed pull requests. Each connection
-    advances its own cursor, and a continuation failure or invalid cursor
-    fails the whole load instead of exposing a partial snapshot. The default
-    relationship page size is 100; `relationshipPageSize` can select a smaller
-    request size. GitHub GraphQL accepts values from 1 through 100. GitHub
-    limits one parent issue to 100 sub-issues and eight nested levels. The
-    labels, assignees, and organization issue-field value collections remain
-    single requests of 100 and do not carry the relationship-completeness
-    guarantee.
+  issue-collection-pagination: >
+    Issue snapshots traverse every page of attached labels, sub-issues,
+    blocked-by, blocking, and linked or closing pull-request connections
+    before they are returned. Direct issue loads and issue-list entries use
+    the same collection completion functions. Parent and duplicate-of remain
+    singular relationships. Linked pull-request traversal includes closed
+    pull requests. Each connection advances its own cursor, and a continuation
+    failure or invalid cursor fails the whole load instead of exposing a
+    partial snapshot. The default page size is 100; `labelPageSize` and
+    `relationshipPageSize` can select smaller request sizes. GitHub GraphQL
+    accepts values from 1 through 100. GitHub limits one parent issue to 100
+    sub-issues and eight nested levels. An issue accepts at most 10 assignees,
+    and an organization accepts at most 25 issue fields, so their first-100
+    reads are complete under the current platform limits.
   graphql-documents: >
     GraphQL operations live beside the resource knowledge that uses them and
     pass through the client-preset generator against the vendored live schema
@@ -163,7 +164,9 @@ proposed-design:
     repository credentials, create uniquely prefixed resources in a sandbox,
     and clean them through unconditional suite teardown. Relationship
     pagination is qualified through the App with two sub-issues and a page
-    size of one. The other relationship collections use deterministic
-    multi-page transport tests; that live qualification does not establish
-    their total cardinality. The repository context defines live-test
-    environment variables and commands.
+    size of one. Attached-label pagination is separately qualified with two
+    disposable labels, one issue, and a label page size of one. The other
+    relationship collections use deterministic multi-page transport tests;
+    those live qualifications do not establish a production cardinality
+    incident. The repository context defines live-test environment variables
+    and commands.

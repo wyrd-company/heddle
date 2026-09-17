@@ -22,6 +22,7 @@ import {
   unmarkDuplicate,
 } from "./issue.actions.js";
 import { issueNames } from "./issue.names.js";
+import { loadIssueLabels } from "./issue.labels.js";
 import { loadIssueRelationships } from "./issue.relationships.js";
 import { parseIssue } from "./parse.js";
 import { planIssuePatch, type Delta, type PatchInputs } from "./patch.js";
@@ -119,11 +120,16 @@ export function createIssue<S extends IssueFieldSchema>(
   const load = async (): Promise<IssueData<S>> => {
     const data = await ctx.execute(IssueLoadDocument, {
       ...coords,
+      labelPageSize: ctx.labelPageSize,
       relationshipPageSize: ctx.relationshipPageSize,
     });
     const issue = data.repository?.issue;
     if (!issue) throw new NotFoundError("issue", ref);
-    const parsed = { ...parseIssue(issue, schema), ...(await loadIssueRelationships(ctx, issue)) };
+    const [labels, relationships] = await Promise.all([
+      loadIssueLabels(ctx, issue),
+      loadIssueRelationships(ctx, issue),
+    ]);
+    const parsed = { ...parseIssue(issue, schema), labels, ...relationships };
     knownId = parsed.id;
     ctx.cache.set(scopes.issues(coords), String(coords.number), parsed.id);
     return parsed;

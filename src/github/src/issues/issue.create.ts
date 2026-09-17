@@ -15,6 +15,7 @@ import {
   type IssueFilter,
 } from "./issue.js";
 import { issueNames } from "./issue.names.js";
+import { loadIssueLabels } from "./issue.labels.js";
 import { loadIssueRelationships } from "./issue.relationships.js";
 import { resolveContentId } from "./issue.resolve.js";
 import { parseIssue } from "./parse.js";
@@ -74,12 +75,17 @@ export async function* listIssues<S extends IssueFieldSchema>(
       repo: repo.repo,
       states: filter?.state ? [stateNames[filter.state]] : null,
       after: after ?? null,
+      labelPageSize: ctx.labelPageSize,
       relationshipPageSize: ctx.relationshipPageSize,
     });
     const issues = required(data.repository?.issues, "repository.issues");
     return { nodes: issues.nodes, pageInfo: issues.pageInfo };
   });
   for await (const issue of pages) {
-    yield { ...parseIssue(issue, schema), ...(await loadIssueRelationships(ctx, issue)) };
+    const [labels, relationships] = await Promise.all([
+      loadIssueLabels(ctx, issue),
+      loadIssueRelationships(ctx, issue),
+    ]);
+    yield { ...parseIssue(issue, schema), labels, ...relationships };
   }
 }

@@ -7,5 +7,6 @@ export interface Context {
   readonly transport: Transport;
   readonly cache: NameCache;
   readonly execute: Execute;
+  readonly labelPageSize: number;
   readonly relationshipPageSize: number;
 }

@@ -45,6 +45,7 @@ export interface RequestBudget {
 export type ClientFactory = (owner: string) => GitHub;
 export interface AppClientOptions {
   wire?: (owner: string) => Transport;
+  labelPageSize?: GitHubOptions["labelPageSize"];
   relationshipPageSize?: GitHubOptions["relationshipPageSize"];
 }
 
@@ -94,6 +95,9 @@ export function appClients(
     return github({
       auth: credential,
       transport,
+      ...(options.labelPageSize === undefined
+        ? {}
+        : { labelPageSize: options.labelPageSize }),
       ...(options.relationshipPageSize === undefined
         ? {}
         : { relationshipPageSize: options.relationshipPageSize }),

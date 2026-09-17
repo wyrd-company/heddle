@@ -1,4 +1,8 @@
-import type { IssueCoreFragment, IssueLocatorFragment } from "../generated/graphql.js";
+import type {
+  IssueCoreFragment,
+  IssueLabelFragment,
+  IssueLocatorFragment,
+} from "../generated/graphql.js";
 import type { Label } from "../repo/labels.js";
 import type { Milestone } from "../repo/milestones.js";
 import { formatIssueRef, nodeId, type IsoDate } from "../refs.js";
@@ -50,8 +54,10 @@ function parseMilestone(node: IssueCoreFragment["milestone"]): Milestone | null 
   };
 }
 
-function parseLabels(node: IssueCoreFragment["labels"]): Label[] {
-  return (node?.nodes ?? [])
+export function parseLabels(
+  nodes: readonly (IssueLabelFragment | null)[] | null | undefined,
+): Label[] {
+  return (nodes ?? [])
     .filter((l): l is NonNullable<typeof l> => l !== null)
     .map((l) => ({ id: nodeId(l.id), name: l.name, color: l.color, description: l.description }));
 }
@@ -114,7 +120,7 @@ export function parseIssue<S extends IssueFieldSchema>(
     stateReason: parseStateReason(issue.stateReason),
     type: issue.issueType?.name ?? null,
     milestone: parseMilestone(issue.milestone),
-    labels: parseLabels(issue.labels),
+    labels: parseLabels(issue.labels?.nodes),
     assignees: (issue.assignees.nodes ?? []).flatMap((a) => (a ? [a.login] : [])),
     fields: parseFields(issue.issueFieldValues, schema) as {
       [K in keyof S]: IssueFieldValues<S>[K] | null;

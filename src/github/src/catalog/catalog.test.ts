@@ -54,6 +54,7 @@ function context(): Context {
     transport,
     cache: new NameCache(),
     execute: createExecute(transport),
+    labelPageSize: 100,
     relationshipPageSize: 100,
   };
 }

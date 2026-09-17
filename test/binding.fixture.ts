@@ -10,7 +10,10 @@ import {
   lastPage,
 } from "../src/github/src/projects/fixtures.test-support.js";
 import { GitHubError } from "../src/github/src/transport/errors.js";
-const relationshipLastPage = { hasNextPage: false, endCursor: null };
+const relationshipLastPage: {
+  hasNextPage: boolean;
+  endCursor: string | null;
+} = { hasNextPage: false, endCursor: null };
 export interface BindingRelation {
   id: string;
   number: number;
@@ -18,6 +21,16 @@ export interface BindingRelation {
 }
 export interface BindingRelationPage {
   nodes: BindingRelation[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
+export interface BindingLabel {
+  id: string;
+  name: string;
+  color: string;
+  description: null;
+}
+export interface BindingLabelPage {
+  nodes: BindingLabel[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
 }
 export const recipe = (number = 1) => ({
@@ -41,6 +54,7 @@ export const recipe = (number = 1) => ({
       color: string;
       description: null;
     }[],
+    pageInfo: relationshipLastPage,
   },
   assignees: { nodes: [{ login: "sample-user" }] },
   parent: null,
@@ -60,6 +74,7 @@ export const recipe = (number = 1) => ({
   },
 });
 export function fixture(projectId = "P_1") {
+  const labelPages = new Map<string, BindingLabelPage>();
   const relationshipPages = {
     subIssues: new Map<string, BindingRelationPage>(),
     blockedBy: new Map<string, BindingRelationPage>(),
@@ -168,6 +183,12 @@ export function fixture(projectId = "P_1") {
       IssueLoad: ({ number }) => ({
         repository: { issue: issues.find((i) => i.number === number) },
       }),
+      IssueLabelsPage: ({ after }) => {
+        const page = labelPages.get(String(after));
+        if (!page)
+          throw new Error(`Missing labels fixture page after ${String(after)}`);
+        return { node: { __typename: "Issue", labels: page } };
+      },
       IssueSubIssuesPage: ({ after }) => relationshipPage("subIssues", after),
       IssueBlockedByPage: ({ after }) => relationshipPage("blockedBy", after),
       IssueBlockingPage: ({ after }) => relationshipPage("blocking", after),
@@ -282,6 +303,7 @@ export function fixture(projectId = "P_1") {
     itemTypes,
     values,
     comments,
+    labelPages,
     relationshipPages,
     transport,
     refuseStatus: () => {

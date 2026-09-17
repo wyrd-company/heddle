@@ -196,6 +196,68 @@ it("persists every later relationship page into the immutable run input", async 
   });
   expect(reopened.get(run.id).initialContext["issue"]).toEqual(saved);
 });
+it("persists every label page into the immutable run input without live restart reads", async () => {
+  const f = setup();
+  const issue = present(f.issues.at(0));
+  issue.labels = {
+    nodes: [
+      {
+        id: "L_1",
+        name: "sample-one",
+        color: "FFFFFF",
+        description: null,
+      },
+    ],
+    pageInfo: { hasNextPage: true, endCursor: "label-cursor" },
+  };
+  f.labelPages.set("label-cursor", {
+    nodes: [
+      {
+        id: "L_2",
+        name: "sample-two",
+        color: "000000",
+        description: null,
+      },
+    ],
+    pageInfo: { hasNextPage: false, endCursor: null },
+  });
+
+  await f.service.start();
+  const saved = f.service.instances.get("I_1").issue;
+  expect(saved.labels.map((label) => label.name)).toEqual([
+    "sample-one",
+    "sample-two",
+  ]);
+  expect(f.transport.callsTo("IssueLabelsPage")).toHaveLength(1);
+
+  issue.labels = {
+    nodes: [],
+    pageInfo: { hasNextPage: false, endCursor: null },
+  };
+  const loads = f.transport.callsTo("IssueLoad").length;
+  const labelLoads = f.transport.callsTo("IssueLabelsPage").length;
+  const run = await f.service.startInstance("I_1", "cook", "revision");
+  expect(run.initialContext["issue"]).toEqual(saved);
+  expect(f.transport.callsTo("IssueLoad")).toHaveLength(loads);
+  expect(f.transport.callsTo("IssueLabelsPage")).toHaveLength(labelLoads);
+
+  f.store.close();
+  stores.splice(stores.indexOf(f.store), 1);
+  const reopened = new RunStore(f.path);
+  stores.push(reopened);
+  expect(
+    new InstanceStore(reopened.db)
+      .get("I_1")
+      .issue.labels.map((label) => label.name),
+  ).toEqual(["sample-one", "sample-two"]);
+  expect(
+    (
+      reopened.get(run.id).initialContext["issue"] as {
+        labels: { name: string }[];
+      }
+    ).labels.map((label) => label.name),
+  ).toEqual(["sample-one", "sample-two"]);
+});
 it("does not persist a partial snapshot when a relationship continuation fails", async () => {
   const f = setup();
   Object.assign(present(f.issues.at(0)), {

@@ -30,12 +30,13 @@ export const IssueCoreFragment = graphql(`
       dueOn
       state
     }
-    labels(first: 100) {
+    labels(first: $labelPageSize) {
       nodes {
-        id
-        name
-        color
-        description
+        ...IssueLabel
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
     assignees(first: 100) {
@@ -138,6 +139,15 @@ export const IssueCoreFragment = graphql(`
         }
       }
     }
+  }
+`);
+
+export const IssueLabelFragment = graphql(`
+  fragment IssueLabel on Label {
+    id
+    name
+    color
+    description
   }
 `);
 

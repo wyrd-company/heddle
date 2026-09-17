@@ -41,6 +41,7 @@ describe("Pull handle (scripted)", () => {
       transport,
       cache: new NameCache(),
       execute: createExecute(transport),
+      labelPageSize: 100,
       relationshipPageSize: 100,
     };
 
@@ -87,6 +88,7 @@ describe("Pull handle (scripted)", () => {
       transport,
       cache: new NameCache(),
       execute: createExecute(transport),
+      labelPageSize: 100,
       relationshipPageSize: 100,
     };
 

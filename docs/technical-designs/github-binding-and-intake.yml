@@ -72,11 +72,11 @@ proposed-design:
       the issue description, parsed into `issue.frontMatter`, so an issue can
       carry configuration and data that has no field
 
-    Collection relationships are complete at capture: discovery waits for
-    every GitHub page before persisting the issue snapshot. The lifecycle run
-    receives a copy of that persisted snapshot. Recovery reads the saved
-    instance and run input and does not resolve those issue relationships from
-    GitHub again.
+    Attached labels and collection relationships are complete at capture:
+    discovery waits for every GitHub page before persisting the issue
+    snapshot. The lifecycle run receives a copy of that persisted snapshot.
+    Recovery reads the saved instance and run input and does not resolve those
+    issue collections from GitHub again.
 
     Conditions, prompt templates, `policy` rules, the epic task-graph
     builder, and reconciliation read this one shape. The `github` brick

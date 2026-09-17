@@ -18,7 +18,10 @@ const issueNode = (overrides: Record<string, unknown> = {}) => ({
   repository: { name: "recipes", owner: { login: "pantry-labs" } },
   issueType: { name: "Recipe" },
   milestone: null,
-  labels: { nodes: [{ id: "L_1", name: "vegan", color: "0e8a16", description: null }] },
+  labels: {
+    nodes: [{ id: "L_1", name: "vegan", color: "0e8a16", description: null }],
+    pageInfo: lastPage,
+  },
   assignees: { nodes: [{ login: "chef-amara" }] },
   parent: {
     id: "I_10",
