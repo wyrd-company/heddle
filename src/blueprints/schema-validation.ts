@@ -4,7 +4,7 @@
 //     - blueprint-authoring
 //     - node-types
 // ---
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import {
   Ajv2020,
@@ -17,10 +17,13 @@ import { parse } from "yaml";
 import { isNodeTypeName, NODE_TYPE_REGISTRY } from "./node-types.js";
 import type { JsonObject } from "./types.js";
 
-const schemaPath = new URL(
-  "../../docs/specifications/blueprint.schema.yml",
-  import.meta.url,
-);
+const schemaPath = [
+  new URL("../docs/specifications/blueprint.schema.yml", import.meta.url),
+  new URL("../../docs/specifications/blueprint.schema.yml", import.meta.url),
+].find((candidate) => existsSync(candidate));
+if (schemaPath === undefined) {
+  throw new Error("The packaged blueprint schema is missing.");
+}
 const blueprintSchema = parse(readFileSync(schemaPath, "utf8")) as AnySchema;
 const ajv = new Ajv2020({
   allErrors: true,
