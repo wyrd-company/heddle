@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
 
 import {
   deriveFlowcraftBlueprint,
@@ -72,6 +73,28 @@ edges:
 ${overrides}`;
 }
 
+function scalarPaths(
+  value: unknown,
+  path: readonly (number | string)[] = [],
+): (readonly (number | string)[])[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => scalarPaths(item, [...path, index]));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.entries(value).flatMap(([key, item]) =>
+      scalarPaths(item, [...path, key]),
+    );
+  }
+  return [path];
+}
+
+function changedScalar(value: unknown): unknown {
+  if (typeof value === "string") return `${value}X`;
+  if (typeof value === "number") return value + 1;
+  if (typeof value === "boolean") return !value;
+  return "X";
+}
+
 describe("blueprint loading", () => {
   it("preserves every source byte on an unchanged save", () => {
     const file = resolve(
@@ -110,6 +133,65 @@ describe("blueprint loading", () => {
         "description: Updated catalog description.",
       ),
     );
+  });
+
+  it("preserves an aligned-comment neighbour around a scalar edit", () => {
+    const source = "a: 1    # first\nb: 2    # second\nz: 3\n";
+    const loaded = loadBlueprint(temporaryFile("aligned.yml", source));
+    loaded.document.setIn(["a"], 5);
+
+    expect(saveBlueprint(loaded)).toBe(
+      "a: 5    # first\nb: 2    # second\nz: 3\n",
+    );
+  });
+
+  it("preserves a flow-sequence neighbour when replacing the sequence", () => {
+    const source = "tags: [x, y]\nlist: [p, q]\nz: 3\n";
+    const loaded = loadBlueprint(temporaryFile("flow.yml", source));
+    loaded.document.setIn(["tags"], ["changed"]);
+
+    expect(saveBlueprint(loaded)).toBe(
+      "tags: [ changed ]\nlist: [p, q]\nz: 3\n",
+    );
+  });
+
+  it.each([3, 4])(
+    "preserves untouched recipe lines when editing long condition %i",
+    (edgeIndex) => {
+      const file = resolve(
+        "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+      );
+      const source = readFileSync(file, "utf8");
+      const loaded = loadBlueprint(file);
+      const path = ["edges", edgeIndex, "when"] as const;
+      const condition = loaded.document.getIn(path);
+      expect(typeof condition).toBe("string");
+      loaded.document.setIn(path, `${String(condition)}X`);
+
+      const saved = saveBlueprint(loaded);
+      expect(saved).toBe(
+        source.replace(String(condition), `${String(condition)}X`),
+      );
+      const reparsed = parseDocument(saved);
+      expect(reparsed.errors).toEqual([]);
+      expect(reparsed.toJS()).toEqual(loaded.document.toJS());
+    },
+  );
+
+  it("preserves semantics when editing every scalar in the shipped fixture", () => {
+    const file = resolve(
+      "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+    );
+    const initial: unknown = loadBlueprint(file).document.toJS();
+
+    for (const path of scalarPaths(initial)) {
+      const loaded = loadBlueprint(file);
+      loaded.document.setIn(path, changedScalar(loaded.document.getIn(path)));
+      const saved = saveBlueprint(loaded);
+      const reparsed = parseDocument(saved);
+      expect(reparsed.errors, path.join(".")).toEqual([]);
+      expect(reparsed.toJS(), path.join(".")).toEqual(loaded.document.toJS());
+    }
   });
 
   it("proves byte round-trip through a reversible localized edit", () => {

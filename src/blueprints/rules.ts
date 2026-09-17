@@ -42,7 +42,7 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
   {
     name: "heddle.entry",
     description:
-      "A cyclic graph declares an entry that names an authored node.",
+      "Entry is declared only when every node has an incoming edge, and names an authored node.",
   },
   {
     name: "heddle.no-action-edge",

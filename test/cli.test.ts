@@ -159,6 +159,9 @@ describe("command arguments", () => {
     expect(result.exitCode).toBe(0);
     expect(result.errors).toEqual([]);
     expect(result.output.join("\n")).toContain("heddle.no-subflow");
+    expect(result.output.join("\n")).toContain(
+      "Entry is declared only when every node has an incoming edge, and names an authored node.",
+    );
     expect(result.output.join("\n")).toContain("requires.issue.stage-name");
   });
 });
