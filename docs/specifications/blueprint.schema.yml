@@ -290,8 +290,12 @@ $defs:
           `properties`, as the MCP tool input schema requires.
         $ref: "#/$defs/schemaRef"
       turnEndPolicy:
+        description: >
+          The starting value. It is mutable context on the stage and may be
+          changed while the stage runs: by the operator, or by a tool call
+          from the agent that raises an escalation the operator approves.
         type: string
-        enum: [require-handoff, allow, allow-once]
+        enum: [require-handoff, allow]
         default: require-handoff
       escalation:
         description: >
