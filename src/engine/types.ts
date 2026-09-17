@@ -85,6 +85,8 @@ export interface EngineOptions {
     context: EngineNodeContext,
     definition: NodeDefinition,
   ) => Promise<void>;
+  /** Reconcile external adapters after durable traversal/claim boundaries. */
+  onBoundary?: (run: Run) => Promise<void>;
 }
 export interface RunEvent {
   sequence: number;

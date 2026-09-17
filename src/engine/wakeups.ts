@@ -24,10 +24,15 @@ export class Wakeups {
         due: Number(row["due"]),
       }));
   }
-  activity(runId: string, nodeId: string, observedAt: number): void {
+  activity(
+    runId: string,
+    nodeId: string,
+    observedAt: number,
+    transaction = true,
+  ): void {
     if (!Number.isFinite(observedAt))
       throw new Error("Activity requires a finite observed time");
-    this.store.transaction(() => {
+    const update = () => {
       const item = this.store
         .awaiting(runId)
         .find((item) => item.nodeId === nodeId);
@@ -46,7 +51,9 @@ export class Wakeups {
         )
         .run(dueAt(latest, item.details.inactivity), runId, nodeId, item.visit);
       this.store.event(runId, "activity", { nodeId, observedAt });
-    });
+    };
+    if (transaction) this.store.transaction(update);
+    else update();
   }
   async tick(
     now: number,

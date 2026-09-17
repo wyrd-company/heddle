@@ -101,9 +101,13 @@ proposed-design:
 
     Behavior: ensures the T3 Code project for the worktree, ensures the
     thread (a new one, or the one named by `resumeThread`), generates the
-    thread's tool server as the agent-tools design describes, starts the
-    first turn, writes `stages.<nodeId>`, and pauses with awaiting details
-    `{ kind: pass, threadId, runId, nodeId, turnEndPolicy }`. If a
+    thread's tool server as the agent-tools design describes, writes
+    `stages.<nodeId>`, and commits the pause with awaiting details
+    `{ kind: pass, threadId, runId, nodeId, turnEndPolicy }`. After that
+    commit and traversal release, it registers the tool server and starts
+    the first turn. A reused thread waits for its prior turn to settle,
+    stops the provider session, and registers the next endpoint before
+    starting its next turn with the preserved conversation. If a
     `deadline` or `inactivity` duration is given, the engine inserts the
     matching wake-up rows.
 

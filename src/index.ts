@@ -41,3 +41,5 @@ export type {
 export * from "./engine/index.js";
 export * from "./binding/index.js";
 export * from "./agent-tools/index.js";
+
+export * from "./pass/index.js";

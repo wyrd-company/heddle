@@ -14,6 +14,7 @@ import { Wakeups } from "./wakeups.js";
 import { createRun, createRelatedRun, type RelatedRun } from "./create-run.js";
 import { DurableTraversal } from "./traversal.js";
 import { childOutputs } from "./child-outputs.js";
+import { reconcileBoundary, recordFailure } from "./boundary.js";
 import { lifecycleStart } from "./lifecycle-start.js";
 
 export class WorkflowEngine {
@@ -72,6 +73,7 @@ export class WorkflowEngine {
     return work;
   }
   private async traverse(runId: string, release: () => void): Promise<Run> {
+    await reconcileBoundary(this.store, this.options.onBoundary, runId);
     const run = this.store.get(runId);
     if (run.paused || run.status === "completed" || run.status === "failed")
       return run;
@@ -128,18 +130,11 @@ export class WorkflowEngine {
       );
       this.settle(runId, result);
     } catch (error) {
-      this.store.transaction(() => {
-        this.store.status(runId, "failed");
-        this.store.event(runId, "failure", {
-          message: error instanceof Error ? error.message : String(error),
-        });
-        this.store.event(runId, "attention", {
-          message: error instanceof Error ? error.message : String(error),
-        });
-      });
+      recordFailure(this.store, runId, error);
     }
     // Release the traversal claim before child completion enters resume.
     release();
+    await reconcileBoundary(this.store, this.options.onBoundary, runId);
     await this.drainHeld(runId);
     await this.dispatchChildren(runId);
     await this.dispatchLifecycles(runId);
@@ -252,21 +247,21 @@ export class WorkflowEngine {
     for (const listed of this.store.list()) {
       const run = this.store.get(listed.id);
       if (rootId !== undefined && run.rootId !== rootId) continue;
-      if (run.paused || this.active.has(run.id)) continue;
+      if (this.active.has(run.id)) continue;
+      if (run.paused) {
+        await reconcileBoundary(this.store, this.options.onBoundary, run.id);
+        continue;
+      }
       try {
         if (run.status === "running" || run.status === "resuming")
           await this.execute(run.id);
         await this.drainHeld(run.id);
         await this.dispatchChildren(run.id);
         await this.deliverCompletion(run.id);
+        await reconcileBoundary(this.store, this.options.onBoundary, run.id);
       } catch (error) {
-        this.store.transaction(() => {
-          this.store.status(run.id, "failed");
-          const message =
-            error instanceof Error ? error.message : String(error);
-          this.store.event(run.id, "failure", { message });
-          this.store.event(run.id, "attention", { message });
-        });
+        recordFailure(this.store, run.id, error);
+        await reconcileBoundary(this.store, this.options.onBoundary, run.id);
       }
     }
   }

@@ -102,6 +102,7 @@ export function makeSession(overrides: Partial<OrchestrationSession> = {}): Orch
     threadId: ids.threadId,
     status: "idle",
     providerName: null,
+    providerThreadId: null,
     runtimeMode: "auto",
     activeTurnId: null,
     lastError: null,
