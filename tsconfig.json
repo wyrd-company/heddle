@@ -5,8 +5,8 @@
     "moduleResolution": "NodeNext",
     "baseUrl": ".",
     "paths": {
-      "@wyrd-company/github-work": ["../../github-spike/dist/index.d.ts"],
-      "@wyrd-company/t3code-client": ["../../t3code-client/dist/index.d.ts"]
+      "@wyrd-company/github-work": ["../../github-spike/src/index.ts"],
+      "@wyrd-company/t3code-client": ["../../t3code-client/src/index.ts"]
     },
     "lib": ["ES2023"],
     "types": ["node"],

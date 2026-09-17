@@ -18,6 +18,7 @@ const manifestPath = new URL(
 );
 const installerPath = new URL("../features/heddle/install.sh", import.meta.url);
 const buildPath = new URL("../scripts/build.mjs", import.meta.url);
+const tsconfigPath = new URL("../tsconfig.json", import.meta.url);
 const commonPath = fileURLToPath(
   new URL("../features/heddle/common.sh", import.meta.url),
 );
@@ -179,5 +180,16 @@ describe("Heddle deployment", () => {
     expect(buildScript).not.toMatch(
       /external:[\s\S]*@wyrd-company\/(?:github-work|t3code-client)/,
     );
+  });
+
+  it("typechecks the workspace client sources bundled by esbuild", async () => {
+    const tsconfig = JSON.parse(await readFile(tsconfigPath, "utf8")) as {
+      compilerOptions: { paths: Record<string, string[]> };
+    };
+
+    expect(tsconfig.compilerOptions.paths).toMatchObject({
+      "@wyrd-company/github-work": ["../../github-spike/src/index.ts"],
+      "@wyrd-company/t3code-client": ["../../t3code-client/src/index.ts"],
+    });
   });
 });

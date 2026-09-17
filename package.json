@@ -31,7 +31,7 @@
     "build": "node scripts/clean-dist.mjs && npm run build:types && node scripts/build.mjs",
     "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly",
     "prepack": "npm run build",
-    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit && tsc --project tsconfig.workspace-inputs.json",
     "format": "prettier --write .",
     "prettier:check": "prettier --check .",
     "lint": "eslint src test",
