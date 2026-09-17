@@ -159,5 +159,6 @@ describe("command arguments", () => {
     expect(result.exitCode).toBe(0);
     expect(result.errors).toEqual([]);
     expect(result.output.join("\n")).toContain("heddle.no-subflow");
+    expect(result.output.join("\n")).toContain("requires.issue.stage-name");
   });
 });
