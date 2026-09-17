@@ -438,3 +438,32 @@ it("does not reenter an awaiting lifecycle when intake continues", async () => {
   expect(store.get(id)).toEqual(before);
   expect(store.events(id)).toEqual(events);
 });
+
+it("starts a related run under the selected lifecycle root and pinned commit", async () => {
+  const { start, engine, store } = harness();
+  const intake = await start();
+  const lifecycleId =
+    store.lifecycleStarts(intake.id)[0]?.lifecycleRunId ?? "missing";
+  const input = {
+    id: "related-1",
+    parentId: lifecycleId,
+    parentNodeId: "inspect",
+    blueprintId: "collection",
+    context: { question: "Which shelf?" },
+  };
+  const related = await engine.startRelated(input);
+  expect(related).toMatchObject({
+    id: "related-1",
+    parentId: lifecycleId,
+    parentNodeId: "inspect",
+    rootId: lifecycleId,
+    commit: "commit-a",
+    status: "awaiting",
+    initialContext: input.context,
+  });
+  expect(await engine.startRelated(input)).toEqual(related);
+  expect(store.lifecycleOrigin(related.id)).toBeUndefined();
+  expect(store.lifecycleStarts(intake.id)).toHaveLength(1);
+  expect(store.get(intake.id)).toEqual(intake);
+  expect(store.list()).toHaveLength(3);
+});
