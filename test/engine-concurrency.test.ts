@@ -815,11 +815,11 @@ it("applies an external idle result without a scheduler identity", async () => {
       runId: run.id,
       nodeId: "inspect",
       result: "idle",
-      payload: { reason: "observed" },
+      payload: { reason: "observed", due: 7 },
     }),
   ).toBe("applied");
   expect(store.get(run.id).context["inspect"]).toEqual({
     idle: true,
-    payload: { reason: "observed" },
+    payload: { reason: "observed", due: 7 },
   });
 });

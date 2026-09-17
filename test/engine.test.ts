@@ -771,3 +771,49 @@ it("rejects a resolver result with a different blueprint identity", async () => 
   ).rejects.toThrow("different identity");
   expect(store.list()).toEqual([]);
 });
+
+it("delivers a still-due idle row updated during the same scheduler tick", async () => {
+  let now = 0;
+  let observeActivity = () => {
+    /* Installed after both runs await. */
+  };
+  const { engine, store } = fixture(
+    [waiting({ inactivity: 100 })],
+    {
+      pass,
+      done: () => {
+        observeActivity();
+        return Promise.resolve(null);
+      },
+    },
+    () => now,
+  );
+  for (const id of ["first", "second"])
+    await engine.start({ id, blueprintId: "inspection", commit: "commit-a" });
+  const original = engine.wakeups
+    .due(100)
+    .find((row) => row.runId === "second");
+  expect(original).toMatchObject({ due: 100 });
+  now = 300;
+  observeActivity = () => {
+    engine.wakeups.activity("second", "inspect", 150);
+  };
+  await engine.tick();
+  expect(store.get("second").status).toBe("completed");
+  expect(store.get("second").context["inspect"]).toEqual({
+    idle: true,
+    payload: { due: 250 },
+  });
+  expect(
+    store.events("second").filter((event) => event.type === "late-wakeup"),
+  ).toEqual([]);
+  expect(
+    store.events("second").filter((event) => event.type === "resume"),
+  ).toMatchObject([
+    { payload: { wakeupId: original?.id, due: 250, payload: { due: 250 } } },
+  ]);
+  expect(store.db.prepare("SELECT * FROM wakeups").all()).toEqual([]);
+  const events = store.events("second");
+  await engine.tick();
+  expect(store.events("second")).toEqual(events);
+});

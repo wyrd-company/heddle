@@ -113,14 +113,24 @@ proposed-design:
     timeout is used. Transactions run synchronously through the owner.
     Resume requests bind to the node visit observed at receipt. An atomic
     claim moves an awaiting run to resuming and persists the result before
-    traversal. A request for a visit that no longer awaits is logged as
-    late-wakeup. A request for a still-awaiting sibling while the run is busy,
-    or while the instance is paused, is queued durably. Settle drains queued
+    traversal. A request for a visit that has left awaiting state or whose
+    run has failed is logged as late-wakeup. A request for a still-awaiting
+    sibling while the run is busy, or while the instance is paused, is queued
+    durably. Settle drains queued
     requests in arrival order. Wake-up row identities are never reused. Repeated
-    scheduler ticks reuse the current row identity and enqueue it once;
-    separate external requests remain distinct.
-    Dequeue, claim, and retirement of the matching wake-up row commit together.
-    Due wake-up rows remain until their request applies or becomes late.
+    scheduler ticks reuse the current row identity and enqueue each due-time
+    attempt once; separate external requests remain distinct.
+    Scheduler idle requests carry the due time for which they were raised.
+    Claim compares that due time with the current wake-up row inside its
+    transaction. An obsolete attempt with a different due time is logged as
+    late-wakeup and discarded; the current row retains its identity and due
+    time for delivery. All these discarded requests use the same late-wakeup
+    event type. The log records the original request payload, including the scheduler identity
+    and due time when present, without a separate reason discriminator.
+    Dequeue and claim commit together with any wake-up row retirement. A
+    matching row is retired when its request applies, its visit has left
+    awaiting state, or its run has failed; an obsolete attempt for a visit
+    that still awaits does not retire the postponed row.
   deadlines: >
     Deadlines are rows, not timers, and they exist only where a blueprint
     author wrote a duration. Two kinds. An elapsed deadline: when a node
@@ -130,9 +140,11 @@ proposed-design:
     `wakeup` row with result name `idle` whose due time is the last observed
     thread activity plus the duration, and the row's due time is pushed
     forward every time the pass's read model records activity, including
-    helper activity. A scheduler tick reads due rows and calls resume for
-    each. If the run has already moved on, the resume is a recorded late
-    wake-up and the row is deleted. A wake-up selects an edge and does
+    helper activity. A scheduler tick reads due rows, rechecks each row's
+    current due time and the run's pause state before dispatch, and calls
+    resume with that current due time when the row is still due. If the run
+    has already moved on, the resume is a recorded late wake-up and the row
+    is deleted. A wake-up selects an edge and does
     nothing else. The Flowcraft `sleep` node is wrapped so it uses the same
     row instead of an in-process timer, which makes it durable across
     restarts. Authored ISO 8601 durations use UTC calendar arithmetic;

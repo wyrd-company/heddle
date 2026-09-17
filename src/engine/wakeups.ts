@@ -55,11 +55,12 @@ export class Wakeups {
     for (const wakeup of this.due(now)) {
       const current = this.store.db
         .prepare(
-          `SELECT w.id FROM wakeups w JOIN runs r ON r.id=w.run_id
+          `SELECT w.due FROM wakeups w JOIN runs r ON r.id=w.run_id
          WHERE w.id=? AND w.due<=? AND r.paused=0`,
         )
         .get(wakeup.id, now);
       if (!current) continue;
+      wakeup.due = Number(current["due"]);
       await resume({
         ...wakeup,
         wakeupId: wakeup.id,
