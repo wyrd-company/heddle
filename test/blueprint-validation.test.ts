@@ -73,7 +73,9 @@ ${overrides}`;
 
 describe("blueprint loading", () => {
   it("preserves every source byte on an unchanged save", () => {
-    const file = temporaryFile("sample-a.yml", passBlueprint());
+    const file = resolve(
+      "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+    );
     const loaded = loadBlueprint(file);
 
     expect(saveBlueprint(loaded)).toBe(readFileSync(file, "utf8"));
