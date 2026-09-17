@@ -38,3 +38,4 @@ tasks:
       - task: lint
       - task: test
       - task: package-check
+      - task: feature-check
