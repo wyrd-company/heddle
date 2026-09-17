@@ -9,6 +9,7 @@ import { lintHeddle } from "../src/blueprints/heddle-lint.js";
 import type { Blueprint } from "../src/blueprints/types.js";
 import { GitHubBindingService } from "../src/binding/service.js";
 import { RunStore } from "../src/engine/store.js";
+import type { EngineNode } from "../src/engine/types.js";
 import { fixture, type BindingRelation } from "./binding.fixture.js";
 
 const stores: RunStore[] = [];
@@ -214,6 +215,40 @@ it("rejects an unknown immutable binding before awaiting", async () => {
       type: "failure",
     }),
   );
+});
+
+it("captures issue-change bindings from immutable run inputs", async () => {
+  const blueprint: Blueprint = {
+    ...waitBlueprint(),
+    nodes: {
+      mutate: { uses: "mutate" },
+      ...waitBlueprint().nodes,
+    },
+    edges: [{ from: "mutate", to: "wait" }],
+  };
+  const mutate: EngineNode = (context) => {
+    context.context["expectedType"] = "Changed after the run started";
+    return Promise.resolve(null);
+  };
+  const f = setup(blueprint, { mutate });
+  await f.service.start();
+  const run = await f.service.engine.start({
+    id: "immutable-binding",
+    blueprintId: blueprint.id,
+    commit: "revision",
+    context: {
+      issue: f.service.instances.get("I_1").issue,
+      expectedType: "Collection request",
+    },
+  });
+  const issue = f.github.issues[0];
+  if (!issue) throw new Error("Fixture issue missing");
+  issue.issueType = { name: "Collection request" };
+  issue.updatedAt = "2026-01-06T00:00:00Z";
+  await f.service.deliver("issues", {
+    issue: { node_id: issue.id, updated_at: issue.updatedAt },
+  });
+  expect(f.store.get(run.id)).toMatchObject({ status: "completed" });
 });
 
 it("projects operator pause and applies manual Paused changes through one operation", async () => {

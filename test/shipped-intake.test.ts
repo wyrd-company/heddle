@@ -185,6 +185,21 @@ it("starts intake when delivery discovers a new issue", async () => {
   });
 });
 
+it("polling discovers and starts intake without a webhook", async () => {
+  const { github, service, store } = setup({ type: "Recipe" });
+  await service.start();
+  const added = recipe(2);
+  added.issueType = { name: "Work item" };
+  github.issues.push(added);
+
+  expect(await service.poll()).toBe(0);
+  const instance = service.instances.get(added.id);
+  expect(store.get(instance.runId ?? "missing")).toMatchObject({
+    blueprintId: "standard-lifecycle",
+    initialContext: { issue: { id: added.id, type: "Work item" } },
+  });
+});
+
 it("wakes unmatched intake and attaches the selected lifecycle", async () => {
   const { github, service, store } = setup({ type: "Recipe" });
   await service.start();
