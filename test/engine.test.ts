@@ -817,3 +817,54 @@ it("delivers a still-due idle row updated during the same scheduler tick", async
   await engine.tick();
   expect(store.events("second")).toEqual(events);
 });
+it("re-enters a self-loop pass with a fresh visit and rejects a stale resume", async () => {
+  const blueprint: WorkflowBlueprint = {
+    id: "inspection",
+    metadata: { cycleEntryPoints: ["inspect"] },
+    nodes: [
+      { id: "inspect", uses: "pass" },
+      { id: "finish", uses: "done" },
+    ],
+    edges: [
+      { source: "inspect", target: "inspect", condition: "passes < 2" },
+      { source: "inspect", target: "finish", condition: "passes >= 2" },
+    ],
+  };
+  const { engine, store } = fixture([blueprint], {
+    pass: async ({ context, await: pause }) => {
+      context["passes"] = Number(context["passes"] ?? 0) + 1;
+      await pause({ kind: "pass", threadId: "thread-fixture" });
+    },
+    done,
+  });
+  await engine.start({
+    id: "inspection-a",
+    blueprintId: blueprint.id,
+    commit: "snapshot-a",
+  });
+  await engine.resume({
+    runId: "inspection-a",
+    nodeId: "inspect",
+    visit: 1,
+    result: "handoff",
+  });
+  expect(store.awaiting("inspection-a").map((item) => item.visit)).toEqual([2]);
+  expect(
+    await engine.resume({
+      runId: "inspection-a",
+      nodeId: "inspect",
+      visit: 1,
+      result: "handoff",
+    }),
+  ).toBe("late-wakeup");
+  await engine.resume({
+    runId: "inspection-a",
+    nodeId: "inspect",
+    visit: 2,
+    result: "handoff",
+  });
+  expect(store.get("inspection-a")).toMatchObject({
+    status: "completed",
+    context: { passes: 2 },
+  });
+});

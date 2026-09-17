@@ -10,6 +10,7 @@ import {
   type IOrchestrator,
   type NodeExecutor,
 } from "flowcraft";
+import { enableCycleReentry } from "./cycle-reentry.js";
 import type { DurableRuntime } from "./runtime.js";
 import type { RunStore } from "./store.js";
 import type { Checkpoint, Data } from "./types.js";
@@ -28,6 +29,7 @@ export class DurableTraversal implements IOrchestrator {
     >[1];
     const { state, blueprint } = context;
     let traverser = initial;
+    enableCycleReentry(traverser);
     if (
       this.checkpoint.frontier !== undefined ||
       this.checkpoint.nodeId !== undefined
@@ -40,6 +42,7 @@ export class DurableTraversal implements IOrchestrator {
         state.clearAwaiting(this.checkpoint.nodeId);
       }
       traverser = GraphTraverser.fromState(blueprint, state);
+      enableCycleReentry(traverser);
       traverser.clearFrontier();
       for (const id of this.checkpoint.frontier ?? [])
         traverser.addToFrontier(id);
