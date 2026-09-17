@@ -4,6 +4,14 @@
   "description": "Workflow orchestration for T3 Code agents",
   "license": "Apache-2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wyrd-company/heddle.git"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
   "engines": {
     "node": ">=24"
   },
@@ -20,7 +28,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
+    "build": "node scripts/clean-dist.mjs && npm run build:types && node scripts/build.mjs",
+    "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly",
+    "prepack": "npm run build",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "format": "prettier --write .",
     "prettier:check": "prettier --check .",
@@ -28,8 +38,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@wyrd-company/github-work": "file:../../github-spike",
-    "@wyrd-company/t3code-client": "file:../../t3code-client",
     "ajv": "^8.20.0",
     "flowcraft": "^2.10.1",
     "jsonata": "^2.2.2",
@@ -39,6 +47,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.10.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.7",

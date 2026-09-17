@@ -23,6 +23,9 @@ tasks:
   test:
     desc: Run offline unit tests
     cmds: [npm test]
+  package-check:
+    desc: Pack, install, and exercise the distributable npm package
+    cmds: [scripts/test-package.sh]
   check:
     desc: Run every gate required before handoff
     cmds:
@@ -31,3 +34,4 @@ tasks:
       - task: prettier-check
       - task: lint
       - task: test
+      - task: package-check
