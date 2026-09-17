@@ -20,7 +20,7 @@ nodes:
         itemCount: { from: issue.fields.`Item Count` }
         storage: { from: issue.frontMatter.storage }
       outputs:
-        summary: stages.capture.handoff
+        summary: capture.payload
   # The assessment stage is the real T3 Code pass exercised by the first slice.
   assess:
     uses: child-run
@@ -30,7 +30,9 @@ nodes:
       inputs:
         summary: { from: capture.payload.summary }
       outputs:
-        decision: stages.assess.handoff.decision
+        decision: assess.payload.decision
+        overridden: assess.overridden
+        turnEnded: assess.turnEnded
   # Accepted collections produce a message whose template reads process metadata.
   record:
     uses: notify
@@ -45,6 +47,13 @@ nodes:
       channel: pushover
       title: { inline: "Collection returned" }
       message: { inline: "The collection needs more information." }
+  # A pass that ends without a handoff is visible as a distinct process outcome.
+  assessment-incomplete:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection assessment interrupted" }
+      message: { inline: "The assessment ended without a decision." }
   # A failed child run is visible instead of ending at a silent dead end.
   run-failed:
     uses: notify
@@ -65,6 +74,9 @@ edges:
   - from: assess
     to: return
     when: result.output.completed and result.output.payload.decision = 'declined'
+  - from: assess
+    to: assessment-incomplete
+    when: result.output.completed and (result.output.payload.overridden or result.output.payload.turnEnded)
   - from: assess
     to: run-failed
     when: result.output.failed

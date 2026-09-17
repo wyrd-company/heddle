@@ -9,19 +9,19 @@ outputs:
   result:
     type: object
 nodes:
-  # The durable wait wakes for the expected type or after the fixture deadline.
+  # The condition reads the changed issue snapshot as its JSONata root.
   wait-for-type:
     uses: on-issue-change
     params:
-      when: issue.type = expectedType
+      when: type = 'Collection request'
       deadline: PT5M
-  # A matching change reruns the ordinary intake helper as a child run.
+  # A matching change retries intake with the snapshot that woke this node.
   retry-intake:
     uses: child-run
     params:
       blueprint: collection-intake
       inputs:
-        issue: { from: issue }
+        issue: { from: "`wait-for-type`.payload" }
   # An expired hold raises attention through the available notification brick.
   notify-attention:
     uses: notify

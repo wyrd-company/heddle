@@ -19,13 +19,22 @@ nodes:
       prompt: prompts/assess.md
       handoff: contracts/assess.yml
       turnEndPolicy: require-handoff
-  # The completion notice gives every pass result an explicit terminal route.
+  # A valid handoff completes the stage with an assessment decision.
   complete:
     uses: notify
     params:
       channel: pushover
       title: { inline: "Collection assessed" }
+  # An operator override or allowed turn end completes without a decision.
+  incomplete:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection assessment interrupted" }
 edges:
   - from: assess
     to: complete
-    when: result.output.handoff or result.output.turnEnded or result.output.overridden
+    when: result.output.handoff
+  - from: assess
+    to: incomplete
+    when: result.output.turnEnded or result.output.overridden
