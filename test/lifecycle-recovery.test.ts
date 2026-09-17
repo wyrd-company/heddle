@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it, onTestFinished } from "vitest";
+import { issue } from "./lifecycle-snapshot.fixture.js";
 
 async function kill(child: ChildProcess) {
   if (child.exitCode !== null || child.signalCode !== null) return;
@@ -34,7 +35,7 @@ function observe(child: ChildProcess): Promise<unknown> {
   });
 }
 it.each(["after-create", "after-intake", "after-lifecycle-pause"])(
-  "recovers the lifecycle relationship and immutable inputs after death %s",
+  "recovers lifecycle origin and immutable inputs before instance attachment after death %s",
   async (boundary) => {
     const directory = mkdtempSync(join(tmpdir(), "heddle-lifecycle-"));
     const path = join(directory, "runs.sqlite");
@@ -63,7 +64,7 @@ it.each(["after-create", "after-intake", "after-lifecycle-pause"])(
       { runId: "intake-1", nodeId: "start", visit: 1, lifecycleRunId: id },
     ];
     const initialContext = {
-      issue: { id: "item-1", title: "Inspect a book" },
+      issue,
       settings: { category: "rare" },
     };
     try {
@@ -76,6 +77,11 @@ it.each(["after-create", "after-intake", "after-lifecycle-pause"])(
       expect(await observe(restarted)).toEqual({
         links,
         count: 2,
+        attachment: {
+          before: null,
+          after: id,
+          currentTitle: "Changed after lifecycle creation",
+        },
         before: { status: "awaiting", initialContext },
         lifecycle: {
           id,

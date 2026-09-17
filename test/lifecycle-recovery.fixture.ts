@@ -2,15 +2,19 @@
 // relationships:
 //   verifies: engine-and-run-model
 // ---
-const { RunStore, WorkflowEngine } = (await import(
+const { RunStore, WorkflowEngine, InstanceStore } = (await import(
   new URL("../dist/index.js", import.meta.url).href
 )) as typeof import("../src/index.js");
+const { issue } = (await import(
+  new URL("./lifecycle-snapshot.fixture.ts", import.meta.url).href
+)) as typeof import("./lifecycle-snapshot.fixture.js");
 const [path, boundary, mode] = process.argv.slice(2);
 if (!path) throw new Error("Database path required");
 process.on("message", () => {
   /* IPC remains available until the test observes and kills this process. */
 });
 const store = new RunStore(path);
+const instances = new InstanceStore(store.db);
 const engine = new WorkflowEngine(store, {
   resolveBlueprint: (commit, id) => {
     if (mode === "restart")
@@ -60,6 +64,7 @@ const engine = new WorkflowEngine(store, {
   },
 });
 if (mode === "crash") {
+  instances.discover(issue);
   const transaction = store.transaction.bind(store);
   store.transaction = <T>(operation: () => T): T => {
     const value = transaction(operation);
@@ -83,15 +88,19 @@ if (mode === "crash") {
     blueprintId: "selection",
     commit: "commit-a",
     context: {
-      issue: { id: "item-1", title: "Inspect a book" },
+      issue,
       settings: { category: "rare" },
     },
   });
   throw new Error("Crash boundary was not reached");
 } else {
-  await engine.recover();
   const links = store.lifecycleStarts();
   const id = links[0]?.lifecycleRunId ?? "missing";
+  const beforeAttachment = instances.get(issue.id).runId;
+  instances.update({ ...issue, title: "Changed after lifecycle creation" });
+  // Composition attaches the durable lifecycle; it does not create a replacement.
+  instances.attach(issue.id, id);
+  await engine.recover();
   const before = store.get(id);
   await engine.resume({ runId: id, nodeId: "inspect", result: "completed" });
   const lifecycle = store.get(id);
@@ -102,6 +111,11 @@ if (mode === "crash") {
   process.send?.({
     links,
     count,
+    attachment: {
+      before: beforeAttachment,
+      after: instances.get(issue.id).runId,
+      currentTitle: instances.get(issue.id).issue.title,
+    },
     before: { status: before.status, initialContext: before.initialContext },
     lifecycle: {
       id,

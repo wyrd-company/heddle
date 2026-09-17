@@ -406,3 +406,35 @@ it("dispatches a lifecycle after the intake result checkpoint commits", async ()
     payload: { runId: JSON.stringify(["intake-1", "start", 1]) },
   });
 });
+
+it("does not reenter an awaiting lifecycle when intake continues", async () => {
+  const store = new RunStore(":memory:");
+  onTestFinished(() => {
+    store.close();
+  });
+  const source = intake();
+  source.nodes.push({ id: "finish", uses: "wait", params: {} });
+  const engine = new WorkflowEngine(store, {
+    resolveBlueprint: (_commit, id) =>
+      Promise.resolve(
+        id === "selection"
+          ? { ...source, edges: [{ source: "start", target: "finish" }] }
+          : target(),
+      ),
+  });
+  const run = await engine.start({
+    id: "intake-1",
+    blueprintId: "selection",
+    commit: "commit-a",
+    context: { issue },
+  });
+  expect(run.status).toBe("awaiting");
+  const id = store.lifecycleStarts(run.id)[0]?.lifecycleRunId ?? "missing";
+  const before = store.get(id);
+  const events = store.events(id);
+  expect(before.status).toBe("awaiting");
+  await engine.resume({ runId: run.id, nodeId: "finish", result: "completed" });
+  expect(store.get(run.id).status).toBe("completed");
+  expect(store.get(id)).toEqual(before);
+  expect(store.events(id)).toEqual(events);
+});
