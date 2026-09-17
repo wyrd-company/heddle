@@ -5,7 +5,7 @@
 import { DatabaseSync } from "node:sqlite";
 import type { EngineNode } from "../src/engine/index.js";
 const { WorkflowEngine, RunStore } = (await import(
-  new URL("../dist/engine/index.js", import.meta.url).href
+  new URL("../dist/index.js", import.meta.url).href
 )) as typeof import("../src/engine/index.js");
 
 const [path, mode] = process.argv.slice(2);
