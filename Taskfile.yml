@@ -1,0 +1,33 @@
+# ---
+# relationships:
+#   verifies: repository-conventions
+# ---
+version: "3"
+
+tasks:
+  install:
+    desc: Install the locked dependency graph
+    cmds: [npm ci]
+  build:
+    desc: Compile the package and executable
+    cmds: [npm run build]
+  typecheck:
+    desc: Check all TypeScript without emitting files
+    cmds: [npm run typecheck]
+  prettier-check:
+    desc: Check repository formatting
+    cmds: [npm run prettier:check]
+  lint:
+    desc: Check source conventions and static correctness
+    cmds: [npm run lint]
+  test:
+    desc: Run offline unit tests
+    cmds: [npm test]
+  check:
+    desc: Run every gate required before handoff
+    cmds:
+      - task: build
+      - task: typecheck
+      - task: prettier-check
+      - task: lint
+      - task: test

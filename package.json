@@ -1,0 +1,50 @@
+{
+  "name": "@wyrd-company/heddle",
+  "version": "0.0.0",
+  "description": "Workflow orchestration for T3 Code agents",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^24.0.0"
+  },
+  "bin": {
+    "heddle": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "prettier:check": "prettier --check .",
+    "lint": "eslint src test vitest.config.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@wyrd-company/github-work": "file:../../github-spike",
+    "@wyrd-company/t3code-client": "file:../../t3code-client",
+    "ajv": "^8.20.0",
+    "better-sqlite3": "^13.0.3",
+    "flowcraft": "^2.10.1",
+    "jsonata": "^2.2.2",
+    "nunjucks": "^3.2.4",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.10.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.7",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,7 @@
+coverage/
+dist/
+node_modules/
+
+# Preserved research captures and externally formatted fixture files.
+fixtures/
+spikes/

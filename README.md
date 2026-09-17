@@ -14,8 +14,41 @@ blueprint. Code changes only when a new kind of integration is needed.
 
 ## Requirements
 
+- Node.js 24.
 - A GitHub Project and the issues in it.
 - A T3 Code server.
+
+## Install
+
+Heddle is not published yet. Clone it into the Heddle worktree layout with
+the `github-work` and `t3code-client` development repositories beside the
+`heddle` worktree directory, then install the locked dependencies and build:
+
+```sh
+npm ci
+task build
+```
+
+The package installs one executable named `heddle`.
+
+## Run
+
+The scaffold exposes the planned command groups. They print their usage and
+return a non-zero exit code until their implementations land.
+
+```sh
+heddle --help
+heddle start
+heddle validate <path>
+heddle skill <command>
+heddle hook <command>
+```
+
+Run every repository gate with:
+
+```sh
+task check
+```
 
 ## Status
 
