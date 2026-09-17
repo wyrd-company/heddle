@@ -4,22 +4,28 @@
 // ---
 import config from "../codegen.ts";
 
-const hookLocations = [];
+export function findLifecycleHookLocations(config) {
+  const hookLocations = [];
 
-if (Object.hasOwn(config, "hooks")) {
-  hookLocations.push("hooks");
-}
-
-for (const [outputPath, outputConfig] of Object.entries(config.generates)) {
-  if (
-    !Array.isArray(outputConfig) &&
-    typeof outputConfig === "object" &&
-    outputConfig !== null &&
-    Object.hasOwn(outputConfig, "hooks")
-  ) {
-    hookLocations.push(`generates[${JSON.stringify(outputPath)}].hooks`);
+  if (Object.hasOwn(config, "hooks")) {
+    hookLocations.push("hooks");
   }
+
+  for (const [outputPath, outputConfig] of Object.entries(config.generates)) {
+    if (
+      !Array.isArray(outputConfig) &&
+      typeof outputConfig === "object" &&
+      outputConfig !== null &&
+      Object.hasOwn(outputConfig, "hooks")
+    ) {
+      hookLocations.push(`generates[${JSON.stringify(outputPath)}].hooks`);
+    }
+  }
+
+  return hookLocations;
 }
+
+const hookLocations = findLifecycleHookLocations(config);
 
 if (hookLocations.length > 0) {
   console.error(
