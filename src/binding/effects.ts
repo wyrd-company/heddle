@@ -78,6 +78,12 @@ export async function githubEffect(
         throw new Error("set-field scope must be project or organization");
       const value = fieldValue(params["value"]);
       if (params["scope"] === "organization") {
+        if (
+          value !== null &&
+          typeof value === "object" &&
+          !Array.isArray(value)
+        )
+          throw new Error("Organization field cannot use an iteration value");
         const current = await handle.load();
         if (
           !isDeepStrictEqual(
@@ -86,12 +92,6 @@ export async function githubEffect(
           )
         )
           await handle.set({ fields: { [field]: value } });
-        if (
-          value !== null &&
-          typeof value === "object" &&
-          !Array.isArray(value)
-        )
-          throw new Error("Organization field cannot use an iteration value");
         issue.fields[field] = value as
           string | number | readonly string[] | null;
       } else await setCard(project, issue, field, value);

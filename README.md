@@ -239,7 +239,9 @@ servings: 4
 Snapshots are cached in the instance store and copied into a run's durable
 initial context. An issue in multiple bound projects raises attention; use
 `instances.chooseProject(issueId, projectId)` before starting its lifecycle.
-The choice is durable. Status options retain their existing order and append
+The choice is durable. Invalid issue front matter raises attention with the issue
+reference and leaves other issues available for discovery. Repeated project
+attention messages are deduplicated. Status options retain their existing order and append
 new stage node ids. Removed stages remain as options. `Paused` is a
 single-select field with `Yes` and `No` options. The service owns both fields.
 Missing organization fields can be mirrored onto a project when declared by

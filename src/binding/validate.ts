@@ -9,7 +9,7 @@ import type {
 import { validateBlueprintPath } from "../blueprints/validate.js";
 import type { ClientFactory, ProjectBinding } from "./config.js";
 import { parseIssueRef } from "../github/src/refs.js";
-import { frontMatter } from "./snapshot.js";
+import { issueFrontMatter } from "./snapshot.js";
 
 export async function liveRequirementFacts(
   clients: ClientFactory,
@@ -42,7 +42,7 @@ export async function liveRequirementFacts(
       if (issue.state === "open")
         issues.push({
           ref: issue.ref,
-          frontMatter: Object.keys(frontMatter(issue.body)),
+          frontMatter: Object.keys(issueFrontMatter(issue)),
         });
     }
     projects.push({

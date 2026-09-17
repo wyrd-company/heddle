@@ -29,6 +29,24 @@ export function frontMatter(body: string): Data {
     throw new Error("Issue front matter must be a YAML mapping");
   return value as Data;
 }
+export class IssueFrontMatterError extends Error {
+  constructor(ref: string, cause: unknown) {
+    super(
+      `Issue ${ref}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = "IssueFrontMatterError";
+  }
+}
+export function issueFrontMatter(
+  issue: Pick<IssueData<IssueFieldSchema>, "ref" | "body">,
+): Data {
+  try {
+    return frontMatter(issue.body);
+  } catch (error) {
+    throw new IssueFrontMatterError(issue.ref, error);
+  }
+}
 export function snapshot(
   issue: IssueData<IssueFieldSchema>,
   project: IssueSnapshot["project"],
@@ -37,6 +55,6 @@ export function snapshot(
     ...issue,
     repository: issue.ref.slice(0, issue.ref.lastIndexOf("#")),
     project,
-    frontMatter: frontMatter(issue.body),
+    frontMatter: issueFrontMatter(issue),
   };
 }

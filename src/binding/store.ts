@@ -15,7 +15,9 @@ export class InstanceStore {
       CREATE TABLE IF NOT EXISTS github_effects (id TEXT PRIMARY KEY, payload TEXT NOT NULL, snapshot TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS issue_projects (issue_id TEXT NOT NULL, project_id TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,project_id));
       CREATE TABLE IF NOT EXISTS project_choices (issue_id TEXT PRIMARY KEY, project_id TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS github_attention (id INTEGER PRIMARY KEY, project TEXT NOT NULL, message TEXT NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS github_attention (id INTEGER PRIMARY KEY, project TEXT NOT NULL, message TEXT NOT NULL);
+      DELETE FROM github_attention WHERE id NOT IN (SELECT min(id) FROM github_attention GROUP BY project,message);
+      CREATE UNIQUE INDEX IF NOT EXISTS github_attention_identity ON github_attention(project,message);`);
   }
   membership(issue: IssueSnapshot): void {
     this.db
@@ -55,8 +57,13 @@ export class InstanceStore {
       .run(issue.id, JSON.stringify(issue));
   }
   get(id: string): Instance {
+    const instance = this.find(id);
+    if (!instance) throw new Error(`Unknown instance ${id}`);
+    return instance;
+  }
+  find(id: string | null): Instance | undefined {
     const row = this.db.prepare("SELECT * FROM instances WHERE id=?").get(id);
-    if (!row) throw new Error(`Unknown instance ${id}`);
+    if (!row) return undefined;
     return {
       id: String(row["id"]),
       issue: JSON.parse(String(row["snapshot"])) as IssueSnapshot,
@@ -93,7 +100,9 @@ export class InstanceStore {
   }
   attention(project: string, message: string): void {
     this.db
-      .prepare("INSERT INTO github_attention(project,message) VALUES (?,?)")
+      .prepare(
+        "INSERT OR IGNORE INTO github_attention(project,message) VALUES (?,?)",
+      )
       .run(project, message);
   }
 }

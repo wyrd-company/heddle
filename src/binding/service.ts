@@ -13,7 +13,11 @@ import { GitHubError } from "../github/src/transport/errors.js";
 import type { ClientFactory, ProjectBinding } from "./config.js";
 import { githubEffect, permissionAttention, setCard } from "./effects.js";
 import { reconcileProject, type BoundProject } from "./reconcile.js";
-import { snapshot, type IssueSnapshot } from "./snapshot.js";
+import {
+  snapshot,
+  IssueFrontMatterError,
+  type IssueSnapshot,
+} from "./snapshot.js";
 import { InstanceStore } from "./store.js";
 
 export class GitHubBindingService {
@@ -71,7 +75,7 @@ export class GitHubBindingService {
   }
   async reconcile(): Promise<void> {
     const blueprints = await this.blueprints();
-    this.projects.clear();
+    const projects: typeof this.projects = new Map();
     for (const binding of this.bindings) {
       const key = `${binding.owner}/${String(binding.number)}`;
       try {
@@ -84,7 +88,7 @@ export class GitHubBindingService {
             this.instances.attention(key, message);
           },
         );
-        this.projects.set(project.id, { project, client, binding });
+        projects.set(project.id, { project, client, binding });
       } catch (error) {
         if (
           !(error instanceof GitHubError) ||
@@ -94,6 +98,7 @@ export class GitHubBindingService {
         this.instances.attention(key, error.message);
       }
     }
+    this.projects = projects;
   }
   async start(): Promise<void> {
     await this.reconcile();
@@ -116,9 +121,7 @@ export class GitHubBindingService {
         for await (const card of project.items({ archived: false })) {
           if (card.type !== "issue" || !card.contentRef) continue;
           const coords = parseIssueRef(card.contentRef);
-          const existing = this.instances
-            .list()
-            .find((x) => x.id === card.contentId);
+          const existing = this.instances.find(card.contentId);
           if (existing) {
             this.instances.membership({
               ...existing.issue,
@@ -143,15 +146,20 @@ export class GitHubBindingService {
             .issue(coords.number)
             .load();
           if (issue.state !== "open") continue;
-          this.instances.discover(
-            snapshot(issue, {
-              id: project.id,
-              owner: binding.owner,
-              number: binding.number,
-              itemId: card.id,
-              fields: card.values,
-            }),
-          );
+          try {
+            this.instances.discover(
+              snapshot(issue, {
+                id: project.id,
+                owner: binding.owner,
+                number: binding.number,
+                itemId: card.id,
+                fields: card.values,
+              }),
+            );
+          } catch (error) {
+            if (!(error instanceof IssueFrontMatterError)) throw error;
+            this.instances.attention(project.id, error.message);
+          }
         }
       } catch (error) {
         if (!(error instanceof GitHubError) || error.code !== "FORBIDDEN")
