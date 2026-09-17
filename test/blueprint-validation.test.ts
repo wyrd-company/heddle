@@ -700,6 +700,42 @@ nodes:
     );
   });
 
+  it("cites the first fallback for repeated fallback-order findings", () => {
+    const { blueprint, policy } = policyFixture(`rules:
+  - id: first-fallback
+    blueprint: first-route
+  - id: second-fallback
+    blueprint: second-route
+  - id: unreachable-a
+    when: category = 'Later A'
+    blueprint: later-route-a
+  - id: unreachable-b
+    when: category = 'Later B'
+    blueprint: later-route-b
+`);
+
+    expect(validateBlueprintFile(blueprint)).toEqual([
+      {
+        file: policy,
+        node: "/rules/1",
+        rule: "policy.fallback-order",
+        message: "Rule cannot follow fallback at /rules/0",
+      },
+      {
+        file: policy,
+        node: "/rules/2",
+        rule: "policy.fallback-order",
+        message: "Rule cannot follow fallback at /rules/0",
+      },
+      {
+        file: policy,
+        node: "/rules/3",
+        rule: "policy.fallback-order",
+        message: "Rule cannot follow fallback at /rules/0",
+      },
+    ]);
+  });
+
   it("rejects a question role without a configured channel", () => {
     const source = `id: sample-a
 kind: helper
