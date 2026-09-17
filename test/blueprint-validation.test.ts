@@ -73,6 +73,42 @@ edges:
 ${overrides}`;
 }
 
+function policyBlueprint(): string {
+  return `id: sample-a
+kind: helper
+inputs:
+  item: {}
+nodes:
+  select:
+    uses: policy
+    params:
+      rules: rules/policy.yml
+      input: { from: item }
+`;
+}
+
+function policyFixture(source: string): {
+  readonly blueprint: string;
+  readonly policy: string;
+} {
+  const blueprint = temporaryFile("sample-a.yml", policyBlueprint());
+  const policy = join(dirname(blueprint), "rules/policy.yml");
+  mkdirSync(dirname(policy), { recursive: true });
+  writeFileSync(policy, source);
+  return { blueprint, policy };
+}
+
+const validPolicy = `rules:
+  - id: preferred
+    when: category = 'Preferred'
+    blueprint: selected-route
+    inputs:
+      item: { from: "$" }
+      threshold: 3
+  - id: fallback
+    blueprint: fallback-route
+`;
+
 function scalarPaths(
   value: unknown,
   path: readonly (number | string)[] = [],
@@ -505,6 +541,101 @@ nodes:
       expect.objectContaining({ node: "check", rule: "reference.exists" }),
     );
   });
+
+  it("accepts a policy rule artifact with a conditional and fallback rule", () => {
+    const { blueprint } = policyFixture(validPolicy);
+
+    expect(validateBlueprintFile(blueprint)).toEqual([]);
+  });
+
+  it("reports an unknown policy rule property at its referenced file and location", () => {
+    const { blueprint, policy } = policyFixture(
+      validPolicy.replace(
+        "    blueprint: selected-route",
+        "    blueprint: selected-route\n    unexpected: true",
+      ),
+    );
+
+    expect(validateBlueprintFile(blueprint)).toContainEqual(
+      expect.objectContaining({
+        file: policy,
+        node: "/rules/0/unexpected",
+        rule: "policy.schema",
+      }),
+    );
+  });
+
+  it("reports a missing required policy rule value at its referenced file and location", () => {
+    const { blueprint, policy } = policyFixture(
+      validPolicy.replace("  - id: preferred\n    when", "  - when"),
+    );
+
+    expect(validateBlueprintFile(blueprint)).toContainEqual(
+      expect.objectContaining({
+        file: policy,
+        node: "/rules/0/id",
+        rule: "policy.schema",
+      }),
+    );
+  });
+
+  it("reports an invalid policy condition shape at its referenced file and location", () => {
+    const { blueprint, policy } = policyFixture(
+      validPolicy.replace("when: category = 'Preferred'", "when: 4"),
+    );
+
+    expect(validateBlueprintFile(blueprint)).toContainEqual(
+      expect.objectContaining({
+        file: policy,
+        node: "/rules/0/when",
+        rule: "policy.schema",
+      }),
+    );
+  });
+
+  it("reports invalid policy JSONata at its referenced file and location", () => {
+    const { blueprint, policy } = policyFixture(
+      validPolicy.replace("category = 'Preferred'", "category ="),
+    );
+
+    expect(validateBlueprintFile(blueprint)).toContainEqual(
+      expect.objectContaining({
+        file: policy,
+        node: "/rules/0/when",
+        rule: "expression.jsonata",
+      }),
+    );
+  });
+
+  it.each([
+    [
+      "blueprint",
+      "blueprint: selected-route",
+      "blueprint: Invalid Route",
+      "/rules/0/blueprint",
+    ],
+    [
+      "input binding",
+      'item: { from: "$" }',
+      'item: { from: "" }',
+      "/rules/0/inputs/item/from",
+    ],
+  ])(
+    "reports an invalid policy %s while retaining a valid fallback rule",
+    (_name, target, replacement, location) => {
+      const { blueprint, policy } = policyFixture(
+        validPolicy.replace(target, replacement),
+      );
+
+      expect(validateBlueprintFile(blueprint)).toContainEqual(
+        expect.objectContaining({
+          file: policy,
+          node: location,
+          rule: "policy.schema",
+        }),
+      );
+    },
+  );
 
   it("rejects a question role without a configured channel", () => {
     const source = `id: sample-a

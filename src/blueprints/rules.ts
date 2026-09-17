@@ -32,6 +32,10 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     description: "Handoff schemas satisfy JSON Schema and MCP constraints.",
   },
   {
+    name: "policy.schema",
+    description: "Policy rule artifacts satisfy the policy rule JSON Schema.",
+  },
+  {
     name: "expression.jsonata",
     description: "Every condition is valid JSONata syntax.",
   },

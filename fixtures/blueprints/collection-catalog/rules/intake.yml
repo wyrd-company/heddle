@@ -1,5 +1,12 @@
-# The policy brick's rule artifact has no published schema yet.
+# Intake selection remains replaceable policy data.
 rules:
-  - when: issue.type = 'Collection request'
-    result: catalog
-  - result: hold
+  - id: catalog
+    when: type = 'Collection request'
+    blueprint: collection-catalog
+    inputs:
+      issue: { from: "$" }
+  - id: hold
+    blueprint: hold-then-attention
+    inputs:
+      issue: { from: "$" }
+      expectedType: Collection request

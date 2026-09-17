@@ -17,20 +17,32 @@ import { parse } from "yaml";
 import { isNodeTypeName, NODE_TYPE_REGISTRY } from "./node-types.js";
 import type { JsonObject } from "./types.js";
 
-const schemaPath = [
-  new URL("../docs/specifications/blueprint.schema.yml", import.meta.url),
-  new URL("../../docs/specifications/blueprint.schema.yml", import.meta.url),
-].find((candidate) => existsSync(candidate));
-if (schemaPath === undefined) {
-  throw new Error("The packaged blueprint schema is missing.");
+function findPackagedSchema(name: string): URL {
+  const path = [
+    new URL(`../docs/specifications/${name}`, import.meta.url),
+    new URL(`../../docs/specifications/${name}`, import.meta.url),
+  ].find((candidate) => existsSync(candidate));
+  if (path === undefined) {
+    throw new Error(`The packaged ${name} schema is missing.`);
+  }
+  return path;
 }
-const blueprintSchema = parse(readFileSync(schemaPath, "utf8")) as AnySchema;
+
+const blueprintSchemaPath = findPackagedSchema("blueprint.schema.yml");
+const policyRuleSchemaPath = findPackagedSchema("policy-rule.schema.yml");
+const blueprintSchema = parse(
+  readFileSync(blueprintSchemaPath, "utf8"),
+) as AnySchema;
+const policyRuleSchema = parse(
+  readFileSync(policyRuleSchemaPath, "utf8"),
+) as AnySchema;
 const ajv = new Ajv2020({
   allErrors: true,
   strict: false,
   validateFormats: false,
 });
 ajv.addSchema(blueprintSchema);
+ajv.addSchema(policyRuleSchema);
 
 const registeredBlueprintValidator = ajv.getSchema(
   "https://heddle.wyrd.company/schemas/blueprint",
@@ -39,6 +51,13 @@ if (registeredBlueprintValidator === undefined) {
   throw new Error("The blueprint schema did not register its $id.");
 }
 const blueprintValidator: ValidateFunction = registeredBlueprintValidator;
+const registeredPolicyRuleValidator = ajv.getSchema(
+  "https://heddle.wyrd.company/schemas/policy-rule",
+);
+if (registeredPolicyRuleValidator === undefined) {
+  throw new Error("The policy rule schema did not register its $id.");
+}
+const policyRuleValidator: ValidateFunction = registeredPolicyRuleValidator;
 
 const parameterValidators = new Map<string, ValidateFunction>();
 
@@ -48,6 +67,14 @@ export function validateBlueprintSchema(value: unknown): {
 } {
   const valid = blueprintValidator(value);
   return { errors: blueprintValidator.errors ?? [], valid };
+}
+
+export function validatePolicyRuleSchema(value: unknown): {
+  readonly errors: readonly ErrorObject[];
+  readonly valid: boolean;
+} {
+  const valid = policyRuleValidator(value);
+  return { errors: policyRuleValidator.errors ?? [], valid };
 }
 
 export function validateNodeParams(

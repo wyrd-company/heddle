@@ -26,7 +26,8 @@
   },
   "files": [
     "dist",
-    "docs/specifications/blueprint.schema.yml"
+    "docs/specifications/blueprint.schema.yml",
+    "docs/specifications/policy-rule.schema.yml"
   ],
   "scripts": {
     "build": "node scripts/clean-dist.mjs && npm run codegen && npm run build:types && node scripts/build.mjs",

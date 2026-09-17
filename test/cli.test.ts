@@ -162,6 +162,7 @@ describe("command arguments", () => {
     expect(result.output.join("\n")).toContain(
       "Entry is declared only when every node has an incoming edge, and names an authored node.",
     );
+    expect(result.output.join("\n")).toContain("policy.schema");
     expect(result.output.join("\n")).toContain("requires.issue.stage-name");
   });
 });

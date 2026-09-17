@@ -5,13 +5,18 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
+import jsonata from "jsonata";
 import { parseDocument } from "yaml";
 
-import { checkJsonSchema, isObject } from "./schema-validation.js";
+import {
+  checkJsonSchema,
+  isObject,
+  validatePolicyRuleSchema,
+} from "./schema-validation.js";
 import type { Blueprint, BlueprintNode, ValidationFinding } from "./types.js";
 
 interface Reference {
-  readonly handoff: boolean;
+  readonly kind: "file" | "handoff" | "policy";
   readonly node: string;
   readonly path: string;
 }
@@ -20,10 +25,10 @@ function addReference(
   references: Reference[],
   node: string,
   value: unknown,
-  handoff = false,
+  kind: Reference["kind"] = "file",
 ): void {
   if (typeof value === "string") {
-    references.push({ handoff, node, path: value });
+    references.push({ kind, node, path: value });
   }
 }
 
@@ -35,7 +40,7 @@ function collectNodeReferences(
   const params = node.params ?? {};
   if (node.uses === "pass") {
     addReference(references, nodeId, params["prompt"]);
-    addReference(references, nodeId, params["handoff"], true);
+    addReference(references, nodeId, params["handoff"], "handoff");
   }
   if (node.uses === "question" && Array.isArray(params["questions"])) {
     for (const question of params["questions"]) {
@@ -49,11 +54,11 @@ function collectNodeReferences(
     addReference(references, nodeId, params["message"]);
   }
   if (node.uses === "policy") {
-    addReference(references, nodeId, params["rules"]);
+    addReference(references, nodeId, params["rules"], "policy");
   }
   if (node.uses === "child-run" && isObject(params["inputs"])) {
     addReference(references, nodeId, params["inputs"]["prompt"]);
-    addReference(references, nodeId, params["inputs"]["handoff"], true);
+    addReference(references, nodeId, params["inputs"]["handoff"], "handoff");
   }
   return references;
 }
@@ -110,7 +115,7 @@ export function validateReferences(
         continue;
       }
 
-      if (reference.handoff) {
+      if (reference.kind === "handoff") {
         const document = parseDocument(readFileSync(referencedPath, "utf8"), {
           prettyErrors: false,
           strict: true,
@@ -128,7 +133,76 @@ export function validateReferences(
           });
         }
       }
+      if (reference.kind === "policy") {
+        const document = parseDocument(readFileSync(referencedPath, "utf8"), {
+          prettyErrors: false,
+          strict: true,
+        });
+        if (document.errors.length > 0) {
+          for (const error of document.errors) {
+            findings.push({
+              file: referencedPath,
+              node: "$policy",
+              rule: "policy.schema",
+              message: error.message,
+            });
+          }
+          continue;
+        }
+        let value: unknown;
+        try {
+          value = document.toJS({ maxAliasCount: 100 });
+        } catch (error) {
+          findings.push({
+            file: referencedPath,
+            node: "$policy",
+            rule: "policy.schema",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+        const result = validatePolicyRuleSchema(value);
+        for (const error of result.errors) {
+          findings.push({
+            file: referencedPath,
+            node: schemaErrorLocation(error),
+            rule: "policy.schema",
+            message: error.message ?? "is invalid",
+          });
+        }
+        if (result.valid && isObject(value) && Array.isArray(value["rules"])) {
+          for (const [index, rule] of value["rules"].entries()) {
+            if (!isObject(rule) || typeof rule["when"] !== "string") continue;
+            try {
+              jsonata(rule["when"]);
+            } catch (error) {
+              findings.push({
+                file: referencedPath,
+                node: `/rules/${String(index)}/when`,
+                rule: "expression.jsonata",
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+        }
+      }
     }
   }
   return findings;
+}
+
+function schemaErrorLocation(error: {
+  readonly instancePath: string;
+  readonly keyword: string;
+  readonly params: Record<string, unknown>;
+}): string {
+  const property =
+    error.keyword === "required"
+      ? error.params["missingProperty"]
+      : error.keyword === "additionalProperties"
+        ? error.params["additionalProperty"]
+        : undefined;
+  if (typeof property !== "string") return error.instancePath || "/";
+  const escaped = property.replaceAll("~", "~0").replaceAll("/", "~1");
+  return `${error.instancePath}/${escaped}`;
 }
