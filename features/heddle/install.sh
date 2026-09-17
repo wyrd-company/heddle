@@ -32,12 +32,7 @@ install -d -m 0755 "$(dirname "${T3CODETOKENFILE}")"
 install -d -m 0755 "$(dirname "${WEBHOOKSECRETFILE}")"
 
 feature_directory="$(dirname "$0")"
-mapfile -t package_paths < <(
-    find "${feature_directory}" -maxdepth 1 -type f \
-        -name 'wyrd-company-heddle-*.tgz' -print
-)
-[ "${#package_paths[@]}" -eq 1 ] \
-    || err "The Feature must contain exactly one packed @wyrd-company/heddle package."
+package_path="$(find_single_package "${feature_directory}")"
 
 install_log="$(mktemp)"
 cleanup() {
@@ -50,7 +45,7 @@ if ! env \
     NPM_CONFIG_ENGINE_STRICT=true \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     npm install --global --prefix /usr/local --ignore-scripts \
-        --no-audit --no-fund "${package_paths[0]}" >"${install_log}" 2>&1; then
+        --no-audit --no-fund "${package_path}" >"${install_log}" 2>&1; then
     cat "${install_log}" >&2
     err "Heddle package installation failed."
 fi

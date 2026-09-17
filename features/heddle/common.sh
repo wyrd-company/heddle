@@ -67,3 +67,15 @@ validate_absolute_path() {
         *$'\n'*|*$'\r'*) err "${option_name} contains unsupported characters." ;;
     esac
 }
+
+find_single_package() {
+    local feature_directory="$1"
+    local -a package_paths
+    mapfile -t package_paths < <(
+        find "${feature_directory}" -maxdepth 1 -type f \
+            -name 'wyrd-company-heddle-*.tgz' -print
+    )
+    [ "${#package_paths[@]}" -eq 1 ] \
+        || err "The Feature must contain exactly one packed @wyrd-company/heddle package."
+    printf '%s\n' "${package_paths[0]}"
+}

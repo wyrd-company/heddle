@@ -5,7 +5,9 @@
 //     - github-binding-and-intake
 // ---
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -85,6 +87,62 @@ describe("Heddle deployment", () => {
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
+  });
+
+  it.each([0, 2])("rejects %i packed packages", async (packageCount) => {
+    const directory = await mkdtemp(join(tmpdir(), "heddle-feature-test-"));
+    try {
+      await Promise.all(
+        Array.from({ length: packageCount }, (_, index) =>
+          writeFile(
+            join(directory, `wyrd-company-heddle-0.0.${index}.tgz`),
+            "fixture",
+          ),
+        ),
+      );
+
+      const result = spawnSync(
+        "bash",
+        [
+          "-c",
+          'source "$1"; find_single_package "$2"',
+          "bash",
+          commonPath,
+          directory,
+        ],
+        { encoding: "utf8" },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("exactly one packed");
+    } finally {
+      await rm(directory, { recursive: true });
+    }
+  });
+
+  it("selects the only packed package", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "heddle-feature-test-"));
+    const packagePath = join(directory, "wyrd-company-heddle-0.0.0.tgz");
+    try {
+      await writeFile(packagePath, "fixture");
+
+      const result = spawnSync(
+        "bash",
+        [
+          "-c",
+          'source "$1"; find_single_package "$2"',
+          "bash",
+          commonPath,
+          directory,
+        ],
+        { encoding: "utf8" },
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe(packagePath);
+    } finally {
+      await rm(directory, { recursive: true });
+    }
   });
 
   it.each([
