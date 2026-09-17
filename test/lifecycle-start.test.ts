@@ -117,6 +117,7 @@ it.each([
   { blueprint: "missing" },
   { blueprint: "collection", inputs: [] },
   { blueprint: "collection", inputs: null },
+  { blueprint: "collection", inputs: { from: "missing" } },
   { blueprint: "collection", inputs: { issue } },
   { blueprint: "collection", inputs: { missing: { from: "missing" } } },
 ])(
@@ -150,6 +151,30 @@ it.each([
     );
   },
 );
+
+it("accepts omitted and resolved whole-mapping inputs as distinct cases", async () => {
+  const omitted = harness();
+  expect((await omitted.start()).status).toBe("completed");
+
+  const referenced = harness({
+    params: {
+      blueprint: "collection",
+      inputs: { from: "settings" },
+    },
+  });
+  const run = await referenced.start({
+    issue,
+    settings: { category: "rare", count: 3 },
+  });
+  expect(run.status).toBe("completed");
+  const lifecycleId =
+    referenced.store.lifecycleStarts(run.id)[0]?.lifecycleRunId ?? "missing";
+  expect(referenced.store.get(lifecycleId).initialContext).toEqual({
+    issue,
+    category: "rare",
+    count: 3,
+  });
+});
 
 it.each(["helper", "stage", undefined])(
   "rejects target kind %s before creation",

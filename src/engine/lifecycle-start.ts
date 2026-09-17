@@ -25,7 +25,7 @@ export async function lifecycleStart(
     !/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/u.test(blueprint)
   )
     throw new Error("lifecycle-start requires a blueprint id");
-  const inputs = params["inputs"] === undefined ? {} : params["inputs"];
+  const inputs = Object.hasOwn(params, "inputs") ? params["inputs"] : {};
   if (!object(inputs) || Object.hasOwn(inputs, "issue"))
     throw new Error("lifecycle-start inputs must be an object without issue");
   const issue = context.context["issue"];
