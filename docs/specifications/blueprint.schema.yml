@@ -198,9 +198,9 @@ $defs:
           properties: { params: { $ref: "#/$defs/childRunParams" } }
           required: [params]
       - if:
-          properties: { uses: { const: stage } }
+          properties: { uses: { const: pass } }
         then:
-          properties: { params: { $ref: "#/$defs/stageParams" } }
+          properties: { params: { $ref: "#/$defs/passParams" } }
           required: [params]
       - if:
           properties: { uses: { const: question } }
@@ -278,7 +278,7 @@ $defs:
         description: Keys under this node's output to child final context keys.
         type: object
         additionalProperties: { type: string }
-  stageParams:
+  passParams:
     type: object
     additionalProperties: false
     required: [prompt, handoff]
@@ -315,8 +315,8 @@ $defs:
         $ref: "#/$defs/valueOrRef"
       resumeThread:
         description: >
-          A stage node id whose thread this stage continues, or a context
-          reference to a thread id.
+          The id of an earlier `pass` node whose thread this pass continues,
+          or a context reference to a thread id.
         $ref: "#/$defs/valueOrRef"
       tools:
         description: Extra MCP registrations for the thread.

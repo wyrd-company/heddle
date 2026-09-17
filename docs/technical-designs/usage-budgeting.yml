@@ -61,7 +61,7 @@ proposed-design:
     - Fallback: local harness transcript files, read only when T3 reports
       partial usage.
   attribution: >
-    Every usage record carries the thread id, the run id, the stage node
+    Every usage record carries the thread id, the run id, the `pass` node
     id, the instance's issue, and the parent thread id for helpers. The
     stage's read model in the node-types design is where the per-attempt
     total lives; the collector is what ships the records out. Rollups by
@@ -76,7 +76,7 @@ proposed-design:
   hold: >
     Before starting a thread or sending a continuation turn, the engine
     asks the ledger. If the account's window is exhausted, the dispatch is
-    held: the stage node stays paused, a `held` row records why, and the
+    held: the `pass` node stays paused, a `held` row records why, and the
     scheduler re-checks at the window's reset time. Hold never ends a
     thread. Whether an in-flight thread is kept or ended when its window
     exhausts mid-turn is a per-provider operator setting, defaulting to

@@ -33,11 +33,11 @@ design-challenges:
     External systems expose many operations. Adding one must be a change
     inside a brick, not a new brick.
   what-a-graph-cannot-hold: >
-    Inside one thread's try at a stage, things happen that a graph of nodes
-    and edges cannot express: a context-fill ratio crossing a limit needs
+    Inside one pass at a stage, things happen that a graph of nodes and
+    edges cannot express: a context-fill ratio crossing a limit needs
     the previous ratio; three consecutive failed test runs is a count over a
     sequence; inactivity is the absence of an event. These live in code
-    behind the stage node, and only their outcomes reach the graph.
+    behind the `pass` node, and only their outcomes reach the graph.
 proposed-design:
   high-level-overview: >
     Every node type declares an input schema and an output schema in JSON
@@ -60,7 +60,7 @@ proposed-design:
     - Sugar inputs: a short form that expands to a full-contract value.
       Suppose `kettle` accepts `preset: tea`, which expands to a
       `target-temperature` of 80. Heddle's real sugar of this shape is
-      `resumeThread: <stage node id>`, which expands to a context reference
+      `resumeThread: <pass node id>`, which expands to a context reference
       to that stage's thread id.
     - Full contract: every input can be given explicitly, including references
       into any context key, so an author can do something the sugar did not
@@ -75,8 +75,9 @@ proposed-design:
       woke it and the wake-up payload under `output.payload`, which is what
       condition edges read.
     - Context conventions: a node type may also write to a well-known shared
-      key. `stage` writes `stages.<nodeId>` with the thread id, visit count,
-      and handoff, so later stages can find prior ones by name.
+      key. Every node marked `stage: true` writes `stages.<nodeId>` with its
+      visit count and, for a `pass`, the thread id and handoff, so later
+      nodes can find prior stages by name.
   flowcraft-built-ins: |
     - `wait`: pauses until an external resume. Unchanged.
     - `sleep`: pauses until a deadline. Wrapped so the deadline is a wake-up
@@ -84,12 +85,12 @@ proposed-design:
     - Function nodes: plain glue for computing a value from the context.
     - Excluded: `subflow` and action edges, for the reasons in the engine
       design. Lint rejects both.
-  stage: |
-    Starts one thread for one try at a stage and pauses. One stage node
-    execution is one attempt: one thread, from its start to the result the
+  pass: |
+    Starts one thread for one pass at a stage and pauses. One `pass` node
+    execution is one pass: one thread, from its start to the result the
     engine records. A retry is a second execution of the same node, with the
     visit count incremented; the process blueprint never learns how many
-    attempts a stage took unless it reads the count.
+    passes a stage took unless it reads the count.
 
     Inputs: `prompt` (a Nunjucks template rendered with the task context),
     `handoff` (the handoff tool definition: a JSON Schema in YAML whose root
@@ -102,12 +103,12 @@ proposed-design:
     thread (a new one, or the one named by `resumeThread`), generates the
     thread's tool server as the agent-tools design describes, starts the
     first turn, writes `stages.<nodeId>`, and pauses with awaiting details
-    `{ kind: stage, threadId, runId, nodeId, turnEndPolicy }`. If a
+    `{ kind: pass, threadId, runId, nodeId, turnEndPolicy }`. If a
     `deadline` or `inactivity` duration is given, the engine inserts the
     matching wake-up rows.
 
     Read model: while the node is paused, the service subscribes to the
-    thread and maintains a read model of the attempt from what it observes,
+    thread and maintains a read model of the pass from what it observes,
     never from what it commanded: last activity time, turn count, turns not
     started by Heddle, token usage by model and by helper, context ratio and
     the previous ratio, compaction outcomes, helper sessions from T3's
@@ -155,7 +156,7 @@ proposed-design:
     failure.
 
     A `kind: stage` blueprint is used from a process blueprint through this
-    node. Such a blueprint wraps one or more `stage` nodes with the retry and
+    node. Such a blueprint wraps one or more `pass` nodes with the retry and
     re-attempt routing the author wants, and ends on the stage result
     contract. The author reference documents the inputs and outputs each
     shipped stage blueprint declares.
@@ -198,7 +199,7 @@ proposed-design:
     Inputs: `rules` (a reference to a rules artifact in the blueprint
     repository), `input` (defaults to the issue).
 
-    Behavior: evaluates the rules and writes a policy object. A later `stage`
+    Behavior: evaluates the rules and writes a policy object. A later `pass`
     reads its starting `turnEndPolicy` from it. Rules are data in the
     blueprint repository; the evaluator is code.
   resume: |
@@ -212,7 +213,7 @@ proposed-design:
 
     - uses `subflow` or an edge `action`
     - has a pausing node with a result that no outgoing edge handles
-    - declares a stage node whose `handoff` is not a valid JSON Schema with
+    - declares a `pass` node whose `handoff` is not a valid JSON Schema with
       an object root, `properties`, and a non-empty `description`
     - names a role in `question` that no configured channel serves
     - has a `when` expression that is not valid JSONata

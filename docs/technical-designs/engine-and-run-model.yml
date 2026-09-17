@@ -76,7 +76,7 @@ proposed-design:
     A node pauses a run by calling Flowcraft's `markAsAwaiting` with a details
     object. The details always carry a `kind` naming what the node waits for,
     and the identifiers a resumer needs to find the run: a thread id for a
-    stage, a child run id for a child-run node, an issue id for an issue-change
+    pass, a child run id for a child-run node, an issue id for an issue-change
     wait, a deadline for a sleep. The serialized context, including the
     awaiting details, is written to SQLite before the service does anything
     else. The awaiting details are indexed so a resumer can find a run by
@@ -114,10 +114,10 @@ proposed-design:
     author wrote a duration. Two kinds. An elapsed deadline: when a node
     pauses with `deadline` in its awaiting details, the service inserts a
     `wakeup` row with the run id, node id, result name `timeout`, and the
-    due time. An inactivity deadline: a stage node with `inactivity` gets a
+    due time. An inactivity deadline: a `pass` node with `inactivity` gets a
     `wakeup` row with result name `idle` whose due time is the last observed
     thread activity plus the duration, and the row's due time is pushed
-    forward every time the stage's read model records activity, including
+    forward every time the pass's read model records activity, including
     helper activity. A scheduler tick reads due rows and calls resume for
     each. If the run has already moved on, the resume is a recorded late
     wake-up and the row is deleted. A wake-up selects an edge and does
@@ -153,7 +153,7 @@ proposed-design:
   read-models: >
     Every altitude the service tracks is a read model built from what it
     observed, in T3 Code's sense of the term: the run's state from its own
-    event log, and a stage's attempt from the thread's event stream. The
+    event log, and a pass from the thread's event stream. The
     service never records what it commanded as if it had happened; a
     command is a request, and the event that follows is the fact.
   command-line: >

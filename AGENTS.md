@@ -55,13 +55,14 @@ Read them before adding either.
   it is discovered, including while it waits in a backlog.
 - An intake blueprint chooses the lifecycle blueprint for a new issue. Intake
   is a blueprint, so the choice is the user's.
-- A stage node starts one thread for one try at a stage, an attempt, and
-  pauses. It wakes on handoff, escalate, timeout, idle, turn-ended, or
-  overridden. Each wake-up picks an edge and does nothing else.
-- What happens inside an attempt is code behind the stage node: a read
-  model of the thread built from observed events, deadlines, and the
-  generated tool server. Only the result crosses into the graph.
-- Stage blueprints wrap stage nodes with retry routing and run as their own
+- A `pass` node starts one thread for one pass at a stage and pauses. It
+  wakes on handoff, escalate, timeout, idle, turn-ended, or overridden. Each
+  wake-up picks an edge and does nothing else. A stage may take several
+  passes; the process blueprint sees only results.
+- What happens inside a pass is code behind the `pass` node: a read model
+  of the thread built from observed events, deadlines, and the generated
+  tool server. Only the result crosses into the graph.
+- Stage blueprints wrap `pass` nodes with retry routing and run as their own
   top-level runs. A parent run starts a child run and pauses until the child
   resumes it. Nested Flowcraft subflows and action edges are not used.
 - Operator turns sent from the T3 Code UI are ordinary observed turns.

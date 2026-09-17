@@ -22,7 +22,7 @@ background:
     - A turn that ends without a handoff looks the same as a turn that ended on purpose to wait for a person.
 design-challenges:
   binding-a-tool-call-to-a-run: >
-    A tool call must resolve to exactly one run, stage node, and thread
+    A tool call must resolve to exactly one run, `pass` node, and thread
     without the agent naming any of them, and without a shared registry a
     wrong token could reach into.
   handoff-as-a-typed-tool: >
@@ -43,14 +43,14 @@ design-challenges:
     exist, and the stage must stay correct through them.
 proposed-design:
   high-level-overview: >
-    When a `stage` node starts a thread it generates a tool server for that
-    thread. The run id, stage node id, and thread id are baked into the
+    When a `pass` node starts a thread it generates a tool server for that
+    thread. The run id, `pass` node id, and thread id are baked into the
     server instance, its endpoint, and its tool definitions, so a tool call
     carries no identifier and needs none. The server is registered for the
     thread through the T3 Code client's external MCP registration with a
     bearer token minted for that instance. Tool calls become resumes or
     event-log rows. The instance, its token, and its registration are torn
-    down when the stage node reaches a terminal state.
+    down when the `pass` node reaches a terminal state.
   generated-tool-server: >
     A tool server instance is a lightweight streamable-HTTP MCP endpoint
     under the service, addressed by an opaque path minted at stage start
@@ -67,12 +67,12 @@ proposed-design:
       (id, header, text, options, multi-select). Under `escalation:
       answer-in-place` (the default) it starts an answer-question child run
       that answers the thread directly. Under `ends-stage` it resumes the
-      stage node with result `escalate`.
+      `pass` node with result `escalate`.
     - `handoff`: the tool definition is the stage's `handoff` declaration
       verbatim: its root `description` is the tool description and the
       schema is the input schema. The server validates the input and
       rejects it with the validation errors, so the agent can correct it.
-      A valid call resumes the stage node with result `handoff` and the
+      A valid call resumes the `pass` node with result `handoff` and the
       validated payload.
     - `propose-policy`: asks for the stage's turn-end policy to change, with
       a reason. It does not change anything. It raises a question to the
@@ -93,7 +93,7 @@ proposed-design:
       continuation turn, or time out.
 
     The blueprint gives the starting value. The policy is mutable data in
-    the stage's awaiting details. The hook reads it from the generated
+    the pass's awaiting details. The hook reads it from the generated
     server at turn end, so a change takes effect on the next turn end
     without restarting anything. The collaborative pattern is: start
     `allow`, the operator and the agent work in the thread, the operator
@@ -155,6 +155,6 @@ proposed-design:
   token-lifecycle: >
     Tokens are random, stored hashed, bound to one generated instance, and
     carry no other claims. They are revoked, the instance deleted, and the
-    thread's external MCP registration cleared when the stage node
+    thread's external MCP registration cleared when the `pass` node
     completes, fails, or is cancelled. A call to a deleted instance is
     rejected and logged.
