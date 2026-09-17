@@ -27,7 +27,8 @@ validation-criteria: >-
   parses in the sandboxed expression evaluator. Every path in a
   `templateRef`, `schemaRef`, or `policy.rules` resolves to a file beside the
   blueprint. Every `handoff` schema is itself a valid JSON Schema Draft
-  2020-12 object whose root is `type: object` with `properties`. Node
+  2020-12 object whose root is `type: object` with `properties` and a
+  non-empty `description`, since it is exposed verbatim as the MCP tool. Node
   `params` additionally validate against the named node type's published
   contract, which is generated from code and is authoritative for keys this
   schema leaves open. Derived Flowcraft blueprints pass Flowcraft's linter

@@ -286,8 +286,9 @@ $defs:
         $ref: "#/$defs/templateRef"
       handoff:
         description: >
-          The handoff tool's input schema. Root must be `type: object` with
-          `properties`, as the MCP tool input schema requires.
+          The handoff tool's definition. Root must be `type: object` with
+          `properties` and a `description`, as the MCP tool schema requires.
+          The `description` is the tool description the agent reads.
         $ref: "#/$defs/schemaRef"
       turnEndPolicy:
         description: >
