@@ -5,6 +5,7 @@
 //     - node-types
 // ---
 import { resultContractFindings } from "./result-contracts.js";
+import { repositoryContractFindings } from "./repository-contracts.js";
 import { deriveFlowcraftBlueprint } from "./flowcraft.js";
 import { basename, extname, resolve } from "node:path";
 
@@ -274,9 +275,17 @@ export function validateBlueprintPath(
       ),
     ];
   }
-  return sortFindings(
-    files.flatMap((file) => validateBlueprintFile(file, options)),
-  );
+  const checked = files.map((file) => checkBlueprintFile(file, options));
+  const findings = checked.flatMap((result) => result.findings);
+  // A file argument deliberately keeps file-local semantics. A directory is
+  // the complete repository inventory, including nested blueprint folders.
+  if (directoryInput) {
+    const loaded = checked.flatMap((result) =>
+      result.loaded === undefined ? [] : [result.loaded],
+    );
+    findings.push(...repositoryContractFindings(loaded));
+  }
+  return sortFindings(findings);
 }
 
 function sortFindings(findings: ValidationFinding[]): ValidationFinding[] {

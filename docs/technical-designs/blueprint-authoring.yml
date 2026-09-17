@@ -63,6 +63,24 @@ proposed-design:
     rule; the command exits non-zero on any finding and offers JSON output
     beside the readable form so an authoring agent or a CI step can consume
     it.
+  repository-agreements: >
+    Directory validation loads the complete recursive blueprint inventory before
+    resolving child-run targets. File-local schema checks remain independent.
+    Findings use repository.child-missing for unresolved targets,
+    repository.child-duplicate for ambiguous targets, repository.child-kind for
+    incompatible kinds, and repository.child-output-path for undeclared direct
+    output paths. Messages identify the parent blueprint, node, target, and
+    mapping. repository.output-schema reports invalid output declarations;
+    repository.output-shape identifies a terminal value that contradicts its
+    output declaration. repository.child-output-shape links that contradiction
+    back to each affected parent result mapping.
+    Output schemas are the static authority. Literal terminal values are checked
+    with JSON Schema. Direct references to declared inputs, pass envelopes, and
+    aggregate bindings provide conservative shape checks. An optional property
+    or union member is a legal mapped path even when another terminal outcome
+    omits it. General JSONata expressions remain legal; expression evaluation,
+    arbitrary schema implication, and conditional reachability are not claimed
+    as static proofs. No run or external effect starts during these checks.
   command-line: >
     `heddle validate <file or directory>` runs the chain above.
     `heddle skill list` names the embedded skills and `heddle skill export

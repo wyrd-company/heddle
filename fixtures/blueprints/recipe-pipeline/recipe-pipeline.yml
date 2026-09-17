@@ -1,5 +1,9 @@
 # A recipe moves from a draft to a taste test and, if approved, to
 # publication. Rejected drafts go back for another attempt.
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
 id: recipe-pipeline
 kind: process
 entry: draft
@@ -28,6 +32,10 @@ nodes:
     stage: true
     params:
       blueprint: stage-review
+      outputs:
+        verdict: result.verdict
+        overridden: result.overridden
+        turnEnded: result.turnEnded
       inputs:
         prompt: prompts/taste-test.md
         handoff: contracts/taste-test.yml
@@ -45,6 +53,8 @@ nodes:
       message: prompts/too-many-tests.md
   run-failed:
     uses: notify
+    config:
+      joinStrategy: any
     params:
       channel: pushover
       title: { inline: "Recipe step failed" }
@@ -52,10 +62,13 @@ nodes:
 edges:
   - from: draft
     to: taste-test
-    when: result.output.completed
+    when: result.output.completed and $not(result.output.payload.result.overridden or result.output.payload.result.turnEnded)
   - from: draft
     to: run-failed
     when: result.output.failed
+  - from: draft
+    to: run-failed
+    when: result.output.completed and (result.output.payload.result.overridden or result.output.payload.result.turnEnded)
   - from: taste-test
     to: publish
     when: result.output.completed and result.output.payload.verdict = 'approved'
@@ -68,3 +81,6 @@ edges:
   - from: taste-test
     to: run-failed
     when: result.output.failed
+  - from: taste-test
+    to: run-failed
+    when: result.output.completed and (result.output.payload.overridden or result.output.payload.turnEnded)

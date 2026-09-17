@@ -1,3 +1,7 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
 # This stage contains the real T3 Code pass for the first executable slice.
 id: stage-assess-collection
 kind: stage
@@ -11,6 +15,16 @@ inputs:
 outputs:
   result:
     type: object
+    properties:
+      payload:
+        type: [object, "null"]
+        required: [decision, reason]
+        properties:
+          decision: { type: string, enum: [accepted, declined] }
+          reason: { type: string }
+      handoff: { type: boolean }
+      overridden: { type: boolean }
+      turnEnded: { type: boolean }
 nodes:
   # The real pass asks an agent to assess the captured summary and hand off a decision.
   assess:

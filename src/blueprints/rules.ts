@@ -24,6 +24,36 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     description: "Node params satisfy the registered node-type schema.",
   },
   {
+    name: "repository.child-missing",
+    description: "Every child-run target exists in the complete repository.",
+  },
+  {
+    name: "repository.child-duplicate",
+    description: "A child-run target resolves to exactly one blueprint file.",
+  },
+  {
+    name: "repository.child-kind",
+    description: "A stage-marked child-run targets a stage blueprint.",
+  },
+  {
+    name: "repository.child-output-path",
+    description: "Direct child output mapping paths are declared by the child.",
+  },
+  {
+    name: "repository.output-schema",
+    description: "Blueprint output declarations are valid JSON Schemas.",
+  },
+  {
+    name: "repository.output-shape",
+    description:
+      "Known terminal shapes do not contradict declared outputs.result.",
+  },
+  {
+    name: "repository.child-output-shape",
+    description:
+      "A mapped child result has no statically proven terminal shape contradiction.",
+  },
+  {
     name: "reference.exists",
     description: "Referenced templates, schemas, and rules files exist.",
   },

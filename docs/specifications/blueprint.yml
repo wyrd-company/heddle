@@ -63,6 +63,21 @@ validation-criteria: >-
   Stage-name and `requires.issue` project checks run only when live validation
   is requested; without a live implementation they return named `not checked`
   findings rather than silently passing.
+  Directory validation adds repository agreements after file-local checks.
+  Every child-run target resolves uniquely in the complete recursive inventory.
+  A stage-marked child-run targets a stage. Unmarked child runs can target
+  any blueprint kind. Parent output
+  mappings use the child's declared output schemas, including nested properties,
+  local schema references, array projections, and union members. A direct path
+  to an undeclared member is invalid even when a fixture happens to produce it.
+  Optional and union members may be absent on outcomes routed elsewhere.
+  Every terminal-result value is checked against outputs.result where a literal
+  or a declared source shape establishes a contradiction. Literal values use
+  JSON Schema validation; references use known input and node output shapes.
+  These checks do not execute blueprints or evaluate JSONata. General expressions
+  remain supported; static validation does not claim to prove their values or
+  conditional reachability. File validation remains file-local; validate the
+  repository directory to establish cross-blueprint agreements.
   Loading a file and saving it unchanged produces byte-identical output,
   comments included. Fixture blueprints under `fixtures/blueprints/` are the
   conformance corpus and each must pass every check above.

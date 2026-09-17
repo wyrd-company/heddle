@@ -1,3 +1,7 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
 # This stage is intentionally a stub for deterministic engine tests.
 id: stage-capture-collection
 kind: stage
@@ -12,6 +16,16 @@ inputs:
 outputs:
   result:
     type: object
+    properties:
+      payload:
+        type: [object, "null"]
+        required: [itemCount, storage]
+        properties:
+          itemCount: { type: integer }
+          storage: { type: string }
+      handoff: { type: boolean }
+      overridden: { type: boolean }
+      turnEnded: { type: boolean }
 nodes:
   # The stub pass immediately returns the supplied details through its handoff.
   capture:
