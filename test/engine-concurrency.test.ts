@@ -718,3 +718,108 @@ it("a failed branch stops dispatch of its unfinished siblings", async () => {
       ),
   ).toEqual([]);
 });
+
+it("discards a queued idle after activity and delivers the postponed wakeup once", async () => {
+  const entered = deferred(),
+    release = deferred();
+  let now = 0;
+  const blueprint = fanout();
+  const second = blueprint.nodes[2];
+  const edge = blueprint.edges[3];
+  if (!second || !edge) throw new Error("Missing idle branch");
+  second.params = { inactivity: 100 };
+  edge.condition = "result.output.idle";
+  const { engine, store } = setup(
+    [blueprint],
+    {
+      slow: async () => {
+        entered.resolve();
+        await release.promise;
+        return null;
+      },
+    },
+    () => now,
+  );
+  const run = await engine.start({
+    blueprintId: "collection",
+    commit: "commit-a",
+  });
+  const work = engine.resume({
+    runId: run.id,
+    nodeId: "first",
+    result: "handoff",
+  });
+  let postponed: unknown;
+  try {
+    await entered.promise;
+    now = 100;
+    await engine.tick();
+    const original = store.db.prepare("SELECT * FROM wakeups").get();
+    expect(original).toMatchObject({ due: 100 });
+    expect(store.db.prepare("SELECT * FROM held_resumes").all()).toHaveLength(
+      1,
+    );
+    engine.wakeups.activity(run.id, "second", 150);
+    postponed = store.db.prepare("SELECT * FROM wakeups").get();
+    expect(postponed).toEqual({ ...original, due: 250 });
+  } finally {
+    now = 160;
+    release.resolve();
+    await work;
+  }
+  expect(store.awaiting(run.id).map((item) => item.nodeId)).toEqual(["second"]);
+  expect(store.get(run.id).context["second"]).toBeUndefined();
+  expect(store.db.prepare("SELECT * FROM held_resumes").all()).toEqual([]);
+  expect(store.db.prepare("SELECT * FROM wakeups").all()).toEqual([postponed]);
+  expect(
+    store.events(run.id).filter((event) => event.type === "late-wakeup"),
+  ).toMatchObject([{ payload: { result: "idle", payload: { due: 100 } } }]);
+  now = 249;
+  await engine.tick();
+  expect(store.awaiting(run.id).map((item) => item.nodeId)).toEqual(["second"]);
+  now = 250;
+  await engine.tick();
+  await engine.tick();
+  await engine.recover();
+  expect(store.get(run.id).status).toBe("completed");
+  expect(store.get(run.id).context["second"]).toEqual({
+    idle: true,
+    payload: { due: 250 },
+  });
+  expect(store.db.prepare("SELECT * FROM wakeups").all()).toEqual([]);
+  expect(
+    store
+      .events(run.id)
+      .filter(
+        (event) =>
+          event.type === "resume" &&
+          (event.payload as { result: string }).result === "idle",
+      ),
+  ).toHaveLength(1);
+});
+
+it("applies an external idle result without a scheduler identity", async () => {
+  const { engine, store } = setup([
+    {
+      id: "inspection",
+      nodes: [{ id: "inspect", uses: "pass", params: { inactivity: 100 } }],
+      edges: [],
+    },
+  ]);
+  const run = await engine.start({
+    blueprintId: "inspection",
+    commit: "commit-a",
+  });
+  expect(
+    await engine.resume({
+      runId: run.id,
+      nodeId: "inspect",
+      result: "idle",
+      payload: { reason: "observed" },
+    }),
+  ).toBe("applied");
+  expect(store.get(run.id).context["inspect"]).toEqual({
+    idle: true,
+    payload: { reason: "observed" },
+  });
+});

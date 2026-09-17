@@ -30,6 +30,18 @@ export function claimResume(
       store.event(run.id, "late-wakeup", request);
       return "late-wakeup";
     }
+    if (request.result === "idle" && request.wakeupId !== undefined) {
+      const current = store.db
+        .prepare("SELECT due FROM wakeups WHERE id=?")
+        .get(request.wakeupId);
+      const recordedDue = (request.payload as { due?: number } | undefined)
+        ?.due;
+      if (current?.["due"] !== recordedDue) {
+        // Activity postpones this identity; discard only the obsolete attempt.
+        store.event(run.id, "late-wakeup", request);
+        return "late-wakeup";
+      }
+    }
     if (run.paused || run.status !== "awaiting") {
       const bound = { ...request, visit: awaiting.visit };
       const inserted = store.db
