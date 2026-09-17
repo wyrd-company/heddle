@@ -113,8 +113,13 @@ proposed-design:
     ends without a handoff under `require-handoff` resumes the stage with
     `turnEnded` and the blueprint's edge for that result decides, which by
     default starts a continuation turn with a reminder, bounded by a count.
-    Hook installation is the one place Heddle writes into a worktree, and
-    the files it writes are listed in the author reference.
+    The installed hook is a one-line invocation of the Heddle CLI:
+    `heddle hook stop claude` or `heddle hook stop codex`. That command
+    reads the harness's hook input on stdin, reads the policy endpoint for
+    the thread's generated instance, and prints the harness-specific block
+    or allow response. Hook installation is the one place Heddle writes
+    into a worktree, and the files it writes are listed in the author
+    reference.
   operator-operations: |
     The operator, through the console or an operator tool surface, can take
     any of the live-thread operations T3 Code offers, plus Heddle's own.

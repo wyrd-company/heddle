@@ -159,8 +159,9 @@ proposed-design:
   command-line: >
     The service is one binary. `heddle start` runs the service: the engine,
     generated tool servers, the webhook handler, and the scheduler. Other
-    commands, `validate` and `skill`, work without the service and are
-    described in the blueprint-authoring design. The command surface is
+    commands work without the service: `validate` and `skill` are described
+    in the blueprint-authoring design, and `hook stop <harness>` is the
+    turn-end hook the agent-tools design describes. The command surface is
     specified as a command-line-interface specification when the CLI is
     built.
   what-the-engine-never-knows: >
