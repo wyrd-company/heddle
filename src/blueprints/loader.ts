@@ -5,7 +5,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { isScalar, parseDocument } from "yaml";
+import {
+  isMap,
+  isScalar,
+  parseDocument,
+  type Document,
+  type Scalar,
+} from "yaml";
 
 import type { Blueprint, LoadedBlueprint } from "./types.js";
 
@@ -194,13 +200,26 @@ export function saveBlueprint(loaded: LoadedBlueprint): string {
     : applyLocalizedEdits(loaded.source, loaded.formattedSource, formattedEdit);
 }
 
+function firstKey(document: Document): Scalar | undefined {
+  if (!isMap(document.contents)) return undefined;
+  const key = document.contents.items[0]?.key;
+  return isScalar(key) ? key : undefined;
+}
+
 export function roundTripBlueprintBytes(loaded: LoadedBlueprint): boolean {
-  const id = loaded.document.getIn(["id"], true);
-  if (!isScalar(id) || typeof id.value !== "string") return false;
+  const originalKey = firstKey(loaded.document);
+  if (originalKey === undefined) return false;
+  const originalComment = originalKey.commentBefore ?? null;
   const editedDocument = loaded.document.clone();
-  editedDocument.setIn(["id"], `${id.value}-roundtrip`);
+  const editedKey = firstKey(editedDocument);
+  if (editedKey === undefined) return false;
+  editedKey.commentBefore = [originalComment, "roundtrip byte check"]
+    .filter((value) => value !== null)
+    .join("\n");
   const editedSource = saveBlueprint({ ...loaded, document: editedDocument });
   const restored = parseBlueprintSource(editedSource, loaded.filePath);
-  restored.document.setIn(["id"], id.value);
+  const restoredKey = firstKey(restored.document);
+  if (restoredKey === undefined) return false;
+  restoredKey.commentBefore = originalComment;
   return saveBlueprint(restored) === loaded.source;
 }
