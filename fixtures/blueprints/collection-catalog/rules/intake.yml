@@ -1,0 +1,5 @@
+# The policy brick's rule artifact has no published schema yet.
+rules:
+  - when: issue.type = 'Collection request'
+    result: catalog
+  - result: hold

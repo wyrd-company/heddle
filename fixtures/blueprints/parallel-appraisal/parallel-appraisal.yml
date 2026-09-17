@@ -1,0 +1,47 @@
+# This unanticipated helper asks two roles at once before joining their answers.
+id: parallel-appraisal
+kind: helper
+description: Collect independent appraisals of a museum object in parallel.
+nodes:
+  # The operator records the object's visible condition.
+  inspect-condition:
+    uses: question
+    params:
+      role: operator
+      questions:
+        - id: condition
+          header: Condition
+          question: prompts/condition.md
+          options:
+            - label: stable
+              description: No immediate treatment is needed.
+            - label: fragile
+              description: Handling should stop until treatment is planned.
+  # The adjudicator separately assesses the object's documented history.
+  inspect-history:
+    uses: question
+    params:
+      role: adjudicator
+      questions:
+        - id: history
+          header: History
+          question: prompts/history.md
+          options:
+            - label: sufficient
+              description: The recorded history supports appraisal.
+            - label: incomplete
+              description: More history is needed before appraisal.
+  # The all-join waits for both paused branches before recording a panel note.
+  record-panel:
+    uses: notify
+    config:
+      joinStrategy: all
+    params:
+      channel: pushover
+      title: { inline: "Appraisal panel answered" }
+      message: prompts/panel.md
+edges:
+  - from: inspect-condition
+    to: record-panel
+  - from: inspect-history
+    to: record-panel

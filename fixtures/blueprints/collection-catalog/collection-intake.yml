@@ -1,0 +1,46 @@
+# This helper approximates issue-type intake with the current node catalog.
+id: collection-intake
+kind: helper
+description: Choose a collection process or hold an unmatched issue.
+nodes:
+  # Policy provides a synchronous node from which JSONata can route on the issue.
+  classify:
+    uses: policy
+    params:
+      rules: rules/intake.yml
+      input: { from: issue }
+  # A matching issue starts the collection process as a child run.
+  start-catalog:
+    uses: child-run
+    params:
+      blueprint: collection-catalog
+  # An unmatched issue starts the helper that waits for a relevant change.
+  start-hold:
+    uses: child-run
+    params:
+      blueprint: hold-then-attention
+      inputs:
+        expectedType: Collection request
+  # Completion of the selected collection process is made visible.
+  catalog-finished:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection intake finished" }
+  # Completion of the hold helper is made visible.
+  hold-finished:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection intake held" }
+edges:
+  - from: classify
+    to: start-catalog
+    when: issue.type = 'Collection request'
+  - from: classify
+    to: start-hold
+    when: issue.type != 'Collection request'
+  - from: start-catalog
+    to: catalog-finished
+  - from: start-hold
+    to: hold-finished

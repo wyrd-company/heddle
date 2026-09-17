@@ -1,0 +1,54 @@
+# An unmatched issue waits once, retries intake on change, and notifies on expiry.
+id: hold-then-attention
+kind: helper
+description: Hold an unmatched collection request until its issue type changes.
+inputs:
+  expectedType:
+    type: string
+outputs:
+  result:
+    type: object
+nodes:
+  # The durable wait wakes for the expected type or after the fixture deadline.
+  wait-for-type:
+    uses: on-issue-change
+    params:
+      when: issue.type = expectedType
+      deadline: PT5M
+  # A matching change reruns the ordinary intake helper as a child run.
+  retry-intake:
+    uses: child-run
+    params:
+      blueprint: collection-intake
+  # An expired hold raises attention through the available notification brick.
+  notify-attention:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection request still unmatched" }
+      message: prompts/hold-expired.md
+  # A completed intake retry produces an explicit terminal node.
+  retry-finished:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection intake retried" }
+  # A failed intake retry is visible rather than silently completing.
+  retry-failed:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection intake retry failed" }
+edges:
+  - from: wait-for-type
+    to: retry-intake
+    when: result.output.changed
+  - from: wait-for-type
+    to: notify-attention
+    when: result.output.timeout
+  - from: retry-intake
+    to: retry-finished
+    when: result.output.completed
+  - from: retry-intake
+    to: retry-failed
+    when: result.output.failed
