@@ -2,7 +2,7 @@
 // relationships:
 //   implements: blueprint-authoring
 // ---
-import { isAlias, isMap, isScalar, isSeq, type Document } from "yaml";
+import { isMap, isScalar, isSeq, type Document } from "yaml";
 import { slots, commentTokens } from "./yaml-comments.js";
 import {
   applySourcePatches,
@@ -12,7 +12,6 @@ import {
 
 export function presentationSnapshot(document: Document): unknown {
   return {
-    directives: document.directives,
     nodes: slots(document)
       .filter((slot) => slot.before && slot.node)
       .map(({ path, node }) => ({
@@ -22,8 +21,6 @@ export function presentationSnapshot(document: Document): unknown {
         format: isScalar(node) ? node.format : undefined,
         minFractionDigits: isScalar(node) ? node.minFractionDigits : undefined,
         flow: isMap(node) || isSeq(node) ? node.flow === true : undefined,
-        anchor: node && !isAlias(node) ? node.anchor : undefined,
-        tag: node?.tag,
       })),
   };
 }

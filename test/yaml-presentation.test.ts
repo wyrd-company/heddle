@@ -285,6 +285,8 @@ describe("YAML presentation and creation matrix", () => {
     ["fractional precision", "a: 1.2\n", "a: 1.200\n"],
     ["document directive", "a: 1\n", "%YAML 1.2\n---\na: 1\n"],
     ["document end marker", "a: 1\n", "a: 1\n...\n"],
+    ["anchor", "a: x\n", "a: &keep x\n"],
+    ["tag", "a: x\n", "a: !!str x\n"],
     ["scalar type", "a: x\n", "a: 'x'\n"],
     ["flow", "a:\n  - x\n", "a: [x]\n"],
   ])("rejects lost %s metadata", (_field, saved, expected) => {

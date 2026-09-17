@@ -59,6 +59,10 @@ export function pairIndex(items: readonly Pair[], pair: Pair): number {
 // explicitly assigned Document metadata always wins.
 export function prepareEdit(original: Document, edited: Document): Document {
   const result = edited.clone();
+  // yaml's Document clone clears the document-end marker.
+  if (!result.directives || !edited.directives)
+    throw new Error("Cannot preserve YAML edits without document directives");
+  result.directives.docEnd = edited.directives.docEnd;
   function visit(before: unknown, value: unknown): Node {
     const after = isNode(value) ? value : result.createNode(value);
     if (

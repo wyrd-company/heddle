@@ -15,6 +15,7 @@ import {
 } from "yaml";
 import { reconcileComments, commentSnapshot } from "./yaml-comments.js";
 import { presentationSnapshot, reconcileSpacing } from "./yaml-presentation.js";
+import { metadataSnapshot, reconcileMetadata } from "./yaml-metadata.js";
 
 import {
   applySourcePatches,
@@ -262,7 +263,8 @@ export function assertPreservedDocument(saved: string, edited: Document): void {
     !isDeepStrictEqual(
       presentationSnapshot(reparsed),
       presentationSnapshot(expected),
-    )
+    ) ||
+    !isDeepStrictEqual(metadataSnapshot(reparsed), metadataSnapshot(edited))
   ) {
     throw new Error("Localized YAML edit did not preserve the edited document");
   }
@@ -270,17 +272,19 @@ export function assertPreservedDocument(saved: string, edited: Document): void {
 
 export function saveLocalizedYaml(
   source: string,
-  formattedSource: string,
+  _formattedSource: string,
   edited: Document,
 ): string {
-  if (edited.toString() === formattedSource) return source;
   const original = parseSource(source);
   const intended = prepareEdit(original, edited);
   const values = applySourcePatches(
     source,
     semanticPatches(source, original, intended),
   );
-  const saved = reconcileSpacing(reconcileComments(values, intended), intended);
+  const saved = reconcileMetadata(
+    reconcileSpacing(reconcileComments(values, intended), intended),
+    intended,
+  );
   assertPreservedDocument(saved, intended);
   return saved;
 }
