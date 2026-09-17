@@ -61,6 +61,49 @@ proposed-design:
     short-lived ticket or a bearer upgrade header. `RpcConnection` correlates
     requests, streams ordered items, reconnects after transport loss, and
     closes every pending operation when the client closes.
+  wire-protocol: >
+    WebSocket requests always carry `headers: []`; the server closes a socket
+    without a reason when that field is absent. The client acknowledges every
+    `Chunk`, because the server does not send the next stream chunk until its
+    `Ack` arrives. An `Interrupt` cancels an in-flight call or stream, and every
+    stream terminates with an `Exit`. Unknown envelope tags are ignored for
+    forward compatibility. Invalid JSON or a malformed known envelope fails
+    every request in flight with a protocol error.
+  http-routes-and-scopes: |
+    The typed HTTP surface is:
+
+    | Method and path | Authorization | Result or purpose |
+    | --- | --- | --- |
+    | `GET /.well-known/t3/environment` | none | environment descriptor |
+    | `GET /api/auth/session` | optional bearer | current session state |
+    | `POST /oauth/token` | none | single-use pairing-token exchange |
+    | `POST /api/auth/websocket-ticket` | bearer | short-lived socket ticket |
+    | `POST /api/auth/pairing-token` | `access:write` | new pairing credential |
+    | `GET /api/auth/pairing-links` | `access:read` | pairing links |
+    | `POST /api/auth/pairing-links/revoke` | `access:write` | revoke one link |
+    | `GET /api/auth/clients` | `access:read` | connected client sessions |
+    | `POST /api/auth/clients/revoke` | `access:write` | revoke one session |
+    | `POST /api/auth/clients/revoke-others` | `access:write` | revoke other sessions |
+    | `GET /api/orchestration/snapshot` | `orchestration:read` | full read model |
+    | `GET /api/orchestration/shell` | `orchestration:read` | lightweight read model |
+    | `GET /api/orchestration/threads/:threadId` | `orchestration:read` | paged thread detail |
+    | `POST /api/orchestration/dispatch` | `orchestration:operate` | dispatch command |
+    | `POST /api/pull-requests/diff` | bearer | outside the typed facade |
+    | `PUT /api/mcp/provider-session` | `orchestration:operate` | replace MCP registration |
+    | `DELETE /api/mcp/provider-session` | `orchestration:operate` | clear MCP registration |
+
+    Standard HTTP failures carry `code`, `reason`, and `traceId`. The MCP
+    routes instead return `{ error: "invalid_external_mcp_registration" }`,
+    plus `requiredScope` for a forbidden request.
+  transport-decisions: >
+    The client implements the small JSON wire directly with Zod rather than
+    depending on the server's private Effect contracts package. Dispatch
+    prefers RPC because it preserves the typed
+    `OrchestrationDispatchCommandError`; the HTTP dispatch route collapses
+    that failure to status 500 and remains a fallback. Socket authentication
+    uses a short-lived ticket by default because it works with every WebSocket
+    implementation; a bearer upgrade header remains available for callers
+    whose WebSocket implementation supports it.
   authentication: >
     A `CredentialStore` holds bearer-session state in memory or in a file.
     `AuthClient` exchanges a pairing token, validates and stores access tokens,
@@ -73,6 +116,12 @@ proposed-design:
     unary or streaming behavior, and its required authorization scope. Typed
     calls derive their input and output from that table. Raw calls remain an
     escape hatch for a server method not yet represented in the registry.
+  raw-reachability: >
+    Pull requests, previews, devices, cloud relay, DPoP, desktop bootstrap,
+    attachment upload signing, source-control clone flows, and settings
+    mutation are outside the typed facade. They remain reachable through
+    `rpc.callRaw` and `rpc.streamRaw` until a typed registry entry and facade
+    operation are added.
   facades: >
     `T3Client` composes `auth`, `server`, `projects`, `threads`, `shell`, `mcp`,
     `vcs`, `terminal`, and `rpc`. Project ensure keys on normalized workspace

@@ -21,8 +21,13 @@ afterEach(async () => {
 
 async function lintSource(
   source: string,
+  directory = "src",
 ): Promise<readonly ESLint.LintResult[]> {
-  const filePath = join(process.cwd(), "src", `lint-probe-${randomUUID()}.ts`);
+  const filePath = join(
+    process.cwd(),
+    directory,
+    `lint-probe-${randomUUID()}.ts`,
+  );
   temporaryFiles.push(filePath);
   await writeFile(filePath, source);
 
@@ -46,6 +51,32 @@ describe("source restrictions", () => {
   it("rejects source files over 300 lines", async () => {
     const results = await lintSource(
       Array.from({ length: 301 }, () => "// line").join("\n"),
+    );
+
+    expect(
+      results
+        .flatMap((result) => result.messages)
+        .map((message) => message.ruleId),
+    ).toContain("max-lines");
+  });
+
+  it("does not count comments toward the T3 Code module line limit", async () => {
+    const results = await lintSource(
+      Array.from({ length: 301 }, () => "// contract").join("\n"),
+      "src/t3code",
+    );
+
+    expect(
+      results
+        .flatMap((result) => result.messages)
+        .map((message) => message.ruleId),
+    ).not.toContain("max-lines");
+  });
+
+  it("still rejects T3 Code source over 300 non-comment lines", async () => {
+    const results = await lintSource(
+      Array.from({ length: 301 }, () => "void 0;").join("\n"),
+      "src/t3code",
     );
 
     expect(

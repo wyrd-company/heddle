@@ -157,6 +157,7 @@ export function applyThreadEvent(
     case "thread.user-input-response-requested":
     case "thread.checkpoint-revert-requested":
     case "thread.session-stop-requested":
+    // Falls through: project events never reach here (aggregate kind), but keep the switch exhaustive.
     case "project.created":
     case "project.meta-updated":
     case "project.deleted":

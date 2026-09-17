@@ -38,5 +38,3 @@ export type {
   ValidationFinding,
   ValidationOptions,
 } from "./blueprints/types.js";
-export * as github from "./github/index.js";
-export * as t3code from "./t3code/index.js";

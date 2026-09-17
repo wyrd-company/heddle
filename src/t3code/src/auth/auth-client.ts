@@ -1,3 +1,10 @@
+/**
+ * AuthClient: the auth control plane over HTTP, and the only module that
+ * reads or writes the credential store. It keeps an in-memory copy of the
+ * last credentials it loaded or saved so the RPC layer can check scopes
+ * without a store round trip, and it tells subscribers when the stored
+ * credential changes so an open socket can re-authenticate.
+ */
 import { z } from "zod";
 
 import { T3AuthError, T3PreconditionError } from "../errors.js";

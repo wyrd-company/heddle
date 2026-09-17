@@ -43,6 +43,7 @@ describe("ThreadsApi.startTurn", () => {
       fetch: server.fetch,
       getAccessToken: async () => "token-1",
     });
+    // Commands are stamped after every fixture timestamp, like a live dispatch.
     const clock = { now: () => new Date("2020-01-01T00:00:10.000Z") };
     threads = new ThreadsApi(http, rpc, new CommandDispatcher(rpc, http, { clock }));
     server.handle("orchestration.dispatchCommand", (payload) => {
@@ -103,6 +104,7 @@ describe("ThreadsApi.startTurn", () => {
       assistantMessage: { id: "a1", text: "pong" },
     });
     expect(outcome.error).toBeUndefined();
+    // Resumes after the receipt, seeded over HTTP, and ends once the turn settled.
     expect(subscriptions[0]).toMatchObject({ threadId: ids.threadId, afterSequence: 10 });
     expect(items[0]?.kind).toBe("snapshot");
     expect(
@@ -122,6 +124,7 @@ describe("ThreadsApi.startTurn", () => {
       interactionMode: "default",
     });
     await expect(handle.completion).resolves.toMatchObject({ state: "completed" });
+    // The shell was not read because both modes were given.
     expect(server.routes.requests.map((r) => r.path)).not.toContain("/api/orchestration/shell");
   });
 
@@ -190,6 +193,7 @@ describe("ThreadsApi.startTurn", () => {
     });
     const idle = handle.events(); // never iterated
     const completion = handle.completion;
+    // Let the snapshot and the first event arrive.
     const iterator = handle.events()[Symbol.asyncIterator]();
     await iterator.next();
     await iterator.next();
@@ -202,6 +206,8 @@ describe("ThreadsApi.startTurn", () => {
   });
 
   it("two turns started back to back both follow the one provider turn they were folded into", async () => {
+    // The event order a live codex session produced for two starts 44 ms apart:
+    // both user messages, one running session, two assistant messages, ready.
     let sequence = 20;
     server.handle("orchestration.dispatchCommand", (payload) => {
       dispatched.push(payload as Record<string, unknown>);

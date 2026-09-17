@@ -19,7 +19,9 @@ const manifestPath = new URL(
 const installerPath = new URL("../features/heddle/install.sh", import.meta.url);
 const buildPath = new URL("../scripts/build.mjs", import.meta.url);
 const codegenPath = new URL("../src/github/codegen.ts", import.meta.url);
+const gitignorePath = new URL("../.gitignore", import.meta.url);
 const packagePath = new URL("../package.json", import.meta.url);
+const prettierIgnorePath = new URL("../.prettierignore", import.meta.url);
 const readmePath = new URL("../README.md", import.meta.url);
 const tsconfigPath = new URL("../tsconfig.json", import.meta.url);
 const commonPath = fileURLToPath(
@@ -175,11 +177,9 @@ describe("Heddle deployment", () => {
     );
   });
 
-  it("bundles both internal clients instead of external package names", async () => {
+  it("does not resolve the internal clients as external packages", async () => {
     const buildScript = await readFile(buildPath, "utf8");
 
-    expect(buildScript).toContain('"src/github/src/"');
-    expect(buildScript).toContain('"src/t3code/src/"');
     expect(buildScript).not.toMatch(
       /external:[\s\S]*@wyrd-company\/(?:github-work|t3code-client)/,
     );
@@ -189,12 +189,13 @@ describe("Heddle deployment", () => {
 
   it("typechecks internal modules without workspace path aliases", async () => {
     const tsconfig = JSON.parse(await readFile(tsconfigPath, "utf8")) as {
-      compilerOptions: { paths?: Record<string, string[]> };
+      compilerOptions: { lib?: string[]; paths?: Record<string, string[]> };
       include: string[];
     };
 
     expect(tsconfig.include).toContain("src");
     expect(tsconfig.compilerOptions.paths).toBeUndefined();
+    expect(tsconfig.compilerOptions.lib).toEqual(["ES2023"]);
   });
 
   it("generates the internal GitHub document lookup before compilation", async () => {
@@ -221,11 +222,30 @@ describe("Heddle deployment", () => {
     expect(readme).not.toMatch(/@wyrd-company\/(?:github-work|t3code-client)/);
   });
 
-  it("exports both internal client public surfaces", async () => {
-    const heddle = await import("../src/index.js");
+  it("preserves both internal client public surfaces", async () => {
+    const [githubClient, githubTesting, t3codeClient, heddle] =
+      await Promise.all([
+        import("../src/github/index.js"),
+        import("../src/github/testing.js"),
+        import("../src/t3code/index.js"),
+        import("../src/index.js"),
+      ]);
 
-    expect(heddle.github.github).toBeTypeOf("function");
-    expect(heddle.github.ScriptedTransport).toBeTypeOf("function");
-    expect(heddle.t3code.T3Client).toBeTypeOf("function");
+    expect(githubClient.github).toBeTypeOf("function");
+    expect(githubClient).not.toHaveProperty("ScriptedTransport");
+    expect(githubTesting.ScriptedTransport).toBeTypeOf("function");
+    expect(t3codeClient.T3Client).toBeTypeOf("function");
+    expect(heddle).not.toHaveProperty("github");
+    expect(heddle).not.toHaveProperty("t3code");
+  });
+
+  it("ignores isolated T3 Code live state and credentials", async () => {
+    const [gitignore, prettierIgnore] = await Promise.all([
+      readFile(gitignorePath, "utf8"),
+      readFile(prettierIgnorePath, "utf8"),
+    ]);
+
+    expect(gitignore).toContain("src/t3code/.t3-live/");
+    expect(prettierIgnore).toContain("src/t3code/.t3-live/");
   });
 });

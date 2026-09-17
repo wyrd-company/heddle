@@ -1,4 +1,5 @@
 node_modules/
+src/t3code/.t3-live/
 dist/
 coverage/
 *.tsbuildinfo

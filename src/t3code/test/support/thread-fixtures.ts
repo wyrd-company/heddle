@@ -1,3 +1,9 @@
+/**
+ * Builders for orchestration read-model values and wire-shaped events, for
+ * unit tests of the projection, the thread watch, and the facades. Values are
+ * parsed through the schemas so defaults are filled the way the client sees
+ * them. All ids are generic placeholders.
+ */
 import { projectId, threadId, turnId, type MessageId } from "../../src/schemas/common.js";
 import type { OrchestrationSession } from "../../src/schemas/orchestration/read-model.js";
 import { OrchestrationEvent } from "../../src/schemas/orchestration/events.js";
@@ -104,6 +110,7 @@ export function makeSession(overrides: Partial<OrchestrationSession> = {}): Orch
   };
 }
 
+/** A wire-shaped event, as the server sends it. */
 export function rawEvent(
   sequence: number,
   type: string,
@@ -243,6 +250,7 @@ export const events = {
     }),
 };
 
+/** A message in the read-model shape. */
 export function makeMessage(input: {
   id: string;
   role?: "user" | "assistant" | "system";
@@ -261,6 +269,7 @@ export function makeMessage(input: {
   };
 }
 
+/** A checkpoint summary in the read-model shape. */
 export function makeCheckpoint(input: {
   turnId: string;
   checkpointTurnCount: number;

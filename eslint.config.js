@@ -94,5 +94,14 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ["src/t3code/**/*.ts"],
+    rules: {
+      "max-lines": [
+        "error",
+        { max: 300, skipBlankLines: false, skipComments: true },
+      ],
+    },
+  },
   prettier,
 );

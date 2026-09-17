@@ -44,8 +44,9 @@ proposed-design:
     one performs no request.
   module-boundary: >
     `src/github/index.ts` preserves the runtime and type exports of the GitHub
-    client and exposes `ScriptedTransport` for deterministic tests. Transport
-    and generated GraphQL types do not appear in resource interfaces.
+    client. `src/github/testing.ts` preserves the separate testing surface and
+    exposes `ScriptedTransport` for deterministic tests. Transport and
+    generated GraphQL types do not appear in resource interfaces.
   authentication-and-transport: >
     Authentication accepts a token, GitHub App credentials with an
     installation id, or GitHub App credentials with an owner whose
@@ -58,6 +59,8 @@ proposed-design:
     repository locates issues, pull requests, labels, and milestones. A
     project locates fields, items, and status updates. Each handle retains the
     context needed to resolve names to ids at the operation boundary.
+    Constructing a handle performs no request; every handle method represents
+    one logical remote operation.
   declared-schemas: >
     `defineProject` and `defineIssueFields` preserve literal declarations.
     Conditional types map each field kind to its accepted value: text, number,
@@ -89,6 +92,24 @@ proposed-design:
     compilation. Execution resolves the exact formatted document text in the
     generated lookup and fails with `SCHEMA_MISMATCH` when registration or
     response structure differs.
+  document-and-parse-conventions: >
+    Documents use the generated `graphql()` tag and execute only through
+    `transport/execute.ts`. Generated GraphQL types are imported only by
+    document and parse modules, so resource interfaces do not expose wire
+    types. Parse modules switch on `__typename`; an unknown member raises
+    `ResponseShapeError` instead of producing a partial domain value. Pure
+    patch planners turn resolved ids and caller input into ordered mutations.
+    Schema reconciliation is also pure and never plans deletion.
+  mutation-order-and-partial-failure: >
+    `item.set` issues one mutation per field, in caller order. It stops on the
+    first failure and names that field; values written by earlier mutations
+    remain set. This trades atomicity for one typed call site over GitHub's
+    field-specific mutations. Ensure operations never delete fields or
+    options, so destructive conformance remains explicit.
+  item-filtering: >
+    Project items are not filtered by field value in the client. GitHub does
+    not provide a server-side item filter, and a client-side predicate would
+    conceal a full project scan.
   schema-snapshot: >
     `src/github/schema/github.graphql` is the build input. The refresh script
     performs GitHub introspection with `GITHUB_TOKEN`, builds a client schema,
@@ -105,6 +126,21 @@ proposed-design:
     invalidate the affected catalog or handle entry. A lookup that returns
     multiple candidates raises `AMBIGUOUS` and carries the candidates rather
     than selecting one.
+  alternatives: >
+    A function namespace per resource repeats reference resolution and makes
+    callers coordinate several requests for one workflow operation. Classes
+    generated from GraphQL types expose GitHub's wire inconsistencies. Result
+    unions double every signature even though Heddle aborts the step for every
+    failure. A fake that interprets GraphQL duplicates GitHub behavior;
+    `ScriptedTransport` tests the same resource seam without that second
+    implementation.
+  accepted-risks: >
+    GitHub App tokens cannot assign bot users, so that request fails as
+    `UNSUPPORTED`. Multi-select project option ids and single-select option ids
+    have different GraphQL scalar shapes and require distinct encoders.
+    Resolving an iteration by date considers both active and completed
+    iterations. A public `Transport` shape is accepted so consumers can test
+    resource behavior without exposing Octokit itself.
   verification: >
     Offline tests exercise resource behavior through `ScriptedTransport` and
     generated documents. Opt-in live tests split organization/project and

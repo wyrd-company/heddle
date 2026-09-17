@@ -46,15 +46,7 @@ for command_name in start validate skill hook; do
 done
 (
     cd "${consumer_directory}"
-    node --input-type=module <<'EOF'
-const heddle = await import("@wyrd-company/heddle");
-if (typeof heddle.github.github !== "function") {
-  throw new Error("packed package does not expose the GitHub client namespace");
-}
-if (typeof heddle.t3code.T3Client !== "function") {
-  throw new Error("packed package does not expose the T3 Code client namespace");
-}
-EOF
+    node --input-type=module -e 'await import("@wyrd-company/heddle")'
 )
 
 node --input-type=module - "${package_paths[0]}" <<'EOF'

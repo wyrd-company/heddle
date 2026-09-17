@@ -93,7 +93,7 @@ export class HttpTransport {
       headers.set("authorization", `Bearer ${accessToken}`);
     }
     if (this.#userAgent !== undefined) headers.set("user-agent", this.#userAgent);
-    let body: BodyInit | undefined;
+    let body: RequestInit["body"] | undefined;
     if (request.body instanceof URLSearchParams) {
       headers.set("content-type", "application/x-www-form-urlencoded");
       body = request.body;

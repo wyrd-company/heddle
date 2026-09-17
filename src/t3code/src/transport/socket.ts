@@ -1,3 +1,10 @@
+/**
+ * SocketTransport: one logical WebSocket connection to `/ws` that survives
+ * drops. It opens lazily, keeps the link alive with Ping/Pong, reconnects with
+ * backoff until `close()`, and hands decoded server envelopes to listeners.
+ * `url()` and `headers()` run on every attempt, so a ticket URL is refreshed;
+ * a `T3AuthError` from them, a 4xx upgrade, or close code 1008 is fatal.
+ */
 import { T3AuthError, T3ConnectionError, T3InterruptedError } from "../errors.js";
 import { createBackoff, defaultBackoffPolicy, type BackoffPolicy } from "../internal/backoff.js";
 import { noopLogger, type Logger } from "../internal/logger.js";

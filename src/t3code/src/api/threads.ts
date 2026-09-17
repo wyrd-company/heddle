@@ -1,3 +1,8 @@
+/**
+ * ThreadsApi: thread lifecycle commands with server bookkeeping filled in,
+ * idempotent `ensure` keyed by the caller's thread id, detail reads over
+ * HTTP, request responses, turns, and the resumable live watch.
+ */
 import { T3PreconditionError, T3RpcError } from "../errors.js";
 import type { RpcClient } from "../rpc/client.js";
 import type { RpcMethods } from "../rpc/registry.js";
@@ -80,6 +85,7 @@ export class ThreadsApi {
       : threads.filter((thread) => thread.projectId === options.projectId);
   }
 
+  /** Active threads first; archived threads are consulted only when the id is not active. */
   async get(
     threadId: ThreadId,
     signal?: AbortSignal,
@@ -90,6 +96,7 @@ export class ThreadsApi {
     return archived.threads.find((thread) => thread.id === threadId);
   }
 
+  /** Full thread over HTTP. Raises `T3NotFoundError` when the thread does not exist. */
   detail(
     threadId: ThreadId,
     window: OrchestrationThreadDetailWindow = {},
@@ -130,6 +137,7 @@ export class ThreadsApi {
     return created;
   }
 
+  /** Returns the existing thread for `threadId` untouched, or creates it. */
   async ensure(
     input: ThreadCreateInput & { readonly threadId: ThreadId },
     signal?: AbortSignal,
@@ -144,6 +152,7 @@ export class ThreadsApi {
     );
   }
 
+  /** Resolves when the thread is archived, including when it is missing or already archived. */
   async archive(threadId: ThreadId, signal?: AbortSignal): Promise<void> {
     await this.#tolerant(
       this.#commands.simple("thread.archive", threadId),
@@ -160,6 +169,7 @@ export class ThreadsApi {
     await this.dispatch(this.#commands.simple("thread.settle", threadId), signal);
   }
 
+  /** Resolves when the thread is gone, including when it never existed. */
   async delete(threadId: ThreadId, signal?: AbortSignal): Promise<void> {
     await this.#tolerant(this.#commands.simple("thread.delete", threadId), signal);
   }
@@ -180,6 +190,10 @@ export class ThreadsApi {
     await this.dispatch(this.#commands.setInteractionMode(threadId, interactionMode), signal);
   }
 
+  /**
+   * Dispatches `thread.turn.start` and returns a handle that follows the turn.
+   * Modes default to the thread's current modes (one shell read when omitted).
+   */
   async startTurn(input: StartTurnInput): Promise<TurnHandle> {
     const { signal } = input;
     let runtimeMode = input.runtimeMode;
@@ -252,10 +266,12 @@ export class ThreadsApi {
     await this.dispatch(this.#commands.dismissUserInput(input), signal);
   }
 
+  /** Open approval and user-input requests, derived from the thread's activities. */
   async pendingRequests(threadId: ThreadId, signal?: AbortSignal): Promise<PendingRequest[]> {
     return pendingRequests((await this.detail(threadId, {}, signal)).thread);
   }
 
+  /** Resumable live view; the projection is seeded from the HTTP detail when resuming. */
   watch(threadId: ThreadId, options: WatchOptions = {}): AsyncIterable<ThreadWatchItem> {
     return watchThread(this.rpc, threadId, {
       ...options,
@@ -267,6 +283,7 @@ export class ThreadsApi {
     return threadPhase(thread);
   }
 
+  /** Any orchestration command; RPC first, HTTP when the socket is fatally unavailable. */
   dispatch(command: ClientOrchestrationCommand, signal?: AbortSignal): Promise<DispatchResult> {
     return this.dispatcher.dispatch(command, signal);
   }

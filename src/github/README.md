@@ -37,8 +37,12 @@ const gh3 = github({ auth: { appId, privateKey, owner: "pantry-labs" } });
 ```
 
 A pre-minted installation token is passed as `{ token }`. The `transport`
-option replaces the wire; `ScriptedTransport` from the module entry answers
-each operation from a script.
+option replaces the wire; `ScriptedTransport` from `src/github/testing.ts`
+answers each operation from a script.
+
+```ts
+import { ScriptedTransport } from "./github/testing.js";
+```
 
 ## Declaring a schema
 
