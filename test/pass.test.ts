@@ -19,6 +19,9 @@ it("renders pinned inputs, activates after commit, and uses service-owned extra 
       { name: "catalog", endpoint: "https://tools.example.test/catalog" },
     ],
   };
+  Object.assign(node, {
+    metadata: { prompt: { inline: "Wrong prompt" }, runtimeMode: "auto" },
+  });
   const read = vi.fn((_commit: string, _blueprint: string, path: string) =>
     Promise.resolve(
       path.endsWith("njk")
@@ -103,6 +106,14 @@ it("counts observed native and operator turns, refreshes inactivity, and keeps s
   expect(f.passes.read("run", "inspect")).toMatchObject({
     turnCount: 1,
     operatorTurnCount: 0,
+  });
+  f.emit(initial.threadId, "thread.session-set", {
+    session: makeSession({
+      threadId: initial.threadId,
+      providerThreadId: "native-first",
+      status: "running",
+      activeTurnId: turnId("observed-first"),
+    }),
   });
   f.emit(initial.threadId, "thread.turn-start-requested", {
     messageId: "operator-message",
@@ -254,6 +265,7 @@ it("waits for the prior turn to settle before replacing a reused provider sessio
   await vi.waitFor(() => {
     expect(f.commands.at(-1)?.type).toBe("thread.session.stop");
   });
+  expect(f.commands.at(-1)).not.toHaveProperty("onlyIfSettled");
   expect(f.registrations.size).toBe(0);
   f.emit(first.threadId, "thread.session-set", {
     session: makeSession({
