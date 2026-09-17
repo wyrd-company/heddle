@@ -637,6 +637,42 @@ nodes:
     },
   );
 
+  it("reports duplicate policy rule ids at the later rule", () => {
+    const { blueprint, policy } = policyFixture(
+      validPolicy.replace("id: fallback", "id: preferred"),
+    );
+
+    expect(validateBlueprintFile(blueprint)).toContainEqual({
+      file: policy,
+      node: "/rules/1/id",
+      rule: "policy.rule-id",
+      message: "Duplicate rule id: preferred",
+    });
+  });
+
+  it("reports every policy rule after a fallback as unreachable", () => {
+    const { blueprint, policy } = policyFixture(
+      `${validPolicy}  - id: unreachable-a\n    when: category = 'Later A'\n    blueprint: later-route-a\n  - id: unreachable-b\n    when: category = 'Later B'\n    blueprint: later-route-b\n`,
+    );
+
+    expect(validateBlueprintFile(blueprint)).toEqual(
+      expect.arrayContaining([
+        {
+          file: policy,
+          node: "/rules/2",
+          rule: "policy.fallback-order",
+          message: "Rule cannot follow fallback at /rules/1",
+        },
+        {
+          file: policy,
+          node: "/rules/3",
+          rule: "policy.fallback-order",
+          message: "Rule cannot follow fallback at /rules/1",
+        },
+      ]),
+    );
+  });
+
   it("rejects a question role without a configured channel", () => {
     const source = `id: sample-a
 kind: helper

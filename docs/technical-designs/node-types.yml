@@ -200,9 +200,10 @@ proposed-design:
     Inputs: `rules` (a reference to a rules artifact in the blueprint
     repository), `input` (defaults to the issue).
 
-    Behavior: evaluates the rules and writes a policy object. A later `pass`
-    reads its starting `turnEndPolicy` from it. Rules are data in the
-    blueprint repository; the evaluator is code.
+    Behavior: evaluates the rules in order. Rules are data in the blueprint
+    repository; the evaluator is code.
+
+    Output: the selected rule id, blueprint id, and bound inputs.
   resume: |
     Not placed by authors. The engine-internal operation the generated tool
     servers, the scheduler, the webhook handler, and child-run completion

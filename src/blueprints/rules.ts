@@ -36,6 +36,14 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     description: "Policy rule artifacts satisfy the policy rule JSON Schema.",
   },
   {
+    name: "policy.rule-id",
+    description: "Policy rule ids are unique within one artifact.",
+  },
+  {
+    name: "policy.fallback-order",
+    description: "No policy rule follows a condition-less fallback.",
+  },
+  {
     name: "expression.jsonata",
     description: "Every condition is valid JSONata syntax.",
   },

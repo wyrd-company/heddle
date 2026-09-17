@@ -21,7 +21,8 @@ description: >-
   is the machine-readable blueprint definition. Policy nodes reference an
   ordered policy rule artifact beside the blueprint. Each rule has a stable
   id, an optional JSONata condition, a selected blueprint, and optional input
-  bindings. A rule without a condition is a fallback.
+  bindings. Rule ids are unique, and a rule without a condition is the final
+  fallback.
 format: json-schema
 validation-criteria: >-
   A conforming blueprint file parses as YAML 1.2 into a document that
@@ -34,7 +35,9 @@ validation-criteria: >-
   blueprint. A referenced policy rules file validates against
   `docs/specifications/policy-rule.schema.yml` interpreted as JSON Schema
   Draft 2020-12. Input bindings are literal values or `{ from: <expression> }`
-  references evaluated over the policy input. Every `handoff` schema is itself a valid JSON Schema Draft
+  references evaluated over the policy input. Rule ids are unique within the
+  artifact, and no rule follows a condition-less fallback. Every `handoff`
+  schema is itself a valid JSON Schema Draft
   2020-12 object whose root is `type: object` with `properties` and a
   non-empty `description`, since it is exposed verbatim as the MCP tool. Node
   `params` additionally validate against the named node type's published

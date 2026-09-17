@@ -171,8 +171,32 @@ export function validateReferences(
           });
         }
         if (result.valid && isObject(value) && Array.isArray(value["rules"])) {
+          const ruleIds = new Set<string>();
+          let fallbackIndex: number | undefined;
           for (const [index, rule] of value["rules"].entries()) {
-            if (!isObject(rule) || typeof rule["when"] !== "string") continue;
+            if (!isObject(rule) || typeof rule["id"] !== "string") continue;
+            if (ruleIds.has(rule["id"])) {
+              findings.push({
+                file: referencedPath,
+                node: `/rules/${String(index)}/id`,
+                rule: "policy.rule-id",
+                message: `Duplicate rule id: ${rule["id"]}`,
+              });
+            }
+            ruleIds.add(rule["id"]);
+            if (fallbackIndex !== undefined) {
+              findings.push({
+                file: referencedPath,
+                node: `/rules/${String(index)}`,
+                rule: "policy.fallback-order",
+                message: `Rule cannot follow fallback at /rules/${String(fallbackIndex)}`,
+              });
+            }
+            if (!Object.hasOwn(rule, "when")) {
+              fallbackIndex ??= index;
+              continue;
+            }
+            if (typeof rule["when"] !== "string") continue;
             try {
               jsonata(rule["when"]);
             } catch (error) {

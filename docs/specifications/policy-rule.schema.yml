@@ -4,7 +4,7 @@ title: Heddle policy rules
 description: >
   An ordered set of data-driven rules that selects a blueprint and binds its
   initial inputs. The first rule whose JSONata condition is true is selected.
-  A rule without a condition is a fallback.
+  Rule ids are unique. A rule without a condition is the final fallback.
 type: object
 additionalProperties: false
 required: [rules]

@@ -163,6 +163,8 @@ describe("command arguments", () => {
       "Entry is declared only when every node has an incoming edge, and names an authored node.",
     );
     expect(result.output.join("\n")).toContain("policy.schema");
+    expect(result.output.join("\n")).toContain("policy.rule-id");
+    expect(result.output.join("\n")).toContain("policy.fallback-order");
     expect(result.output.join("\n")).toContain("requires.issue.stage-name");
   });
 });
