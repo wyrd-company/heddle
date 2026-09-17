@@ -123,13 +123,22 @@ proposed-design:
     wake-up and the row is deleted. A wake-up selects an edge and does
     nothing else. The Flowcraft `sleep` node is wrapped so it uses the same
     row instead of an in-process timer, which makes it durable across
-    restarts.
+    restarts. Authored ISO 8601 durations use UTC calendar arithmetic;
+    inactivity durations are applied to each latest observed activity time.
+    Wake-up rows carry the node visit so a deadline from an earlier visit
+    cannot wake a later visit to the same node.
   recovery: >
     On start, the service reads every run whose status is `running` or
     `resuming` and replays it from its last serialized context, then resumes
     the scheduler. Node effects are idempotent, keyed by run id plus node id
     plus visit count, so a replayed node that already created a thread or
     posted a comment finds its prior effect and continues.
+    A checkpoint records either the initial traversal or the completed
+    node and output from which Flowcraft resumes. The checkpoint and the
+    completed visit are committed together after every node. A claimed
+    resume records its result and payload in that same durable carrier
+    before traversal. Child dispatch follows the parent's persisted pause;
+    recovery also delivers child completions whose parents still await them.
   event-log: >
     Every node start, node end, pause, resume, late wake-up, and failure is a
     row with the run id, a sequence number, and a JSON payload. The log is
@@ -142,6 +151,9 @@ proposed-design:
     commit changes what new instances get; running instances keep their
     commit until they finish. Moving a running instance to a newer commit
     is not supported in this version.
+    Each run stores the resolved Flowcraft blueprint beside its commit.
+    Traversal and recovery consume that stored snapshot; the resolver is
+    called with the pinned commit only when creating a run.
   pause-and-resume: >
     An operator can pause an instance or an epic. A paused instance keeps
     its live thread untouched and its paused nodes paused; what it loses is
