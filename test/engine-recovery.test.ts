@@ -54,6 +54,7 @@ it.each(["paused", "mid-node", "resuming"])(
       });
       expect(await nextMessage(child), errors).toBe(mode);
       await stop(child);
+      expect(child.signalCode).toBe("SIGKILL");
       const restarted = launch(path, "resume");
       children.push(restarted);
       const completed = once(restarted, "exit");
@@ -62,6 +63,10 @@ it.each(["paused", "mid-node", "resuming"])(
         effects: [
           {
             id: JSON.stringify(["delivery-1", "record", 1]),
+            attempts: 1,
+          },
+          {
+            id: JSON.stringify(["delivery-1", "prepare", 1]),
             attempts: mode === "mid-node" ? 2 : 1,
           },
           {

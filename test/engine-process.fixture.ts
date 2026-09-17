@@ -10,6 +10,9 @@ const { WorkflowEngine, RunStore } = (await import(
 
 const [path, mode] = process.argv.slice(2);
 if (!path) throw new Error("Fixture requires database path");
+process.on("message", () => {
+  /* Keep the process available for an observed SIGKILL. */
+});
 const store = new RunStore(path);
 const effects = new DatabaseSync(`${path}.effects`);
 effects.exec(
@@ -22,7 +25,7 @@ const record: EngineNode = async ({ effectKey, nodeId }) => {
     )
     .run(effectKey);
   if (
-    (mode === "mid-node" && nodeId === "record") ||
+    (mode === "mid-node" && nodeId === "prepare") ||
     (mode === "resuming" && nodeId === "finish")
   ) {
     process.send?.(mode);
@@ -41,11 +44,13 @@ const engine = new WorkflowEngine(store, {
       id: "delivery",
       nodes: [
         { id: "record", uses: "record" },
+        { id: "prepare", uses: "record" },
         { id: "approval", uses: "pass" },
         { id: "finish", uses: "finish" },
       ],
       edges: [
-        { source: "record", target: "approval" },
+        { source: "record", target: "prepare" },
+        { source: "prepare", target: "approval" },
         {
           source: "approval",
           target: "finish",
@@ -68,6 +73,7 @@ if (mode === "resume") {
   });
   effects.close();
   store.close();
+  process.disconnect();
 } else {
   await engine.start({
     id: "delivery-1",
@@ -81,7 +87,4 @@ if (mode === "resume") {
       result: "handoff",
     });
   process.send?.("paused");
-  process.on("message", () => {
-    /* Keep the paused process available for SIGKILL. */
-  });
 }

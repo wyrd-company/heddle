@@ -117,6 +117,9 @@ it("runs two child blueprints and returns declared outputs at the same pinned co
     expect(item?.nodeId).toBe(nodeId);
     const childId = item?.details.childRunId ?? "";
     expect(store.get(childId).status).toBe("awaiting");
+    expect(store.get(childId).initialContext).toEqual(
+      nodeId === "first" ? { item: { name: "book" } } : {},
+    );
     expect(store.findAwaiting("childRunId", childId)).toHaveLength(1);
     await engine.resume({
       runId: childId,
@@ -731,4 +734,28 @@ it("arbitrates per run while another paused node still exists", async () => {
   expect(store.get(run.id).status, JSON.stringify(store.events(run.id))).toBe(
     "completed",
   );
+});
+it("rejects a resume for a node that is not awaiting", async () => {
+  const { engine, store } = fixture([waiting()], { pass, done });
+  const run = await engine.start({
+    blueprintId: "inspection",
+    commit: "commit-a",
+  });
+  expect(
+    await engine.resume({ runId: run.id, nodeId: "finish", result: "handoff" }),
+  ).toBe("late-wakeup");
+  expect(store.get(run.id)).toEqual(run);
+});
+it("rejects a resolver result with a different blueprint identity", async () => {
+  const store = new RunStore(":memory:");
+  cleanups.push(() => {
+    store.close();
+  });
+  const engine = new WorkflowEngine(store, {
+    resolveBlueprint: () => Promise.resolve(waiting()),
+  });
+  await expect(
+    engine.start({ blueprintId: "different", commit: "commit-a" }),
+  ).rejects.toThrow("different identity");
+  expect(store.list()).toEqual([]);
 });
