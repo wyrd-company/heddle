@@ -24,7 +24,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "format": "prettier --write .",
     "prettier:check": "prettier --check .",
-    "lint": "eslint src test vitest.config.ts",
+    "lint": "eslint src test",
     "test": "vitest run"
   },
   "dependencies": {
