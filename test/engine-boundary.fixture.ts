@@ -120,7 +120,7 @@ if (mode === "crash") {
     };
     const execute = target.execute.bind(engine);
     target.execute = async (id) => {
-      if (store.get(id).status === "resuming") await stopAtBoundary();
+      if (store.get(id).checkpoint.nodeId === "inspect") await stopAtBoundary();
       return execute(id);
     };
   }

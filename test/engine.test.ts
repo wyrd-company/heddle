@@ -243,6 +243,7 @@ it("holds wakeups and external resumes while paused and requeues them on instanc
   });
   engine.pauseInstance(run.id);
   now = 100;
+  expect(engine.wakeups.due(now)).toEqual([]);
   await engine.tick();
   expect(store.get(run.id).status).toBe("awaiting");
   expect(
@@ -711,6 +712,13 @@ it("queues a sibling handoff while the run is busy and drains it after settle", 
     blueprintId: blueprint.id,
     commit: "commit-a",
   });
+  expect(store.get(run.id).context["_awaitingNodeIds"]).toEqual([
+    "first",
+    "second",
+  ]);
+  expect(
+    Object.keys(store.get(run.id).context["_awaitingDetails"] as object),
+  ).toEqual(["first", "second"]);
   const first = engine.resume({
     runId: run.id,
     nodeId: "first",
