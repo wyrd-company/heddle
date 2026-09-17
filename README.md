@@ -14,7 +14,7 @@ blueprint. Code changes only when a new kind of integration is needed.
 
 ## Requirements
 
-- Node.js 24.
+- Node.js 24 or newer, including its built-in SQLite API.
 - A GitHub Project and the issues in it.
 - A T3 Code server.
 
