@@ -327,7 +327,7 @@ $defs:
       inactivity:
         description: >
           An ISO 8601 duration of no observed thread activity after which the
-          node wakes with result `silent`.
+          node wakes with result `idle`.
         $ref: "#/$defs/deadline"
   questionParams:
     type: object
