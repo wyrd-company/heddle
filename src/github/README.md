@@ -129,6 +129,8 @@ for await (const data of repo.issues.list({ states: ["OPEN"] })) console.log(dat
 
 Labels and assignees take an array to replace or `{ add, remove }` to change. `null` clears a milestone, type, or field value.
 
+Issue loads and issue-list entries include every page of `subIssues`, `blockedBy`, `blocking`, and `closedBy`. A continuation failure rejects the load, so callers never receive a partial relationship snapshot. `github({ relationshipPageSize })` can lower the default page size of 100; GitHub accepts values from 1 through 100. Parent and duplicate relationships are singular. Labels, assignees, and organization issue-field values remain limited to their first 100 entries.
+
 ## Pull requests
 
 ```ts

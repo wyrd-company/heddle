@@ -85,6 +85,19 @@ proposed-design:
     reviews, review threads, reactions, and relationships. Patch planners
     compute mutations from a loaded snapshot and invalidate affected cache
     entries after success.
+  issue-relationship-pagination: >
+    Issue snapshots traverse every page of the sub-issues, blocked-by,
+    blocking, and linked or closing pull-request connections before they are
+    returned. Parent and duplicate-of remain singular relationships. Linked
+    pull-request traversal includes closed pull requests. Each connection
+    advances its own cursor, and a continuation failure or invalid cursor
+    fails the whole load instead of exposing a partial snapshot. The default
+    relationship page size is 100; `relationshipPageSize` can select a smaller
+    request size. GitHub GraphQL accepts values from 1 through 100. GitHub
+    limits one parent issue to 100 sub-issues and eight nested levels. The
+    labels, assignees, and organization issue-field value collections remain
+    single requests of 100 and do not carry the relationship-completeness
+    guarantee.
   graphql-documents: >
     GraphQL operations live beside the resource knowledge that uses them and
     pass through the client-preset generator against the vendored live schema
@@ -148,5 +161,9 @@ proposed-design:
     Offline tests exercise resource behavior through `ScriptedTransport` and
     generated documents. Opt-in live tests split organization/project and
     repository credentials, create uniquely prefixed resources in a sandbox,
-    and clean them through unconditional suite teardown. The repository
-    context defines their environment variables and commands.
+    and clean them through unconditional suite teardown. Relationship
+    pagination is qualified through the App with two sub-issues and a page
+    size of one. The other relationship collections use deterministic
+    multi-page transport tests; that live qualification does not establish
+    their total cardinality. The repository context defines live-test
+    environment variables and commands.
