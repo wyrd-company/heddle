@@ -40,15 +40,26 @@ proposed-design:
     Pausing node types record what they wait for in awaiting details, as the
     engine design describes. The catalog below is the starting set.
   contract-convention: |
+    The convention is illustrated with an invented node type, `kettle`,
+    which does not exist. It is chosen so that nothing about it can be
+    mistaken for a real contract.
+
     - Well-known inputs with defaults: the common case needs only the inputs
-      that vary. A `stage` needs a role and a prompt; everything else
-      defaults.
+      that vary. Suppose `kettle` takes `volume`, `target-temperature`, and
+      `whistle`. An author writes `volume: 1.5` and the other two default to
+      boiling and on.
     - Sugar inputs: a short form that expands to a full-contract value.
-      `resumeThread: implement` expands to a thread id read from
-      `stages.implement.threadId` in the context.
+      Suppose `kettle` accepts `preset: tea`, which expands to a
+      `target-temperature` of 80. Heddle's real sugar of this shape is
+      `resumeThread: <stage node id>`, which expands to a context reference
+      to that stage's thread id.
     - Full contract: every input can be given explicitly, including references
       into any context key, so an author can do something the sugar did not
-      anticipate.
+      anticipate. `target-temperature: { from: issue.frontMatter.brew.temp }`
+      is the full form.
+    - Metadata is not an input. A node's `metadata` bag is arbitrary data the
+      author attaches for templates, guards, and downstream nodes to read.
+      Node types do not read their inputs from it.
     - Well-known outputs: the node writes a fixed shape under its node id. A
       pausing node also writes `output.<result>` as `true` for the result that
       woke it and the wake-up payload under `output.payload`, which is what
