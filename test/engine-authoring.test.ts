@@ -34,7 +34,7 @@ nodes:
     uses: child-run
     params:
       blueprint: inspection
-      inputs: { item: { from: first.result } }
+      inputs: { item: { from: first.payload.result } }
       outputs: { answer: result }
   finish:
     uses: notify
@@ -114,8 +114,12 @@ edges:
     }
     const completed = store.get(run.id);
     expect(completed.status).toBe("completed");
-    expect(completed.context["first"]).toMatchObject({ result: "accepted" });
-    expect(completed.context["second"]).toMatchObject({ answer: "accepted" });
+    expect(completed.context["first"]).toMatchObject({
+      payload: { result: "accepted" },
+    });
+    expect(completed.context["second"]).toMatchObject({
+      payload: { answer: "accepted" },
+    });
     expect(resolutions).toEqual(["commit-a", "commit-a", "commit-a"]);
   } finally {
     store.close();

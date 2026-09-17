@@ -47,8 +47,9 @@ design-challenges:
     come from outside the run and must lose cleanly when the agent wins.
   arbitrating-competing-wake-ups: >
     A handoff and a timeout can arrive within the same second from different
-    processes. Exactly one may resume the run; the other must be recorded and
-    ignored, never applied.
+    sources. Both submit requests to the Heddle service that owns the SQLite
+    writer. Exactly one request may resume a given awaited visit; a later
+    request for that visit is recorded and ignored.
   at-least-once-node-execution: >
     Flowcraft executes nodes at least once. Every node effect that touches
     the world must be idempotent under replay.
@@ -66,8 +67,8 @@ proposed-design:
   run: >
     A run is one execution of one blueprint. It has an id, the blueprint
     repository commit it is pinned to, an initial context, a serialized
-    context, a status (`running`, `awaiting`, `completed`, `failed`,
-    `cancelled`, `paused`), a parent run
+    context, a status (`running`, `resuming`, `awaiting`, `completed`,
+    `failed`), a pause flag independent of status, a parent run
     id when started by another run, and an append-only event log. Each issue
     in a bound project has exactly one lifecycle run at a time. Stage runs and
     helper runs (answer-question, hold-then-attention) are children of that
@@ -101,14 +102,22 @@ proposed-design:
     are rejected by lint. After traversal the engine asserts the run landed
     in an expected state (awaiting again, or completed) and raises attention
     if it did not, because Flowcraft reports a dead end as success. Edge
-    conditions are JSONata expressions.
+    conditions are JSONata expressions. Child outputs live only under
+    `output.payload`; they never share the result-flag namespace. Parent
+    context references therefore use `<child-node>.payload.<output-key>`.
   arbitration: >
-    Resume is serialized per run with a database-level claim: an `UPDATE`
-    that moves the run from `awaiting` at a specific node to `resuming`
-    succeeds for exactly one caller. Every other caller records its attempt
-    in the event log as `late-wakeup` and returns. A late handoff after a
-    timeout is therefore visible in the log and in the console, but is never
-    applied to a run that has moved on.
+    One Heddle service owns the SQLite file and every engine write. Store
+    handles in that process share one synchronous writer connection and
+    traversal ownership map. External processes submit requests to that
+    service; they do not open competing writer connections. No SQLite busy
+    timeout is used. Transactions run synchronously through the owner.
+    Resume requests bind to the node visit observed at receipt. An atomic
+    claim moves an awaiting run to resuming and persists the result before
+    traversal. A request for a visit that no longer awaits is logged as
+    late-wakeup. A request for a still-awaiting sibling while the run is busy,
+    or while the instance is paused, is queued durably. Settle drains queued
+    requests in arrival order. Dequeue and claim commit together. Due wake-up
+    rows remain until their request applies or becomes late.
   deadlines: >
     Deadlines are rows, not timers, and they exist only where a blueprint
     author wrote a duration. Two kinds. An elapsed deadline: when a node
@@ -133,12 +142,19 @@ proposed-design:
     the scheduler. Node effects are idempotent, keyed by run id plus node id
     plus visit count, so a replayed node that already created a thread or
     posted a comment finds its prior effect and continues.
-    A checkpoint records either the initial traversal or the completed
-    node and output from which Flowcraft resumes. The checkpoint and the
-    completed visit are committed together after every node. A claimed
-    resume records its result and payload in that same durable carrier
-    before traversal. Child dispatch follows the parent's persisted pause;
-    recovery also delivers child completions whose parents still await them.
+    A checkpoint records the exact unfinished node frontier and its context,
+    or a completed node whose result still needs routing, together with the
+    remaining frontier. Flowcraft supplies graph traversal, node execution
+    and result routing through its orchestrator extension seam. The engine
+    persists before dispatch and after each routed node. The completed visit
+    and its output checkpoint commit together, so replay keeps the effect
+    identity and cannot skip an unfinished sibling beside a persisted pause.
+    A claimed resume records its result and payload before traversal.
+    Child dispatch follows the parent's persisted pause; recovery delivers
+    completed children whose parents still await them. A child creation
+    failure raises attention and selects the parent's failed result. Recovery
+    isolates failures per run and continues with other runs. Paused instances
+    remain untouched; instance resume recovers only that instance's subtree.
   event-log: >
     Every node start, node end, pause, resume, late wake-up, and failure is a
     row with the run id, a sequence number, and a JSON payload. The log is

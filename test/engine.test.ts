@@ -133,21 +133,20 @@ it("runs two child blueprints and returns declared outputs at the same pinned co
   expect(run.context["first"]).toMatchObject({
     completed: true,
     payload: { result: "accepted" },
-    result: "accepted",
   });
   expect(run.context["second"]).toMatchObject({
     completed: true,
     payload: { answer: "accepted" },
-    answer: "accepted",
   });
   expect(resolutions).toEqual(["commit-a", "commit-a", "commit-a"]);
 });
-it("arbitrates parallel resume callers on separate connections to one SQLite file", async () => {
+it("arbitrates parallel resume callers through one SQLite writer", async () => {
   const { engine, store, path, resolveBlueprint } = fixture([waiting()], {
     pass,
     done,
   });
   const otherStore = new RunStore(path);
+  expect(otherStore.db).toBe(store.db);
   cleanups.push(() => {
     otherStore.close();
   });
@@ -657,7 +656,7 @@ it("does not hide a real in-flight failure when the instance is paused", async (
   );
 });
 
-it("arbitrates per run while another paused node still exists", async () => {
+it("queues a sibling handoff while the run is busy and drains it after settle", async () => {
   let enter: () => void = () => {
     throw new Error("uninitialized");
   };
@@ -700,6 +699,7 @@ it("arbitrates per run while another paused node still exists", async () => {
     blocking,
   });
   const otherStore = new RunStore(path);
+  expect(otherStore.db).toBe(store.db);
   cleanups.push(() => {
     otherStore.close();
   });
@@ -724,13 +724,12 @@ it("arbitrates per run while another paused node still exists", async () => {
         nodeId: "second",
         result: "handoff",
       }),
-    ).toBe("late-wakeup");
+    ).toBe("held");
   } finally {
     release();
     await first;
   }
-  expect(store.get(run.id).status).toBe("awaiting");
-  await engine.resume({ runId: run.id, nodeId: "second", result: "handoff" });
+  expect(store.db.prepare("SELECT * FROM held_resumes").all()).toEqual([]);
   expect(store.get(run.id).status, JSON.stringify(store.events(run.id))).toBe(
     "completed",
   );

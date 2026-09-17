@@ -146,13 +146,14 @@ proposed-design:
 
     Inputs: `blueprint` (id), `inputs` (a mapping from the child's initial
     context keys to values or context references), `outputs` (a mapping from
-    keys under this node's output to the child's final context keys).
+    keys under this node's output.payload to the child's final context keys).
 
     Behavior: starts the child at the same pinned commit with the mapped
     initial context and the parent run id, pauses with
     `{ kind: child-run, childRunId }`.
 
-    Results: `completed` with the mapped outputs; `failed` with the child's
+    Results: `completed` with the mapped outputs under `output.payload`;
+    `failed` with the child's
     failure.
 
     A `kind: stage` blueprint is used from a process blueprint through this

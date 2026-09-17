@@ -83,9 +83,13 @@ export function bindNode(
         [nodeId]: awaiting,
       };
     }
+    if (awaiting) {
+      snapshot[`_outputs.${nodeId}`] = output ?? null;
+      snapshot[nodeId] = output ?? null;
+    }
     store.transaction(() => {
       const checkpoint = awaiting
-        ? { context: snapshot }
+        ? { context: snapshot, frontier: runtime.pending }
         : {
             context: {
               ...snapshot,
@@ -98,6 +102,7 @@ export function bindNode(
                 [nodeId]: { kind: "checkpoint" },
               },
             },
+            frontier: runtime.pending,
             nodeId,
             output: output ?? null,
           };

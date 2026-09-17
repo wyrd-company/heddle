@@ -16,6 +16,7 @@ export interface ResumeInput {
 }
 export interface Checkpoint {
   context: Data;
+  frontier?: string[];
   nodeId?: string;
   output?: unknown;
 }

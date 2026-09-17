@@ -24,6 +24,7 @@ export function isDispatchHeld(error: unknown): boolean {
 /** Flowcraft's synchronous evaluator cannot consume JSONata's async result. */
 export class DurableRuntime extends FlowRuntime<Data, Data> {
   readonly pausing = new Set<string>();
+  pending: string[] = [];
   resumedNodeId?: string;
   override async determineNextNodes(
     blueprint: WorkflowBlueprint,
@@ -32,9 +33,7 @@ export class DurableRuntime extends FlowRuntime<Data, Data> {
     context: ContextImplementation<Data>,
     executionId?: string,
   ) {
-    // Pausing is not a result. Route only when a caller resumes this node.
     const data = await context.toJSON();
-    if (this.pausing.delete(nodeId)) return [];
     const edges = [];
     const outgoing = blueprint.edges.filter((edge) => edge.source === nodeId);
     for (const edge of outgoing) {

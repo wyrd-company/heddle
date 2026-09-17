@@ -53,7 +53,12 @@ export class Wakeups {
     resume: (input: ResumeInput) => Promise<string>,
   ): Promise<void> {
     for (const wakeup of this.due(now)) {
-      const current = this.due(now).find((item) => item.id === wakeup.id);
+      const current = this.store.db
+        .prepare(
+          `SELECT w.id FROM wakeups w JOIN runs r ON r.id=w.run_id
+         WHERE w.id=? AND w.due<=? AND r.paused=0`,
+        )
+        .get(wakeup.id, now);
       if (!current) continue;
       const outcome = await resume({ ...wakeup, payload: { due: wakeup.due } });
       if (outcome !== "held")

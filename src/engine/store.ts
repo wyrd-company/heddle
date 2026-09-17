@@ -2,8 +2,8 @@
 // relationships:
 //   implements: engine-and-run-model
 // ---
-import { DatabaseSync } from "node:sqlite";
-import { schema } from "./schema.js";
+import type { DatabaseSync } from "node:sqlite";
+import { acquireWriter } from "./writer.js";
 import { dueAt, duration as checkedDuration } from "./timing.js";
 import type {
   Awaiting,
@@ -16,12 +16,16 @@ import type {
 
 export class RunStore {
   readonly db: DatabaseSync;
+  readonly active: Map<string, Promise<Run>>;
+  private readonly release: () => void;
   constructor(path: string) {
-    this.db = new DatabaseSync(path);
-    this.db.exec(schema);
+    const owner = acquireWriter(path);
+    this.db = owner.db;
+    this.active = owner.active;
+    this.release = owner.release;
   }
   close(): void {
-    this.db.close();
+    this.release();
   }
   transaction<T>(operation: () => T): T {
     this.db.exec("BEGIN IMMEDIATE");
