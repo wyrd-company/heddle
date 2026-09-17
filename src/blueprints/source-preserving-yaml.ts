@@ -16,13 +16,12 @@ import {
 import { reconcileComments, commentSnapshot } from "./yaml-comments.js";
 import { presentationSnapshot, reconcileSpacing } from "./yaml-presentation.js";
 import { metadataSnapshot, reconcileMetadata } from "./yaml-metadata.js";
-
+import { retainedPairSources } from "./yaml-pair-source.js";
 import {
   applySourcePatches,
   parseSource,
   type SourcePatch,
 } from "./yaml-source.js";
-
 import {
   shape,
   pairIndex,
@@ -34,12 +33,14 @@ function semanticPatches(
   source: string,
   original: Document,
   edited: Document,
+  authored: Document,
 ): SourcePatch[] {
   const patches: SourcePatch[] = [];
   const flowNodes = flowNodeStarts(original);
   const newline = source.includes("\r\n") ? "\r\n" : "\n";
   const lineStart = (offset: number): number =>
     source.lastIndexOf("\n", offset - 1) + 1;
+  const retainedPairs = retainedPairSources(source, original, authored, edited);
 
   function render(node: Node, indent: number): string {
     const document = edited.clone();
@@ -163,6 +164,15 @@ function semanticPatches(
     const pieces = newItems.map((item, index) => {
       const match = matches[index] ?? -1;
       if (match < 0) {
+        const pair = isMap(after) ? (item as Pair) : undefined;
+        const retained = pair ? retainedPairs.get(pair) : undefined;
+        if (retained && pair) {
+          const firstPatch = patches.length;
+          visitItem(retained.pair, pair);
+          let text = retained.render(patches.splice(firstPatch), indent);
+          if (!text.endsWith(newline)) text += newline;
+          return text;
+        }
         const collection = after.clone() as typeof after;
         collection.items = [item] as typeof collection.items;
         collection.commentBefore = null;
@@ -279,7 +289,7 @@ export function saveLocalizedYaml(source: string, edited: Document): string {
   const intended = prepareEdit(original, edited);
   const values = applySourcePatches(
     source,
-    semanticPatches(source, original, intended),
+    semanticPatches(source, original, intended, edited),
   );
   const saved = reconcileMetadata(
     reconcileSpacing(reconcileComments(values, intended), intended),

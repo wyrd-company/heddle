@@ -45,14 +45,16 @@ export function pairIndex(items: readonly Pair[], pair: Pair): number {
         isNode(old.value) &&
         old.value.range?.[0] === valueStart),
   );
-  return retained >= 0
-    ? retained
-    : items.findIndex((old) =>
-        isDeepStrictEqual(
-          isScalar(old.key) ? old.key.value : shape(old.key),
-          isScalar(pair.key) ? pair.key.value : shape(pair.key),
-        ),
-      );
+  if (retained >= 0) return retained;
+  // A source-backed pair whose ranges do not occur in this map came from
+  // elsewhere. Key equality must not replace that identity with a local pair.
+  if (keyStart !== undefined || valueStart !== undefined) return -1;
+  return items.findIndex((old) =>
+    isDeepStrictEqual(
+      isScalar(old.key) ? old.key.value : shape(old.key),
+      isScalar(pair.key) ? pair.key.value : shape(pair.key),
+    ),
+  );
 }
 
 // Plain JS replacements have no presentation metadata. Inherit source style;
