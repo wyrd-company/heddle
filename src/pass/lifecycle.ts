@@ -55,7 +55,12 @@ export async function dispatchPass(
   options: PassOptions,
   store: PassStore,
 ): Promise<void> {
-  if (item.dispatched || store.get(item.key)?.phase === "retired") return;
+  if (
+    item.dispatched ||
+    store.get(item.key)?.phase === "retired" ||
+    store.runs.get(item.runId).paused
+  )
+    return;
   await options.client.threads.dispatch({
     type: "thread.turn.start",
     threadId: threadId(item.threadId),
