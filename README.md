@@ -20,16 +20,39 @@ blueprint. Code changes only when a new kind of integration is needed.
 
 ## Install
 
-Heddle is not published yet. Clone it into the Heddle worktree layout with
-the `github-work` and `t3code-client` development repositories beside the
-`heddle` worktree directory, then install the locked dependencies and build:
+The private phase publishes `@wyrd-company/heddle` to GitHub Packages. Map the
+scope to GitHub's npm registry in the installing user's `.npmrc`, authenticate
+that registry according to the organization's package policy, then install the
+package:
+
+```ini
+@wyrd-company:registry=https://npm.pkg.github.com
+```
+
+```sh
+npm install --global @wyrd-company/heddle
+```
+
+The package manifest fixes the publish target to
+`https://npm.pkg.github.com` with restricted access. A release operator can run
+`npm publish` only after authentication is configured. This repository does
+not publish as part of its build or test tasks.
+
+For local development, clone `github-work` and `t3code-client` beside the
+Heddle worktree directory and build both clients so their declarations exist.
+Then install and build Heddle:
 
 ```sh
 npm ci
 task build
 ```
 
-The package installs one executable named `heddle`.
+`npm pack` builds the package and produces a tarball with one executable named
+`heddle`. esbuild includes the unpublished `github-work` and `t3code-client`
+workspace clients in the distributable; their workspace paths are build inputs
+and do not appear as package dependencies. `task package-check` rejects file
+dependencies, symbolic links, and parent-directory archive entries, installs
+the tarball into an empty project, and exercises `heddle --help`.
 
 ## Run
 
@@ -49,6 +72,111 @@ Run every repository gate with:
 ```sh
 task check
 ```
+
+## Configuration
+
+Heddle reads one YAML configuration file. This is the minimum service shape;
+the implementation tasks that own each integration also own its detailed
+validation rules.
+
+```yaml
+projects:
+  - owner: sample-owner
+    number: 12
+github:
+  credentialFile: /run/secrets/heddle-github-app.yml
+t3Code:
+  endpoint: http://127.0.0.1:3773
+  tokenFile: /run/secrets/heddle-t3-token
+blueprints:
+  repository: /workspaces/blueprints
+webhook:
+  secretFile: /run/secrets/heddle-webhook-secret
+```
+
+`projects` lists the bound GitHub Projects. `github.credentialFile` points to
+Heddle's GitHub App credential file. `t3Code.endpoint` names the T3 Code
+server, and `t3Code.tokenFile` points to its bearer token. The blueprint
+repository is a local Git checkout. `webhook.secretFile` points to the secret
+used to verify GitHub deliveries. Secret values are read from these files;
+they do not belong in YAML values, Feature options, command arguments, or
+logs.
+
+Configure the App according to GitHub's
+[permission reference](https://docs.github.com/rest/authentication/permissions-required-for-github-apps)
+with these permissions:
+
+- Repository metadata: read-only.
+- Repository contents, issues, and pull requests: read and write.
+- Organization Projects: read and write.
+- Organization custom properties: administration.
+- Organization issue types: read and write.
+
+Subscribe the App to the `issues`, `projects_v2_item`, `issue_comment`, and
+`pull_request` events listed in GitHub's
+[webhook reference](https://docs.github.com/webhooks/webhook-events-and-payloads).
+Agents use their own narrower credentials and never receive this App
+credential.
+
+For T3 Code, issue a dedicated bearer session on the machine that owns the T3
+state, write it directly to the mounted token file, and restrict the file to
+the service user:
+
+```sh
+install -m 0600 /dev/null /path/to/secrets/heddle-t3-token
+sudo -u vscode t3 auth session issue --base-dir /home/vscode/.t3 \
+  --label heddle --token-only \
+  > /path/to/secrets/heddle-t3-token
+```
+
+Replace `vscode` and its home directory with the T3 service account and base
+directory, then set `t3Code.endpoint` to that server. A one-time token from
+`t3 pair` or `t3 auth pairing create` must be exchanged for a bearer session
+before it can be stored; one-time pairing tokens are not restart credentials.
+
+## Dev Container Feature
+
+The Feature runs `heddle start` as the selected service user through a native
+s6-overlay 3 longrun. Its options select the configuration file, state
+directory, and secret-file locations. Mount each at the same path:
+
+```json
+{
+  "overrideCommand": false,
+  "features": {
+    "ghcr.io/wyrd-company/heddle/heddle:0": {
+      "configFile": "/etc/heddle/config.yml",
+      "stateDirectory": "/var/lib/heddle",
+      "githubAppCredentialsFile": "/run/secrets/heddle-github-app.yml",
+      "t3CodeTokenFile": "/run/secrets/heddle-t3-token",
+      "webhookSecretFile": "/run/secrets/heddle-webhook-secret"
+    }
+  },
+  "mounts": [
+    {
+      "source": "${localWorkspaceFolder}/.devcontainer/heddle/config.yml",
+      "target": "/etc/heddle/config.yml",
+      "type": "bind"
+    },
+    {
+      "source": "${localWorkspaceFolder}/.devcontainer/heddle/state",
+      "target": "/var/lib/heddle",
+      "type": "bind"
+    },
+    {
+      "source": "${localWorkspaceFolder}/.devcontainer/heddle/secrets",
+      "target": "/run/secrets",
+      "type": "bind"
+    }
+  ]
+}
+```
+
+The Feature artifact contains the npm tarball built from the same accepted
+revision. Run `task feature-check` to stage that tarball and prove the Feature
+in isolated Dev Container builds. The service assembly lands after the engine,
+GitHub binding, T3 Code pass, and webhook components; until then the registered
+service invokes the scaffold's non-operational `start` command.
 
 ## Status
 
