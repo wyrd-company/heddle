@@ -1,0 +1,11 @@
+# Handoff schema for the draft stage.
+type: object
+required: [title, ingredients, steps]
+properties:
+  title: { type: string }
+  ingredients:
+    type: array
+    items: { type: string }
+  steps:
+    type: array
+    items: { type: string }

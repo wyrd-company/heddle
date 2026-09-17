@@ -1,0 +1,57 @@
+# A recipe moves from a draft to a taste test and, if approved, to
+# publication. Rejected drafts go back for another attempt.
+id: recipe-pipeline
+kind: process
+description: Editorial pipeline for a recipe catalog.
+metadata:
+  maxTasteTests: 3          # read by the review loop guard
+requires:
+  issue:
+    type: [Recipe]
+    fields: [Servings]
+    frontMatter: [cuisine]
+nodes:
+  draft:
+    uses: child-run
+    stage: true
+    metadata:
+      kitchen: test-kitchen-a
+    params:
+      blueprint: stage-write
+      inputs:
+        prompt: prompts/draft.md
+        handoff: contracts/draft.yml
+        servings: { from: issue.fields.Servings }
+  taste-test:
+    uses: child-run
+    stage: true
+    params:
+      blueprint: stage-review
+      inputs:
+        prompt: prompts/taste-test.md
+        handoff: contracts/taste-test.yml
+  publish:
+    uses: github
+    stage: true
+    params:
+      operation: add-labels
+      labels: [published]
+  too-many-tests:
+    uses: notify
+    params:
+      channel: pushover
+      title: "Recipe needs an editor"
+      message: prompts/too-many-tests.md
+edges:
+  - from: draft
+    to: taste-test
+    when: result.output.completed
+  - from: taste-test
+    to: publish
+    when: result.output.completed && result.output.payload.verdict == 'approved'
+  - from: taste-test
+    to: draft
+    when: result.output.completed && result.output.payload.verdict == 'rejected' && stages.taste-test.visits < blueprint.metadata.maxTasteTests
+  - from: taste-test
+    to: too-many-tests
+    when: result.output.completed && result.output.payload.verdict == 'rejected' && stages.taste-test.visits >= blueprint.metadata.maxTasteTests

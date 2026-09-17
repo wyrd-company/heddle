@@ -1,0 +1,430 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://heddle.wyrd.company/schemas/blueprint
+title: Heddle blueprint
+description: >
+  A workflow blueprint authored as YAML. Nodes are keyed by id. Edges route
+  on expressions over the run context. Node-type inputs live under `params`
+  and are checked against the node type's own contract in addition to this
+  schema. Comments in the source file are not part of the data model and are
+  preserved by every conforming writer.
+type: object
+additionalProperties: false
+required:
+  - id
+  - kind
+  - nodes
+properties:
+  id:
+    description: Blueprint id. Also the file's basename without extension.
+    $ref: "#/$defs/slug"
+  kind:
+    description: >
+      `process` blueprints belong to the user and route on stage outcomes.
+      `stage` blueprints are run by `child-run` nodes and end on the stage
+      result contract. `helper` blueprints are small plumbing runs such as
+      intake, answer-question, and hold-then-attention.
+    type: string
+    enum: [process, stage, helper]
+  description:
+    type: string
+  metadata:
+    description: >
+      A bag available to every node in the run as `blueprint.metadata` and to
+      templates. Authors put process-level configuration here, such as
+      thresholds guards read.
+    $ref: "#/$defs/bag"
+  requires:
+    description: What this blueprint needs from the issue and the project.
+    type: object
+    additionalProperties: false
+    properties:
+      issue:
+        type: object
+        additionalProperties: false
+        properties:
+          type:
+            description: Organization issue types this blueprint accepts.
+            type: array
+            items: { type: string }
+          fields:
+            description: Project or organization fields the blueprint reads.
+            type: array
+            items: { type: string }
+          labels:
+            type: array
+            items: { type: string }
+          frontMatter:
+            description: >
+              Keys the blueprint reads from YAML front matter carried in a
+              Markdown comment block in the issue description.
+            type: array
+            items: { type: string }
+  inputs:
+    description: >
+      For `stage` and `helper` blueprints: the initial context keys a parent
+      must supply, each with a JSON Schema. Process blueprints receive the
+      issue and need no declaration.
+    type: object
+    additionalProperties:
+      $ref: "#/$defs/jsonSchema"
+  outputs:
+    description: >
+      For `stage` and `helper` blueprints: the final context keys returned to
+      the parent, each with a JSON Schema. A stage blueprint's outputs always
+      include `result`.
+    type: object
+    additionalProperties:
+      $ref: "#/$defs/jsonSchema"
+  nodes:
+    type: object
+    minProperties: 1
+    propertyNames:
+      $ref: "#/$defs/slug"
+    additionalProperties:
+      $ref: "#/$defs/node"
+  edges:
+    type: array
+    items:
+      $ref: "#/$defs/edge"
+$defs:
+  slug:
+    type: string
+    pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+  path:
+    description: A path relative to the blueprint file.
+    type: string
+    pattern: "^(?!/)(?!.*\\.\\./).+$"
+  bag:
+    type: object
+    additionalProperties: true
+  expression:
+    description: >
+      An edge condition or value expression evaluated by the sandboxed
+      expression evaluator over `result` and the run context.
+    type: string
+    minLength: 1
+  jsonSchema:
+    description: A JSON Schema Draft 2020-12 object, written in YAML.
+    type: object
+  templateRef:
+    description: >
+      A Nunjucks template, given as a path to a file beside the blueprint or
+      inline. Rendered with the task context.
+    oneOf:
+      - $ref: "#/$defs/path"
+      - type: object
+        additionalProperties: false
+        required: [inline]
+        properties:
+          inline: { type: string }
+  schemaRef:
+    description: >
+      A JSON Schema written in YAML, given as a path to a file beside the
+      blueprint or inline.
+    oneOf:
+      - $ref: "#/$defs/path"
+      - $ref: "#/$defs/jsonSchema"
+  contextRef:
+    description: >
+      A value taken from the run context at execution time, written as
+      `{ from: <expression> }`.
+    type: object
+    additionalProperties: false
+    required: [from]
+    properties:
+      from:
+        $ref: "#/$defs/expression"
+  valueOrRef:
+    anyOf:
+      - $ref: "#/$defs/contextRef"
+      - not:
+          type: object
+          required: [from]
+  node:
+    type: object
+    additionalProperties: false
+    required: [uses]
+    properties:
+      uses:
+        description: The node type. Shipped node types are listed in `$defs`.
+        type: string
+      description:
+        type: string
+      stage:
+        description: >
+          Marks a node whose entry is projected to the bound project's Status
+          field. Defaults to true for `child-run` of a `stage` blueprint.
+        type: boolean
+      metadata:
+        description: >
+          A bag merged into the node's context as `node.metadata`. Keys with
+          the same name on the issue take precedence unless listed in
+          `fixed`.
+        $ref: "#/$defs/bag"
+      fixed:
+        description: Metadata keys the issue may not override.
+        type: array
+        items: { type: string }
+      params:
+        description: Node-type inputs. Checked against the node type's contract.
+        type: object
+        additionalProperties: true
+      inputs:
+        description: >
+          Flowcraft input mapping: a context key, or a map of input names to
+          context keys, populated into the node's `input`.
+        oneOf:
+          - type: string
+          - type: object
+            additionalProperties: { type: string }
+      config:
+        type: object
+        additionalProperties: false
+        properties:
+          joinStrategy:
+            type: string
+            enum: [all, any]
+          maxRetries:
+            type: integer
+            minimum: 0
+          retryDelay:
+            type: integer
+            minimum: 0
+    allOf:
+      - if:
+          properties: { uses: { const: child-run } }
+        then:
+          properties: { params: { $ref: "#/$defs/childRunParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: stage } }
+        then:
+          properties: { params: { $ref: "#/$defs/stageParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: question } }
+        then:
+          properties: { params: { $ref: "#/$defs/questionParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: on-issue-change } }
+        then:
+          properties: { params: { $ref: "#/$defs/onIssueChangeParams" } }
+      - if:
+          properties: { uses: { const: github } }
+        then:
+          properties: { params: { $ref: "#/$defs/githubParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: git } }
+        then:
+          properties: { params: { $ref: "#/$defs/gitParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: notify } }
+        then:
+          properties: { params: { $ref: "#/$defs/notifyParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: policy } }
+        then:
+          properties: { params: { $ref: "#/$defs/policyParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: sleep } }
+        then:
+          properties: { params: { $ref: "#/$defs/sleepParams" } }
+          required: [params]
+      - if:
+          properties: { uses: { const: wait } }
+        then:
+          properties: { params: { $ref: "#/$defs/waitParams" } }
+  edge:
+    type: object
+    additionalProperties: false
+    required: [from, to]
+    properties:
+      from:
+        $ref: "#/$defs/slug"
+      to:
+        $ref: "#/$defs/slug"
+      when:
+        description: >
+          Condition. A pausing node's results appear as booleans under
+          `result.output`, so the common form is `result.output.<result>`.
+          Absent means unconditional. Edges never carry an `action`.
+        $ref: "#/$defs/expression"
+      description:
+        type: string
+  deadline:
+    description: >
+      An ISO 8601 duration after which the node wakes with result `timeout`.
+    type: string
+    pattern: "^P(?!$)(\\d+Y)?(\\d+M)?(\\d+W)?(\\d+D)?(T(?=\\d)(\\d+H)?(\\d+M)?(\\d+S)?)?$"
+  childRunParams:
+    type: object
+    additionalProperties: false
+    required: [blueprint]
+    properties:
+      blueprint:
+        $ref: "#/$defs/slug"
+      inputs:
+        description: Child initial context keys to values or context references.
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/valueOrRef"
+      outputs:
+        description: Keys under this node's output to child final context keys.
+        type: object
+        additionalProperties: { type: string }
+  stageParams:
+    type: object
+    additionalProperties: false
+    required: [prompt, handoff]
+    properties:
+      prompt:
+        $ref: "#/$defs/templateRef"
+      handoff:
+        description: >
+          The handoff tool's input schema. Root must be `type: object` with
+          `properties`, as the MCP tool input schema requires.
+        $ref: "#/$defs/schemaRef"
+      turnEndPolicy:
+        type: string
+        enum: [require-handoff, allow, allow-once]
+        default: require-handoff
+      escalation:
+        description: >
+          Whether an escalation ends the stage or is answered in place.
+        type: string
+        enum: [ends-stage, answer-in-place]
+        default: answer-in-place
+      model:
+        $ref: "#/$defs/valueOrRef"
+      runtimeMode:
+        type: string
+        enum: [approval-required, auto-accept-edits, auto, full-access]
+        default: full-access
+      worktree:
+        $ref: "#/$defs/valueOrRef"
+      resumeThread:
+        description: >
+          A stage node id whose thread this stage continues, or a context
+          reference to a thread id.
+        $ref: "#/$defs/valueOrRef"
+      tools:
+        description: Extra MCP registrations for the thread.
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: [name, endpoint]
+          properties:
+            name: { type: string }
+            endpoint: { type: string, format: uri }
+      deadline:
+        $ref: "#/$defs/deadline"
+      inactivity:
+        description: >
+          An ISO 8601 duration of no observed thread activity after which the
+          node wakes with result `silent`.
+        $ref: "#/$defs/deadline"
+  questionParams:
+    type: object
+    additionalProperties: false
+    required: [role, questions]
+    properties:
+      role:
+        type: string
+      questions:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, question]
+          properties:
+            id: { $ref: "#/$defs/slug" }
+            header: { type: string }
+            question: { $ref: "#/$defs/templateRef" }
+            multiSelect: { type: boolean, default: false }
+            options:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [label]
+                properties:
+                  label: { type: string }
+                  description: { type: string }
+      deadline:
+        $ref: "#/$defs/deadline"
+  onIssueChangeParams:
+    type: object
+    additionalProperties: false
+    properties:
+      when:
+        $ref: "#/$defs/expression"
+      deadline:
+        $ref: "#/$defs/deadline"
+  githubParams:
+    type: object
+    required: [operation]
+    properties:
+      operation:
+        type: string
+        enum:
+          - set-field
+          - comment
+          - add-labels
+          - remove-labels
+          - close
+          - reopen
+          - open-pull-request
+          - request-review
+          - link
+    additionalProperties: true
+  gitParams:
+    type: object
+    required: [operation]
+    properties:
+      operation:
+        type: string
+        enum: [worktree-add, worktree-remove, branch, merge, push]
+    additionalProperties: true
+  notifyParams:
+    type: object
+    additionalProperties: false
+    required: [channel, title]
+    properties:
+      channel:
+        type: string
+        enum: [pushover]
+      title:
+        $ref: "#/$defs/templateRef"
+      message:
+        $ref: "#/$defs/templateRef"
+      url:
+        $ref: "#/$defs/valueOrRef"
+  policyParams:
+    type: object
+    additionalProperties: false
+    required: [rules]
+    properties:
+      rules:
+        $ref: "#/$defs/path"
+      input:
+        $ref: "#/$defs/contextRef"
+  sleepParams:
+    type: object
+    additionalProperties: false
+    required: [duration]
+    properties:
+      duration:
+        $ref: "#/$defs/deadline"
+  waitParams:
+    type: object
+    additionalProperties: false
+    properties:
+      deadline:
+        $ref: "#/$defs/deadline"

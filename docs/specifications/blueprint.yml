@@ -1,0 +1,40 @@
+$schema: https://refinery.systems/ontology/specification
+relationships:
+  realizes:
+    - blueprint-authoring
+    - node-types
+description: >-
+  Defines the blueprint file: the YAML document a person or agent authors to
+  describe how work moves through a process, and which Heddle loads, lints,
+  and runs on the Flowcraft engine. A blueprint has an id, a kind (process,
+  stage, or helper), a metadata bag, what it requires from the issue and
+  the project, nodes keyed by id, and edges that route on expressions. Each
+  node names a node type, carries a metadata bag that becomes part of that
+  node's context, and gives the node type its inputs under `params`.
+  Prompts are Nunjucks templates rendered with the task context. Handoff
+  schemas are JSON Schema written in YAML and are exposed verbatim as the
+  handoff tool's input schema, so they must satisfy the MCP tool input
+  schema constraints. Blueprints never carry action edges and never use
+  the Flowcraft subflow node type; composition is through `child-run`.
+  `docs/specifications/blueprint.schema.yml` is the machine-readable
+  definition.
+format: json-schema
+validation-criteria: >-
+  A conforming blueprint file parses as YAML 1.2 into a document that
+  validates against `docs/specifications/blueprint.schema.yml` interpreted as
+  JSON Schema Draft 2020-12. Node ids are the keys of `nodes` and are
+  slugs. Every edge names two existing node ids. Every `when` expression
+  parses in the sandboxed expression evaluator. Every path in a
+  `templateRef`, `schemaRef`, or `policy.rules` resolves to a file beside the
+  blueprint. Every `handoff` schema is itself a valid JSON Schema Draft
+  2020-12 object whose root is `type: object` with `properties`. Node
+  `params` additionally validate against the named node type's published
+  contract, which is generated from code and is authoritative for keys this
+  schema leaves open. Derived Flowcraft blueprints pass Flowcraft's linter
+  and Heddle's lint rules: no `subflow`, no edge `action`, every result of a
+  pausing node handled by an outgoing edge, every `question` role served by
+  a configured channel, every stage name a valid single-select option, and
+  `requires.issue` satisfiable against the bound project at reconciliation.
+  Loading a file and saving it unchanged produces byte-identical output,
+  comments included. Fixture blueprints under `fixtures/blueprints/` are the
+  conformance corpus and each must pass every check above.

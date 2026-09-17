@@ -1,0 +1,7 @@
+type: object
+required: [verdict]
+properties:
+  verdict:
+    type: string
+    enum: [approved, rejected]
+  notes: { type: string }
