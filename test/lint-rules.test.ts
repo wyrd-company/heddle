@@ -1,6 +1,6 @@
 // ---
 // relationships:
-//   verifies: repository-conventions
+//   verifies: AGENTS.md
 // ---
 import { randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
@@ -31,6 +31,18 @@ async function lintSource(
 }
 
 describe("source restrictions", () => {
+  it("allows source files with 300 lines", async () => {
+    const results = await lintSource(
+      Array.from({ length: 300 }, () => "// line").join("\n"),
+    );
+
+    expect(
+      results
+        .flatMap((result) => result.messages)
+        .map((message) => message.ruleId),
+    ).not.toContain("max-lines");
+  });
+
   it("rejects source files over 300 lines", async () => {
     const results = await lintSource(
       Array.from({ length: 301 }, () => "// line").join("\n"),
@@ -57,15 +69,19 @@ describe("source restrictions", () => {
   );
 
   it.each([
-    ['void import("child_process");', "no-restricted-syntax"],
-    ['require("node:child_process");', "no-restricted-syntax"],
-  ])("rejects source that uses a shell module", async (source, ruleId) => {
+    'void import("child_process");',
+    "void import(`child_process`);",
+    'require("node:child_process");',
+    'createRequire(import.meta.url)("child_process");',
+    'process.getBuiltinModule("node:child_process");',
+    'module.require("child_process");',
+  ])("rejects shell access form: %s", async (source) => {
     const results = await lintSource(source);
 
     expect(
       results
         .flatMap((result) => result.messages)
         .map((message) => message.ruleId),
-    ).toContain(ruleId);
+    ).toContain("no-restricted-syntax");
   });
 });

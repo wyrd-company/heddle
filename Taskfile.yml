@@ -1,6 +1,6 @@
 # ---
 # relationships:
-#   verifies: repository-conventions
+#   verifies: AGENTS.md
 # ---
 version: "3"
 

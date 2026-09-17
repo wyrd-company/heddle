@@ -67,12 +67,23 @@ describe("command arguments", () => {
     },
   );
 
-  it("rejects unknown commands", () => {
-    const result = capture(["unknown"]);
+  it.each(["unknown", "toString", "constructor", "__proto__"])(
+    "rejects unknown command %s",
+    (command) => {
+      const result = capture([command]);
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.errors.join("\n")).toContain(`Unknown command: ${command}`);
+      expect(result.errors.join("\n")).toContain("Usage: heddle <command>");
+    },
+  );
+
+  it("rejects help for an inherited prototype name", () => {
+    const result = capture(["toString", "--help"]);
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.errors.join("\n")).toContain("Unknown command: unknown");
-    expect(result.errors.join("\n")).toContain("Usage: heddle <command>");
+    expect(result.output).toEqual([]);
+    expect(result.errors.join("\n")).toContain("Unknown command: toString");
   });
 
   it.each([

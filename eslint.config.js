@@ -1,6 +1,6 @@
 // ---
 // relationships:
-//   enforces: repository-conventions
+//   enforces: AGENTS.md
 // ---
 import eslint from "@eslint/js";
 import prettier from "eslint-config-prettier";
@@ -30,11 +30,14 @@ const sourceRestrictions = {
     "error",
     {
       selector:
-        "ImportExpression[source.value='child_process'], ImportExpression[source.value='node:child_process'], CallExpression[callee.name='require'][arguments.0.value='child_process'], CallExpression[callee.name='require'][arguments.0.value='node:child_process']",
+        "Literal[value=/^(node:)?child_process$/], TemplateElement[value.cooked=/^(node:)?child_process$/]",
       message: "Service code must use a library instead of shelling out.",
     },
   ],
 };
+
+// This syntax guard rejects every statically spelled child_process specifier.
+// Computed specifiers are outside the reach of syntax-only lint.
 
 export default tseslint.config(
   { ignores: ["coverage/**", "dist/**", "node_modules/**", "spikes/**"] },

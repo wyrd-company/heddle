@@ -10,29 +10,26 @@ export interface CliIo {
 }
 
 interface CommandHelp {
-  readonly name: string;
   readonly usage: string;
 }
 
-const commands: Readonly<Record<string, CommandHelp>> = {
-  hook: {
-    name: "hook",
-    usage: "Usage: heddle hook <command>\n\nCommands:\n  stop <harness>",
-  },
-  skill: {
-    name: "skill",
-    usage:
-      "Usage: heddle skill <command>\n\nCommands:\n  list\n  export <name> <directory>",
-  },
-  start: {
-    name: "start",
-    usage: "Usage: heddle start",
-  },
-  validate: {
-    name: "validate",
-    usage: "Usage: heddle validate <path>",
-  },
-};
+const commands = new Map<string, CommandHelp>([
+  [
+    "hook",
+    {
+      usage: "Usage: heddle hook <command>\n\nCommands:\n  stop <harness>",
+    },
+  ],
+  [
+    "skill",
+    {
+      usage:
+        "Usage: heddle skill <command>\n\nCommands:\n  list\n  export <name> <directory>",
+    },
+  ],
+  ["start", { usage: "Usage: heddle start" }],
+  ["validate", { usage: "Usage: heddle validate <path>" }],
+]);
 
 const rootUsage = `Usage: heddle <command>
 
@@ -61,7 +58,7 @@ export function runCli(arguments_: readonly string[], io: CliIo): number {
     return 2;
   }
 
-  const command = commands[commandName];
+  const command = commands.get(commandName);
   if (command === undefined) {
     io.error(`Unknown command: ${commandName}`);
     io.error(rootUsage);
@@ -73,7 +70,7 @@ export function runCli(arguments_: readonly string[], io: CliIo): number {
     return 0;
   }
 
-  if (commandArguments.length === 0 || command.name === "start") {
+  if (commandArguments.length === 0 || commandName === "start") {
     io.error(command.usage);
     return 2;
   }
