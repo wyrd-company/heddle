@@ -39,8 +39,9 @@ The package manifest fixes the publish target to
 not publish as part of its build or test tasks.
 
 For local development, clone `github-work` and `t3code-client` beside the
-Heddle worktree directory and build both clients so their declarations exist.
-Then install and build Heddle:
+Heddle worktree directory and install each client's locked dependencies.
+Heddle typechecks and bundles their source entrypoints directly, so a separate
+client build is not required. Then install and build Heddle:
 
 ```sh
 npm ci
@@ -106,25 +107,32 @@ Configure the App according to GitHub's
 [permission reference](https://docs.github.com/rest/authentication/permissions-required-for-github-apps)
 with these permissions:
 
-- Repository metadata: read-only.
-- Repository contents, issues, and pull requests: read and write.
-- Organization Projects: read and write.
-- Organization custom properties: administration.
-- Organization issue types: read and write.
+- Metadata: read.
+- Code: read and write.
+- Issue fields: read and write.
+- Issue types: read and write.
+- Issues: read and write.
+- Pull requests: read and write.
+- Organization projects: administration.
 
-Subscribe the App to the `issues`, `projects_v2_item`, `issue_comment`, and
-`pull_request` events listed in GitHub's
-[webhook reference](https://docs.github.com/webhooks/webhook-events-and-payloads).
-Agents use their own narrower credentials and never receive this App
-credential.
+The required webhook subscriptions are still pending integration
+qualification. The candidate set is `issues`, `projects_v2_item`,
+`issue_comment`, and `pull_request` from GitHub's
+[webhook reference](https://docs.github.com/webhooks/webhook-events-and-payloads);
+do not treat that set as accepted until the webhook integration proves it.
+Agents use their own narrower credentials and never receive this App credential.
 
 For T3 Code, issue a dedicated bearer session on the machine that owns the T3
 state, write it directly to the mounted token file, and restrict the file to
 the service user:
 
 ```sh
-install -m 0600 /dev/null /path/to/secrets/heddle-t3-token
-sudo -u vscode t3 auth session issue --base-dir /home/vscode/.t3 \
+heddle_service_user=vscode
+install -m 0600 -o "${heddle_service_user}" \
+  -g "$(id -gn "${heddle_service_user}")" \
+  /dev/null /path/to/secrets/heddle-t3-token
+sudo -u "${heddle_service_user}" \
+  t3 auth session issue --base-dir /home/vscode/.t3 \
   --label heddle --token-only \
   > /path/to/secrets/heddle-t3-token
 ```
@@ -175,8 +183,10 @@ directory, and secret-file locations. Mount each at the same path:
 The Feature artifact contains the npm tarball built from the same accepted
 revision. Run `task feature-check` to stage that tarball and prove the Feature
 in isolated Dev Container builds. The service assembly lands after the engine,
-GitHub binding, T3 Code pass, and webhook components; until then the registered
-service invokes the scaffold's non-operational `start` command.
+GitHub binding, T3 Code pass, and webhook components. Until then, `start` writes
+its usage, exits with status 2, and s6 restarts it in a loop. The later service
+integration must replace that scaffold with a durable process and eliminate the
+restart loop before operational acceptance.
 
 ## Status
 

@@ -26,5 +26,10 @@ Dev Container build.
 Every secret option is a file location. Secret values do not enter Feature
 options, generated launchers, or installation logs.
 
+The current `start` scaffold writes its usage and exits with status 2, so s6
+restarts it in a loop. The Feature is not operational until the later service
+integration replaces the scaffold with a durable process and eliminates that
+restart loop.
+
 See the repository [README](../../README.md#dev-container-feature) for the
 configuration schema, bind mounts, GitHub App permissions, and T3 Code pairing.
