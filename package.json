@@ -44,17 +44,19 @@
     "test:t3code-live": "T3_LIVE=1 vitest run --config vitest.t3code-live.config.ts"
   },
   "dependencies": {
-    "ajv": "^8.20.0",
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@js-temporal/polyfill": "^0.5.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@octokit/auth-app": "^8.3.1",
     "@octokit/core": "^7.0.8",
+    "ajv": "^8.20.0",
     "flowcraft": "^2.10.1",
     "graphql": "^16.14.2",
     "jsonata": "^2.2.2",
     "nunjucks": "^3.2.4",
+    "smol-toml": "^1.8.0",
     "yaml": "^2.9.1",
-    "zod": "^4.6.5",
-    "@js-temporal/polyfill": "^0.5.1"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

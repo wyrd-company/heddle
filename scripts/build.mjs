@@ -14,6 +14,8 @@ await build({
     "@octokit/auth-app",
     "@octokit/core",
     "ajv",
+    "@modelcontextprotocol/sdk",
+    "smol-toml",
     "flowcraft",
     "graphql",
     "jsonata",

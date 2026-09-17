@@ -7,6 +7,13 @@ import type { WorkflowBlueprint } from "flowcraft";
 import type { RunStore } from "./store.js";
 import type { Data, EngineOptions, Run } from "./types.js";
 
+export interface RelatedRun {
+  id: string;
+  parentId: string;
+  parentNodeId: string;
+  blueprintId: string;
+  context: Data;
+}
 export interface NewRun {
   id: string;
   blueprintId: string;
