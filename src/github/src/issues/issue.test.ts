@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { github } from "../github.js";
 import { ScriptedTransport } from "../testing/scripted-transport.js";
 
+const lastPage = { hasNextPage: false, endCursor: null };
+
 const issueNode = (overrides: Record<string, unknown> = {}) => ({
   __typename: "Issue",
   id: "I_1",
@@ -23,11 +25,15 @@ const issueNode = (overrides: Record<string, unknown> = {}) => ({
     number: 10,
     repository: { name: "recipes", owner: { login: "pantry-labs" } },
   },
-  subIssues: { nodes: [] },
-  blockedBy: { nodes: [] },
-  blocking: { nodes: [] },
-  duplicateOf: null,
-  closedByPullRequestsReferences: { nodes: [] },
+  subIssues: { nodes: [], pageInfo: lastPage },
+  blockedBy: { nodes: [], pageInfo: lastPage },
+  blocking: { nodes: [], pageInfo: lastPage },
+  duplicateOf: {
+    id: "I_12",
+    number: 12,
+    repository: { name: "recipes", owner: { login: "pantry-labs" } },
+  },
+  closedByPullRequestsReferences: { nodes: [], pageInfo: lastPage },
   issueFieldValues: {
     nodes: [
       {
@@ -58,6 +64,7 @@ describe("Issue handle (scripted)", () => {
     expect(data.ref).toBe("pantry-labs/recipes#1");
     expect(data.type).toBe("Recipe");
     expect(data.parent).toBe("pantry-labs/recipes#10");
+    expect(data.duplicateOf).toBe("pantry-labs/recipes#12");
     expect(data.labels.map((l) => l.name)).toEqual(["vegan"]);
     expect(data.assignees).toEqual(["chef-amara"]);
     expect(data.fields).toEqual({ Priority: "High" });

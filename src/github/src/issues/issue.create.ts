@@ -15,6 +15,7 @@ import {
   type IssueFilter,
 } from "./issue.js";
 import { issueNames } from "./issue.names.js";
+import { loadIssueRelationships } from "./issue.relationships.js";
 import { resolveContentId } from "./issue.resolve.js";
 import { parseIssue } from "./parse.js";
 
@@ -61,23 +62,24 @@ const stateNames: Record<NonNullable<IssueFilter["state"]>, IssueState> = {
   closed: "CLOSED",
 };
 
-export function listIssues<S extends IssueFieldSchema>(
+export async function* listIssues<S extends IssueFieldSchema>(
   ctx: Context,
   repo: RepoCoordinates,
   schema: S | undefined,
   filter: IssueFilter | undefined,
 ): AsyncIterable<IssueData<S>> {
-  return paginate(async (after) => {
+  const pages = paginate(async (after) => {
     const data = await ctx.execute(IssueListDocument, {
       owner: repo.owner,
       repo: repo.repo,
       states: filter?.state ? [stateNames[filter.state]] : null,
       after: after ?? null,
+      relationshipPageSize: ctx.relationshipPageSize,
     });
     const issues = required(data.repository?.issues, "repository.issues");
-    return {
-      nodes: (issues.nodes ?? []).map((node) => (node ? parseIssue(node, schema) : null)),
-      pageInfo: issues.pageInfo,
-    };
+    return { nodes: issues.nodes, pageInfo: issues.pageInfo };
   });
+  for await (const issue of pages) {
+    yield { ...parseIssue(issue, schema), ...(await loadIssueRelationships(ctx, issue)) };
+  }
 }

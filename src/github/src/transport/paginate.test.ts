@@ -22,6 +22,28 @@ describe("paginate", () => {
     expect(seen).toEqual([undefined, "c1"]);
   });
 
+  it("rejects a non-terminal page without a continuation cursor", async () => {
+    await expect(
+      collect(
+        paginate(async () => ({
+          nodes: ["partial"],
+          pageInfo: { hasNextPage: true, endCursor: null },
+        })),
+      ),
+    ).rejects.toThrow("missing cursor for a non-terminal page");
+  });
+
+  it("rejects a continuation cursor that does not advance", async () => {
+    await expect(
+      collect(
+        paginate(async (after) => ({
+          nodes: [after ?? "first"],
+          pageInfo: { hasNextPage: true, endCursor: "same" },
+        })),
+      ),
+    ).rejects.toThrow("cursor did not advance from same");
+  });
+
   it("stops REST pagination on a short page", async () => {
     const calls: number[] = [];
     const items = await collect(

@@ -50,7 +50,12 @@ function memoryAdapter(initial: Spice[]) {
 
 function context(): Context {
   const transport = new ScriptedTransport();
-  return { transport, cache: new NameCache(), execute: createExecute(transport) };
+  return {
+    transport,
+    cache: new NameCache(),
+    execute: createExecute(transport),
+    relationshipPageSize: 100,
+  };
 }
 
 describe("catalog", () => {

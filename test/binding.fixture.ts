@@ -10,6 +10,16 @@ import {
   lastPage,
 } from "../src/github/src/projects/fixtures.test-support.js";
 import { GitHubError } from "../src/github/src/transport/errors.js";
+const relationshipLastPage = { hasNextPage: false, endCursor: null };
+export interface BindingRelation {
+  id: string;
+  number: number;
+  repository: { name: string; owner: { login: string } };
+}
+export interface BindingRelationPage {
+  nodes: BindingRelation[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
 export const recipe = (number = 1) => ({
   __typename: "Issue",
   id: `I_${String(number)}`,
@@ -34,11 +44,11 @@ export const recipe = (number = 1) => ({
   },
   assignees: { nodes: [{ login: "sample-user" }] },
   parent: null,
-  subIssues: { nodes: [] },
-  blockedBy: { nodes: [] },
-  blocking: { nodes: [] },
+  subIssues: { nodes: [], pageInfo: relationshipLastPage },
+  blockedBy: { nodes: [], pageInfo: relationshipLastPage },
+  blocking: { nodes: [], pageInfo: relationshipLastPage },
   duplicateOf: null,
-  closedByPullRequestsReferences: { nodes: [] },
+  closedByPullRequestsReferences: { nodes: [], pageInfo: relationshipLastPage },
   issueFieldValues: {
     nodes: [
       {
@@ -50,6 +60,21 @@ export const recipe = (number = 1) => ({
   },
 });
 export function fixture(projectId = "P_1") {
+  const relationshipPages = {
+    subIssues: new Map<string, BindingRelationPage>(),
+    blockedBy: new Map<string, BindingRelationPage>(),
+    blocking: new Map<string, BindingRelationPage>(),
+    closedByPullRequestsReferences: new Map<string, BindingRelationPage>(),
+  };
+  const relationshipPage = (
+    field: keyof typeof relationshipPages,
+    after: unknown,
+  ) => {
+    const page = relationshipPages[field].get(String(after));
+    if (!page)
+      throw new Error(`Missing ${field} fixture page after ${String(after)}`);
+    return { node: { __typename: "Issue", [field]: page } };
+  };
   const fields: Record<string, unknown>[] = [
     wireSelectField("F_status", "Status", [
       { id: "O_backlog", name: "Backlog" },
@@ -143,6 +168,11 @@ export function fixture(projectId = "P_1") {
       IssueLoad: ({ number }) => ({
         repository: { issue: issues.find((i) => i.number === number) },
       }),
+      IssueSubIssuesPage: ({ after }) => relationshipPage("subIssues", after),
+      IssueBlockedByPage: ({ after }) => relationshipPage("blockedBy", after),
+      IssueBlockingPage: ({ after }) => relationshipPage("blocking", after),
+      IssueClosedByPage: ({ after }) =>
+        relationshipPage("closedByPullRequestsReferences", after),
       ItemLoad: ({ id }) => ({ node: item(Number(String(id).split("_")[1])) }),
       UpdateItemFieldValue: ({ input }) => {
         if (statusForbidden)
@@ -252,6 +282,7 @@ export function fixture(projectId = "P_1") {
     itemTypes,
     values,
     comments,
+    relationshipPages,
     transport,
     refuseStatus: () => {
       statusForbidden = true;

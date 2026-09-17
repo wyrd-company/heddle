@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RunStore } from "../src/engine/store.js";
 import { GitHubBindingService } from "../src/binding/service.js";
+import { InstanceStore } from "../src/binding/store.js";
 import { deriveFlowcraftBlueprint } from "../src/blueprints/flowcraft.js";
 import type { Blueprint } from "../src/blueprints/types.js";
 import { lintHeddle } from "../src/blueprints/heddle-lint.js";
@@ -59,6 +60,11 @@ function setup(
   );
   return { ...wire, path, store, service, blueprints };
 }
+const relatedIssue = (number: number) => ({
+  id: `I_${String(number)}`,
+  number,
+  repository: { name: "supplies", owner: { login: "sample-owner" } },
+});
 it("reconciles the union append-only, discovers new issues, caches snapshots and preserves initial context across restart", async () => {
   const f = setup();
   f.blueprints.push({
@@ -136,6 +142,73 @@ it("reconciles the union append-only, discovers new issues, caches snapshots and
   const store = new RunStore(f.path);
   stores.push(store);
   expect(store.get(run.id).initialContext["issue"]).toEqual(snapshot);
+});
+it("persists every later relationship page into the immutable run input", async () => {
+  const f = setup();
+  const issue = present(f.issues.at(0));
+  const firstPages = [
+    ["subIssues", "sub-cursor", 10],
+    ["blockedBy", "blocked-cursor", 20],
+    ["blocking", "blocking-cursor", 30],
+    ["closedByPullRequestsReferences", "pull-cursor", 40],
+  ] as const;
+  for (const [field, cursor, number] of firstPages) {
+    Object.assign(issue, {
+      [field]: {
+        nodes: [relatedIssue(number)],
+        pageInfo: { hasNextPage: true, endCursor: cursor },
+      },
+    });
+    f.relationshipPages[field].set(cursor, {
+      nodes: [relatedIssue(number + 1)],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    });
+  }
+
+  await f.service.start();
+  const saved = f.service.instances.get("I_1").issue;
+  expect(saved).toMatchObject({
+    subIssues: ["sample-owner/supplies#10", "sample-owner/supplies#11"],
+    blockedBy: ["sample-owner/supplies#20", "sample-owner/supplies#21"],
+    blocking: ["sample-owner/supplies#30", "sample-owner/supplies#31"],
+    closedBy: ["sample-owner/supplies#40", "sample-owner/supplies#41"],
+  });
+  expect(
+    [
+      "IssueSubIssuesPage",
+      "IssueBlockedByPage",
+      "IssueBlockingPage",
+      "IssueClosedByPage",
+    ].map((operation) => f.transport.callsTo(operation)[0]?.input["after"]),
+  ).toEqual(["sub-cursor", "blocked-cursor", "blocking-cursor", "pull-cursor"]);
+
+  const run = await f.service.startInstance("I_1", "cook", "revision");
+  expect(run.initialContext["issue"]).toEqual(saved);
+  f.store.close();
+  stores.splice(stores.indexOf(f.store), 1);
+  const reopened = new RunStore(f.path);
+  stores.push(reopened);
+  expect(new InstanceStore(reopened.db).get("I_1").issue).toMatchObject({
+    subIssues: saved.subIssues,
+    blockedBy: saved.blockedBy,
+    blocking: saved.blocking,
+    closedBy: saved.closedBy,
+  });
+  expect(reopened.get(run.id).initialContext["issue"]).toEqual(saved);
+});
+it("does not persist a partial snapshot when a relationship continuation fails", async () => {
+  const f = setup();
+  Object.assign(present(f.issues.at(0)), {
+    blockedBy: {
+      nodes: [relatedIssue(20)],
+      pageInfo: { hasNextPage: true, endCursor: "missing-page" },
+    },
+  });
+
+  await expect(f.service.start()).rejects.toThrow(
+    "Missing blockedBy fixture page after missing-page",
+  );
+  expect(f.service.instances.find("I_1")).toBeUndefined();
 });
 it.each([
   { operation: "set-field", field: "Notes", value: "Chopped" },

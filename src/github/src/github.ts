@@ -12,6 +12,8 @@ export interface GitHubOptions {
   /** Replace the wire. Two adapters exist: Octokit (default) and Scripted (tests). */
   transport?: Transport;
   baseUrl?: string;
+  /** Per-request size for issue relationship connections. GitHub accepts 1 through 100. */
+  relationshipPageSize?: number;
 }
 
 export interface GitHub {
@@ -34,7 +36,12 @@ export function github(options: GitHubOptions): GitHub {
       options.auth,
       options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl },
     );
-  const ctx: Context = { transport, cache: new NameCache(), execute: createExecute(transport) };
+  const ctx: Context = {
+    transport,
+    cache: new NameCache(),
+    execute: createExecute(transport),
+    relationshipPageSize: options.relationshipPageSize ?? 100,
+  };
   return {
     owner: (login, opts) => createOwner(ctx, login, opts?.issueFields),
     raw: {

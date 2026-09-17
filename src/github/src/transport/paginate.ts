@@ -1,3 +1,5 @@
+import { ResponseShapeError } from "./errors.js";
+
 /** Cursor pagination over a GraphQL connection. */
 export interface Connection<T> {
   nodes?: readonly (T | null)[] | null;
@@ -11,14 +13,34 @@ export interface Connection<T> {
 export async function* paginate<T>(
   fetchPage: (after: string | undefined) => Promise<Connection<T>>,
 ): AsyncGenerator<T, void, undefined> {
-  let after: string | undefined;
+  yield* paginateFrom(await fetchPage(undefined), fetchPage);
+}
+
+/** Continues an already-fetched GraphQL connection without fetching its first page again. */
+export async function* paginateFrom<T>(
+  firstPage: Connection<T>,
+  fetchPage: (after: string) => Promise<Connection<T>>,
+): AsyncGenerator<T, void, undefined> {
+  let page = firstPage;
+  const cursors = new Set<string>();
   for (;;) {
-    const page = await fetchPage(after);
     for (const node of page.nodes ?? []) {
       if (node !== null) yield node;
     }
-    if (!page.pageInfo.hasNextPage || !page.pageInfo.endCursor) return;
-    after = page.pageInfo.endCursor;
+    if (!page.pageInfo.hasNextPage) return;
+    const after = page.pageInfo.endCursor;
+    if (!after)
+      throw new ResponseShapeError(
+        "connection.pageInfo.endCursor",
+        "missing cursor for a non-terminal page",
+      );
+    if (cursors.has(after))
+      throw new ResponseShapeError(
+        "connection.pageInfo.endCursor",
+        `cursor did not advance from ${after}`,
+      );
+    cursors.add(after);
+    page = await fetchPage(after);
   }
 }
 

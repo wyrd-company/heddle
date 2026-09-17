@@ -37,7 +37,12 @@ describe("Pull handle (scripted)", () => {
       },
     });
 
-    const ctx = { transport, cache: new NameCache(), execute: createExecute(transport) };
+    const ctx = {
+      transport,
+      cache: new NameCache(),
+      execute: createExecute(transport),
+      relationshipPageSize: 100,
+    };
 
     const pr = createPull(ctx, { coords: { owner: "test", repo: "repo", number: 1 } });
 
@@ -78,7 +83,12 @@ describe("Pull handle (scripted)", () => {
       },
     });
 
-    const ctx = { transport, cache: new NameCache(), execute: createExecute(transport) };
+    const ctx = {
+      transport,
+      cache: new NameCache(),
+      execute: createExecute(transport),
+      relationshipPageSize: 100,
+    };
 
     const pr = createPull(ctx, {
       coords: { owner: "test", repo: "repo", number: 1 },

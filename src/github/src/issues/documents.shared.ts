@@ -46,25 +46,37 @@ export const IssueCoreFragment = graphql(`
     parent {
       ...IssueLocator
     }
-    subIssues(first: 100) {
+    subIssues(first: $relationshipPageSize) {
       nodes {
         ...IssueLocator
       }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
-    blockedBy(first: 100) {
+    blockedBy(first: $relationshipPageSize) {
       nodes {
         ...IssueLocator
       }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
-    blocking(first: 100) {
+    blocking(first: $relationshipPageSize) {
       nodes {
         ...IssueLocator
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
     duplicateOf {
       ...IssueLocator
     }
-    closedByPullRequestsReferences(first: 100, includeClosedPrs: true) {
+    closedByPullRequestsReferences(first: $relationshipPageSize, includeClosedPrs: true) {
       nodes {
         number
         repository {
@@ -73,6 +85,10 @@ export const IssueCoreFragment = graphql(`
             login
           }
         }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
     issueFieldValues(first: 100) {

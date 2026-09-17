@@ -5,7 +5,11 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
-import { github, type GitHub } from "../github/src/github.js";
+import {
+  github,
+  type GitHub,
+  type GitHubOptions,
+} from "../github/src/github.js";
 import { OctokitTransport } from "../github/src/transport/octokit-transport.js";
 import type { Transport } from "../github/src/transport/transport.js";
 
@@ -39,12 +43,16 @@ export interface RequestBudget {
   mutations: number;
 }
 export type ClientFactory = (owner: string) => GitHub;
+export interface AppClientOptions {
+  wire?: (owner: string) => Transport;
+  relationshipPageSize?: GitHubOptions["relationshipPageSize"];
+}
 
 /** Credentials are consumed in process; validation never prints their values. */
 export function appClients(
   path: string,
   budget: RequestBudget,
-  wire?: (owner: string) => Transport,
+  wireOrOptions?: ((owner: string) => Transport) | AppClientOptions,
 ): ClientFactory {
   let raw: unknown;
   try {
@@ -56,6 +64,10 @@ export function appClients(
   if (!result.success)
     throw new Error("Invalid Heddle GitHub App credential file");
   const auth = result.data;
+  const options: AppClientOptions =
+    typeof wireOrOptions === "function"
+      ? { wire: wireOrOptions }
+      : (wireOrOptions ?? {});
   return (owner) => {
     const installationId = auth.installations[owner];
     if (!installationId)
@@ -65,7 +77,8 @@ export function appClients(
       privateKey: auth["private-key"],
       installationId,
     };
-    const underlying = wire?.(owner) ?? new OctokitTransport(credential);
+    const underlying =
+      options.wire?.(owner) ?? new OctokitTransport(credential);
     const transport: Transport = {
       async graphql(operation) {
         budget.graphql++;
@@ -78,7 +91,13 @@ export function appClients(
         return underlying.rest(route, params);
       },
     };
-    return github({ auth: credential, transport });
+    return github({
+      auth: credential,
+      transport,
+      ...(options.relationshipPageSize === undefined
+        ? {}
+        : { relationshipPageSize: options.relationshipPageSize }),
+    });
   };
 }
 

@@ -1585,6 +1585,7 @@ export type IssueLoadQueryVariables = Exact<{
   owner: string;
   repo: string;
   number: number;
+  relationshipPageSize: number;
 }>;
 
 
@@ -1597,19 +1598,19 @@ export type IssueLoadQuery = { repository: { issue: { __typename: 'Issue', id: s
            } } | null, subIssues: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
               | { login: string }
               | { login: string }
-             } } | null> | null }, blockedBy: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, blockedBy: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
               | { login: string }
               | { login: string }
-             } } | null> | null }, blocking: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, blocking: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
               | { login: string }
               | { login: string }
-             } } | null> | null }, duplicateOf: { id: string, number: number, repository: { name: string, owner:
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, duplicateOf: { id: string, number: number, repository: { name: string, owner:
             | { login: string }
             | { login: string }
            } } | null, closedByPullRequestsReferences: { nodes: Array<{ number: number, repository: { name: string, owner:
               | { login: string }
               | { login: string }
-             } } | null> | null } | null, issueFieldValues: { nodes: Array<
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } } | null, issueFieldValues: { nodes: Array<
           | { __typename: 'IssueFieldDateValue', dateValue: string, field:
               | { name: string }
               | Record<PropertyKey, never>
@@ -1649,6 +1650,7 @@ export type IssueListQueryVariables = Exact<{
   repo: string;
   states?: Array<IssueState> | IssueState | null | undefined;
   after?: string | null | undefined;
+  relationshipPageSize: number;
 }>;
 
 
@@ -1661,19 +1663,19 @@ export type IssueListQuery = { repository: { issues: { pageInfo: { hasNextPage: 
              } } | null, subIssues: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
                 | { login: string }
                 | { login: string }
-               } } | null> | null }, blockedBy: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+               } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, blockedBy: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
                 | { login: string }
                 | { login: string }
-               } } | null> | null }, blocking: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+               } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, blocking: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
                 | { login: string }
                 | { login: string }
-               } } | null> | null }, duplicateOf: { id: string, number: number, repository: { name: string, owner:
+               } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, duplicateOf: { id: string, number: number, repository: { name: string, owner:
               | { login: string }
               | { login: string }
              } } | null, closedByPullRequestsReferences: { nodes: Array<{ number: number, repository: { name: string, owner:
                 | { login: string }
                 | { login: string }
-               } } | null> | null } | null, issueFieldValues: { nodes: Array<
+               } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } } | null, issueFieldValues: { nodes: Array<
             | { __typename: 'IssueFieldDateValue', dateValue: string, field:
                 | { name: string }
                 | Record<PropertyKey, never>
@@ -1696,6 +1698,1206 @@ export type IssueListQuery = { repository: { issues: { pageInfo: { hasNextPage: 
                | null }
            | null> | null } | null } | null> | null } } | null };
 
+export type IssueSubIssuesPageQueryVariables = Exact<{
+  id: string | number;
+  first: number;
+  after: string;
+}>;
+
+
+export type IssueSubIssuesPageQuery = { node:
+    | { __typename: 'AddedToMergeQueueEvent' }
+    | { __typename: 'AddedToProjectEvent' }
+    | { __typename: 'AddedToProjectV2Event' }
+    | { __typename: 'App' }
+    | { __typename: 'AssignedEvent' }
+    | { __typename: 'AutoMergeDisabledEvent' }
+    | { __typename: 'AutoMergeEnabledEvent' }
+    | { __typename: 'AutoRebaseEnabledEvent' }
+    | { __typename: 'AutoSquashEnabledEvent' }
+    | { __typename: 'AutomaticBaseChangeFailedEvent' }
+    | { __typename: 'AutomaticBaseChangeSucceededEvent' }
+    | { __typename: 'BaseRefChangedEvent' }
+    | { __typename: 'BaseRefDeletedEvent' }
+    | { __typename: 'BaseRefForcePushedEvent' }
+    | { __typename: 'Blob' }
+    | { __typename: 'BlockedByAddedEvent' }
+    | { __typename: 'BlockedByRemovedEvent' }
+    | { __typename: 'BlockingAddedEvent' }
+    | { __typename: 'BlockingRemovedEvent' }
+    | { __typename: 'Bot' }
+    | { __typename: 'BranchProtectionRule' }
+    | { __typename: 'BypassForcePushAllowance' }
+    | { __typename: 'BypassPullRequestAllowance' }
+    | { __typename: 'CWE' }
+    | { __typename: 'CheckRun' }
+    | { __typename: 'CheckSuite' }
+    | { __typename: 'ClosedEvent' }
+    | { __typename: 'CodeOfConduct' }
+    | { __typename: 'CommentDeletedEvent' }
+    | { __typename: 'Commit' }
+    | { __typename: 'CommitComment' }
+    | { __typename: 'CommitCommentThread' }
+    | { __typename: 'Comparison' }
+    | { __typename: 'ConnectedEvent' }
+    | { __typename: 'ConvertToDraftEvent' }
+    | { __typename: 'ConvertedFromDraftEvent' }
+    | { __typename: 'ConvertedNoteToIssueEvent' }
+    | { __typename: 'ConvertedToDiscussionEvent' }
+    | { __typename: 'CrossReferencedEvent' }
+    | { __typename: 'DemilestonedEvent' }
+    | { __typename: 'DependencyGraphManifest' }
+    | { __typename: 'DeployKey' }
+    | { __typename: 'DeployedEvent' }
+    | { __typename: 'Deployment' }
+    | { __typename: 'DeploymentEnvironmentChangedEvent' }
+    | { __typename: 'DeploymentReview' }
+    | { __typename: 'DeploymentStatus' }
+    | { __typename: 'DisconnectedEvent' }
+    | { __typename: 'Discussion' }
+    | { __typename: 'DiscussionCategory' }
+    | { __typename: 'DiscussionComment' }
+    | { __typename: 'DiscussionPoll' }
+    | { __typename: 'DiscussionPollOption' }
+    | { __typename: 'DraftIssue' }
+    | { __typename: 'Enterprise' }
+    | { __typename: 'EnterpriseAdministratorInvitation' }
+    | { __typename: 'EnterpriseIdentityProvider' }
+    | { __typename: 'EnterpriseMemberInvitation' }
+    | { __typename: 'EnterpriseRepositoryInfo' }
+    | { __typename: 'EnterpriseServerInstallation' }
+    | { __typename: 'EnterpriseServerUserAccount' }
+    | { __typename: 'EnterpriseServerUserAccountEmail' }
+    | { __typename: 'EnterpriseServerUserAccountsUpload' }
+    | { __typename: 'EnterpriseTeam' }
+    | { __typename: 'EnterpriseUserAccount' }
+    | { __typename: 'Environment' }
+    | { __typename: 'ExternalIdentity' }
+    | { __typename: 'Gist' }
+    | { __typename: 'GistComment' }
+    | { __typename: 'HeadRefDeletedEvent' }
+    | { __typename: 'HeadRefForcePushedEvent' }
+    | { __typename: 'HeadRefRestoredEvent' }
+    | { __typename: 'IpAllowListEntry' }
+    | { __typename: 'Issue', subIssues: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+              | { login: string }
+              | { login: string }
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } } }
+    | { __typename: 'IssueComment' }
+    | { __typename: 'IssueCommentPinnedEvent' }
+    | { __typename: 'IssueCommentUnpinnedEvent' }
+    | { __typename: 'IssueFieldAddedEvent' }
+    | { __typename: 'IssueFieldChangedEvent' }
+    | { __typename: 'IssueFieldDate' }
+    | { __typename: 'IssueFieldDateValue' }
+    | { __typename: 'IssueFieldMultiSelect' }
+    | { __typename: 'IssueFieldMultiSelectValue' }
+    | { __typename: 'IssueFieldNumber' }
+    | { __typename: 'IssueFieldNumberValue' }
+    | { __typename: 'IssueFieldRemovedEvent' }
+    | { __typename: 'IssueFieldSingleSelect' }
+    | { __typename: 'IssueFieldSingleSelectOption' }
+    | { __typename: 'IssueFieldSingleSelectValue' }
+    | { __typename: 'IssueFieldText' }
+    | { __typename: 'IssueFieldTextValue' }
+    | { __typename: 'IssueType' }
+    | { __typename: 'IssueTypeAddedEvent' }
+    | { __typename: 'IssueTypeChangedEvent' }
+    | { __typename: 'IssueTypeRemovedEvent' }
+    | { __typename: 'Label' }
+    | { __typename: 'LabeledEvent' }
+    | { __typename: 'Language' }
+    | { __typename: 'License' }
+    | { __typename: 'LinkedBranch' }
+    | { __typename: 'LockedEvent' }
+    | { __typename: 'Mannequin' }
+    | { __typename: 'MarkedAsDuplicateEvent' }
+    | { __typename: 'MarketplaceCategory' }
+    | { __typename: 'MarketplaceListing' }
+    | { __typename: 'MemberFeatureRequestNotification' }
+    | { __typename: 'MembersCanDeleteReposClearAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposDisableAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposEnableAuditEntry' }
+    | { __typename: 'MentionedEvent' }
+    | { __typename: 'MergeQueue' }
+    | { __typename: 'MergeQueueEntry' }
+    | { __typename: 'MergedEvent' }
+    | { __typename: 'MigrationSource' }
+    | { __typename: 'Milestone' }
+    | { __typename: 'MilestonedEvent' }
+    | { __typename: 'MovedColumnsInProjectEvent' }
+    | { __typename: 'OIDCProvider' }
+    | { __typename: 'OauthApplicationCreateAuditEntry' }
+    | { __typename: 'OrgAddBillingManagerAuditEntry' }
+    | { __typename: 'OrgAddMemberAuditEntry' }
+    | { __typename: 'OrgBlockUserAuditEntry' }
+    | { __typename: 'OrgConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgCreateAuditEntry' }
+    | { __typename: 'OrgDisableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgDisableSamlAuditEntry' }
+    | { __typename: 'OrgDisableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgEnableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgEnableSamlAuditEntry' }
+    | { __typename: 'OrgEnableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgInviteMemberAuditEntry' }
+    | { __typename: 'OrgInviteToBusinessAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessApprovedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessBlockedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessDeniedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessRequestedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessUnblockedAuditEntry' }
+    | { __typename: 'OrgRemoveBillingManagerAuditEntry' }
+    | { __typename: 'OrgRemoveMemberAuditEntry' }
+    | { __typename: 'OrgRemoveOutsideCollaboratorAuditEntry' }
+    | { __typename: 'OrgRestoreMemberAuditEntry' }
+    | { __typename: 'OrgUnblockUserAuditEntry' }
+    | { __typename: 'OrgUpdateDefaultRepositoryPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryCreationPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryInvitationPermissionAuditEntry' }
+    | { __typename: 'Organization' }
+    | { __typename: 'OrganizationIdentityProvider' }
+    | { __typename: 'OrganizationInvitation' }
+    | { __typename: 'OrganizationMigration' }
+    | { __typename: 'Package' }
+    | { __typename: 'PackageFile' }
+    | { __typename: 'PackageTag' }
+    | { __typename: 'PackageVersion' }
+    | { __typename: 'ParentIssueAddedEvent' }
+    | { __typename: 'ParentIssueRemovedEvent' }
+    | { __typename: 'PendingAssigneeSuggestion' }
+    | { __typename: 'PendingCloseSuggestion' }
+    | { __typename: 'PendingFieldSuggestion' }
+    | { __typename: 'PendingLabelSuggestion' }
+    | { __typename: 'PendingTypeSuggestion' }
+    | { __typename: 'PinnedDiscussion' }
+    | { __typename: 'PinnedEnvironment' }
+    | { __typename: 'PinnedEvent' }
+    | { __typename: 'PinnedIssue' }
+    | { __typename: 'PinnedIssueComment' }
+    | { __typename: 'PrivateRepositoryForkingDisableAuditEntry' }
+    | { __typename: 'PrivateRepositoryForkingEnableAuditEntry' }
+    | { __typename: 'Project' }
+    | { __typename: 'ProjectCard' }
+    | { __typename: 'ProjectColumn' }
+    | { __typename: 'ProjectV2' }
+    | { __typename: 'ProjectV2Field' }
+    | { __typename: 'ProjectV2Item' }
+    | { __typename: 'ProjectV2ItemFieldDateValue' }
+    | { __typename: 'ProjectV2ItemFieldIterationValue' }
+    | { __typename: 'ProjectV2ItemFieldMultiSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldNumberValue' }
+    | { __typename: 'ProjectV2ItemFieldSingleSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldTextValue' }
+    | { __typename: 'ProjectV2ItemStatusChangedEvent' }
+    | { __typename: 'ProjectV2IterationField' }
+    | { __typename: 'ProjectV2MultiSelectField' }
+    | { __typename: 'ProjectV2SingleSelectField' }
+    | { __typename: 'ProjectV2StatusUpdate' }
+    | { __typename: 'ProjectV2View' }
+    | { __typename: 'ProjectV2Workflow' }
+    | { __typename: 'PublicKey' }
+    | { __typename: 'PullRequest' }
+    | { __typename: 'PullRequestCommit' }
+    | { __typename: 'PullRequestCommitCommentThread' }
+    | { __typename: 'PullRequestReview' }
+    | { __typename: 'PullRequestReviewComment' }
+    | { __typename: 'PullRequestReviewThread' }
+    | { __typename: 'PullRequestStack' }
+    | { __typename: 'PullRequestStackEntry' }
+    | { __typename: 'PullRequestThread' }
+    | { __typename: 'Push' }
+    | { __typename: 'PushAllowance' }
+    | { __typename: 'Query' }
+    | { __typename: 'Reaction' }
+    | { __typename: 'ReadyForReviewEvent' }
+    | { __typename: 'Ref' }
+    | { __typename: 'ReferencedEvent' }
+    | { __typename: 'Release' }
+    | { __typename: 'ReleaseAsset' }
+    | { __typename: 'RemovedFromMergeQueueEvent' }
+    | { __typename: 'RemovedFromProjectEvent' }
+    | { __typename: 'RemovedFromProjectV2Event' }
+    | { __typename: 'RenamedTitleEvent' }
+    | { __typename: 'ReopenedEvent' }
+    | { __typename: 'RepoAccessAuditEntry' }
+    | { __typename: 'RepoAddMemberAuditEntry' }
+    | { __typename: 'RepoAddTopicAuditEntry' }
+    | { __typename: 'RepoArchivedAuditEntry' }
+    | { __typename: 'RepoChangeMergeSettingAuditEntry' }
+    | { __typename: 'RepoConfigDisableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigEnableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigLockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigUnlockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoCreateAuditEntry' }
+    | { __typename: 'RepoDestroyAuditEntry' }
+    | { __typename: 'RepoRemoveMemberAuditEntry' }
+    | { __typename: 'RepoRemoveTopicAuditEntry' }
+    | { __typename: 'Repository' }
+    | { __typename: 'RepositoryCustomProperty' }
+    | { __typename: 'RepositoryInvitation' }
+    | { __typename: 'RepositoryMigration' }
+    | { __typename: 'RepositoryRule' }
+    | { __typename: 'RepositoryRuleset' }
+    | { __typename: 'RepositoryRulesetBypassActor' }
+    | { __typename: 'RepositoryTopic' }
+    | { __typename: 'RepositoryVisibilityChangeDisableAuditEntry' }
+    | { __typename: 'RepositoryVisibilityChangeEnableAuditEntry' }
+    | { __typename: 'RepositoryVulnerabilityAlert' }
+    | { __typename: 'ReviewDismissalAllowance' }
+    | { __typename: 'ReviewDismissedEvent' }
+    | { __typename: 'ReviewRequest' }
+    | { __typename: 'ReviewRequestRemovedEvent' }
+    | { __typename: 'ReviewRequestedEvent' }
+    | { __typename: 'SavedReply' }
+    | { __typename: 'SecurityAdvisory' }
+    | { __typename: 'SponsorsActivity' }
+    | { __typename: 'SponsorsListing' }
+    | { __typename: 'SponsorsListingFeaturedItem' }
+    | { __typename: 'SponsorsTier' }
+    | { __typename: 'Sponsorship' }
+    | { __typename: 'SponsorshipNewsletter' }
+    | { __typename: 'Status' }
+    | { __typename: 'StatusCheckRollup' }
+    | { __typename: 'StatusContext' }
+    | { __typename: 'SubIssueAddedEvent' }
+    | { __typename: 'SubIssueRemovedEvent' }
+    | { __typename: 'SubscribedEvent' }
+    | { __typename: 'Tag' }
+    | { __typename: 'Team' }
+    | { __typename: 'TeamAddMemberAuditEntry' }
+    | { __typename: 'TeamAddRepositoryAuditEntry' }
+    | { __typename: 'TeamChangeParentTeamAuditEntry' }
+    | { __typename: 'TeamRemoveMemberAuditEntry' }
+    | { __typename: 'TeamRemoveRepositoryAuditEntry' }
+    | { __typename: 'Topic' }
+    | { __typename: 'TransferredEvent' }
+    | { __typename: 'Tree' }
+    | { __typename: 'UnassignedEvent' }
+    | { __typename: 'UnlabeledEvent' }
+    | { __typename: 'UnlockedEvent' }
+    | { __typename: 'UnmarkedAsDuplicateEvent' }
+    | { __typename: 'UnpinnedEvent' }
+    | { __typename: 'UnsubscribedEvent' }
+    | { __typename: 'User' }
+    | { __typename: 'UserBlockedEvent' }
+    | { __typename: 'UserContentEdit' }
+    | { __typename: 'UserList' }
+    | { __typename: 'UserNamespaceRepository' }
+    | { __typename: 'UserStatus' }
+    | { __typename: 'VerifiableDomain' }
+    | { __typename: 'Workflow' }
+    | { __typename: 'WorkflowRun' }
+    | { __typename: 'WorkflowRunFile' }
+   | null };
+
+export type IssueBlockedByPageQueryVariables = Exact<{
+  id: string | number;
+  first: number;
+  after: string;
+}>;
+
+
+export type IssueBlockedByPageQuery = { node:
+    | { __typename: 'AddedToMergeQueueEvent' }
+    | { __typename: 'AddedToProjectEvent' }
+    | { __typename: 'AddedToProjectV2Event' }
+    | { __typename: 'App' }
+    | { __typename: 'AssignedEvent' }
+    | { __typename: 'AutoMergeDisabledEvent' }
+    | { __typename: 'AutoMergeEnabledEvent' }
+    | { __typename: 'AutoRebaseEnabledEvent' }
+    | { __typename: 'AutoSquashEnabledEvent' }
+    | { __typename: 'AutomaticBaseChangeFailedEvent' }
+    | { __typename: 'AutomaticBaseChangeSucceededEvent' }
+    | { __typename: 'BaseRefChangedEvent' }
+    | { __typename: 'BaseRefDeletedEvent' }
+    | { __typename: 'BaseRefForcePushedEvent' }
+    | { __typename: 'Blob' }
+    | { __typename: 'BlockedByAddedEvent' }
+    | { __typename: 'BlockedByRemovedEvent' }
+    | { __typename: 'BlockingAddedEvent' }
+    | { __typename: 'BlockingRemovedEvent' }
+    | { __typename: 'Bot' }
+    | { __typename: 'BranchProtectionRule' }
+    | { __typename: 'BypassForcePushAllowance' }
+    | { __typename: 'BypassPullRequestAllowance' }
+    | { __typename: 'CWE' }
+    | { __typename: 'CheckRun' }
+    | { __typename: 'CheckSuite' }
+    | { __typename: 'ClosedEvent' }
+    | { __typename: 'CodeOfConduct' }
+    | { __typename: 'CommentDeletedEvent' }
+    | { __typename: 'Commit' }
+    | { __typename: 'CommitComment' }
+    | { __typename: 'CommitCommentThread' }
+    | { __typename: 'Comparison' }
+    | { __typename: 'ConnectedEvent' }
+    | { __typename: 'ConvertToDraftEvent' }
+    | { __typename: 'ConvertedFromDraftEvent' }
+    | { __typename: 'ConvertedNoteToIssueEvent' }
+    | { __typename: 'ConvertedToDiscussionEvent' }
+    | { __typename: 'CrossReferencedEvent' }
+    | { __typename: 'DemilestonedEvent' }
+    | { __typename: 'DependencyGraphManifest' }
+    | { __typename: 'DeployKey' }
+    | { __typename: 'DeployedEvent' }
+    | { __typename: 'Deployment' }
+    | { __typename: 'DeploymentEnvironmentChangedEvent' }
+    | { __typename: 'DeploymentReview' }
+    | { __typename: 'DeploymentStatus' }
+    | { __typename: 'DisconnectedEvent' }
+    | { __typename: 'Discussion' }
+    | { __typename: 'DiscussionCategory' }
+    | { __typename: 'DiscussionComment' }
+    | { __typename: 'DiscussionPoll' }
+    | { __typename: 'DiscussionPollOption' }
+    | { __typename: 'DraftIssue' }
+    | { __typename: 'Enterprise' }
+    | { __typename: 'EnterpriseAdministratorInvitation' }
+    | { __typename: 'EnterpriseIdentityProvider' }
+    | { __typename: 'EnterpriseMemberInvitation' }
+    | { __typename: 'EnterpriseRepositoryInfo' }
+    | { __typename: 'EnterpriseServerInstallation' }
+    | { __typename: 'EnterpriseServerUserAccount' }
+    | { __typename: 'EnterpriseServerUserAccountEmail' }
+    | { __typename: 'EnterpriseServerUserAccountsUpload' }
+    | { __typename: 'EnterpriseTeam' }
+    | { __typename: 'EnterpriseUserAccount' }
+    | { __typename: 'Environment' }
+    | { __typename: 'ExternalIdentity' }
+    | { __typename: 'Gist' }
+    | { __typename: 'GistComment' }
+    | { __typename: 'HeadRefDeletedEvent' }
+    | { __typename: 'HeadRefForcePushedEvent' }
+    | { __typename: 'HeadRefRestoredEvent' }
+    | { __typename: 'IpAllowListEntry' }
+    | { __typename: 'Issue', blockedBy: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+              | { login: string }
+              | { login: string }
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } } }
+    | { __typename: 'IssueComment' }
+    | { __typename: 'IssueCommentPinnedEvent' }
+    | { __typename: 'IssueCommentUnpinnedEvent' }
+    | { __typename: 'IssueFieldAddedEvent' }
+    | { __typename: 'IssueFieldChangedEvent' }
+    | { __typename: 'IssueFieldDate' }
+    | { __typename: 'IssueFieldDateValue' }
+    | { __typename: 'IssueFieldMultiSelect' }
+    | { __typename: 'IssueFieldMultiSelectValue' }
+    | { __typename: 'IssueFieldNumber' }
+    | { __typename: 'IssueFieldNumberValue' }
+    | { __typename: 'IssueFieldRemovedEvent' }
+    | { __typename: 'IssueFieldSingleSelect' }
+    | { __typename: 'IssueFieldSingleSelectOption' }
+    | { __typename: 'IssueFieldSingleSelectValue' }
+    | { __typename: 'IssueFieldText' }
+    | { __typename: 'IssueFieldTextValue' }
+    | { __typename: 'IssueType' }
+    | { __typename: 'IssueTypeAddedEvent' }
+    | { __typename: 'IssueTypeChangedEvent' }
+    | { __typename: 'IssueTypeRemovedEvent' }
+    | { __typename: 'Label' }
+    | { __typename: 'LabeledEvent' }
+    | { __typename: 'Language' }
+    | { __typename: 'License' }
+    | { __typename: 'LinkedBranch' }
+    | { __typename: 'LockedEvent' }
+    | { __typename: 'Mannequin' }
+    | { __typename: 'MarkedAsDuplicateEvent' }
+    | { __typename: 'MarketplaceCategory' }
+    | { __typename: 'MarketplaceListing' }
+    | { __typename: 'MemberFeatureRequestNotification' }
+    | { __typename: 'MembersCanDeleteReposClearAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposDisableAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposEnableAuditEntry' }
+    | { __typename: 'MentionedEvent' }
+    | { __typename: 'MergeQueue' }
+    | { __typename: 'MergeQueueEntry' }
+    | { __typename: 'MergedEvent' }
+    | { __typename: 'MigrationSource' }
+    | { __typename: 'Milestone' }
+    | { __typename: 'MilestonedEvent' }
+    | { __typename: 'MovedColumnsInProjectEvent' }
+    | { __typename: 'OIDCProvider' }
+    | { __typename: 'OauthApplicationCreateAuditEntry' }
+    | { __typename: 'OrgAddBillingManagerAuditEntry' }
+    | { __typename: 'OrgAddMemberAuditEntry' }
+    | { __typename: 'OrgBlockUserAuditEntry' }
+    | { __typename: 'OrgConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgCreateAuditEntry' }
+    | { __typename: 'OrgDisableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgDisableSamlAuditEntry' }
+    | { __typename: 'OrgDisableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgEnableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgEnableSamlAuditEntry' }
+    | { __typename: 'OrgEnableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgInviteMemberAuditEntry' }
+    | { __typename: 'OrgInviteToBusinessAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessApprovedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessBlockedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessDeniedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessRequestedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessUnblockedAuditEntry' }
+    | { __typename: 'OrgRemoveBillingManagerAuditEntry' }
+    | { __typename: 'OrgRemoveMemberAuditEntry' }
+    | { __typename: 'OrgRemoveOutsideCollaboratorAuditEntry' }
+    | { __typename: 'OrgRestoreMemberAuditEntry' }
+    | { __typename: 'OrgUnblockUserAuditEntry' }
+    | { __typename: 'OrgUpdateDefaultRepositoryPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryCreationPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryInvitationPermissionAuditEntry' }
+    | { __typename: 'Organization' }
+    | { __typename: 'OrganizationIdentityProvider' }
+    | { __typename: 'OrganizationInvitation' }
+    | { __typename: 'OrganizationMigration' }
+    | { __typename: 'Package' }
+    | { __typename: 'PackageFile' }
+    | { __typename: 'PackageTag' }
+    | { __typename: 'PackageVersion' }
+    | { __typename: 'ParentIssueAddedEvent' }
+    | { __typename: 'ParentIssueRemovedEvent' }
+    | { __typename: 'PendingAssigneeSuggestion' }
+    | { __typename: 'PendingCloseSuggestion' }
+    | { __typename: 'PendingFieldSuggestion' }
+    | { __typename: 'PendingLabelSuggestion' }
+    | { __typename: 'PendingTypeSuggestion' }
+    | { __typename: 'PinnedDiscussion' }
+    | { __typename: 'PinnedEnvironment' }
+    | { __typename: 'PinnedEvent' }
+    | { __typename: 'PinnedIssue' }
+    | { __typename: 'PinnedIssueComment' }
+    | { __typename: 'PrivateRepositoryForkingDisableAuditEntry' }
+    | { __typename: 'PrivateRepositoryForkingEnableAuditEntry' }
+    | { __typename: 'Project' }
+    | { __typename: 'ProjectCard' }
+    | { __typename: 'ProjectColumn' }
+    | { __typename: 'ProjectV2' }
+    | { __typename: 'ProjectV2Field' }
+    | { __typename: 'ProjectV2Item' }
+    | { __typename: 'ProjectV2ItemFieldDateValue' }
+    | { __typename: 'ProjectV2ItemFieldIterationValue' }
+    | { __typename: 'ProjectV2ItemFieldMultiSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldNumberValue' }
+    | { __typename: 'ProjectV2ItemFieldSingleSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldTextValue' }
+    | { __typename: 'ProjectV2ItemStatusChangedEvent' }
+    | { __typename: 'ProjectV2IterationField' }
+    | { __typename: 'ProjectV2MultiSelectField' }
+    | { __typename: 'ProjectV2SingleSelectField' }
+    | { __typename: 'ProjectV2StatusUpdate' }
+    | { __typename: 'ProjectV2View' }
+    | { __typename: 'ProjectV2Workflow' }
+    | { __typename: 'PublicKey' }
+    | { __typename: 'PullRequest' }
+    | { __typename: 'PullRequestCommit' }
+    | { __typename: 'PullRequestCommitCommentThread' }
+    | { __typename: 'PullRequestReview' }
+    | { __typename: 'PullRequestReviewComment' }
+    | { __typename: 'PullRequestReviewThread' }
+    | { __typename: 'PullRequestStack' }
+    | { __typename: 'PullRequestStackEntry' }
+    | { __typename: 'PullRequestThread' }
+    | { __typename: 'Push' }
+    | { __typename: 'PushAllowance' }
+    | { __typename: 'Query' }
+    | { __typename: 'Reaction' }
+    | { __typename: 'ReadyForReviewEvent' }
+    | { __typename: 'Ref' }
+    | { __typename: 'ReferencedEvent' }
+    | { __typename: 'Release' }
+    | { __typename: 'ReleaseAsset' }
+    | { __typename: 'RemovedFromMergeQueueEvent' }
+    | { __typename: 'RemovedFromProjectEvent' }
+    | { __typename: 'RemovedFromProjectV2Event' }
+    | { __typename: 'RenamedTitleEvent' }
+    | { __typename: 'ReopenedEvent' }
+    | { __typename: 'RepoAccessAuditEntry' }
+    | { __typename: 'RepoAddMemberAuditEntry' }
+    | { __typename: 'RepoAddTopicAuditEntry' }
+    | { __typename: 'RepoArchivedAuditEntry' }
+    | { __typename: 'RepoChangeMergeSettingAuditEntry' }
+    | { __typename: 'RepoConfigDisableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigEnableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigLockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigUnlockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoCreateAuditEntry' }
+    | { __typename: 'RepoDestroyAuditEntry' }
+    | { __typename: 'RepoRemoveMemberAuditEntry' }
+    | { __typename: 'RepoRemoveTopicAuditEntry' }
+    | { __typename: 'Repository' }
+    | { __typename: 'RepositoryCustomProperty' }
+    | { __typename: 'RepositoryInvitation' }
+    | { __typename: 'RepositoryMigration' }
+    | { __typename: 'RepositoryRule' }
+    | { __typename: 'RepositoryRuleset' }
+    | { __typename: 'RepositoryRulesetBypassActor' }
+    | { __typename: 'RepositoryTopic' }
+    | { __typename: 'RepositoryVisibilityChangeDisableAuditEntry' }
+    | { __typename: 'RepositoryVisibilityChangeEnableAuditEntry' }
+    | { __typename: 'RepositoryVulnerabilityAlert' }
+    | { __typename: 'ReviewDismissalAllowance' }
+    | { __typename: 'ReviewDismissedEvent' }
+    | { __typename: 'ReviewRequest' }
+    | { __typename: 'ReviewRequestRemovedEvent' }
+    | { __typename: 'ReviewRequestedEvent' }
+    | { __typename: 'SavedReply' }
+    | { __typename: 'SecurityAdvisory' }
+    | { __typename: 'SponsorsActivity' }
+    | { __typename: 'SponsorsListing' }
+    | { __typename: 'SponsorsListingFeaturedItem' }
+    | { __typename: 'SponsorsTier' }
+    | { __typename: 'Sponsorship' }
+    | { __typename: 'SponsorshipNewsletter' }
+    | { __typename: 'Status' }
+    | { __typename: 'StatusCheckRollup' }
+    | { __typename: 'StatusContext' }
+    | { __typename: 'SubIssueAddedEvent' }
+    | { __typename: 'SubIssueRemovedEvent' }
+    | { __typename: 'SubscribedEvent' }
+    | { __typename: 'Tag' }
+    | { __typename: 'Team' }
+    | { __typename: 'TeamAddMemberAuditEntry' }
+    | { __typename: 'TeamAddRepositoryAuditEntry' }
+    | { __typename: 'TeamChangeParentTeamAuditEntry' }
+    | { __typename: 'TeamRemoveMemberAuditEntry' }
+    | { __typename: 'TeamRemoveRepositoryAuditEntry' }
+    | { __typename: 'Topic' }
+    | { __typename: 'TransferredEvent' }
+    | { __typename: 'Tree' }
+    | { __typename: 'UnassignedEvent' }
+    | { __typename: 'UnlabeledEvent' }
+    | { __typename: 'UnlockedEvent' }
+    | { __typename: 'UnmarkedAsDuplicateEvent' }
+    | { __typename: 'UnpinnedEvent' }
+    | { __typename: 'UnsubscribedEvent' }
+    | { __typename: 'User' }
+    | { __typename: 'UserBlockedEvent' }
+    | { __typename: 'UserContentEdit' }
+    | { __typename: 'UserList' }
+    | { __typename: 'UserNamespaceRepository' }
+    | { __typename: 'UserStatus' }
+    | { __typename: 'VerifiableDomain' }
+    | { __typename: 'Workflow' }
+    | { __typename: 'WorkflowRun' }
+    | { __typename: 'WorkflowRunFile' }
+   | null };
+
+export type IssueBlockingPageQueryVariables = Exact<{
+  id: string | number;
+  first: number;
+  after: string;
+}>;
+
+
+export type IssueBlockingPageQuery = { node:
+    | { __typename: 'AddedToMergeQueueEvent' }
+    | { __typename: 'AddedToProjectEvent' }
+    | { __typename: 'AddedToProjectV2Event' }
+    | { __typename: 'App' }
+    | { __typename: 'AssignedEvent' }
+    | { __typename: 'AutoMergeDisabledEvent' }
+    | { __typename: 'AutoMergeEnabledEvent' }
+    | { __typename: 'AutoRebaseEnabledEvent' }
+    | { __typename: 'AutoSquashEnabledEvent' }
+    | { __typename: 'AutomaticBaseChangeFailedEvent' }
+    | { __typename: 'AutomaticBaseChangeSucceededEvent' }
+    | { __typename: 'BaseRefChangedEvent' }
+    | { __typename: 'BaseRefDeletedEvent' }
+    | { __typename: 'BaseRefForcePushedEvent' }
+    | { __typename: 'Blob' }
+    | { __typename: 'BlockedByAddedEvent' }
+    | { __typename: 'BlockedByRemovedEvent' }
+    | { __typename: 'BlockingAddedEvent' }
+    | { __typename: 'BlockingRemovedEvent' }
+    | { __typename: 'Bot' }
+    | { __typename: 'BranchProtectionRule' }
+    | { __typename: 'BypassForcePushAllowance' }
+    | { __typename: 'BypassPullRequestAllowance' }
+    | { __typename: 'CWE' }
+    | { __typename: 'CheckRun' }
+    | { __typename: 'CheckSuite' }
+    | { __typename: 'ClosedEvent' }
+    | { __typename: 'CodeOfConduct' }
+    | { __typename: 'CommentDeletedEvent' }
+    | { __typename: 'Commit' }
+    | { __typename: 'CommitComment' }
+    | { __typename: 'CommitCommentThread' }
+    | { __typename: 'Comparison' }
+    | { __typename: 'ConnectedEvent' }
+    | { __typename: 'ConvertToDraftEvent' }
+    | { __typename: 'ConvertedFromDraftEvent' }
+    | { __typename: 'ConvertedNoteToIssueEvent' }
+    | { __typename: 'ConvertedToDiscussionEvent' }
+    | { __typename: 'CrossReferencedEvent' }
+    | { __typename: 'DemilestonedEvent' }
+    | { __typename: 'DependencyGraphManifest' }
+    | { __typename: 'DeployKey' }
+    | { __typename: 'DeployedEvent' }
+    | { __typename: 'Deployment' }
+    | { __typename: 'DeploymentEnvironmentChangedEvent' }
+    | { __typename: 'DeploymentReview' }
+    | { __typename: 'DeploymentStatus' }
+    | { __typename: 'DisconnectedEvent' }
+    | { __typename: 'Discussion' }
+    | { __typename: 'DiscussionCategory' }
+    | { __typename: 'DiscussionComment' }
+    | { __typename: 'DiscussionPoll' }
+    | { __typename: 'DiscussionPollOption' }
+    | { __typename: 'DraftIssue' }
+    | { __typename: 'Enterprise' }
+    | { __typename: 'EnterpriseAdministratorInvitation' }
+    | { __typename: 'EnterpriseIdentityProvider' }
+    | { __typename: 'EnterpriseMemberInvitation' }
+    | { __typename: 'EnterpriseRepositoryInfo' }
+    | { __typename: 'EnterpriseServerInstallation' }
+    | { __typename: 'EnterpriseServerUserAccount' }
+    | { __typename: 'EnterpriseServerUserAccountEmail' }
+    | { __typename: 'EnterpriseServerUserAccountsUpload' }
+    | { __typename: 'EnterpriseTeam' }
+    | { __typename: 'EnterpriseUserAccount' }
+    | { __typename: 'Environment' }
+    | { __typename: 'ExternalIdentity' }
+    | { __typename: 'Gist' }
+    | { __typename: 'GistComment' }
+    | { __typename: 'HeadRefDeletedEvent' }
+    | { __typename: 'HeadRefForcePushedEvent' }
+    | { __typename: 'HeadRefRestoredEvent' }
+    | { __typename: 'IpAllowListEntry' }
+    | { __typename: 'Issue', blocking: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+              | { login: string }
+              | { login: string }
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } } }
+    | { __typename: 'IssueComment' }
+    | { __typename: 'IssueCommentPinnedEvent' }
+    | { __typename: 'IssueCommentUnpinnedEvent' }
+    | { __typename: 'IssueFieldAddedEvent' }
+    | { __typename: 'IssueFieldChangedEvent' }
+    | { __typename: 'IssueFieldDate' }
+    | { __typename: 'IssueFieldDateValue' }
+    | { __typename: 'IssueFieldMultiSelect' }
+    | { __typename: 'IssueFieldMultiSelectValue' }
+    | { __typename: 'IssueFieldNumber' }
+    | { __typename: 'IssueFieldNumberValue' }
+    | { __typename: 'IssueFieldRemovedEvent' }
+    | { __typename: 'IssueFieldSingleSelect' }
+    | { __typename: 'IssueFieldSingleSelectOption' }
+    | { __typename: 'IssueFieldSingleSelectValue' }
+    | { __typename: 'IssueFieldText' }
+    | { __typename: 'IssueFieldTextValue' }
+    | { __typename: 'IssueType' }
+    | { __typename: 'IssueTypeAddedEvent' }
+    | { __typename: 'IssueTypeChangedEvent' }
+    | { __typename: 'IssueTypeRemovedEvent' }
+    | { __typename: 'Label' }
+    | { __typename: 'LabeledEvent' }
+    | { __typename: 'Language' }
+    | { __typename: 'License' }
+    | { __typename: 'LinkedBranch' }
+    | { __typename: 'LockedEvent' }
+    | { __typename: 'Mannequin' }
+    | { __typename: 'MarkedAsDuplicateEvent' }
+    | { __typename: 'MarketplaceCategory' }
+    | { __typename: 'MarketplaceListing' }
+    | { __typename: 'MemberFeatureRequestNotification' }
+    | { __typename: 'MembersCanDeleteReposClearAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposDisableAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposEnableAuditEntry' }
+    | { __typename: 'MentionedEvent' }
+    | { __typename: 'MergeQueue' }
+    | { __typename: 'MergeQueueEntry' }
+    | { __typename: 'MergedEvent' }
+    | { __typename: 'MigrationSource' }
+    | { __typename: 'Milestone' }
+    | { __typename: 'MilestonedEvent' }
+    | { __typename: 'MovedColumnsInProjectEvent' }
+    | { __typename: 'OIDCProvider' }
+    | { __typename: 'OauthApplicationCreateAuditEntry' }
+    | { __typename: 'OrgAddBillingManagerAuditEntry' }
+    | { __typename: 'OrgAddMemberAuditEntry' }
+    | { __typename: 'OrgBlockUserAuditEntry' }
+    | { __typename: 'OrgConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgCreateAuditEntry' }
+    | { __typename: 'OrgDisableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgDisableSamlAuditEntry' }
+    | { __typename: 'OrgDisableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgEnableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgEnableSamlAuditEntry' }
+    | { __typename: 'OrgEnableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgInviteMemberAuditEntry' }
+    | { __typename: 'OrgInviteToBusinessAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessApprovedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessBlockedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessDeniedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessRequestedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessUnblockedAuditEntry' }
+    | { __typename: 'OrgRemoveBillingManagerAuditEntry' }
+    | { __typename: 'OrgRemoveMemberAuditEntry' }
+    | { __typename: 'OrgRemoveOutsideCollaboratorAuditEntry' }
+    | { __typename: 'OrgRestoreMemberAuditEntry' }
+    | { __typename: 'OrgUnblockUserAuditEntry' }
+    | { __typename: 'OrgUpdateDefaultRepositoryPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryCreationPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryInvitationPermissionAuditEntry' }
+    | { __typename: 'Organization' }
+    | { __typename: 'OrganizationIdentityProvider' }
+    | { __typename: 'OrganizationInvitation' }
+    | { __typename: 'OrganizationMigration' }
+    | { __typename: 'Package' }
+    | { __typename: 'PackageFile' }
+    | { __typename: 'PackageTag' }
+    | { __typename: 'PackageVersion' }
+    | { __typename: 'ParentIssueAddedEvent' }
+    | { __typename: 'ParentIssueRemovedEvent' }
+    | { __typename: 'PendingAssigneeSuggestion' }
+    | { __typename: 'PendingCloseSuggestion' }
+    | { __typename: 'PendingFieldSuggestion' }
+    | { __typename: 'PendingLabelSuggestion' }
+    | { __typename: 'PendingTypeSuggestion' }
+    | { __typename: 'PinnedDiscussion' }
+    | { __typename: 'PinnedEnvironment' }
+    | { __typename: 'PinnedEvent' }
+    | { __typename: 'PinnedIssue' }
+    | { __typename: 'PinnedIssueComment' }
+    | { __typename: 'PrivateRepositoryForkingDisableAuditEntry' }
+    | { __typename: 'PrivateRepositoryForkingEnableAuditEntry' }
+    | { __typename: 'Project' }
+    | { __typename: 'ProjectCard' }
+    | { __typename: 'ProjectColumn' }
+    | { __typename: 'ProjectV2' }
+    | { __typename: 'ProjectV2Field' }
+    | { __typename: 'ProjectV2Item' }
+    | { __typename: 'ProjectV2ItemFieldDateValue' }
+    | { __typename: 'ProjectV2ItemFieldIterationValue' }
+    | { __typename: 'ProjectV2ItemFieldMultiSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldNumberValue' }
+    | { __typename: 'ProjectV2ItemFieldSingleSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldTextValue' }
+    | { __typename: 'ProjectV2ItemStatusChangedEvent' }
+    | { __typename: 'ProjectV2IterationField' }
+    | { __typename: 'ProjectV2MultiSelectField' }
+    | { __typename: 'ProjectV2SingleSelectField' }
+    | { __typename: 'ProjectV2StatusUpdate' }
+    | { __typename: 'ProjectV2View' }
+    | { __typename: 'ProjectV2Workflow' }
+    | { __typename: 'PublicKey' }
+    | { __typename: 'PullRequest' }
+    | { __typename: 'PullRequestCommit' }
+    | { __typename: 'PullRequestCommitCommentThread' }
+    | { __typename: 'PullRequestReview' }
+    | { __typename: 'PullRequestReviewComment' }
+    | { __typename: 'PullRequestReviewThread' }
+    | { __typename: 'PullRequestStack' }
+    | { __typename: 'PullRequestStackEntry' }
+    | { __typename: 'PullRequestThread' }
+    | { __typename: 'Push' }
+    | { __typename: 'PushAllowance' }
+    | { __typename: 'Query' }
+    | { __typename: 'Reaction' }
+    | { __typename: 'ReadyForReviewEvent' }
+    | { __typename: 'Ref' }
+    | { __typename: 'ReferencedEvent' }
+    | { __typename: 'Release' }
+    | { __typename: 'ReleaseAsset' }
+    | { __typename: 'RemovedFromMergeQueueEvent' }
+    | { __typename: 'RemovedFromProjectEvent' }
+    | { __typename: 'RemovedFromProjectV2Event' }
+    | { __typename: 'RenamedTitleEvent' }
+    | { __typename: 'ReopenedEvent' }
+    | { __typename: 'RepoAccessAuditEntry' }
+    | { __typename: 'RepoAddMemberAuditEntry' }
+    | { __typename: 'RepoAddTopicAuditEntry' }
+    | { __typename: 'RepoArchivedAuditEntry' }
+    | { __typename: 'RepoChangeMergeSettingAuditEntry' }
+    | { __typename: 'RepoConfigDisableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigEnableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigLockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigUnlockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoCreateAuditEntry' }
+    | { __typename: 'RepoDestroyAuditEntry' }
+    | { __typename: 'RepoRemoveMemberAuditEntry' }
+    | { __typename: 'RepoRemoveTopicAuditEntry' }
+    | { __typename: 'Repository' }
+    | { __typename: 'RepositoryCustomProperty' }
+    | { __typename: 'RepositoryInvitation' }
+    | { __typename: 'RepositoryMigration' }
+    | { __typename: 'RepositoryRule' }
+    | { __typename: 'RepositoryRuleset' }
+    | { __typename: 'RepositoryRulesetBypassActor' }
+    | { __typename: 'RepositoryTopic' }
+    | { __typename: 'RepositoryVisibilityChangeDisableAuditEntry' }
+    | { __typename: 'RepositoryVisibilityChangeEnableAuditEntry' }
+    | { __typename: 'RepositoryVulnerabilityAlert' }
+    | { __typename: 'ReviewDismissalAllowance' }
+    | { __typename: 'ReviewDismissedEvent' }
+    | { __typename: 'ReviewRequest' }
+    | { __typename: 'ReviewRequestRemovedEvent' }
+    | { __typename: 'ReviewRequestedEvent' }
+    | { __typename: 'SavedReply' }
+    | { __typename: 'SecurityAdvisory' }
+    | { __typename: 'SponsorsActivity' }
+    | { __typename: 'SponsorsListing' }
+    | { __typename: 'SponsorsListingFeaturedItem' }
+    | { __typename: 'SponsorsTier' }
+    | { __typename: 'Sponsorship' }
+    | { __typename: 'SponsorshipNewsletter' }
+    | { __typename: 'Status' }
+    | { __typename: 'StatusCheckRollup' }
+    | { __typename: 'StatusContext' }
+    | { __typename: 'SubIssueAddedEvent' }
+    | { __typename: 'SubIssueRemovedEvent' }
+    | { __typename: 'SubscribedEvent' }
+    | { __typename: 'Tag' }
+    | { __typename: 'Team' }
+    | { __typename: 'TeamAddMemberAuditEntry' }
+    | { __typename: 'TeamAddRepositoryAuditEntry' }
+    | { __typename: 'TeamChangeParentTeamAuditEntry' }
+    | { __typename: 'TeamRemoveMemberAuditEntry' }
+    | { __typename: 'TeamRemoveRepositoryAuditEntry' }
+    | { __typename: 'Topic' }
+    | { __typename: 'TransferredEvent' }
+    | { __typename: 'Tree' }
+    | { __typename: 'UnassignedEvent' }
+    | { __typename: 'UnlabeledEvent' }
+    | { __typename: 'UnlockedEvent' }
+    | { __typename: 'UnmarkedAsDuplicateEvent' }
+    | { __typename: 'UnpinnedEvent' }
+    | { __typename: 'UnsubscribedEvent' }
+    | { __typename: 'User' }
+    | { __typename: 'UserBlockedEvent' }
+    | { __typename: 'UserContentEdit' }
+    | { __typename: 'UserList' }
+    | { __typename: 'UserNamespaceRepository' }
+    | { __typename: 'UserStatus' }
+    | { __typename: 'VerifiableDomain' }
+    | { __typename: 'Workflow' }
+    | { __typename: 'WorkflowRun' }
+    | { __typename: 'WorkflowRunFile' }
+   | null };
+
+export type IssueClosedByPageQueryVariables = Exact<{
+  id: string | number;
+  first: number;
+  after: string;
+}>;
+
+
+export type IssueClosedByPageQuery = { node:
+    | { __typename: 'AddedToMergeQueueEvent' }
+    | { __typename: 'AddedToProjectEvent' }
+    | { __typename: 'AddedToProjectV2Event' }
+    | { __typename: 'App' }
+    | { __typename: 'AssignedEvent' }
+    | { __typename: 'AutoMergeDisabledEvent' }
+    | { __typename: 'AutoMergeEnabledEvent' }
+    | { __typename: 'AutoRebaseEnabledEvent' }
+    | { __typename: 'AutoSquashEnabledEvent' }
+    | { __typename: 'AutomaticBaseChangeFailedEvent' }
+    | { __typename: 'AutomaticBaseChangeSucceededEvent' }
+    | { __typename: 'BaseRefChangedEvent' }
+    | { __typename: 'BaseRefDeletedEvent' }
+    | { __typename: 'BaseRefForcePushedEvent' }
+    | { __typename: 'Blob' }
+    | { __typename: 'BlockedByAddedEvent' }
+    | { __typename: 'BlockedByRemovedEvent' }
+    | { __typename: 'BlockingAddedEvent' }
+    | { __typename: 'BlockingRemovedEvent' }
+    | { __typename: 'Bot' }
+    | { __typename: 'BranchProtectionRule' }
+    | { __typename: 'BypassForcePushAllowance' }
+    | { __typename: 'BypassPullRequestAllowance' }
+    | { __typename: 'CWE' }
+    | { __typename: 'CheckRun' }
+    | { __typename: 'CheckSuite' }
+    | { __typename: 'ClosedEvent' }
+    | { __typename: 'CodeOfConduct' }
+    | { __typename: 'CommentDeletedEvent' }
+    | { __typename: 'Commit' }
+    | { __typename: 'CommitComment' }
+    | { __typename: 'CommitCommentThread' }
+    | { __typename: 'Comparison' }
+    | { __typename: 'ConnectedEvent' }
+    | { __typename: 'ConvertToDraftEvent' }
+    | { __typename: 'ConvertedFromDraftEvent' }
+    | { __typename: 'ConvertedNoteToIssueEvent' }
+    | { __typename: 'ConvertedToDiscussionEvent' }
+    | { __typename: 'CrossReferencedEvent' }
+    | { __typename: 'DemilestonedEvent' }
+    | { __typename: 'DependencyGraphManifest' }
+    | { __typename: 'DeployKey' }
+    | { __typename: 'DeployedEvent' }
+    | { __typename: 'Deployment' }
+    | { __typename: 'DeploymentEnvironmentChangedEvent' }
+    | { __typename: 'DeploymentReview' }
+    | { __typename: 'DeploymentStatus' }
+    | { __typename: 'DisconnectedEvent' }
+    | { __typename: 'Discussion' }
+    | { __typename: 'DiscussionCategory' }
+    | { __typename: 'DiscussionComment' }
+    | { __typename: 'DiscussionPoll' }
+    | { __typename: 'DiscussionPollOption' }
+    | { __typename: 'DraftIssue' }
+    | { __typename: 'Enterprise' }
+    | { __typename: 'EnterpriseAdministratorInvitation' }
+    | { __typename: 'EnterpriseIdentityProvider' }
+    | { __typename: 'EnterpriseMemberInvitation' }
+    | { __typename: 'EnterpriseRepositoryInfo' }
+    | { __typename: 'EnterpriseServerInstallation' }
+    | { __typename: 'EnterpriseServerUserAccount' }
+    | { __typename: 'EnterpriseServerUserAccountEmail' }
+    | { __typename: 'EnterpriseServerUserAccountsUpload' }
+    | { __typename: 'EnterpriseTeam' }
+    | { __typename: 'EnterpriseUserAccount' }
+    | { __typename: 'Environment' }
+    | { __typename: 'ExternalIdentity' }
+    | { __typename: 'Gist' }
+    | { __typename: 'GistComment' }
+    | { __typename: 'HeadRefDeletedEvent' }
+    | { __typename: 'HeadRefForcePushedEvent' }
+    | { __typename: 'HeadRefRestoredEvent' }
+    | { __typename: 'IpAllowListEntry' }
+    | { __typename: 'Issue', closedByPullRequestsReferences: { nodes: Array<{ number: number, repository: { name: string, owner:
+              | { login: string }
+              | { login: string }
+             } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } } | null }
+    | { __typename: 'IssueComment' }
+    | { __typename: 'IssueCommentPinnedEvent' }
+    | { __typename: 'IssueCommentUnpinnedEvent' }
+    | { __typename: 'IssueFieldAddedEvent' }
+    | { __typename: 'IssueFieldChangedEvent' }
+    | { __typename: 'IssueFieldDate' }
+    | { __typename: 'IssueFieldDateValue' }
+    | { __typename: 'IssueFieldMultiSelect' }
+    | { __typename: 'IssueFieldMultiSelectValue' }
+    | { __typename: 'IssueFieldNumber' }
+    | { __typename: 'IssueFieldNumberValue' }
+    | { __typename: 'IssueFieldRemovedEvent' }
+    | { __typename: 'IssueFieldSingleSelect' }
+    | { __typename: 'IssueFieldSingleSelectOption' }
+    | { __typename: 'IssueFieldSingleSelectValue' }
+    | { __typename: 'IssueFieldText' }
+    | { __typename: 'IssueFieldTextValue' }
+    | { __typename: 'IssueType' }
+    | { __typename: 'IssueTypeAddedEvent' }
+    | { __typename: 'IssueTypeChangedEvent' }
+    | { __typename: 'IssueTypeRemovedEvent' }
+    | { __typename: 'Label' }
+    | { __typename: 'LabeledEvent' }
+    | { __typename: 'Language' }
+    | { __typename: 'License' }
+    | { __typename: 'LinkedBranch' }
+    | { __typename: 'LockedEvent' }
+    | { __typename: 'Mannequin' }
+    | { __typename: 'MarkedAsDuplicateEvent' }
+    | { __typename: 'MarketplaceCategory' }
+    | { __typename: 'MarketplaceListing' }
+    | { __typename: 'MemberFeatureRequestNotification' }
+    | { __typename: 'MembersCanDeleteReposClearAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposDisableAuditEntry' }
+    | { __typename: 'MembersCanDeleteReposEnableAuditEntry' }
+    | { __typename: 'MentionedEvent' }
+    | { __typename: 'MergeQueue' }
+    | { __typename: 'MergeQueueEntry' }
+    | { __typename: 'MergedEvent' }
+    | { __typename: 'MigrationSource' }
+    | { __typename: 'Milestone' }
+    | { __typename: 'MilestonedEvent' }
+    | { __typename: 'MovedColumnsInProjectEvent' }
+    | { __typename: 'OIDCProvider' }
+    | { __typename: 'OauthApplicationCreateAuditEntry' }
+    | { __typename: 'OrgAddBillingManagerAuditEntry' }
+    | { __typename: 'OrgAddMemberAuditEntry' }
+    | { __typename: 'OrgBlockUserAuditEntry' }
+    | { __typename: 'OrgConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'OrgCreateAuditEntry' }
+    | { __typename: 'OrgDisableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgDisableSamlAuditEntry' }
+    | { __typename: 'OrgDisableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgEnableOauthAppRestrictionsAuditEntry' }
+    | { __typename: 'OrgEnableSamlAuditEntry' }
+    | { __typename: 'OrgEnableTwoFactorRequirementAuditEntry' }
+    | { __typename: 'OrgInviteMemberAuditEntry' }
+    | { __typename: 'OrgInviteToBusinessAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessApprovedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessBlockedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessDeniedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessRequestedAuditEntry' }
+    | { __typename: 'OrgOauthAppAccessUnblockedAuditEntry' }
+    | { __typename: 'OrgRemoveBillingManagerAuditEntry' }
+    | { __typename: 'OrgRemoveMemberAuditEntry' }
+    | { __typename: 'OrgRemoveOutsideCollaboratorAuditEntry' }
+    | { __typename: 'OrgRestoreMemberAuditEntry' }
+    | { __typename: 'OrgUnblockUserAuditEntry' }
+    | { __typename: 'OrgUpdateDefaultRepositoryPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryCreationPermissionAuditEntry' }
+    | { __typename: 'OrgUpdateMemberRepositoryInvitationPermissionAuditEntry' }
+    | { __typename: 'Organization' }
+    | { __typename: 'OrganizationIdentityProvider' }
+    | { __typename: 'OrganizationInvitation' }
+    | { __typename: 'OrganizationMigration' }
+    | { __typename: 'Package' }
+    | { __typename: 'PackageFile' }
+    | { __typename: 'PackageTag' }
+    | { __typename: 'PackageVersion' }
+    | { __typename: 'ParentIssueAddedEvent' }
+    | { __typename: 'ParentIssueRemovedEvent' }
+    | { __typename: 'PendingAssigneeSuggestion' }
+    | { __typename: 'PendingCloseSuggestion' }
+    | { __typename: 'PendingFieldSuggestion' }
+    | { __typename: 'PendingLabelSuggestion' }
+    | { __typename: 'PendingTypeSuggestion' }
+    | { __typename: 'PinnedDiscussion' }
+    | { __typename: 'PinnedEnvironment' }
+    | { __typename: 'PinnedEvent' }
+    | { __typename: 'PinnedIssue' }
+    | { __typename: 'PinnedIssueComment' }
+    | { __typename: 'PrivateRepositoryForkingDisableAuditEntry' }
+    | { __typename: 'PrivateRepositoryForkingEnableAuditEntry' }
+    | { __typename: 'Project' }
+    | { __typename: 'ProjectCard' }
+    | { __typename: 'ProjectColumn' }
+    | { __typename: 'ProjectV2' }
+    | { __typename: 'ProjectV2Field' }
+    | { __typename: 'ProjectV2Item' }
+    | { __typename: 'ProjectV2ItemFieldDateValue' }
+    | { __typename: 'ProjectV2ItemFieldIterationValue' }
+    | { __typename: 'ProjectV2ItemFieldMultiSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldNumberValue' }
+    | { __typename: 'ProjectV2ItemFieldSingleSelectValue' }
+    | { __typename: 'ProjectV2ItemFieldTextValue' }
+    | { __typename: 'ProjectV2ItemStatusChangedEvent' }
+    | { __typename: 'ProjectV2IterationField' }
+    | { __typename: 'ProjectV2MultiSelectField' }
+    | { __typename: 'ProjectV2SingleSelectField' }
+    | { __typename: 'ProjectV2StatusUpdate' }
+    | { __typename: 'ProjectV2View' }
+    | { __typename: 'ProjectV2Workflow' }
+    | { __typename: 'PublicKey' }
+    | { __typename: 'PullRequest' }
+    | { __typename: 'PullRequestCommit' }
+    | { __typename: 'PullRequestCommitCommentThread' }
+    | { __typename: 'PullRequestReview' }
+    | { __typename: 'PullRequestReviewComment' }
+    | { __typename: 'PullRequestReviewThread' }
+    | { __typename: 'PullRequestStack' }
+    | { __typename: 'PullRequestStackEntry' }
+    | { __typename: 'PullRequestThread' }
+    | { __typename: 'Push' }
+    | { __typename: 'PushAllowance' }
+    | { __typename: 'Query' }
+    | { __typename: 'Reaction' }
+    | { __typename: 'ReadyForReviewEvent' }
+    | { __typename: 'Ref' }
+    | { __typename: 'ReferencedEvent' }
+    | { __typename: 'Release' }
+    | { __typename: 'ReleaseAsset' }
+    | { __typename: 'RemovedFromMergeQueueEvent' }
+    | { __typename: 'RemovedFromProjectEvent' }
+    | { __typename: 'RemovedFromProjectV2Event' }
+    | { __typename: 'RenamedTitleEvent' }
+    | { __typename: 'ReopenedEvent' }
+    | { __typename: 'RepoAccessAuditEntry' }
+    | { __typename: 'RepoAddMemberAuditEntry' }
+    | { __typename: 'RepoAddTopicAuditEntry' }
+    | { __typename: 'RepoArchivedAuditEntry' }
+    | { __typename: 'RepoChangeMergeSettingAuditEntry' }
+    | { __typename: 'RepoConfigDisableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigDisableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigDisableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigEnableAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigEnableCollaboratorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableContributorsOnlyAuditEntry' }
+    | { __typename: 'RepoConfigEnableSockpuppetDisallowedAuditEntry' }
+    | { __typename: 'RepoConfigLockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoConfigUnlockAnonymousGitAccessAuditEntry' }
+    | { __typename: 'RepoCreateAuditEntry' }
+    | { __typename: 'RepoDestroyAuditEntry' }
+    | { __typename: 'RepoRemoveMemberAuditEntry' }
+    | { __typename: 'RepoRemoveTopicAuditEntry' }
+    | { __typename: 'Repository' }
+    | { __typename: 'RepositoryCustomProperty' }
+    | { __typename: 'RepositoryInvitation' }
+    | { __typename: 'RepositoryMigration' }
+    | { __typename: 'RepositoryRule' }
+    | { __typename: 'RepositoryRuleset' }
+    | { __typename: 'RepositoryRulesetBypassActor' }
+    | { __typename: 'RepositoryTopic' }
+    | { __typename: 'RepositoryVisibilityChangeDisableAuditEntry' }
+    | { __typename: 'RepositoryVisibilityChangeEnableAuditEntry' }
+    | { __typename: 'RepositoryVulnerabilityAlert' }
+    | { __typename: 'ReviewDismissalAllowance' }
+    | { __typename: 'ReviewDismissedEvent' }
+    | { __typename: 'ReviewRequest' }
+    | { __typename: 'ReviewRequestRemovedEvent' }
+    | { __typename: 'ReviewRequestedEvent' }
+    | { __typename: 'SavedReply' }
+    | { __typename: 'SecurityAdvisory' }
+    | { __typename: 'SponsorsActivity' }
+    | { __typename: 'SponsorsListing' }
+    | { __typename: 'SponsorsListingFeaturedItem' }
+    | { __typename: 'SponsorsTier' }
+    | { __typename: 'Sponsorship' }
+    | { __typename: 'SponsorshipNewsletter' }
+    | { __typename: 'Status' }
+    | { __typename: 'StatusCheckRollup' }
+    | { __typename: 'StatusContext' }
+    | { __typename: 'SubIssueAddedEvent' }
+    | { __typename: 'SubIssueRemovedEvent' }
+    | { __typename: 'SubscribedEvent' }
+    | { __typename: 'Tag' }
+    | { __typename: 'Team' }
+    | { __typename: 'TeamAddMemberAuditEntry' }
+    | { __typename: 'TeamAddRepositoryAuditEntry' }
+    | { __typename: 'TeamChangeParentTeamAuditEntry' }
+    | { __typename: 'TeamRemoveMemberAuditEntry' }
+    | { __typename: 'TeamRemoveRepositoryAuditEntry' }
+    | { __typename: 'Topic' }
+    | { __typename: 'TransferredEvent' }
+    | { __typename: 'Tree' }
+    | { __typename: 'UnassignedEvent' }
+    | { __typename: 'UnlabeledEvent' }
+    | { __typename: 'UnlockedEvent' }
+    | { __typename: 'UnmarkedAsDuplicateEvent' }
+    | { __typename: 'UnpinnedEvent' }
+    | { __typename: 'UnsubscribedEvent' }
+    | { __typename: 'User' }
+    | { __typename: 'UserBlockedEvent' }
+    | { __typename: 'UserContentEdit' }
+    | { __typename: 'UserList' }
+    | { __typename: 'UserNamespaceRepository' }
+    | { __typename: 'UserStatus' }
+    | { __typename: 'VerifiableDomain' }
+    | { __typename: 'Workflow' }
+    | { __typename: 'WorkflowRun' }
+    | { __typename: 'WorkflowRunFile' }
+   | null };
+
 export type IssueCoreFragment = { __typename: 'Issue', id: string, number: number, title: string, body: string, state: IssueState, stateReason: IssueStateReason | null, createdAt: string, updatedAt: string, url: string, repository: { name: string, owner:
       | { login: string }
       | { login: string }
@@ -1705,19 +2907,19 @@ export type IssueCoreFragment = { __typename: 'Issue', id: string, number: numbe
        } } | null, subIssues: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
           | { login: string }
           | { login: string }
-         } } | null> | null }, blockedBy: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+         } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, blockedBy: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
           | { login: string }
           | { login: string }
-         } } | null> | null }, blocking: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
+         } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, blocking: { nodes: Array<{ id: string, number: number, repository: { name: string, owner:
           | { login: string }
           | { login: string }
-         } } | null> | null }, duplicateOf: { id: string, number: number, repository: { name: string, owner:
+         } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } }, duplicateOf: { id: string, number: number, repository: { name: string, owner:
         | { login: string }
         | { login: string }
        } } | null, closedByPullRequestsReferences: { nodes: Array<{ number: number, repository: { name: string, owner:
           | { login: string }
           | { login: string }
-         } } | null> | null } | null, issueFieldValues: { nodes: Array<
+         } } | null> | null, pageInfo: { hasNextPage: boolean, endCursor: string | null } } | null, issueFieldValues: { nodes: Array<
       | { __typename: 'IssueFieldDateValue', dateValue: string, field:
           | { name: string }
           | Record<PropertyKey, never>
@@ -3180,7 +4382,7 @@ export type DeleteLabelMutationVariables = Exact<{
 export type DeleteLabelMutation = { deleteLabel: { clientMutationId: string | null } | null };
 
 export const IssueLocatorFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]} as unknown as DocumentNode<IssueLocatorFragment, unknown>;
-export const IssueCoreFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueCore"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueType"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"milestone"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"dueOn"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}},{"kind":"Field","name":{"kind":"Name","value":"labels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignees"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"parent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"subIssues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockedBy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blocking"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"duplicateOf"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"closedByPullRequestsReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}},{"kind":"Argument","name":{"kind":"Name","value":"includeClosedPrs"},"value":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueFieldValues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDateValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"dateValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumberValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"numberValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldTextValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"textValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"optionName"},"name":{"kind":"Name","value":"name"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]} as unknown as DocumentNode<IssueCoreFragment, unknown>;
+export const IssueCoreFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueCore"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueType"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"milestone"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"dueOn"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}},{"kind":"Field","name":{"kind":"Name","value":"labels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignees"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"parent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"subIssues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockedBy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blocking"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"duplicateOf"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"closedByPullRequestsReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeClosedPrs"},"value":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueFieldValues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDateValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"dateValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumberValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"numberValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldTextValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"textValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"optionName"},"name":{"kind":"Name","value":"name"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]} as unknown as DocumentNode<IssueCoreFragment, unknown>;
 export const CommentPageFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CommentPage"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueCommentConnection"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"author"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CommentPageFragment, unknown>;
 export const IssueFieldRefFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueFieldRef"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFields"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]}}]} as unknown as DocumentNode<IssueFieldRefFragment, unknown>;
 export const ProjectFieldPartsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ProjectFieldParts"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ProjectV2FieldConfiguration"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ProjectV2FieldCommon"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"dataType"}},{"kind":"Field","name":{"kind":"Name","value":"isIssueField"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ProjectV2Field"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issueField"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueFieldRef"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ProjectV2SingleSelectField"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueField"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueFieldRef"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ProjectV2MultiSelectField"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"multiSelectOptions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueField"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueFieldRef"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ProjectV2IterationField"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"configuration"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"duration"}},{"kind":"Field","name":{"kind":"Name","value":"iterations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"startDate"}},{"kind":"Field","name":{"kind":"Name","value":"duration"}}]}},{"kind":"Field","name":{"kind":"Name","value":"completedIterations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"startDate"}},{"kind":"Field","name":{"kind":"Name","value":"duration"}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueFieldRef"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFields"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]}}]} as unknown as DocumentNode<ProjectFieldPartsFragment, unknown>;
@@ -3213,9 +4415,13 @@ export const RemoveBlockedByDocument = {"kind":"Document","definitions":[{"kind"
 export const AddCloseIssueReferencesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AddCloseIssueReferences"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AddCloseIssueReferencesInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addCloseIssueReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issue"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<AddCloseIssueReferencesMutation, AddCloseIssueReferencesMutationVariables>;
 export const RemoveCloseIssueReferencesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RemoveCloseIssueReferences"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RemoveCloseIssueReferencesInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeCloseIssueReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issue"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<RemoveCloseIssueReferencesMutation, RemoveCloseIssueReferencesMutationVariables>;
 export const SetIssueFieldValueDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetIssueFieldValue"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetIssueFieldValueInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setIssueFieldValue"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issue"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<SetIssueFieldValueMutation, SetIssueFieldValueMutationVariables>;
-export const IssueLoadDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueLoad"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repo"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"number"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"repository"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repo"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issue"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"number"},"value":{"kind":"Variable","name":{"kind":"Name","value":"number"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueCore"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueCore"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueType"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"milestone"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"dueOn"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}},{"kind":"Field","name":{"kind":"Name","value":"labels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignees"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"parent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"subIssues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockedBy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blocking"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"duplicateOf"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"closedByPullRequestsReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}},{"kind":"Argument","name":{"kind":"Name","value":"includeClosedPrs"},"value":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueFieldValues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDateValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"dateValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumberValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"numberValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldTextValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"textValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"optionName"},"name":{"kind":"Name","value":"name"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]}}]} as unknown as DocumentNode<IssueLoadQuery, IssueLoadQueryVariables>;
+export const IssueLoadDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueLoad"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repo"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"number"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"repository"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repo"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issue"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"number"},"value":{"kind":"Variable","name":{"kind":"Name","value":"number"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueCore"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueCore"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueType"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"milestone"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"dueOn"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}},{"kind":"Field","name":{"kind":"Name","value":"labels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignees"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"parent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"subIssues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockedBy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blocking"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"duplicateOf"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"closedByPullRequestsReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeClosedPrs"},"value":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueFieldValues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDateValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"dateValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumberValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"numberValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldTextValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"textValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"optionName"},"name":{"kind":"Name","value":"name"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]}}]} as unknown as DocumentNode<IssueLoadQuery, IssueLoadQueryVariables>;
 export const IssueIdDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueId"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repo"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"number"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"repository"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repo"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issueOrPullRequest"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"number"},"value":{"kind":"Variable","name":{"kind":"Name","value":"number"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PullRequest"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]}}]} as unknown as DocumentNode<IssueIdQuery, IssueIdQueryVariables>;
-export const IssueListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repo"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"states"}},"type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"IssueState"}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"repository"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repo"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"states"},"value":{"kind":"Variable","name":{"kind":"Name","value":"states"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueCore"}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueCore"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueType"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"milestone"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"dueOn"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}},{"kind":"Field","name":{"kind":"Name","value":"labels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignees"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"parent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"subIssues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockedBy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blocking"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"duplicateOf"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"closedByPullRequestsReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}},{"kind":"Argument","name":{"kind":"Name","value":"includeClosedPrs"},"value":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueFieldValues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDateValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"dateValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumberValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"numberValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldTextValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"textValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"optionName"},"name":{"kind":"Name","value":"name"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]}}]} as unknown as DocumentNode<IssueListQuery, IssueListQueryVariables>;
+export const IssueListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repo"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"states"}},"type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"IssueState"}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"repository"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repo"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"states"},"value":{"kind":"Variable","name":{"kind":"Name","value":"states"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueCore"}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueCore"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueType"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}},{"kind":"Field","name":{"kind":"Name","value":"milestone"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"dueOn"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}},{"kind":"Field","name":{"kind":"Name","value":"labels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignees"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"parent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"subIssues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockedBy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"blocking"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"duplicateOf"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"closedByPullRequestsReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"relationshipPageSize"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeClosedPrs"},"value":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"issueFieldValues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDateValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldDate"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"dateValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumberValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldNumber"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"numberValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldTextValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldText"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"textValue"},"name":{"kind":"Name","value":"value"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldSingleSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","alias":{"kind":"Name","value":"optionName"},"name":{"kind":"Name","value":"name"}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelectValue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"field"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueFieldMultiSelect"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"options"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]}}]}}]} as unknown as DocumentNode<IssueListQuery, IssueListQueryVariables>;
+export const IssueSubIssuesPageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueSubIssuesPage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"subIssues"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]} as unknown as DocumentNode<IssueSubIssuesPageQuery, IssueSubIssuesPageQueryVariables>;
+export const IssueBlockedByPageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueBlockedByPage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"blockedBy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]} as unknown as DocumentNode<IssueBlockedByPageQuery, IssueBlockedByPageQueryVariables>;
+export const IssueBlockingPageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueBlockingPage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"blocking"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"IssueLocator"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"IssueLocator"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}}]} as unknown as DocumentNode<IssueBlockingPageQuery, IssueBlockingPageQueryVariables>;
+export const IssueClosedByPageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"IssueClosedByPage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"closedByPullRequestsReferences"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeClosedPrs"},"value":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"repository"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]}}]}}]} as unknown as DocumentNode<IssueClosedByPageQuery, IssueClosedByPageQueryVariables>;
 export const CommentListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CommentList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"subjectId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"subjectId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"Issue"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"comments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CommentPage"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PullRequest"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"comments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"IntValue","value":"100"}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"CommentPage"}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"CommentPage"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"IssueCommentConnection"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"author"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"login"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CommentListQuery, CommentListQueryVariables>;
 export const UserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"User"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"login"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"user"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"login"},"value":{"kind":"Variable","name":{"kind":"Name","value":"login"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<UserQuery, UserQueryVariables>;
 export const TeamIdDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TeamId"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"org"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"organization"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"login"},"value":{"kind":"Variable","name":{"kind":"Name","value":"org"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<TeamIdQuery, TeamIdQueryVariables>;
