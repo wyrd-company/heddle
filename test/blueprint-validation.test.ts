@@ -214,6 +214,74 @@ describe("validation chain", () => {
     expect(findings.map((item) => item.rule)).not.toContain("input.path");
   });
 
+  it("requires the blueprint id to match its filename", () => {
+    const findings = validateBlueprintFile(
+      temporaryFile("different.yml", passBlueprint()),
+    );
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({ rule: "blueprint.id", node: "$blueprint" }),
+    );
+  });
+
+  it.each([
+    ["object root", passBlueprint().replace("type: object", "type: string")],
+    [
+      "properties",
+      passBlueprint().replace(
+        "        properties:\n          value: { type: string }\n",
+        "",
+      ),
+    ],
+    [
+      "valid JSON Schema",
+      passBlueprint().replace("type: object", "type: impossible"),
+    ],
+  ])("requires handoff schema %s", (_constraint, source) => {
+    expect(
+      validateBlueprintFile(temporaryFile("sample-a.yml", source)).map(
+        (item) => item.rule,
+      ),
+    ).toContain("handoff.schema");
+  });
+
+  it("resolves policy rules files", () => {
+    const source = `id: sample-a
+kind: helper
+nodes:
+  check:
+    uses: policy
+    params:
+      rules: rules/missing.yml
+`;
+
+    expect(
+      validateBlueprintFile(temporaryFile("sample-a.yml", source)),
+    ).toContainEqual(
+      expect.objectContaining({ node: "check", rule: "reference.exists" }),
+    );
+  });
+
+  it("rejects a question role without a configured channel", () => {
+    const source = `id: sample-a
+kind: helper
+nodes:
+  ask:
+    uses: question
+    params:
+      role: sample-role
+      questions:
+        - id: sample
+          question: { inline: "Choose." }
+`;
+
+    expect(
+      validateBlueprintFile(temporaryFile("sample-a.yml", source)),
+    ).toContainEqual(
+      expect.objectContaining({ node: "ask", rule: "heddle.question-role" }),
+    );
+  });
+
   it.each([
     [
       "action edge",
@@ -337,17 +405,23 @@ nodes:
   });
 
   it("rejects a statically unknown context root", () => {
-    const source = passBlueprint().replace(
-      'title: { inline: "Complete" }',
-      "title: { from: absent.value }",
-    );
+    const source = `id: sample-a
+kind: helper
+nodes:
+  child:
+    uses: child-run
+    params:
+      blueprint: sample-child
+      inputs:
+        value: { from: absent.value }
+`;
     const findings = validateBlueprintFile(
       temporaryFile("sample-a.yml", source),
     );
 
     expect(findings).toContainEqual(
       expect.objectContaining({
-        node: "done",
+        node: "child",
         rule: "heddle.context-key",
         message: "Context key cannot be provided: absent",
       }),
