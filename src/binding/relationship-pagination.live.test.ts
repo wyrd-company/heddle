@@ -31,13 +31,15 @@ it.skipIf(!process.env["HEDDLE_RELATIONSHIP_LIVE"])(
       const parent = await repo.issues.create({
         title: `Fixture parent ${suffix}`,
       });
+      issues.push(parent);
       const first = await repo.issues.create({
         title: `Fixture child A ${suffix}`,
       });
+      issues.push(first);
       const second = await repo.issues.create({
         title: `Fixture child B ${suffix}`,
       });
-      issues.push(parent, first, second);
+      issues.push(second);
       await parent.link({ subIssues: [first, second] });
 
       const before = budget.graphql;
