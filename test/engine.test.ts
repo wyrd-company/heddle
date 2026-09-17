@@ -527,6 +527,41 @@ it("rechecks a due inactivity row moved forward while another wakeup is running"
   await engine.tick();
   expect(store.get(second.id).status).toBe("awaiting");
 });
+it("does not dispatch a due row paused during the same scheduler tick", async () => {
+  let now = 0;
+  const { engine, store } = fixture(
+    [waiting({ inactivity: 100 })],
+    {
+      pass,
+      done: () => {
+        engine.pauseInstance("second");
+        return Promise.resolve(null);
+      },
+    },
+    () => now,
+  );
+  for (const id of ["first", "second"])
+    await engine.start({ id, blueprintId: "inspection", commit: "commit-a" });
+  now = 100;
+  const requests: string[] = [];
+  await engine.wakeups.tick(now, async (request) => {
+    requests.push(request.runId);
+    return engine.resume(request);
+  });
+  expect(requests).toEqual(["first"]);
+  expect(store.get("first").status).toBe("completed");
+  expect(store.get("second")).toMatchObject({
+    paused: true,
+    status: "awaiting",
+  });
+  expect(store.db.prepare("SELECT * FROM held_resumes").all()).toEqual([]);
+  expect(store.db.prepare("SELECT run_id,due FROM wakeups").all()).toEqual([
+    { run_id: "second", due: 100 },
+  ]);
+  expect(store.events("second").some((event) => event.type === "resume")).toBe(
+    false,
+  );
+});
 it("does not move inactivity backwards for old observed activity", async () => {
   const { engine, store } = fixture(
     [waiting({ inactivity: "PT5S" })],

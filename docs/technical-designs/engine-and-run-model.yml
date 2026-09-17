@@ -155,8 +155,11 @@ proposed-design:
     sibling while the run is busy, or while the instance is paused, is queued
     durably. Settle drains queued
     requests in arrival order. Wake-up row identities are never reused. Repeated
-    scheduler ticks reuse the current row identity and enqueue each due-time
-    attempt once; separate external requests remain distinct.
+    scheduler ticks reuse the current row identity and enqueue that identity
+    once. While an earlier attempt for that identity remains queued, a later
+    due-time attempt is not enqueued. After the obsolete attempt drains, the
+    current row delivers once on the first subsequent tick. Separate external
+    requests remain distinct.
     Scheduler idle requests carry the due time for which they were raised.
     Claim compares that due time with the current wake-up row inside its
     transaction. An obsolete attempt with a different due time is logged as
