@@ -91,7 +91,10 @@ proposed-design:
     snapshot. `task build` regenerates `src/github/src/generated` before type
     compilation. Execution resolves the exact formatted document text in the
     generated lookup and fails with `SCHEMA_MISMATCH` when registration or
-    response structure differs.
+    response structure differs. GraphQL Code Generator lifecycle hooks are
+    prohibited at the root and for each generated output. The build checks the
+    exported configuration before invoking the generator, so a configured hook
+    fails without executing it.
   document-and-parse-conventions: >
     Documents use the generated `graphql()` tag and execute only through
     `transport/execute.ts`. Generated GraphQL types are imported only by

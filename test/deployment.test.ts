@@ -213,6 +213,19 @@ describe("Heddle deployment", () => {
     expect(manifest.scripts["build"]).toContain("npm run codegen");
   });
 
+  it("guards against lifecycle hooks before GraphQL code generation", async () => {
+    const manifest = JSON.parse(await readFile(packagePath, "utf8")) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(manifest.scripts["codegen:guard"]).toBe(
+      "node src/github/scripts/check-codegen-hooks.mjs",
+    );
+    expect(manifest.scripts["codegen"]).toBe(
+      "npm run codegen:guard && graphql-codegen --config src/github/codegen.ts",
+    );
+  });
+
   it("documents the clients as internal modules", async () => {
     const readme = await readFile(readmePath, "utf8");
 
