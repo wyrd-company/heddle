@@ -117,12 +117,19 @@ describe("issue label pagination", () => {
       continuationCalls: 1,
     },
   ])("refuses a $name continuation cursor", async ({ pageInfo, error, continuationCalls }) => {
+    let continuation = 0;
     const transport = new ScriptedTransport({
       graphql: {
         IssueLoad: () => ({ repository: { issue: issueNode({ nodes: [label(1)], pageInfo }) } }),
-        IssueLabelsPage: () => ({
-          node: { __typename: "Issue", labels: { nodes: [label(2)], pageInfo } },
-        }),
+        IssueLabelsPage: () => {
+          continuation++;
+          return {
+            node: {
+              __typename: "Issue",
+              labels: { nodes: [label(2)], pageInfo: continuation === 1 ? pageInfo : lastPage },
+            },
+          };
+        },
       },
     });
 
