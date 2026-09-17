@@ -1,155 +1,239 @@
+// ---
+// relationships:
+//   implements: blueprint-authoring
+// ---
 import { isDeepStrictEqual } from "node:util";
-
 import {
+  isAlias,
   isMap,
   isNode,
   isScalar,
   isSeq,
-  parseDocument,
-  stringify,
   type Document,
   type Node,
+  type Pair,
 } from "yaml";
+import { reconcileComments, commentSnapshot } from "./yaml-comments.js";
 
-import { applyLocalizedLineEdits } from "./yaml-line-edits.js";
+import {
+  applySourcePatches,
+  parseSource,
+  type SourcePatch,
+} from "./yaml-source.js";
 
-interface SourcePatch {
-  readonly end: number;
-  readonly replacement: string;
-  readonly start: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function nodeAt(document: Document, path: readonly (number | string)[]): Node {
-  const value =
-    path.length === 0 ? document.contents : document.getIn(path, true);
-  return isNode(value) ? value : document.createNode(value);
-}
-
-function renderReplacement(
-  document: Document,
-  originalNode: Node,
-  editedNode: Node,
-  source: string,
-): string {
-  const replacement = document.createNode(editedNode.toJSON());
-  if (isScalar(originalNode) && isScalar(replacement)) {
-    if (originalNode.type !== undefined) replacement.type = originalNode.type;
-  } else if (isMap(originalNode) && isMap(replacement)) {
-    if (originalNode.flow !== undefined) replacement.flow = originalNode.flow;
-  } else if (isSeq(originalNode) && isSeq(replacement)) {
-    if (originalNode.flow !== undefined) replacement.flow = originalNode.flow;
-  }
-
-  const start = originalNode.range?.[0];
-  if (start === undefined) {
-    throw new Error("Cannot preserve YAML source for a node without a range");
-  }
-  const lineStart = Math.max(source.lastIndexOf("\n", start - 1) + 1, 0);
-  const indentation = " ".repeat(start - lineStart);
-  return stringify(replacement, { lineWidth: 0 })
-    .replace(/\n$/u, "")
-    .replaceAll("\n", `\n${indentation}`);
+function shape(value: unknown): unknown {
+  if (isAlias(value)) return { alias: value.source };
+  if (isScalar(value)) return value.value;
+  if (isMap(value))
+    return {
+      map: value.items.map((pair) => [shape(pair.key), shape(pair.value)]),
+    };
+  if (isSeq(value)) return { sequence: value.items.map(shape) };
+  return value;
 }
 
 function semanticPatches(
-  originalDocument: Document,
-  editedDocument: Document,
   source: string,
+  original: Document,
+  edited: Document,
 ): SourcePatch[] {
   const patches: SourcePatch[] = [];
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  const lineStart = (offset: number): number =>
+    source.lastIndexOf("\n", offset - 1) + 1;
 
-  function visit(
-    originalValue: unknown,
-    editedValue: unknown,
-    path: readonly (number | string)[],
-  ): void {
-    if (isDeepStrictEqual(originalValue, editedValue)) return;
-
-    if (
-      Array.isArray(originalValue) &&
-      Array.isArray(editedValue) &&
-      originalValue.length === editedValue.length
-    ) {
-      originalValue.forEach((value, index) => {
-        visit(value, editedValue[index], [...path, index]);
-      });
-      return;
+  function render(node: Node, indent: number): string {
+    const document = edited.clone();
+    document.contents = node.clone() as Node;
+    document.commentBefore = null;
+    document.comment = null;
+    if (document.directives) {
+      document.directives.docStart = null;
+      document.directives.docEnd = false;
     }
-
-    if (isRecord(originalValue) && isRecord(editedValue)) {
-      const originalKeys = Object.keys(originalValue);
-      const editedKeys = Object.keys(editedValue);
-      if (
-        originalKeys.length === editedKeys.length &&
-        originalKeys.every((key, index) => key === editedKeys[index])
-      ) {
-        originalKeys.forEach((key) => {
-          visit(originalValue[key], editedValue[key], [...path, key]);
-        });
-        return;
-      }
-    }
-
-    const originalNode = nodeAt(originalDocument, path);
-    const editedNode = nodeAt(editedDocument, path);
-    const range = originalNode.range;
-    if (range == null) {
-      throw new Error(`Cannot preserve YAML source at ${path.join(".")}`);
-    }
-    patches.push({
-      start: range[0],
-      end: range[1],
-      replacement: renderReplacement(
-        editedDocument,
-        originalNode,
-        editedNode,
-        source,
-      ),
-    });
+    return document
+      .toString({ lineWidth: 0, verifyAliasOrder: false })
+      .replace(/\n$/u, "")
+      .replaceAll("\n", `\n${" ".repeat(indent)}`)
+      .replaceAll("\n", newline);
   }
 
-  visit(
-    originalDocument.toJS({ maxAliasCount: 100 }),
-    editedDocument.toJS({ maxAliasCount: 100 }),
-    [],
-  );
+  function replace(before: Node, after: Node): void {
+    if (!before.range)
+      throw new Error("Cannot preserve YAML source for a node without a range");
+    const [start, end] = before.range;
+    const replacement = after.clone() as Node;
+    replacement.commentBefore = null;
+    replacement.comment = null;
+    if (before.srcToken?.type === "block-scalar")
+      replacement.comment = after.comment ?? null;
+    // Anchors and tags precede the node's range and remain in the source.
+    if (!isAlias(replacement)) delete replacement.anchor;
+    delete replacement.tag;
+    if (isScalar(before) && isScalar(replacement) && before.type !== undefined)
+      replacement.type = before.type;
+    if (
+      (isMap(before) || isSeq(before)) &&
+      (isMap(replacement) || isSeq(replacement)) &&
+      before.flow !== undefined
+    )
+      replacement.flow = before.flow;
+    const block =
+      before.srcToken?.type === "block-map" ||
+      before.srcToken?.type === "block-seq";
+    const indent = block
+      ? start - lineStart(start)
+      : before.srcToken && "indent" in before.srcToken
+        ? before.srcToken.indent
+        : 0;
+    const newBlock =
+      !block && (isMap(replacement) || isSeq(replacement)) && !replacement.flow;
+    let text = render(
+      replacement,
+      before.srcToken?.type === "block-scalar" || newBlock
+        ? indent + 2
+        : indent,
+    );
+    if (newBlock) text = `${newline}${" ".repeat(indent + 2)}${text}`;
+    if (start === end && source[start - 1] === ":") text = ` ${text}`;
+    if (start === end && source[end] === "#") text += " ";
+    if (source.slice(start, end).endsWith(newline)) text += newline;
+    patches.push({ start, end, replacement: text });
+  }
+
+  function blockItems(before: Node, after: Node): boolean {
+    if (!(isMap(before) && isMap(after)) && !(isSeq(before) && isSeq(after)))
+      return false;
+    if (
+      !before.range ||
+      (before.srcToken?.type !== "block-map" &&
+        before.srcToken?.type !== "block-seq")
+    )
+      return false;
+    const oldItems = before.items;
+    const newItems = after.items;
+    if (newItems.length === 0) return false;
+    const tokens = before.srcToken.items;
+    const indent = before.srcToken.indent;
+    const used = new Set<number>();
+    const matches = newItems.map((item, index) => {
+      let found = -1;
+      if (isMap(before)) {
+        found = oldItems.findIndex((old) =>
+          isDeepStrictEqual(
+            shape((old as Pair).key),
+            shape((item as Pair).key),
+          ),
+        );
+      } else if (isNode(item) && item.range) {
+        found = oldItems.findIndex(
+          (old) => isNode(old) && old.range?.[0] === item.range?.[0],
+        );
+      } else if (oldItems.length === newItems.length) found = index;
+      if (used.has(found)) return -1;
+      if (found >= 0) used.add(found);
+      return found;
+    });
+    if (
+      matches.every((match, index) => match === index) &&
+      oldItems.length === newItems.length
+    ) {
+      newItems.forEach((item, index) => {
+        visitItem(oldItems[index], item);
+      });
+      return true;
+    }
+    // Keep the original bytes of every surviving entry, including its trivia.
+    const range = before.range;
+    const starts = tokens.map((token, index) => {
+      const first =
+        token.start[0]?.offset ??
+        token.key?.offset ??
+        token.value?.offset ??
+        range[0];
+      return index === 0 ? range[0] : lineStart(first);
+    });
+    const end = before.range[1];
+    const pieces = newItems.map((item, index) => {
+      const match = matches[index] ?? -1;
+      if (match < 0) {
+        const collection = after.clone() as typeof after;
+        collection.items = [item] as typeof collection.items;
+        collection.commentBefore = null;
+        collection.comment = null;
+        delete collection.anchor;
+        delete collection.tag;
+        return `${" ".repeat(indent)}${render(collection, indent)}${newline}`;
+      }
+      const start = starts[match] ?? range[0];
+      const stop = starts[match + 1] ?? end;
+      const firstPatch = patches.length;
+      visitItem(oldItems[match], item);
+      const local = patches.splice(firstPatch).map((patch) => ({
+        ...patch,
+        start: patch.start - start,
+        end: patch.end - start,
+      }));
+      let text = applySourcePatches(source.slice(start, stop), local);
+      if (match === 0) text = " ".repeat(indent) + text;
+      if (!text.endsWith(newline)) text += newline;
+      return text;
+    });
+    let replacement = pieces.join("").slice(indent);
+    if (!source.slice(before.range[0], end).endsWith(newline))
+      replacement = replacement.slice(0, -newline.length);
+    patches.push({ start: before.range[0], end, replacement });
+    return true;
+  }
+
+  function visitItem(before: unknown, after: unknown): void {
+    if (before && after && !isNode(before) && !isNode(after)) {
+      visit((before as Pair).key, (after as Pair).key);
+      visit((before as Pair).value, (after as Pair).value);
+    } else visit(before, after);
+  }
+
+  function visit(before: unknown, after: unknown): void {
+    if (isDeepStrictEqual(shape(before), shape(after))) return;
+    if (!isNode(before))
+      throw new Error("Cannot preserve YAML source for a missing node");
+    const target = isNode(after) ? after : edited.createNode(after);
+    if (blockItems(before, target)) return;
+    if (
+      isMap(before) &&
+      isMap(target) &&
+      before.items.length === target.items.length &&
+      before.items.every((pair, index) =>
+        isDeepStrictEqual(shape(pair.key), shape(target.items[index]?.key)),
+      )
+    ) {
+      before.items.forEach((pair, index) => {
+        visitItem(pair, target.items[index]);
+      });
+    } else if (
+      isSeq(before) &&
+      isSeq(target) &&
+      before.items.length === target.items.length
+    ) {
+      before.items.forEach((item, index) => {
+        visit(item, target.items[index]);
+      });
+    } else replace(before, target);
+  }
+  visit(original.contents, edited.contents);
   return patches;
 }
 
-function applySourcePatches(
-  source: string,
-  patches: readonly SourcePatch[],
-): string {
-  let saved = source;
-  let previousStart = source.length;
-  for (const patch of [...patches].sort(
-    (left, right) => right.start - left.start,
-  )) {
-    if (patch.end > previousStart) {
-      throw new Error("Overlapping YAML edits cannot preserve source bytes");
-    }
-    saved = `${saved.slice(0, patch.start)}${patch.replacement}${saved.slice(patch.end)}`;
-    previousStart = patch.start;
-  }
-  return saved;
-}
-
-function assertSemanticSave(saved: string, editedDocument: Document): void {
-  const reparsed = parseDocument(saved, {
-    keepSourceTokens: true,
-    prettyErrors: false,
-    strict: true,
-  });
+export function assertPreservedDocument(saved: string, edited: Document): void {
+  const reparsed = parseSource(saved);
+  const expected = parseSource(edited.toString({ lineWidth: 0 }));
   if (
-    reparsed.errors.length > 0 ||
+    reparsed.errors.length ||
     !isDeepStrictEqual(
-      reparsed.toJS({ maxAliasCount: 100 }),
-      editedDocument.toJS({ maxAliasCount: 100 }),
-    )
+      reparsed.toJS({ mapAsMap: true }),
+      expected.toJS({ mapAsMap: true }),
+    ) ||
+    !isDeepStrictEqual(commentSnapshot(reparsed), commentSnapshot(expected))
   ) {
     throw new Error("Localized YAML edit did not preserve the edited document");
   }
@@ -158,21 +242,15 @@ function assertSemanticSave(saved: string, editedDocument: Document): void {
 export function saveLocalizedYaml(
   source: string,
   formattedSource: string,
-  editedDocument: Document,
+  edited: Document,
 ): string {
-  const formattedEdit = editedDocument.toString();
-  if (formattedEdit === formattedSource) return source;
-
-  const originalDocument = parseDocument(source, {
-    keepSourceTokens: true,
-    prettyErrors: false,
-    strict: true,
-  });
-  const patches = semanticPatches(originalDocument, editedDocument, source);
-  const saved =
-    patches.length > 0
-      ? applySourcePatches(source, patches)
-      : applyLocalizedLineEdits(source, formattedSource, formattedEdit);
-  assertSemanticSave(saved, editedDocument);
+  if (edited.toString() === formattedSource) return source;
+  const original = parseSource(source);
+  const values = applySourcePatches(
+    source,
+    semanticPatches(source, original, edited),
+  );
+  const saved = reconcileComments(values, edited);
+  assertPreservedDocument(saved, edited);
   return saved;
 }
