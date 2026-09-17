@@ -38,6 +38,9 @@ validation-criteria: >-
   pausing node handled by an outgoing edge, every `question` role served by
   a configured channel, every stage name a valid single-select option, and
   `requires.issue` satisfiable against the bound project at reconciliation.
+  Stage-name and `requires.issue` project checks run only when live validation
+  is requested; without a live implementation they return named `not checked`
+  findings rather than silently passing.
   Loading a file and saving it unchanged produces byte-identical output,
   comments included. Fixture blueprints under `fixtures/blueprints/` are the
   conformance corpus and each must pass every check above.

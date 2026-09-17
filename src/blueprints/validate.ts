@@ -9,6 +9,7 @@ import { basename, extname, resolve } from "node:path";
 import { discoverBlueprintFiles, inputIsDirectory } from "./discovery.js";
 import { lintDerivedBlueprint } from "./flowcraft-lint.js";
 import { lintHeddle, validateExpressions } from "./heddle-lint.js";
+import { validateLiveRequirements } from "./live-checks.js";
 import {
   BlueprintParseError,
   loadBlueprint,
@@ -77,7 +78,8 @@ function isTraversableBlueprint(value: JsonObject): boolean {
           (edge) =>
             isObject(edge) &&
             typeof edge["from"] === "string" &&
-            typeof edge["to"] === "string",
+            typeof edge["to"] === "string" &&
+            (edge["when"] === undefined || typeof edge["when"] === "string"),
         )))
   );
 }
@@ -172,19 +174,7 @@ function validateLoaded(
     ...lintHeddle(file, blueprint, options),
     ...flowcraftFindings(file, blueprint),
   );
-  if (
-    options.checkRequiresIssue === true &&
-    blueprint.requires?.["issue"] !== undefined
-  ) {
-    findings.push(
-      finding(
-        file,
-        blueprintNode,
-        "requires.issue.live",
-        "not checked: live requires.issue validation is not implemented",
-      ),
-    );
-  }
+  findings.push(...validateLiveRequirements(file, blueprint, options));
   return findings;
 }
 
@@ -255,8 +245,10 @@ export function validateBlueprintPath(
 ): ValidationFinding[] {
   const path = resolve(inputPath);
   let files: string[];
+  let directoryInput: boolean;
   try {
-    files = inputIsDirectory(path) ? discoverBlueprintFiles(path) : [path];
+    directoryInput = inputIsDirectory(path);
+    files = directoryInput ? discoverBlueprintFiles(path) : [path];
   } catch (error) {
     return [
       finding(
@@ -264,6 +256,16 @@ export function validateBlueprintPath(
         blueprintNode,
         "input.path",
         error instanceof Error ? error.message : String(error),
+      ),
+    ];
+  }
+  if (directoryInput && files.length === 0) {
+    return [
+      finding(
+        path,
+        blueprintNode,
+        "input.path",
+        "No blueprint files found in directory",
       ),
     ];
   }

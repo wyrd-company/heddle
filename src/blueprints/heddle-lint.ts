@@ -33,8 +33,6 @@ function requiredResults(node: BlueprintNode): string[] {
       remove(results, "escalate");
     if (node.params?.["deadline"] === undefined) remove(results, "timeout");
     if (node.params?.["inactivity"] === undefined) remove(results, "idle");
-    if (node.params?.["turnEndPolicy"] !== "allow")
-      remove(results, "turnEnded");
   }
   if (
     ["question", "on-issue-change"].includes(node.uses) &&
@@ -149,6 +147,15 @@ export function lintHeddle(
         "$blueprint",
         "heddle.entry",
         `Entry does not name an authored node: ${blueprint.entry}`,
+      ),
+    );
+  } else if (hasNaturalEntry && blueprint.entry !== undefined) {
+    findings.push(
+      finding(
+        file,
+        "$blueprint",
+        "heddle.entry",
+        "Entry is only valid for a graph with no natural start",
       ),
     );
   } else if (!hasNaturalEntry && blueprint.entry === undefined) {

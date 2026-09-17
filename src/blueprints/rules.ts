@@ -73,4 +73,9 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     name: "requires.issue.live",
     description: "Live project requirements are checked when requested.",
   },
+  {
+    name: "requires.issue.stage-name",
+    description:
+      "Stage node names are live project single-select options when requested.",
+  },
 ];

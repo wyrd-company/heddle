@@ -68,7 +68,7 @@ nodes:
 edges:
   - from: first
     to: done
-    when: result.output.handoff or result.output.overridden
+    when: result.output.handoff or result.output.overridden or result.output.turnEnded
 ${overrides}`;
 }
 
@@ -125,7 +125,7 @@ describe("blueprint loading", () => {
     const invalid = temporaryFile(
       "sample-a.yml",
       passBlueprint().replace(
-        "result.output.handoff or result.output.overridden",
+        "result.output.handoff or result.output.overridden or result.output.turnEnded",
         "result.output.handoff",
       ),
     );
@@ -147,7 +147,8 @@ describe("blueprint loading", () => {
       {
         source: "first",
         target: "done",
-        condition: "result.output.handoff or result.output.overridden",
+        condition:
+          "result.output.handoff or result.output.overridden or result.output.turnEnded",
       },
     ]);
     expect(derived.edges.every((edge) => edge.action === undefined)).toBe(true);
@@ -193,8 +194,8 @@ describe("validation chain", () => {
 
   it("requires an explicit authored entry for a fully cyclic graph", () => {
     const cyclic = passBlueprint().replace(
-      "  - from: first\n    to: done\n    when: result.output.handoff or result.output.overridden",
-      "  - from: first\n    to: done\n    when: result.output.handoff or result.output.overridden\n  - from: done\n    to: first",
+      "  - from: first\n    to: done\n    when: result.output.handoff or result.output.overridden or result.output.turnEnded",
+      "  - from: first\n    to: done\n    when: result.output.handoff or result.output.overridden or result.output.turnEnded\n  - from: done\n    to: first",
     );
     const missing = temporaryFile("sample-a.yml", cyclic);
     const unknown = temporaryFile(
@@ -207,6 +208,21 @@ describe("validation chain", () => {
     );
     expect(validateBlueprintFile(unknown)).toContainEqual(
       expect.objectContaining({ rule: "heddle.entry" }),
+    );
+  });
+
+  it("rejects an explicit entry when the graph has a natural start", () => {
+    const file = temporaryFile(
+      "sample-a.yml",
+      passBlueprint().replace("kind: stage", "kind: stage\nentry: done"),
+    );
+
+    expect(validateBlueprintFile(file)).toContainEqual(
+      expect.objectContaining({
+        node: "$blueprint",
+        rule: "heddle.entry",
+        message: "Entry is only valid for a graph with no natural start",
+      }),
     );
   });
 
@@ -226,7 +242,7 @@ describe("validation chain", () => {
       passBlueprint()
         .replace("id: sample-a", "id: different")
         .replace(
-          "result.output.handoff or result.output.overridden",
+          "result.output.handoff or result.output.overridden or result.output.turnEnded",
           "result.output.handoff",
         ),
     );
@@ -305,6 +321,35 @@ describe("validation chain", () => {
       expect.objectContaining({ rule: "blueprint.schema", node: "probe" }),
     );
     expect(findings.map((item) => item.rule)).not.toContain("input.path");
+  });
+
+  it("reports a non-string edge condition without throwing", () => {
+    const source = `id: sample-a
+kind: helper
+nodes:
+  child:
+    uses: child-run
+    params:
+      blueprint: sample-child
+  done:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Done" }
+edges:
+  - from: child
+    to: done
+    when: 5
+`;
+
+    expect(
+      validateBlueprintFile(temporaryFile("sample-a.yml", source)),
+    ).toContainEqual(
+      expect.objectContaining({
+        node: "$blueprint",
+        rule: "blueprint.schema",
+      }),
+    );
   });
 
   it("requires the blueprint id to match its filename", () => {
@@ -403,8 +448,8 @@ nodes:
     [
       "action edge",
       passBlueprint().replace(
-        "when: result.output.handoff or result.output.overridden",
-        "action: continue\n    when: result.output.handoff or result.output.overridden",
+        "when: result.output.handoff or result.output.overridden or result.output.turnEnded",
+        "action: continue\n    when: result.output.handoff or result.output.overridden or result.output.turnEnded",
       ),
       "heddle.no-action-edge",
     ],
@@ -416,7 +461,7 @@ nodes:
     [
       "unhandled pass result",
       passBlueprint().replace(
-        "result.output.handoff or result.output.overridden",
+        "result.output.handoff or result.output.overridden or result.output.turnEnded",
         "result.output.handoff",
       ),
       "heddle.unhandled-result",
@@ -432,7 +477,7 @@ nodes:
     [
       "invalid JSONata",
       passBlueprint().replace(
-        "result.output.handoff or result.output.overridden",
+        "result.output.handoff or result.output.overridden or result.output.turnEnded",
         "(",
       ),
       "expression.jsonata",
@@ -519,6 +564,51 @@ nodes:
           item.message.includes("not checked"),
       ),
     ).toBe(true);
+  });
+
+  it("checks stage names only at the flagged live boundary", () => {
+    const file = resolve(
+      "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+    );
+
+    expect(validateBlueprintFile(file)).toEqual([]);
+    expect(
+      validateBlueprintFile(file, { checkRequiresIssue: true }),
+    ).toContainEqual(
+      expect.objectContaining({
+        node: "draft",
+        rule: "requires.issue.stage-name",
+        message:
+          "not checked: live stage-name single-select validation is not implemented",
+      }),
+    );
+  });
+
+  it("rejects a directory with no blueprint candidates", () => {
+    const directory = mkdtempSync(join(tmpdir(), "heddle-blueprints-empty-"));
+    temporaryDirectories.push(directory);
+
+    expect(validateBlueprintPath(directory)).toContainEqual(
+      expect.objectContaining({
+        file: directory,
+        node: "$blueprint",
+        rule: "input.path",
+      }),
+    );
+  });
+
+  it("requires turnEnded routing for every pass policy start", () => {
+    const source = passBlueprint().replace(" or result.output.turnEnded", "");
+
+    expect(
+      validateBlueprintFile(temporaryFile("sample-a.yml", source)),
+    ).toContainEqual(
+      expect.objectContaining({
+        node: "first",
+        rule: "heddle.unhandled-result",
+        message: "Result is not handled: turnEnded",
+      }),
+    );
   });
 
   it("rejects a statically unknown context root", () => {

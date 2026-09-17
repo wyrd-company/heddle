@@ -21,7 +21,7 @@ properties:
     description: >
       The node where execution begins when every node has an incoming edge,
       such as a process with a retry cycle. It must name a key in `nodes`.
-      A blueprint with a natural entry node may omit it.
+      A blueprint with a natural entry node must omit it.
     $ref: "#/$defs/slug"
   kind:
     description: >

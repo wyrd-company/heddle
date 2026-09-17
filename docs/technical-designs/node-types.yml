@@ -222,4 +222,5 @@ proposed-design:
     - reads a context key that no earlier node or the initial context
       provides, when that can be determined statically
     - declares a stage whose name is not a valid project single-select
-      option
+      option; this is a flagged live check and reports `not checked` when the
+      live project validator is unavailable
