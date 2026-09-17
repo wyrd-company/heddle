@@ -1,0 +1,10 @@
+# Handoff schema for the deterministic capture stub.
+type: object
+description: Hand off the collection details supplied to the capture stage.
+required: [itemCount, storage]
+properties:
+  itemCount:
+    type: integer
+  storage:
+    type: string
+additionalProperties: false

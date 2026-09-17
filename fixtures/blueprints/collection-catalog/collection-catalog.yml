@@ -1,0 +1,70 @@
+# A collection request is captured, assessed, and then recorded or returned.
+id: collection-catalog
+kind: process
+description: Catalog an item collection for a community archive.
+metadata:
+  shelfLabel: community-collection
+requires:
+  issue:
+    type: [Collection request]
+    fields: [Item Count]
+    frontMatter: [storage]
+nodes:
+  # The capture stage is stubbed: its prompt asks the pass to hand off immediately.
+  capture:
+    uses: child-run
+    stage: true
+    params:
+      blueprint: stage-capture-collection
+      inputs:
+        itemCount: { from: issue.fields.`Item Count` }
+        storage: { from: issue.frontMatter.storage }
+      outputs:
+        summary: stages.capture.handoff
+  # The assessment stage is the real T3 Code pass exercised by the first slice.
+  assess:
+    uses: child-run
+    stage: true
+    params:
+      blueprint: stage-assess-collection
+      inputs:
+        summary: { from: capture.output.payload.summary }
+      outputs:
+        decision: stages.assess.handoff.decision
+  # Accepted collections produce a message whose template reads process metadata.
+  record:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection accepted" }
+      message: prompts/record.md
+  # Declined collections produce a distinct terminal message.
+  return:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection returned" }
+      message: { inline: "The collection needs more information." }
+  # A failed child run is visible instead of ending at a silent dead end.
+  run-failed:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection step failed" }
+      message: { inline: "The collection process needs attention." }
+edges:
+  - from: capture
+    to: assess
+    when: result.output.completed
+  - from: capture
+    to: run-failed
+    when: result.output.failed
+  - from: assess
+    to: record
+    when: result.output.completed and result.output.payload.decision = 'accepted'
+  - from: assess
+    to: return
+    when: result.output.completed and result.output.payload.decision = 'declined'
+  - from: assess
+    to: run-failed
+    when: result.output.failed

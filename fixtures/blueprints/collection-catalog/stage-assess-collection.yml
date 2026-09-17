@@ -1,0 +1,31 @@
+# This stage contains the real T3 Code pass for the first executable slice.
+id: stage-assess-collection
+kind: stage
+description: Assess whether a captured collection has enough information.
+metadata:
+  execution: real-t3-code-pass
+  firstSlice: true
+inputs:
+  summary:
+    type: object
+outputs:
+  result:
+    type: object
+nodes:
+  # The real pass asks an agent to assess the captured summary and hand off a decision.
+  assess:
+    uses: pass
+    params:
+      prompt: prompts/assess.md
+      handoff: contracts/assess.yml
+      turnEndPolicy: require-handoff
+  # The completion notice gives every pass result an explicit terminal route.
+  complete:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection assessed" }
+edges:
+  - from: assess
+    to: complete
+    when: result.output.handoff or result.output.turnEnded or result.output.overridden

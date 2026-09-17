@@ -1,0 +1,32 @@
+# This stage is intentionally a stub for deterministic engine tests.
+id: stage-capture-collection
+kind: stage
+description: Capture a supplied collection summary without additional judgment.
+metadata:
+  execution: stub
+inputs:
+  itemCount:
+    type: integer
+  storage:
+    type: string
+outputs:
+  result:
+    type: object
+nodes:
+  # The stub pass immediately returns the supplied details through its handoff.
+  capture:
+    uses: pass
+    params:
+      prompt: prompts/capture.md
+      handoff: contracts/capture.yml
+      turnEndPolicy: require-handoff
+  # The completion notice gives every pass result an explicit terminal route.
+  complete:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Collection captured" }
+edges:
+  - from: capture
+    to: complete
+    when: result.output.handoff or result.output.turnEnded or result.output.overridden
