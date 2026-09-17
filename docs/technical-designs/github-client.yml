@@ -1,0 +1,113 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - github-binding-and-intake
+    - node-types
+objective: >
+  Give Heddle typed internal access to GitHub Projects, issues, pull requests,
+  conversations, labels, milestones, organization issue types, and
+  organization issue fields through names and declared schemas rather than
+  GraphQL node ids.
+background:
+  current-design: >
+    A workflow instance begins with a GitHub issue and its project item.
+    GitHub divides the required operations between GraphQL and REST, exposes
+    most relationships by node id, and provides different shapes for project
+    fields, issue fields, and repository resources.
+  problems:
+    - Callers identify resources by repository, number, and name while mutations require node ids.
+    - Project field values must stay statically tied to a caller's declared field and option names.
+    - Pagination, partial GraphQL failures, renamed resources, and ambiguous name matches must not leak inconsistent state.
+    - GitHub's published GraphQL schema can lag operations available on the live service.
+design-challenges:
+  typed-and-dynamic-projects: >
+    Declared project schemas need literal field and option types while Heddle
+    must also inspect projects that have no declaration.
+  one-resource-model: >
+    Projects, issues, pull requests, labels, milestones, types, fields,
+    comments, reviews, and threads need consistent lookup, error, pagination,
+    caching, and idempotency rules across two GitHub APIs.
+  generated-document-integrity: >
+    GraphQL source text is the key into the generated document lookup. Source
+    formatting and code generation must remain one build agreement so a
+    changed operation cannot execute with stale generated types.
+  reversible-testing: >
+    Live qualification creates remote resources. Every created resource that
+    GitHub can delete needs a unique run prefix and unconditional cleanup;
+    issues and pull requests close because the API does not delete them.
+proposed-design:
+  high-level-overview: >
+    The internal `src/github` module provides a `github` composition function,
+    owner and repository handles, project and work-item handles, issue and pull
+    handles, named-resource catalogs, a transport seam, generated typed
+    GraphQL documents, and one error hierarchy. Handles are lazy: constructing
+    one performs no request.
+  module-boundary: >
+    `src/github/index.ts` preserves the runtime and type exports of the GitHub
+    client and exposes `ScriptedTransport` for deterministic tests. Transport
+    and generated GraphQL types do not appear in resource interfaces.
+  authentication-and-transport: >
+    Authentication accepts a token, GitHub App credentials with an
+    installation id, or GitHub App credentials with an owner whose
+    installation is resolved. `OctokitTransport` implements GraphQL and REST.
+    The `Transport` interface accepts named GraphQL operations and REST routes,
+    so tests use the same resource logic with a scripted adapter.
+  ownership-tree: >
+    `GitHub.owner(login)` is the root locator. An owner locates repositories,
+    projects, organization issue types, and organization issue fields. A
+    repository locates issues, pull requests, labels, and milestones. A
+    project locates fields, items, and status updates. Each handle retains the
+    context needed to resolve names to ids at the operation boundary.
+  declared-schemas: >
+    `defineProject` and `defineIssueFields` preserve literal declarations.
+    Conditional types map each field kind to its accepted value: text, number,
+    date, one option, multiple options, an iteration date or title, or the
+    corresponding organization issue-field type. Undeclared projects use the
+    dynamic handle and return runtime value shapes.
+  catalogs: >
+    Named resources implement a common catalog contract for list, get, find,
+    create, update, delete, and ensure. Ensure creates missing resources,
+    updates supported properties, reports unchanged or unmanaged values, and
+    requires explicit deletion for destructive changes. Milestone names map to
+    GitHub titles at the adapter boundary.
+  projects-and-items: >
+    Project locators resolve by number or by a declared title and refuse an
+    ambiguous match. Project ensure conforms metadata and declared fields one
+    resource at a time. Items accept issue, pull-request, or draft content;
+    typed item setters validate declared field and option names at compile
+    time and serialize each field kind into its GitHub mutation shape.
+  issues-and-pulls: >
+    Issue and pull handles load snapshots and apply explicit patches for
+    content, state, labels, assignees, milestones, issue types, issue fields,
+    reviews, review threads, reactions, and relationships. Patch planners
+    compute mutations from a loaded snapshot and invalidate affected cache
+    entries after success.
+  graphql-documents: >
+    GraphQL operations live beside the resource knowledge that uses them and
+    pass through the client-preset generator against the vendored live schema
+    snapshot. `task build` regenerates `src/github/src/generated` before type
+    compilation. Execution resolves the exact formatted document text in the
+    generated lookup and fails with `SCHEMA_MISMATCH` when registration or
+    response structure differs.
+  schema-snapshot: >
+    `src/github/schema/github.graphql` is the build input. The refresh script
+    performs GitHub introspection with `GITHUB_TOKEN`, builds a client schema,
+    and replaces that snapshot. Refresh is an explicit repository operation;
+    ordinary builds are offline.
+  errors: >
+    `GitHubError` provides stable codes for missing resources, forbidden and
+    unauthenticated calls, rate limits, validation failures, schema mismatch,
+    response-shape mismatch, non-draft operations, ambiguity, unsupported
+    operations, and unknown failures. GraphQL responses containing any error
+    fail as a unit instead of returning partial data.
+  cache: >
+    Name-to-id caches are scoped to one client context. Successful mutations
+    invalidate the affected catalog or handle entry. A lookup that returns
+    multiple candidates raises `AMBIGUOUS` and carries the candidates rather
+    than selecting one.
+  verification: >
+    Offline tests exercise resource behavior through `ScriptedTransport` and
+    generated documents. Opt-in live tests split organization/project and
+    repository credentials, create uniquely prefixed resources in a sandbox,
+    and clean them through unconditional suite teardown. The repository
+    context defines their environment variables and commands.

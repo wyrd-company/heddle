@@ -18,6 +18,9 @@ const manifestPath = new URL(
 );
 const installerPath = new URL("../features/heddle/install.sh", import.meta.url);
 const buildPath = new URL("../scripts/build.mjs", import.meta.url);
+const codegenPath = new URL("../src/github/codegen.ts", import.meta.url);
+const packagePath = new URL("../package.json", import.meta.url);
+const readmePath = new URL("../README.md", import.meta.url);
 const tsconfigPath = new URL("../tsconfig.json", import.meta.url);
 const commonPath = fileURLToPath(
   new URL("../features/heddle/common.sh", import.meta.url),
@@ -172,24 +175,57 @@ describe("Heddle deployment", () => {
     );
   });
 
-  it("bundles both workspace clients instead of externalizing them", async () => {
+  it("bundles both internal clients instead of external package names", async () => {
     const buildScript = await readFile(buildPath, "utf8");
 
-    expect(buildScript).toContain('"@wyrd-company/github-work": resolve(');
-    expect(buildScript).toContain('"@wyrd-company/t3code-client": resolve(');
+    expect(buildScript).toContain('"src/github/src/"');
+    expect(buildScript).toContain('"src/t3code/src/"');
     expect(buildScript).not.toMatch(
       /external:[\s\S]*@wyrd-company\/(?:github-work|t3code-client)/,
     );
+    expect(buildScript).not.toContain("../../../github-spike");
+    expect(buildScript).not.toContain("../../../t3code-client");
   });
 
-  it("typechecks the workspace client sources bundled by esbuild", async () => {
+  it("typechecks internal modules without workspace path aliases", async () => {
     const tsconfig = JSON.parse(await readFile(tsconfigPath, "utf8")) as {
-      compilerOptions: { paths: Record<string, string[]> };
+      compilerOptions: { paths?: Record<string, string[]> };
+      include: string[];
     };
 
-    expect(tsconfig.compilerOptions.paths).toMatchObject({
-      "@wyrd-company/github-work": ["../../github-spike/src/index.ts"],
-      "@wyrd-company/t3code-client": ["../../t3code-client/src/index.ts"],
-    });
+    expect(tsconfig.include).toContain("src");
+    expect(tsconfig.compilerOptions.paths).toBeUndefined();
+  });
+
+  it("generates the internal GitHub document lookup before compilation", async () => {
+    const [codegen, manifestText] = await Promise.all([
+      readFile(codegenPath, "utf8"),
+      readFile(packagePath, "utf8"),
+    ]);
+    const manifest = JSON.parse(manifestText) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(codegen).toContain('schema: "src/github/schema/github.graphql"');
+    expect(codegen).toContain('documents: ["src/github/src/**/*.ts"');
+    expect(codegen).toContain('"src/github/src/generated/"');
+    expect(manifest.scripts["build"]).toContain("npm run codegen");
+  });
+
+  it("documents the clients as internal modules", async () => {
+    const readme = await readFile(readmePath, "utf8");
+
+    expect(readme).toContain("## Internal modules");
+    expect(readme).toContain("`src/t3code/`");
+    expect(readme).toContain("`src/github/`");
+    expect(readme).not.toMatch(/@wyrd-company\/(?:github-work|t3code-client)/);
+  });
+
+  it("exports both internal client public surfaces", async () => {
+    const heddle = await import("../src/index.js");
+
+    expect(heddle.github.github).toBeTypeOf("function");
+    expect(heddle.github.ScriptedTransport).toBeTypeOf("function");
+    expect(heddle.t3code.T3Client).toBeTypeOf("function");
   });
 });

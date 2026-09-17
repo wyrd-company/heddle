@@ -38,10 +38,7 @@ The package manifest fixes the publish target to
 `npm publish` only after authentication is configured. This repository does
 not publish as part of its build or test tasks.
 
-For local development, clone `github-work` and `t3code-client` beside the
-Heddle worktree directory and install each client's locked dependencies.
-Heddle typechecks and bundles their source entrypoints directly, so a separate
-client build is not required. Then install and build Heddle:
+For local development, install Heddle's locked dependencies and build:
 
 ```sh
 npm ci
@@ -49,11 +46,24 @@ task build
 ```
 
 `npm pack` builds the package and produces a tarball with one executable named
-`heddle`. esbuild includes the unpublished `github-work` and `t3code-client`
-workspace clients in the distributable; their workspace paths are build inputs
-and do not appear as package dependencies. `task package-check` rejects file
-dependencies, symbolic links, and parent-directory archive entries, installs
-the tarball into an empty project, and exercises `heddle --help`.
+`heddle`. `task package-check` rejects file dependencies, symbolic links, and
+parent-directory archive entries, installs the tarball into an empty project,
+and exercises `heddle --help`.
+
+## Internal modules
+
+Heddle owns its T3 Code and GitHub clients as internal modules:
+
+- `src/t3code/` provides the T3 Code HTTP, WebSocket RPC, authentication,
+  project, thread, turn, shell, MCP, version-control, and terminal surfaces.
+- `src/github/` provides typed GitHub Projects, issues, pull requests,
+  conversations, labels, milestones, issue types, and issue fields.
+
+They build, typecheck, and test as part of Heddle. They are not package
+dependencies and are not published separately. Their technical designs are
+`docs/technical-designs/t3-code-client.yml` and
+`docs/technical-designs/github-client.yml`; `AGENTS.md` defines their offline
+and live test commands.
 
 ## Run
 

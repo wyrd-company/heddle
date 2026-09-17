@@ -1,6 +1,8 @@
 coverage/
 dist/
 node_modules/
+src/github/schema/
+src/github/src/generated/
 
 # Preserved research captures and externally formatted fixture files.
 fixtures/

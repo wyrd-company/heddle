@@ -42,7 +42,7 @@ proposed-design:
     bound project is a workflow instance from the moment it is discovered.
     A shipped, replaceable intake blueprint reads the issue and starts its
     lifecycle run. Stages declared by bound blueprints are reconciled into
-    each project's Status field through `@wyrd-company/github-work`, with
+    each project's Status field through Heddle's internal GitHub client, with
     the blueprint as the source of truth. Issue and card changes arrive as
     webhook deliveries or poll diffs and become resumes on waiting runs.
   binding: >

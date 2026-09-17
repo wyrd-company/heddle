@@ -11,6 +11,9 @@ tasks:
   build:
     desc: Compile the package and executable
     cmds: [npm run build]
+  codegen:
+    desc: Regenerate the internal GitHub document lookup
+    cmds: [npm run codegen]
   typecheck:
     desc: Check all TypeScript without emitting files
     cmds: [npm run typecheck]
@@ -23,6 +26,15 @@ tasks:
   test:
     desc: Run offline unit tests
     cmds: [npm test]
+  test:t3code-live:
+    desc: Run the opt-in T3 Code integration suite against an isolated server
+    cmds: [npm run test:t3code-live]
+  test:github-live:
+    desc: Run the opt-in GitHub integration suite
+    cmds: [npm run test:github-live]
+  github-schema-refresh:
+    desc: Refresh the vendored GitHub GraphQL schema snapshot
+    cmds: [node --env-file-if-exists=.env src/github/scripts/refresh-schema.mjs]
   package-check:
     desc: Pack, install, and exercise the distributable npm package
     cmds: [scripts/test-package.sh]

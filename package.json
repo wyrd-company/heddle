@@ -29,31 +29,43 @@
     "docs/specifications/blueprint.schema.yml"
   ],
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && npm run build:types && node scripts/build.mjs",
+    "build": "node scripts/clean-dist.mjs && npm run codegen && npm run build:types && node scripts/build.mjs",
     "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly",
+    "codegen": "graphql-codegen --config src/github/codegen.ts",
     "prepack": "npm run build",
-    "typecheck": "tsc --project tsconfig.json --noEmit && tsc --project tsconfig.workspace-inputs.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
     "format": "prettier --write .",
     "prettier:check": "prettier --check .",
     "lint": "eslint src test",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:github-live": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --config vitest.github-live.config.ts",
+    "test:t3code-live": "T3_LIVE=1 vitest run --config vitest.t3code-live.config.ts"
   },
   "dependencies": {
     "ajv": "^8.20.0",
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "@octokit/auth-app": "^8.3.1",
+    "@octokit/core": "^7.0.8",
     "flowcraft": "^2.10.1",
+    "graphql": "^16.14.2",
     "jsonata": "^2.2.2",
     "nunjucks": "^3.2.4",
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@graphql-codegen/cli": "^7.4.1",
+    "@graphql-codegen/client-preset": "^6.2.0",
     "@types/node": "^24.10.0",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.28.2",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.7",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.70.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "ws": "^8.21.3"
   }
 }

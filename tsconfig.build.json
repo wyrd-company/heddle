@@ -7,5 +7,11 @@
     "outDir": "dist",
     "noEmit": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.live.test.ts",
+    "src/**/test/**",
+    "src/**/codegen.ts"
+  ]
 }

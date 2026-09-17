@@ -109,3 +109,45 @@ one as a finding to design for, not a failure.
   approval from the user.
 - Example values in tests and docs are generic and never drawn from the
   system's own domain.
+
+## Internal integration modules
+
+`src/t3code/` owns Heddle's T3 Code client. `src/github/` owns its GitHub
+Projects, issues, and pull-request client. They are internal modules of the
+Heddle package. Their public boundaries are `src/t3code/index.ts` and
+`src/github/index.ts`; application code does not import implementation files
+below their nested `src/` directories.
+
+The module designs are `docs/technical-designs/t3-code-client.yml` and
+`docs/technical-designs/github-client.yml`.
+
+## Internal module testing
+
+`task check` runs both modules' offline unit tests. The T3 Code tests use the
+in-process fake HTTP and WebSocket server under `src/t3code/test/support`.
+The GitHub tests use `ScriptedTransport`. Neither offline suite needs a live
+service or credentials.
+
+`task test:t3code-live` runs `src/t3code/test/live` against a separate T3 Code
+server. It skips unless `T3_LIVE_URL` and `T3_LIVE_TOKEN` are set; the command
+sets `T3_LIVE=1`. `T3_LIVE_MODEL` selects the model. `T3_LIVE_AGENT=1` enables
+tests that spend provider credit, and `T3_LIVE_QUEUED=1` selects the queued
+two-turn scenario. `src/t3code/scripts/live-server.sh` starts a throwaway
+server on port 3979 by default, with its own state and workspace. Set `T3_BIN`
+to the server entry point and `T3_PORT` to another unused port when needed.
+Never run this suite against the shared server on port 3773.
+
+`task test:github-live` runs the GitHub suites against the organization in
+`GITHUB_TEST_OWNER` and repository in `GITHUB_TEST_REPO`; it skips when these
+or usable credentials are absent. `GITHUB_TOKEN` administers the organization
+and its projects. Repository suites prefer the App identified by
+`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH`, and
+`GITHUB_APP_INSTALLATION_ID`, then `GITHUB_REPO_TOKEN`, then `GITHUB_TOKEN`.
+`GITHUB_TEST_ASSIGNEE` supplies an assignable user when the repository
+credential is an App. Live tests prefix created resources with a unique run
+id and clean up in suite teardown. Secrets come from the environment or the
+private-key path and never from repository files.
+
+`task github-schema-refresh` replaces the vendored GraphQL schema by live
+introspection. It requires `GITHUB_TOKEN`. Ordinary builds use the committed
+snapshot and remain offline.
