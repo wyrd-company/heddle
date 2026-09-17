@@ -4,10 +4,12 @@
 //     - blueprint-authoring
 //     - node-types
 // ---
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import jsonata from "jsonata";
+import { parse } from "yaml";
+import { resolveValues } from "../src/engine/runtime.js";
 import { afterEach, expect, it } from "vitest";
 import {
   deriveFlowcraftBlueprint,
@@ -43,7 +45,31 @@ function createHarness() {
       pass: async ({ await: pause }) => {
         await pause({ kind: "pass" });
       },
-      policy: () => Promise.resolve(null),
+      policy: async ({ params }) => {
+        const policy = parse(
+          readFileSync(join(fixtureDirectory, String(params["rules"])), "utf8"),
+        ) as {
+          rules: {
+            id: string;
+            when?: string;
+            blueprint: string;
+            inputs?: Record<string, unknown>;
+          }[];
+        };
+        const input = params["input"] as Record<string, unknown>;
+        for (const rule of policy.rules) {
+          if (
+            rule.when === undefined ||
+            (await jsonata(rule.when).evaluate(input))
+          )
+            return {
+              id: rule.id,
+              blueprint: rule.blueprint,
+              inputs: await resolveValues(rule.inputs ?? {}, input),
+            };
+        }
+        throw new Error("No fixture policy matched");
+      },
       notify: ({ run, nodeId }) => {
         notifications.push({ blueprintId: run.blueprintId, nodeId });
         return Promise.resolve(null);
@@ -155,3 +181,38 @@ it.each([
     }
   },
 );
+
+it("starts the fixture policy-selected lifecycle without awaiting its completion", async () => {
+  const { engine, store, notifications } = createHarness();
+  try {
+    const issue = {
+      id: "item-1",
+      type: "Collection request",
+      fields: { "Item Count": 3 },
+    };
+    const intake = await engine.start({
+      id: "intake-1",
+      blueprintId: "collection-intake",
+      commit: "commit-a",
+      context: { issue },
+    });
+    expect(intake.status).toBe("completed");
+    const links = store.lifecycleStarts(intake.id);
+    expect(links).toHaveLength(1);
+    const lifecycle = store.get(links[0]?.lifecycleRunId ?? "missing");
+    expect(lifecycle).toMatchObject({
+      blueprintId: "collection-catalog",
+      parentId: null,
+      rootId: lifecycle.id,
+      status: "awaiting",
+      initialContext: { issue },
+    });
+    expect(store.awaiting(intake.id)).toEqual([]);
+    expect(notifications).toContainEqual({
+      blueprintId: "collection-intake",
+      nodeId: "catalog-finished",
+    });
+  } finally {
+    store.close();
+  }
+});

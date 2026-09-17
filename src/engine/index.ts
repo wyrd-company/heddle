@@ -13,6 +13,8 @@ export type {
   EngineNode,
   EngineNodeContext,
   EngineOptions,
+  LifecycleOrigin,
+  LifecycleStart,
   ResumeInput,
   Run,
   RunEvent,

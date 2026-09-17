@@ -15,7 +15,12 @@ description: >-
   schemas are JSON Schema written in YAML and are exposed verbatim as the
   handoff tool's input schema, so they must satisfy the MCP tool input
   schema constraints. Blueprints never carry action edges and never use
-  the Flowcraft subflow node type; composition is through `child-run`.
+  the Flowcraft subflow node type; composition is through `child-run`. Intake uses `lifecycle-start` to create
+  an independent process run with the same issue snapshot and pinned commit.
+  Its blueprint id and additional input mapping may reference policy output;
+  the issue is transferred automatically and cannot be replaced by inputs.
+  The synchronous started result carries payload.runId without waiting for
+  lifecycle completion.
   A graph in which every node has an incoming edge declares the node where
   execution begins with `entry`. `docs/specifications/blueprint.schema.yml`
   is the machine-readable blueprint definition. Policy nodes reference an

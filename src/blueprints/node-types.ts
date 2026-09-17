@@ -20,6 +20,11 @@ export const NODE_TYPE_REGISTRY = {
     pausing: true,
     results: ["completed", "failed"],
   },
+  "lifecycle-start": {
+    paramsSchema: schemaReference("lifecycleStartParams"),
+    pausing: false,
+    results: ["started"],
+  },
   pass: {
     paramsSchema: schemaReference("passParams"),
     pausing: true,

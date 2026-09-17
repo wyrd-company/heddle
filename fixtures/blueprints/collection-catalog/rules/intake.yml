@@ -3,8 +3,7 @@ rules:
   - id: catalog
     when: type = 'Collection request'
     blueprint: collection-catalog
-    inputs:
-      issue: { from: "$" }
+    inputs: {}
   - id: hold
     blueprint: hold-then-attention
     inputs:

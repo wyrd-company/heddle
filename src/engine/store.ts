@@ -9,6 +9,8 @@ import type {
   Awaiting,
   Checkpoint,
   Data,
+  LifecycleStart,
+  LifecycleOrigin,
   Run,
   RunEvent,
   RunStatus,
@@ -86,6 +88,34 @@ export class RunStore {
       .prepare("SELECT id FROM runs ORDER BY rowid")
       .all()
       .map((row) => this.get(String(row["id"])));
+  }
+  lifecycleOrigin(lifecycleRunId: string): LifecycleOrigin | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM lifecycle_starts WHERE lifecycle_run_id=?")
+      .get(lifecycleRunId);
+    return row === undefined
+      ? undefined
+      : {
+          runId: String(row["run_id"]),
+          nodeId: String(row["node_id"]),
+          visit: Number(row["visit"]),
+        };
+  }
+  lifecycleStarts(runId?: string): LifecycleStart[] {
+    const rows =
+      runId === undefined
+        ? this.db.prepare("SELECT * FROM lifecycle_starts ORDER BY rowid").all()
+        : this.db
+            .prepare(
+              "SELECT * FROM lifecycle_starts WHERE run_id=? ORDER BY rowid",
+            )
+            .all(runId);
+    return rows.map((row) => ({
+      runId: String(row["run_id"]),
+      nodeId: String(row["node_id"]),
+      visit: Number(row["visit"]),
+      lifecycleRunId: String(row["lifecycle_run_id"]),
+    }));
   }
   event(runId: string, type: string, payload: unknown): void {
     this.db

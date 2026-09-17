@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS runs (
   initial_context TEXT NOT NULL, context TEXT NOT NULL, checkpoint TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS runs_root ON runs(root_id);
+CREATE TABLE IF NOT EXISTS lifecycle_starts (
+  run_id TEXT NOT NULL REFERENCES runs(id), node_id TEXT NOT NULL, visit INTEGER NOT NULL,
+  lifecycle_run_id TEXT NOT NULL UNIQUE REFERENCES runs(id),
+  PRIMARY KEY(run_id, node_id, visit)
+);
 CREATE TABLE IF NOT EXISTS awaiting (
   run_id TEXT NOT NULL REFERENCES runs(id), node_id TEXT NOT NULL, visit INTEGER NOT NULL,
   kind TEXT NOT NULL, thread_id TEXT, child_run_id TEXT, issue_id TEXT, details TEXT NOT NULL,

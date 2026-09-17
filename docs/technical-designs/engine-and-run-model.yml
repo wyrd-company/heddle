@@ -91,6 +91,24 @@ proposed-design:
     A stage blueprint therefore knows nothing about its parent, and a parent
     knows nothing about threads. Flowcraft's `subflow` node type is excluded
     from the registry so it cannot be used by mistake.
+  lifecycle-start: >
+    Intake starts a lifecycle through `lifecycle-start`. The target is an
+    independent top-level run with its own root id and no parent. A durable
+    lifecycle-start relationship records the source run id, node id, visit,
+    and lifecycle run id atomically with target creation. This provenance
+    relationship is distinct from child-run completion routing. The node
+    returns started with the lifecycle run id immediately after creation;
+    it does not await completion. Dispatch follows intake traversal and
+    recovery dispatches durable starts even after intake has completed.
+    The target blueprint must have kind process. The node captures the
+    current issue snapshot and mapped additional inputs before asynchronous
+    target resolution, preserving the initial issue identity. The target
+    stores these immutable values in initialContext and pins the intake
+    commit. Replay consumes the same invocation, and execution/recovery read
+    the stored target blueprint. Instance binding attaches the created run
+    rather than creating a second lifecycle or refreshing its inputs.
+    Lifecycle pause/resume controls its own root and descendants independently
+    of the intake run. Invalid targets fail intake before lifecycle effects.
   resume: >
     A resume is the single entry point for waking a paused run. Its input is
     a run id, the id of the node to wake, a result name, and a payload. The
@@ -180,7 +198,8 @@ proposed-design:
   blueprint-pinning: >
     A run pins the blueprint repository commit it started from, which covers
     the blueprint and every prompt, handoff schema, and rules file it
-    references. Child runs pin the same commit as their parent. A new
+    references. Child runs pin the same commit as their parent. Lifecycle starts pin the
+    same commit as their intake source. A new
     commit changes what new instances get; running instances keep their
     commit until they finish. Moving a running instance to a newer commit
     is not supported in this version.

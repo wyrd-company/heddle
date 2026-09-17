@@ -834,7 +834,7 @@ nodes:
       temporaryFile("sample-a.yml", source),
     );
 
-    expect(Object.keys(NODE_TYPE_REGISTRY)).toHaveLength(10);
+    expect(Object.keys(NODE_TYPE_REGISTRY)).toHaveLength(11);
     expect(findings).toContainEqual(
       expect.objectContaining({ node: "done", rule: "node.params" }),
     );

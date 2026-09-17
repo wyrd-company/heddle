@@ -1,4 +1,4 @@
-# This helper approximates issue-type intake with the current node catalog.
+# Intake selects a lifecycle without waiting for it to complete.
 id: collection-intake
 kind: helper
 description: Choose a collection process or hold an unmatched issue.
@@ -9,13 +9,12 @@ nodes:
     params:
       rules: rules/intake.yml
       input: { from: issue }
-  # A matching issue starts the collection process as a child run.
+  # A matching issue starts an independent collection lifecycle.
   start-catalog:
-    uses: child-run
+    uses: lifecycle-start
     params:
-      blueprint: collection-catalog
-      inputs:
-        issue: { from: issue }
+      blueprint: { from: classify.blueprint }
+      inputs: { from: classify.inputs }
   # An unmatched issue starts the helper that waits for a relevant change.
   start-hold:
     uses: child-run
@@ -24,12 +23,12 @@ nodes:
       inputs:
         issue: { from: issue }
         expectedType: Collection request
-  # Completion of the selected collection process is made visible.
+  # Durable start of the selected collection process is made visible.
   catalog-finished:
     uses: notify
     params:
       channel: pushover
-      title: { inline: "Collection intake finished" }
+      title: { inline: "Collection lifecycle started" }
   # Completion of the hold helper is made visible.
   hold-finished:
     uses: notify

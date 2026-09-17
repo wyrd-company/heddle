@@ -5,7 +5,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { WorkflowBlueprint } from "flowcraft";
 import type { RunStore } from "./store.js";
-import type { Data, EngineOptions, Run } from "./types.js";
+import type { Data, EngineOptions, LifecycleOrigin, Run } from "./types.js";
 
 export interface RelatedRun {
   id: string;
@@ -22,6 +22,7 @@ export interface NewRun {
   rootId: string;
   parentId: string | null;
   parentNodeId: string | null;
+  lifecycleOrigin?: LifecycleOrigin;
 }
 export function createRelatedRun(
   store: RunStore,
@@ -35,8 +36,10 @@ export function createRelatedRun(
     rootId: parent.rootId,
   });
 }
-function sameRun(existing: Run, input: NewRun): Run {
+function sameRun(store: RunStore, existing: Run, input: NewRun): Run {
+  const origin = store.lifecycleOrigin(existing.id);
   if (
+    !isDeepStrictEqual(origin, input.lifecycleOrigin) ||
     existing.blueprintId !== input.blueprintId ||
     existing.commit !== input.commit ||
     existing.rootId !== input.rootId ||
@@ -53,13 +56,18 @@ export async function createRun(
   input: NewRun,
 ): Promise<Run> {
   if (store.db.prepare("SELECT 1 FROM runs WHERE id=?").get(input.id))
-    return sameRun(store.get(input.id), input);
+    return sameRun(store, store.get(input.id), input);
   const blueprint = structuredClone(
     await resolve(input.commit, input.blueprintId),
   );
   checkBlueprint(blueprint);
   if (blueprint.id !== input.blueprintId)
     throw new Error("Blueprint resolver returned a different identity");
+  if (
+    input.lifecycleOrigin &&
+    (blueprint as WorkflowBlueprint & { kind?: string }).kind !== "process"
+  )
+    throw new Error("lifecycle-start requires a process blueprint");
   const context = structuredClone(input.context ?? {});
   const run: Run = {
     ...input,
@@ -71,13 +79,24 @@ export async function createRun(
     checkpoint: { context },
   };
   store.transaction(() => {
-    if (store.create(run))
+    if (store.create(run)) {
       store.event(run.id, "start", {
         blueprintId: run.blueprintId,
         commit: run.commit,
       });
+      if (input.lifecycleOrigin) {
+        const origin = input.lifecycleOrigin;
+        store.db
+          .prepare("INSERT INTO lifecycle_starts VALUES (?,?,?,?)")
+          .run(origin.runId, origin.nodeId, origin.visit, run.id);
+        store.event(origin.runId, "lifecycle-started", {
+          ...origin,
+          lifecycleRunId: run.id,
+        });
+      }
+    }
   });
-  return sameRun(store.get(run.id), input);
+  return sameRun(store, store.get(run.id), input);
 }
 function checkBlueprint(blueprint: WorkflowBlueprint): void {
   if (

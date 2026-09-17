@@ -69,7 +69,7 @@ properties:
     description: >
       For `stage` and `helper` blueprints: the initial context keys a parent
       must supply, each with a JSON Schema. Process blueprints receive the
-      issue and need no declaration.
+      issue automatically and may declare additional lifecycle-start inputs.
     type: object
     additionalProperties:
       $ref: "#/$defs/jsonSchema"
@@ -204,6 +204,11 @@ $defs:
           properties: { params: { $ref: "#/$defs/childRunParams" } }
           required: [params]
       - if:
+          properties: { uses: { const: lifecycle-start } }
+        then:
+          properties: { params: { $ref: "#/$defs/lifecycleStartParams" } }
+          required: [params]
+      - if:
           properties: { uses: { const: pass } }
         then:
           properties: { params: { $ref: "#/$defs/passParams" } }
@@ -284,6 +289,28 @@ $defs:
         description: Keys under this node's output.payload to child final context keys.
         type: object
         additionalProperties: { type: string }
+  lifecycleStartParams:
+    type: object
+    additionalProperties: false
+    required: [blueprint]
+    properties:
+      blueprint:
+        description: Process blueprint id, selected literally or from intake policy output.
+        oneOf:
+          - $ref: "#/$defs/slug"
+          - $ref: "#/$defs/contextRef"
+      inputs:
+        description: >
+          Additional initial context values or a reference to their mapping.
+          The current issue snapshot is transferred automatically; inputs
+          cannot replace issue. Values are captured before target resolution.
+        oneOf:
+          - $ref: "#/$defs/contextRef"
+          - type: object
+            propertyNames:
+              not: { enum: [issue, from] }
+            additionalProperties:
+              $ref: "#/$defs/valueOrRef"
   passParams:
     type: object
     additionalProperties: false

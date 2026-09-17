@@ -161,6 +161,31 @@ proposed-design:
     retry routing the author wants, and ends on the stage result
     contract. The author reference documents the inputs and outputs each
     shipped stage blueprint declares.
+  lifecycle-start: |
+    Starts the process blueprint selected by intake as an independent
+    top-level run. Intake does not wait for lifecycle completion.
+
+    Inputs: `blueprint` (a process blueprint id or context reference),
+    `inputs` (optional additional initial-context values or a reference to
+    their mapping). The current `issue` snapshot is transferred automatically;
+    mapped inputs cannot replace it. Its non-empty id must match the intake
+    run's initial issue id. Other issue fields may reflect observed updates.
+
+    Behavior: captures issue and mapped inputs before resolving the target
+    at the intake run's pinned commit. Target creation and the source
+    run/node/visit relationship commit atomically. The target has no parent
+    and is its own root. Replay reuses that invocation and stored snapshot.
+    Lifecycle dispatch follows intake traversal; target completion does not
+    resume intake. The engine exposes the relationship for instance binding,
+    inspection, and recovery through `RunStore.lifecycleStarts`.
+
+    Output and results: `{ started: true, payload: { runId } }` after durable
+    creation. This synchronous node does not pause or create a completion wait.
+    Context writes: only the ordinary output under the authored node id.
+    Failure: an invalid target id, unresolved target, non-process target,
+    invalid input mapping, or changed issue identity fails intake and raises
+    attention before target execution. A later lifecycle failure belongs to
+    that independent run and does not change the started result.
   on-issue-change: |
     Pauses until the bound issue or its project card changes.
 

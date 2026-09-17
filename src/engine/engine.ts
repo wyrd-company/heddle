@@ -3,22 +3,17 @@
 //   implements: engine-and-run-model
 // ---
 import { randomUUID } from "node:crypto";
-import type { WorkflowBlueprint, WorkflowResult } from "flowcraft";
-import jsonata from "jsonata";
+import type { WorkflowResult } from "flowcraft";
 import { claimResume, drainQueued } from "./claims.js";
 import { bindNode } from "./nodes.js";
 import { Attention, DurableRuntime, isDispatchHeld } from "./runtime.js";
 import { RunStore } from "./store.js";
-import type {
-  Awaiting,
-  Data,
-  EngineOptions,
-  ResumeInput,
-  Run,
-} from "./types.js";
+import type { Data, EngineOptions, ResumeInput, Run } from "./types.js";
 import { Wakeups } from "./wakeups.js";
 import { createRun, createRelatedRun, type RelatedRun } from "./create-run.js";
 import { DurableTraversal } from "./traversal.js";
+import { childOutputs } from "./child-outputs.js";
+import { lifecycleStart } from "./lifecycle-start.js";
 
 export class WorkflowEngine {
   readonly wakeups: Wakeups;
@@ -91,7 +86,14 @@ export class WorkflowEngine {
           runtime,
           run,
           { ...definition },
-          this.options.nodes?.[definition.uses],
+          definition.uses === "lifecycle-start"
+            ? (context) =>
+                lifecycleStart(
+                  this.store,
+                  this.options.resolveBlueprint,
+                  context,
+                )
+            : this.options.nodes?.[definition.uses],
           this.clock,
           this.options.beforeNode,
         ),
@@ -135,6 +137,7 @@ export class WorkflowEngine {
     release();
     await this.drainHeld(runId);
     await this.dispatchChildren(runId);
+    await this.dispatchLifecycles(runId);
     await this.deliverCompletion(runId);
     return this.store.get(runId);
   }
@@ -214,7 +217,7 @@ export class WorkflowEngine {
       payload =
         child.status === "failed"
           ? { runId: child.id, events: this.store.events(child.id) }
-          : await this.childOutputs(child, awaiting);
+          : await childOutputs(child, awaiting);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.store.event(child.parentId, "attention", {
@@ -232,22 +235,12 @@ export class WorkflowEngine {
       payload,
     });
   }
-  private async childOutputs(child: Run, awaiting: Awaiting): Promise<Data> {
-    const declared =
-      (child.blueprint as WorkflowBlueprint & { outputs?: Data }).outputs ?? {};
-    const mapping =
-      (awaiting.details["outputs"] as Record<string, string> | undefined) ??
-      Object.fromEntries(Object.keys(declared).map((key) => [key, key]));
-    return Object.fromEntries(
-      await Promise.all(
-        Object.entries(mapping).map(
-          async ([key, path]): Promise<[string, unknown]> => [
-            key,
-            (await jsonata(path).evaluate(child.context)) as unknown,
-          ],
-        ),
-      ),
-    );
+  private async dispatchLifecycles(runId: string): Promise<void> {
+    for (const started of this.store.lifecycleStarts(runId)) {
+      const run = this.store.get(started.lifecycleRunId);
+      if (run.status === "running" || run.status === "resuming")
+        await this.execute(run.id);
+    }
   }
   async recover(rootId?: string): Promise<void> {
     for (const listed of this.store.list()) {

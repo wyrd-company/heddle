@@ -81,7 +81,7 @@ proposed-design:
     A new item in a bound project creates an instance whose first run is the
     intake blueprint. Intake reads `issue` and routes on whatever the author
     chose: issue type, an organization field, a project field, the parent
-    epic's blueprint, or a mix. Its terminal nodes are `start-lifecycle`
+    epic's blueprint, or a mix. Its terminal nodes are `lifecycle-start`
     nodes naming a blueprint id. The shipped default routes on issue type.
     Whether the lifecycle blueprint can also be pinned by a person through a
     project field is a choice the intake author makes by reading that field

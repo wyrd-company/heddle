@@ -5,6 +5,14 @@
 import type { NodeDefinition, WorkflowBlueprint } from "flowcraft";
 
 export type Data = Record<string, unknown>;
+export interface LifecycleOrigin {
+  runId: string;
+  nodeId: string;
+  visit: number;
+}
+export interface LifecycleStart extends LifecycleOrigin {
+  lifecycleRunId: string;
+}
 export type RunStatus =
   "running" | "resuming" | "awaiting" | "completed" | "failed";
 export interface ResumeInput {
