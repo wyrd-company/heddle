@@ -15,14 +15,17 @@ const effects = new DatabaseSync(`${path}.effects`);
 effects.exec(
   "CREATE TABLE IF NOT EXISTS effects (id TEXT PRIMARY KEY,attempts INTEGER NOT NULL)",
 );
-const record: EngineNode = async ({ effectKey }) => {
+const record: EngineNode = async ({ effectKey, nodeId }) => {
   effects
     .prepare(
       "INSERT INTO effects VALUES (?,1) ON CONFLICT(id) DO UPDATE SET attempts=attempts+1",
     )
     .run(effectKey);
-  if (mode === "mid-node") {
-    process.send?.("mid-node");
+  if (
+    (mode === "mid-node" && nodeId === "record") ||
+    (mode === "resuming" && nodeId === "finish")
+  ) {
+    process.send?.(mode);
     await new Promise(() => {
       /* The parent kills the process at this boundary. */
     });
@@ -50,7 +53,7 @@ const engine = new WorkflowEngine(store, {
         },
       ],
     }),
-  nodes: { record, pass: pause, finish: () => Promise.resolve({ done: true }) },
+  nodes: { record, pass: pause, finish: record },
 });
 if (mode === "resume") {
   await engine.recover();
@@ -71,6 +74,12 @@ if (mode === "resume") {
     blueprintId: "delivery",
     commit: "commit-a",
   });
+  if (mode === "resuming")
+    await engine.resume({
+      runId: "delivery-1",
+      nodeId: "approval",
+      result: "handoff",
+    });
   process.send?.("paused");
   process.on("message", () => {
     /* Keep the paused process available for SIGKILL. */

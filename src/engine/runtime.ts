@@ -13,10 +13,18 @@ import jsonata from "jsonata";
 import type { Data } from "./types.js";
 
 export class Attention extends Error {}
+export class DispatchHeld extends Error {}
+export function isDispatchHeld(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error instanceof DispatchHeld || isDispatchHeld(error.cause))
+  );
+}
 
 /** Flowcraft's synchronous evaluator cannot consume JSONata's async result. */
 export class DurableRuntime extends FlowRuntime<Data, Data> {
   readonly pausing = new Set<string>();
+  resumedNodeId?: string;
   override async determineNextNodes(
     blueprint: WorkflowBlueprint,
     nodeId: string,
@@ -41,6 +49,8 @@ export class DurableRuntime extends FlowRuntime<Data, Data> {
     }
     if (outgoing.length > 0 && edges.length === 0)
       throw new Attention(`No edge handles the result of ${nodeId}`);
+    if (nodeId === this.resumedNodeId && edges.length > 1)
+      throw new Attention(`Multiple edges handle the result of ${nodeId}`);
     return super.determineNextNodes(
       { ...blueprint, edges },
       nodeId,

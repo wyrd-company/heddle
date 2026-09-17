@@ -7,7 +7,7 @@ import type { WorkflowBlueprint, WorkflowResult } from "flowcraft";
 import jsonata from "jsonata";
 import { claimResume } from "./claims.js";
 import { bindNode } from "./nodes.js";
-import { Attention, DurableRuntime } from "./runtime.js";
+import { Attention, DurableRuntime, isDispatchHeld } from "./runtime.js";
 import { RunStore } from "./store.js";
 import type {
   Awaiting,
@@ -17,6 +17,7 @@ import type {
   Run,
 } from "./types.js";
 import { Wakeups } from "./wakeups.js";
+import { createRun } from "./create-run.js";
 
 export class WorkflowEngine {
   readonly wakeups: Wakeups;
@@ -36,7 +37,7 @@ export class WorkflowEngine {
     id?: string;
   }): Promise<Run> {
     const id = input.id ?? randomUUID();
-    const run = await this.create({
+    const run = await createRun(this.store, this.options.resolveBlueprint, {
       ...input,
       id,
       rootId: id,
@@ -44,53 +45,6 @@ export class WorkflowEngine {
       parentNodeId: null,
     });
     return run.status === "awaiting" ? run : this.execute(run.id);
-  }
-  private async create(input: {
-    id: string;
-    blueprintId: string;
-    commit: string;
-    context?: Data;
-    rootId: string;
-    parentId: string | null;
-    parentNodeId: string | null;
-  }): Promise<Run> {
-    const existing = this.store.list().find((run) => run.id === input.id);
-    if (existing) return existing;
-    const blueprint = structuredClone(
-      await this.options.resolveBlueprint(input.commit, input.blueprintId),
-    );
-    this.checkBlueprint(blueprint);
-    if (blueprint.id !== input.blueprintId)
-      throw new Error("Blueprint resolver returned a different identity");
-    const context = structuredClone(input.context ?? {});
-    const run: Run = {
-      ...input,
-      blueprint,
-      status: "running",
-      paused: false,
-      initialContext: context,
-      context,
-      checkpoint: { context },
-    };
-    if (input.parentId) run.paused = this.store.get(input.parentId).paused;
-    this.store.transaction(() => {
-      if (this.store.create(run))
-        this.store.event(run.id, "start", {
-          blueprintId: run.blueprintId,
-          commit: run.commit,
-        });
-    });
-    return this.store.get(run.id);
-  }
-  private checkBlueprint(blueprint: WorkflowBlueprint): void {
-    if (
-      blueprint.nodes.some(
-        (node) => node.uses === "subflow" || node.uses === "SubflowNode",
-      )
-    )
-      throw new Error("subflow is excluded; use child-run");
-    if (blueprint.edges.some((edge) => edge.action !== undefined))
-      throw new Error("Action edges are excluded");
   }
   async resume(
     request: ResumeInput,
@@ -130,6 +84,13 @@ export class WorkflowEngine {
     }
     // Bind closures before replacing names in the execution blueprint.
     const checkpoint = run.checkpoint;
+    const details = checkpoint.context["_awaitingDetails"] as
+      Record<string, Data> | undefined;
+    if (
+      checkpoint.nodeId &&
+      details?.[checkpoint.nodeId]?.["kind"] !== "checkpoint"
+    )
+      runtime.resumedNodeId = checkpoint.nodeId;
     try {
       const result =
         checkpoint.nodeId === undefined
@@ -144,17 +105,15 @@ export class WorkflowEngine {
             );
       this.settle(runId, result);
     } catch (error) {
-      if (!this.store.get(runId).paused) {
-        this.store.transaction(() => {
-          this.store.status(runId, "failed");
-          this.store.event(runId, "failure", {
-            message: error instanceof Error ? error.message : String(error),
-          });
-          this.store.event(runId, "attention", {
-            message: error instanceof Error ? error.message : String(error),
-          });
+      this.store.transaction(() => {
+        this.store.status(runId, "failed");
+        this.store.event(runId, "failure", {
+          message: error instanceof Error ? error.message : String(error),
         });
-      }
+        this.store.event(runId, "attention", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
     }
     // Release the traversal claim before child completion enters resume.
     this.active.delete(runId);
@@ -163,20 +122,29 @@ export class WorkflowEngine {
     return this.store.get(runId);
   }
   private settle(runId: string, result: WorkflowResult<Data>): void {
-    if (this.store.get(runId).paused && result.status === "failed") return;
-    if (result.status !== "awaiting" && result.status !== "completed")
+    if (
+      this.store.get(runId).paused &&
+      result.status === "failed" &&
+      result.errors?.every((error) => isDispatchHeld(error.originalError))
+    )
+      return;
+    if (
+      (result.errors?.length ?? 0) > 0 ||
+      (result.status !== "awaiting" && result.status !== "completed")
+    )
       throw new Attention(
         `Run landed in ${result.status}: ${result.errors?.map((error) => error.message).join("; ") ?? ""}`,
       );
     this.store.transaction(() => {
+      const status =
+        this.store.awaiting(runId).length > 0 ? "awaiting" : result.status;
       this.store.save(
         runId,
         result.context,
         { context: result.context },
-        result.status === "awaiting" ? "awaiting" : "completed",
+        status === "awaiting" ? "awaiting" : "completed",
       );
-      if (result.status === "completed")
-        this.store.event(runId, "completed", {});
+      if (status === "completed") this.store.event(runId, "completed", {});
     });
   }
   private async dispatchChildren(runId: string): Promise<void> {
@@ -185,7 +153,7 @@ export class WorkflowEngine {
     for (const item of this.store.awaiting(runId)) {
       if (item.details.kind !== "child-run" || !item.details.childRunId)
         continue;
-      const child = await this.create({
+      const child = await createRun(this.store, this.options.resolveBlueprint, {
         id: item.details.childRunId,
         blueprintId: String(item.details["blueprint"]),
         commit: parent.commit,

@@ -25,6 +25,8 @@ export class Wakeups {
       }));
   }
   activity(runId: string, nodeId: string, observedAt: number): void {
+    if (!Number.isFinite(observedAt))
+      throw new Error("Activity requires a finite observed time");
     this.store.transaction(() => {
       const item = this.store
         .awaiting(runId)
@@ -51,6 +53,8 @@ export class Wakeups {
     resume: (input: ResumeInput) => Promise<string>,
   ): Promise<void> {
     for (const wakeup of this.due(now)) {
+      const current = this.due(now).find((item) => item.id === wakeup.id);
+      if (!current) continue;
       const outcome = await resume({ ...wakeup, payload: { due: wakeup.due } });
       if (outcome !== "held")
         this.store.db.prepare("DELETE FROM wakeups WHERE id=?").run(wakeup.id);

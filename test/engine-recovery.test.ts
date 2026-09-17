@@ -39,7 +39,7 @@ async function stop(child: ChildProcess): Promise<void> {
   child.kill("SIGKILL");
   await exited;
 }
-it.each(["paused", "mid-node"])(
+it.each(["paused", "mid-node", "resuming"])(
   "recovers after process death while %s with stable effect identity",
   async (mode) => {
     const directory = mkdtempSync(join(tmpdir(), "heddle-recovery-"));
@@ -63,6 +63,10 @@ it.each(["paused", "mid-node"])(
           {
             id: JSON.stringify(["delivery-1", "record", 1]),
             attempts: mode === "mid-node" ? 2 : 1,
+          },
+          {
+            id: JSON.stringify(["delivery-1", "finish", 1]),
+            attempts: mode === "resuming" ? 2 : 1,
           },
         ],
       });

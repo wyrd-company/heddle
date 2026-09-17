@@ -4,7 +4,7 @@
 // ---
 import type { NodeDefinition, NodeFunction } from "flowcraft";
 import type { RunStore } from "./store.js";
-import { DurableRuntime, resolveValues } from "./runtime.js";
+import { DurableRuntime, DispatchHeld, resolveValues } from "./runtime.js";
 import type { AwaitingDetails, Data, EngineNode, Run } from "./types.js";
 import { duration } from "./timing.js";
 
@@ -18,7 +18,7 @@ export function bindNode(
 ): NodeFunction<Data, Data, unknown, unknown> {
   return async (native) => {
     if (store.get(run.id).paused)
-      throw new Error("Dispatch held by instance pause");
+      throw new DispatchHeld("Dispatch held by instance pause");
     const nodeId = definition.id;
     const visit = store.beginVisit(run.id, nodeId);
     store.event(run.id, "node-start", { nodeId, visit });
@@ -27,6 +27,8 @@ export function bindNode(
       definition.params ?? {},
       context,
     )) as Data;
+    const deadline = duration(params["deadline"]);
+    const inactivity = duration(params["inactivity"]);
     let awaiting: AwaitingDetails | undefined;
     const pause = async (details: AwaitingDetails) => {
       awaiting = details;
@@ -66,12 +68,12 @@ export function bindNode(
       });
     }
     // Node-owned shared context writes are part of the same durable checkpoint.
-    for (const [key, value] of Object.entries(context))
+    for (const [key, value] of Object.entries(context)) {
+      if (key === "_awaitingNodeIds" || key === "_awaitingDetails") continue;
       await native.context.set(key, value);
+    }
     const snapshot = await native.context.toJSON();
     if (awaiting) {
-      const deadline = duration(params["deadline"]);
-      const inactivity = duration(params["inactivity"]);
       if (deadline !== undefined) awaiting.deadline = deadline;
       if (inactivity !== undefined) awaiting.inactivity = inactivity;
       snapshot["_awaitingNodeIds"] =
@@ -87,8 +89,14 @@ export function bindNode(
         : {
             context: {
               ...snapshot,
-              _awaitingNodeIds: [nodeId],
-              _awaitingDetails: { [nodeId]: { kind: "checkpoint" } },
+              _awaitingNodeIds: [
+                ...native.dependencies.workflowState.getAwaitingNodeIds(),
+                nodeId,
+              ],
+              _awaitingDetails: {
+                ...(snapshot["_awaitingDetails"] as Data),
+                [nodeId]: { kind: "checkpoint" },
+              },
             },
             nodeId,
             output: output ?? null,

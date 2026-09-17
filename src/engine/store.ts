@@ -168,6 +168,7 @@ export class RunStore {
   }
   recordAwaiting(item: Awaiting, now: number): void {
     const { details, runId, nodeId, visit } = item;
+    if (details.inactivity !== undefined) details.lastActivity ??= now;
     this.db
       .prepare("INSERT OR REPLACE INTO awaiting VALUES (?,?,?,?,?,?,?,?)")
       .run(
