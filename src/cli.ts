@@ -14,6 +14,14 @@ if (
 ) {
   const { hookCli } = await import("./agent-tools/hooks.js");
   process.exitCode = await hookCli(args[2]);
+} else if (
+  args.length === 3 &&
+  args[0] === "hook" &&
+  args[1] === "export-plugins" &&
+  args[2]
+) {
+  const { exportHookPlugins } = await import("./agent-tools/plugins.js");
+  await exportHookPlugins(args[2]);
 } else
   process.exitCode = await runConfiguredCli(args, {
     error: (message) => {

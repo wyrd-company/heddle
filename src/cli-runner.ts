@@ -21,7 +21,8 @@ const commands = new Map<string, CommandHelp>([
   [
     "hook",
     {
-      usage: "Usage: heddle hook <command>\n\nCommands:\n  stop <harness>",
+      usage:
+        "Usage: heddle hook <command>\n\nCommands:\n  stop <harness>\n  export-plugins <directory>",
     },
   ],
   [

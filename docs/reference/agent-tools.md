@@ -11,7 +11,9 @@ relationships:
 Each pass has a generated Streamable HTTP MCP endpoint. Its opaque path binds
 one run, node visit, and thread. Its bearer token works only at that path.
 The service stores the token hash in awaiting details; the clear token is
-returned once for thread registration and hook installation.
+returned once for thread registration. Heddle retains the binding in its owned
+state directory while the pass is active; neither worktrees nor Git metadata
+contain hook credentials or endpoint-binding files.
 
 | Tool             | Behavior                                                                                                                                                                                                                  |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -34,7 +36,7 @@ are consumed once and survive service restart.
 ## Integration
 
 The pass node calls `prepareAgentTools` with the thread id, pinned handoff schema,
-and rendered context. It installs the returned binding before the first turn,
+and rendered context. It retains the returned binding in Heddle-owned state before the first turn,
 registers that path and token through T3 Code, and persists the returned details
 through the engine's await operation. The handoff schema and context are copied
 into those durable details; recovery never resolves a live blueprint file.
@@ -45,45 +47,66 @@ the same recovery at startup. Route instance requests through `handle`; consume
 rejected promises in the HTTP host. The HTTP host owns listening and shutdown.
 The service uses stateless Streamable HTTP requests.
 
-The pass lifecycle owns clearing T3 Code registration and installed hooks when
-a pass completes, fails, or is cancelled. `revoke(path)` persistently revokes a
+The pass lifecycle owns clearing T3 Code registration, session mapping, and
+credentials when a pass completes, fails, or is cancelled. The shared profile
+plugin remains installed. `revoke(path)` persistently revokes a
 live instance. Authentication also rejects an instance whose run is terminal or
 whose node visit is no longer awaiting. Rejected calls go to the host's supplied
 log callback, or standard error. The callback receives only the path.
 
-## Worktree files
+## User-profile plugins
 
-Hook installation preserves unrelated configuration and adds one command:
-`heddle hook stop claude` or `heddle hook stop codex`. `heddle` must be on the
-harness's PATH. Hook commands read the harness's real `Stop` JSON from stdin.
-An unavailable policy endpoint produces exit code 2 with a handoff diagnostic.
-No request timeout is added by Heddle.
+Export the reusable native marketplace packages once, outside worktrees:
 
-| Harness     | Files written by hook installation                                    |
-| ----------- | --------------------------------------------------------------------- |
-| Claude Code | `.claude/settings.local.json`, `.claude/.heddle-hook.json`            |
-| Codex       | `.codex/hooks.json`, `.codex/config.toml`, `.codex/.heddle-hook.json` |
+```sh
+heddle hook export-plugins ~/.local/share/heddle/plugins
+claude plugin marketplace add ~/.local/share/heddle/plugins/claude
+claude plugin install heddle@heddle --scope user
+codex plugin marketplace add ~/.local/share/heddle/plugins/codex
+codex plugin add heddle@heddle
+```
 
-The `.heddle-hook.json` file contains the service origin, instance path, and
-bearer token. It is created with owner-only access. Treat it as a credential
-and exclude it from commits. Each installation belongs to the pass using that
-worktree. The integration must remove the pass's hook and credential at teardown
-and must not overwrite another live pass's binding in the same worktree.
+After exporting an updated package, use `claude plugin update heddle@heddle`
+or repeat `codex plugin add heddle@heddle`. Installation and update are native
+harness operations. Heddle does not rewrite operator profile configuration or
+write separate hook trust. Repeated installation keeps one hook. The plugin
+version follows the Heddle package version.
 
-Codex project hook discovery is enabled in its project configuration. Codex
-requires independent operator trust for a discovered hook. Heddle does not write
-user trust or access settings. The Codex installer reports observation mode;
-the pass observer calls `observeTurnEnd` for completed turns. When the operator
-has independently trusted the hook, the hook can block before that observation.
-A completed turn resumes with `turnEnded`; required-handoff results include a
-reminder. The blueprint owns continuation routing and its count bound. Operator
-turn suppression and registration teardown belong to the pass node.
+Each plugin runs `heddle hook stop claude` or `heddle hook stop codex`.
+`heddle` must be on the harness PATH. Both commands read the real Stop JSON
+and send only its exact `session_id` to Heddle's local `hooks.sock`. The socket
+is in `HEDDLE_STATE_DIR`, defaulting to `$XDG_STATE_HOME/heddle` or
+`~/.local/state/heddle`. Hook input cannot select a thread, pass, endpoint, or
+token. Cwd has no role in correlation. No request timeout is added by Heddle.
+
+Heddle correlates authoritative T3 session events with the active run, node
+visit, thread, and generated endpoint. An unmapped session returns allow with
+no generated-endpoint call, attention, or state change. The plugin is also
+inert when no Heddle runtime is listening. Active uniquely mapped sessions use
+their own generated policy endpoint. An ambiguous owned mapping is an invariant
+error; it does not change decisions for unrelated sessions.
+
+Recovery reconciles terminal and stale mappings before serving hook traffic.
+Removing the awaiting row immediately rejects the endpoint's original token.
+Terminal mapping removal then makes subsequent Stop events return inert allow;
+cleanup cannot precede that awaiting-row transition. An in-flight policy read
+rechecks the mapping before returning a block. A later pass never acquires the
+completed pass's credentials. The reusable plugin remains installed throughout.
+
+Codex supports independently trusted blocking and untrusted observation.
+Heddle does not make hook trust a setup prerequisite. Under observation,
+completed turns resume with `turnEnded`; required-handoff results include the
+reminder. A real blueprint owns continuation routing and its count bound.
 
 ## Qualification
 
+`node scripts/qualify-plugin-install.mjs` checks initial native installation,
+update and repeat installation in isolated Claude and Codex profiles. It checks
+that unrelated Codex comments remain and installation adds no hook trust.
+
 `node scripts/qualify-codex-hooks.mjs` measures the installed Codex executable
 against a local Responses fixture. It uses isolated configuration, no provider
-credentials, and the installed Heddle hook command. It measures both untrusted
+credentials, and the natively installed Heddle plugin command. It measures both untrusted
 observation and fixture-only operator trust. In the trusted case the hook blocks
 one completion, the next model request receives the handoff reminder, and a
 live policy change allows the same turn to finish.

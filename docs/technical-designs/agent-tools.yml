@@ -105,21 +105,29 @@ proposed-design:
     The agent calls `propose-policy`, which raises a question the operator
     answers; approval applies the change.
   harness-hooks: >
-    Each supported harness gets an adapter that installs a turn-end hook in
-    the thread's working directory or configuration before the first turn
-    starts. Claude Code uses a `Stop` hook in the worktree's project
-    settings. Other harnesses use their equivalent where one exists; where
-    none exists, the policy is enforced by observation only: a turn that
-    ends without a handoff under `require-handoff` resumes the stage with
-    `turnEnded` and the blueprint's edge for that result decides, which by
-    default starts a continuation turn with a reminder, bounded by a count.
-    The installed hook is a one-line invocation of the Heddle CLI:
-    `heddle hook stop claude` or `heddle hook stop codex`. That command
-    reads the harness's hook input on stdin, reads the policy endpoint for
-    the thread's generated instance, and prints the harness-specific block
-    or allow response. Hook installation is the one place Heddle writes
-    into a worktree, and the files it writes are listed in the author
-    reference.
+    Each supported harness loads a reusable plugin installed once in its user
+    profile through its native plugin installer. Each Stop hook invokes
+    `heddle hook stop claude` or `heddle hook stop codex`; both consume the
+    exact shared `session_id` property from native hook JSON. The command
+    sends only that identity to Heddle's local socket. Heddle owns durable
+    native-session to T3-thread to active-pass correlation and calls that
+    pass's generated policy endpoint with its own credential. Cwd and
+    hook-supplied thread, pass, endpoint, or token overrides provide no
+    authority. Tokens and endpoint bindings remain in Heddle-owned state
+    outside all worktrees and Git metadata. Profile configuration changes
+    belong to the native installer; Heddle writes no separate hook trust.
+    A session with no active Heddle-instigated mapping returns inert allow:
+    no generated-endpoint call, attention, or state change. Ambiguous owned
+    mappings are invariant errors and never affect unrelated sessions.
+    Recovery reconciles stale and terminal mappings before hook decisions.
+    Terminal awaiting-row removal immediately rejects the original endpoint
+    token. Mapping and credential cleanup follows that transition; subsequent
+    Stop events allow without calling the ended endpoint. The plugin remains
+    installed. In-flight policy reads recheck their occurrence before returning
+    a block. For active mapped Codex sessions, independently trusted hooks
+    block before completion; unavailable or untrusted blocking is observed as
+    turnEnded with the missing-handoff reminder. The blueprint owns any
+    continuation and its bound. Installation has no hook-trust prerequisite.
   operator-operations: |
     The operator, through the console or an operator tool surface, can take
     any of the live-thread operations T3 Code offers, plus Heddle's own.
