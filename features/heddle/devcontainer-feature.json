@@ -1,0 +1,45 @@
+{
+  "id": "heddle",
+  "version": "0.1.0",
+  "name": "Heddle",
+  "description": "Installs Heddle and registers it as an s6-overlay service.",
+  "documentationURL": "https://github.com/wyrd-company/heddle/tree/main/features/heddle",
+  "options": {
+    "configFile": {
+      "type": "string",
+      "default": "/etc/heddle/config.yml",
+      "description": "Absolute path to the bind-mounted Heddle configuration file."
+    },
+    "stateDirectory": {
+      "type": "string",
+      "default": "/var/lib/heddle",
+      "description": "Absolute path to the bind-mounted Heddle state directory."
+    },
+    "githubAppCredentialsFile": {
+      "type": "string",
+      "default": "/run/secrets/heddle-github-app.yml",
+      "description": "Absolute path to the bind-mounted GitHub App credential file."
+    },
+    "t3CodeTokenFile": {
+      "type": "string",
+      "default": "/run/secrets/heddle-t3-token",
+      "description": "Absolute path to the bind-mounted T3 Code bearer-token file."
+    },
+    "webhookSecretFile": {
+      "type": "string",
+      "default": "/run/secrets/heddle-webhook-secret",
+      "description": "Absolute path to the bind-mounted GitHub webhook secret file."
+    },
+    "serviceUser": {
+      "type": "string",
+      "default": "automatic",
+      "description": "User that runs Heddle. Automatic selection prefers the remote user, container user, vscode, then root."
+    }
+  },
+  "dependsOn": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24"
+    }
+  },
+  "installsAfter": ["ghcr.io/devcontainers/features/common-utils"]
+}

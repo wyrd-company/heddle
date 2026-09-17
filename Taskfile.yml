@@ -26,6 +26,9 @@ tasks:
   package-check:
     desc: Pack, install, and exercise the distributable npm package
     cmds: [scripts/test-package.sh]
+  feature-check:
+    desc: Build and test the Feature in isolated Dev Containers
+    cmds: [scripts/test-feature.sh]
   check:
     desc: Run every gate required before handoff
     cmds:
