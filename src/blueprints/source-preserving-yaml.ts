@@ -270,11 +270,7 @@ export function assertPreservedDocument(saved: string, edited: Document): void {
   }
 }
 
-export function saveLocalizedYaml(
-  source: string,
-  _formattedSource: string,
-  edited: Document,
-): string {
+export function saveLocalizedYaml(source: string, edited: Document): string {
   const original = parseSource(source);
   const intended = prepareEdit(original, edited);
   const values = applySourcePatches(

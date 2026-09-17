@@ -48,7 +48,6 @@ function parseBlueprintSource(
     source,
     document,
     blueprint: value as Blueprint,
-    formattedSource: document.toString(),
     originalValue: structuredClone(value),
   };
 }
@@ -59,11 +58,7 @@ export function loadBlueprint(filePath: string): LoadedBlueprint {
 }
 
 export function saveBlueprint(loaded: LoadedBlueprint): string {
-  return saveLocalizedYaml(
-    loaded.source,
-    loaded.formattedSource,
-    loaded.document,
-  );
+  return saveLocalizedYaml(loaded.source, loaded.document);
 }
 
 function firstKey(document: Document): Scalar | undefined {

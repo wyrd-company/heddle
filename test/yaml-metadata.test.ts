@@ -20,9 +20,15 @@ function node(document: Document, path: readonly (string | number)[]): Node {
   return value;
 }
 
-function key(document: Document, name: string): Node {
-  if (!isMap(document.contents)) throw new Error("Missing test map");
-  const value = document.contents.items.find(
+function key(
+  document: Document,
+  name: string,
+  path: readonly (string | number)[] = [],
+): Node {
+  const map =
+    path.length === 0 ? document.contents : document.getIn(path, true);
+  if (!isMap(map)) throw new Error("Missing test map");
+  const value = map.items.find(
     (pair) => isScalar(pair.key) && pair.key.value === name,
   )?.key;
   if (!isNode(value)) throw new Error("Missing test key");
@@ -42,7 +48,6 @@ function write(source: string, edit: (document: Document) => void): string {
     source,
     document,
     blueprint: value as Blueprint,
-    formattedSource: document.toString(),
     originalValue: structuredClone(value),
   };
   edit(document);
@@ -54,30 +59,62 @@ const contexts = [
     name: "block map scalar",
     source: (property: string) =>
       `top:\n  value: ${property}text   # keep\nz: 3\n`,
-    path: ["top", "value"],
+    get: (document: Document) => node(document, ["top", "value"]),
   },
   {
     name: "block sequence scalar",
     source: (property: string) => `top:\n  - ${property}text   # keep\nz: 3\n`,
-    path: ["top", 0],
+    get: (document: Document) => node(document, ["top", 0]),
   },
   {
     name: "flow sequence scalar",
     source: (property: string) =>
       `top: [${property}text, keep]   # untouched\nz: 3\n`,
-    path: ["top", 0],
+    get: (document: Document) => node(document, ["top", 0]),
+  },
+  {
+    name: "flow map scalar",
+    source: (property: string) =>
+      `top: {value: ${property}text, keep: yes}   # untouched\nz: 3\n`,
+    get: (document: Document) => node(document, ["top", "value"]),
+  },
+  {
+    name: "block map key",
+    source: (property: string) =>
+      `top:\n  ${property}value: text   # keep\nz: 3\n`,
+    get: (document: Document) => key(document, "value", ["top"]),
+  },
+  {
+    name: "root scalar",
+    source: (property: string) => `${property}text   # keep\n`,
+    get: (document: Document) => {
+      if (!isNode(document.contents)) throw new Error("Missing test root");
+      return document.contents;
+    },
   },
   {
     name: "nested block collection",
     source: (property: string) =>
       `top:\n  value:${property ? ` ${property.trimEnd()}` : ""}\n    nested: 1   # keep\nz: 3\n`,
-    path: ["top", "value"],
+    get: (document: Document) => node(document, ["top", "value"]),
+  },
+  {
+    name: "block map after leading comment",
+    source: (property: string) =>
+      `top:${property ? ` ${property.trimEnd()}` : ""}\n  # keep\n  value: text\nz: 3\n`,
+    get: (document: Document) => node(document, ["top"]),
+  },
+  {
+    name: "block sequence after leading comment",
+    source: (property: string) =>
+      `top:${property ? ` ${property.trimEnd()}` : ""}\n  # keep\n  - text\nz: 3\n`,
+    get: (document: Document) => node(document, ["top"]),
   },
   {
     name: "CRLF scalar without final newline",
     source: (property: string) =>
       `top:\r\n  value: ${property}text   # keep\r\nz: 3`,
-    path: ["top", "value"],
+    get: (document: Document) => node(document, ["top", "value"]),
   },
 ] as const;
 
@@ -139,7 +176,7 @@ describe("YAML anchor and tag operation/context matrix", () => {
         const source = context.source(operation.before);
         const expected = context.source(operation.after);
         const saved = write(source, (document) => {
-          operation.edit(node(document, context.path));
+          operation.edit(context.get(document));
         });
         expect(saved).toBe(expected);
         expect(saved).not.toMatch(/[ \t]+\r?$/mu);
@@ -147,6 +184,30 @@ describe("YAML anchor and tag operation/context matrix", () => {
 });
 
 describe("YAML aliases with edited anchors", () => {
+  it("preserves an untouched verbatim tag beside an unrelated edit", () => {
+    expect(
+      write("a: !<tag:yaml.org,2002:str> x\nb: 1\n", (document) => {
+        document.set("b", 2);
+      }),
+    ).toBe("a: !<tag:yaml.org,2002:str> x\nb: 2\n");
+  });
+
+  it("preserves untouched tag spelling and spacing beside an anchor edit", () => {
+    expect(
+      write("a: !<tag:yaml.org,2002:str>  &old x\n", (document) => {
+        node(document, ["a"]).anchor = "next";
+      }),
+    ).toBe("a: !<tag:yaml.org,2002:str>  &next x\n");
+  });
+
+  it("quotes a string when removing the tag that preserved its type", () => {
+    expect(
+      write("a: !old 1\nb: 2\n", (document) => {
+        delete node(document, ["a"]).tag;
+      }),
+    ).toBe('a: "1"\nb: 2\n');
+  });
+
   it("changes a tag without moving its untouched anchor", () => {
     expect(
       write("a: !old &keep text   # untouched\n", (document) => {
@@ -188,6 +249,17 @@ describe("YAML aliases with edited anchors", () => {
 });
 
 describe("YAML document markers and directives", () => {
+  it("preserves untouched non-canonical directive spacing", () => {
+    expect(
+      write(
+        "%YAML  1.2\n%TAG  !e!  tag:e.com,1:\n---\na: !e!x y\nb: 1\n",
+        (document) => {
+          document.set("b", 2);
+        },
+      ),
+    ).toBe("%YAML  1.2\n%TAG  !e!  tag:e.com,1:\n---\na: !e!x y\nb: 2\n");
+  });
+
   it.each([
     ["LF", "\n"],
     ["CRLF", "\r\n"],

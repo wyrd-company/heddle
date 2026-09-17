@@ -374,7 +374,6 @@ describe("source-preserving YAML adversarial matrix", () => {
   ])("save rejects a lossy %s reconciliation result", (_kind, output) => {
     const source = "a: 1 # old\n";
     const document = parseDocument(source, { keepSourceTokens: true });
-    const formatted = document.toString();
     document.set("a", 2);
     node(document, ["a"]).comment = " new";
     const corrupt = vi
@@ -382,7 +381,7 @@ describe("source-preserving YAML adversarial matrix", () => {
       .mockReturnValue(output);
     try {
       expect(() => {
-        saveLocalizedYaml(source, formatted, document);
+        saveLocalizedYaml(source, document);
       }).toThrow(/did not preserve/u);
     } finally {
       corrupt.mockRestore();
@@ -394,9 +393,8 @@ describe("source-preserving YAML adversarial matrix", () => {
       "utf8",
     );
     const document = parseDocument(source, { keepSourceTokens: true });
-    const formatted = document.toString();
     document.addIn(["edges"], { from: "publish", to: "run-failed" });
-    expect(saveLocalizedYaml(source, formatted, document)).toBe(
+    expect(saveLocalizedYaml(source, document)).toBe(
       `${source}  - from: publish\n    to: run-failed\n`,
     );
   });
@@ -406,17 +404,15 @@ describe("source-preserving YAML adversarial matrix", () => {
       "utf8",
     );
     const document = parseDocument(source, { keepSourceTokens: true });
-    const formatted = document.toString();
     document.setIn(["nodes", "extra"], { uses: "notify" });
-    expect(saveLocalizedYaml(source, formatted, document)).toBe(
+    expect(saveLocalizedYaml(source, document)).toBe(
       source.replace("edges:\n", "  extra:\n    uses: notify\nedges:\n"),
     );
   });
   it.each(probes)("$name", ({ source, edit, expected }) => {
     const document = parseDocument(source, { keepSourceTokens: true });
-    const formatted = document.toString();
     edit(document);
-    const saved = saveLocalizedYaml(source, formatted, document);
+    const saved = saveLocalizedYaml(source, document);
     expect(saved).toBe(expected);
     const parsed = parseDocument(saved);
     expect(parsed.errors).toEqual([]);

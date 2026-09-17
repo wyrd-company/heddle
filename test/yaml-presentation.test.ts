@@ -34,9 +34,8 @@ function key(d: Document, name: string): Node {
 }
 function write(source: string, edit: (d: Document) => void): string {
   const document = parseDocument(source, { keepSourceTokens: true });
-  const formatted = document.toString();
   edit(document);
-  return saveLocalizedYaml(source, formatted, document);
+  return saveLocalizedYaml(source, document);
 }
 
 describe("YAML presentation and creation matrix", () => {

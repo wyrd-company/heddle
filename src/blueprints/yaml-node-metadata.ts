@@ -2,27 +2,26 @@
 // relationships:
 //   implements: blueprint-authoring
 // ---
+import { isDeepStrictEqual } from "node:util";
 import {
   CST,
   isAlias,
   isMap,
-  isNode,
+  isScalar,
   isSeq,
-  Parser,
   type Document,
   type Node,
 } from "yaml";
+import {
+  nodesByPath,
+  nodeSourceContexts,
+  type NodeSourceContext,
+} from "./yaml-node-paths.js";
 import {
   applySourcePatches,
   parseSource,
   type SourcePatch,
 } from "./yaml-source.js";
-
-interface PropertyContext {
-  readonly node: Node;
-  readonly tokens: readonly CST.SourceToken[];
-  readonly root: boolean;
-}
 
 interface PropertyValue {
   readonly type: "anchor" | "tag";
@@ -30,82 +29,12 @@ interface PropertyValue {
 }
 
 type PropertyToken = CST.SourceToken & { readonly type: "anchor" | "tag" };
-
 function documentDirectives(
   document: Document,
 ): NonNullable<Document["directives"]> {
   if (!document.directives)
     throw new Error("Cannot preserve YAML metadata without directives");
   return document.directives;
-}
-
-function parsedDocumentToken(source: string): CST.Document {
-  const token = [...new Parser().parse(source)].find(
-    (candidate): candidate is CST.Document => candidate.type === "document",
-  );
-  if (!token)
-    throw new Error("Cannot preserve YAML metadata without a document");
-  return token;
-}
-
-function propertyContexts(
-  source: string,
-  document: Document,
-): Map<string, PropertyContext> {
-  const result = new Map<string, PropertyContext>();
-
-  function visit(
-    value: unknown,
-    path: string,
-    tokens: readonly CST.SourceToken[],
-    root = false,
-  ): void {
-    if (!isNode(value)) return;
-    result.set(path, { node: value, tokens, root });
-    if (isMap(value))
-      value.items.forEach((pair, index) => {
-        visit(
-          pair.key,
-          `${path}.${String(index)}.key`,
-          pair.srcToken?.start ?? [],
-        );
-        visit(
-          pair.value,
-          `${path}.${String(index)}.value`,
-          pair.srcToken?.sep ?? [],
-        );
-      });
-    if (isSeq(value))
-      value.items.forEach((item, index) => {
-        const token =
-          value.srcToken && "items" in value.srcToken
-            ? value.srcToken.items[index]
-            : undefined;
-        visit(item, `${path}.${String(index)}`, token?.start ?? []);
-      });
-  }
-
-  visit(document.contents, "root", parsedDocumentToken(source).start, true);
-  return result;
-}
-
-function nodesByPath(document: Document): Map<string, Node> {
-  const result = new Map<string, Node>();
-  function visit(value: unknown, path: string): void {
-    if (!isNode(value)) return;
-    result.set(path, value);
-    if (isMap(value))
-      value.items.forEach((pair, index) => {
-        visit(pair.key, `${path}.${String(index)}.key`);
-        visit(pair.value, `${path}.${String(index)}.value`);
-      });
-    if (isSeq(value))
-      value.items.forEach((item, index) => {
-        visit(item, `${path}.${String(index)}`);
-      });
-  }
-  visit(document.contents, "root");
-  return result;
 }
 
 export function nodeMetadataSnapshot(document: Document): unknown {
@@ -141,77 +70,167 @@ function sourcePropertyTokens(
   );
 }
 
-function propertyPatch(
+function propertyPatches(
   source: string,
-  context: PropertyContext,
+  context: NodeSourceContext,
   desired: readonly PropertyValue[],
-): SourcePatch | undefined {
+  target: Node,
+): SourcePatch[] {
   const existing = sourcePropertyTokens(context.tokens);
   const desiredByType = new Map(
     desired.map((property) => [property.type, property.source]),
   );
-  if (
-    existing.length === desired.length &&
-    existing.every((token) => token.source === desiredByType.get(token.type))
-  )
-    return undefined;
+  const changedTypes = new Set<PropertyValue["type"]>();
+  if (!isAlias(context.node) && !isAlias(target)) {
+    if (context.node.anchor !== target.anchor) changedTypes.add("anchor");
+    if (context.node.tag !== target.tag) changedTypes.add("tag");
+  }
+  if (changedTypes.size === 0) return [];
 
-  const retainedTypes = new Set(existing.map((token) => token.type));
-  const ordered = [
-    ...existing.flatMap((token) => {
-      const value = desiredByType.get(token.type);
-      return value ? [value] : [];
-    }),
-    ...desired
-      .filter((property) => !retainedTypes.has(property.type))
-      .map((property) => property.source),
-  ];
-  const replacement = ordered.join(" ");
   if (existing.length > 0) {
     const first = existing[0];
     const last = existing.at(-1);
-    if (!first || !last) return undefined;
-    let start = first.offset;
-    let end = last.offset + last.source.length;
-    while (/[ \t]/u.test(source[end] ?? "")) end += 1;
-    if (!replacement && end === last.offset + last.source.length)
-      while (start > 0 && /[ \t]/u.test(source[start - 1] ?? "")) start -= 1;
-    const sameLine = !source.slice(end, context.node.range?.[0]).includes("\n");
-    return {
-      start,
-      end,
-      replacement: replacement && sameLine ? `${replacement} ` : replacement,
-    };
+    if (!first || !last) return [];
+    const retained = existing.filter((token) => desiredByType.has(token.type));
+    if (retained.length === 0) {
+      const replacement = desired.map((property) => property.source).join(" ");
+      let start = first.offset;
+      let end = last.offset + last.source.length;
+      while (/[ \t]/u.test(source[end] ?? "")) end += 1;
+      if (!replacement && end === last.offset + last.source.length)
+        while (start > 0 && /[ \t]/u.test(source[start - 1] ?? "")) start -= 1;
+      return [
+        {
+          start,
+          end,
+          replacement: replacement ? `${replacement} ` : "",
+        },
+      ];
+    }
+
+    const patches: SourcePatch[] = [];
+    for (const token of existing) {
+      const replacement = desiredByType.get(token.type);
+      if (replacement === undefined) {
+        const index = existing.indexOf(token);
+        const next = existing[index + 1];
+        const previous = existing[index - 1];
+        patches.push({
+          start: previous
+            ? previous.offset + previous.source.length
+            : token.offset,
+          end: next ? next.offset : token.offset + token.source.length,
+          replacement: "",
+        });
+      } else if (changedTypes.has(token.type)) {
+        patches.push({
+          start: token.offset,
+          end: token.offset + token.source.length,
+          replacement,
+        });
+      }
+    }
+    const retainedTypes = new Set(retained.map((token) => token.type));
+    const additions = desired.filter(
+      (property) => !retainedTypes.has(property.type),
+    );
+    const retainedLast = retained.at(-1);
+    if (additions.length > 0 && retainedLast)
+      patches.push({
+        start: retainedLast.offset + retainedLast.source.length,
+        end: retainedLast.offset + retainedLast.source.length,
+        replacement: ` ${additions.map((property) => property.source).join(" ")}`,
+      });
+    return patches;
   }
 
-  if (!replacement || !context.node.range) return undefined;
+  const replacement = desired.map((property) => property.source).join(" ");
+  if (!replacement || !context.node.range) return [];
   const start = context.node.range[0];
   if (context.root) {
     const block =
       (isMap(context.node) || isSeq(context.node)) &&
       context.node.flow !== true;
     const newline = source.includes("\r\n") ? "\r\n" : "\n";
-    return {
-      start,
-      end: start,
-      replacement: block ? `${replacement}${newline}` : `${replacement} `,
-    };
+    return [
+      {
+        start,
+        end: start,
+        replacement: block ? `${replacement}${newline}` : `${replacement} `,
+      },
+    ];
   }
 
-  const separatorNewline = [...context.tokens]
-    .reverse()
-    .find((token) => token.type === "newline");
+  const separatorNewline = context.tokens.find(
+    (token) => token.type === "newline",
+  );
   if (separatorNewline) {
     let patchStart = separatorNewline.offset;
     while (patchStart > 0 && /[ \t]/u.test(source[patchStart - 1] ?? ""))
       patchStart -= 1;
-    return {
-      start: patchStart,
-      end: separatorNewline.offset,
-      replacement: ` ${replacement}`,
-    };
+    return [
+      {
+        start: patchStart,
+        end: separatorNewline.offset,
+        replacement: ` ${replacement}`,
+      },
+    ];
   }
-  return { start, end: start, replacement: `${replacement} ` };
+  return [{ start, end: start, replacement: `${replacement} ` }];
+}
+
+function renderScalarValue(
+  document: Document,
+  node: Node,
+  source: string,
+): string {
+  const rendered = document.clone();
+  const value = node.clone() as Node;
+  if (!isAlias(value)) {
+    delete value.anchor;
+    delete value.tag;
+  }
+  value.commentBefore = null;
+  value.comment = null;
+  rendered.contents = value;
+  rendered.commentBefore = null;
+  rendered.comment = null;
+  if (rendered.directives) rendered.directives.docEnd = false;
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  return rendered
+    .toString({ lineWidth: 0, verifyAliasOrder: false, directives: false })
+    .replace(/\n$/u, "")
+    .replaceAll("\n", newline);
+}
+
+function reconcileTagDependentScalarValues(
+  source: string,
+  edited: Document,
+  tagChanges: ReadonlySet<string>,
+): string {
+  if (tagChanges.size === 0) return source;
+  const current = nodeSourceContexts(source, parseSource(source));
+  const expectedDocument = parseSource(edited.toString({ lineWidth: 0 }));
+  const expected = nodesByPath(expectedDocument);
+  const patches: SourcePatch[] = [];
+  for (const path of tagChanges) {
+    const context = current.get(path);
+    const target = expected.get(path);
+    if (
+      !context?.node.range ||
+      !target ||
+      !isScalar(context.node) ||
+      !isScalar(target) ||
+      isDeepStrictEqual(context.node.value, target.value)
+    )
+      continue;
+    patches.push({
+      start: context.node.range[0],
+      end: context.node.range[1],
+      replacement: renderScalarValue(expectedDocument, target, source),
+    });
+  }
+  return applySourcePatches(source, patches);
 }
 
 export function reconcileNodeProperties(
@@ -219,18 +238,25 @@ export function reconcileNodeProperties(
   edited: Document,
 ): string {
   const current = parseSource(source);
-  const contexts = propertyContexts(source, current);
+  const contexts = nodeSourceContexts(source, current);
   const desired = nodesByPath(edited);
   const patches: SourcePatch[] = [];
+  const tagChanges = new Set<string>();
   for (const [path, context] of contexts) {
     const target = desired.get(path);
     if (!target) continue;
-    const patch = propertyPatch(
+    if (context.node.tag !== target.tag) tagChanges.add(path);
+    const nodePatches = propertyPatches(
       source,
       context,
       propertyValues(edited, target),
+      target,
     );
-    if (patch) patches.push(patch);
+    patches.push(...nodePatches);
   }
-  return applySourcePatches(source, patches);
+  return reconcileTagDependentScalarValues(
+    applySourcePatches(source, patches),
+    edited,
+    tagChanges,
+  );
 }

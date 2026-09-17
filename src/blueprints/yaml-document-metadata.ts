@@ -40,24 +40,39 @@ export function documentMetadataSnapshot(document: Document): unknown {
 
 interface DirectiveLine {
   readonly key: string;
-  readonly source: string;
+  readonly value: string;
 }
 
 function directiveLine(token: CST.Directive): DirectiveLine | undefined {
   const yaml = /^%YAML[ \t]+(\S+)$/u.exec(token.source);
-  if (yaml) return { key: "YAML", source: token.source };
+  const version = yaml?.[1];
+  if (version) return { key: "YAML", value: version };
   const tag = /^%TAG[ \t]+(\S+)[ \t]+(\S+)$/u.exec(token.source);
   const handle = tag?.[1];
-  return handle ? { key: `TAG ${handle}`, source: token.source } : undefined;
+  const prefix = tag?.[2];
+  return handle && prefix ? { key: `TAG ${handle}`, value: prefix } : undefined;
 }
 
-function desiredDirectiveLines(document: Document): Map<string, string> {
-  const result = new Map<string, string>();
+interface DesiredDirectiveLine {
+  readonly source: string;
+  readonly value: string;
+}
+
+function desiredDirectiveLines(
+  document: Document,
+): Map<string, DesiredDirectiveLine> {
+  const result = new Map<string, DesiredDirectiveLine>();
   const directives = documentDirectives(document);
   if (directives.yaml.explicit)
-    result.set("YAML", `%YAML ${directives.yaml.version}`);
+    result.set("YAML", {
+      source: `%YAML ${directives.yaml.version}`,
+      value: directives.yaml.version,
+    });
   for (const [handle, prefix] of customTagEntries(document))
-    result.set(`TAG ${handle}`, `%TAG ${handle} ${prefix}`);
+    result.set(`TAG ${handle}`, {
+      source: `%TAG ${handle} ${prefix}`,
+      value: prefix,
+    });
   return result;
 }
 
@@ -101,19 +116,19 @@ function reconcileDirectiveLines(source: string, edited: Document): string {
     const line = directiveLine(token);
     if (!line) continue;
     existingKeys.add(line.key);
-    const replacement = desired.get(line.key);
-    if (replacement === undefined) {
+    const target = desired.get(line.key);
+    if (target === undefined) {
       const next = tokens[index + 1];
       patches.push({
         start: token.offset,
         end: next?.type === "newline" ? tokenEnd(next) : tokenEnd(token),
         replacement: "",
       });
-    } else if (replacement !== line.source) {
+    } else if (target.value !== line.value) {
       patches.push({
         start: token.offset,
         end: tokenEnd(token),
-        replacement,
+        replacement: target.source,
       });
     }
   }
@@ -126,7 +141,7 @@ function reconcileDirectiveLines(source: string, edited: Document): string {
       patches.push({
         start,
         end: start,
-        replacement: missing.map(([, line]) => line + newline).join(""),
+        replacement: missing.map(([, line]) => line.source + newline).join(""),
       });
       return applySourcePatches(source, patches);
     }
@@ -138,7 +153,7 @@ function reconcileDirectiveLines(source: string, edited: Document): string {
       patches.push({
         start,
         end: start,
-        replacement: yaml.map(([, line]) => line + newline).join(""),
+        replacement: yaml.map(([, line]) => line.source + newline).join(""),
       });
     }
     if (tags.length > 0) {
@@ -152,7 +167,7 @@ function reconcileDirectiveLines(source: string, edited: Document): string {
       patches.push({
         start,
         end: start,
-        replacement: tags.map(([, line]) => line + newline).join(""),
+        replacement: tags.map(([, line]) => line.source + newline).join(""),
       });
     }
   }

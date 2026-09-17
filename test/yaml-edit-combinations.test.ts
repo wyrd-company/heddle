@@ -149,9 +149,8 @@ describe("independent YAML context and operation combinations", () => {
         const document = parseDocument(context.source, {
           keepSourceTokens: true,
         });
-        const formatted = document.toString();
         operation.edit(document, context.path, context.parent);
-        const saved = saveLocalizedYaml(context.source, formatted, document);
+        const saved = saveLocalizedYaml(context.source, document);
         const parsed = parseDocument(saved);
         expect(parsed.errors).toEqual([]);
         expect(parsed.toJS()).toEqual(
