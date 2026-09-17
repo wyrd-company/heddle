@@ -157,7 +157,7 @@ proposed-design:
 
     A `kind: stage` blueprint is used from a process blueprint through this
     node. Such a blueprint wraps one or more `pass` nodes with the retry and
-    re-attempt routing the author wants, and ends on the stage result
+    retry routing the author wants, and ends on the stage result
     contract. The author reference documents the inputs and outputs each
     shipped stage blueprint declares.
   on-issue-change: |

@@ -140,7 +140,7 @@ proposed-design:
     thread events, so these appear like any other. Heddle does not steer
     against the operator: while operator turns are arriving, Heddle sends
     no continuation turns of its own. Deadlines and inactivity detection
-    keep running, so an attempt the operator abandoned mid-stage still
+    keep running, so a pass the operator abandoned mid-stage still
     wakes the stage. A rewind discards turns; the read model drops its
     per-turn state for the discarded turns and re-reads the thread.
   answer-question-run: >

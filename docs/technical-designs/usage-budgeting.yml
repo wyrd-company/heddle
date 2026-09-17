@@ -32,7 +32,7 @@ design-challenges:
     against what the provider reveals.
   attribution: >
     Usage must roll up from turn to thread to stage to instance to epic to
-    project, and helper sessions must be charged to the attempt that
+    project, and helper sessions must be charged to the pass that
     spawned them.
   holding-without-losing: >
     When a window is exhausted mid-stage, the thread and its context are
@@ -63,13 +63,13 @@ proposed-design:
   attribution: >
     Every usage record carries the thread id, the run id, the `pass` node
     id, the instance's issue, and the parent thread id for helpers. The
-    stage's read model in the node-types design is where the per-attempt
+    pass's read model in the node-types design is where the per-pass
     total lives; the collector is what ships the records out. Rollups by
     stage, instance, epic, and project are queries over the sink, not state
     the engine holds.
   window-ledger: >
     Per provider account and window: used percent, reset time, last checked
-    time, and which attempts are currently charged to it. Fed by pushed
+    time, and which passes are currently charged to it. Fed by pushed
     updates while turns run and by probes on a schedule derived from the
     reset time while nothing runs, so a window that reopens during a hold
     is noticed.

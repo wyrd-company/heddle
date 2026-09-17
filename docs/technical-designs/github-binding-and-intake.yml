@@ -112,7 +112,7 @@ proposed-design:
     `requires.issue` declarations. Drift the package reports but will not fix
     is raised as attention.
   status-projection: >
-    When a run enters a stage node, the engine sets the card's Status to that
+    When a run enters a node marked `stage: true`, the engine sets the card's Status to that
     stage's option. The blueprint author does not write this; it is an
     invariant. A blueprint may additionally map other node results to other
     fields through the `github` brick.
