@@ -95,7 +95,7 @@ describe("Heddle deployment", () => {
       await Promise.all(
         Array.from({ length: packageCount }, (_, index) =>
           writeFile(
-            join(directory, `wyrd-company-heddle-0.0.${index}.tgz`),
+            join(directory, `wyrd-company-heddle-0.0.${String(index)}.tgz`),
             "fixture",
           ),
         ),
