@@ -67,15 +67,28 @@ function contextKeyFindings(
   file: string,
   blueprint: Blueprint,
 ): ValidationFinding[] {
-  const available = new Set([
+  const initial = [
     "issue",
     "blueprint",
     "stages",
     ...Object.keys(blueprint.inputs ?? {}),
-    ...Object.keys(blueprint.nodes),
-  ]);
+  ];
+  const incoming = new Map<string, string[]>();
+  for (const edge of blueprint.edges ?? []) {
+    const sources = incoming.get(edge.to) ?? [];
+    sources.push(edge.from);
+    incoming.set(edge.to, sources);
+  }
   const findings: ValidationFinding[] = [];
   for (const [nodeId, node] of Object.entries(blueprint.nodes)) {
+    const available = new Set([...initial, nodeId]);
+    const pending = [...(incoming.get(nodeId) ?? [])];
+    while (pending.length > 0) {
+      const predecessor = pending.pop();
+      if (predecessor === undefined || available.has(predecessor)) continue;
+      available.add(predecessor);
+      pending.push(...(incoming.get(predecessor) ?? []));
+    }
     for (const expression of contextReferences(node.params)) {
       const root = /^([A-Za-z][\w-]*)(?:\.|$)/u.exec(expression)?.[1];
       if (root !== undefined && !available.has(root)) {

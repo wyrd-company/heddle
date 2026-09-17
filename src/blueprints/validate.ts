@@ -250,13 +250,9 @@ export function validateBlueprintPath(
   options: ValidationOptions = {},
 ): ValidationFinding[] {
   const path = resolve(inputPath);
+  let files: string[];
   try {
-    const files = inputIsDirectory(path)
-      ? discoverBlueprintFiles(path)
-      : [path];
-    return sortFindings(
-      files.flatMap((file) => validateBlueprintFile(file, options)),
-    );
+    files = inputIsDirectory(path) ? discoverBlueprintFiles(path) : [path];
   } catch (error) {
     return [
       finding(
@@ -267,6 +263,9 @@ export function validateBlueprintPath(
       ),
     ];
   }
+  return sortFindings(
+    files.flatMap((file) => validateBlueprintFile(file, options)),
+  );
 }
 
 function sortFindings(findings: ValidationFinding[]): ValidationFinding[] {

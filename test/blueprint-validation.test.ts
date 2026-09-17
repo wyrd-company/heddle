@@ -505,4 +505,36 @@ nodes:
       }),
     );
   });
+
+  it("rejects context from a node that cannot precede the consumer", () => {
+    const source = `id: sample-a
+kind: helper
+nodes:
+  first:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "First" }
+      url: { from: later.receipt }
+  later:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Later" }
+edges:
+  - from: first
+    to: later
+`;
+    const findings = validateBlueprintFile(
+      temporaryFile("sample-a.yml", source),
+    );
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        node: "first",
+        rule: "heddle.context-key",
+        message: "Context key cannot be provided: later",
+      }),
+    );
+  });
 });
