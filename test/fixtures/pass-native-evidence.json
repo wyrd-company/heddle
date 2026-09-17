@@ -1,0 +1,2376 @@
+{
+  "relationships": {
+    "verifies": [
+      "node-types",
+      "agent-tools"
+    ]
+  },
+  "harnesses": {
+    "codex": "0.154.0",
+    "claude": "2.1.274"
+  },
+  "t3ProductionHead": "06d379013005981af41bb9c0845ed73944bee10d",
+  "scenarios": {
+    "claude-block": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 90,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 92,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 444,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 461,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 470,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 477,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 3525,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "eca7e550-55d8-471d-b9c9-a07a50eacb8e"
+          }
+        },
+        {
+          "elapsedMs": 3526,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 3527,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 3527,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "eca7e550-55d8-471d-b9c9-a07a50eacb8e",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "2a1e5998-138c-440a-b002-13cb964f3c23"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 3527,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 6007,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 6009,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 6009,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 6010,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 6014,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 6016,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 6016,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 6017,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 7072,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "eca7e550-55d8-471d-b9c9-a07a50eacb8e"
+          }
+        },
+        {
+          "elapsedMs": 7072,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "eca7e550-55d8-471d-b9c9-a07a50eacb8e",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 7072,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "codex-block": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 94,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 95,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 407,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 409,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 411,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 669,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 2173,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 3387,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1aa-186f-7003-8d6e-21bb7147384f"
+          }
+        },
+        {
+          "elapsedMs": 3391,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 3392,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 3396,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1aa-186f-7003-8d6e-21bb7147384f",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fdd61b81-0b0e-4c3a-b84b-b2cc07b91a6f"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 3397,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 9538,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 9541,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 9541,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 9542,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 9545,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 9547,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 9547,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 9548,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 14590,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1aa-186f-7003-8d6e-21bb7147384f"
+          }
+        },
+        {
+          "elapsedMs": 14590,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1aa-186f-7003-8d6e-21bb7147384f",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 14590,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "codex-observe": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "turnEnded",
+        "turnEnded"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 92,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 94,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 418,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 420,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 422,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 3476,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 3477,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 3477,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 3478,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 3485,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 3584,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 2
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 3584,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 3872,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 3874,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 3875,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 7602,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 7604,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 7604,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 7604,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 7612,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 7613,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 7614,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        }
+      ]
+    },
+    "codex-allow": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "turnEnded"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 78,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 79,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 391,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 393,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 395,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 3982,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a7-162b-7251-ae05-f5d2b73e660e"
+          }
+        },
+        {
+          "elapsedMs": 3984,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 3984,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 3985,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a7-162b-7251-ae05-f5d2b73e660e",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "08480c1f-bfa3-4532-b97a-cdc70060e6fd"
+            },
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 3985,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 4010,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 4012,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 4012,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 4013,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 4021,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 4024,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 4024,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        }
+      ]
+    },
+    "codex-reuse": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff",
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 1,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 75,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 76,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 376,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 378,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 379,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 6338,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 6339,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 6339,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 6339,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 6344,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 6366,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "review",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 6367,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 6368,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 7845,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a7-2751-7ea3-b4f9-29b2eb7800be"
+          }
+        },
+        {
+          "elapsedMs": 7845,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a7-2751-7ea3-b4f9-29b2eb7800be",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 7845,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 8160,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 8161,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 8163,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 11762,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 11762,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 11763,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 11764,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 11766,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 11767,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 11768,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 11768,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 12863,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a7-2751-7ea3-b4f9-29b2eb7800be"
+          }
+        },
+        {
+          "elapsedMs": 12863,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a7-2751-7ea3-b4f9-29b2eb7800be",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 12863,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "claude-reuse": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff",
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 93,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 94,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 403,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 430,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 438,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 447,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 8906,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 8908,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 8908,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 8908,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 8912,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 8932,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "review",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 8932,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 8933,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 10811,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "58bd6907-4428-4366-9416-597834ad0174"
+          }
+        },
+        {
+          "elapsedMs": 10811,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "58bd6907-4428-4366-9416-597834ad0174",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 10811,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 11536,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 11563,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 11572,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 11582,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 15076,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 15076,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 15077,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 15077,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 15081,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 15083,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 15083,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 15083,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 16734,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "58bd6907-4428-4366-9416-597834ad0174"
+          }
+        },
+        {
+          "elapsedMs": 16734,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "58bd6907-4428-4366-9416-597834ad0174",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 16734,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "kill-active": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 95,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 96,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 427,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 430,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 433,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 6758,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 6759,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 1
+          }
+        },
+        {
+          "elapsedMs": 8116,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 8117,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 8118,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 8119,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 8124,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 8128,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 8128,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 8130,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 10428,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a0-7a90-7281-a2ee-5e100bf97d8a"
+          }
+        },
+        {
+          "elapsedMs": 10428,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a0-7a90-7281-a2ee-5e100bf97d8a",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 10428,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "kill-terminal": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 86,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 87,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 427,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 430,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 432,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 8340,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 8343,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 8343,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 8345,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 8749,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 8749,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 8754,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 8754,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 8755,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 8755,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 11117,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 12402,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a0-0d6c-7cd1-b511-678ebbf3ff0f"
+          }
+        },
+        {
+          "elapsedMs": 12403,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a0-0d6c-7cd1-b511-678ebbf3ff0f",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 12403,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "approval-timing": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 93,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 94,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 484,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 515,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 526,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 536,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 4512,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.requested",
+            "sequence": 389
+          }
+        },
+        {
+          "elapsedMs": 4512,
+          "kind": "approval-before-response",
+          "data": {
+            "requestId": "fa0de39c-25a0-46ab-a4df-ab9002b0cdb3",
+            "requestType": "command_execution_approval",
+            "observedRequestIds": [
+              "fa0de39c-25a0-46ab-a4df-ab9002b0cdb3"
+            ]
+          }
+        },
+        {
+          "elapsedMs": 4521,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.resolved",
+            "sequence": 392
+          }
+        },
+        {
+          "elapsedMs": 5934,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.requested",
+            "sequence": 402
+          }
+        },
+        {
+          "elapsedMs": 5935,
+          "kind": "approval-before-response",
+          "data": {
+            "requestId": "17d5557a-3207-4e00-ab5d-99deeaa6012c",
+            "requestType": "dynamic_tool_call",
+            "observedRequestIds": [
+              "17d5557a-3207-4e00-ab5d-99deeaa6012c"
+            ]
+          }
+        },
+        {
+          "elapsedMs": 5955,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 5958,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 5959,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 5959,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 5962,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.resolved",
+            "sequence": 404
+          }
+        },
+        {
+          "elapsedMs": 5966,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 5969,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 5969,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 5971,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 6876,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "ff992015-f77a-4264-b42b-70d8326690a1"
+          }
+        },
+        {
+          "elapsedMs": 6877,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "ff992015-f77a-4264-b42b-70d8326690a1",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 6877,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "concurrent-isolation": {
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        },
+        {
+          "id": "second-fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff",
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 76,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 77,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 78,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 78,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 171,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 171,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 1
+          }
+        },
+        {
+          "elapsedMs": 399,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 401,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 404,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 596,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 599,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 601,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 12491,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a4-6b72-7432-8590-e50b74322205"
+          }
+        },
+        {
+          "elapsedMs": 12491,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a4-6b72-7432-8590-e50b74322205",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 12491,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 12777,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a4-4414-7101-b286-cffecf82b922"
+          }
+        },
+        {
+          "elapsedMs": 12778,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 12779,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 12779,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a4-4414-7101-b286-cffecf82b922",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "985cba3e-6f8e-4ebc-8fa9-45d80f376a05"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 12780,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 13015,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a4-44f5-7b51-94ba-92bbbc2ae09a"
+          }
+        },
+        {
+          "elapsedMs": 13017,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 13017,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 13018,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a4-44f5-7b51-94ba-92bbbc2ae09a",
+            "mapped": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "96fae138-605c-4052-8929-b0fe66a4f962"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 13018,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 13031,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 13031,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 13043,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 13052,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 13053,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 13053,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 13054,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 13056,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 13056,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "path": "policy"
+          }
+        },
+        {
+          "elapsedMs": 13056,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 13059,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 13061,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 13061,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 13062,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 13064,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 13065,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 13065,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 13066,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "path": "mcp"
+          }
+        },
+        {
+          "elapsedMs": 14120,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b1a4-44f5-7b51-94ba-92bbbc2ae09a"
+          }
+        },
+        {
+          "elapsedMs": 14120,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b1a4-44f5-7b51-94ba-92bbbc2ae09a",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 14121,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ],
+      "sessions": {
+        "ordinaryThreadId": "42d40333-7824-4c6c-9842-2aa64d2ad5a8",
+        "ordinaryNativeSessionId": "01a0b1a4-6b72-7432-8590-e50b74322205",
+        "active": [
+          {
+            "runId": "fixture",
+            "threadId": "985cba3e-6f8e-4ebc-8fa9-45d80f376a05",
+            "nativeSessionId": "01a0b1a4-4414-7101-b286-cffecf82b922"
+          },
+          {
+            "runId": "second-fixture",
+            "threadId": "96fae138-605c-4052-8929-b0fe66a4f962",
+            "nativeSessionId": "01a0b1a4-44f5-7b51-94ba-92bbbc2ae09a"
+          }
+        ]
+      }
+    }
+  }
+}

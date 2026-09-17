@@ -36,9 +36,10 @@ are consumed once and survive service restart.
 ## Integration
 
 The pass node calls `prepareAgentTools` with the thread id, pinned handoff schema,
-and rendered context. It retains the returned binding in Heddle-owned state before the first turn,
-registers that path and token through T3 Code, and persists the returned details
-through the engine's await operation. The handoff schema and context are copied
+and rendered context. It retains the returned binding in Heddle-owned state and
+persists the details through the engine's await operation. After that boundary
+commits and releases traversal, it registers the path and token through T3 Code
+and starts the turn. The handoff schema and context are copied
 into those durable details; recovery never resolves a live blueprint file.
 
 `GeneratedToolService.recover()` publishes persisted pass instances and is called
@@ -94,7 +95,9 @@ rechecks the mapping before returning a block. A later pass never acquires the
 completed pass's credentials. The reusable plugin remains installed throughout.
 
 Codex supports independently trusted blocking and untrusted observation.
-Heddle does not make hook trust a setup prerequisite. Under observation,
+Heddle does not make hook trust a setup prerequisite. If the native harness does
+not execute the hook, including when its hook feature is disabled, Heddle uses
+observed completion. Under observation,
 completed turns resume with `turnEnded`; required-handoff results include the
 reminder. A real blueprint owns continuation routing and its count bound.
 
@@ -115,3 +118,6 @@ The offline suite checks real engine resumes, cross-instance token isolation,
 CLI input/output, immutable handoff definition, and SIGKILL followed by service
 recovery at the same endpoint paths. The observation test follows a blueprint's
 continuation count through to completion.
+
+[Pass qualification](pass-qualification.md) records real T3 ordering, both native
+harnesses, concurrent ordinary sessions, approval timing, and process-kill recovery.
