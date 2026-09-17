@@ -33,6 +33,10 @@ export async function fixtureProfiles(root, { trusted = false } = {}) {
   );
   await copyFile(resolve("dist/cli.js"), join(bin, "heddle"));
   await chmod(join(bin, "heddle"), 0o755);
+  const schemas = join(root, "docs/specifications");
+  await mkdir(schemas, { recursive: true });
+  for (const name of ["blueprint.schema.yml", "policy-rule.schema.yml"])
+    await copyFile(resolve("docs/specifications", name), join(schemas, name));
   await symlink(resolve("node_modules"), join(root, "node_modules"));
   await writeFile(
     join(codex, "config.toml"),
@@ -48,6 +52,14 @@ export async function fixtureProfiles(root, { trusted = false } = {}) {
   const source = join(root, "packages");
   await exportHookPlugins(source);
   const exec = promisify(execFile);
+  const smoke = exec(join(bin, "heddle"), ["hook", "stop", "codex"], { env });
+  smoke.child.stdin.end(
+    JSON.stringify({
+      hook_event_name: "SessionStart",
+      session_id: "fixture-smoke",
+    }),
+  );
+  await smoke;
   for (const harness of ["claude", "codex"]) {
     await exec(
       harness,

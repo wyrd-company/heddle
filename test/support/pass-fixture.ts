@@ -24,6 +24,7 @@ import {
   rawEvent,
   at,
 } from "../../src/t3code/test/support/thread-fixtures.js";
+import { ThreadProjectionTracker } from "../../src/t3code/src/api/thread-tracker.js";
 const cleanup: (() => void)[] = [];
 afterEach(() => {
   for (const close of cleanup.splice(0).reverse()) close();
@@ -78,6 +79,7 @@ export function passFixture(
     Set<{ push: (item: ThreadWatchItem) => void }>
   >();
   let sequence = 0;
+  const history: Extract<ThreadWatchItem, { kind: "event" }>[] = [];
   const workspace = join(root, "workspace");
   mkdirSync(workspace);
   const project = makeShellProject({ workspaceRoot: workspace });
@@ -109,13 +111,25 @@ export function passFixture(
         (command) => {
           operations.push(command.type);
           commands.push(command);
-          if (!committed.has(command.commandId))
+          if (!committed.has(command.commandId)) {
             committed.add(command.commandId);
+            if (command.type === "thread.turn.start")
+              emit(command.threadId, "thread.message-sent", {
+                messageId: command.message.messageId,
+                role: "user",
+                text: command.message.text,
+                turnId: null,
+                streaming: false,
+                createdAt: at,
+                updatedAt: at,
+              });
+          }
           return Promise.resolve({ sequence });
         },
       ),
       watch: (id, options) => ({
         async *[Symbol.asyncIterator]() {
+          const tracker = new ThreadProjectionTracker();
           let wake: (() => void) | undefined;
           const items: ThreadWatchItem[] = [];
           const queue = {
@@ -139,6 +153,21 @@ export function passFixture(
                 snapshotSequence: sequence,
               },
             };
+            yield* tracker.seed({
+              thread: structuredClone(thread),
+              snapshotSequence: sequence,
+            });
+            if (options?.afterSequence !== undefined)
+              for (const replay of history) {
+                if (
+                  "unknown" in replay.event ||
+                  replay.event.aggregateId !== id ||
+                  replay.event.sequence <= options.afterSequence
+                )
+                  continue;
+                yield replay;
+                yield* tracker.apply(replay.event);
+              }
             yield { kind: "synchronized" };
             while (!options?.signal?.aborted) {
               if (!items.length)
@@ -146,7 +175,10 @@ export function passFixture(
                   wake = resolve;
                 });
               const item = items.shift();
-              if (item) yield item;
+              if (item) {
+                yield item;
+                if (item.kind === "event") yield* tracker.apply(item.event);
+              }
             }
           } finally {
             subscriptions.delete(queue);
@@ -202,6 +234,7 @@ export function passFixture(
       ...rawEvent(++sequence, type, { threadId: id, ...payload }),
       aggregateId: id,
     });
+    history.push({ kind: "event", event });
     const current = threads.get(id);
     if (current) threads.set(id, applyThreadEvent(current, event));
     for (const queue of queues.get(id) ?? [])

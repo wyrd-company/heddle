@@ -28,6 +28,18 @@ export class PassStore {
             .all(runId);
     return rows.map((row) => JSON.parse(String(row["data"])) as PassInvocation);
   }
+  pending(item: PassInvocation): boolean {
+    const status = this.runs.get(item.runId).status;
+    return (
+      status !== "failed" &&
+      status !== "completed" &&
+      !!this.runs.db
+        .prepare(
+          "SELECT 1 FROM visits WHERE run_id=? AND node_id=? AND count=? AND active=1",
+        )
+        .get(item.runId, item.nodeId, item.visit)
+    );
+  }
   awaiting(item: PassInvocation): Awaiting | undefined {
     const run = this.runs.get(item.runId);
     if (run.status === "failed" || run.status === "completed") return undefined;
@@ -40,9 +52,27 @@ export class PassStore {
           row.details.threadId === item.threadId,
       );
   }
+  saveObservation(item: PassInvocation): void {
+    const stored = this.get(item.key);
+    if (!stored) return;
+    this.save({
+      ...stored,
+      projection: item.projection,
+      sequence: item.sequence,
+      view: item.view,
+    });
+  }
   save(item: PassInvocation): void {
-    if (item.phase !== "retired" && this.get(item.key)?.phase === "retired")
-      return;
+    const stored = this.get(item.key);
+    if (item.phase !== "retired" && stored?.phase === "retired") return;
+    if (stored && (stored.sequence ?? -1) > (item.sequence ?? -1)) {
+      item = {
+        ...item,
+        sequence: stored.sequence,
+        projection: stored.projection,
+        view: stored.view,
+      };
+    }
     this.runs.db
       .prepare(
         `INSERT INTO pass_invocations(effect_key,run_id,thread_id,data) VALUES (?,?,?,?)

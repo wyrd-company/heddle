@@ -54,8 +54,14 @@ starts its turn on that thread. T3 retains the native resume cursor. A trailing 
 from the prior turn returns allow before the next mapping exists.
 
 The read model records observed turns, including turns started in the T3 UI,
-activity, token deltas by model, helper usage snapshots, context ratios, compaction
+activity, cumulative total-token deltas by model, helper usage snapshots, context ratios, compaction
 outcomes, open requests, and the current policy. It uses subscription events rather
 than polling. Terminal and failed passes lose their mapping and credential before
 remote registration cleanup; a late registration response cannot restore access.
 The reusable [profile plugins](agent-tools.md) remain installed.
+
+A retired pass keeps a read-only observer until its last observed turn settles, so
+usage reported after handoff remains with that pass. Credentials, mappings, and
+registrations are removed immediately. A reused pass excludes earlier activity
+until its own start message appears. Model totals use the cumulative processed-token
+counter; latest-request input/output counters are not summed as cumulative usage.

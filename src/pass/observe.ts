@@ -24,12 +24,23 @@ export function observePass(
   item.sequence = event.sequence;
   item.projection = applyThreadEvent(item.projection, event);
   const view = item.view;
+  if (event.type === "thread.turn-start-requested")
+    view.pendingMessageId = event.payload.messageId;
+  if (event.type === "thread.message-sent" && event.payload.role === "user")
+    view.pendingMessageId = event.payload.messageId;
+  if (view.pendingMessageId === item.messageId) view.started = true;
+  if (!view.started) {
+    if (
+      event.type === "thread.activity-appended" &&
+      event.payload.activity.kind === "context-window.updated"
+    )
+      view.usageBaseline = usage(record(event.payload.activity.payload));
+    return true;
+  }
   view.lastActivity = Math.max(
     view.lastActivity ?? 0,
     Date.parse(event.occurredAt),
   );
-  if (event.type === "thread.turn-start-requested")
-    view.pendingMessageId = event.payload.messageId;
   if (event.type === "thread.session-set") {
     const session = event.payload.session;
     if (session.providerThreadId !== null) {
@@ -94,29 +105,18 @@ function observeActivity(
     item.projection?.modelSelection.instanceId,
     item.projection?.modelSelection.model,
   ]);
-  const total = view.usageByModel[key] ?? {
-    input: 0,
-    cachedInput: 0,
-    output: 0,
-    reasoning: 0,
-    total: 0,
-  };
-  for (const field of Object.keys(next) as (keyof TokenUsage)[]) {
-    const prior = view.usageBaseline?.[field] ?? 0;
-    total[field] += next[field] >= prior ? next[field] - prior : next[field];
-  }
+  const total = view.usageByModel[key] ?? { total: 0 };
+  const prior = view.usageBaseline?.total ?? 0;
+  total.total += Math.max(0, next.total - prior);
   view.usageByModel[key] = total;
-  view.usageBaseline = next;
+  view.usageBaseline = { total: Math.max(prior, next.total) };
 }
 function usage(payload: Record<string, unknown>): TokenUsage {
   return {
-    input: number(payload["inputTokens"]),
-    cachedInput: number(payload["cachedInputTokens"]),
-    output: number(payload["outputTokens"]),
-    reasoning: number(payload["reasoningOutputTokens"]),
-    total: number(payload["totalProcessedTokens"]),
+    total: number(payload["totalProcessedTokens"] ?? payload["usedTokens"]),
   };
 }
+
 const number = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
 

@@ -13,7 +13,11 @@ import { ExecutionEnvironmentDescriptor } from "../environment.js";
 import { ModelSelection, SnapShotAccessibility, ProjectMonogramText } from "./model.js";
 import { ClientOrchestrationCommand, ThreadMetaUpdateCommand } from "./commands.js";
 import { OrchestrationEvent } from "./events.js";
-import { OrchestrationThreadActivity, OrchestrationThreadDetailSnapshot } from "./read-model.js";
+import {
+  OrchestrationSession,
+  OrchestrationThreadActivity,
+  OrchestrationThreadDetailSnapshot,
+} from "./read-model.js";
 import { OrchestrationShellSnapshot } from "./shell.js";
 import { ProviderOptionSelections, ServerProvider } from "../provider.js";
 import { openRequests, UserInputRequestedPayload } from "./activities.js";
@@ -258,4 +262,22 @@ describe("nested contract validation", () => {
     expect(ProjectMonogramText.safeParse("ABC").success).toBe(false);
     expect(ProjectMonogramText.safeParse("!").success).toBe(false);
   });
+});
+
+it("retains exact native session identity and decodes legacy omission as null", () => {
+  const legacy = {
+    threadId: "sample-thread",
+    status: "ready",
+    providerName: "codex",
+    activeTurnId: null,
+    lastError: null,
+    updatedAt: "2026-01-01T00:00:00Z",
+  };
+  expect(OrchestrationSession.parse(legacy).providerThreadId).toBeNull();
+  expect(
+    OrchestrationSession.parse({ ...legacy, providerThreadId: " native-exact " }).providerThreadId,
+  ).toBe(" native-exact ");
+  expect(
+    OrchestrationSession.parse({ ...legacy, providerThreadId: null }).providerThreadId,
+  ).toBeNull();
 });

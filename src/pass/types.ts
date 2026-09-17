@@ -10,7 +10,11 @@ import type {
   PendingRequest,
 } from "../t3code/index.js";
 import type { AwaitingDetails, Data } from "../engine/index.js";
-import type { ToolBinding, TurnEndPolicy } from "../agent-tools/index.js";
+import type {
+  ToolBinding,
+  TurnEndPolicy,
+  ToolOperations,
+} from "../agent-tools/index.js";
 
 export interface PassOptions {
   client: {
@@ -26,6 +30,7 @@ export interface PassOptions {
     blueprintId: string,
     path: string,
   ) => Promise<string>;
+  toolOperations?: ToolOperations;
   extraToolAuthorization?: (tool: {
     name: string;
     endpoint: string;
@@ -75,11 +80,8 @@ export interface PassReadModel {
   usageBaseline: TokenUsage | null;
   usageSessionId: string | null;
   pendingMessageId: string | null;
+  started: boolean;
 }
 export interface TokenUsage {
-  input: number;
-  cachedInput: number;
-  output: number;
-  reasoning: number;
   total: number;
 }

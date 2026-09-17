@@ -145,6 +145,7 @@ export async function preparePass(
       usageBaseline: null,
       usageSessionId: null,
       pendingMessageId: null,
+      started: false,
     },
   };
 }

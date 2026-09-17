@@ -86,7 +86,6 @@ export async function stopPriorSession(
     commandId: commandId(`${item.commandId}-stop`),
     threadId: threadId(item.threadId),
     createdAt: item.createdAt,
-    onlyIfSettled: true,
   });
 }
 export async function retirePass(
