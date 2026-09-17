@@ -9,7 +9,11 @@ import { basename, extname, resolve } from "node:path";
 import { discoverBlueprintFiles, inputIsDirectory } from "./discovery.js";
 import { lintDerivedBlueprint } from "./flowcraft-lint.js";
 import { lintHeddle, validateExpressions } from "./heddle-lint.js";
-import { BlueprintParseError, loadBlueprint, saveBlueprint } from "./loader.js";
+import {
+  BlueprintParseError,
+  loadBlueprint,
+  roundTripBlueprintBytes,
+} from "./loader.js";
 import { isNodeTypeName } from "./node-types.js";
 import { validateReferences } from "./references.js";
 import {
@@ -214,7 +218,7 @@ export function checkBlueprintFile(
     };
   }
   const findings = validateLoaded(file, loaded.blueprint, options);
-  if (saveBlueprint(loaded) !== loaded.source) {
+  if (!roundTripBlueprintBytes(loaded)) {
     findings.push(
       finding(
         file,

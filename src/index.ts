@@ -9,7 +9,11 @@ export {
   type HeddleFlowcraftNode,
 } from "./blueprints/flowcraft.js";
 export { lintDerivedBlueprint } from "./blueprints/flowcraft-lint.js";
-export { loadBlueprint, saveBlueprint } from "./blueprints/loader.js";
+export {
+  loadBlueprint,
+  roundTripBlueprintBytes,
+  saveBlueprint,
+} from "./blueprints/loader.js";
 export {
   isNodeTypeName,
   NODE_TYPE_REGISTRY,

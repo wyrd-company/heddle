@@ -49,6 +49,7 @@ export interface LoadedBlueprint {
   readonly source: string;
   readonly document: Document;
   readonly blueprint: Blueprint;
+  readonly formattedSource: string;
   readonly originalValue: unknown;
 }
 

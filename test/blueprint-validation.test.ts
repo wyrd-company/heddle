@@ -23,6 +23,7 @@ import {
   loadBlueprint,
   loadValidatedBlueprint,
   NODE_TYPE_REGISTRY,
+  roundTripBlueprintBytes,
   saveBlueprint,
   validateBlueprintFile,
   validateBlueprintPath,
@@ -79,6 +80,44 @@ describe("blueprint loading", () => {
     const loaded = loadBlueprint(file);
 
     expect(saveBlueprint(loaded)).toBe(readFileSync(file, "utf8"));
+  });
+
+  it("preserves a comment-only document edit", () => {
+    const file = resolve(
+      "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+    );
+    const loaded = loadBlueprint(file);
+    loaded.document.commentBefore = "Added document comment.";
+
+    expect(
+      saveBlueprint(loaded).startsWith(
+        "#Added document comment.\n\n# A recipe moves",
+      ),
+    ).toBe(true);
+  });
+
+  it("preserves untouched lines around a localized value edit", () => {
+    const file = resolve(
+      "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+    );
+    const source = readFileSync(file, "utf8");
+    const loaded = loadBlueprint(file);
+    loaded.document.setIn(["description"], "Updated catalog description.");
+
+    expect(saveBlueprint(loaded)).toBe(
+      source.replace(
+        "description: Editorial pipeline for a recipe catalog.",
+        "description: Updated catalog description.",
+      ),
+    );
+  });
+
+  it("proves byte round-trip through a reversible localized edit", () => {
+    const loaded = loadBlueprint(
+      resolve("fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml"),
+    );
+
+    expect(roundTripBlueprintBytes(loaded)).toBe(true);
   });
 
   it("offers the full check chain as the service load boundary", () => {
