@@ -253,13 +253,17 @@ function semanticPatches(
 export function assertPreservedDocument(saved: string, edited: Document): void {
   const reparsed = parseSource(saved);
   const expected = parseSource(edited.toString({ lineWidth: 0 }));
+  const comments = commentSnapshot(reparsed);
+  const commentsMatch =
+    isDeepStrictEqual(comments, commentSnapshot(edited)) ||
+    isDeepStrictEqual(comments, commentSnapshot(expected));
   if (
     reparsed.errors.length ||
     !isDeepStrictEqual(
       reparsed.toJS({ mapAsMap: true }),
       expected.toJS({ mapAsMap: true }),
     ) ||
-    !isDeepStrictEqual(commentSnapshot(reparsed), commentSnapshot(expected)) ||
+    !commentsMatch ||
     !isDeepStrictEqual(
       presentationSnapshot(reparsed),
       presentationSnapshot(expected),

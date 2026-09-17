@@ -111,6 +111,24 @@ const contexts = [
     get: (document: Document) => node(document, ["top"]),
   },
   {
+    name: "block map after indicator-line comment",
+    source: (property: string) =>
+      `top:${property ? ` ${property.trimEnd()}` : ""}   # keep\n  value: text\nz: 3\n`,
+    get: (document: Document) => node(document, ["top"]),
+  },
+  {
+    name: "block sequence after indicator-line comment",
+    source: (property: string) =>
+      `top:${property ? ` ${property.trimEnd()}` : ""}   # keep\n  - text\nz: 3\n`,
+    get: (document: Document) => node(document, ["top"]),
+  },
+  {
+    name: "block map sequence item after indicator-line comment",
+    source: (property: string) =>
+      `top:\n  -${property ? ` ${property.trimEnd()}` : ""}   # keep\n    value: text\nz: 3\n`,
+    get: (document: Document) => node(document, ["top", 0]),
+  },
+  {
     name: "CRLF scalar without final newline",
     source: (property: string) =>
       `top:\r\n  value: ${property}text   # keep\r\nz: 3`,
@@ -260,6 +278,14 @@ describe("YAML document markers and directives", () => {
     ).toBe("%YAML  1.2\n%TAG  !e!  tag:e.com,1:\n---\na: !e!x y\nb: 2\n");
   });
 
+  it("removes a YAML directive without leaving space before its comment", () => {
+    expect(
+      write("%YAML 1.2 # keep\n---\na: 1\n", (document) => {
+        directives(document).yaml.explicit = false;
+      }),
+    ).toBe("# keep\n---\na: 1\n");
+  });
+
   it.each([
     ["LF", "\n"],
     ["CRLF", "\r\n"],
@@ -357,6 +383,22 @@ describe("YAML document markers and directives", () => {
         },
       ),
     ).toBe("%TAG !e! tag:example.com,next:\n---\na: !e!value text   # keep\n");
+  });
+
+  it("removes a used TAG directive while preserving the resolved node tag", () => {
+    expect(
+      write("%TAG !e! tag:e.com,1:\n---\na: !e!x y\n", (document) => {
+        delete directives(document).tags["!e!"];
+      }),
+    ).toBe("---\na: !<tag:e.com,1:x> y\n");
+  });
+
+  it("changes a TAG prefix while preserving the resolved node tag", () => {
+    expect(
+      write("%TAG !e! tag:e.com,1:\n---\na: !e!x y\n", (document) => {
+        directives(document).tags["!e!"] = "tag:f.com,1:";
+      }),
+    ).toBe("%TAG !e! tag:f.com,1:\n---\na: !<tag:e.com,1:x> y\n");
   });
 
   it("combines directive, semantic, comment and presentation edits", () => {

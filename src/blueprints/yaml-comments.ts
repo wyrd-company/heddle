@@ -2,7 +2,9 @@
 // relationships:
 //   implements: blueprint-authoring
 // ---
+import { isDeepStrictEqual } from "node:util";
 import { isMap, isNode, isSeq, Parser, type Document, type Node } from "yaml";
+import { shape } from "./yaml-edit-model.js";
 import {
   applySourcePatches,
   parseSource,
@@ -80,6 +82,11 @@ export function commentTokens(source: string): CommentToken[] {
 
 export function reconcileComments(source: string, edited: Document): string {
   const original = parseSource(source);
+  if (
+    isDeepStrictEqual(shape(original.contents), shape(edited.contents)) &&
+    isDeepStrictEqual(commentSnapshot(original), commentSnapshot(edited))
+  )
+    return source;
   const expected = parseSource(edited.toString({ lineWidth: 0 }));
   const desired = new Map(
     slots(expected).map((slot) => [slot.path, slot.value]),

@@ -80,6 +80,22 @@ function tokenEnd(token: CST.Token): number {
   return token.offset + ("source" in token ? token.source.length : 0);
 }
 
+function directiveRemovalEnd(
+  tokens: readonly CST.Token[],
+  index: number,
+  directive: CST.Directive,
+): number {
+  let end = tokenEnd(directive);
+  let cursor = index + 1;
+  let next = tokens[cursor];
+  while (next?.type === "space" && next.offset === end) {
+    end = tokenEnd(next);
+    cursor += 1;
+    next = tokens[cursor];
+  }
+  return next?.type === "newline" && next.offset === end ? tokenEnd(next) : end;
+}
+
 function preludeInsertionOffset(
   tokens: readonly CST.Token[],
   document: CST.Document,
@@ -118,10 +134,9 @@ function reconcileDirectiveLines(source: string, edited: Document): string {
     existingKeys.add(line.key);
     const target = desired.get(line.key);
     if (target === undefined) {
-      const next = tokens[index + 1];
       patches.push({
         start: token.offset,
-        end: next?.type === "newline" ? tokenEnd(next) : tokenEnd(token),
+        end: directiveRemovalEnd(tokens, index, token),
         replacement: "",
       });
     } else if (target.value !== line.value) {

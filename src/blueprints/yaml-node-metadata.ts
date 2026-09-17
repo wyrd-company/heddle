@@ -70,11 +70,37 @@ function sourcePropertyTokens(
   );
 }
 
+function sourceTagUnderDirectives(
+  document: Document,
+  tokens: readonly CST.SourceToken[],
+): string | undefined {
+  const tag = sourcePropertyTokens(tokens).find(
+    (token) => token.type === "tag",
+  );
+  if (!tag) return undefined;
+  return (
+    documentDirectives(document).tagName(tag.source, () => undefined) ??
+    undefined
+  );
+}
+
+function inlineCommentOffset(
+  tokens: readonly CST.SourceToken[],
+): number | undefined {
+  const newline = tokens.find((token) => token.type === "newline");
+  return tokens.find(
+    (token) =>
+      token.type === "comment" &&
+      (newline === undefined || token.offset < newline.offset),
+  )?.offset;
+}
+
 function propertyPatches(
   source: string,
   context: NodeSourceContext,
   desired: readonly PropertyValue[],
   target: Node,
+  sourceTag: string | undefined,
 ): SourcePatch[] {
   const existing = sourcePropertyTokens(context.tokens);
   const desiredByType = new Map(
@@ -83,7 +109,7 @@ function propertyPatches(
   const changedTypes = new Set<PropertyValue["type"]>();
   if (!isAlias(context.node) && !isAlias(target)) {
     if (context.node.anchor !== target.anchor) changedTypes.add("anchor");
-    if (context.node.tag !== target.tag) changedTypes.add("tag");
+    if (sourceTag !== target.tag) changedTypes.add("tag");
   }
   if (changedTypes.size === 0) return [];
 
@@ -96,7 +122,9 @@ function propertyPatches(
       const replacement = desired.map((property) => property.source).join(" ");
       let start = first.offset;
       let end = last.offset + last.source.length;
-      while (/[ \t]/u.test(source[end] ?? "")) end += 1;
+      const comment = inlineCommentOffset(context.tokens);
+      if (comment === undefined)
+        while (/[ \t]/u.test(source[end] ?? "")) end += 1;
       if (!replacement && end === last.offset + last.source.length)
         while (start > 0 && /[ \t]/u.test(source[start - 1] ?? "")) start -= 1;
       return [
@@ -164,6 +192,12 @@ function propertyPatches(
   const separatorNewline = context.tokens.find(
     (token) => token.type === "newline",
   );
+  const comment = inlineCommentOffset(context.tokens);
+  if (comment !== undefined) {
+    let start = comment;
+    while (start > 0 && /[ \t]/u.test(source[start - 1] ?? "")) start -= 1;
+    return [{ start, end: start, replacement: ` ${replacement}` }];
+  }
   if (separatorNewline) {
     let patchStart = separatorNewline.offset;
     while (patchStart > 0 && /[ \t]/u.test(source[patchStart - 1] ?? ""))
@@ -245,12 +279,14 @@ export function reconcileNodeProperties(
   for (const [path, context] of contexts) {
     const target = desired.get(path);
     if (!target) continue;
-    if (context.node.tag !== target.tag) tagChanges.add(path);
+    const sourceTag = sourceTagUnderDirectives(edited, context.tokens);
+    if (sourceTag !== target.tag) tagChanges.add(path);
     const nodePatches = propertyPatches(
       source,
       context,
       propertyValues(edited, target),
       target,
+      sourceTag,
     );
     patches.push(...nodePatches);
   }
