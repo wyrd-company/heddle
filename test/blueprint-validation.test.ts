@@ -9,6 +9,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -90,7 +91,7 @@ describe("blueprint loading", () => {
 
     expect(loadValidatedBlueprint(valid).blueprint.id).toBe("sample-a");
     expect(() => loadValidatedBlueprint(invalid)).toThrow(
-      /heddle\.pass-result/u,
+      /heddle\.unhandled-result/u,
     );
   });
 
@@ -129,6 +130,26 @@ describe("validation chain", () => {
     expect(lintDerivedBlueprint(loaded.blueprint)).toEqual([]);
   });
 
+  it("requires every named child-run result from the node-type registry", () => {
+    const fixture = readFileSync(
+      resolve("fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml"),
+      "utf8",
+    );
+    const source = fixture.replace(
+      "  - from: draft\n    to: run-failed\n    when: result.output.failed\n",
+      "",
+    );
+    const file = temporaryFile("recipe-pipeline.yml", source);
+
+    expect(validateBlueprintFile(file)).toContainEqual(
+      expect.objectContaining({
+        node: "draft",
+        rule: "heddle.unhandled-result",
+        message: "Result is not handled: failed",
+      }),
+    );
+  });
+
   it("requires an explicit authored entry for a fully cyclic graph", () => {
     const cyclic = passBlueprint().replace(
       "  - from: first\n    to: done\n    when: result.output.handoff or result.output.overridden",
@@ -156,6 +177,26 @@ describe("validation chain", () => {
     );
 
     expect(validateBlueprintPath(dirname(dirname(file)))).toEqual([]);
+  });
+
+  it("does not follow a referenced-file symlink outside the blueprint directory", () => {
+    const source = passBlueprint().replace(
+      'prompt: { inline: "Complete the request." }',
+      "prompt: prompt.md",
+    );
+    const file = temporaryFile("nested/sample-a.yml", source);
+    const outside = join(dirname(dirname(file)), "outside.md");
+    writeFileSync(outside, "Outside");
+    symlinkSync(outside, join(dirname(file), "prompt.md"));
+
+    expect(
+      validateBlueprintFile(file).some(
+        (item) =>
+          item.node === "first" &&
+          item.rule === "reference.exists" &&
+          item.message.includes("must stay beside"),
+      ),
+    ).toBe(true);
   });
 
   it("reports malformed node shapes as schema findings", () => {
@@ -191,7 +232,7 @@ describe("validation chain", () => {
         "result.output.handoff or result.output.overridden",
         "result.output.handoff",
       ),
-      "heddle.pass-result",
+      "heddle.unhandled-result",
     ],
     [
       "handoff without description",
@@ -228,7 +269,7 @@ describe("validation chain", () => {
   it.each([
     ["action-edge.yml", "heddle.no-action-edge"],
     ["subflow.yml", "heddle.no-subflow"],
-    ["unhandled-pass-result.yml", "heddle.pass-result"],
+    ["unhandled-pass-result.yml", "heddle.unhandled-result"],
     ["handoff-without-description.yml", "handoff.schema"],
     ["invalid-jsonata.yml", "expression.jsonata"],
     ["missing-template.yml", "reference.exists"],
@@ -291,5 +332,23 @@ nodes:
           item.message.includes("not checked"),
       ),
     ).toBe(true);
+  });
+
+  it("rejects a statically unknown context root", () => {
+    const source = passBlueprint().replace(
+      'title: { inline: "Complete" }',
+      "title: { from: absent.value }",
+    );
+    const findings = validateBlueprintFile(
+      temporaryFile("sample-a.yml", source),
+    );
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        node: "done",
+        rule: "heddle.context-key",
+        message: "Context key cannot be provided: absent",
+      }),
+    );
   });
 });

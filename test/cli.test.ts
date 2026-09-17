@@ -124,7 +124,7 @@ describe("command arguments", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.errors.join("\n")).toContain(
-      `${file}:first [heddle.pass-result]`,
+      `${file}:first [heddle.unhandled-result]`,
     );
   });
 

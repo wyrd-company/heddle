@@ -15,7 +15,12 @@ function isBlueprintCandidate(filePath: string): boolean {
     strict: true,
   });
   if (document.errors.length > 0) return true;
-  const value: unknown = document.toJS({ maxAliasCount: 100 });
+  let value: unknown;
+  try {
+    value = document.toJS({ maxAliasCount: 100 });
+  } catch {
+    return true;
+  }
   return (
     isObject(value) &&
     ["id", "kind", "nodes", "edges"].some((key) => Object.hasOwn(value, key))

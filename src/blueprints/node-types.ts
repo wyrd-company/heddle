@@ -65,12 +65,12 @@ export const NODE_TYPE_REGISTRY = {
   sleep: {
     paramsSchema: schemaReference("sleepParams"),
     pausing: true,
-    results: ["completed"],
+    results: [],
   },
   wait: {
     paramsSchema: schemaReference("waitParams"),
     pausing: true,
-    results: ["resumed", "timeout"],
+    results: [],
   },
 } as const satisfies Record<string, NodeTypeContract>;
 

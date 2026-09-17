@@ -49,12 +49,17 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     description: "Blueprint edges do not declare Flowcraft actions.",
   },
   {
-    name: "heddle.pass-result",
-    description: "Every possible pass result has an outgoing edge.",
+    name: "heddle.unhandled-result",
+    description: "Every named result of a pausing node has an outgoing edge.",
   },
   {
     name: "heddle.question-role",
     description: "Every question role has a configured channel.",
+  },
+  {
+    name: "heddle.context-key",
+    description:
+      "Statically identifiable context roots have a possible provider.",
   },
   {
     name: "flowcraft.lint",

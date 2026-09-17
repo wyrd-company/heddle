@@ -6,9 +6,10 @@
 // ---
 import jsonata from "jsonata";
 
+import { isNodeTypeName, NODE_TYPE_REGISTRY } from "./node-types.js";
 import type {
   Blueprint,
-  JsonObject,
+  BlueprintNode,
   ValidationFinding,
   ValidationOptions,
 } from "./types.js";
@@ -24,21 +25,84 @@ function finding(
   return { file, node, rule, message };
 }
 
-function requiredPassResults(params: JsonObject | undefined): string[] {
-  const results = ["handoff", "overridden"];
-  if (params?.["escalation"] === "ends-stage") results.push("escalate");
-  if (params?.["deadline"] !== undefined) results.push("timeout");
-  if (params?.["inactivity"] !== undefined) results.push("idle");
-  if (params?.["turnEndPolicy"] === "allow") results.push("turnEnded");
+function requiredResults(node: BlueprintNode): string[] {
+  if (!isNodeTypeName(node.uses)) return [];
+  const results = [...NODE_TYPE_REGISTRY[node.uses].results];
+  if (node.uses === "pass") {
+    if (node.params?.["escalation"] !== "ends-stage")
+      remove(results, "escalate");
+    if (node.params?.["deadline"] === undefined) remove(results, "timeout");
+    if (node.params?.["inactivity"] === undefined) remove(results, "idle");
+    if (node.params?.["turnEndPolicy"] !== "allow")
+      remove(results, "turnEnded");
+  }
+  if (
+    ["question", "on-issue-change"].includes(node.uses) &&
+    node.params?.["deadline"] === undefined
+  ) {
+    remove(results, "timeout");
+  }
   return results;
 }
 
-function handledResults(blueprint: Blueprint, nodeId: string): Set<string> {
+function remove(values: string[], value: string): void {
+  const index = values.indexOf(value);
+  if (index >= 0) values.splice(index, 1);
+}
+
+function contextReferences(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(contextReferences);
+  if (typeof value !== "object" || value === null) return [];
+  const object = value as Record<string, unknown>;
+  const own = typeof object["from"] === "string" ? [object["from"]] : [];
+  return [
+    ...own,
+    ...Object.entries(object)
+      .filter(([key]) => key !== "from")
+      .flatMap(([, nested]) => contextReferences(nested)),
+  ];
+}
+
+function contextKeyFindings(
+  file: string,
+  blueprint: Blueprint,
+): ValidationFinding[] {
+  const available = new Set([
+    "issue",
+    "blueprint",
+    "stages",
+    ...Object.keys(blueprint.inputs ?? {}),
+    ...Object.keys(blueprint.nodes),
+  ]);
+  const findings: ValidationFinding[] = [];
+  for (const [nodeId, node] of Object.entries(blueprint.nodes)) {
+    for (const expression of contextReferences(node.params)) {
+      const root = /^([A-Za-z][\w-]*)(?:\.|$)/u.exec(expression)?.[1];
+      if (root !== undefined && !available.has(root)) {
+        findings.push(
+          finding(
+            file,
+            nodeId,
+            "heddle.context-key",
+            `Context key cannot be provided: ${root}`,
+          ),
+        );
+      }
+    }
+  }
+  return findings;
+}
+
+function handledResults(
+  blueprint: Blueprint,
+  nodeId: string,
+  required: readonly string[],
+): Set<string> {
   const outgoing = (blueprint.edges ?? []).filter(
     (edge) => edge.from === nodeId,
   );
   if (outgoing.some((edge) => edge.when === undefined)) {
-    return new Set(requiredPassResults(blueprint.nodes[nodeId]?.params));
+    return new Set(required);
   }
   const handled = new Set<string>();
   for (const edge of outgoing) {
@@ -90,15 +154,16 @@ export function lintHeddle(
         finding(file, nodeId, "heddle.no-subflow", "subflow is not supported"),
       );
     }
-    if (node.uses === "pass") {
-      const handled = handledResults(blueprint, nodeId);
-      for (const result of requiredPassResults(node.params)) {
+    if (isNodeTypeName(node.uses) && NODE_TYPE_REGISTRY[node.uses].pausing) {
+      const required = requiredResults(node);
+      const handled = handledResults(blueprint, nodeId, required);
+      for (const result of required) {
         if (!handled.has(result)) {
           findings.push(
             finding(
               file,
               nodeId,
-              "heddle.pass-result",
+              "heddle.unhandled-result",
               `Result is not handled: ${result}`,
             ),
           );
@@ -131,6 +196,7 @@ export function lintHeddle(
       );
     }
   }
+  findings.push(...contextKeyFindings(file, blueprint));
   return findings;
 }
 

@@ -196,20 +196,9 @@ export function checkBlueprintFile(
   options: ValidationOptions = {},
 ): BlueprintCheckResult {
   const file = resolve(filePath);
+  let loaded: LoadedBlueprint;
   try {
-    const loaded = loadBlueprint(file);
-    const findings = validateLoaded(file, loaded.blueprint, options);
-    if (saveBlueprint(loaded) !== loaded.source) {
-      findings.push(
-        finding(
-          file,
-          blueprintNode,
-          "roundtrip.bytes",
-          "Unchanged save changed bytes",
-        ),
-      );
-    }
-    return { findings: sortFindings(findings), loaded };
+    loaded = loadBlueprint(file);
   } catch (error) {
     const rule =
       error instanceof BlueprintParseError ? "yaml.parse" : "input.path";
@@ -224,6 +213,18 @@ export function checkBlueprintFile(
       ],
     };
   }
+  const findings = validateLoaded(file, loaded.blueprint, options);
+  if (saveBlueprint(loaded) !== loaded.source) {
+    findings.push(
+      finding(
+        file,
+        blueprintNode,
+        "roundtrip.bytes",
+        "Unchanged save changed bytes",
+      ),
+    );
+  }
+  return { findings: sortFindings(findings), loaded };
 }
 
 export class BlueprintValidationError extends Error {

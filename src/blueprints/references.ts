@@ -2,8 +2,8 @@
 // relationships:
 //   implements: blueprint-authoring
 // ---
-import { readFileSync, statSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { parseDocument } from "yaml";
 
@@ -64,22 +64,41 @@ export function validateReferences(
 ): ValidationFinding[] {
   const findings: ValidationFinding[] = [];
   const directory = dirname(filePath);
+  const realDirectory = realpathSync(directory);
   for (const [nodeId, node] of Object.entries(blueprint.nodes)) {
     for (const reference of collectNodeReferences(nodeId, node)) {
       const referencedPath = resolve(directory, reference.path);
       const relativePath = relative(directory, referencedPath);
-      if (
+      const outsideDirectory =
         isAbsolute(reference.path) ||
         relativePath === ".." ||
-        relativePath.startsWith(
-          `..${process.platform === "win32" ? "\\" : "/"}`,
-        )
-      ) {
+        relativePath.startsWith(`..${sep}`);
+      if (outsideDirectory) {
+        findings.push({
+          file: filePath,
+          node: reference.node,
+          rule: "reference.exists",
+          message: `Referenced file must stay beside the blueprint: ${reference.path}`,
+        });
         continue;
       }
       try {
         if (!statSync(referencedPath).isFile()) {
           throw new Error("is not a file");
+        }
+        const realReferencedPath = realpathSync(referencedPath);
+        const realRelativePath = relative(realDirectory, realReferencedPath);
+        if (
+          realRelativePath === ".." ||
+          realRelativePath.startsWith(`..${sep}`)
+        ) {
+          findings.push({
+            file: filePath,
+            node: reference.node,
+            rule: "reference.exists",
+            message: `Referenced file must stay beside the blueprint: ${reference.path}`,
+          });
+          continue;
         }
       } catch {
         findings.push({

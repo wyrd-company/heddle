@@ -43,10 +43,19 @@ nodes:
       channel: pushover
       title: { inline: "Recipe needs an editor" }
       message: prompts/too-many-tests.md
+  run-failed:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Recipe step failed" }
+      message: { inline: "The recipe process needs attention." }
 edges:
   - from: draft
     to: taste-test
     when: result.output.completed
+  - from: draft
+    to: run-failed
+    when: result.output.failed
   - from: taste-test
     to: publish
     when: result.output.completed and result.output.payload.verdict = 'approved'
@@ -56,3 +65,6 @@ edges:
   - from: taste-test
     to: too-many-tests
     when: result.output.completed and result.output.payload.verdict = 'rejected' and stages.`taste-test`.visits >= blueprint.metadata.maxTasteTests
+  - from: taste-test
+    to: run-failed
+    when: result.output.failed
