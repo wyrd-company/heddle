@@ -194,11 +194,14 @@ proposed-design:
 
     Inputs: `when` (an optional JSONata condition over the changed issue
     that must be true for the node to wake; otherwise any change wakes it),
+    `bindings` (JSONata variable names mapped to immutable run-context paths),
     `deadline`.
 
-    Behavior: pauses with `{ kind: issue-change, issueId, condition }`. The
-    webhook handler evaluates the condition against the changed issue and
-    resumes matching runs.
+    Behavior: captures bindings from the run's immutable initial context and
+    pauses with `{ kind: issue-change, issueId, condition, bindings }`. The
+    webhook handler keeps the changed issue as the JSONata root, supplies the
+    captured values as variables, and resumes matching runs. Validation rejects
+    unknown binding paths and condition variables without bindings.
 
     Results: `changed` with the new issue snapshot; `timeout`.
   github: |

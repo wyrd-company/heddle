@@ -23,7 +23,7 @@ export class InstanceStore {
       CREATE TABLE IF NOT EXISTS issue_projects (issue_id TEXT NOT NULL, project_id TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,project_id));
       CREATE TABLE IF NOT EXISTS project_choices (issue_id TEXT PRIMARY KEY, project_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS project_choice_questions (issue_id TEXT PRIMARY KEY, occurrence_id TEXT NOT NULL UNIQUE);
-      CREATE TABLE IF NOT EXISTS issue_deliveries (issue_id TEXT NOT NULL, updated_at TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,updated_at));
+      CREATE TABLE IF NOT EXISTS issue_deliveries (issue_id TEXT NOT NULL, updated_at TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,updated_at,snapshot));
       CREATE TABLE IF NOT EXISTS github_attention (id INTEGER PRIMARY KEY, project TEXT NOT NULL, message TEXT NOT NULL);
       DELETE FROM github_attention WHERE id NOT IN (SELECT min(id) FROM github_attention GROUP BY project,message);
       CREATE UNIQUE INDEX IF NOT EXISTS github_attention_identity ON github_attention(project,message);`);

@@ -15,6 +15,12 @@ export type { BindingServiceOptions } from "./service.js";
 export type { IntakeResult } from "./intake-service.js";
 export type { ProjectChoiceQuestion } from "./store.js";
 export {
+  PushoverDelivery,
+  type Notification,
+  type NotificationDelivery,
+  type PushoverOptions,
+} from "./notify.js";
+export {
   GitHubEventHandler,
   githubEvents,
   type GitHubEvent,

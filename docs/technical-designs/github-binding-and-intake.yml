@@ -92,6 +92,10 @@ proposed-design:
     Whether the lifecycle blueprint can also be pinned by a person through a
     project field is a choice the intake author makes by reading that field
     first.
+    The selected lifecycle is the instance root; the intake run is not. The
+    service attaches it from lifecycle-start's durable origin and initial
+    issue identity. Startup repairs a committed lifecycle whose instance
+    attachment was interrupted without resolving live issue data again.
   unmatched-intake: >
     An issue that matches no rule enters the shipped `hold-then-attention`
     blueprint: wait on `on-issue-change` with a deadline, re-run intake on
@@ -144,14 +148,31 @@ proposed-design:
     copy, dedupes on the issue's updated time so a change seen by both
     producers is applied once, and resumes runs waiting on
     `on-issue-change` whose condition matches.
+    Immutable values used by a condition are captured as named bindings from
+    the waiting run's initial context. The changed issue remains the JSONata
+    root. Snapshot refresh changes the instance's current view and never a
+    run's saved initial context.
   service-as-single-writer: >
-    The service is the only writer of Status. Agents and people may change
-    any other field, and those changes are events the blueprint can route
-    on. A person moving Status by hand is also an event, and the shipped
-    lifecycle blueprint treats it as an operator override that resumes the
-    current stage with result `overridden`.
+    The service owns Status projection. Agents do not write it. A person
+    moving Status by hand is an event, and the shipped lifecycle blueprint
+    treats it as an operator override that resumes the current stage with
+    result `overridden`. Changes to other fields are events the blueprint can
+    route on.
   pause: >
     Pausing an instance or an epic is an operator operation on the service,
     projected to the card as a `Paused` field Heddle owns alongside Status,
     so the state is visible on the board. Setting that field by hand is an
     issue change the service treats as the same operation.
+    A manually moved Status resumes the current pass as `overridden`. Delivery
+    deduplication prevents service projections from becoming feedback loops.
+  project-choice: >
+    More than one bound-project membership creates one durable question. A
+    valid occurrence answer selects one membership, writes Heddle Project to
+    that card, and allows intake to start. Restart and repeated delivery retain
+    the answer and do not create another unresolved question.
+  permission-attention: >
+    A GitHub permission refusal leaves the node awaiting and records its run,
+    node, and visit. Operator continuation applies only to that occurrence and
+    never retries the refused effect. Immediate replay, recovery replay, and an
+    old action after a later refusal are inert. Attention reopening is not
+    supported.

@@ -109,6 +109,11 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
       "Statically identifiable context roots have a possible provider.",
   },
   {
+    name: "heddle.issue-change-binding",
+    description:
+      "Every issue-change variable names an explicit immutable binding.",
+  },
+  {
     name: "flowcraft.lint",
     description: "The derived Flowcraft blueprint passes its linter.",
   },

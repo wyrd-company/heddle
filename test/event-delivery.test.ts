@@ -9,18 +9,20 @@ import { lintHeddle } from "../src/blueprints/heddle-lint.js";
 import type { Blueprint } from "../src/blueprints/types.js";
 import { GitHubBindingService } from "../src/binding/service.js";
 import { RunStore } from "../src/engine/store.js";
-import { fixture } from "./binding.fixture.js";
+import { fixture, type BindingRelation } from "./binding.fixture.js";
 
 const stores: RunStore[] = [];
 afterEach(() => {
   for (const store of stores.splice(0)) store.close();
 });
 
-function setup(blueprint: Blueprint, nodes = {}) {
-  const github = fixture();
-  const store = new RunStore(":memory:");
-  stores.push(store);
-  const service = new GitHubBindingService(
+function binding(
+  blueprint: Blueprint,
+  github: ReturnType<typeof fixture>,
+  store: RunStore,
+  nodes = {},
+) {
+  return new GitHubBindingService(
     store,
     [{ owner: "sample-owner", number: 1 }],
     github.clients,
@@ -33,11 +35,18 @@ function setup(blueprint: Blueprint, nodes = {}) {
       nodes,
     },
   );
+}
+
+function setup(blueprint: Blueprint, nodes = {}) {
+  const github = fixture();
+  const store = new RunStore(":memory:");
+  stores.push(store);
+  const service = binding(blueprint, github, store, nodes);
   return { github, store, service };
 }
 
 const waitBlueprint = (
-  bindings = { expectedType: "expectedType" },
+  bindings: Record<string, string> = { expectedType: "expectedType" },
 ): Blueprint => ({
   id: "wait-for-record",
   kind: "helper",
@@ -82,15 +91,56 @@ it("applies one signed webhook/poll change and keeps run inputs immutable", asyn
   });
   expect(f.service.instances.get("I_1").issue.type).toBe("Collection request");
 
-  expect(await f.service.poll()).toBe(0);
+  const restarted = binding(waitBlueprint(), f.github, f.store);
+  await restarted.start();
+  expect(await restarted.poll()).toBe(0);
   expect(
-    await f.service.deliver("issues", {
+    await restarted.deliver("issues", {
       issue: { node_id: "I_1", updated_at: changedAt },
     }),
   ).toBe(false);
   expect(
     f.store.events("waiting").filter((event) => event.type === "resume"),
   ).toHaveLength(1);
+});
+
+it("refreshes an issue when a linked pull request changes", async () => {
+  const f = setup(waitBlueprint());
+  const issue = f.github.issues[0];
+  if (!issue) throw new Error("Fixture issue missing");
+  (issue.closedByPullRequestsReferences.nodes as BindingRelation[]).push({
+    id: "PR_7",
+    number: 7,
+    repository: { name: "changes", owner: { login: "sample-owner" } },
+  });
+  await f.service.start();
+  const waiting = await f.service.engine.start({
+    id: "pull-wait",
+    blueprintId: "wait-for-record",
+    commit: "revision",
+    context: {
+      issue: f.service.instances.get("I_1").issue,
+      expectedType: "Work item",
+    },
+  });
+  issue.title = "Updated garden soup";
+  issue.issueType = { name: "Work item" };
+  issue.updatedAt = "2026-01-05T00:00:00Z";
+
+  expect(
+    await f.service.deliver("pull_request", {
+      repository: { full_name: "sample-owner/changes" },
+      pull_request: {
+        node_id: "PR_7",
+        number: 7,
+        updated_at: issue.updatedAt,
+      },
+    }),
+  ).toBe(true);
+  expect(f.store.get(waiting.id)).toMatchObject({ status: "completed" });
+  expect(f.service.instances.get("I_1").issue.title).toBe(
+    "Updated garden soup",
+  );
 });
 
 it("refuses an invalid webhook signature before loading GitHub", async () => {
@@ -106,6 +156,37 @@ it("refuses an invalid webhook signature before loading GitHub", async () => {
     ),
   ).rejects.toThrow("signature is invalid");
   expect(f.github.transport.calls).toHaveLength(calls);
+});
+
+it("retains distinct card changes that share an issue update time", async () => {
+  const f = setup(waitBlueprint());
+  await f.service.start();
+  const issue = f.github.issues[0];
+  if (!issue) throw new Error("Fixture issue missing");
+  const updatedAt = issue.updatedAt;
+  f.github.values["C_1"] = { Paused: "Yes" };
+  expect(
+    await f.service.deliver("projects_v2_item", {
+      projects_v2_item: {
+        content_node_id: issue.id,
+        updated_at: updatedAt,
+      },
+    }),
+  ).toBe(true);
+  f.github.values["C_1"] = { Paused: "Yes", Status: "Backlog" };
+  expect(
+    await f.service.deliver("projects_v2_item", {
+      projects_v2_item: {
+        content_node_id: issue.id,
+        updated_at: updatedAt,
+      },
+    }),
+  ).toBe(true);
+  expect(
+    f.store.db
+      .prepare("SELECT * FROM issue_deliveries WHERE issue_id=?")
+      .all(issue.id),
+  ).toHaveLength(2);
 });
 
 it("rejects an unknown immutable binding before awaiting", async () => {
@@ -168,8 +249,16 @@ it("projects operator pause and applies manual Paused changes through one operat
   await f.service.resumeInstance("I_1");
   expect(f.github.values["C_1"]["Paused"]).toBe("No");
   expect(
+    await f.service.deliver("projects_v2_item", {
+      projects_v2_item: {
+        content_node_id: "I_1",
+        updated_at: issue.updatedAt,
+      },
+    }),
+  ).toBe(false);
+  expect(
     f.store.events(run.id).filter((event) => event.type === "instance-resumed"),
-  ).toHaveLength(2);
+  ).toHaveLength(1);
 });
 
 it("turns a manual Status move into the paused pass overridden result", async () => {

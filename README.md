@@ -217,11 +217,11 @@ Apache-2.0.
 issue discovery, stage projection, and the `github` node. Construct it with a
 `RunStore`, configured projects, `appClients(config.github.credentialFile,
 budget)`, a provider of bound blueprints, and the engine options. `start()`
-reconciles and discovers; `discover()` performs a later discovery pass.
-`reconcile()` also runs before `startInstance(issueId, blueprintId, commit)`.
-The service assembly calls `reconcile()` when the blueprint repository changes.
-Intake chooses the blueprint and supplies its captured commit to
-`startInstance`; discovery records backlog issues without choosing a lifecycle.
+reconciles, discovers, repairs lifecycle attachments, and starts the configured
+intake for every new issue. `poll()` repeats discovery before delivering
+snapshot diffs through the same handler used by signed webhooks. See the
+[binding reference](docs/reference/github-binding.md) for event, intake,
+project-choice, permission-attention, pause, and shipped blueprint contracts.
 
 The credential file contains `app-id`, an `installations` mapping from owner
 login to installation id, and `private-key`. The binding accepts an App
@@ -241,12 +241,12 @@ servings: 4
 ```
 
 Snapshots are cached in the instance store and copied into a run's durable
-initial context. An issue in multiple bound projects raises attention; use
-`instances.chooseProject(issueId, projectId)` before starting its lifecycle.
-The choice is durable. Invalid issue front matter raises attention with the issue
-reference and leaves other issues available for discovery. Repeated project
-attention messages are deduplicated. Status options retain their existing order and append
-new stage node ids. Removed stages remain as options. `Paused` is a
+initial context. An issue in multiple bound projects asks one durable project
+question and starts no lifecycle until `answerProjectChoice` records a valid
+answer on the selected card. Invalid issue front matter raises attention with
+the issue reference and leaves other issues available for discovery. Repeated
+project attention messages are deduplicated. Status options retain their
+existing order and append new stage node ids. Removed stages remain as options. `Paused` is a
 single-select field with `Yes` and `No` options. The service owns both fields.
 Missing organization fields can be mirrored onto a project when declared by
 `requires.issue.fields`; unknown field names raise attention.
@@ -261,7 +261,9 @@ Writes read current state first. Completed effects retain their input and
 snapshot so replay does not overwrite later changes. Comments also carry an
 invisible effect marker so recovery after a remote write can find them.
 A permission refusal records attention and leaves the node awaiting an
-operator decision; it does not fail the run or retry the request.
+operator decision. `resolvePermissionAttention` continues the exact run, node,
+and visit occurrence without retrying the request; repeated and stale
+continuations are inert.
 
 For live validation, set `HEDDLE_CONFIG` to the configuration file and run
 `heddle validate --check-requires-issue <path>`. The check reads every bound

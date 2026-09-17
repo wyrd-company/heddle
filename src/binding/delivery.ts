@@ -16,6 +16,7 @@ export interface IssueDelivery {
   event: GitHubEvent;
   issueId: string;
   updatedAt: string;
+  relatedRef?: `${string}/${string}#${number}`;
 }
 
 type DeliveryHandler = (delivery: IssueDelivery) => Promise<boolean>;
@@ -41,6 +42,16 @@ function issueFromPayload(event: GitHubEvent, payload: unknown): IssueDelivery {
       : (record(root["issue"]) ?? record(root["pull_request"]));
   if (!source)
     throw new Error(`GitHub ${event} delivery has no issue identity`);
+  const repository = record(root["repository"]);
+  const repositoryName = repository?.["full_name"];
+  const pullNumber = source["number"];
+  const relatedRef =
+    event === "pull_request" &&
+    typeof repositoryName === "string" &&
+    /^[^/]+\/[^/]+$/u.test(repositoryName) &&
+    typeof pullNumber === "number"
+      ? (`${repositoryName}#${String(pullNumber)}` as `${string}/${string}#${number}`)
+      : undefined;
   return {
     event,
     issueId: requiredString(
@@ -51,6 +62,7 @@ function issueFromPayload(event: GitHubEvent, payload: unknown): IssueDelivery {
       source["updated_at"] ?? root["updated_at"],
       "an updated time",
     ),
+    ...(relatedRef === undefined ? {} : { relatedRef }),
   };
 }
 

@@ -1,0 +1,43 @@
+# The replaceable default intake maps a generic issue type to a lifecycle.
+id: default-intake
+kind: helper
+description: Select a lifecycle by issue type or hold until the type is supplied.
+nodes:
+  classify:
+    uses: policy
+    params:
+      rules: rules/default-intake.yml
+      input: { from: issue }
+  start-lifecycle:
+    uses: lifecycle-start
+    params:
+      blueprint: { from: classify.blueprint }
+      inputs: { from: classify.inputs }
+  start-hold:
+    uses: child-run
+    params:
+      blueprint: hold-then-attention
+      inputs:
+        issue: { from: issue }
+        expectedType: { from: classify.inputs.expectedType }
+  held:
+    uses: terminal-result
+    params:
+      value: { from: start-hold.payload }
+  hold-failed:
+    uses: terminal-result
+    params:
+      value: { status: failed, details: { from: start-hold.payload } }
+edges:
+  - from: classify
+    to: start-lifecycle
+    when: result.output.blueprint != 'hold-then-attention'
+  - from: classify
+    to: start-hold
+    when: result.output.blueprint = 'hold-then-attention'
+  - from: start-hold
+    to: held
+    when: result.output.completed
+  - from: start-hold
+    to: hold-failed
+    when: result.output.failed

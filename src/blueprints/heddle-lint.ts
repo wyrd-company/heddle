@@ -6,6 +6,7 @@
 // ---
 import jsonata from "jsonata";
 
+import { contextKeyFindings } from "./context-lint.js";
 import { isNodeTypeName, NODE_TYPE_REGISTRY } from "./node-types.js";
 import type {
   Blueprint,
@@ -46,83 +47,6 @@ function requiredResults(node: BlueprintNode): string[] {
 function remove(values: string[], value: string): void {
   const index = values.indexOf(value);
   if (index >= 0) values.splice(index, 1);
-}
-
-function contextReferences(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap(contextReferences);
-  if (typeof value !== "object" || value === null) return [];
-  const object = value as Record<string, unknown>;
-  const own = typeof object["from"] === "string" ? [object["from"]] : [];
-  return [
-    ...own,
-    ...Object.entries(object)
-      .filter(([key]) => key !== "from")
-      .flatMap(([, nested]) => contextReferences(nested)),
-  ];
-}
-
-function contextKeyFindings(
-  file: string,
-  blueprint: Blueprint,
-): ValidationFinding[] {
-  const initial = [
-    "issue",
-    "blueprint",
-    "stages",
-    ...Object.keys(blueprint.inputs ?? {}),
-  ];
-  const incoming = new Map<string, string[]>();
-  for (const edge of blueprint.edges ?? []) {
-    const sources = incoming.get(edge.to) ?? [];
-    sources.push(edge.from);
-    incoming.set(edge.to, sources);
-  }
-  const findings: ValidationFinding[] = [];
-  for (const [nodeId, node] of Object.entries(blueprint.nodes)) {
-    const available = new Set([...initial, nodeId]);
-    const pending = [...(incoming.get(nodeId) ?? [])];
-    while (pending.length > 0) {
-      const predecessor = pending.pop();
-      if (predecessor === undefined || available.has(predecessor)) continue;
-      available.add(predecessor);
-      pending.push(...(incoming.get(predecessor) ?? []));
-    }
-    for (const expression of contextReferences(node.params)) {
-      const root = /^([A-Za-z][\w-]*)(?:\.|$)/u.exec(expression)?.[1];
-      if (root !== undefined && !available.has(root)) {
-        findings.push(
-          finding(
-            file,
-            nodeId,
-            "heddle.context-key",
-            `Context key cannot be provided: ${root}`,
-          ),
-        );
-      }
-    }
-    if (
-      node.uses === "on-issue-change" &&
-      node.params?.["bindings"] !== null &&
-      typeof node.params?.["bindings"] === "object" &&
-      !Array.isArray(node.params["bindings"])
-    ) {
-      for (const [name, path] of Object.entries(node.params["bindings"])) {
-        if (typeof path !== "string") continue;
-        const root = /^([A-Za-z][\w-]*)(?:\.|$)/u.exec(path)?.[1];
-        if (root !== undefined && !available.has(root)) {
-          findings.push(
-            finding(
-              file,
-              nodeId,
-              "heddle.context-key",
-              `Bound value ${name} cannot be provided: ${root}`,
-            ),
-          );
-        }
-      }
-    }
-  }
-  return findings;
 }
 
 function handledResults(

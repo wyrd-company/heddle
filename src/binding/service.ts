@@ -18,16 +18,18 @@ import {
   IssueFrontMatterError,
   type IssueSnapshot,
 } from "./snapshot.js";
+import { startBoundInstance } from "./start-instance.js";
 import { InstanceStore } from "./store.js";
 import { GitHubEventHandler, type GitHubEvent } from "./delivery.js";
 import { BindingEventService } from "./event-service.js";
 import { onIssueChange } from "./issue-change.js";
 import { BindingIntakeService, type IntakeResult } from "./intake-service.js";
+import { notifyNode, type NotificationDelivery } from "./notify.js";
 
 export interface BindingServiceOptions {
   intake?: { blueprintId: string; commit: string };
+  notifications?: NotificationDelivery;
 }
-
 export class GitHubBindingService {
   readonly instances: InstanceStore;
   readonly engine: WorkflowEngine;
@@ -52,6 +54,9 @@ export class GitHubBindingService {
       nodes: {
         ...engineOptions.nodes,
         "on-issue-change": onIssueChange,
+        ...(options.notifications === undefined
+          ? {}
+          : { notify: notifyNode(options.notifications) }),
         github: async (context) => {
           try {
             const bound = this.bound(context);
@@ -85,6 +90,7 @@ export class GitHubBindingService {
       this.engine,
       (id) => this.projects.get(id),
       () => this.discover(),
+      () => this.startPendingIntakes(),
     );
     this.events = this.eventService.handler;
     this.intakeService = new BindingIntakeService(
@@ -131,15 +137,18 @@ export class GitHubBindingService {
   async start(): Promise<void> {
     await this.reconcile();
     await this.discover();
+    await this.startPendingIntakes();
+  }
+  private async startPendingIntakes(): Promise<void> {
     this.intakeService.recoverAttachments();
-    if (this.options.intake)
-      for (const instance of this.instances.list())
-        if (!instance.runId)
-          await this.intakeService.start(
-            instance.id,
-            this.options.intake.blueprintId,
-            this.options.intake.commit,
-          );
+    if (!this.options.intake) return;
+    for (const instance of this.instances.list())
+      if (!instance.runId)
+        await this.intakeService.start(
+          instance.id,
+          this.options.intake.blueprintId,
+          this.options.intake.commit,
+        );
   }
   async discover(): Promise<void> {
     for (const binding of this.bindings) {
@@ -206,6 +215,9 @@ export class GitHubBindingService {
     }
   }
   async poll(): Promise<number> {
+    await this.reconcile();
+    await this.discover();
+    await this.startPendingIntakes();
     return this.eventService.poll();
   }
   async deliver(event: GitHubEvent, payload: unknown): Promise<boolean> {
@@ -261,34 +273,14 @@ export class GitHubBindingService {
   }
   async startInstance(id: string, blueprintId: string, commit: string) {
     await this.reconcile();
-    const instance = this.instances.get(id);
-    if (this.instances.ambiguous(id))
-      throw new Error(
-        "Issue belongs to multiple bound projects; select its project before starting",
-      );
-    if (
-      instance.runId &&
-      this.store.db.prepare("SELECT 1 FROM runs WHERE id=?").get(instance.runId)
-    ) {
-      const run = this.store.get(instance.runId);
-      if (run.blueprintId !== blueprintId || run.commit !== commit)
-        throw new Error(
-          "Instance already has a different lifecycle invocation",
-        );
-      await this.engine.recover(run.rootId);
-      return this.store.get(run.id);
-    }
-    if (!this.projects.has(instance.issue.project.id))
-      throw new Error(
-        "Project reconciliation requires attention before starting an instance",
-      );
-    const runId = instance.runId ?? `issue:${id}`;
-    this.instances.attach(id, runId);
-    return this.engine.start({
-      id: runId,
+    return startBoundInstance(
+      this.store,
+      this.instances,
+      this.engine,
+      (projectId) => this.projects.has(projectId),
+      id,
       blueprintId,
       commit,
-      context: { issue: structuredClone(instance.issue) },
-    });
+    );
   }
 }

@@ -26,6 +26,7 @@
   },
   "files": [
     "dist",
+    "blueprints",
     "docs/specifications/blueprint.schema.yml",
     "docs/specifications/policy-rule.schema.yml"
   ],

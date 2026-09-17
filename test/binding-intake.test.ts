@@ -73,6 +73,10 @@ it("attaches the selected lifecycle root instead of the intake root", async () =
     nodeId: "select",
     visit: 1,
   });
+  const restarted = service(store, undefined, github.clients);
+  await restarted.start();
+  expect(restarted.instances.get("I_1").runId).toBe(instance.runId);
+  expect(store.lifecycleStarts("intake:I_1")).toHaveLength(1);
 });
 
 it("repairs an interrupted create/attach boundary from persisted identity", async () => {
@@ -140,15 +144,13 @@ it("asks one durable project question and projects the selected answer", async (
   const secondGitHub = fixture("P_2");
   const store = new RunStore(":memory:");
   stores.push(store);
-  const binding = service(
-    store,
-    [
-      { owner: "sample-owner", number: 1 },
-      { owner: "other-owner", number: 1 },
-    ],
-    (owner) =>
-      owner === "sample-owner" ? firstGitHub.clients() : secondGitHub.clients(),
-  );
+  const bindings = [
+    { owner: "sample-owner", number: 1 },
+    { owner: "other-owner", number: 1 },
+  ] as const;
+  const clients: ClientFactory = (owner) =>
+    owner === "sample-owner" ? firstGitHub.clients() : secondGitHub.clients();
+  const binding = service(store, bindings, clients);
   await binding.start();
   const question = await binding.startIntake("I_1", intake.id, "revision");
   expect(question).toMatchObject({
@@ -161,11 +163,17 @@ it("asks one durable project question and projects the selected answer", async (
   await binding.answerProjectChoice("I_1", "project-choice:I_1", "P_2");
   await binding.answerProjectChoice("I_1", "project-choice:I_1", "P_2");
   expect(secondGitHub.values["C_1"]?.["Heddle Project"]).toBe("other-owner/1");
-  const selected = await binding.startIntake("I_1", intake.id, "revision");
+  const restarted = service(store, bindings, clients);
+  await restarted.start();
+  expect(restarted.instances.projectChoice("I_1")).toMatchObject({
+    id: "project-choice:I_1",
+    answer: "P_2",
+  });
+  const selected = await restarted.startIntake("I_1", intake.id, "revision");
   expect(selected).toMatchObject({ blueprintId: lifecycle.id });
   expect(secondGitHub.values["C_1"]?.["Status"]).toBe("work");
   expect(firstGitHub.values["C_1"]?.["Status"]).toBeUndefined();
-  expect(binding.instances.projectChoice("I_1")).toMatchObject({
+  expect(restarted.instances.projectChoice("I_1")).toMatchObject({
     id: "project-choice:I_1",
     answer: "P_2",
   });

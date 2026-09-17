@@ -24,7 +24,7 @@ export interface EventBoundProject {
 }
 
 export class BindingEventService {
-  readonly handler = new GitHubEventHandler((delivery) => this.apply(delivery));
+  readonly handler = new GitHubEventHandler((delivery) => this.route(delivery));
 
   constructor(
     private readonly store: RunStore,
@@ -32,7 +32,20 @@ export class BindingEventService {
     private readonly engine: WorkflowEngine,
     private readonly project: (id: string) => EventBoundProject | undefined,
     private readonly discover: () => Promise<void>,
+    private readonly afterApply: () => Promise<void> = () => Promise.resolve(),
   ) {}
+
+  private async route(delivery: IssueDelivery): Promise<boolean> {
+    if (delivery.event !== "pull_request" || !delivery.relatedRef)
+      return this.apply(delivery);
+    let applied = false;
+    for (const instance of this.instances.list()) {
+      if (!instance.issue.closedBy.includes(delivery.relatedRef)) continue;
+      applied =
+        (await this.apply({ ...delivery, issueId: instance.id })) || applied;
+    }
+    return applied;
+  }
 
   private async refresh(issue: IssueSnapshot): Promise<IssueSnapshot> {
     const bound = this.project(issue.project.id);
@@ -52,16 +65,22 @@ export class BindingEventService {
   }
 
   private async apply(delivery: IssueDelivery): Promise<boolean> {
-    if (!this.instances.find(delivery.issueId)) {
+    const known = this.instances.find(delivery.issueId) !== undefined;
+    if (!known) {
       await this.discover();
       if (!this.instances.find(delivery.issueId)) return false;
     }
     const before = this.instances.get(delivery.issueId);
     const changed = await this.refresh(before.issue);
-    if (!this.instances.applyDelivery(changed, delivery.updatedAt))
-      return false;
+    if (JSON.stringify(changed) === JSON.stringify(before.issue)) {
+      if (!known) this.instances.applyDelivery(changed, changed.updatedAt);
+      await this.afterApply();
+      return !known;
+    }
+    if (!this.instances.applyDelivery(changed, changed.updatedAt)) return false;
     await this.applyBoardOperations(before, changed);
     await this.resumeIssueChange(changed);
+    await this.afterApply();
     return true;
   }
 
@@ -145,8 +164,9 @@ export class BindingEventService {
   async setPaused(id: string, paused: boolean): Promise<void> {
     const instance = this.instances.get(id);
     if (!instance.runId) throw new Error("Instance has no lifecycle run");
-    if (paused) this.engine.pauseInstance(instance.runId);
-    else await this.engine.resumeInstance(instance.runId);
+    const run = this.store.get(instance.runId);
+    if (paused && !run.paused) this.engine.pauseInstance(instance.runId);
+    if (!paused && run.paused) await this.engine.resumeInstance(instance.runId);
     const bound = this.project(instance.issue.project.id);
     if (!bound) throw new Error("Issue is not in a reconciled project");
     await setCard(
