@@ -296,7 +296,10 @@ $defs:
         additionalProperties:
           $ref: "#/$defs/valueOrRef"
       outputs:
-        description: Keys under this node's output.payload to child final context keys.
+        description: >
+          Keys under this node's output.payload mapped to JSONata expressions over
+          child final context. Omitted mappings export all declared outputs by
+          literal key; an explicit empty object exports no values.
         type: object
         additionalProperties: { type: string }
   lifecycleStartParams:

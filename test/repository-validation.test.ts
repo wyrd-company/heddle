@@ -182,6 +182,120 @@ describe("repository child contracts", () => {
     ]);
     expect(validateBlueprintPath(root)).toEqual([]);
   });
+  it.each([
+    "draft-notes",
+    "draft.notes",
+    "draft notes",
+    'draft\\"notes',
+    "__proto__",
+    "",
+    "`notes`",
+  ])(
+    "preserves the literal default key %s in repository validation and inferred completion shapes",
+    (key) => {
+      const original = parent();
+      const helper: Blueprint = {
+        ...original,
+        outputs: {
+          result: {
+            type: "object",
+            properties: Object.fromEntries([[key, { type: "number" }]]),
+          },
+        },
+        nodes: {
+          ...original.nodes,
+          inspect: { uses: "child-run", params: { blueprint: "measure" } },
+          done: {
+            uses: "terminal-result",
+            params: { value: { from: "inspect.payload" } },
+          },
+        },
+      };
+      const source = {
+        ...child(),
+        outputs: Object.fromEntries([[key, { type: "string" }]]),
+      };
+      const root = repository([helper, source]);
+      const findings = validateBlueprintPath(root);
+      expect(
+        findings.filter(
+          (finding) => finding.rule === "repository.child-output-path",
+        ),
+      ).toEqual([]);
+      expect(findings).toContainEqual(
+        expect.objectContaining({
+          node: "done",
+          rule: "repository.output-shape",
+        }),
+      );
+      write(root, "exhibit.yml", {
+        ...helper,
+        outputs: {
+          result: {
+            type: "object",
+            properties: Object.fromEntries([[key, { type: "string" }]]),
+          },
+        },
+      });
+      expect(validateBlueprintPath(root)).toEqual([]);
+    },
+  );
+  it.each([true, {}])(
+    "accepts the same additional member with explicit open-object schema %j",
+    (additionalProperties) => {
+      const schema = { type: "object", additionalProperties };
+      expect(
+        validateBlueprintPath(
+          repository([
+            parent("measure", { amount: "result.extra" }),
+            child({ extra: 3 }, schema),
+          ]),
+        ),
+      ).toEqual([]);
+    },
+  );
+  it.each([true, {}])(
+    "retains declared property shapes under explicit open-object schema %j",
+    (additionalProperties) => {
+      const original = parent("measure", { amount: "result.count" });
+      const consumer: Blueprint = {
+        ...original,
+        outputs: { result: { type: "number" } },
+        nodes: {
+          ...original.nodes,
+          done: {
+            uses: "terminal-result",
+            params: { value: { from: "inspect.payload.amount" } },
+          },
+        },
+      };
+      expect(
+        rules(
+          repository([
+            consumer,
+            child(
+              { count: "three" },
+              {
+                type: "object",
+                properties: { count: { type: "string" } },
+                additionalProperties,
+              },
+            ),
+          ]),
+        ),
+      ).toContain("repository.output-shape");
+    },
+  );
+  it("rejects an additional member with an explicitly closed object schema", () => {
+    expect(
+      rules(
+        repository([
+          parent("measure", { amount: "result.extra" }),
+          child({}, { type: "object", additionalProperties: false }),
+        ]),
+      ),
+    ).toContain("repository.child-output-path");
+  });
   it.each(["wrong", { count: "wrong" }, {}, { count: 2.5 }])(
     "rejects literal terminal shape %j against the declaration",
     (value) => {

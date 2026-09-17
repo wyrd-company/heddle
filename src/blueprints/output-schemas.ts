@@ -98,7 +98,8 @@ export function schemaAtPath(
     const child =
       isObject(properties) && key !== undefined ? properties[key] : undefined;
     const nested =
-      child === true
+      child === true ||
+      (child === undefined && choice["additionalProperties"] === true)
         ? {}
         : isObject(child)
           ? child

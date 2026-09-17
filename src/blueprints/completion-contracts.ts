@@ -82,11 +82,17 @@ function nodeSchema(
     const mapping =
       node.params?.["outputs"] ??
       Object.fromEntries(Object.keys(outputs).map((key) => [key, key]));
-    const properties: Record<string, JsonObject> = {};
+    const properties: Record<string, JsonObject> = Object.create(
+      null,
+    ) as Record<string, JsonObject>;
     if (isObject(mapping))
       for (const [key, expression] of Object.entries(mapping)) {
         const path =
-          typeof expression === "string" ? declaredPath(expression) : undefined;
+          node.params?.["outputs"] === undefined
+            ? [key]
+            : typeof expression === "string"
+              ? declaredPath(expression)
+              : undefined;
         const schema = path?.[0] === undefined ? undefined : outputs[path[0]];
         properties[key] =
           schema === undefined || path === undefined

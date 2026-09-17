@@ -66,11 +66,18 @@ validation-criteria: >-
   Directory validation adds repository agreements after file-local checks.
   Every child-run target resolves uniquely in the complete recursive inventory.
   A stage-marked child-run targets a stage. Unmarked child runs can target
-  any blueprint kind. Parent output
-  mappings use the child's declared output schemas, including nested properties,
+  any blueprint kind. An omitted child-run outputs mapping exports each declared
+  output by its literal name from child context, including punctuation and escaped
+  characters. Its inferred payload property keeps that output declaration. An
+  explicit empty mapping exports nothing. Authored mapping values are JSONata
+  expressions over child context. Parent output mappings use the child's
+  declared output schemas, including nested properties,
   local schema references, array projections, and union members. A direct path
   to an undeclared member is invalid even when a fixture happens to produce it.
-  Optional and union members may be absent on outcomes routed elsewhere.
+  Explicit additionalProperties: true and additionalProperties: {} both permit
+  an additional member without asserting its shape; additionalProperties: false
+  does not declare additional members. Optional and union members may be absent
+  on outcomes routed elsewhere.
   Every terminal-result value is checked against outputs.result where a literal
   or a declared source shape establishes a contradiction. Literal values use
   JSON Schema validation; references use known input and node output shapes.

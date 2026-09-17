@@ -146,7 +146,10 @@ proposed-design:
 
     Inputs: `blueprint` (id), `inputs` (a mapping from the child's initial
     context keys to values or context references), `outputs` (a mapping from
-    keys under this node's output.payload to the child's final context keys).
+    keys under this node's output.payload to JSONata expressions over the
+    child's final context). When outputs is omitted, each declared output is
+    selected by its literal key without expression evaluation. An explicit
+    empty mapping exports no values.
 
     Behavior: starts the child at the same pinned commit with the mapped
     initial context and the parent run id, pauses with

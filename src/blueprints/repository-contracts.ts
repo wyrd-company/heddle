@@ -58,7 +58,10 @@ export function repositoryContractFindings(
       if (typeof mappings !== "object") continue;
       for (const [name, expression] of Object.entries(mappings)) {
         if (typeof expression !== "string") continue;
-        const path = declaredPath(expression);
+        const path =
+          definition.params?.["outputs"] === undefined
+            ? [name]
+            : declaredPath(expression);
         const schema = path?.[0] === undefined ? undefined : declared[path[0]];
         if (
           path !== undefined &&

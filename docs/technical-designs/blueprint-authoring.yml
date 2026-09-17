@@ -74,6 +74,13 @@ proposed-design:
     repository.output-shape identifies a terminal value that contradicts its
     output declaration. repository.child-output-shape links that contradiction
     back to each affected parent result mapping.
+    Omitted child output mappings select literal declared keys from child context
+    and retain the schema at each exact payload key. Punctuation and escaping in
+    a declared key do not become expressions. Authored mapping values remain
+    JSONata expressions; an explicit empty mapping exports no values. Explicit
+    additionalProperties: true and additionalProperties: {} both permit an
+    additional member with unknown shape, while additionalProperties: false does
+    not declare additional members.
     Output schemas are the static authority. Literal terminal values are checked
     with JSON Schema. Direct references to declared inputs, pass envelopes, and
     aggregate bindings provide conservative shape checks. An optional property

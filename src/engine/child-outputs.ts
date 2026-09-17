@@ -12,9 +12,15 @@ export async function childOutputs(
 ): Promise<Data> {
   const declared =
     (child.blueprint as WorkflowBlueprint & { outputs?: Data }).outputs ?? {};
-  const mapping =
-    (awaiting.details["outputs"] as Record<string, string> | undefined) ??
-    Object.fromEntries(Object.keys(declared).map((key) => [key, key]));
+  const mapping = awaiting.details["outputs"] as
+    Record<string, string> | undefined;
+  if (mapping === undefined)
+    return Object.fromEntries(
+      Object.keys(declared).map((key) => [
+        key,
+        Object.hasOwn(child.context, key) ? child.context[key] : undefined,
+      ]),
+    );
   return Object.fromEntries(
     await Promise.all(
       Object.entries(mapping).map(
