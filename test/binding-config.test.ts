@@ -58,3 +58,52 @@ it("accepts the documented service configuration", () => {
     }).github.credentialFile,
   ).toBe("/secrets/app.yml");
 });
+
+it("feeds bound-project facts through the validate command", async () => {
+  const { runCli } = await import("../src/cli-runner.js");
+  const messages: string[] = [];
+  const io = {
+    output: (message: string) => {
+      messages.push(message);
+    },
+    error: (message: string) => {
+      messages.push(message);
+    },
+  };
+  const options = {
+    liveIssue: [
+      {
+        name: "sample-owner/1",
+        fields: ["Servings"],
+        types: ["Recipe"],
+        labels: [],
+        stages: ["draft", "taste-test", "publish"],
+        issues: [{ ref: "sample-owner/recipes#1", frontMatter: ["cuisine"] }],
+      },
+    ],
+  };
+  expect(
+    runCli(
+      [
+        "validate",
+        "--check-requires-issue",
+        "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+      ],
+      io,
+      options,
+    ),
+  ).toBe(0);
+  options.liveIssue[0]?.fields.splice(0);
+  expect(
+    runCli(
+      [
+        "validate",
+        "--check-requires-issue",
+        "fixtures/blueprints/recipe-pipeline/recipe-pipeline.yml",
+      ],
+      io,
+      options,
+    ),
+  ).toBe(1);
+  expect(messages.join(" ")).toContain("missing field Servings");
+});

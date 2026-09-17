@@ -473,3 +473,30 @@ it("keeps equal project numbers in different owners separate", async () => {
     ["I_2", "P_2", "other-owner"],
   ]);
 });
+
+it("reads before a new field write even when the effect identity differs", async () => {
+  const f = setup();
+  await f.service.start();
+  const run = await f.service.startInstance("I_1", "cook", "revision");
+  const client = f.clients();
+  const project = await client.owner("sample-owner").project(1).open();
+  const context = {
+    run,
+    nodeId: "effect",
+    visit: 1,
+    effectKey: "first",
+    params: { operation: "set-field", field: "Notes", value: "Ready" },
+    input: null,
+    context: { issue: f.service.instances.get("I_1").issue },
+    await: () => Promise.resolve(),
+  };
+  await githubEffect(context, project, client, f.service.instances);
+  const writes = f.transport.callsTo("UpdateItemFieldValue").length;
+  await githubEffect(
+    { ...context, effectKey: "second" },
+    project,
+    client,
+    f.service.instances,
+  );
+  expect(f.transport.callsTo("UpdateItemFieldValue")).toHaveLength(writes);
+});
