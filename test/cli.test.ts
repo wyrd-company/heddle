@@ -310,17 +310,20 @@ describe("start options", () => {
     });
   });
 
-  it("rejects an invalid polling interval as usage error", async () => {
-    const result = await captureConfigured([
-      "start",
-      "--poll-interval",
-      "invalid",
-    ]);
+  it.each(["invalid", "0", "1.5", "9007199254740992"])(
+    "rejects invalid polling interval %s as usage error",
+    async (value) => {
+      const result = await captureConfigured([
+        "start",
+        "--poll-interval",
+        value,
+      ]);
 
-    expect(result.exitCode).toBe(2);
-    expect(result.errors).toEqual([
-      "--poll-interval must be a positive integer",
-      expect.stringContaining("Usage: heddle start"),
-    ]);
-  });
+      expect(result.exitCode).toBe(2);
+      expect(result.errors).toEqual([
+        "--poll-interval must be a positive integer",
+        expect.stringContaining("Usage: heddle start"),
+      ]);
+    },
+  );
 });
