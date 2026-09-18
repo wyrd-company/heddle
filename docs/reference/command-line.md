@@ -55,6 +55,11 @@ execution and restart. Working-tree edits do not affect existing runs. Keep
 the pinned Git objects available while their runs need them; the working tree
 can move to another commit. `heddle validate` checks authored working-tree
 files with the same validation contracts used for committed runtime snapshots.
+Repository metadata and object-read failures name the requested revision and
+do not include raw Git errors, repository URLs, or absolute repository paths.
+Reference findings include the authored reference in the JSON `reference`
+field. Runtime diagnostics use that field and apply the existing safe identity
+filter instead of parsing the human `message` text.
 
 Webhook listening is disabled by default. To enable it, configure both
 `webhook.listen.host` and `webhook.listen.port`; there is no default port.

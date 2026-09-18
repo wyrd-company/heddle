@@ -60,9 +60,10 @@ proposed-design:
     the load-then-save round-trip. None of it needs credentials or a
     running service. The one live check, `requires.issue` against the bound
     project, is a separate flag. Failures name the file, the node, and the
-    rule; the command exits non-zero on any finding and offers JSON output
-    beside the readable form so an authoring agent or a CI step can consume
-    it.
+    rule. A reference finding also carries the authored reference as a
+    structured field; consumers do not recover identity from human message
+    text. The command exits non-zero on any finding and offers JSON output
+    beside the readable form so an authoring agent or a CI step can consume it.
   repository-agreements: >
     Directory validation loads the complete recursive blueprint inventory before
     resolving child-run targets. File-local schema checks remain independent.
@@ -108,9 +109,12 @@ proposed-design:
     repository validation, YAML byte round-trip checks, and graph derivation
     used by the authoring CLI. It retains the validated graph and artifact
     text by commit and removes the temporary tree. Relative artifact paths
-    and symlinks remain bound to the blueprint directory. Diagnostics identify
-    the revision and relative artifact without including repository URLs or
-    raw Git errors. The configured directory can be a repository root or a
+    and symlinks remain bound to the blueprint directory. Repository metadata
+    and object-read diagnostics identify the requested revision without
+    including repository URLs, absolute repository paths, or raw Git errors.
+    Reference diagnostics use the finding's structured reference identity and
+    apply the same safe identity filter used for revisions and artifacts. The
+    configured directory can be a repository root or a
     directory within a checkout, including a linked worktree.
   authoring-help: >
     An author reference is generated from the node-type contracts: every

@@ -49,8 +49,8 @@ export class BlueprintCatalog {
             `Invalid blueprint revision ${safeIdentity(commit)}: ${findings
               .map((item) => {
                 const identity =
-                  item.rule === "reference.exists"
-                    ? safeIdentity(item.message.split(": ").at(-1) ?? "")
+                  item.reference !== undefined
+                    ? safeIdentity(item.reference)
                     : safeIdentity(relative(root, item.file));
                 return `${identity} [${item.rule}] node ${safeIdentity(item.node)}`;
               })

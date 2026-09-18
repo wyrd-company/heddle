@@ -57,6 +57,7 @@ export interface ValidationFinding {
   readonly node: string;
   readonly rule: string;
   readonly message: string;
+  readonly reference?: string;
 }
 
 export interface ValidationOptions {

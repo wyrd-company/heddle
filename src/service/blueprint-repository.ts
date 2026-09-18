@@ -80,27 +80,34 @@ export class BlueprintRepository {
   ): Promise<T> {
     const temporary = fs.mkdtempSync(join(tmpdir(), "heddle-blueprints-"));
     try {
-      const location = await this.location();
-      const gitdir = this.objectDirectory(location.gitdir);
       const files: string[] = [];
       const links: { path: string; target: string }[] = [];
-      const write = async (oid: string, directory: string): Promise<void> => {
-        const { tree } = await git.readTree({ fs, gitdir, oid });
-        for (const entry of tree) {
-          const path = join(directory, entry.path);
-          if (entry.type === "tree") {
-            fs.mkdirSync(path, { recursive: true });
-            await write(entry.oid, path);
-          } else if (entry.type === "blob") {
-            const { blob } = await git.readBlob({ fs, gitdir, oid: entry.oid });
-            files.push(path);
-            if (entry.mode === "120000")
-              links.push({ path, target: Buffer.from(blob).toString("utf8") });
-            else fs.writeFileSync(path, blob);
-          }
-        }
-      };
       try {
+        const location = await this.location();
+        const gitdir = this.objectDirectory(location.gitdir);
+        const write = async (oid: string, directory: string): Promise<void> => {
+          const { tree } = await git.readTree({ fs, gitdir, oid });
+          for (const entry of tree) {
+            const path = join(directory, entry.path);
+            if (entry.type === "tree") {
+              fs.mkdirSync(path, { recursive: true });
+              await write(entry.oid, path);
+            } else if (entry.type === "blob") {
+              const { blob } = await git.readBlob({
+                fs,
+                gitdir,
+                oid: entry.oid,
+              });
+              files.push(path);
+              if (entry.mode === "120000")
+                links.push({
+                  path,
+                  target: Buffer.from(blob).toString("utf8"),
+                });
+              else fs.writeFileSync(path, blob);
+            }
+          }
+        };
         const { oid } = await git.readTree({
           fs,
           gitdir,

@@ -7,6 +7,8 @@
 import {
   mkdtempSync,
   mkdirSync,
+  readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -157,6 +159,54 @@ it("uses the authoring validator and safe revision and artifact diagnostics", as
     "handoff.schema",
   );
 });
+it("uses structured reference identity when human wording changes", async () => {
+  const root = fixture();
+  const path = join(root, "sample-process.yml");
+  writeFileSync(
+    path,
+    readFileSync(path, "utf8").replace(
+      "prompt: parcel.njk",
+      "prompt: ../../outside/item.njk",
+    ),
+  );
+  const commit = commitFixture(root);
+
+  await expect(
+    new BlueprintCatalog(root).resolve(commit, "sample-process"),
+  ).rejects.toThrow("<invalid identity> [reference.exists] node measure");
+});
+it.each([
+  [
+    "repository location",
+    (root: string) => {
+      const relocated = `${root}-relocated`;
+      renameSync(root, relocated);
+      roots.push(relocated);
+    },
+  ],
+  [
+    "common object directory",
+    (root: string) => {
+      mkdirSync(join(root, ".git", "commondir"));
+    },
+  ],
+])(
+  "contains %s failures at the requested revision",
+  async (_name, breakMetadata) => {
+    const root = fixture();
+    const first = commitFixture(root);
+    const catalog = new BlueprintCatalog(root);
+    expect(await catalog.pin("HEAD")).toBe(first);
+
+    breakMetadata(root);
+
+    await expect(
+      catalog.resolve(first, "sample-process"),
+    ).rejects.toMatchObject({
+      message: `Cannot read blueprint tree at revision ${first}: ensure its objects and configured directory are present`,
+    });
+  },
+);
 it("reads nested catalogs and linked worktrees from packed Git objects", async () => {
   const root = mkdtempSync(join(tmpdir(), "nested-snapshot-"));
   roots.push(root);

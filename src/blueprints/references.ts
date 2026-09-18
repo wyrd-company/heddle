@@ -83,7 +83,8 @@ export function validateReferences(
           file: filePath,
           node: reference.node,
           rule: "reference.exists",
-          message: `Referenced file must stay beside the blueprint: ${reference.path}`,
+          message: `Referenced file must stay beside the blueprint (${reference.path})`,
+          reference: reference.path,
         });
         continue;
       }
@@ -101,7 +102,8 @@ export function validateReferences(
             file: filePath,
             node: reference.node,
             rule: "reference.exists",
-            message: `Referenced file must stay beside the blueprint: ${reference.path}`,
+            message: `Referenced file must stay beside the blueprint (${reference.path})`,
+            reference: reference.path,
           });
           continue;
         }
@@ -110,7 +112,8 @@ export function validateReferences(
           file: filePath,
           node: reference.node,
           rule: "reference.exists",
-          message: `Referenced file does not exist: ${reference.path}`,
+          message: `Referenced file does not exist (${reference.path})`,
+          reference: reference.path,
         });
         continue;
       }

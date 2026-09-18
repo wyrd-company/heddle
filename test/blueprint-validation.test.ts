@@ -428,6 +428,7 @@ describe("validation chain", () => {
         (item) =>
           item.node === "first" &&
           item.rule === "reference.exists" &&
+          item.reference === "prompt.md" &&
           item.message.includes("must stay beside"),
       ),
     ).toBe(true);
@@ -450,6 +451,7 @@ describe("validation chain", () => {
         (item) =>
           item.node === "first" &&
           item.rule === "reference.exists" &&
+          item.reference === prompt &&
           item.message.includes("must stay beside"),
       ),
     ).toBe(true);

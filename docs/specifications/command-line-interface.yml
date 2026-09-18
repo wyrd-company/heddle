@@ -54,7 +54,7 @@ configuration:
   notifications.pushoverCredentialFile: Optional JSON file containing Pushover token and user fields.
 diagnostics:
   startup: Reports the resolved database path, polling interval, and configured webhook HTTP route or disabled state, without secrets or generated-tool endpoints.
-  errors: Report paths and operational causes without credential contents.
+  errors: Report operational causes without credential contents. Committed-blueprint repository failures name the requested revision without raw Git errors, repository URLs, or absolute repository paths; reference findings carry an additive structured reference identity independent of human message text.
 signals:
   SIGINT: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
   SIGTERM: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
