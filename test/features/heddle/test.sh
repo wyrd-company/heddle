@@ -18,8 +18,6 @@ check "launcher carries GitHub credential path" grep -q -- '--github-app-credent
 check "launcher carries T3 token path" grep -q -- '--t3-token /run/secrets/heddle-t3-token' /usr/local/bin/heddle-service
 check "launcher carries webhook secret path" grep -q -- '--webhook-secret /run/secrets/heddle-webhook-secret' /usr/local/bin/heddle-service
 check "default service configuration exists" test -r /etc/heddle/config.yml
-check "Heddle longrun remains up" bash -c 'sleep 2; s6-svstat /run/service/heddle | grep -q "up (pid"'
-check "s6 stops Heddle cleanly" bash -c 's6-svc -d /run/service/heddle; sleep 1; s6-svstat /run/service/heddle | grep -q "down"'
-check "s6 restarts Heddle after a clean stop" bash -c 's6-svc -u /run/service/heddle; sleep 1; s6-svstat /run/service/heddle | grep -q "up (pid"'
+check "s6 longrun stays up, stops cleanly, and restarts" /workspaces/test/heddle/check-longrun.sh
 
 reportResults
