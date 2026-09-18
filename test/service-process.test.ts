@@ -47,13 +47,13 @@ async function started(child: ChildProcess): Promise<string> {
     child.stderr?.on("data", (chunk) => {
       errors += String(chunk);
     });
-    child.once("exit", (code, signal) =>
+    child.once("exit", (code, signal) => {
       reject(
         new Error(
           `service exited before startup (${String(code)}/${String(signal)}): ${errors}`,
         ),
-      ),
-    );
+      );
+    });
     child.stdout?.on("data", (chunk) => {
       output += String(chunk);
       if (output.includes("Heddle started")) resolveLine(output);
@@ -67,7 +67,9 @@ async function exited(
   if (child.exitCode !== null || child.signalCode !== null)
     return { code: child.exitCode, signal: child.signalCode };
   return new Promise((resolveExit) =>
-    child.once("exit", (code, signal) => resolveExit({ code, signal })),
+    child.once("exit", (code, signal) => {
+      resolveExit({ code, signal });
+    }),
   );
 }
 

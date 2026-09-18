@@ -27,7 +27,7 @@ function config(root: string): ResolvedServiceConfig {
     state: {},
   };
 }
-const io = { output() {}, error() {} };
+const io = { output: () => undefined, error: () => undefined };
 
 it("keeps one service alive, rejects a second writer, and releases the store on close", async () => {
   const root = mkdtempSync(join(tmpdir(), "service-start-"));

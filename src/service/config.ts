@@ -86,6 +86,7 @@ export function resolveServiceConfig(
   } catch (error) {
     throw new Error(
       `Cannot load Heddle configuration ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
   const parsed = serviceConfigSchema.safeParse(source);

@@ -50,9 +50,12 @@ function listenSocket(server: Server, path: string): Promise<void> {
   });
 }
 function closeServer(server: Server): Promise<void> {
-  return new Promise((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
-  );
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 function secret(path: string): string {
   return readFileSync(path, "utf8").trim();
@@ -82,7 +85,7 @@ export async function startService(
   try {
     store = new RunStore(config.databasePath);
     if (config.projects.length === 0 && config.pass === undefined) {
-      timer = setInterval(() => {}, config.polling.intervalMs);
+      timer = setInterval(() => undefined, config.polling.intervalMs);
       startupMessage = `Heddle started with no bound projects; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms`;
     } else {
       const catalog = new BlueprintCatalog(config.blueprints.repository);
@@ -100,7 +103,9 @@ export async function startService(
       t3 = client;
       let passNode: EngineNode = () =>
         Promise.reject(new Error("Pass service is not ready"));
-      let boundary: ((run: Run) => Promise<void>) | undefined;
+      const lifecycle: {
+        boundary?: (run: Run) => Promise<void>;
+      } = {};
       const notification =
         config.notifications === undefined
           ? undefined
@@ -128,7 +133,7 @@ export async function startService(
             policy: catalog.policyNode,
             pass: (context) => passNode(context),
           },
-          onBoundary: (run) => boundary?.(run) ?? Promise.resolve(),
+          onBoundary: (run) => lifecycle.boundary?.(run) ?? Promise.resolve(),
         },
         {
           ...(config.intake === undefined ? {} : { intake: config.intake }),
@@ -138,7 +143,6 @@ export async function startService(
         },
       );
       engine = binding.engine;
-      let hookHandler: HookServer | undefined;
       tcp = createServer((request, response) => {
         void (async () => {
           if (
@@ -146,7 +150,7 @@ export async function startService(
             request.method === "POST" &&
             config.webhook
           ) {
-            const chunks: Buffer[] = [];
+            const chunks: Uint8Array[] = [];
             for await (const chunk of request) chunks.push(Buffer.from(chunk));
             await binding.events.webhook(
               String(request.headers["x-github-event"] ?? ""),
@@ -162,7 +166,7 @@ export async function startService(
             return;
           }
           await passes.tools.handle(request, response);
-        })().catch((error) => {
+        })().catch((error: unknown) => {
           io.error(error instanceof Error ? error.message : String(error));
           if (!response.headersSent) response.writeHead(500).end();
         });
@@ -182,15 +186,15 @@ export async function startService(
         readArtifact: (commit, id, path) => catalog.read(commit, id, path),
       });
       passNode = passes.node;
-      boundary = passes.synchronize;
+      lifecycle.boundary = passes.synchronize;
       await binding.engine.recover();
       await passes.recover();
       hookSocket = join(config.stateDirectory, "hooks.sock");
       rmSync(hookSocket, { force: true });
-      hookHandler = new HookServer(passes.sessions, origin);
-      hooks = createServer(
-        (request, response) => void hookHandler?.handle(request, response),
-      );
+      const hookHandler = new HookServer(passes.sessions, origin);
+      hooks = createServer((request, response) => {
+        void hookHandler.handle(request, response);
+      });
       await listenSocket(hooks, hookSocket);
       await binding.start();
       const poll = (): void => {
@@ -199,11 +203,11 @@ export async function startService(
           await binding.poll();
           await binding.engine.tick();
         })()
-          .catch((error) =>
+          .catch((error: unknown) => {
             io.error(
               `Heddle poll failed: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-          )
+            );
+          })
           .finally(() => {
             polling = undefined;
           });
@@ -232,7 +236,7 @@ export async function startService(
       return closing;
     };
     signalHandler = () => {
-      void close().catch((error) => {
+      void close().catch((error: unknown) => {
         io.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 1;
         finish();

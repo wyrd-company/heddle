@@ -50,9 +50,7 @@ function startOverrides(args: readonly string[]): StartOverrides {
     ...(values["--database"] === undefined
       ? {}
       : { databasePath: values["--database"] }),
-    ...(pollingIntervalMs === undefined
-      ? {}
-      : { pollingIntervalMs: Number(pollingIntervalMs) }),
+    ...(pollingIntervalMs === undefined ? {} : { pollingIntervalMs }),
     ...(values["--github-app-credentials"] === undefined
       ? {}
       : { githubCredentialFile: values["--github-app-credentials"] }),

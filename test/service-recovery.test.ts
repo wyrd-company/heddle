@@ -45,13 +45,13 @@ async function packagedStarted(child: ChildProcess): Promise<string> {
     child.stderr?.on("data", (chunk) => {
       errors += String(chunk);
     });
-    child.once("exit", (code, signal) =>
+    child.once("exit", (code, signal) => {
       reject(
         new Error(
           `packaged service exited (${String(code)}/${String(signal)}): ${errors}`,
         ),
-      ),
-    );
+      );
+    });
     child.stdout?.on("data", (chunk) => {
       output += String(chunk);
       if (output.includes("Heddle started;")) resolve(output);
@@ -60,7 +60,11 @@ async function packagedStarted(child: ChildProcess): Promise<string> {
 }
 async function processExit(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
-  await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  await new Promise<void>((resolve) =>
+    child.once("exit", () => {
+      resolve();
+    }),
+  );
 }
 
 it("reopens the production composition and recovers the same paused pass", async () => {
@@ -154,7 +158,7 @@ it("reopens the production composition and recovers the same paused pass", async
       defaultWorktree: root,
     },
   };
-  const io = { output() {}, error() {} };
+  const io = { output: () => undefined, error: () => undefined };
   try {
     const first = await startService(config, io);
     const paused = await first.engine?.start({
@@ -163,11 +167,15 @@ it("reopens the production composition and recovers the same paused pass", async
       commit: "fixture",
     });
     expect(paused?.status).toBe("awaiting");
-    await vi.waitFor(() => expect(registrations).toBe(1));
+    await vi.waitFor(() => {
+      expect(registrations).toBe(1);
+    });
     await first.close();
     const second = await startService(config, io);
     expect(second.engine?.store.get("durable-run").status).toBe("awaiting");
-    await vi.waitFor(() => expect(registrations).toBe(2));
+    await vi.waitFor(() => {
+      expect(registrations).toBe(2);
+    });
     await second.close();
 
     const packagedBefore = launch(configPath);

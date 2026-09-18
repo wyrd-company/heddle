@@ -50,6 +50,7 @@ export function acquireStoreLease(databasePath: string): StoreLease {
       if (Number.isSafeInteger(owner) && owner > 0 && live(owner))
         throw new Error(
           `Heddle store is already owned by service process ${String(owner)}: ${databasePath}`,
+          { cause: error },
         );
       unlinkSync(path);
     }
