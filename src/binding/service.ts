@@ -25,33 +25,11 @@ import { BindingEventService } from "./event-service.js";
 import { onIssueChange } from "./issue-change.js";
 import { BindingIntakeService, type IntakeResult } from "./intake-service.js";
 import { notifyNode, type NotificationDelivery } from "./notify.js";
+import { assertRuntimeCapabilities } from "./runtime-capabilities.js";
 
 export interface BindingServiceOptions {
   intake?: { blueprintId: string; commit: string };
   notifications?: NotificationDelivery;
-}
-
-function assertRuntimeCapabilities(
-  blueprints: readonly Blueprint[],
-  supports: (type: string) => boolean,
-  notificationsConfigured: boolean,
-): void {
-  const unavailable = blueprints.flatMap((blueprint) =>
-    Object.entries(blueprint.nodes).flatMap(([nodeId, node]) => {
-      if (supports(node.uses)) return [];
-      const remedy =
-        node.uses === "notify" && !notificationsConfigured
-          ? "configure options.notifications to enable notification delivery"
-          : `register a runtime implementation for node type \"${node.uses}\"`;
-      return [
-        `blueprint \"${blueprint.id}\", node \"${nodeId}\": node type \"${node.uses}\" is unavailable; ${remedy}`,
-      ];
-    }),
-  );
-  if (unavailable.length > 0)
-    throw new Error(
-      `Blueprint runtime capability check failed:\n- ${unavailable.join("\n- ")}`,
-    );
 }
 
 export class GitHubBindingService {
@@ -60,6 +38,7 @@ export class GitHubBindingService {
   readonly events: GitHubEventHandler;
   private readonly eventService: BindingEventService;
   private readonly intakeService: BindingIntakeService;
+  private readonly runtimeNodes: NonNullable<EngineOptions["nodes"]>;
   private projects = new Map<
     string,
     { project: BoundProject; client: GitHub; binding: ProjectBinding }
@@ -73,7 +52,7 @@ export class GitHubBindingService {
     private readonly options: BindingServiceOptions = {},
   ) {
     this.instances = new InstanceStore(store.db);
-    const runtimeNodes: NonNullable<EngineOptions["nodes"]> = {
+    this.runtimeNodes = {
       ...engineOptions.nodes,
       "on-issue-change": onIssueChange,
       ...(options.notifications === undefined
@@ -95,7 +74,7 @@ export class GitHubBindingService {
     };
     this.engine = new WorkflowEngine(store, {
       ...engineOptions,
-      nodes: runtimeNodes,
+      nodes: this.runtimeNodes,
       beforeNode: async (context, definition) => {
         await engineOptions.beforeNode?.(context, definition);
         if ((definition as { stage?: boolean }).stage !== true) return;
@@ -136,7 +115,7 @@ export class GitHubBindingService {
     const blueprints = await this.blueprints();
     assertRuntimeCapabilities(
       blueprints,
-      (type) => this.engine.supportsNodeType(type),
+      this.runtimeNodes,
       this.options.notifications !== undefined,
     );
     const projects: typeof this.projects = new Map();
