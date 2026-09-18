@@ -33,7 +33,13 @@ const commands = new Map<string, CommandHelp>([
         "Usage: heddle skill <command>\n\nCommands:\n  list\n  export <name> <directory>",
     },
   ],
-  ["start", { usage: "Usage: heddle start" }],
+  [
+    "start",
+    {
+      usage:
+        "Usage: heddle start [--config <path>] [--state <directory>] [--database <path>] [--poll-interval <milliseconds>] [--github-app-credentials <path>] [--t3-token <path>] [--webhook-secret <path>]",
+    },
+  ],
   [
     "validate",
     {
@@ -94,7 +100,14 @@ export function runCli(
     return runSkill(commandArguments, io, command.usage);
   }
 
-  if (commandArguments.length === 0 || commandName === "start") {
+  if (commandName === "start") {
+    io.error(
+      "The start command must be run through the executable service boundary.",
+    );
+    return 2;
+  }
+
+  if (commandArguments.length === 0) {
     io.error(command.usage);
     return 2;
   }
