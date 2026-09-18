@@ -10,6 +10,7 @@ import { deriveFlowcraftBlueprint } from "./flowcraft.js";
 import { basename, extname, resolve } from "node:path";
 
 import { discoverBlueprintFiles, inputIsDirectory } from "./discovery.js";
+import { hyphenatedNameFindings } from "./expression-names.js";
 import { lintDerivedBlueprint } from "./flowcraft-lint.js";
 import { lintHeddle, validateExpressions } from "./heddle-lint.js";
 import { validateLiveRequirements } from "./live-checks.js";
@@ -175,6 +176,7 @@ function validateLoaded(
     ...validateReferences(file, blueprint, options),
     ...validateInlineHandoffs(file, blueprint),
     ...validateExpressions(file, blueprint),
+    ...hyphenatedNameFindings(file, blueprint),
     ...lintHeddle(file, blueprint, options),
     ...flowcraftFindings(file, blueprint),
     ...resultContractFindings(deriveFlowcraftBlueprint(blueprint)).map((item) =>

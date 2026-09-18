@@ -1,0 +1,20 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+# The stored value and the routing guard both spell a hyphenated node id as a
+# subtraction, so each reads nothing at run time.
+id: hyphenated-reference
+kind: helper
+description: Read a hyphenated node id without quoting it.
+nodes:
+  weigh-parcel:
+    uses: wait
+  store:
+    uses: terminal-result
+    params:
+      value: { from: weigh-parcel.payload }
+edges:
+  - from: weigh-parcel
+    to: store
+    when: weigh-parcel.payload

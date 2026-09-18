@@ -976,6 +976,7 @@ Pause for an external resume, with an optional authored deadline.
 - `policy.rule-id`: Policy rule ids are unique within one artifact.
 - `policy.fallback-order`: No policy rule follows a condition-less fallback.
 - `expression.jsonata`: Every condition is valid JSONata syntax.
+- `expression.hyphenated-name`: An expression quotes a hyphenated node, input, or output name instead of subtracting it.
 - `heddle.owned-field`: GitHub nodes do not write service-owned Status or Paused fields.
 - `heddle.no-subflow`: Blueprints do not use the Flowcraft subflow node.
 - `heddle.entry`: Entry is declared only when every node has an incoming edge, and names an authored node.

@@ -78,6 +78,11 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     description: "Every condition is valid JSONata syntax.",
   },
   {
+    name: "expression.hyphenated-name",
+    description:
+      "An expression quotes a hyphenated node, input, or output name instead of subtracting it.",
+  },
+  {
     name: "heddle.owned-field",
     description:
       "GitHub nodes do not write service-owned Status or Paused fields.",

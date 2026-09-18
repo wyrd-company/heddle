@@ -13,6 +13,7 @@ import {
   isObject,
   validatePolicyRuleSchema,
 } from "./schema-validation.js";
+import { policyHyphenatedNameFindings } from "./expression-names.js";
 import { blueprintRootFor, resolveBlueprintPath } from "./root.js";
 import type {
   Blueprint,
@@ -183,6 +184,9 @@ export function validateReferences(
           });
         }
         if (result.valid && isObject(value) && Array.isArray(value["rules"])) {
+          findings.push(
+            ...policyHyphenatedNameFindings(referencedPath, value["rules"]),
+          );
           const ruleIds = new Set<string>();
           let fallbackIndex: number | undefined;
           for (const [index, rule] of value["rules"].entries()) {
