@@ -116,7 +116,7 @@ it("rejects an oversized declared length immediately, before any body arrives", 
   client.flushHeaders();
   expect(await observed, "413 is sent during header handling").toBe(true);
   expect(await status).toBe(413);
-  expect(responseHeaders["connection"]).toBe("close");
+  expect(responseHeaders.connection).toBe("close");
   expect(apply).not.toHaveBeenCalled();
 });
 
@@ -150,7 +150,7 @@ it("rejects streamed overflow before the sender finishes its chunked body", asyn
   client.write(body.subarray(0, limit));
   client.write(body.subarray(limit));
   expect(await status).toBe(413);
-  expect(responseHeaders["connection"]).toBe("close");
+  expect(responseHeaders.connection).toBe("close");
   expect(client.writableEnded).toBe(false);
   expect(apply).not.toHaveBeenCalled();
 });
