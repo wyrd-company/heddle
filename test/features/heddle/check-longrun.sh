@@ -110,7 +110,7 @@ start_supervisor "${dirty_exit_directory}"
 sleep 1
 prove_stable_pid "${dirty_exit_directory}" "dirty-exit control"
 /command/s6-svc -d "${dirty_exit_directory}"
-sleep 1
+sleep 2
 if prove_clean_down "${dirty_exit_directory}" "dirty-exit control"; then
     echo "dirty-exit control unexpectedly passed the clean-down proof" >&2
     exit 1
