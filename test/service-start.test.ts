@@ -7,10 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import type { ResolvedServiceConfig } from "../src/service/config.js";
-import { startService } from "../src/service/service.js";
+import { startService, type RunningService } from "../src/service/service.js";
 
 const roots: string[] = [];
-afterEach(() => {
+const services: RunningService[] = [];
+afterEach(async () => {
+  for (const service of services.splice(0).reverse()) await service.close();
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
@@ -28,13 +30,18 @@ function config(root: string): ResolvedServiceConfig {
   };
 }
 const io = { output: () => undefined, error: () => undefined };
+async function start(root: string): Promise<RunningService> {
+  const service = await startService(config(root), io);
+  services.push(service);
+  return service;
+}
 
 it("keeps one service alive, rejects a second writer, and releases the store on close", async () => {
   const root = mkdtempSync(join(tmpdir(), "service-start-"));
   roots.push(root);
-  const first = await startService(config(root), io);
-  await expect(startService(config(root), io)).rejects.toThrow("already owned");
+  const first = await start(root);
+  await expect(start(root)).rejects.toThrow("already owned");
   await first.close();
-  const second = await startService(config(root), io);
+  const second = await start(root);
   await second.close();
 });

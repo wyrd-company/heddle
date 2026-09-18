@@ -10,6 +10,7 @@ import {
   rmSync,
   writeFileSync,
   statSync,
+  existsSync,
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -196,6 +197,12 @@ it("gates valid mutating webhook and tool requests throughout engine and pass re
         engineGate.release();
         await passEntered.wait;
       }
+      expect(
+        existsSync(
+          serviceHookSocket(config.stateDirectory, config.databasePath),
+        ),
+        phase,
+      ).toBe(false);
       const changes = store.db.prepare("SELECT total_changes() AS count").get();
       expect((await webhook()).status, phase).toBe(503);
       expect((await handoff()).status, phase).toBe(503);
@@ -282,6 +289,9 @@ it("uses the database identity across state overrides and symlink aliases", asyn
         databasePath: alias,
       },
       io,
-    ),
+    ).then((service) => {
+      services.push(service);
+      return service;
+    }),
   ).rejects.toThrow("already owned");
 });

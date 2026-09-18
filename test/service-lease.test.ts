@@ -2,14 +2,22 @@
 // relationships:
 //   verifies: command-line-interface
 // ---
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+  fstatSync,
+  closeSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { acquireStoreLease, type StoreLease } from "../src/service/lease.js";
 
 const interleave = vi.hoisted(() => ({
-  beforeLock: undefined as (() => boolean | undefined) | undefined,
+  beforeLock: undefined as ((fd: number) => boolean | undefined) | undefined,
 }));
 vi.mock("fs-native-extensions", async (original) => {
   const native = await original<typeof import("fs-native-extensions")>();
@@ -17,7 +25,7 @@ vi.mock("fs-native-extensions", async (original) => {
     tryLock: (fd: number) => {
       const run = interleave.beforeLock;
       interleave.beforeLock = undefined;
-      return run?.() ?? native.tryLock(fd);
+      return run?.(fd) ?? native.tryLock(fd);
     },
   };
 });
@@ -67,8 +75,33 @@ it("retries an obsolete descriptor and respects the replacement anchor owner", (
 it("release is idempotent and cannot release a successor owner", () => {
   const path = database();
   const first = acquireStoreLease(path);
+  leases.push(first);
+  const anchor = statSync(`${path}.writer`);
   first.release();
+  expect(statSync(`${path}.writer`).ino).toBe(anchor.ino);
   leases.push(acquireStoreLease(path));
   first.release();
   expect(() => leases.push(acquireStoreLease(path))).toThrow("already owned");
+});
+
+it("closes a rejected acquisition descriptor while preserving its owner", () => {
+  const path = database();
+  leases.push(acquireStoreLease(path));
+  let rejected = -1;
+  interleave.beforeLock = (fd) => {
+    rejected = fd;
+    return undefined;
+  };
+  try {
+    expect(() => leases.push(acquireStoreLease(path))).toThrow("already owned");
+    expect(() => fstatSync(rejected)).toThrow("EBADF");
+    expect(() => leases.push(acquireStoreLease(path))).toThrow("already owned");
+  } finally {
+    // A failed cleanup-guard mutation must not leave its descriptor open.
+    try {
+      closeSync(rejected);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EBADF") throw error;
+    }
+  }
 });
