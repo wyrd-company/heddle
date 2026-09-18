@@ -360,7 +360,7 @@ it("flushes pipelined responses before closing an overflowing request socket", a
   );
   socket.write(`${overflow.length.toString(16)}\r\n`);
   socket.write(overflow);
-  socket.write("\r\n0\r\n\r\n");
+  socket.write("\r\n");
   await overflowRead;
   release(true);
   const closedWithError = await ended.then(
