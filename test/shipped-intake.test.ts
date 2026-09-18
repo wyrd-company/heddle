@@ -74,6 +74,7 @@ function setup(
     now?: () => number;
     notification?: NotificationDelivery | null;
     type?: string;
+    holdFailure?: string;
   } = {},
 ) {
   const github = fixture();
@@ -94,6 +95,8 @@ function setup(
     () => Promise.resolve(blueprints),
     {
       resolveBlueprint: (_commit, id) => {
+        if (id === "hold-then-attention" && options.holdFailure !== undefined)
+          throw new Error(options.holdFailure);
         const blueprint = blueprints.find((candidate) => candidate.id === id);
         if (!blueprint) throw new Error(`Unknown blueprint: ${id}`);
         return Promise.resolve(deriveFlowcraftBlueprint(blueprint));
@@ -281,5 +284,60 @@ it("notifies the configured Pushover channel after the authored deadline", async
     user: "test-channel-key",
     title: "Issue intake needs attention",
     message: "Issue type Work item is still required.",
+  });
+});
+
+function intakeRun(store: RunStore) {
+  const run = store
+    .list()
+    .find((candidate) => candidate.blueprintId === "default-intake");
+  if (!run) throw new Error("Intake run missing");
+  return run;
+}
+
+it("completes the intake run with the hold result after the notification", async () => {
+  let now = 0;
+  const { service, store } = setup({ type: "Recipe", now: () => now });
+  await service.start();
+  now = 24 * 60 * 60 * 1000;
+  await service.engine.tick();
+
+  const run = intakeRun(store);
+  expect(run.status).toBe("completed");
+  expect(run.context["result"]).toEqual({ result: { status: "attention" } });
+  expect(store.events(run.id).some((event) => event.type === "attention")).toBe(
+    false,
+  );
+});
+
+it("completes the intake run with the retry result when the issue type arrives", async () => {
+  const { github, service, store } = setup({ type: "Recipe" });
+  await service.start();
+  const issue = github.issues[0];
+  if (!issue) throw new Error("Fixture issue missing");
+  issue.issueType = { name: "Work item" };
+  issue.updatedAt = "2026-01-02T00:00:00Z";
+  expect(await service.poll()).toBe(1);
+
+  const run = intakeRun(store);
+  expect(run.status).toBe("completed");
+  expect(run.context["result"]).toEqual({ result: { status: "retried" } });
+  expect(store.events(run.id).some((event) => event.type === "attention")).toBe(
+    false,
+  );
+});
+
+it("completes the intake run with the hold failure details when the hold cannot start", async () => {
+  const { service, store } = setup({
+    type: "Recipe",
+    holdFailure: "Hold is unavailable",
+  });
+  await service.start();
+
+  const run = intakeRun(store);
+  expect(run.status).toBe("completed");
+  expect(run.context["result"]).toEqual({
+    status: "failed",
+    details: { message: "Hold is unavailable" },
   });
 });

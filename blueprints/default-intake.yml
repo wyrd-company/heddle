@@ -23,11 +23,11 @@ nodes:
   held:
     uses: terminal-result
     params:
-      value: { from: start-hold.payload }
+      value: { from: "`start-hold`.payload" }
   hold-failed:
     uses: terminal-result
     params:
-      value: { status: failed, details: { from: start-hold.payload } }
+      value: { status: failed, details: { from: "`start-hold`.payload" } }
 edges:
   - from: classify
     to: start-lifecycle
