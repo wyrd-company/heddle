@@ -127,7 +127,7 @@ Heddle's GitHub App credential file. `t3Code.endpoint` names the T3 Code
 server, and `t3Code.tokenFile` points to its bearer token. The blueprint
 repository is a local Git checkout or a blueprint directory within one.
 `intake.commit` selects the Git revision for new intake runs. A run stores its
-full commit and resolved graph; prompts, handoff schemas, and policies come
+full commit and resolved graph; templates, handoff schemas, and policies come
 from that commit on execution and restart. Working-tree edits do not change a
 run. Commit authored changes and select the new revision for new runs. Keep
 those Git objects available for existing runs. Linked worktrees and packed

@@ -17,6 +17,12 @@ Every completed node writes its output below its authored node id. A pausing res
 
 The running blueprint is a reserved context root. Edge conditions, `{ from: <expression> }` references, and templates read `blueprint.id` and `blueprint.metadata`, the blueprint's own top-level metadata bag, which is `{}` when none is authored. A child run reads its own blueprint, never its parent's.
 
+## Templates
+
+One renderer serves every `templateRef`. A string is a path to a file beside the blueprint, `{ inline }` is template text, and both render as Nunjucks with autoescaping off and undefined values fatal. Each template reads the run context, the running blueprint as `blueprint`, and the node's own `metadata`, `node`, and `input`.
+
+A `templateRef` path is read from the run's pinned commit and resolves beside the blueprint file. A template may load another with `include`, `import`, or `extends`; those targets resolve from the blueprint repository root at the same pinned commit. A target that leaves the repository is refused.
+
 ## Minimal blueprint
 
 ```yaml
@@ -157,7 +163,7 @@ The complete authored document shape is below. Node-type inputs follow in the ca
     },
   "templateRef":
     {
-      "description": "A Nunjucks template, given as a path to a file beside the blueprint or inline. Rendered with the task context.\n",
+      "description": "A Nunjucks template, given as a path to a file beside the blueprint or inline. Every template renders the same way, with the task context, the running blueprint, and the node's own metadata, definition, and input. A path is read from the run's pinned commit. `include`, `import`, and `extends` targets are paths from the blueprint repository root at that same commit, and a target outside the repository is refused.\n",
       "oneOf":
         [
           { "$ref": "#/$defs/path" },

@@ -10,7 +10,7 @@ metadata:
 
 Read `references/blueprint-author-reference.md` before editing. It is generated from the same contracts that Heddle validates.
 
-Use generic names and scenarios. Keep every referenced template, schema, and rule file beside its blueprint. Use condition edges for routing and route every named result of each pausing node. Do not use action edges or Flowcraft subflows.
+Use generic names and scenarios. Keep every referenced template, schema, and rule file beside its blueprint; write `include`, `import`, and `extends` targets as paths from the blueprint repository root. Use condition edges for routing and route every named result of each pausing node. Do not use action edges or Flowcraft subflows.
 
 After every blueprint or referenced-file edit, run:
 
