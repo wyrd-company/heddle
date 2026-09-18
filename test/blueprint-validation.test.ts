@@ -827,6 +827,8 @@ nodes:
     ["handoff-without-description.yml", "handoff.schema"],
     ["invalid-jsonata.yml", "expression.jsonata"],
     ["missing-template.yml", "reference.exists"],
+    ["unavailable.yml", "heddle.unavailable-node-type"],
+    ["unavailable.yml", "heddle.unavailable-operation"],
   ])("keeps %s bound to %s in the negative corpus", (name, expectedRule) => {
     const file = resolve("test/fixtures/blueprints/negative", name);
 

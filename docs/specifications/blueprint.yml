@@ -88,7 +88,8 @@ validation-criteria: >-
   schema leaves open. Derived Flowcraft blueprints pass Flowcraft's linter
   and Heddle's lint rules: no `subflow`, no edge `action`, every result of a
   pausing node handled by an outgoing edge, every `question` role served by
-  a configured channel, every stage name a valid single-select option, and
+  a configured channel, every stage name a valid single-select option, every
+  node type and node operation marked available in the published catalog, and
   `requires.issue` satisfiable against the bound project at reconciliation.
   Stage-name and `requires.issue` project checks run only when live validation
   is requested; without a live implementation they return named `not checked`

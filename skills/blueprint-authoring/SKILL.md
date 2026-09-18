@@ -12,7 +12,7 @@ Read `references/blueprint-author-reference.md` before editing. It is generated 
 
 Node ids are hyphenated slugs and JSONata reads a bare hyphen as subtraction, so inside any expression a node, input, or output id is written in backticks - `start-hold`.payload, never start-hold.payload - and the whole expression is then quoted in YAML.
 
-Use generic names and scenarios. Write every path - template, handoff schema, policy rules, and every `include`, `import`, and `extends` target - relative to the blueprint root, the directory Heddle is pointed at, and never above it; a blueprint in a subdirectory of the root prefixes its paths with that subdirectory. Use condition edges for routing and route every named result of each pausing node. Do not use action edges or Flowcraft subflows.
+Use generic names and scenarios. Write every path - template, handoff schema, policy rules, and every `include`, `import`, and `extends` target - relative to the blueprint root, the directory Heddle is pointed at, and never above it; a blueprint in a subdirectory of the root prefixes its paths with that subdirectory. Use condition edges for routing and route every named result of each pausing node. Do not use action edges or Flowcraft subflows. The catalog publishes every designed node type and operation and marks each one available or not; `heddle validate` rejects a blueprint that uses one Heddle cannot run yet.
 
 After every blueprint or referenced-file edit, run:
 

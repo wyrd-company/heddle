@@ -393,10 +393,13 @@ The complete authored document shape is below. Node-type inputs follow in the ca
 
 ## Node types
 
+The catalog below publishes every designed node type and, for a node type that takes an operation, every designed operation, each marked available or not. `heddle validate` rejects a blueprint that uses a node type or an operation that is not available yet.
+
 ### `child-run`
 
 Start a child blueprint and pause until it completes.
 
+- Available: yes
 - Pausing: yes
 - Results: `completed`, `failed`
 - Context keys written: `<node-id>`
@@ -444,6 +447,7 @@ Start a child blueprint and pause until it completes.
 
 Start the selected lifecycle as an independent top-level run.
 
+- Available: yes
 - Pausing: no
 - Results: `started`
 - Context keys written: `<node-id>`
@@ -502,6 +506,7 @@ Start the selected lifecycle as an independent top-level run.
 
 Run one agent pass in one T3 Code thread and pause for its outcome.
 
+- Available: yes
 - Pausing: yes
 - Results: `handoff`, `escalate`, `timeout`, `idle`, `turnEnded`, `overridden`
 - Context keys written: `<node-id>`, `stages.<node-id>`
@@ -596,6 +601,7 @@ Run one agent pass in one T3 Code thread and pause for its outcome.
 
 Ask a configured role one or more questions and pause for its answer.
 
+- Available: no, Heddle has no run-time implementation for it yet
 - Pausing: yes
 - Results: `answered`, `timeout`
 - Context keys written: `<node-id>`
@@ -665,6 +671,7 @@ Ask a configured role one or more questions and pause for its answer.
 
 Pause until the bound issue changes and its authored condition matches.
 
+- Available: yes
 - Pausing: yes
 - Results: `changed`, `timeout`
 - Context keys written: `<node-id>`
@@ -706,6 +713,8 @@ Pause until the bound issue changes and its authored condition matches.
 
 Apply one GitHub operation to the bound issue or repository.
 
+- Available: yes
+- Operations: `set-field`, `comment`, `add-labels`, `remove-labels`, `close`, `reopen`, `open-pull-request` (not available yet), `request-review` (not available yet), `link` (not available yet)
 - Pausing: no
 - Results: none
 - Context keys written: `<node-id>`, `issue`
@@ -735,6 +744,75 @@ Apply one GitHub operation to the bound issue or repository.
         },
     },
   "additionalProperties": true,
+  "allOf":
+    [
+      {
+        "if":
+          {
+            "required": ["operation"],
+            "properties": { "operation": { "const": "set-field" } },
+          },
+        "then":
+          {
+            "required": ["field", "value"],
+            "properties":
+              {
+                "field": { "type": "string" },
+                "scope": { "enum": ["project", "organization"] },
+              },
+          },
+      },
+      {
+        "if":
+          {
+            "required": ["operation"],
+            "properties": { "operation": { "const": "comment" } },
+          },
+        "then":
+          {
+            "required": ["body"],
+            "properties": { "body": { "type": "string" } },
+          },
+      },
+      {
+        "if":
+          {
+            "required": ["operation"],
+            "properties": { "operation": { "const": "add-labels" } },
+          },
+        "then":
+          {
+            "required": ["labels"],
+            "properties":
+              { "labels": { "type": "array", "items": { "type": "string" } } },
+          },
+      },
+      {
+        "if":
+          {
+            "required": ["operation"],
+            "properties": { "operation": { "const": "remove-labels" } },
+          },
+        "then":
+          {
+            "required": ["labels"],
+            "properties":
+              { "labels": { "type": "array", "items": { "type": "string" } } },
+          },
+      },
+      {
+        "if":
+          {
+            "required": ["operation"],
+            "properties": { "operation": { "const": "close" } },
+          },
+        "then":
+          {
+            "properties":
+              { "reason": { "enum": ["completed", "not-planned"] } },
+          },
+      },
+    ],
 }
 ```
 
@@ -748,6 +826,7 @@ Apply one GitHub operation to the bound issue or repository.
 
 Apply one Git worktree, branch, merge, or push operation.
 
+- Available: no, Heddle has no run-time implementation for it yet
 - Pausing: no
 - Results: none
 - Context keys written: `<node-id>`
@@ -780,6 +859,7 @@ Apply one Git worktree, branch, merge, or push operation.
 
 Set the run's final result.
 
+- Available: yes
 - Pausing: no
 - Results: none
 - Context keys written: `<node-id>`, `result`
@@ -805,6 +885,7 @@ Set the run's final result.
 
 Collect named predecessor outputs into one object.
 
+- Available: yes
 - Pausing: no
 - Results: none
 - Context keys written: `<node-id>`
@@ -852,6 +933,7 @@ Collect named predecessor outputs into one object.
 
 Send a notification through a configured channel.
 
+- Available: yes
 - Pausing: no
 - Results: none
 - Context keys written: `<node-id>`
@@ -882,6 +964,7 @@ Send a notification through a configured channel.
 
 Evaluate an ordered policy-rule artifact against an input.
 
+- Available: yes
 - Pausing: no
 - Results: none
 - Context keys written: `<node-id>`
@@ -914,6 +997,7 @@ Evaluate an ordered policy-rule artifact against an input.
 
 Pause for an authored duration.
 
+- Available: yes
 - Pausing: yes
 - Results: none
 - Context keys written: `<node-id>`
@@ -938,6 +1022,7 @@ Pause for an authored duration.
 
 Pause for an external resume, with an optional authored deadline.
 
+- Available: yes
 - Pausing: yes
 - Results: none
 - Context keys written: `<node-id>`
@@ -978,6 +1063,8 @@ Pause for an external resume, with an optional authored deadline.
 - `expression.jsonata`: Every condition is valid JSONata syntax.
 - `expression.hyphenated-name`: An expression quotes a hyphenated node, input, or output name instead of subtracting it.
 - `heddle.owned-field`: GitHub nodes do not write service-owned Status or Paused fields.
+- `heddle.unavailable-node-type`: Every node type a blueprint uses has a run-time implementation.
+- `heddle.unavailable-operation`: Every node operation a blueprint uses has a run-time implementation.
 - `heddle.no-subflow`: Blueprints do not use the Flowcraft subflow node.
 - `heddle.entry`: Entry is declared only when every node has an incoming edge, and names an authored node.
 - `heddle.no-action-edge`: Blueprint edges do not declare Flowcraft actions.

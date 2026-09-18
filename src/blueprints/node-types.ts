@@ -7,6 +7,10 @@ import type { JsonObject } from "./types.js";
 
 export interface NodeTypeContract {
   readonly description: string;
+  /** Whether Heddle has a run-time implementation for this node type. */
+  readonly available: boolean;
+  /** Per-operation availability, for a node type that takes an operation. */
+  readonly operations?: Readonly<Record<string, boolean>>;
   readonly paramsSchema: JsonObject;
   readonly outputSchema: JsonObject;
   readonly contextWrites: readonly string[];

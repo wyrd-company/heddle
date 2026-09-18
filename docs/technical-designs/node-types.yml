@@ -39,6 +39,16 @@ design-challenges:
     sequence; inactivity is the absence of an event. These live in code
     behind the `pass` node, and only their outcomes reach the graph.
 proposed-design:
+  availability: >
+    The catalog publishes every designed node type and, for a node type that
+    takes an operation, every designed operation. Each carries an availability
+    marker that says whether Heddle has a run-time implementation for it. The
+    marker is the single source of truth: an agreement test fails when a node
+    type marked available is not dispatchable by the composed service, or when
+    a `github` operation marked available has no handler. `heddle validate`
+    rejects a blueprint that uses a node type or an operation that is not
+    available, naming the file and the node, so an author learns at authoring
+    time instead of at run time.
   high-level-overview: >
     Every node type declares an input schema and an output schema in JSON
     Schema, published in the blueprint author reference and embedded in the
@@ -220,15 +230,20 @@ proposed-design:
     One brick, one operation per use. Acts with Heddle's own GitHub App,
     never an agent's credential.
 
-    Inputs: `operation` and operation-specific parameters. Operations at
-    launch: `set-field` (project card field values), `comment`,
-    `add-labels`, `remove-labels`, `close`, `reopen`, `open-pull-request`,
-    `request-review`, `link`.
+    Inputs: `operation` and operation-specific parameters. Operations:
+    `set-field` (project card field values), `comment`, `add-labels`,
+    `remove-labels`, `close` (an optional `reason` of `completed` or
+    `not-planned`), `reopen`, `open-pull-request`, `request-review`, `link`.
+    The schema declares each operation's own required parameters, so a
+    missing or unsupported parameter is a validation finding.
 
     Behavior: idempotent by run id, node id, and visit count; a replayed
     node finds its prior effect by a marker comment or by reading state
-    before writing. A permission refusal is raised as attention, not
-    retried.
+    before writing. An operation that finds the issue already in its target
+    state writes nothing. Every operation carries the resulting issue state
+    into the run context, including the issue's update time, so Heddle's own
+    change is not delivered back as an operator action. A permission refusal
+    is raised as attention, not retried.
 
     Output: the operation's result, such as a pull request number.
   git: |

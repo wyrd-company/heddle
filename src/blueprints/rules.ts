@@ -88,6 +88,16 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
       "GitHub nodes do not write service-owned Status or Paused fields.",
   },
   {
+    name: "heddle.unavailable-node-type",
+    description:
+      "Every node type a blueprint uses has a run-time implementation.",
+  },
+  {
+    name: "heddle.unavailable-operation",
+    description:
+      "Every node operation a blueprint uses has a run-time implementation.",
+  },
+  {
     name: "heddle.no-subflow",
     description: "Blueprints do not use the Flowcraft subflow node.",
   },

@@ -4,6 +4,7 @@
 //     - blueprint-authoring
 //     - node-types
 // ---
+import { availabilityFindings } from "./availability.js";
 import jsonata from "jsonata";
 
 import { contextKeyFindings } from "./context-lint.js";
@@ -175,6 +176,7 @@ export function lintHeddle(
       );
     }
   }
+  findings.push(...availabilityFindings(file, blueprint));
   findings.push(...contextKeyFindings(file, blueprint));
   return findings;
 }

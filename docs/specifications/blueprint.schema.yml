@@ -450,6 +450,38 @@ $defs:
           - request-review
           - link
     additionalProperties: true
+    allOf:
+      - if:
+          required: [operation]
+          properties: { operation: { const: set-field } }
+        then:
+          required: [field, value]
+          properties:
+            field: { type: string }
+            scope: { enum: [project, organization] }
+      - if:
+          required: [operation]
+          properties: { operation: { const: comment } }
+        then:
+          required: [body]
+          properties: { body: { type: string } }
+      - if:
+          required: [operation]
+          properties: { operation: { const: add-labels } }
+        then:
+          required: [labels]
+          properties: { labels: { type: array, items: { type: string } } }
+      - if:
+          required: [operation]
+          properties: { operation: { const: remove-labels } }
+        then:
+          required: [labels]
+          properties: { labels: { type: array, items: { type: string } } }
+      - if:
+          required: [operation]
+          properties: { operation: { const: close } }
+        then:
+          properties: { reason: { enum: [completed, not-planned] } }
   gitParams:
     type: object
     required: [operation]

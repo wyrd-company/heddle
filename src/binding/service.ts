@@ -41,7 +41,8 @@ export class GitHubBindingService {
   readonly events: GitHubEventHandler;
   private readonly eventService: BindingEventService;
   private readonly intakeService: BindingIntakeService;
-  private readonly runtimeNodes: NonNullable<EngineOptions["nodes"]>;
+  /** Every node type this binding dispatches, the engine built-ins aside. */
+  readonly runtimeNodes: NonNullable<EngineOptions["nodes"]>;
   private projects = new Map<
     string,
     { project: BoundProject; client: GitHub; binding: ProjectBinding }

@@ -264,11 +264,6 @@ it("the parallel appraisal fixture returns named answers without notifications",
             ).blueprint,
           ),
         ),
-      nodes: {
-        question: async ({ await: pause }) => {
-          await pause({ kind: "question" });
-        },
-      },
     });
     const run = await engine.start({
       blueprintId: "parallel-appraisal",

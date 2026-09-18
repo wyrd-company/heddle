@@ -1,0 +1,20 @@
+id: unavailable
+kind: helper
+nodes:
+  prepare-workspace:
+    uses: git
+    params:
+      operation: worktree-add
+  record-relation:
+    uses: github
+    params:
+      operation: link
+  finish:
+    uses: terminal-result
+    params:
+      value: done
+edges:
+  - from: prepare-workspace
+    to: record-relation
+  - from: record-relation
+    to: finish

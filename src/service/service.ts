@@ -4,6 +4,7 @@
 //     - command-line-interface
 //     - engine-and-run-model
 // ---
+import { serviceNodes } from "./nodes.js";
 import { createServer, type Server } from "node:http";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
@@ -148,10 +149,9 @@ export async function startService(
         {
           pinCommit: (revision) => catalog.pin(revision),
           resolveBlueprint: (commit, id) => catalog.resolve(commit, id),
-          nodes: {
-            policy: catalog.policyNode,
-            pass: (context) => passNode(context),
-          },
+          nodes: serviceNodes(catalog.policyNode, (context) =>
+            passNode(context),
+          ),
           onBoundary: (run) => lifecycle.boundary?.(run) ?? Promise.resolve(),
         },
         {

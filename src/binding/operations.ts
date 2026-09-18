@@ -73,7 +73,12 @@ function closeReason(value: unknown): CloseReason {
   return value as CloseReason;
 }
 
-const setField: GitHubOperation = async ({ params, project, handle, issue }) => {
+const setField: GitHubOperation = async ({
+  params,
+  project,
+  handle,
+  issue,
+}) => {
   const field = params["field"];
   if (typeof field !== "string" || !Object.hasOwn(params, "value"))
     throw new Error("set-field requires field and value");

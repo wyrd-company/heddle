@@ -36,8 +36,7 @@ export async function githubEffect(
   instances: InstanceStore,
 ): Promise<void> {
   const issue = structuredClone(context.context["issue"]) as
-    | IssueSnapshot
-    | undefined;
+    IssueSnapshot | undefined;
   if (!issue) throw new Error("GitHub node requires a bound issue snapshot");
   const params = context.params;
   const payload = JSON.stringify([issue.id, issue.project.id, params]);
