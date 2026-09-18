@@ -39,8 +39,8 @@ export const recipe = (number = 1) => ({
   number,
   title: "Garden soup",
   body: "<!--\n---\nservings: 4\n---\n-->\nRecipe",
-  state: "OPEN",
-  stateReason: null,
+  state: "OPEN" as string,
+  stateReason: null as string | null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
   url: "https://example.invalid/recipe",
@@ -258,6 +258,29 @@ export function fixture(projectId = "P_1") {
           color: "FFFFFF",
           description: null,
         });
+        return {};
+      },
+      RemoveLabelsFromLabelable: () => {
+        const first = issues[0];
+        if (!first) throw new Error("Fixture issue missing");
+        first.labels.nodes = first.labels.nodes.filter(
+          (label) => label.name !== "vegetarian",
+        );
+        return {};
+      },
+      CloseIssue: ({ input }) => {
+        const first = issues[0];
+        if (!first) throw new Error("Fixture issue missing");
+        const i = input as { stateReason: string };
+        first.state = "CLOSED";
+        first.stateReason = i.stateReason;
+        return {};
+      },
+      ReopenIssue: () => {
+        const first = issues[0];
+        if (!first) throw new Error("Fixture issue missing");
+        first.state = "OPEN";
+        first.stateReason = "REOPENED";
         return {};
       },
       IssueFieldsList: () => ({
