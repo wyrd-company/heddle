@@ -222,8 +222,11 @@ directory, and secret-file locations. Mount each at the same path:
 
 The Feature artifact contains the npm tarball built from the same accepted
 revision. Run `task feature-check` to stage that tarball and prove the Feature
-in isolated Dev Container builds. The test observes the s6 longrun staying up,
-stopping cleanly, and starting again against the same store.
+in isolated Dev Container builds. The test records one supervised PID across
+separated observations, requires exit status 0 after stopping the service, and
+then records a stable new PID after starting against the same store. A
+restart-looping fixture must fail the PID proof, and a dirty-exit fixture must
+fail the shutdown proof.
 
 ## Status
 
