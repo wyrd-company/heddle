@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { runCli, type CliIo } from "../src/cli-runner.js";
+import { parseStartOverrides, runConfiguredCli } from "../src/binding/cli.js";
 import { validateBlueprintPath } from "../src/blueprints/validate.js";
 
 function capture(arguments_: readonly string[]): {
@@ -24,6 +25,35 @@ function capture(arguments_: readonly string[]): {
 
   return { errors, exitCode: runCli(arguments_, io), output };
 }
+
+async function captureConfigured(arguments_: readonly string[]): Promise<{
+  readonly errors: string[];
+  readonly exitCode: number;
+  readonly output: string[];
+}> {
+  const errors: string[] = [];
+  const output: string[] = [];
+  const io: CliIo = {
+    error: (message) => errors.push(message),
+    output: (message) => output.push(message),
+  };
+
+  return {
+    errors,
+    exitCode: await runConfiguredCli(arguments_, io),
+    output,
+  };
+}
+
+const startOptions = [
+  ["--config", "/example/config.yml"],
+  ["--state", "/example/state"],
+  ["--database", "/example/store.sqlite"],
+  ["--poll-interval", "41000"],
+  ["--github-app-credentials", "/example/credentials.yml"],
+  ["--t3-token", "/example/token"],
+  ["--webhook-secret", "/example/secret"],
+] as const;
 
 describe("command help", () => {
   it("lists every command", () => {
@@ -198,5 +228,99 @@ describe("command arguments", () => {
     expect(result.output.join("\n")).toContain("policy.rule-id");
     expect(result.output.join("\n")).toContain("policy.fallback-order");
     expect(result.output.join("\n")).toContain("requires.issue.stage-name");
+  });
+});
+
+describe("start options", () => {
+  it.each(startOptions)(
+    "rejects a missing %s value as usage error",
+    async (flag) => {
+      const result = await captureConfigured(["start", flag]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toEqual([]);
+      expect(result.errors).toEqual([
+        `${flag} requires a value`,
+        expect.stringContaining("Usage: heddle start"),
+      ]);
+    },
+  );
+
+  it.each(startOptions)(
+    "rejects a flag-shaped %s value as usage error",
+    async (flag) => {
+      const result = await captureConfigured(["start", flag, "--other"]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toEqual([]);
+      expect(result.errors).toEqual([
+        `${flag} requires a value that does not start with '-'`,
+        expect.stringContaining("Usage: heddle start"),
+      ]);
+    },
+  );
+
+  it.each(startOptions)(
+    "rejects duplicate singleton option %s",
+    async (flag, value) => {
+      const result = await captureConfigured([
+        "start",
+        flag,
+        value,
+        flag,
+        value,
+      ]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toEqual([]);
+      expect(result.errors).toEqual([
+        `Duplicate heddle start option: ${flag}`,
+        expect.stringContaining("Usage: heddle start"),
+      ]);
+    },
+  );
+
+  it.each([
+    [["--other", "value"], "Unknown heddle start option: --other"],
+    [["config.yml"], "Expected a heddle start option, received: config.yml"],
+  ] as const)(
+    "rejects invalid option input %#",
+    async (arguments_, message) => {
+      const result = await captureConfigured(["start", ...arguments_]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toEqual([]);
+      expect(result.errors).toEqual([
+        message,
+        expect.stringContaining("Usage: heddle start"),
+      ]);
+    },
+  );
+
+  it("preserves defaults and every documented override", () => {
+    expect(parseStartOverrides([])).toEqual({});
+    expect(parseStartOverrides(startOptions.flat())).toEqual({
+      configPath: "/example/config.yml",
+      stateDirectory: "/example/state",
+      databasePath: "/example/store.sqlite",
+      pollingIntervalMs: 41000,
+      githubCredentialFile: "/example/credentials.yml",
+      t3TokenFile: "/example/token",
+      webhookSecretFile: "/example/secret",
+    });
+  });
+
+  it("rejects an invalid polling interval as usage error", async () => {
+    const result = await captureConfigured([
+      "start",
+      "--poll-interval",
+      "invalid",
+    ]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.errors).toEqual([
+      "--poll-interval must be a positive integer",
+      expect.stringContaining("Usage: heddle start"),
+    ]);
   });
 });

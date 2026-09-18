@@ -2,7 +2,7 @@
 // relationships:
 //   implements: github-binding-and-intake
 // ---
-import { runCli, type CliIo } from "../cli-runner.js";
+import { runCli, START_USAGE, type CliIo } from "../cli-runner.js";
 import { appClients, loadBindingConfig } from "./config.js";
 import { liveRequirementFacts } from "./validate.js";
 import {
@@ -11,27 +11,39 @@ import {
 } from "../service/config.js";
 import { startService } from "../service/service.js";
 
-function startOverrides(args: readonly string[]): StartOverrides {
+const startOptions = new Set([
+  "--config",
+  "--state",
+  "--database",
+  "--poll-interval",
+  "--github-app-credentials",
+  "--t3-token",
+  "--webhook-secret",
+]);
+
+class StartUsageError extends Error {}
+
+export function parseStartOverrides(args: readonly string[]): StartOverrides {
   const values: Record<string, string> = {};
   for (let index = 0; index < args.length; index += 2) {
-    const flag = args[index],
-      value = args[index + 1];
-    if (!flag || !value || !flag.startsWith("--"))
-      throw new Error("Invalid heddle start arguments");
+    const flag = args[index];
+    if (!flag?.startsWith("--"))
+      throw new StartUsageError(
+        `Expected a heddle start option, received: ${flag ?? "<missing>"}`,
+      );
+    if (!startOptions.has(flag))
+      throw new StartUsageError(`Unknown heddle start option: ${flag}`);
+    if (Object.hasOwn(values, flag))
+      throw new StartUsageError(`Duplicate heddle start option: ${flag}`);
+    const value = args[index + 1];
+    if (value === undefined)
+      throw new StartUsageError(`${flag} requires a value`);
+    if (value.startsWith("-"))
+      throw new StartUsageError(
+        `${flag} requires a value that does not start with '-'`,
+      );
     values[flag] = value;
   }
-  const known = new Set([
-    "--config",
-    "--state",
-    "--database",
-    "--poll-interval",
-    "--github-app-credentials",
-    "--t3-token",
-    "--webhook-secret",
-  ]);
-  for (const flag of Object.keys(values))
-    if (!known.has(flag))
-      throw new Error(`Unknown heddle start option: ${flag}`);
   const polling = values["--poll-interval"];
   const pollingIntervalMs: number | undefined =
     polling === undefined ? undefined : Number(polling);
@@ -39,7 +51,7 @@ function startOverrides(args: readonly string[]): StartOverrides {
     polling !== undefined &&
     (!Number.isSafeInteger(pollingIntervalMs) || Number(pollingIntervalMs) <= 0)
   )
-    throw new Error("--poll-interval must be a positive integer");
+    throw new StartUsageError("--poll-interval must be a positive integer");
   return {
     ...(values["--config"] === undefined
       ? {}
@@ -69,13 +81,17 @@ export async function runConfiguredCli(
   if (args[0] === "start" && args[1] !== "--help" && args[1] !== "-h") {
     try {
       const service = await startService(
-        resolveServiceConfig(startOverrides(args.slice(1))),
+        resolveServiceConfig(parseStartOverrides(args.slice(1))),
         io,
       );
       await service.done;
       return typeof process.exitCode === "number" ? process.exitCode : 0;
     } catch (error) {
       io.error(error instanceof Error ? error.message : String(error));
+      if (error instanceof StartUsageError) {
+        io.error(START_USAGE);
+        return 2;
+      }
       return 1;
     }
   }

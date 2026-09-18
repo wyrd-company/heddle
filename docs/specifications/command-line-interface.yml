@@ -35,6 +35,7 @@ commands:
         syntax: --webhook-secret <path>
     exit-status:
       success: 0 after SIGINT or SIGTERM closes intake, listeners, the T3 Code client, and SQLite
+      usage-error: 2 for an unknown option, a missing or flag-shaped value, a duplicate singleton option, or an invalid polling interval
       configuration-error: 1 with the resolved configuration path and actionable detail
       ownership-error: 1 when another live Heddle service owns the configured database
 configuration:

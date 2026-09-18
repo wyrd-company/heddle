@@ -18,6 +18,9 @@ interface CommandHelp {
   readonly usage: string;
 }
 
+export const START_USAGE =
+  "Usage: heddle start [--config <path>] [--state <directory>] [--database <path>] [--poll-interval <milliseconds>] [--github-app-credentials <path>] [--t3-token <path>] [--webhook-secret <path>]";
+
 const commands = new Map<string, CommandHelp>([
   [
     "hook",
@@ -36,8 +39,7 @@ const commands = new Map<string, CommandHelp>([
   [
     "start",
     {
-      usage:
-        "Usage: heddle start [--config <path>] [--state <directory>] [--database <path>] [--poll-interval <milliseconds>] [--github-app-credentials <path>] [--t3-token <path>] [--webhook-secret <path>]",
+      usage: START_USAGE,
     },
   ],
   [
