@@ -15,6 +15,7 @@ import { RunStore } from "../engine/store.js";
 import { PassService } from "../pass/service.js";
 import { T3Client, schemas } from "../t3code/index.js";
 import type { EngineNode, Run } from "../engine/types.js";
+import type { WorkflowEngine } from "../engine/engine.js";
 import type { ResolvedServiceConfig } from "./config.js";
 import { BlueprintCatalog } from "./blueprints.js";
 import { acquireStoreLease } from "./lease.js";
@@ -27,6 +28,7 @@ export interface RunningService {
   close(): Promise<void>;
   done: Promise<void>;
   origin?: string;
+  engine?: WorkflowEngine;
 }
 
 function listenTcp(server: Server): Promise<void> {
@@ -75,9 +77,10 @@ export async function startService(
   let closing: Promise<void> | undefined;
   let signalHandler: (() => void) | undefined;
   let startupMessage: string;
+  let engine: WorkflowEngine | undefined;
   try {
     store = new RunStore(config.databasePath);
-    if (config.projects.length === 0) {
+    if (config.projects.length === 0 && config.pass === undefined) {
       timer = setInterval(() => {}, config.polling.intervalMs);
       startupMessage = `Heddle started with no bound projects; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms`;
     } else {
@@ -107,10 +110,16 @@ export async function startService(
               return new PushoverDelivery(value);
             })();
       const budget = { graphql: 0, rest: 0, mutations: 0 };
+      const clients =
+        config.projects.length === 0
+          ? () => {
+              throw new Error("No GitHub projects are bound");
+            }
+          : appClients(config.github.credentialFile, budget);
       const binding = new GitHubBindingService(
         store,
         config.projects,
-        appClients(config.github.credentialFile, budget),
+        clients,
         () => Promise.resolve(catalog.list()),
         {
           resolveBlueprint: (commit, id) => catalog.resolve(commit, id),
@@ -127,6 +136,7 @@ export async function startService(
             : { notifications: notification }),
         },
       );
+      engine = binding.engine;
       let hookHandler: HookServer | undefined;
       tcp = createServer((request, response) => {
         void (async () => {
@@ -222,7 +232,7 @@ export async function startService(
     process.once("SIGINT", signalHandler);
     process.once("SIGTERM", signalHandler);
     io.output(startupMessage);
-    return { close, done };
+    return { close, done, ...(engine === undefined ? {} : { engine }) };
   } catch (error) {
     if (timer) clearInterval(timer);
     passes?.close();

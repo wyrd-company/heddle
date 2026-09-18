@@ -48,3 +48,13 @@ export * from "./binding/index.js";
 export * from "./agent-tools/index.js";
 
 export * from "./pass/index.js";
+export {
+  startService,
+  type RunningService,
+  type ServiceIo,
+} from "./service/service.js";
+export {
+  resolveServiceConfig,
+  type ResolvedServiceConfig,
+  type StartOverrides,
+} from "./service/config.js";
