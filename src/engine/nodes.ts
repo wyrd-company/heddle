@@ -30,6 +30,15 @@ export function bindNode(
     const visit = store.beginVisit(run.id, nodeId);
     store.event(run.id, "node-start", { nodeId, visit });
     const context = await native.context.toJSON();
+    if ((definition as { stage?: boolean }).stage === true) {
+      // A stage's visit count is readable by the edges leaving it.
+      const stages = { ...(context["stages"] as Data | undefined) };
+      stages[nodeId] = {
+        ...(stages[nodeId] as Data | undefined),
+        visits: visit,
+      };
+      context["stages"] = stages;
+    }
     const params = (await resolveValues(
       definition.params ?? {},
       context,

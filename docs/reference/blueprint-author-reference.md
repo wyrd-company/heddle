@@ -13,7 +13,7 @@ This file is generated from the node-type registry, blueprint schema, validation
 
 Heddle dispatches Flowcraft nodes sequentially with engine concurrency 1. Durable snapshot checkpointing and the one-terminal-result guard depend on that order. A concurrency change must replace those agreements before it changes dispatch.
 
-Every completed node writes its output below its authored node id. A pausing result is also exposed during edge routing as `result.output.<result>`; its wake payload is `result.output.payload`.
+Every completed node writes its output below its authored node id. A pausing result is also exposed during edge routing as `result.output.<result>`; its wake payload is `result.output.payload`. Every node marked `stage: true` writes its visit count to `stages.<node-id>.visits`, whatever its node type, before the edges leaving it are evaluated.
 
 ## Minimal blueprint
 
