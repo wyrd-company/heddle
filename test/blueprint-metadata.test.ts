@@ -4,7 +4,7 @@
 //     - blueprint-authoring
 //     - engine-and-run-model
 // ---
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -14,6 +14,7 @@ import {
   RunStore,
   WorkflowEngine,
 } from "../src/index.js";
+import { directoryTemplates } from "./support/templates.js";
 import { passFixture } from "./support/pass-fixture.js";
 
 const parcels = resolve("test/fixtures/blueprints/parcel-routing");
@@ -117,8 +118,7 @@ it("renders a pass prompt with the running blueprint metadata", async () => {
       .blueprint,
   );
   const fixture = passFixture(stage, {
-    readArtifact: (_commit, _id, path) =>
-      Promise.resolve(readFileSync(join(catalog, path), "utf8")),
+    templates: directoryTemplates(catalog),
   });
   await fixture.engine.start({
     id: "assessment",

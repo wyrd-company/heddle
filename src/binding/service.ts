@@ -25,11 +25,14 @@ import { BindingEventService } from "./event-service.js";
 import { onIssueChange } from "./issue-change.js";
 import { BindingIntakeService, type IntakeResult } from "./intake-service.js";
 import { notifyNode, type NotificationDelivery } from "./notify.js";
+import type { TemplateSource } from "../templates/index.js";
 import { assertRuntimeCapabilities } from "./runtime-capabilities.js";
 
 export interface BindingServiceOptions {
   intake?: { blueprintId: string; commit: string };
   notifications?: NotificationDelivery;
+  /** Reads templates and their includes at each run's pinned commit. */
+  templates?: TemplateSource;
 }
 
 export class GitHubBindingService {
@@ -57,7 +60,7 @@ export class GitHubBindingService {
       "on-issue-change": onIssueChange,
       ...(options.notifications === undefined
         ? {}
-        : { notify: notifyNode(options.notifications) }),
+        : { notify: notifyNode(options.notifications, options.templates) }),
       github: async (context) => {
         try {
           const bound = this.bound(context);

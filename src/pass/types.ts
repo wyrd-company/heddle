@@ -10,6 +10,7 @@ import type {
   PendingRequest,
 } from "../t3code/index.js";
 import type { AwaitingDetails, Data } from "../engine/index.js";
+import type { TemplateSource } from "../templates/index.js";
 import type {
   ToolBinding,
   TurnEndPolicy,
@@ -25,11 +26,7 @@ export interface PassOptions {
   toolOrigin: string;
   defaultModel: ModelSelection;
   defaultWorktree: string;
-  readArtifact: (
-    commit: string,
-    blueprintId: string,
-    path: string,
-  ) => Promise<string>;
+  templates: TemplateSource;
   toolOperations?: ToolOperations;
   extraToolAuthorization?: (tool: {
     name: string;

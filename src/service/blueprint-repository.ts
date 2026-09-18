@@ -16,6 +16,20 @@ export function beside(directory: string, path: string): boolean {
   );
 }
 
+/**
+ * The root-relative identity of a blueprint repository path. Absolute paths
+ * and parent traversal leave the repository and are refused.
+ */
+export function repositoryPath(path: string): string {
+  const base = resolve("/blueprint-repository");
+  const target = resolve(base, path);
+  if (isAbsolute(path) || !beside(base, target))
+    throw new Error(
+      `Template path leaves the blueprint repository: ${safeIdentity(path)}`,
+    );
+  return relative(base, target).split(sep).join("/");
+}
+
 /** Display identities, never repository URLs, absolute paths, or control bytes. */
 export function safeIdentity(value: string): string {
   return /^[\w./-]+$/u.test(value) &&

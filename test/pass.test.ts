@@ -4,6 +4,7 @@
 // ---
 import { expect, it, vi } from "vitest";
 import { blueprint, passFixture } from "./support/pass-fixture.js";
+import { templateSource } from "./support/templates.js";
 import { makeSession } from "../src/t3code/test/support/thread-fixtures.js";
 import { threadId, turnId } from "../src/t3code/index.js";
 
@@ -33,7 +34,7 @@ it("renders pinned inputs, activates after commit, and uses service-owned extra 
     Promise.resolve("Bearer fixture-catalog-authorization"),
   );
   const f = passFixture(plan, {
-    readArtifact: read,
+    templates: templateSource(read),
     extraToolAuthorization: authorization,
   });
   await f.start();

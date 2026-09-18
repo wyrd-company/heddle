@@ -153,7 +153,7 @@ export async function startService(
           ...(config.intake === undefined ? {} : { intake: config.intake }),
           ...(notification === undefined
             ? {}
-            : { notifications: notification }),
+            : { notifications: notification, templates: catalog }),
         },
       );
       engine = binding.engine;
@@ -186,7 +186,7 @@ export async function startService(
           config.pass.defaultModel,
         ),
         defaultWorktree: config.pass.defaultWorktree,
-        readArtifact: (commit, id, path) => catalog.read(commit, id, path),
+        templates: catalog,
       });
       passNode = passes.node;
       lifecycle.boundary = passes.synchronize;

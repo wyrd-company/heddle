@@ -4,7 +4,6 @@
 // ---
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
-import nunjucks from "nunjucks";
 import { parse } from "yaml";
 import { prepareAgentTools } from "../agent-tools/index.js";
 import { schemas } from "../t3code/index.js";
@@ -13,6 +12,7 @@ import {
   blueprintContext,
   type HeddleFlowcraftNode,
 } from "../blueprints/flowcraft.js";
+import { renderTemplate } from "../templates/index.js";
 import type { PassInvocation, PassOptions } from "./types.js";
 
 export async function preparePass(
@@ -24,14 +24,23 @@ export async function preparePass(
     (node) => node.id === nodeId,
   ) as HeddleFlowcraftNode;
   const read = (path: string) =>
-    options.readArtifact(run.commit, run.blueprintId, path);
-  const prompt = params["prompt"];
-  const template =
-    typeof prompt === "string" ? await read(prompt) : record(prompt)["inline"];
-  if (typeof template !== "string")
-    throw new Error(
-      "Pass prompt requires a pinned template path or inline text",
-    );
+    options.templates.read(run.commit, run.blueprintId, path);
+  const rendered = await renderTemplate(
+    params["prompt"],
+    {
+      ...context.context,
+      blueprint: blueprintContext(run.blueprint),
+      metadata: definition.metadata ?? {},
+      node: definition,
+      input: context.input,
+    },
+    {
+      commit: run.commit,
+      blueprintId: run.blueprintId,
+      label: "Pass prompt",
+      source: options.templates,
+    },
+  );
   const handoff =
     typeof params["handoff"] === "string"
       ? (parse(await read(params["handoff"])) as unknown)
@@ -90,17 +99,6 @@ export async function preparePass(
     context: context.context,
     policy,
     escalation,
-  });
-  const environment = new nunjucks.Environment([], {
-    autoescape: false,
-    throwOnUndefined: true,
-  });
-  const rendered = environment.renderString(template, {
-    ...context.context,
-    blueprint: blueprintContext(run.blueprint),
-    metadata: definition.metadata ?? {},
-    node: definition,
-    input: context.input,
   });
   return {
     key: context.effectKey,

@@ -3,10 +3,11 @@
 //   implements: command-line-interface
 // ---
 import { readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   BlueprintRepository,
   beside,
+  repositoryPath,
   safeIdentity,
 } from "./blueprint-repository.js";
 import jsonata from "jsonata";
@@ -30,8 +31,14 @@ interface Entry {
   artifacts: Map<string, string>;
 }
 
+/** One pinned revision: its blueprints, and every file by root-relative path. */
+interface Snapshot {
+  entries: Map<string, Entry>;
+  files: Map<string, string>;
+}
+
 export class BlueprintCatalog {
-  private readonly snapshots = new Map<string, Promise<Map<string, Entry>>>();
+  private readonly snapshots = new Map<string, Promise<Snapshot>>();
   private readonly repository: BlueprintRepository;
   constructor(readonly root: string) {
     this.repository = new BlueprintRepository(root);
@@ -39,7 +46,7 @@ export class BlueprintCatalog {
   pin(revision: string): Promise<string> {
     return this.repository.pin(revision);
   }
-  private snapshot(commit: string): Promise<Map<string, Entry>> {
+  private snapshot(commit: string): Promise<Snapshot> {
     let snapshot = this.snapshots.get(commit);
     if (!snapshot) {
       snapshot = this.repository.tree(commit, (root, files) => {
@@ -56,6 +63,18 @@ export class BlueprintCatalog {
               })
               .join("; ")}`,
           );
+        const contents = new Map<string, string>();
+        for (const file of files) {
+          try {
+            if (beside(root, realpathSync(file)))
+              contents.set(
+                relative(root, file).split(sep).join("/"),
+                readFileSync(file, "utf8"),
+              );
+          } catch {
+            /* Dangling links are not repository files. */
+          }
+        }
         const entries = new Map<string, Entry>();
         for (const path of discoverBlueprintFiles(root)) {
           const loaded = loadValidatedBlueprint(path);
@@ -79,7 +98,7 @@ export class BlueprintCatalog {
             artifacts,
           });
         }
-        return entries;
+        return { entries, files: contents };
       });
       this.snapshots.set(commit, snapshot);
       void snapshot.catch(() => this.snapshots.delete(commit));
@@ -89,13 +108,13 @@ export class BlueprintCatalog {
   async list(revision = "HEAD"): Promise<readonly Blueprint[]> {
     const commit = await this.pin(revision);
     return structuredClone(
-      [...(await this.snapshot(commit)).values()].map(
+      [...(await this.snapshot(commit)).entries.values()].map(
         (entry) => entry.authored,
       ),
     );
   }
   private async entry(commit: string, id: string): Promise<Entry> {
-    const entry = (await this.snapshot(commit)).get(id);
+    const entry = (await this.snapshot(commit)).entries.get(id);
     if (!entry)
       throw new Error(
         `Unknown blueprint ${safeIdentity(id)} at revision ${safeIdentity(commit)}`,
@@ -117,6 +136,16 @@ export class BlueprintCatalog {
     if (contents === undefined)
       throw new Error(
         `Missing blueprint artifact ${safeIdentity(path)} at revision ${safeIdentity(commit)} for blueprint ${safeIdentity(id)}`,
+      );
+    return contents;
+  }
+  /** A file addressed from the blueprint repository root at a pinned commit. */
+  async readFromRoot(commit: string, path: string): Promise<string> {
+    const snapshot = await this.snapshot(commit);
+    const contents = snapshot.files.get(repositoryPath(path));
+    if (contents === undefined)
+      throw new Error(
+        `Missing blueprint repository file ${safeIdentity(path)} at revision ${safeIdentity(commit)}`,
       );
     return contents;
   }

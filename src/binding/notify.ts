@@ -2,8 +2,12 @@
 // relationships:
 //   implements: github-binding-and-intake
 // ---
-import { blueprintContext } from "../blueprints/flowcraft.js";
-import type { Data, EngineNode } from "../engine/types.js";
+import {
+  blueprintContext,
+  type HeddleFlowcraftNode,
+} from "../blueprints/flowcraft.js";
+import { renderTemplate, type TemplateSource } from "../templates/index.js";
+import type { EngineNode } from "../engine/types.js";
 
 export interface Notification {
   title: string;
@@ -42,38 +46,36 @@ export class PushoverDelivery implements NotificationDelivery {
   }
 }
 
-function template(value: unknown, context: Data, name: string): string {
-  const inline =
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    typeof (value as Data)["inline"] === "string"
-      ? String((value as Data)["inline"])
-      : value;
-  if (typeof inline !== "string")
-    throw new Error(`notify requires a ${name} template`);
-  return inline.replaceAll(
-    /\{\{\s*([A-Za-z][\w-]*)\s*\}\}/gu,
-    (_match, key: string) => {
-      const result = context[key];
-      if (result === undefined)
-        throw new Error(`notify template value is unavailable: ${key}`);
-      return typeof result === "string" ? result : JSON.stringify(result);
-    },
-  );
-}
-
-export function notifyNode(delivery: NotificationDelivery): EngineNode {
+export function notifyNode(
+  delivery: NotificationDelivery,
+  templates?: TemplateSource,
+): EngineNode {
   return async (context) => {
+    const definition = context.run.blueprint.nodes.find(
+      (node) => node.id === context.nodeId,
+    ) as HeddleFlowcraftNode | undefined;
     const values = {
       ...context.context,
       blueprint: blueprintContext(context.run.blueprint),
+      metadata: definition?.metadata ?? {},
+      node: definition ?? {},
+      input: context.input,
     };
-    const title = template(context.params["title"], values, "title");
-    const message = template(
+    const site = (label: string) => ({
+      commit: context.run.commit,
+      blueprintId: context.run.blueprintId,
+      label,
+      source: templates,
+    });
+    const title = await renderTemplate(
+      context.params["title"],
+      values,
+      site("Notify title"),
+    );
+    const message = await renderTemplate(
       context.params["message"] ?? { inline: "" },
       values,
-      "message",
+      site("Notify message"),
     );
     const url = context.params["url"];
     if (url !== undefined && typeof url !== "string")

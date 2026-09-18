@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { afterEach, vi } from "vitest";
 import type { WorkflowBlueprint } from "flowcraft";
 import { RunStore, WorkflowEngine } from "../../src/engine/index.js";
+import { templateSource } from "./templates.js";
 import { PassService, type PassOptions } from "../../src/pass/index.js";
 import {
   applyThreadEvent,
@@ -213,7 +214,9 @@ export function passFixture(
       model: "sample-model",
     }),
     defaultWorktree: workspace,
-    readArtifact: () => Promise.reject(new Error("unexpected artifact read")),
+    templates: templateSource(() =>
+      Promise.reject(new Error("unexpected artifact read")),
+    ),
     ...overrides,
   };
   let passes: PassService;
