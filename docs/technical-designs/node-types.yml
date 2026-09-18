@@ -78,6 +78,14 @@ proposed-design:
       key. Every node marked `stage: true` writes `stages.<nodeId>` with its
       visit count and, for a `pass`, the thread id and handoff, so later
       nodes can find prior stages by name.
+    - The running blueprint: `blueprint` is a reserved context root that every
+      edge condition, `{ from: <expression> }` reference, and Nunjucks
+      template reads. It carries `blueprint.id` and `blueprint.metadata`, the
+      blueprint's own top-level metadata bag, which is `{}` when none is
+      authored. The engine supplies it from the run's pinned blueprint at
+      evaluation time, so it is never stored in the run context and no node
+      output can replace it. A run reads its own blueprint, never its
+      parent's, and metadata Heddle derives for the engine is not part of it.
   flowcraft-built-ins: |
     - `wait`: pauses until an external resume. Unchanged.
     - `sleep`: pauses until a deadline. Wrapped so the deadline is a wake-up

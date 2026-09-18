@@ -11,6 +11,9 @@ description: >-
   the project, nodes keyed by id, and edges that route on expressions. Each
   node names a node type, carries a metadata bag that becomes part of that
   node's context, and gives the node type its inputs under `params`.
+  The blueprint's own metadata bag is readable in every edge condition,
+  `{ from: <expression> }` reference, and template as `blueprint.metadata`,
+  beside `blueprint.id`; a run reads its own blueprint, never its parent's.
   Prompts are Nunjucks templates rendered with the task context. Handoff
   schemas are JSON Schema written in YAML and are exposed verbatim as the
   handoff tool's input schema, so they must satisfy the MCP tool input
