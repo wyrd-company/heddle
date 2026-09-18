@@ -14,6 +14,14 @@ production tree `3dc21446cfaeb20bec8953916f53d8aeb1357465`. The
 ordering, public native session identities, workflow results, and request timing.
 It contains no endpoint credentials.
 
+Each scenario uses a fresh server, harness profile, hook socket, and workflow
+state. A fixture root can run only one scenario. Retained native session, thread,
+and request identities are unchanged; redaction omits endpoint paths,
+authorization values, and approval command text. Public T3 snapshots supply the
+scenario participant identities. Retention rejects foreign callbacks and native
+identities shared between independently qualified scenarios, and records a
+SHA-256 digest of each raw ordering log.
+
 The [guard evidence](../../test/fixtures/pass-guard-evidence.json) retains each
 compiled mutation, its named failing tests, and the paired restored build and
 full-suite result. Compiler-invalid experiments are listed separately and do not

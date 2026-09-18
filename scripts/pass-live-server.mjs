@@ -7,7 +7,7 @@ import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
 import { fixtureProfiles } from "./pass-fixture-profiles.mjs";
-const [source, root, port = "3987"] = process.argv.slice(2);
+const [source, root, port = "3987", mode = "trusted"] = process.argv.slice(2);
 if (!source || !root)
   throw new Error("Supply T3 source and fresh fixture root");
 const workspace = join(root, "workspace"),
@@ -30,7 +30,9 @@ await exec("git", [
   "-qm",
   "fixture",
 ]);
-const profileEnv = await fixtureProfiles(profile, { trusted: true });
+const profileEnv = await fixtureProfiles(profile, {
+  trusted: mode === "trusted",
+});
 const env = { ...process.env, ...profileEnv };
 await writeFile(join(root, "profile-env.json"), JSON.stringify(profileEnv));
 const tokenFile = join(root, "token");
@@ -80,6 +82,10 @@ await writeFile(
     profile,
     state: join(root, "service"),
     port: Number(port) + 1,
+    t3Head: (
+      await exec("git", ["rev-parse", "HEAD"], { cwd: source })
+    ).stdout.trim(),
+    hookMode: mode,
   }),
 );
 console.log(JSON.stringify({ root, serverPid: server.pid, t3Port: port }));

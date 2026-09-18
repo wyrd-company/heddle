@@ -72,7 +72,12 @@ const engine = new WorkflowEngine(store, {
         .get()?.["count"],
     });
     if (run.status === "completed" || run.status === "failed")
-      process.send?.({ kind: "terminal", status: run.status });
+      process.send?.({
+        kind: "terminal",
+        status: run.status,
+        runId: run.id,
+        at: Date.now(),
+      });
   },
 });
 passes = new PassService(engine, {
@@ -93,11 +98,31 @@ passes = new PassService(engine, {
   },
 });
 const tools = createServer((request, response) => {
+  const owner = store.db
+    .prepare("SELECT data FROM pass_invocations")
+    .all()
+    .map((row) => JSON.parse(String(row["data"])))
+    .find(
+      (item) =>
+        item.binding &&
+        (request.url === item.binding.path ||
+          request.url === `${item.binding.path}/policy`),
+    );
   if (request.url?.endsWith("/policy")) log("policy-request");
   response.once("finish", () => {
     log("tool-response", {
       status: response.statusCode,
       path: request.url?.endsWith("/policy") ? "policy" : "mcp",
+      method: request.method,
+      authorizationPresent: request.headers.authorization !== undefined,
+      endpointOwner: owner
+        ? {
+            runId: owner.runId,
+            nodeId: owner.nodeId,
+            visit: owner.visit,
+            threadId: owner.threadId,
+          }
+        : null,
     });
   });
   void passes.tools.handle(request, response).catch((error) => {
@@ -128,13 +153,13 @@ hooks.decide = async (sessionId) => {
       : null,
     result,
   });
+  if (!mapped)
+    process.send?.({ kind: "terminal-stop", sessionId, at: Date.now() });
   return result;
 };
 const hookServer = createServer((request, response) => {
   response.once("finish", () => {
     log("hook-response", { status: response.statusCode });
-    if (store.list().some((run) => run.status === "completed"))
-      process.send?.({ kind: "terminal-stop" });
   });
   void hooks.handle(request, response);
 });

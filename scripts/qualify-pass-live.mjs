@@ -17,6 +17,11 @@ if (!root) throw new Error("Supply the isolated pass fixture root");
 const connection = JSON.parse(
   await readFile(join(root, "connection.json"), "utf8"),
 );
+await writeFile(
+  join(root, "scenario.json"),
+  JSON.stringify({ provider, scenario }),
+  { flag: "wx" },
+);
 const state = join(root, provider + "-" + scenario + "-" + String(Date.now()));
 console.log(JSON.stringify({ fixtureState: state }));
 await mkdir(state, { recursive: true });
@@ -155,6 +160,7 @@ const spawn = () => {
   return child;
 };
 let service = spawn();
+const terminals = [];
 const wait = async (kind, predicate = () => true) => {
   for (;;) {
     const index = messages.findIndex(
@@ -273,7 +279,7 @@ try {
       await client.close();
     }
     service.send("release");
-    await wait("terminal");
+    terminals.push(await wait("terminal"));
   }
   if (killMid || killTerminal) {
     await wait(killMid ? "status-held" : "handoff-committed");
@@ -288,6 +294,7 @@ try {
     await wait("ready");
   }
   const terminal = await wait("terminal");
+  terminals.push(terminal);
   service.send("state");
   const result = await wait("state");
   await writeFile(join(state, "result.json"), JSON.stringify(result, null, 2));
@@ -315,9 +322,98 @@ try {
       state,
     }),
   );
-  if (scenario !== "observe" && scenario !== "allow")
-    await wait("terminal-stop");
+  if (scenario !== "observe" && scenario !== "allow") {
+    const seen = new Set();
+    for (const view of result.views) {
+      if (seen.has(view.nativeSessionId)) continue;
+      seen.add(view.nativeSessionId);
+      const ended = terminals.find((entry) => entry.runId === view.runId);
+      assert.ok(ended, "each run has its own terminal event");
+      await wait(
+        "terminal-stop",
+        (message) =>
+          message.sessionId === view.nativeSessionId && message.at >= ended.at,
+      );
+    }
+  }
+  await build({
+    entryPoints: ["src/t3code/index.ts"],
+    bundle: true,
+    packages: "external",
+    platform: "node",
+    format: "esm",
+    outfile: join(root, "client.mjs"),
+  });
+  const { T3Client } = await import(join(root, "client.mjs"));
+  const auditClient = T3Client.create({
+    baseUrl: config.t3Url,
+    accessToken: (await readFile(config.tokenFile, "utf8")).trim(),
+  });
+  const participants = [];
+  try {
+    for (const view of result.views) {
+      const thread = await auditClient.threads.get(view.threadId);
+      assert.equal(thread.session.providerThreadId, view.nativeSessionId);
+      participants.push({
+        role: "pass",
+        runId: view.runId,
+        threadId: thread.id,
+        nativeSessionId: thread.session.providerThreadId,
+      });
+    }
+    if (isolation) {
+      const ordinary = JSON.parse(
+        await readFile(join(state, "isolation.json"), "utf8"),
+      );
+      participants.push({
+        role: "ordinary",
+        threadId: ordinary.ordinaryThreadId,
+        nativeSessionId: ordinary.ordinaryNativeSessionId,
+      });
+    }
+  } finally {
+    await auditClient.close();
+  }
+  const ordering = (await readFile(join(state, "ordering.jsonl"), "utf8"))
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  assert.ok(
+    ordering
+      .filter((entry) => entry.kind === "native-stop")
+      .every((entry) =>
+        participants.some(
+          (participant) =>
+            participant.nativeSessionId === entry.data.session_id,
+        ),
+      ),
+    "native callback belongs to this scenario",
+  );
+  if (scenario === "observe")
+    assert.equal(
+      ordering.filter((entry) => entry.kind === "native-stop").length,
+      0,
+    );
+  await writeFile(
+    join(state, "provenance.json"),
+    JSON.stringify(
+      {
+        provider,
+        scenario,
+        hookMode: config.hookMode,
+        t3Head: config.t3Head,
+        sourceHead: (
+          await promisify(execFile)("git", ["rev-parse", "HEAD"])
+        ).stdout.trim(),
+        participants,
+      },
+      null,
+      2,
+    ),
+  );
+  const closed = once(service, "exit");
   service.send("close");
+  await closed;
 } catch (error) {
   if (service.connected) service.send("state");
   await writeFile(join(state, "error.txt"), String(error) + "\n" + errors);
