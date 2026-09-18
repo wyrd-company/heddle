@@ -279,8 +279,13 @@ it("isolates a poisoned instance from another issue's delivery, a poll, and star
   expect(service.instances.get(second.id).runId).not.toBeNull();
 });
 
-const reproDirectory = "/home/vscode/.heddle-dev/uat-961/repro";
-const repro = existsSync(join(reproDirectory, "heddle.sqlite")) ? it : it.skip;
+// A recorded database that once stopped the service from starting. It is
+// supplied by the environment and never committed.
+const reproDirectory = process.env["HEDDLE_INTAKE_REPRO_DIRECTORY"] ?? "";
+const repro =
+  reproDirectory !== "" && existsSync(join(reproDirectory, "heddle.sqlite"))
+    ? it
+    : it.skip;
 
 repro(
   "starts against the recorded database and gives issue 34 a new attempt",
