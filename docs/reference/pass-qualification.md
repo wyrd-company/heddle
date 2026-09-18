@@ -24,8 +24,10 @@ SHA-256 digest of each raw ordering log.
 
 The [guard evidence](../../test/fixtures/pass-guard-evidence.json) retains each
 compiled mutation, its named failing tests, and the paired restored build and
-full-suite result. Compiler-invalid experiments are listed separately and do not
-count as test evidence.
+full-suite result. Each source head names the committed input actually mutated;
+each source-content digest matches the restored guarded file in this revision.
+Later fixture and evidence-only commits do not alter those guarded files.
+Compiler-invalid experiments do not count as test evidence.
 
 | Scenario                              | Measured result                                                                                                                                                    |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -45,12 +47,31 @@ Stop with inert allow. A process killed before returning the MCP response can
 recover the committed handoff without repeating the resume. Cleanup cannot precede
 awaiting-row removal: the committed boundary is the authority for revocation.
 
+The [shared-lifetime control](../../test/fixtures/pass-shared-lifetime-control.json)
+runs two scenarios against one server as an intentional isolation fault. It records
+MCP GET requests with Authorization headers to the completed first pass endpoint
+while the second fixture listens. Their SHA-256 endpoint fingerprints match the
+first pass and differ from the active second pass; the responses are 401 with no
+current endpoint owner. Header presence does not establish credential validity.
+The fresh-lifetime qualification has no pre-terminal MCP 401 responses. The
+kill-after-handoff scenario records one MCP POST returning 401 after the recovered
+run is completed and its endpoint has no owner, before the final inert Stop.
+Terminal policy 401 responses are explicit fixture probes after awaiting-row
+removal.
+
 The deterministic fixture uses the public session and activity events and the
 client's projection tracker. Live observations establish two details it must retain:
 normal user messages can identify Heddle's turn without a `turn-start-requested`
 event; replay containing only a ready session can settle the durable prior turn
 without the client tracker having observed its start in that connection. Approval
 request and resolution timing agrees with the deterministic fixture.
+
+The suite command is `node scripts/qualify-pass-suite.mjs <t3-source> <fresh-root>`.
+It waits for the child server’s actual HTTP listening event before starting each
+scenario and stops that server and its recorded descendants in unconditional
+cleanup. `node scripts/retain-pass-evidence.mjs <root>/manifest.json <output>`
+validates provenance and produces the redacted evidence. The manifest records the
+committed Heddle input before the subsequent evidence-only commit.
 
 The scripts `pass-live-server.mjs` and `qualify-pass-live.mjs` create isolated
 profiles, server state, workflow state, and workspaces. Native credential files are
