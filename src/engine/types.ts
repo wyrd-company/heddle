@@ -78,6 +78,8 @@ export interface EngineNodeContext {
 }
 export type EngineNode = (context: EngineNodeContext) => Promise<unknown>;
 export interface EngineOptions {
+  /** Resolve a requested revision once before a new root run is persisted. */
+  pinCommit?: (revision: string) => Promise<string>;
   resolveBlueprint: (commit: string, id: string) => Promise<WorkflowBlueprint>;
   nodes?: Record<string, EngineNode>;
   clock?: () => number;

@@ -81,3 +81,10 @@ for (const section of [
   }
 }
 EOF
+
+# Exercise repository movement and crash recovery through the installed executable.
+(
+    cd "${repository_root}"
+    HEDDLE_TEST_CLI="${consumer_directory}/node_modules/.bin/heddle" \
+        node_modules/.bin/vitest run test/service-recovery.test.ts
+)

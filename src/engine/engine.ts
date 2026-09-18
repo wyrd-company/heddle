@@ -38,6 +38,9 @@ export class WorkflowEngine {
     const id = input.id ?? randomUUID();
     const run = await createRun(this.store, this.options.resolveBlueprint, {
       ...input,
+      commit: this.options.pinCommit
+        ? await this.options.pinCommit(input.commit)
+        : input.commit,
       id,
       rootId: id,
       parentId: null,

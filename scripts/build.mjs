@@ -20,6 +20,7 @@ await build({
     "fs-native-extensions",
     "graphql",
     "jsonata",
+    "isomorphic-git",
     "nunjucks",
     "yaml",
     "zod",

@@ -130,8 +130,9 @@ export async function startService(
         store,
         config.projects,
         clients,
-        () => Promise.resolve(catalog.list()),
+        () => catalog.list(config.intake?.commit),
         {
+          pinCommit: (revision) => catalog.pin(revision),
           resolveBlueprint: (commit, id) => catalog.resolve(commit, id),
           nodes: {
             policy: catalog.policyNode,

@@ -41,13 +41,13 @@ commands:
 configuration:
   projects: Bound GitHub Project owner and number pairs. An empty list runs an idle service.
   github.credentialFile: GitHub App credential-file path.
-  blueprints.repository: Local blueprint repository root.
+  blueprints.repository: Local Git checkout or blueprint directory within a checkout; execution reads committed Git objects.
   t3Code.endpoint: T3 Code service URL.
   t3Code.tokenFile: Optional bearer-token file path.
   webhook.secretFile: Optional GitHub webhook secret-file path.
   state.databasePath: Optional SQLite database path override.
   polling.intervalMs: Optional positive polling interval in milliseconds; default 30000.
-  intake: Optional default intake blueprint id and pinned commit.
+  intake: Optional default intake blueprint id and Git revision; each new root run resolves the revision once and stores its full commit.
   pass: Required for bound projects; supplies the default model and worktree.
   notifications.pushoverCredentialFile: Optional JSON file containing Pushover token and user fields.
 diagnostics:

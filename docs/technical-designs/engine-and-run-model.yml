@@ -237,7 +237,14 @@ proposed-design:
     is not supported in this version.
     Each run stores the resolved Flowcraft blueprint beside its commit.
     Traversal and recovery consume that stored snapshot; the resolver is
-    called with the pinned commit only when creating a run.
+    called with the pinned commit only when creating a run. The production
+    catalog resolves a requested revision to its full commit before root-run
+    creation. The stored commit is the identity shared by graph resolution,
+    pass prompt and handoff-schema loading, policy evaluation, and restart.
+    The catalog reads Git tree and blob objects through isomorphic-git.
+    Recovery reads referenced artifacts from the stored commit even when the
+    repository working tree or branch has moved. The local object database
+    supplies the pinned commits for the lifetime of their runs.
   pause-and-resume: >
     An operator can pause an instance or an epic. A paused instance keeps
     its live thread untouched and its paused nodes paused; what it loses is

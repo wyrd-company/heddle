@@ -18,13 +18,18 @@ import {
 } from "../src/t3code/test/support/thread-fixtures.js";
 import type { ResolvedServiceConfig } from "../src/service/config.js";
 import { startService } from "../src/service/service.js";
+import { commitFixture, writeSample } from "./support/blueprint-repository.js";
+import type { PassInvocation } from "../src/pass/types.js";
+import type { RunningService } from "../src/service/service.js";
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];
-afterEach(() => {
-  for (const child of children.splice(0))
+afterEach(async () => {
+  const stopped = children.splice(0);
+  for (const child of stopped)
     if (child.exitCode === null && child.signalCode === null)
       child.kill("SIGKILL");
+  await Promise.all(stopped.map(processExit));
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
@@ -32,7 +37,12 @@ afterEach(() => {
 function launch(config: string): ChildProcess {
   const child = spawn(
     process.execPath,
-    [join(process.cwd(), "dist/cli.js"), "start", "--config", config],
+    [
+      process.env["HEDDLE_TEST_CLI"] ?? join(process.cwd(), "dist/cli.js"),
+      "start",
+      "--config",
+      config,
+    ],
     { stdio: ["ignore", "pipe", "pipe"] },
   );
   children.push(child);
@@ -67,15 +77,13 @@ async function processExit(child: ChildProcess): Promise<void> {
   );
 }
 
-it("reopens the production composition and recovers the same paused pass", async () => {
+it("recovers pinned graph prompt schema and policy after packaged process death and repository change", async () => {
   const root = mkdtempSync(join(tmpdir(), "service-recovery-"));
   roots.push(root);
   const blueprints = join(root, "blueprints");
   mkdirSync(blueprints);
-  writeFileSync(
-    join(blueprints, "sample-process.yml"),
-    `id: sample-process\nkind: process\nnodes:\n  inspect:\n    uses: pass\n    params:\n      prompt: { inline: Inspect the sample. }\n      handoff:\n        type: object\n        description: Submit the result.\n        properties:\n          accepted: { type: boolean }\n        required: [accepted]\n  finish:\n    uses: terminal-result\n    params:\n      value: done\nedges:\n  - from: inspect\n    to: finish\n    when: result.output.handoff\n  - from: inspect\n    to: finish\n    when: result.output.escalate\n  - from: inspect\n    to: finish\n    when: result.output.timeout\n  - from: inspect\n    to: finish\n    when: result.output.idle\n  - from: inspect\n    to: finish\n    when: result.output.turnEnded\n  - from: inspect\n    to: finish\n    when: result.output.overridden\n`,
-  );
+  writeSample(blueprints, "first");
+  const firstCommit = commitFixture(blueprints);
   const server = await FakeT3Server.start({ token: "fixture-token" });
   const projects = [makeShellProject({ workspaceRoot: root })];
   const threads: ReturnType<typeof makeShellThread>[] = [];
@@ -159,19 +167,20 @@ it("reopens the production composition and recovers the same paused pass", async
     },
   };
   const io = { output: () => undefined, error: () => undefined };
+  let active: RunningService | undefined;
   try {
-    const first = await startService(config, io);
+    const first = (active = await startService(config, io));
     const paused = await first.engine?.start({
       id: "durable-run",
       blueprintId: "sample-process",
-      commit: "fixture",
+      commit: firstCommit,
     });
     expect(paused?.status).toBe("awaiting");
     await vi.waitFor(() => {
       expect(registrations).toBe(1);
     });
     await first.close();
-    const second = await startService(config, io);
+    const second = (active = await startService(config, io));
     expect(second.engine?.store.get("durable-run").status).toBe("awaiting");
     await vi.waitFor(() => {
       expect(registrations).toBe(2);
@@ -182,38 +191,66 @@ it("reopens the production composition and recovers the same paused pass", async
     const beforeOutput = await packagedStarted(packagedBefore);
     const beforePid = packagedBefore.pid;
     expect(beforeOutput).toContain("tools=http://127.0.0.1:");
+    writeSample(blueprints, "second");
+    const secondCommit = commitFixture(blueprints);
+    writeSample(blueprints, "uncommitted");
     packagedBefore.kill("SIGKILL");
     await processExit(packagedBefore);
-
-    const db = new DatabaseSync(config.databasePath);
-    const row = db
-      .prepare("SELECT data FROM pass_invocations WHERE run_id=?")
-      .get("durable-run");
-    const invocation = JSON.parse(String(row?.["data"])) as {
-      binding: { path: string; token: string };
-    };
-    db.close();
 
     const packagedAfter = launch(configPath);
     const afterOutput = await packagedStarted(packagedAfter);
     const afterPid = packagedAfter.pid;
-    const origin = /tools=(http:\/\/127\.0\.0\.1:\d+)/u.exec(afterOutput)?.[1];
+    let origin = /tools=(http:\/\/127\.0\.0\.1:\d+)/u.exec(afterOutput)?.[1];
     expect(origin).toBeDefined();
-    const response = await fetch(String(origin) + invocation.binding.path, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${invocation.binding.token}`,
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name: "handoff", arguments: { accepted: true } },
-      }),
+    const readPass = (runId: string, nodeId: string): PassInvocation => {
+      const db = new DatabaseSync(config.databasePath, { readOnly: true });
+      try {
+        const row = db
+          .prepare(
+            "SELECT data FROM pass_invocations WHERE run_id=? AND json_extract(data, '$.nodeId')=?",
+          )
+          .get(runId, nodeId);
+        return JSON.parse(String(row?.["data"])) as PassInvocation;
+      } finally {
+        db.close();
+      }
+    };
+    const handoff = async (
+      runId: string,
+      nodeId: string,
+      arguments_: Record<string, boolean>,
+    ) => {
+      const item = readPass(runId, nodeId);
+      expect(item.binding).not.toBeNull();
+      if (!item.binding) throw new Error("Pass binding is missing");
+      const response = await fetch(String(origin) + item.binding.path, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${item.binding.token}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "handoff", arguments: arguments_ },
+        }),
+      });
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).not.toContain('"isError":true');
+    };
+    await handoff("durable-run", "inspect", { accepted: true });
+    await vi.waitFor(() => {
+      expect(readPass("durable-run", "measure").phase).toBe("active");
     });
-    expect(response.status).toBe(200);
+    const pinnedPass = readPass("durable-run", "measure");
+    expect(pinnedPass.prompt).toBe("Inspect the first parcel.\r\n");
+    expect(pinnedPass.details["agentTools"]).toMatchObject({
+      handoff: { required: ["first"] },
+    });
+    await handoff("durable-run", "measure", { first: true });
     expect(beforePid).toBeTypeOf("number");
     packagedAfter.kill("SIGTERM");
     await processExit(packagedAfter);
@@ -223,11 +260,69 @@ it("reopens the production composition and recovers the same paused pass", async
         .prepare("SELECT status FROM runs WHERE id=?")
         .get("durable-run")?.["status"],
     ).toBe("completed");
+    const pinnedRow = verified
+      .prepare("SELECT blueprint_commit, context FROM runs WHERE id=?")
+      .get("durable-run");
+    const pinnedContext = JSON.parse(String(pinnedRow?.["context"])) as Record<
+      string,
+      unknown
+    >;
+    expect(pinnedRow?.["blueprint_commit"]).toBe(firstCommit);
+    expect(pinnedContext["result"]).toBe("first-graph");
+    expect(pinnedContext["_outputs.choose"]).toMatchObject({ id: "first" });
     verified.close();
+
+    const latest = (active = await startService(config, io));
+    const newRun = await latest.engine?.start({
+      id: "new-run",
+      blueprintId: "sample-process",
+      commit: secondCommit,
+    });
+    expect(newRun?.commit).toBe(secondCommit);
+    await latest.close();
+    const packagedNew = launch(configPath);
+    const newOutput = await packagedStarted(packagedNew);
+    origin = /tools=(http:\/\/127\.0\.0\.1:\d+)/u.exec(newOutput)?.[1];
+    await handoff("new-run", "inspect", { accepted: true });
+    await vi.waitFor(() => {
+      expect(readPass("new-run", "measure").phase).toBe("active");
+    });
+    expect(readPass("new-run", "measure").prompt).toBe(
+      "Inspect the second parcel.\r\n",
+    );
+    expect(readPass("new-run", "measure").details["agentTools"]).toMatchObject({
+      handoff: { required: ["second"] },
+    });
+    await handoff("new-run", "measure", { second: true });
+    packagedNew.kill("SIGTERM");
+    await processExit(packagedNew);
+    const newer = new DatabaseSync(config.databasePath, { readOnly: true });
+    try {
+      const row = newer
+        .prepare("SELECT status, context FROM runs WHERE id=?")
+        .get("new-run");
+      expect(row?.["status"]).toBe("completed");
+      const context = JSON.parse(String(row?.["context"])) as Record<
+        string,
+        unknown
+      >;
+      expect(context["result"]).toBe("second-graph");
+      expect(context["_outputs.choose"]).toMatchObject({ id: "second" });
+    } finally {
+      newer.close();
+    }
     writeFileSync(
-      "/tmp/task994-live-proof.json",
+      "/tmp/task997-live-proof.json",
       JSON.stringify(
         {
+          firstCommit,
+          secondCommit,
+          liveContent: "uncommitted",
+          pinnedPrompt: pinnedPass.prompt,
+          pinnedSchema: "first",
+          pinnedPolicy: "first",
+          pinnedGraph: "first-graph",
+          newContent: "second",
           storePath: config.databasePath,
           runId: "durable-run",
           before: {
@@ -248,6 +343,11 @@ it("reopens the production composition and recovers the same paused pass", async
       ) + "\n",
     );
   } finally {
+    for (const child of children)
+      if (child.exitCode === null && child.signalCode === null)
+        child.kill("SIGKILL");
+    await Promise.all(children.map(processExit));
+    await active?.close();
     await server.close();
   }
 }, 15_000);
