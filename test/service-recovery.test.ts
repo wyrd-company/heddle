@@ -18,6 +18,7 @@ import {
 } from "../src/t3code/test/support/thread-fixtures.js";
 import type { ResolvedServiceConfig } from "../src/service/config.js";
 import { startService } from "../src/service/service.js";
+import { serviceHookSocket } from "../src/service/identity.js";
 import { commitFixture, writeSample } from "./support/blueprint-repository.js";
 import type { PassInvocation } from "../src/pass/types.js";
 import type { RunningService } from "../src/service/service.js";
@@ -201,7 +202,7 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     const beforePid = packagedBefore.pid;
     expect(beforeOutput).toContain("tools=http://127.0.0.1:");
     expect(beforeOutput).toContain(
-      `hooks=${join(root, "state", "hooks.sock")}`,
+      `hooks=${serviceHookSocket(config.stateDirectory, config.databasePath)}`,
     );
     writeSample(blueprints, "second");
     const secondCommit = commitFixture(blueprints);

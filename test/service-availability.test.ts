@@ -26,6 +26,8 @@ import { startService, type RunningService } from "../src/service/service.js";
 import { serviceHookSocket } from "../src/service/identity.js";
 import type { ResolvedServiceConfig } from "../src/service/config.js";
 
+import { commitFixture, fixtureGit } from "./support/blueprint-repository.js";
+
 const roots: string[] = [];
 const services: RunningService[] = [];
 afterEach(async () => {
@@ -62,6 +64,7 @@ edges:
   - { from: inspect, to: finish, when: result.output.overridden }
 `,
   );
+  commitFixture(repository);
   const secretFile = join(root, "webhook-secret");
   writeFileSync(secretFile, "fixture-secret");
   return {
@@ -114,7 +117,7 @@ it("gates valid mutating webhook and tool requests throughout engine and pass re
   await seed.start({
     id: "sample-run",
     blueprintId: "sample-process",
-    commit: "fixture",
+    commit: fixtureGit(config.blueprints.repository, "rev-parse", "HEAD"),
   });
   seeded.db.exec("CREATE TABLE request_effects (kind TEXT NOT NULL)");
   seeded.close();
