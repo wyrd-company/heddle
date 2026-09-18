@@ -10,8 +10,12 @@ relationships:
 # GitHub binding, delivery, and intake
 
 `GitHubBindingService` binds GitHub Projects to workflow instances. `start()`
-reconciles project fields, discovers open issues, repairs lifecycle attachments,
-and starts the configured intake for every instance without a lifecycle.
+first checks every node in the loaded blueprint repository against the node
+types composed into that service. An unavailable type stops startup with the
+blueprint id, node id, type, and required configuration before project
+reconciliation, recovery, intake, or other external effects. After that check,
+`start()` reconciles project fields, discovers open issues, repairs lifecycle
+attachments, and starts the configured intake for every instance without a lifecycle.
 `poll()` performs the same discovery and intake work before it diffs known issue
 and card snapshots.
 
@@ -82,8 +86,11 @@ keeps the expected issue type in one input, uses that input for its immutable
 wake binding and notification message, retries intake after a matching change,
 and sends attention after its authored `PT24H` deadline.
 
-Register `PushoverDelivery` as `options.notifications` to enable the shipped
-`notify` node:
+Register `PushoverDelivery` as `options.notifications` when any loaded blueprint
+uses `notify`. Notification delivery remains optional when the loaded repository
+does not use `notify`. The service rejects startup when a loaded `notify` node
+has no configured delivery. This service compatibility check does not apply to
+the `heddle validate` authoring command.
 
 ```ts
 new PushoverDelivery({

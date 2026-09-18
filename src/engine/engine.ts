@@ -16,6 +16,15 @@ import { DurableTraversal } from "./traversal.js";
 import { childOutputs } from "./child-outputs.js";
 import { lifecycleStart } from "./lifecycle-start.js";
 
+const builtInNodeTypes = new Set([
+  "aggregate",
+  "child-run",
+  "lifecycle-start",
+  "sleep",
+  "terminal-result",
+  "wait",
+]);
+
 export class WorkflowEngine {
   readonly wakeups: Wakeups;
   private readonly clock: () => number;
@@ -27,6 +36,11 @@ export class WorkflowEngine {
     this.active = store.active;
     this.clock = options.clock ?? Date.now;
     this.wakeups = new Wakeups(store);
+  }
+  supportsNodeType(type: string): boolean {
+    return (
+      builtInNodeTypes.has(type) || this.options.nodes?.[type] !== undefined
+    );
   }
   async start(input: {
     blueprintId: string;

@@ -14,7 +14,10 @@ import {
   loadValidatedBlueprint,
   validateBlueprintPath,
 } from "../src/blueprints/validate.js";
-import { PushoverDelivery } from "../src/binding/notify.js";
+import {
+  PushoverDelivery,
+  type NotificationDelivery,
+} from "../src/binding/notify.js";
 import { GitHubBindingService } from "../src/binding/service.js";
 import { resolveValues } from "../src/engine/runtime.js";
 import { RunStore } from "../src/engine/store.js";
@@ -69,7 +72,7 @@ function policyNode() {
 function setup(
   options: {
     now?: () => number;
-    notification?: PushoverDelivery;
+    notification?: NotificationDelivery | null;
     type?: string;
   } = {},
 ) {
@@ -100,9 +103,15 @@ function setup(
     },
     {
       intake: { blueprintId: "default-intake", commit: "revision" },
-      ...(options.notification === undefined
+      ...(options.notification === null
         ? {}
-        : { notifications: options.notification }),
+        : {
+            notifications:
+              options.notification ??
+              ({
+                send: () => Promise.resolve(),
+              } satisfies NotificationDelivery),
+          }),
     },
   );
   return { github, service, store };
@@ -110,6 +119,16 @@ function setup(
 
 it("ships valid replaceable intake and hold blueprints", () => {
   expect(validateBlueprintPath(directory)).toEqual([]);
+});
+
+it("rejects the shipped notify node before startup effects when notification delivery is absent", async () => {
+  const { github, service, store } = setup({ notification: null });
+
+  await expect(service.start()).rejects.toThrow(
+    'Blueprint runtime capability check failed:\n- blueprint "hold-then-attention", node "notify-attention": node type "notify" is unavailable; configure options.notifications to enable notification delivery',
+  );
+  expect(github.transport.calls).toHaveLength(0);
+  expect(store.list()).toHaveLength(0);
 });
 
 it("binds the hold condition and prompt to its one expected type input", () => {

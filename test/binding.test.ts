@@ -60,6 +60,30 @@ function setup(
   );
   return { ...wire, path, store, service, blueprints };
 }
+
+it("starts without notification delivery when loaded blueprints do not use notify", async () => {
+  const f = setup();
+
+  await expect(f.service.start()).resolves.toBeUndefined();
+  expect(f.service.instances.list()).toHaveLength(1);
+});
+
+it("rejects an unavailable loaded node type before binding effects", async () => {
+  const f = setup([
+    {
+      id: "sample-process",
+      kind: "process",
+      nodes: { sample: { uses: "unavailable-sample" } },
+    },
+  ]);
+
+  await expect(f.service.start()).rejects.toThrow(
+    'blueprint "sample-process", node "sample": node type "unavailable-sample" is unavailable; register a runtime implementation for node type "unavailable-sample"',
+  );
+  expect(f.transport.calls).toHaveLength(0);
+  expect(f.store.list()).toHaveLength(0);
+});
+
 const relatedIssue = (number: number) => ({
   id: `I_${String(number)}`,
   number,

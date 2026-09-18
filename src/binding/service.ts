@@ -30,6 +30,30 @@ export interface BindingServiceOptions {
   intake?: { blueprintId: string; commit: string };
   notifications?: NotificationDelivery;
 }
+
+function assertRuntimeCapabilities(
+  blueprints: readonly Blueprint[],
+  supports: (type: string) => boolean,
+  notificationsConfigured: boolean,
+): void {
+  const unavailable = blueprints.flatMap((blueprint) =>
+    Object.entries(blueprint.nodes).flatMap(([nodeId, node]) => {
+      if (supports(node.uses)) return [];
+      const remedy =
+        node.uses === "notify" && !notificationsConfigured
+          ? "configure options.notifications to enable notification delivery"
+          : `register a runtime implementation for node type \"${node.uses}\"`;
+      return [
+        `blueprint \"${blueprint.id}\", node \"${nodeId}\": node type \"${node.uses}\" is unavailable; ${remedy}`,
+      ];
+    }),
+  );
+  if (unavailable.length > 0)
+    throw new Error(
+      `Blueprint runtime capability check failed:\n- ${unavailable.join("\n- ")}`,
+    );
+}
+
 export class GitHubBindingService {
   readonly instances: InstanceStore;
   readonly engine: WorkflowEngine;
@@ -49,28 +73,29 @@ export class GitHubBindingService {
     private readonly options: BindingServiceOptions = {},
   ) {
     this.instances = new InstanceStore(store.db);
+    const runtimeNodes: NonNullable<EngineOptions["nodes"]> = {
+      ...engineOptions.nodes,
+      "on-issue-change": onIssueChange,
+      ...(options.notifications === undefined
+        ? {}
+        : { notify: notifyNode(options.notifications) }),
+      github: async (context) => {
+        try {
+          const bound = this.bound(context);
+          await githubEffect(
+            context,
+            bound.project,
+            bound.client,
+            this.instances,
+          );
+        } catch (error) {
+          await permissionAttention(error, context, store);
+        }
+      },
+    };
     this.engine = new WorkflowEngine(store, {
       ...engineOptions,
-      nodes: {
-        ...engineOptions.nodes,
-        "on-issue-change": onIssueChange,
-        ...(options.notifications === undefined
-          ? {}
-          : { notify: notifyNode(options.notifications) }),
-        github: async (context) => {
-          try {
-            const bound = this.bound(context);
-            await githubEffect(
-              context,
-              bound.project,
-              bound.client,
-              this.instances,
-            );
-          } catch (error) {
-            await permissionAttention(error, context, store);
-          }
-        },
-      },
+      nodes: runtimeNodes,
       beforeNode: async (context, definition) => {
         await engineOptions.beforeNode?.(context, definition);
         if ((definition as { stage?: boolean }).stage !== true) return;
@@ -109,6 +134,11 @@ export class GitHubBindingService {
   }
   async reconcile(): Promise<void> {
     const blueprints = await this.blueprints();
+    assertRuntimeCapabilities(
+      blueprints,
+      (type) => this.engine.supportsNodeType(type),
+      this.options.notifications !== undefined,
+    );
     const projects: typeof this.projects = new Map();
     for (const binding of this.bindings) {
       const key = `${binding.owner}/${String(binding.number)}`;
