@@ -41,7 +41,7 @@ commands:
 configuration:
   projects: Bound GitHub Project owner and number pairs. An empty list runs an idle service.
   github.credentialFile: GitHub App credential-file path.
-  blueprints.repository: Local Git checkout or blueprint directory within a checkout; execution reads committed Git objects.
+  blueprints.repository: The blueprint root; a local Git checkout or a directory within one. Execution reads committed Git objects.
   t3Code.endpoint: T3 Code service URL.
   t3Code.tokenFile: Optional bearer-token file path.
   webhook.secretFile: GitHub webhook secret-file path; required when webhook configuration is present.

@@ -228,7 +228,7 @@ proposed-design:
     the source for the console, for Flowcraft's replay, and for retention
     decisions. Retention rules are configuration, not code.
   blueprint-pinning: >
-    A run pins the blueprint repository commit it started from, which covers
+    A run pins the blueprint root commit it started from, which covers
     the blueprint and every prompt, handoff schema, and rules file it
     references. Child runs pin the same commit as their parent. Lifecycle starts pin the
     same commit as their intake source. A new

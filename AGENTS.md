@@ -49,6 +49,16 @@ Read them before adding either.
   own GitHub App with write permissions. Agents hold narrower credentials
   and never Heddle's.
 
+## Glossary
+
+**Blueprint root** - the directory a Heddle service is pointed at through
+`blueprints.repository`, or that `heddle validate` is given. Heddle finds
+every blueprint inside it and reaches nothing above it. Every path a
+blueprint writes resolves from the blueprint root, never from the directory
+of the blueprint file that wrote it. It is not necessarily the top of the git
+checkout: a blueprint directory inside a larger repository is a blueprint
+root.
+
 ## How work runs
 
 - Every issue in a bound GitHub Project is a workflow instance from the moment
@@ -71,8 +81,8 @@ Read them before adding either.
   answers the thread directly.
 - Handoff is a tool defined per stage with JSON Schema. The agent must call it
   to finish the stage.
-- Blueprints are YAML files in a git repository, pinned per instance to a
-  commit. The engine may use JSON internally. Translation is never lossy
+- Blueprints are YAML files in a blueprint root under git, pinned per
+  instance to a commit. The engine may use JSON internally. Translation is never lossy
   and keeps comments. Edge conditions are JSONata. Prompts are Nunjucks
   templates. The file format is `docs/specifications/blueprint.yml`.
 - Timeouts exist only where a blueprint author writes a duration, and a

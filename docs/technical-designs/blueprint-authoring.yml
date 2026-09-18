@@ -32,8 +32,10 @@ design-challenges:
     with a reason, before any project or thread is touched.
 proposed-design:
   high-level-overview: >
-    A blueprint repository is a git repository the service reads. Each
-    blueprint is one YAML file. The loader parses YAML into a document model
+    The blueprint root is the directory the service reads, inside a git
+    repository. Each blueprint is one YAML file, in the root or any
+    subdirectory of it, and every path a blueprint writes is relative to the
+    root rather than to the file that wrote it. The loader parses YAML into a document model
     that preserves comments, derives a Flowcraft blueprint from it, lints
     the result with Flowcraft's linter plus Heddle's rules, and caches the
     JSON by commit. Writers, whether an agent tool, a console editor,
@@ -97,7 +99,7 @@ proposed-design:
     specified as a command-line-interface specification when the CLI is
     built.
   pinning-and-change: >
-    The service reads the blueprint repository at a commit. A run pins that
+    The service reads the blueprint root at a commit. A run pins that
     commit, which covers the blueprint and every file it references. A new
     commit changes what new instances get; running instances keep their
     commit until they finish. Moving a running instance to a newer commit
@@ -109,12 +111,12 @@ proposed-design:
     repository validation, YAML byte round-trip checks, and graph derivation
     used by the authoring CLI. It retains the validated graph and artifact
     text by commit and removes the temporary tree. Relative artifact paths
-    and symlinks remain bound to the blueprint directory. Repository metadata
+    and symlinks remain bound to the blueprint root. Repository metadata
     and object-read diagnostics identify the requested revision without
     including repository URLs, absolute repository paths, or raw Git errors.
     Reference diagnostics use the finding's structured reference identity and
     apply the same safe identity filter used for revisions and artifacts. The
-    configured directory can be a repository root or a
+    The blueprint root can be a repository root or a
     directory within a checkout, including a linked worktree.
   authoring-help: >
     An author reference is generated from the node-type contracts: every

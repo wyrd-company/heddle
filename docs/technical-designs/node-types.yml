@@ -267,17 +267,17 @@ proposed-design:
     (templates; see the template contract below), `url`. Fire and forget; the
     output is the delivery receipt.
   templates: |
-    One renderer serves every `templateRef`. A string is a path to a file
-    beside the blueprint, `{ inline }` is template text, and both render as
+    One renderer serves every `templateRef`. A string is a path from the
+    blueprint root, `{ inline }` is template text, and both render as
     Nunjucks with autoescaping off and undefined values fatal. The render
     context is the run context, the running blueprint as `blueprint`, and the
     node's own `metadata`, `node`, and `input`.
 
     A `templateRef` path is read from the run's pinned commit. A template may
     load another with `include`, `import`, or `extends`; those targets are
-    paths from the blueprint repository root at that same commit, through a
+    paths from the same blueprint root at that same commit, through a
     loader over the pinned tree. A run's templates never change under it, and
-    a target that leaves the repository is refused.
+    a target that leaves the blueprint root is refused.
   policy: |
     Inputs: `rules` (a reference to a rules artifact in the blueprint
     repository), `input` (defaults to the issue).
@@ -302,9 +302,9 @@ proposed-design:
     - names a role in `question` that no configured channel serves
     - has a `when` expression that is not valid JSONata
     - references a template, schema, or rules file that does not exist
-      beside the blueprint
+      inside the blueprint root
     - names a literal `include`, `import`, or `extends` target that is absent
-      from the blueprint repository or that leaves it
+      from the blueprint root or that leaves it
     - reads a context key that no earlier node or the initial context
       provides, when that can be determined statically
     - declares a stage whose name is not a valid project single-select

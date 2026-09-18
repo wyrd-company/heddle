@@ -124,8 +124,12 @@ pass:
 `projects` lists the bound GitHub Projects. An empty list runs an idle service.
 `github.credentialFile` points to
 Heddle's GitHub App credential file. `t3Code.endpoint` names the T3 Code
-server, and `t3Code.tokenFile` points to its bearer token. The blueprint
-repository is a local Git checkout or a blueprint directory within one.
+server, and `t3Code.tokenFile` points to its bearer token.
+`blueprints.repository` is the blueprint root: a local Git checkout or a
+directory within one. Heddle finds every blueprint inside that root and
+reaches nothing above it, and every path a blueprint writes - a template, a
+handoff contract, a policy rule artifact - resolves from the root rather than
+from the directory of the blueprint file that wrote it.
 `intake.commit` selects the Git revision for new intake runs. A run stores its
 full commit and resolved graph; templates, handoff schemas, and policies come
 from that commit on execution and restart. Working-tree edits do not change a

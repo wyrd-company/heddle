@@ -1035,7 +1035,7 @@ it("reports a notify message path that does not exist", () => {
   ]);
 });
 
-it("reports an include target missing from the blueprint repository", () => {
+it("reports an include target missing from the blueprint root", () => {
   const directory = templateRepository(
     "summary.njk",
     'Done. {% include "shared/absent.njk" %}',
@@ -1044,11 +1044,11 @@ it("reports an include target missing from the blueprint repository", () => {
     validateBlueprintPath(directory).map((item) => [item.rule, item.message]),
   ).toContainEqual([
     "reference.exists",
-    "Included template does not exist in the blueprint repository (shared/absent.njk)",
+    "Included template does not exist in the blueprint root (shared/absent.njk)",
   ]);
 });
 
-it("reports an include target that leaves the blueprint repository", () => {
+it("reports an include target that leaves the blueprint root", () => {
   const directory = templateRepository(
     "summary.njk",
     'Done. {% include "../outside.njk" %}',
@@ -1057,7 +1057,7 @@ it("reports an include target that leaves the blueprint repository", () => {
     validateBlueprintPath(directory).map((item) => [item.rule, item.message]),
   ).toContainEqual([
     "reference.exists",
-    "Included template must stay inside the blueprint repository (../outside.njk)",
+    "Included template must stay inside the blueprint root (../outside.njk)",
   ]);
 });
 

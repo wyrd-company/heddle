@@ -40,8 +40,8 @@ function templateText(directory: string, value: unknown): string | undefined {
 }
 
 /**
- * Literal template-loading targets resolve from the blueprint repository
- * root, so they are only checkable when the whole repository is validated.
+ * Literal template-loading targets resolve from the blueprint root, so they
+ * are only checkable when a whole blueprint root is validated.
  */
 export function validateIncludes(
   root: string,
@@ -70,7 +70,7 @@ export function validateIncludes(
               file: filePath,
               node: template.node,
               rule: "reference.exists",
-              message: `Included template must stay inside the blueprint repository (${target})`,
+              message: `Included template must stay inside the blueprint root (${target})`,
               reference: target,
             });
             continue;
@@ -82,7 +82,7 @@ export function validateIncludes(
               file: filePath,
               node: template.node,
               rule: "reference.exists",
-              message: `Included template does not exist in the blueprint repository (${target})`,
+              message: `Included template does not exist in the blueprint root (${target})`,
               reference: target,
             });
           }

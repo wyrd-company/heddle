@@ -55,7 +55,7 @@ const rootUsage = `Usage: heddle <command>
 
 Commands:
   start       Start the service
-  validate    Validate a blueprint file or repository
+  validate    Validate a blueprint file or blueprint root
   skill       Work with embedded skills
   hook        Handle an agent harness hook
 

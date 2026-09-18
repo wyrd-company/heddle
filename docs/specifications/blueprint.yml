@@ -15,14 +15,13 @@ description: >-
   `{ from: <expression> }` reference, and template as `blueprint.metadata`,
   beside `blueprint.id`; a run reads its own blueprint, never its parent's.
   Every `templateRef` is a Nunjucks template and behaves the same way: a
-  string is a path to a file beside the blueprint, `{ inline }` is template
+  string is a path from the blueprint root, `{ inline }` is template
   text, and both render with the task context, the running blueprint, and the
   node's own metadata, definition, and input. A path is read from the run's
   pinned commit. A template may load another with `include`, `import`, or
-  `extends`; those targets are paths from the blueprint repository root at the
-  same pinned commit, so the two bases differ: a `templateRef` path is beside
-  the blueprint, and a loaded target is from the repository root. A target
-  outside the repository is refused. Handoff
+  `extends`; those targets are paths from the blueprint root at the same
+  pinned commit, on the one base every blueprint path shares. A target
+  outside the blueprint root is refused. Handoff
   schemas are JSON Schema written in YAML and are exposed verbatim as the
   handoff tool's input schema, so they must satisfy the MCP tool input
   schema constraints. Blueprints never carry action edges and never use
@@ -42,8 +41,17 @@ description: >-
   returns an object in authored binding order; missing values fail.
   A graph in which every node has an incoming edge declares the node where
   execution begins with `entry`. `docs/specifications/blueprint.schema.yml`
-  is the machine-readable blueprint definition. Policy nodes reference an
-  ordered policy rule artifact beside the blueprint. Each rule has a stable
+  is the machine-readable blueprint definition.
+  The blueprint root is the directory a Heddle service or `heddle validate`
+  is pointed at. Heddle finds every blueprint inside it, in that directory or
+  any subdirectory, and reaches nothing above it. It is not necessarily the
+  top of the git checkout; a blueprint directory within a larger checkout is
+  a blueprint root. Every path a blueprint writes - a template, a handoff
+  contract, a policy rule artifact - is relative to the blueprint root, never
+  to the directory of the blueprint file that wrote it. A path that would
+  leave the root is refused, and execution reads it from the run's pinned
+  commit. Policy nodes reference an
+  ordered policy rule artifact. Each rule has a stable
   id, an optional JSONata condition, a selected blueprint, and optional input
   bindings. Rule ids are unique, and a rule without a condition is the final
   fallback.
@@ -55,10 +63,10 @@ validation-criteria: >-
   slugs. `entry`, when present, names an existing node; it is required when
   the graph has no natural entry node. Every edge names two existing node ids.
   Every `when` expression is a syntactically valid JSONata expression. Every path in a
-  `templateRef`, `schemaRef`, or `policy.rules` resolves to a file beside the
-  blueprint. Every literal `include`, `import`, or `extends` target in a
-  template resolves to a file within the blueprint repository, checked when a
-  repository directory is validated. A referenced policy rules file validates against
+  `templateRef`, `schemaRef`, or `policy.rules` resolves to a file inside the
+  blueprint root. Every literal `include`, `import`, or `extends` target in a
+  template resolves to a file inside the blueprint root, checked when a
+  blueprint root is validated. A referenced policy rules file validates against
   `docs/specifications/policy-rule.schema.yml` interpreted as JSON Schema
   Draft 2020-12. Input bindings are literal values or `{ from: <expression> }`
   references evaluated over the policy input. Rule ids are unique within the
