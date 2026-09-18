@@ -31,7 +31,10 @@ function loaderFor(site: TemplateSite): nunjucks.ILoaderAsync {
       try {
         identity = repositoryPath(name);
       } catch (error) {
-        callback(error instanceof Error ? error : new Error(String(error)), null);
+        callback(
+          error instanceof Error ? error : new Error(String(error)),
+          null,
+        );
         return;
       }
       const source = site.source;
@@ -49,7 +52,10 @@ function loaderFor(site: TemplateSite): nunjucks.ILoaderAsync {
           callback(null, { src, path: identity, noCache: true });
         },
         (error: unknown) => {
-          callback(error instanceof Error ? error : new Error(String(error)), null);
+          callback(
+            error instanceof Error ? error : new Error(String(error)),
+            null,
+          );
         },
       );
     },

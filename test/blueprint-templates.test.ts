@@ -160,9 +160,10 @@ it("delivers a notify message from the file pinned at the run's commit", async (
   const catalog = new BlueprintCatalog(root);
   const blueprint = await catalog.resolve(commit, "sample-process");
   const sent = recorder();
-  await notifyNode(sent.delivery, catalog)(
-    nodeContext(blueprint, commit, "announce"),
-  );
+  await notifyNode(
+    sent.delivery,
+    catalog,
+  )(nodeContext(blueprint, commit, "announce"));
   expect(sent.notifications).toEqual([
     { title: "Card reviewed", message: "Reviewed cards#12 on the first pass." },
   ]);
@@ -176,9 +177,10 @@ it("renders dotted references in a notify template", async () => {
   const catalog = new BlueprintCatalog(root);
   const blueprint = await catalog.resolve(commit, "sample-process");
   const sent = recorder();
-  await notifyNode(sent.delivery, catalog)(
-    nodeContext(blueprint, commit, "announce"),
-  );
+  await notifyNode(
+    sent.delivery,
+    catalog,
+  )(nodeContext(blueprint, commit, "announce"));
   expect(sent.notifications[0]?.message).toBe(
     "cards#12 belongs to upper-shelf.",
   );
@@ -196,9 +198,10 @@ it("resolves a notify include from the repository root", async () => {
   const catalog = new BlueprintCatalog(root);
   const blueprint = await catalog.resolve(commit, "sample-process");
   const sent = recorder();
-  await notifyNode(sent.delivery, catalog)(
-    nodeContext(blueprint, commit, "announce"),
-  );
+  await notifyNode(
+    sent.delivery,
+    catalog,
+  )(nodeContext(blueprint, commit, "announce"));
   expect(sent.notifications[0]?.message).toBe(
     "Reviewed. Filed under upper-shelf.",
   );
@@ -224,7 +227,10 @@ it("refuses an include that leaves the repository root", async () => {
   const blueprint = await catalog.resolve(commit, "sample-process");
   const sent = recorder();
   await expect(
-    notifyNode(sent.delivery, catalog)(
+    notifyNode(
+      sent.delivery,
+      catalog,
+    )(
       nodeContext(blueprint, commit, "announce", {
         issue: { ref: "cards#12" },
         escape: "../outside.njk",
@@ -241,10 +247,11 @@ it("fails a notify node whose template reads an undefined value", async () => {
   const blueprint = await catalog.resolve(commit, "sample-process");
   const sent = recorder();
   await expect(
-    notifyNode(sent.delivery, catalog)(
-      nodeContext(blueprint, commit, "announce"),
-    ),
-  ).rejects.toThrow('attempted to output null or undefined value');
+    notifyNode(
+      sent.delivery,
+      catalog,
+    )(nodeContext(blueprint, commit, "announce")),
+  ).rejects.toThrow("attempted to output null or undefined value");
   expect(sent.notifications).toEqual([]);
 });
 
@@ -257,14 +264,14 @@ it("delivers the shipped collection-catalog record message", async () => {
   const catalog = new BlueprintCatalog(root);
   const blueprint = await catalog.resolve(commit, "collection-catalog");
   const sent = recorder();
-  await notifyNode(sent.delivery, catalog)(
-    nodeContext(blueprint, commit, "record"),
-  );
+  await notifyNode(
+    sent.delivery,
+    catalog,
+  )(nodeContext(blueprint, commit, "record"));
   expect(sent.notifications).toEqual([
     {
       title: "Collection accepted",
-      message:
-        "Record the accepted collection under community-collection.\n",
+      message: "Record the accepted collection under community-collection.\n",
     },
   ]);
 });
