@@ -31,6 +31,22 @@ install -d -m 0755 "$(dirname "${GITHUBAPPCREDENTIALSFILE}")"
 install -d -m 0755 "$(dirname "${T3CODETOKENFILE}")"
 install -d -m 0755 "$(dirname "${WEBHOOKSECRETFILE}")"
 
+if [ ! -e "${CONFIGFILE}" ]; then
+    cat >"${CONFIGFILE}" <<EOF
+projects: []
+github:
+  credentialFile: ${GITHUBAPPCREDENTIALSFILE}
+blueprints:
+  repository: /usr/local/share/heddle/blueprints
+t3Code:
+  endpoint: http://127.0.0.1:3773
+webhook:
+  secretFile: ${WEBHOOKSECRETFILE}
+EOF
+    chown "${service_user}:${service_group}" "${CONFIGFILE}"
+    chmod 0640 "${CONFIGFILE}"
+fi
+
 feature_directory="$(dirname "$0")"
 package_path="$(find_single_package "${feature_directory}")"
 

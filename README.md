@@ -67,12 +67,15 @@ and live test commands.
 
 ## Run
 
-`heddle validate` checks blueprints. Harnesses invoke `heddle hook stop claude`
+`heddle start` runs the production service. `heddle validate` checks blueprints. Harnesses invoke `heddle hook stop claude`
 or `heddle hook stop codex` to check the current turn-end policy. See the
 [agent tools and hook reference](docs/reference/agent-tools.md) for installation,
 worktree files, and Codex observation enforcement.
 
-The `start` and `skill` command groups print their usage and return status 2.
+The default configuration is `~/.config/heddle/config.yml`; the default state
+directory is `~/.local/state/heddle/`, containing `heddle.sqlite`. See the
+[command-line reference](docs/reference/command-line.md) for overrides,
+signals, diagnostics, writer ownership, and recovery.
 
 ```sh
 heddle --help
@@ -107,15 +110,31 @@ blueprints:
   repository: /workspaces/blueprints
 webhook:
   secretFile: /run/secrets/heddle-webhook-secret
+state:
+  databasePath: /var/lib/heddle/heddle.sqlite
+polling:
+  intervalMs: 30000
+pass:
+  defaultModel:
+    instanceId: sample-provider
+    model: sample-model
+  defaultWorktree: /workspaces
 ```
 
-`projects` lists the bound GitHub Projects. `github.credentialFile` points to
+`projects` lists the bound GitHub Projects. An empty list runs an idle service.
+`github.credentialFile` points to
 Heddle's GitHub App credential file. `t3Code.endpoint` names the T3 Code
 server, and `t3Code.tokenFile` points to its bearer token. The blueprint
 repository is a local Git checkout. `webhook.secretFile` points to the secret
 used to verify GitHub deliveries. Secret values are read from these files;
 they do not belong in YAML values, Feature options, command arguments, or
 logs.
+
+`state.databasePath` overrides the SQLite path. Otherwise Heddle uses
+`heddle.sqlite` below the selected state directory. `polling.intervalMs`
+defaults to 30000. One service owns the database writer. A second service exits
+before opening SQLite. `SIGINT` and `SIGTERM` close the service and release the
+writer; restart after an abrupt process death recovers durable runs.
 
 Configure the App according to GitHub's
 [permission reference](https://docs.github.com/rest/authentication/permissions-required-for-github-apps)
@@ -203,11 +222,8 @@ directory, and secret-file locations. Mount each at the same path:
 
 The Feature artifact contains the npm tarball built from the same accepted
 revision. Run `task feature-check` to stage that tarball and prove the Feature
-in isolated Dev Container builds. The service assembly lands after the engine,
-GitHub binding, T3 Code pass, and webhook components. Until then, `start` writes
-its usage, exits with status 2, and s6 restarts it in a loop. The later service
-integration must replace that scaffold with a durable process and eliminate the
-restart loop before operational acceptance.
+in isolated Dev Container builds. The test observes the s6 longrun staying up,
+stopping cleanly, and starting again against the same store.
 
 ## Status
 

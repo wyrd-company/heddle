@@ -1,0 +1,62 @@
+$schema: https://refinery.systems/ontology/specification
+relationships:
+  realizes: engine-and-run-model
+description: >-
+  Defines Heddle's executable command surface and the production service
+  boundary. `heddle start` owns one durable store writer and composes the
+  engine, scheduler, GitHub intake and webhook delivery, generated tools,
+  harness hook transport, notification delivery, and T3 Code pass runtime.
+format: cli
+validation-criteria: >-
+  CLI, configuration, packaged-process, recovery, signal, exclusive-writer,
+  and Dev Container Feature tests execute the same production composition.
+commands:
+  start:
+    invocation: heddle start
+    description: Run one long-lived Heddle service until SIGINT or SIGTERM.
+    options:
+      config:
+        syntax: --config <path>
+        default: ~/.config/heddle/config.yml
+      state-directory:
+        syntax: --state <directory>
+        default: ~/.local/state/heddle/
+      database:
+        syntax: --database <path>
+        default: <state-directory>/heddle.sqlite
+      polling-interval:
+        syntax: --poll-interval <milliseconds>
+        default: 30000
+      github-app-credentials:
+        syntax: --github-app-credentials <path>
+      t3-token:
+        syntax: --t3-token <path>
+      webhook-secret:
+        syntax: --webhook-secret <path>
+    exit-status:
+      success: 0 after SIGINT or SIGTERM closes intake, listeners, the T3 Code client, and SQLite
+      configuration-error: 1 with the resolved configuration path and actionable detail
+      ownership-error: 1 when another live Heddle service owns the configured database
+configuration:
+  projects: Bound GitHub Project owner and number pairs. An empty list runs an idle service.
+  github.credentialFile: GitHub App credential-file path.
+  blueprints.repository: Local blueprint repository root.
+  t3Code.endpoint: T3 Code service URL.
+  t3Code.tokenFile: Optional bearer-token file path.
+  webhook.secretFile: Optional GitHub webhook secret-file path.
+  state.databasePath: Optional SQLite database path override.
+  polling.intervalMs: Optional positive polling interval in milliseconds; default 30000.
+  intake: Optional default intake blueprint id and pinned commit.
+  pass: Required for bound projects; supplies the default model and worktree.
+  notifications.pushoverCredentialFile: Optional JSON file containing Pushover token and user fields.
+diagnostics:
+  startup: Reports the resolved database path and polling interval without secret values.
+  errors: Report paths and operational causes without credential contents.
+signals:
+  SIGINT: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
+  SIGTERM: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
+recovery: >-
+  Startup recovers durable engine runs and pass observations before accepting
+  hook traffic or new intake. A forced process death leaves the SQLite
+  checkpoint intact; the next service process removes only a stale writer
+  lease, opens the same database, and resumes the paused run.

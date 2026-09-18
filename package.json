@@ -28,7 +28,8 @@
     "dist",
     "blueprints",
     "docs/specifications/blueprint.schema.yml",
-    "docs/specifications/policy-rule.schema.yml"
+    "docs/specifications/policy-rule.schema.yml",
+    "docs/specifications/command-line-interface.yml"
   ],
   "scripts": {
     "build": "node scripts/clean-dist.mjs && npm run generate:authoring && npm run codegen && npm run build:types && node scripts/build.mjs",

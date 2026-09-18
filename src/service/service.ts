@@ -74,12 +74,12 @@ export async function startService(
   });
   let closing: Promise<void> | undefined;
   let signalHandler: (() => void) | undefined;
+  let startupMessage: string;
   try {
     store = new RunStore(config.databasePath);
     if (config.projects.length === 0) {
-      io.output(
-        `Heddle started with no bound projects; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms`,
-      );
+      timer = setInterval(() => {}, config.polling.intervalMs);
+      startupMessage = `Heddle started with no bound projects; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms`;
     } else {
       const catalog = new BlueprintCatalog(config.blueprints.repository);
       if (!config.pass)
@@ -192,9 +192,7 @@ export async function startService(
           ),
         config.polling.intervalMs,
       );
-      io.output(
-        `Heddle started; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms; tools=${origin}; hooks=${hookSocket}`,
-      );
+      startupMessage = `Heddle started; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms; tools=${origin}; hooks=${hookSocket}`;
     }
     const close = async (): Promise<void> => {
       if (closing) return closing;
@@ -223,6 +221,7 @@ export async function startService(
     };
     process.once("SIGINT", signalHandler);
     process.once("SIGTERM", signalHandler);
+    io.output(startupMessage);
     return { close, done };
   } catch (error) {
     if (timer) clearInterval(timer);

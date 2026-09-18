@@ -255,8 +255,11 @@ proposed-design:
     commands work without the service: `validate` and `skill` are described
     in the blueprint-authoring design, and `hook stop <harness>` is the
     turn-end hook the agent-tools design describes. The command surface is
-    specified as a command-line-interface specification when the CLI is
-    built.
+    specified by `docs/specifications/command-line-interface.yml`. Its default
+    configuration is `~/.config/heddle/config.yml`; its default SQLite file is
+    `~/.local/state/heddle/heddle.sqlite`. SIGINT and SIGTERM close the one
+    service-owned writer. Restart after abrupt process death recovers durable
+    runs before new intake.
   what-the-engine-never-knows: >
     The engine has no notion of a stage name, a status name, a review, or an
     epic. Those exist only as node ids and blueprint ids, which are user

@@ -26,10 +26,11 @@ Dev Container build.
 Every secret option is a file location. Secret values do not enter Feature
 options, generated launchers, or installation logs.
 
-The current `start` scaffold writes its usage and exits with status 2, so s6
-restarts it in a loop. The Feature is not operational until the later service
-integration replaces the scaffold with a durable process and eliminates that
-restart loop.
+If no configuration file is mounted, the Feature creates an idle configuration
+with no bound projects so the longrun can start. Mount the production
+configuration and secret files before adding projects. s6 sends service signals
+to `heddle start`; Heddle closes SQLite and releases the single writer before it
+exits.
 
 See the repository [README](../../README.md#dev-container-feature) for the
 configuration schema, bind mounts, GitHub App permissions, and T3 Code pairing.
