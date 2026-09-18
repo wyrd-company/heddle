@@ -49,18 +49,24 @@ it("resolves configured and command-line database and polling overrides", () => 
   const f = fixture(
     "state:\n  databasePath: /configured/state.sqlite\npolling:\n  intervalMs: 41000\n",
   );
-  expect(resolveServiceConfig({ configPath: f.path })).toMatchObject({
+  const stateDirectory = join(f.root, "service-state");
+  expect(
+    resolveServiceConfig({ configPath: f.path, stateDirectory }),
+  ).toMatchObject({
     databasePath: "/configured/state.sqlite",
+    stateDirectory,
     polling: { intervalMs: 41000 },
   });
   expect(
     resolveServiceConfig({
       configPath: f.path,
+      stateDirectory,
       databasePath: "/overridden/state.sqlite",
       pollingIntervalMs: 52000,
     }),
   ).toMatchObject({
     databasePath: "/overridden/state.sqlite",
+    stateDirectory,
     polling: { intervalMs: 52000 },
   });
 });

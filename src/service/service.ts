@@ -65,6 +65,7 @@ export async function startService(
   config: ResolvedServiceConfig,
   io: ServiceIo,
 ): Promise<RunningService> {
+  mkdirSync(config.stateDirectory, { recursive: true, mode: 0o700 });
   mkdirSync(dirname(config.databasePath), { recursive: true, mode: 0o700 });
   const lease = acquireStoreLease(config.databasePath);
   let store: RunStore | undefined,

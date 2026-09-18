@@ -4,7 +4,7 @@
 // ---
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import { bindingConfigSchema } from "../binding/config.js";
@@ -105,8 +105,7 @@ export function resolveServiceConfig(
   return {
     ...parsed.data,
     configPath,
-    stateDirectory:
-      configuredDatabase === undefined ? stateDirectory : dirname(databasePath),
+    stateDirectory,
     databasePath,
     polling: {
       intervalMs: overrides.pollingIntervalMs ?? parsed.data.polling.intervalMs,
