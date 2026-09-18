@@ -36,9 +36,7 @@ const documentSchema = Object.fromEntries(
   Object.entries(schema).filter(([key]) => key !== "$defs"),
 );
 const sharedDefinitions = Object.fromEntries(
-  Object.entries(schema.$defs).filter(
-    ([key]) => !key.endsWith("Params"),
-  ),
+  Object.entries(schema.$defs).filter(([key]) => !key.endsWith("Params")),
 );
 let reference = `---\nrelationships:\n  implements:\n    - blueprint-authoring\n    - node-types\n---\n\n# Blueprint author reference\n\nThis file is generated from the node-type registry, blueprint schema, validation-rule registry, shipped blueprints, and hook-plugin file registry. Run \`task build\` to regenerate it.\n\n## Engine agreement\n\nHeddle dispatches Flowcraft nodes sequentially with engine concurrency 1. Durable snapshot checkpointing and the one-terminal-result guard depend on that order. A concurrency change must replace those agreements before it changes dispatch.\n\nEvery completed node writes its output below its authored node id. A pausing result is also exposed during edge routing as \`result.output.<result>\`; its wake payload is \`result.output.payload\`.\n\n## Minimal blueprint\n\n\`\`\`yaml\nid: sample-process\nkind: helper\nnodes:\n  hold:\n    uses: wait\n  finish:\n    uses: terminal-result\n    params:\n      value: done\nedges:\n  - from: hold\n    to: finish\n\`\`\`\n\n## Blueprint document\n\nThe complete authored document shape is below. Node-type inputs follow in the catalog.\n${fenced(documentSchema)}\n### Shared schema definitions\n${fenced(sharedDefinitions)}\n## Node types\n`;
 for (const [name, contract] of Object.entries(contracts)) {
