@@ -12,6 +12,6 @@ check "custom T3 token path is preserved" grep -q -- '--t3-token /mnt/secrets/t3
 check "custom webhook secret path is preserved" grep -q -- '--webhook-secret /mnt/secrets/webhook-secret' /usr/local/bin/heddle-service
 check "custom state directory is owned by the non-root service user" test "$(stat -c '%U' /mnt/state)" = vscode
 check "s6 launches as the non-root service user" grep -q '^exec s6-setuidgid vscode ' /etc/s6-overlay/s6-rc.d/heddle/run
-check "custom-path s6 longrun stays up, stops cleanly, and restarts" /workspaces/test/heddle/check-longrun.sh
+check "custom-path s6 longrun stays up, stops cleanly, and restarts" ./check-longrun.sh
 
 reportResults
