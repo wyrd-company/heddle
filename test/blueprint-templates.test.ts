@@ -42,7 +42,7 @@ const results = [
   "overridden",
 ];
 
-/** A repository whose blueprint sits in a subdirectory beside shared parts. */
+/** A blueprint root whose blueprint sits in a subdirectory beside shared parts. */
 function sampleRepository(summary: string): string {
   const root = temporary("heddle-templates-");
   mkdirSync(join(root, "shared"), { recursive: true });
@@ -70,7 +70,7 @@ nodes:
   inspect:
     uses: pass
     params:
-      prompt: prompts/brief.njk
+      prompt: process/prompts/brief.njk
       handoff:
         type: object
         description: Submit the result.
@@ -82,7 +82,7 @@ nodes:
     params:
       channel: pushover
       title: { inline: "Card reviewed" }
-      message: prompts/summary.njk
+      message: process/prompts/summary.njk
   finish:
     uses: terminal-result
     params:
@@ -186,7 +186,7 @@ it("renders dotted references in a notify template", async () => {
   );
 });
 
-it("resolves a notify include from the repository root", async () => {
+it("resolves a notify include from the blueprint root", async () => {
   const root = sampleRepository(
     'Reviewed. {% include "shared/signature.njk" %}',
   );
@@ -207,7 +207,7 @@ it("resolves a notify include from the repository root", async () => {
   );
 });
 
-it("resolves a pass prompt include from the repository root", async () => {
+it("resolves a pass prompt include from the blueprint root", async () => {
   const root = sampleRepository("Reviewed.");
   const commit = commitFixture(root);
   const catalog = new BlueprintCatalog(root);
@@ -219,7 +219,7 @@ it("resolves a pass prompt include from the repository root", async () => {
   expect(invocation.prompt).toBe("Task: Open card cards#12.");
 });
 
-it("refuses an include that leaves the repository root", async () => {
+it("refuses an include that leaves the blueprint root", async () => {
   // A computed target passes the static check, so the loader is the bound.
   const root = sampleRepository("{% include escape %}");
   const commit = commitFixture(root);
@@ -236,7 +236,7 @@ it("refuses an include that leaves the repository root", async () => {
         escape: "../outside.njk",
       }),
     ),
-  ).rejects.toThrow("Template path leaves the blueprint repository");
+  ).rejects.toThrow("Path leaves the blueprint root");
   expect(sent.notifications).toEqual([]);
 });
 

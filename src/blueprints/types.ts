@@ -61,6 +61,8 @@ export interface ValidationFinding {
 }
 
 export interface ValidationOptions {
+  /** The directory every blueprint path resolves from; defaults to the file's own directory. */
+  readonly blueprintRoot?: string;
   readonly checkRequiresIssue?: boolean;
   readonly liveIssue?: readonly {
     name: string;

@@ -3,7 +3,7 @@
 //   implements: blueprint-authoring
 // ---
 import { readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { relative, sep } from "node:path";
 
 import jsonata from "jsonata";
 import { parseDocument } from "yaml";
@@ -13,7 +13,13 @@ import {
   isObject,
   validatePolicyRuleSchema,
 } from "./schema-validation.js";
-import type { Blueprint, BlueprintNode, ValidationFinding } from "./types.js";
+import { blueprintRootFor, resolveBlueprintPath } from "./root.js";
+import type {
+  Blueprint,
+  BlueprintNode,
+  ValidationFinding,
+  ValidationOptions,
+} from "./types.js";
 
 interface Reference {
   readonly kind: "file" | "handoff" | "policy";
@@ -66,24 +72,27 @@ function collectNodeReferences(
 export function validateReferences(
   filePath: string,
   blueprint: Blueprint,
+  options: ValidationOptions,
 ): ValidationFinding[] {
+  const blueprintRoot = blueprintRootFor(
+    options.blueprintRoot,
+    filePath,
+    false,
+  );
   const findings: ValidationFinding[] = [];
-  const directory = dirname(filePath);
-  const realDirectory = realpathSync(directory);
+  const realRoot = realpathSync(blueprintRoot);
   for (const [nodeId, node] of Object.entries(blueprint.nodes)) {
     for (const reference of collectNodeReferences(nodeId, node)) {
-      const referencedPath = resolve(directory, reference.path);
-      const relativePath = relative(directory, referencedPath);
-      const outsideDirectory =
-        isAbsolute(reference.path) ||
-        relativePath === ".." ||
-        relativePath.startsWith(`..${sep}`);
-      if (outsideDirectory) {
+      const referencedPath = resolveBlueprintPath(
+        blueprintRoot,
+        reference.path,
+      );
+      if (referencedPath === undefined) {
         findings.push({
           file: filePath,
           node: reference.node,
           rule: "reference.exists",
-          message: `Referenced file must stay beside the blueprint (${reference.path})`,
+          message: `Referenced file must stay inside the blueprint root (${reference.path})`,
           reference: reference.path,
         });
         continue;
@@ -93,7 +102,7 @@ export function validateReferences(
           throw new Error("is not a file");
         }
         const realReferencedPath = realpathSync(referencedPath);
-        const realRelativePath = relative(realDirectory, realReferencedPath);
+        const realRelativePath = relative(realRoot, realReferencedPath);
         if (
           realRelativePath === ".." ||
           realRelativePath.startsWith(`..${sep}`)
@@ -102,7 +111,7 @@ export function validateReferences(
             file: filePath,
             node: reference.node,
             rule: "reference.exists",
-            message: `Referenced file must stay beside the blueprint (${reference.path})`,
+            message: `Referenced file must stay inside the blueprint root (${reference.path})`,
             reference: reference.path,
           });
           continue;

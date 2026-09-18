@@ -48,16 +48,14 @@ it("pins graph and artifact bytes across live repository movement and catalog re
   writeSample(root, "uncommitted");
   for (const reader of [catalog, new BlueprintCatalog(root)]) {
     expect(await reader.resolve(first, "sample-process")).toEqual(graph);
-    expect(await reader.read(first, "sample-process", "parcel.njk")).toBe(
+    expect(await reader.read(first, "parcel.njk")).toBe(
       "Inspect the first parcel.\r\n",
     );
-    expect(await reader.read(first, "sample-process", "receipt.yml")).toContain(
+    expect(await reader.read(first, "receipt.yml")).toContain(
       "required: [first]",
     );
-    expect(await reader.read(first, "sample-process", "routing.yml")).toContain(
-      "id: first",
-    );
-    expect(await reader.read(second, "sample-process", "parcel.njk")).toBe(
+    expect(await reader.read(first, "routing.yml")).toContain("id: first");
+    expect(await reader.read(second, "parcel.njk")).toBe(
       "Inspect the second parcel.\r\n",
     );
     expect(await reader.resolve(second, "sample-process")).not.toEqual(graph);
@@ -112,7 +110,6 @@ it("carries the canonical commit from producer through persistence and inherited
     expect(
       await new BlueprintCatalog(root).read(
         restored.get("receipt").commit,
-        "sample-process",
         "parcel.njk",
       ),
     ).toContain("first parcel");
@@ -133,17 +130,15 @@ it("uses the authoring validator and safe revision and artifact diagnostics", as
   await expect(
     catalog.pin("https://name:credential@example.invalid/repo"),
   ).rejects.toThrow("revision <invalid identity>");
-  await expect(
-    catalog.read(first, "sample-process", "missing.njk"),
-  ).rejects.toThrow(
-    `Missing blueprint artifact missing.njk at revision ${first}`,
+  await expect(catalog.read(first, "missing.njk")).rejects.toThrow(
+    `Missing blueprint root file missing.njk at revision ${first}`,
+  );
+  await expect(catalog.read(first, "../outside")).rejects.toThrow(
+    "Path leaves the blueprint root",
   );
   await expect(
-    catalog.read(first, "sample-process", "../outside"),
-  ).rejects.toThrow("Invalid artifact identity");
-  await expect(
-    catalog.read(first, "sample-process", "/blueprint/parcel.njk"),
-  ).rejects.toThrow("Invalid artifact identity");
+    catalog.read(first, "/blueprint-root/parcel.njk"),
+  ).rejects.toThrow("Path leaves the blueprint root");
   await expect(catalog.resolve(first, "missing-blueprint")).rejects.toThrow(
     `Unknown blueprint missing-blueprint at revision ${first}`,
   );
@@ -221,9 +216,7 @@ it("reads nested catalogs and linked worktrees from packed Git objects", async (
   expect(await catalog.pin("HEAD")).toBe(first);
   fixtureGit(linked, "checkout", "--detach");
   expect(await catalog.pin("HEAD")).toBe(first);
-  expect(await catalog.read(first, "sample-process", "parcel.njk")).toContain(
-    "first parcel",
-  );
+  expect(await catalog.read(first, "parcel.njk")).toContain("first parcel");
 });
 it("retains beside-blueprint symlinks and excludes host files", async () => {
   const root = fixture();
@@ -236,13 +229,9 @@ it("retains beside-blueprint symlinks and excludes host files", async () => {
   writeFileSync(foreignFile, "nodes: [invalid YAML");
   symlinkSync(foreignFile, join(root, "unrelated.yml"));
   const first = commitFixture(root);
-  expect(
-    await new BlueprintCatalog(root).read(
-      first,
-      "sample-process",
-      "parcel.njk",
-    ),
-  ).toBe("A linked parcel.");
+  expect(await new BlueprintCatalog(root).read(first, "parcel.njk")).toBe(
+    "A linked parcel.",
+  );
   rmSync(join(root, "parcel.njk"));
   const outsideRoot = mkdtempSync(join(tmpdir(), "outside-artifact-"));
   roots.push(outsideRoot);
@@ -255,21 +244,28 @@ it("retains beside-blueprint symlinks and excludes host files", async () => {
   ).rejects.toThrow("reference.exists");
 });
 
-it("keeps referenced and unreferenced symlinks beside their blueprint directory", async () => {
+it("keeps referenced and unreferenced symlinks inside their blueprint root", async () => {
   const root = mkdtempSync(join(tmpdir(), "artifact-boundary-"));
   roots.push(root);
   const nested = join(root, "recipes");
   mkdirSync(nested);
-  writeSample(nested, "first");
+  writeSample(nested, "first", "recipes/");
   writeFileSync(join(root, "outer.njk"), "An unrelated parcel.");
   symlinkSync("../outer.njk", join(nested, "unreferenced.njk"));
   const first = commitFixture(root);
   const catalog = new BlueprintCatalog(root);
-  await expect(
-    catalog.read(first, "sample-process", "unreferenced.njk"),
-  ).rejects.toThrow("Missing blueprint artifact unreferenced.njk");
+  // Root-relative identity: the bare spelling names nothing in this root.
+  await expect(catalog.read(first, "unreferenced.njk")).rejects.toThrow(
+    "Missing blueprint root file unreferenced.njk",
+  );
+  expect(await catalog.read(first, "recipes/unreferenced.njk")).toBe(
+    "An unrelated parcel.",
+  );
+  expect(await catalog.read(first, "recipes/parcel.njk")).toContain(
+    "first parcel",
+  );
   rmSync(join(nested, "parcel.njk"));
-  symlinkSync("../outer.njk", join(nested, "parcel.njk"));
+  symlinkSync("../../outside.njk", join(nested, "parcel.njk"));
   const second = commitFixture(root);
   await expect(catalog.resolve(second, "sample-process")).rejects.toThrow(
     "reference.exists",

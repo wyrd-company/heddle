@@ -23,8 +23,7 @@ export async function preparePass(
   const definition = run.blueprint.nodes.find(
     (node) => node.id === nodeId,
   ) as HeddleFlowcraftNode;
-  const read = (path: string) =>
-    options.templates.read(run.commit, run.blueprintId, path);
+  const read = (path: string) => options.templates.read(run.commit, path);
   const rendered = await renderTemplate(
     params["prompt"],
     {

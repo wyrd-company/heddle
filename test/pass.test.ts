@@ -23,7 +23,7 @@ it("renders pinned inputs, activates after commit, and uses service-owned extra 
   Object.assign(node, {
     metadata: { prompt: { inline: "Wrong prompt" }, runtimeMode: "auto" },
   });
-  const read = vi.fn((_commit: string, _blueprint: string, path: string) =>
+  const read = vi.fn((_commit: string, path: string) =>
     Promise.resolve(
       path.endsWith("njk")
         ? "Inspect {{ item }}"
@@ -39,8 +39,8 @@ it("renders pinned inputs, activates after commit, and uses service-owned extra 
   });
   await f.start();
   expect(read.mock.calls).toEqual([
-    ["pinned", "inspection", "prompts/inspect.njk"],
-    ["pinned", "inspection", "schemas/result.yml"],
+    ["pinned", "prompts/inspect.njk"],
+    ["pinned", "schemas/result.yml"],
   ]);
   expect(f.operations).toEqual([
     "register:heddle",

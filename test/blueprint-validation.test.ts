@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -302,9 +303,16 @@ describe("validation chain", () => {
   });
 
   it("accepts every shipped blueprint fixture", () => {
-    const fixtureDirectory = resolve("fixtures/blueprints");
+    const packs = readdirSync(resolve("fixtures/blueprints"), {
+      withFileTypes: true,
+    }).filter((entry) => entry.isDirectory());
 
-    expect(validateBlueprintPath(fixtureDirectory)).toEqual([]);
+    expect(packs.length).toBeGreaterThan(0);
+    for (const pack of packs) {
+      expect(
+        validateBlueprintPath(resolve("fixtures/blueprints", pack.name)),
+      ).toEqual([]);
+    }
   });
 
   it("passes Flowcraft lint after deriving the cyclic fixture entry", () => {
@@ -429,7 +437,7 @@ describe("validation chain", () => {
           item.node === "first" &&
           item.rule === "reference.exists" &&
           item.reference === "prompt.md" &&
-          item.message.includes("must stay beside"),
+          item.message.includes("must stay inside the blueprint root"),
       ),
     ).toBe(true);
   });
@@ -452,7 +460,7 @@ describe("validation chain", () => {
           item.node === "first" &&
           item.rule === "reference.exists" &&
           item.reference === prompt &&
-          item.message.includes("must stay beside"),
+          item.message.includes("must stay inside the blueprint root"),
       ),
     ).toBe(true);
   });

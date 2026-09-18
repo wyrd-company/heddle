@@ -172,7 +172,7 @@ function validateLoaded(
   }
   findings.push(
     ...validateParams(file, blueprint),
-    ...validateReferences(file, blueprint),
+    ...validateReferences(file, blueprint, options),
     ...validateInlineHandoffs(file, blueprint),
     ...validateExpressions(file, blueprint),
     ...lintHeddle(file, blueprint, options),
@@ -270,10 +270,10 @@ export function validateBlueprintPath(
       ),
     ];
   }
-  const checked = files.map((file) => checkBlueprintFile(file, options));
+  const rooted = directoryInput ? { ...options, blueprintRoot: path } : options;
+  const checked = files.map((file) => checkBlueprintFile(file, rooted));
   const findings = checked.flatMap((result) => result.findings);
-  // A file argument deliberately keeps file-local semantics. A directory is
-  // the complete repository inventory, including nested blueprint folders.
+  // A directory is the complete blueprint root inventory, nested folders included.
   if (directoryInput) {
     const loaded = checked.flatMap((result) =>
       result.loaded === undefined ? [] : [result.loaded],

@@ -6,12 +6,10 @@ import nunjucks from "nunjucks";
 import { repositoryPath } from "../service/blueprint-repository.js";
 import type { Data } from "../engine/types.js";
 
-/** Blueprint repository reads at one pinned commit. */
+/** Blueprint root reads at one pinned commit. */
 export interface TemplateSource {
-  /** A path beside the blueprint file. */
-  read(commit: string, blueprintId: string, path: string): Promise<string>;
-  /** A path from the blueprint repository root. */
-  readFromRoot(commit: string, path: string): Promise<string>;
+  /** A path from the blueprint root. */
+  read(commit: string, path: string): Promise<string>;
 }
 
 /** Where one authored template is rendered and what it may read. */
@@ -41,13 +39,13 @@ function loaderFor(site: TemplateSite): nunjucks.ILoaderAsync {
       if (!source) {
         callback(
           new Error(
-            `${site.label} includes ${identity} but no blueprint repository is configured`,
+            `${site.label} includes ${identity} but no blueprint root is configured`,
           ),
           null,
         );
         return;
       }
-      source.readFromRoot(site.commit, identity).then(
+      source.read(site.commit, identity).then(
         (src) => {
           callback(null, { src, path: identity, noCache: true });
         },
@@ -69,9 +67,9 @@ async function templateText(
   if (typeof value === "string") {
     if (!site.source)
       throw new Error(
-        `${site.label} names a template path but no blueprint repository is configured`,
+        `${site.label} names a template path but no blueprint root is configured`,
       );
-    return site.source.read(site.commit, site.blueprintId, value);
+    return site.source.read(site.commit, value);
   }
   const inline =
     value !== null && typeof value === "object" && !Array.isArray(value)
@@ -86,8 +84,8 @@ async function templateText(
 
 /**
  * Renders one `templateRef`: a path read from the run's pinned commit, or
- * inline text. Included templates resolve from the blueprint repository root
- * at the same commit.
+ * inline text. Template and include paths alike resolve from the blueprint
+ * root at that commit.
  */
 export async function renderTemplate(
   value: unknown,

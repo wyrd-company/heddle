@@ -6,27 +6,19 @@ import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import git from "isomorphic-git";
+import { beside, resolveBlueprintPath } from "../blueprints/root.js";
 
-export function beside(directory: string, path: string): boolean {
-  const displacement = relative(directory, path);
-  return (
-    displacement !== ".." &&
-    !displacement.startsWith(`..${sep}`) &&
-    !isAbsolute(displacement)
-  );
-}
+export { beside };
 
 /**
- * The root-relative identity of a blueprint repository path. Absolute paths
- * and parent traversal leave the repository and are refused.
+ * The root-relative identity of a blueprint path. Absolute paths and parent
+ * traversal leave the blueprint root and are refused.
  */
 export function repositoryPath(path: string): string {
-  const base = resolve("/blueprint-repository");
-  const target = resolve(base, path);
-  if (isAbsolute(path) || !beside(base, target))
-    throw new Error(
-      `Template path leaves the blueprint repository: ${safeIdentity(path)}`,
-    );
+  const base = resolve("/blueprint-root");
+  const target = resolveBlueprintPath(base, path);
+  if (target === undefined)
+    throw new Error(`Path leaves the blueprint root: ${safeIdentity(path)}`);
   return relative(base, target).split(sep).join("/");
 }
 

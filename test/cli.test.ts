@@ -171,8 +171,11 @@ describe("command arguments", () => {
     expect(result.output).toEqual([expect.stringContaining("no findings")]);
   });
 
-  it("validates a blueprint directory offline", () => {
-    const result = capture(["validate", resolve("fixtures/blueprints")]);
+  it("validates a blueprint root offline", () => {
+    const result = capture([
+      "validate",
+      resolve("fixtures/blueprints/recipe-pipeline"),
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.errors).toEqual([]);

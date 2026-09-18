@@ -3,13 +3,13 @@
 //   implements: command-line-interface
 // ---
 import { readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { relative, sep } from "node:path";
 import {
   BlueprintRepository,
-  beside,
   repositoryPath,
   safeIdentity,
 } from "./blueprint-repository.js";
+import { beside } from "../blueprints/root.js";
 import jsonata from "jsonata";
 import { parse } from "yaml";
 import {
@@ -28,7 +28,6 @@ import type { Blueprint } from "../blueprints/types.js";
 interface Entry {
   authored: Blueprint;
   blueprint: HeddleFlowcraftBlueprint;
-  artifacts: Map<string, string>;
 }
 
 /** One pinned revision: its blueprints, and every file by root-relative path. */
@@ -77,25 +76,10 @@ export class BlueprintCatalog {
         }
         const entries = new Map<string, Entry>();
         for (const path of discoverBlueprintFiles(root)) {
-          const loaded = loadValidatedBlueprint(path);
-          const directory = dirname(path);
-          const artifacts = new Map<string, string>();
-          for (const file of files) {
-            if (!beside(directory, file)) continue;
-            try {
-              if (beside(directory, realpathSync(file)))
-                artifacts.set(
-                  relative(directory, file),
-                  readFileSync(file, "utf8"),
-                );
-            } catch {
-              /* Unreferenced dangling links are not artifacts. */
-            }
-          }
+          const loaded = loadValidatedBlueprint(path, { blueprintRoot: root });
           entries.set(loaded.blueprint.id, {
             authored: loaded.blueprint,
             blueprint: deriveFlowcraftBlueprint(loaded.blueprint),
-            artifacts,
           });
         }
         return { entries, files: contents };
@@ -124,37 +108,18 @@ export class BlueprintCatalog {
   async resolve(commit: string, id: string): Promise<HeddleFlowcraftBlueprint> {
     return structuredClone((await this.entry(commit, id)).blueprint);
   }
-  async read(commit: string, id: string, path: string): Promise<string> {
-    const entry = await this.entry(commit, id);
-    const base = resolve("/blueprint");
-    const target = resolve(base, path);
-    if (isAbsolute(path) || !beside(base, target))
-      throw new Error(
-        `Invalid artifact identity at revision ${safeIdentity(commit)} for blueprint ${safeIdentity(id)}`,
-      );
-    const contents = entry.artifacts.get(relative(base, target));
-    if (contents === undefined)
-      throw new Error(
-        `Missing blueprint artifact ${safeIdentity(path)} at revision ${safeIdentity(commit)} for blueprint ${safeIdentity(id)}`,
-      );
-    return contents;
-  }
-  /** A file addressed from the blueprint repository root at a pinned commit. */
-  async readFromRoot(commit: string, path: string): Promise<string> {
+  /** A file addressed from the blueprint root at a pinned commit. */
+  async read(commit: string, path: string): Promise<string> {
     const snapshot = await this.snapshot(commit);
     const contents = snapshot.files.get(repositoryPath(path));
     if (contents === undefined)
       throw new Error(
-        `Missing blueprint repository file ${safeIdentity(path)} at revision ${safeIdentity(commit)}`,
+        `Missing blueprint root file ${safeIdentity(path)} at revision ${safeIdentity(commit)}`,
       );
     return contents;
   }
   readonly policyNode: EngineNode = async ({ run, params }) => {
-    const source = await this.read(
-      run.commit,
-      run.blueprintId,
-      String(params["rules"]),
-    );
+    const source = await this.read(run.commit, String(params["rules"]));
     const policy = parse(source) as {
       rules: {
         id: string;
