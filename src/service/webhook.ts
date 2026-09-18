@@ -20,6 +20,7 @@ export function webhookServer(
       return;
     }
     const rejectOverflow = () => {
+      // Close after the response so earlier pipelined replies can also flush.
       response.writeHead(413, { Connection: "close" }).end();
       request.resume();
     };
@@ -30,8 +31,7 @@ export function webhookServer(
     void (async () => {
       const chunks: Uint8Array[] = [];
       let size = 0;
-      // Returning must leave the socket alive long enough to send HTTP 413.
-      for await (const chunk of request.iterator({ destroyOnReturn: false })) {
+      for await (const chunk of request) {
         const bytes = chunk as Buffer;
         size += bytes.length;
         if (size > bodyLimit) {
