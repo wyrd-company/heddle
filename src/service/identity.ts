@@ -32,7 +32,7 @@ export function serviceHookSocket(
 ): string {
   const identity = createHash("sha256")
     .update(resolve(databasePath))
-    .digest("hex")
-    .slice(0, 24);
-  return join(stateDirectory, `hooks-${identity}.sock`);
+    .digest("base64url")
+    .slice(0, 16);
+  return join(stateDirectory, identity);
 }

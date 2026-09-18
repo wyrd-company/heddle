@@ -320,3 +320,24 @@ it("keeps the default hook inert before its state directory exists", async () =>
     ),
   ).toEqual({});
 });
+
+it("serves hooks under a deep state directory with a compact database identity", async () => {
+  const config = fixture();
+  const stateDirectory = join(
+    config.stateDirectory,
+    "s".repeat(83 - config.stateDirectory.length - 1),
+  );
+  mkdirSync(stateDirectory);
+  const service = await startService({ ...config, stateDirectory }, io);
+  services.push(service);
+  const socket = serviceHookSocket(stateDirectory, config.databasePath);
+  expect(Buffer.byteLength(socket)).toBe(100);
+  expect(statSync(socket).isSocket()).toBe(true);
+  vi.stubEnv("HEDDLE_HOOK_SOCKET", socket);
+  expect(
+    await runStopHook(
+      "codex",
+      JSON.stringify({ hook_event_name: "Stop", session_id: "sample-session" }),
+    ),
+  ).toEqual({});
+});

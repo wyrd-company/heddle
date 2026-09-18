@@ -36,9 +36,11 @@ process acquires ownership and recovers runs from the same database. The
 Webhook and generated-tool requests receive HTTP 503 until engine and pass
 recovery finish. Hook traffic and intake start after recovery.
 
-Each database has its own `hooks-<identity>.sock` under the state directory.
-Different databases can share that directory. Startup prints the exact hook
-socket path. Hook commands derive the default socket from `heddle.sqlite`
+Each database has its own `<identity>` socket under the state directory.
+The filename is the first 16 base64url characters of the canonical database
+path’s SHA-256 (96 bits). The full path must fit the operating system’s Unix
+socket path limit. Different databases can share that directory. Startup prints
+the exact hook socket path. Hook commands derive the default socket from `heddle.sqlite`
 under `HEDDLE_STATE_DIR` or the default state directory. For a database
 override, set `HEDDLE_HOOK_SOCKET` to the socket reported at startup in the
 agent harness environment.

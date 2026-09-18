@@ -64,8 +64,9 @@ ownership: >-
   overrides are independent; different databases can share one state directory.
 hook-transport: >-
   Each database has a hook socket under the state directory named
-  hooks-<identity>.sock, where identity is the first 24 hexadecimal characters
-  of SHA-256 of the canonical database path. Startup reports the exact socket.
+  <identity>, where identity is the first 16 base64url characters of SHA-256
+  of the canonical database path (96 bits). Startup reports the exact socket.
+  The full path remains subject to the operating system Unix socket path limit.
   Hook commands use HEDDLE_HOOK_SOCKET when set. Otherwise they derive the
   socket from heddle.sqlite under HEDDLE_STATE_DIR or the default state
   directory. Set HEDDLE_HOOK_SOCKET to the reported socket for a database
