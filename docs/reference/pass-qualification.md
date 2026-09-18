@@ -8,8 +8,8 @@ relationships:
 
 # Pass qualification
 
-The isolated qualification uses Claude Code 2.1.274, Codex 0.154.0, and T3 Code
-production tree `06d379013005981af41bb9c0845ed73944bee10d`. The
+The isolated qualification uses Claude Code 2.1.275, Codex 0.154.0, and T3 Code
+production tree `3dc21446cfaeb20bec8953916f53d8aeb1357465`. The
 [retained evidence](../../test/fixtures/pass-native-evidence.json) records relative
 ordering, public native session identities, workflow results, and request timing.
 It contains no endpoint credentials.
