@@ -101,7 +101,7 @@ it("closes a rejected acquisition descriptor while preserving its owner", () => 
     try {
       closeSync(rejected);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EBADF") throw error;
+      expect((error as NodeJS.ErrnoException).code).toBe("EBADF");
     }
   }
 });
