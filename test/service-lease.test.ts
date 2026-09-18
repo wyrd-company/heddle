@@ -33,9 +33,18 @@ const roots: string[] = [];
 const leases: StoreLease[] = [];
 afterEach(() => {
   interleave.beforeLock = undefined;
-  for (const lease of leases.splice(0)) lease.release();
+  const errors: unknown[] = [];
+  for (const lease of leases.splice(0)) {
+    try {
+      lease.release();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
+  if (errors.length)
+    throw new AggregateError(errors, "Lease fixture cleanup failed");
 });
 function database(): string {
   const root = mkdtempSync(join(tmpdir(), "service-lease-"));
