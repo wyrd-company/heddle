@@ -14,7 +14,7 @@ import {
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { WorkflowEngine } from "../src/engine/engine.js";
 import { RunStore } from "../src/engine/store.js";
@@ -280,7 +280,7 @@ it.each(["existing", "missing"] as const)(
   async (target) => {
     const config = fixture();
     const alias = join(config.stateDirectory, "alias.sqlite");
-    if (target === "missing") symlinkSync(config.databasePath, alias);
+    if (target === "missing") symlinkSync(basename(config.databasePath), alias);
     const first = await startService(
       {
         ...config,
