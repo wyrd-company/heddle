@@ -217,14 +217,18 @@ it("resolves a pass prompt include from the repository root", async () => {
 });
 
 it("refuses an include that leaves the repository root", async () => {
-  const root = sampleRepository('{% include "../outside.njk" %}');
+  // A computed target passes the static check, so the loader is the bound.
+  const root = sampleRepository("{% include escape %}");
   const commit = commitFixture(root);
   const catalog = new BlueprintCatalog(root);
   const blueprint = await catalog.resolve(commit, "sample-process");
   const sent = recorder();
   await expect(
     notifyNode(sent.delivery, catalog)(
-      nodeContext(blueprint, commit, "announce"),
+      nodeContext(blueprint, commit, "announce", {
+        issue: { ref: "cards#12" },
+        escape: "../outside.njk",
+      }),
     ),
   ).rejects.toThrow("Template path leaves the blueprint repository");
   expect(sent.notifications).toEqual([]);

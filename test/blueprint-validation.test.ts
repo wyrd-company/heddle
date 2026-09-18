@@ -981,3 +981,82 @@ edges:
     );
   });
 });
+
+function templateRepository(message: string, summary: string): string {
+  const directory = mkdtempSync(join(tmpdir(), "heddle-includes-"));
+  temporaryDirectories.push(directory);
+  mkdirSync(join(directory, "shared"), { recursive: true });
+  writeFileSync(join(directory, "shared", "footer.njk"), "Filed.");
+  writeFileSync(join(directory, "summary.njk"), summary);
+  writeFileSync(
+    join(directory, "sample-a.yml"),
+    `id: sample-a
+kind: stage
+nodes:
+  first:
+    uses: pass
+    params:
+      prompt: { inline: "Complete the request." }
+      handoff:
+        type: object
+        description: Submit the result.
+        properties:
+          value: { type: string }
+  done:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Complete" }
+      message: ${message}
+edges:
+  - from: first
+    to: done
+    when: result.output.handoff or result.output.overridden or result.output.turnEnded
+`,
+  );
+  return directory;
+}
+
+it("reports a notify message path that does not exist", () => {
+  const directory = templateRepository("prompts/absent.md", "Filed.");
+  expect(
+    validateBlueprintPath(directory).map((item) => [item.rule, item.message]),
+  ).toContainEqual([
+    "reference.exists",
+    "Referenced file does not exist (prompts/absent.md)",
+  ]);
+});
+
+it("reports an include target missing from the blueprint repository", () => {
+  const directory = templateRepository(
+    "summary.njk",
+    'Done. {% include "shared/absent.njk" %}',
+  );
+  expect(
+    validateBlueprintPath(directory).map((item) => [item.rule, item.message]),
+  ).toContainEqual([
+    "reference.exists",
+    "Included template does not exist in the blueprint repository (shared/absent.njk)",
+  ]);
+});
+
+it("reports an include target that leaves the blueprint repository", () => {
+  const directory = templateRepository(
+    "summary.njk",
+    'Done. {% include "../outside.njk" %}',
+  );
+  expect(
+    validateBlueprintPath(directory).map((item) => [item.rule, item.message]),
+  ).toContainEqual([
+    "reference.exists",
+    "Included template must stay inside the blueprint repository (../outside.njk)",
+  ]);
+});
+
+it("accepts an include target present in the blueprint repository", () => {
+  const directory = templateRepository(
+    "summary.njk",
+    'Done. {% include "shared/footer.njk" %}',
+  );
+  expect(validateBlueprintPath(directory)).toEqual([]);
+});

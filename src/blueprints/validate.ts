@@ -20,6 +20,7 @@ import {
 } from "./loader.js";
 import { isNodeTypeName } from "./node-types.js";
 import { validateReferences } from "./references.js";
+import { validateIncludes } from "./template-includes.js";
 import {
   checkJsonSchema,
   isObject,
@@ -256,14 +257,8 @@ export function validateBlueprintPath(
     directoryInput = inputIsDirectory(path);
     files = directoryInput ? discoverBlueprintFiles(path) : [path];
   } catch (error) {
-    return [
-      finding(
-        path,
-        blueprintNode,
-        "input.path",
-        error instanceof Error ? error.message : String(error),
-      ),
-    ];
+    const message = error instanceof Error ? error.message : String(error);
+    return [finding(path, blueprintNode, "input.path", message)];
   }
   if (directoryInput && files.length === 0) {
     return [
@@ -283,7 +278,10 @@ export function validateBlueprintPath(
     const loaded = checked.flatMap((result) =>
       result.loaded === undefined ? [] : [result.loaded],
     );
-    findings.push(...repositoryContractFindings(loaded));
+    findings.push(
+      ...repositoryContractFindings(loaded),
+      ...validateIncludes(path, loaded),
+    );
   }
   return sortFindings(findings);
 }

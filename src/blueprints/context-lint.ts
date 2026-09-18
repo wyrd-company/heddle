@@ -40,6 +40,9 @@ function templateKeys(value: unknown): string[] {
   );
 }
 
+/** Node-scoped roots the engine supplies wherever a template is rendered. */
+const TEMPLATE_ROOTS = new Set(["metadata", "node", "input"]);
+
 export function contextKeyFindings(
   file: string,
   blueprint: Blueprint,
@@ -120,7 +123,7 @@ export function contextKeyFindings(
         ...templateKeys(node.params?.["title"]),
         ...templateKeys(node.params?.["message"]),
       ])
-        if (!available.has(key))
+        if (!available.has(key) && !TEMPLATE_ROOTS.has(key))
           findings.push(
             finding(
               file,
