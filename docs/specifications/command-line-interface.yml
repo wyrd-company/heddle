@@ -52,7 +52,8 @@ configuration:
   agentTools.listen.port: Explicit stable TCP port from 1 through 65535, with no default port; required whenever projects are bound or pass defaults are configured.
   state.databasePath: Optional SQLite database path override.
   polling.intervalMs: Optional positive polling interval in milliseconds; default 30000.
-  intake: Optional default intake blueprint id and Git revision; each new root run resolves the revision once and stores its full commit.
+  intake.blueprintId: Optional default intake blueprint id.
+  intake.revision: Git revision for new intake attempts; each new attempt resolves it once and the run stores the full commit.
   pass: Required for bound projects; supplies the default model and worktree.
   notifications.pushoverCredentialFile: Optional JSON file containing Pushover token and user fields.
 diagnostics:

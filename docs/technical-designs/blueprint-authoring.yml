@@ -24,7 +24,7 @@ design-challenges:
     or formatting an author chose.
   two-kinds-of-blueprint: >
     Plumbing blueprints (shipped stage blueprints, answer-question,
-    hold-then-attention, the default intake) ship with Heddle and change on its schedule. Process blueprints
+    the default intake) ship with Heddle and change on its schedule. Process blueprints
     belong to the user and change on theirs. Both use one format and one
     registry, and a user may fork a shipped one.
   validation-before-harm: >

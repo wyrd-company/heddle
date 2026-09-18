@@ -134,11 +134,13 @@ directory within one. Heddle finds every blueprint inside that root and
 reaches nothing above it, and every path a blueprint writes - a template, a
 handoff contract, a policy rule artifact - resolves from the root rather than
 from the directory of the blueprint file that wrote it.
-`intake.commit` selects the Git revision for new intake runs. A run stores its
+`intake.revision` selects the Git revision for new intake attempts; a branch
+follows new commits as each new attempt starts, and a full hash promotes a
+revision deliberately. A run stores its
 full commit and resolved graph; templates, handoff schemas, and policies come
 from that commit on execution and restart. Working-tree edits do not change a
-run. Commit authored changes and select the new revision for new runs. Keep
-those Git objects available for existing runs. Linked worktrees and packed
+run. Commit authored changes and select the new revision for new attempts.
+Keep those Git objects available for existing runs. Linked worktrees and packed
 objects use the same contract. `webhook.secretFile` points to the secret
 used to verify GitHub deliveries. Secret values are read from these files;
 they do not belong in YAML values, Feature options, command arguments, or

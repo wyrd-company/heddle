@@ -33,6 +33,9 @@ export class InstanceStore {
       CREATE TABLE IF NOT EXISTS project_choice_questions (issue_id TEXT PRIMARY KEY, occurrence_id TEXT NOT NULL UNIQUE);
       CREATE TABLE IF NOT EXISTS issue_deliveries (issue_id TEXT NOT NULL, updated_at TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,updated_at,snapshot));
       CREATE TABLE IF NOT EXISTS intake_attempts (issue_id TEXT PRIMARY KEY, attempt INTEGER NOT NULL, run_id TEXT NOT NULL, commit_id TEXT NOT NULL, snapshot TEXT NOT NULL);
+      INSERT OR IGNORE INTO intake_attempts
+        SELECT json_extract(initial_context,'$.issue.id'), 1, id, blueprint_commit, json_extract(initial_context,'$.issue')
+        FROM runs WHERE id = 'intake:' || json_extract(initial_context,'$.issue.id');
       CREATE TABLE IF NOT EXISTS github_attention (id INTEGER PRIMARY KEY, project TEXT NOT NULL, message TEXT NOT NULL);
       DELETE FROM github_attention WHERE id NOT IN (SELECT min(id) FROM github_attention GROUP BY project,message);
       CREATE UNIQUE INDEX IF NOT EXISTS github_attention_identity ON github_attention(project,message);`);

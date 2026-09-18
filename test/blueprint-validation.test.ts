@@ -829,12 +829,47 @@ nodes:
     ["missing-template.yml", "reference.exists"],
     ["unavailable.yml", "heddle.unavailable-node-type"],
     ["unavailable.yml", "heddle.unavailable-operation"],
+    ["intake-dead-end.yml", "heddle.intake-terminal"],
   ])("keeps %s bound to %s in the negative corpus", (name, expectedRule) => {
     const file = resolve("test/fixtures/blueprints/negative", name);
 
     expect(validateBlueprintFile(file).map((item) => item.rule)).toContain(
       expectedRule,
     );
+  });
+
+  it("names the dead end and its reason in an intake that can end unowned", () => {
+    const file = resolve(
+      "test/fixtures/blueprints/negative/intake-dead-end.yml",
+    );
+
+    expect(validateBlueprintFile(file)).toContainEqual({
+      file,
+      node: "give-up",
+      rule: "heddle.intake-terminal",
+      message:
+        "Node give-up uses terminal-result and has no outgoing edge, so this intake can end without starting a lifecycle and leave the issue unowned",
+    });
+  });
+
+  it("leaves a blueprint that starts no lifecycle to end where it likes", () => {
+    const source = [
+      "id: sample-a",
+      "kind: helper",
+      "nodes:",
+      "  first:",
+      "    uses: terminal-result",
+      "    params:",
+      "      value: { status: done }",
+      "edges: []",
+      "",
+    ].join("\n");
+
+    expect(
+      validateBlueprintFile(temporaryFile("sample-a.yml", source)).map(
+        (item) => item.rule,
+      ),
+    ).not.toContain("heddle.intake-terminal");
   });
 
   it("validates params through each node type's published schema", () => {

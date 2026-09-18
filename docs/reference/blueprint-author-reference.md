@@ -67,7 +67,7 @@ The complete authored document shape is below. Node-type inputs follow in the ca
         },
       "kind":
         {
-          "description": "`process` blueprints belong to the user and route on stage outcomes. `stage` blueprints are run by `child-run` nodes and end on the stage result contract. `helper` blueprints are small plumbing runs such as intake, answer-question, and hold-then-attention.\n",
+          "description": "`process` blueprints belong to the user and route on stage outcomes. `stage` blueprints are run by `child-run` nodes and end on the stage result contract. `helper` blueprints are small plumbing runs such as intake and answer-question.\n",
           "type": "string",
           "enum": ["process", "stage", "helper"],
         },

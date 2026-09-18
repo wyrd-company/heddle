@@ -180,3 +180,19 @@ it.each([
     );
   },
 );
+
+it("takes any Git revision for intake and names the key an old commit key misses", () => {
+  const accepted = fixture(
+    "intake:\n  blueprintId: sample-intake\n  revision: main\n",
+  );
+  expect(resolveServiceConfig({ configPath: accepted.path })).toMatchObject({
+    intake: { blueprintId: "sample-intake", revision: "main" },
+  });
+
+  const rejected = fixture(
+    "intake:\n  blueprintId: sample-intake\n  commit: main\n",
+  );
+  expect(() => resolveServiceConfig({ configPath: rejected.path })).toThrow(
+    /intake\.revision/u,
+  );
+});

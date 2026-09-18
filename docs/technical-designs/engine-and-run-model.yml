@@ -71,7 +71,7 @@ proposed-design:
     `failed`), a pause flag independent of status, a parent run
     id when started by another run, and an append-only event log. Each issue
     in a bound project has exactly one lifecycle run at a time. Stage runs and
-    helper runs (answer-question, hold-then-attention) are children of that
+    helper runs (answer-question) are children of that
     lifecycle run or of each other.
   pausing: >
     A node pauses a run by calling Flowcraft's `markAsAwaiting` with a details

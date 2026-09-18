@@ -309,3 +309,48 @@ it("notifies once per episode and keeps waiting without a second deadline", asyn
     "wait-for-fix",
   ]);
 });
+
+it("does not let an earlier visit's deadline wake the visit that replaced it", async () => {
+  let now = 0;
+  const sent: string[] = [];
+  const { github, service, store } = setup({
+    type: "Recipe",
+    now: () => now,
+    notification: {
+      send: (item) => {
+        sent.push(item.title);
+        return Promise.resolve();
+      },
+    },
+  });
+  await service.start();
+  const hour = 60 * 60 * 1000;
+
+  // An edit that still matches no rule opens a second visit with its own grace.
+  now = hour;
+  const issue = github.issues[0];
+  if (!issue) throw new Error("Fixture issue missing");
+  issue.title = "Garden soup, revised";
+  issue.updatedAt = "2026-01-02T00:00:00Z";
+  expect(await service.poll()).toBe(1);
+  const second = store
+    .awaiting("intake:I_1")
+    .find((item) => item.nodeId === "hold-for-fix");
+  expect(second?.visit).toBe(2);
+
+  // The first visit's deadline falls due and wakes nothing.
+  now = 24 * hour + 1;
+  await service.engine.tick();
+  expect(sent).toEqual([]);
+  expect(
+    store.events("intake:I_1").filter((event) => event.type === "late-wakeup"),
+  ).toHaveLength(1);
+  expect(
+    store.awaiting("intake:I_1").map((item) => [item.nodeId, item.visit]),
+  ).toEqual([["hold-for-fix", 2]]);
+
+  // The second visit's own deadline is what notifies.
+  now = 25 * hour + 1;
+  await service.engine.tick();
+  expect(sent).toEqual(["Issue intake needs attention"]);
+});

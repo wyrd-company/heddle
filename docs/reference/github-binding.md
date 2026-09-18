@@ -80,18 +80,23 @@ resolution call. Explicit attention reopening is not supported.
 
 ## Shipped helper blueprints
 
-The package ships `blueprints/default-intake.yml`,
-`blueprints/hold-then-attention.yml`, and
+The package ships `blueprints/default-intake.yml` and
 `blueprints/rules/default-intake.yml`. They are ordinary blueprint repository
 files. Copy them into the user's blueprint repository and replace or edit them
 there.
 
 The default policy maps the generic `Work item` issue type to
 `standard-lifecycle`. Replace that rule and target with the user's issue types
-and lifecycle ids. Its fallback starts `hold-then-attention`. The hold helper
-keeps the expected issue type in one input, uses that input for its immutable
-wake binding and notification message, retries intake after a matching change,
-and sends attention after its authored `PT24H` deadline.
+and lifecycle ids. A rules file needs no fallback rule: `policy` reports
+`matched: false` and the intake blueprint decides what an unmatched issue
+means.
+
+The default intake is one looping run. It classifies the issue, and on no
+match waits on `on-issue-change` for its authored `PT24H` grace period. An
+edit sends the changed snapshot back to `classify`. When the grace period
+passes it notifies once, naming the issue and the rules file, and then waits
+again with no deadline. Its only node without an outgoing edge is the
+`lifecycle-start`, so an issue is never left with no run that owns it.
 
 Register `PushoverDelivery` as `options.notifications` when any loaded blueprint
 uses `notify`. Notification delivery remains optional when the loaded repository

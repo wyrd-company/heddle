@@ -97,10 +97,28 @@ proposed-design:
     issue identity. Startup repairs a committed lifecycle whose instance
     attachment was interrupted without resolving live issue data again.
   unmatched-intake: >
-    An issue that matches no rule enters the shipped `hold-then-attention`
-    blueprint: wait on `on-issue-change` with a deadline, re-run intake on
-    change, and raise attention through `notify` or `question` when the
-    deadline passes. Users replace it like any blueprint.
+    An issue that matches no rule stays in its intake run. `policy` reports
+    `matched: false`, and the blueprint waits on `on-issue-change` for the
+    author's grace period, classifies the changed snapshot again on every
+    edit, and raises attention through `notify` or `question` when the grace
+    period passes, then waits again untimed. Lint refuses an intake whose
+    paths do not all end at a `lifecycle-start`, so no path leaves the issue
+    unowned. Users replace the blueprint like any other.
+  intake-attempts: >
+    An instance records the attempt its intake is on: the run id, the commit
+    it resolved, and the issue snapshot it started with. Replaying the current
+    attempt is idempotent because it is replayed with those recorded values. A
+    new attempt runs under a new run id only when something changed since the
+    last one ended: the stored issue snapshot, the resolved intake revision,
+    or the life of the process. A run that has not ended owns its issue, and
+    changes reach it through the issue-change wake-up rather than a new
+    attempt. There is no clock, retry interval, or backoff. A failed attempt
+    and its events are kept.
+  intake-isolation: >
+    One issue's intake failure is recorded as attention on that instance and
+    on its own attempt run, and the loop continues. It never fails another
+    issue's delivery, a poll, or service start. A delivery whose own issue
+    applied returns success even when another instance's attempt failed.
   inference-guard-rails: |
     - Project: from the issue's project memberships. If it is in more than
       one bound project, ask once through `question` and record the answer

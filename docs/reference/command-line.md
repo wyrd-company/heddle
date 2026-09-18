@@ -47,10 +47,10 @@ override, set `HEDDLE_HOOK_SOCKET` to the socket reported at startup in the
 agent harness environment.
 
 `blueprints.repository` names a Git checkout or a blueprint directory within
-one. `intake.commit` selects a commit or named ref for new intake runs. Each
-new root run resolves it once to a full commit and stores that identity with
-its graph. A repeated start for the same run and original revision uses that
-stored commit even after a named ref moves. Prompts, handoff schemas, and policies use the same commit during
+one. `intake.revision` selects any Git revision for new intake attempts. Each new
+attempt resolves it once to a full commit and stores that identity with its
+graph. Replaying the current attempt uses that stored commit even after a
+named ref moves; a moved ref is what starts the next attempt. Prompts, handoff schemas, and policies use the same commit during
 execution and restart. Working-tree edits do not affect existing runs. Keep
 the pinned Git objects available while their runs need them; the working tree
 can move to another commit. `heddle validate` checks authored working-tree
