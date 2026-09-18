@@ -67,21 +67,45 @@ export class DurableRuntime extends FlowRuntime<Data, Data> {
 export async function resolveValues(
   value: unknown,
   context: Data,
+  unresolved?: string[],
 ): Promise<unknown> {
   if (Array.isArray(value))
-    return Promise.all(value.map((item) => resolveValues(item, context)));
+    return Promise.all(
+      value.map((item) => resolveValues(item, context, unresolved)),
+    );
   if (value !== null && typeof value === "object") {
     const record = value as Data;
-    if (typeof record["from"] === "string" && Object.keys(record).length === 1)
-      return jsonata(record["from"]).evaluate(context) as Promise<unknown>;
+    if (
+      typeof record["from"] === "string" &&
+      Object.keys(record).length === 1
+    ) {
+      const resolved: unknown = await jsonata(record["from"]).evaluate(context);
+      if (resolved === undefined) unresolved?.push(record["from"]);
+      return resolved;
+    }
     return Object.fromEntries(
       await Promise.all(
         Object.entries(record).map(async ([key, item]) => [
           key,
-          await resolveValues(item, context),
+          await resolveValues(item, context, unresolved),
         ]),
       ),
     );
   }
   return value;
+}
+
+/** A node failure names the references that had no value, so the cause is readable. */
+export function withUnresolved(
+  error: unknown,
+  unresolved: readonly string[],
+): unknown {
+  if (unresolved.length === 0) return error;
+  const named = unresolved
+    .map((expression) => `{ from: ${expression} }`)
+    .join(", ");
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(`${message}; reference resolved to no value: ${named}`, {
+    cause: error,
+  });
 }

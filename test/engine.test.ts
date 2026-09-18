@@ -903,3 +903,33 @@ it("re-enters a self-loop pass with a fresh visit and rejects a stale resume", a
     context: { passes: 2 },
   });
 });
+
+it("names the reference that had no value when a node fails on it", async () => {
+  const blueprint: WorkflowBlueprint = {
+    id: "packing",
+    nodes: [
+      {
+        id: "seal",
+        uses: "terminal-result",
+        params: { value: { from: "measure-weight.payload" } },
+      },
+    ],
+    edges: [],
+  };
+  const { engine, store } = fixture([blueprint]);
+
+  const run = await engine.start({
+    blueprintId: "packing",
+    commit: "commit-a",
+  });
+
+  expect(run.status).toBe("failed");
+  const messages = store
+    .events(run.id)
+    .filter((event) => event.type === "attention")
+    .map((event) => JSON.stringify(event.payload));
+  expect(messages.join("\n")).toContain(
+    "reference resolved to no value: { from: measure-weight.payload }",
+  );
+  expect(messages.join("\n")).toContain("Terminal result value is missing");
+});

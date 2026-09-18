@@ -5,7 +5,12 @@
 import type { NodeDefinition, NodeFunction } from "flowcraft";
 import type { RunStore } from "./store.js";
 import { blueprintContext } from "../blueprints/flowcraft.js";
-import { DurableRuntime, DispatchHeld, resolveValues } from "./runtime.js";
+import {
+  DurableRuntime,
+  DispatchHeld,
+  resolveValues,
+  withUnresolved,
+} from "./runtime.js";
 import type {
   AwaitingDetails,
   Data,
@@ -42,10 +47,12 @@ export function bindNode(
     }
     // References read the pinned blueprint beside the context; the context object
     // itself stays unchanged, so nothing durable gains a blueprint key.
-    const params = (await resolveValues(definition.params ?? {}, {
-      ...context,
-      blueprint: blueprintContext(run.blueprint),
-    })) as Data;
+    const unresolved: string[] = [];
+    const params = (await resolveValues(
+      definition.params ?? {},
+      { ...context, blueprint: blueprintContext(run.blueprint) },
+      unresolved,
+    )) as Data;
     const deadline = duration(params["deadline"]);
     const inactivity = duration(params["inactivity"]);
     let awaiting: AwaitingDetails | undefined;
@@ -66,38 +73,43 @@ export function bindNode(
       context,
       await: pause,
     };
-    await beforeNode?.(nodeContext, definition);
-    if (awaiting) {
-      // The adapter holds dispatch until its attention is resolved.
-    } else if (definition.uses === "child-run") {
-      if (typeof params["blueprint"] !== "string")
-        throw new Error("child-run requires blueprint");
-      await pause({
-        kind: "child-run",
-        childRunId: effectKey,
-        blueprint: params["blueprint"],
-        inputs: params["inputs"] ?? {},
-        outputs: params["outputs"],
-      });
-    } else if (definition.uses === "sleep") {
-      const deadline = duration(params["duration"]);
-      if (deadline === undefined) throw new Error("sleep requires duration");
-      await pause({ kind: "sleep", deadline });
-    } else if (definition.uses === "wait") {
-      await pause({ kind: "wait" });
-    } else {
-      if (!implementation)
-        throw new Error(`Node type is not registered: ${definition.uses}`);
-      output = await implementation({
-        run,
-        nodeId,
-        visit,
-        effectKey,
-        params,
-        input: native.input,
-        context,
-        await: pause,
-      });
+    try {
+      await beforeNode?.(nodeContext, definition);
+      if (awaiting) {
+        // The adapter holds dispatch until its attention is resolved.
+      } else if (definition.uses === "child-run") {
+        if (typeof params["blueprint"] !== "string")
+          throw new Error("child-run requires blueprint");
+        await pause({
+          kind: "child-run",
+          childRunId: effectKey,
+          blueprint: params["blueprint"],
+          inputs: params["inputs"] ?? {},
+          outputs: params["outputs"],
+        });
+      } else if (definition.uses === "sleep") {
+        const deadline = duration(params["duration"]);
+        if (deadline === undefined) throw new Error("sleep requires duration");
+        await pause({ kind: "sleep", deadline });
+      } else if (definition.uses === "wait") {
+        await pause({ kind: "wait" });
+      } else {
+        if (!implementation)
+          throw new Error(`Node type is not registered: ${definition.uses}`);
+        output = await implementation({
+          run,
+          nodeId,
+          visit,
+          effectKey,
+          params,
+          input: native.input,
+          context,
+          await: pause,
+        });
+      }
+    } catch (error) {
+      // The cause of a failed node includes the references that had no value.
+      throw withUnresolved(error, unresolved);
     }
     // Node-owned shared context writes are part of the same durable checkpoint.
     for (const [key, value] of Object.entries(context)) {

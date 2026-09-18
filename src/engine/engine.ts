@@ -19,7 +19,11 @@ import {
 } from "./create-run.js";
 import { DurableTraversal } from "./traversal.js";
 import { childOutputs } from "./child-outputs.js";
-import { reconcileBoundary, recordFailure } from "./boundary.js";
+import {
+  failureMessage,
+  reconcileBoundary,
+  recordFailure,
+} from "./boundary.js";
 import { lifecycleStart } from "./lifecycle-start.js";
 
 export class WorkflowEngine {
@@ -152,7 +156,7 @@ export class WorkflowEngine {
       (result.status !== "awaiting" && result.status !== "completed")
     )
       throw new Attention(
-        `Run landed in ${result.status}: ${result.errors?.map((error) => error.message).join("; ") ?? ""}`,
+        `Run landed in ${result.status}: ${result.errors?.map(failureMessage).join("; ") ?? ""}`,
       );
     this.store.transaction(() => {
       const context = terminalContext(result.context);
