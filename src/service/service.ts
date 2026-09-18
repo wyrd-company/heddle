@@ -70,6 +70,7 @@ export async function startService(
     passes: PassService | undefined,
     t3: T3Client | undefined,
     timer: NodeJS.Timeout | undefined;
+  let polling: Promise<void> | undefined, hookSocket: string | undefined;
   let finish!: () => void;
   const done = new Promise<void>((resolve) => {
     finish = resolve;
@@ -184,7 +185,7 @@ export async function startService(
       boundary = passes.synchronize;
       await binding.engine.recover();
       await passes.recover();
-      const hookSocket = join(config.stateDirectory, "hooks.sock");
+      hookSocket = join(config.stateDirectory, "hooks.sock");
       rmSync(hookSocket, { force: true });
       hookHandler = new HookServer(passes.sessions, origin);
       hooks = createServer(
@@ -192,28 +193,36 @@ export async function startService(
       );
       await listenSocket(hooks, hookSocket);
       await binding.start();
-      timer = setInterval(
-        () =>
-          void Promise.all([binding.poll(), binding.engine.tick()]).catch(
-            (error) =>
-              io.error(
-                `Heddle poll failed: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-          ),
-        config.polling.intervalMs,
-      );
+      const poll = (): void => {
+        if (polling) return;
+        polling = (async () => {
+          await binding.poll();
+          await binding.engine.tick();
+        })()
+          .catch((error) =>
+            io.error(
+              `Heddle poll failed: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          )
+          .finally(() => {
+            polling = undefined;
+          });
+      };
+      timer = setInterval(poll, config.polling.intervalMs);
       startupMessage = `Heddle started; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms; tools=${origin}; hooks=${hookSocket}`;
     }
     const close = async (): Promise<void> => {
       if (closing) return closing;
       closing = (async () => {
         if (timer) clearInterval(timer);
-        passes?.close();
         if (hooks?.listening) await closeServer(hooks);
         if (tcp?.listening) await closeServer(tcp);
+        await polling;
+        passes?.close();
         await t3?.close();
         store?.close();
         lease.release();
+        if (hookSocket) rmSync(hookSocket, { force: true });
         if (signalHandler) {
           process.off("SIGINT", signalHandler);
           process.off("SIGTERM", signalHandler);
@@ -238,9 +247,11 @@ export async function startService(
     passes?.close();
     if (hooks?.listening) await closeServer(hooks);
     if (tcp?.listening) await closeServer(tcp);
+    await polling;
     await t3?.close();
     store?.close();
     lease.release();
+    if (hookSocket) rmSync(hookSocket, { force: true });
     finish();
     throw error;
   }

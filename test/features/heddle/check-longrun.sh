@@ -12,7 +12,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cp /etc/s6-overlay/s6-rc.d/heddle/run "${service_directory}/run"
+cat >"${service_directory}/run" <<EOF
+#!/usr/bin/env bash
+exec /usr/local/bin/heddle-service
+EOF
 chmod 0755 "${service_directory}/run"
 /command/s6-supervise "${service_directory}" &
 supervisor_pid=$!
