@@ -139,6 +139,9 @@ it("uses the authoring validator and safe revision and artifact diagnostics", as
   await expect(
     catalog.read(first, "sample-process", "../outside"),
   ).rejects.toThrow("Invalid artifact identity");
+  await expect(
+    catalog.read(first, "sample-process", "/blueprint/parcel.njk"),
+  ).rejects.toThrow("Invalid artifact identity");
   await expect(catalog.resolve(first, "missing-blueprint")).rejects.toThrow(
     `Unknown blueprint missing-blueprint at revision ${first}`,
   );
@@ -163,8 +166,10 @@ it("reads nested catalogs and linked worktrees from packed Git objects", async (
   const first = commitFixture(root);
   fixtureGit(root, "gc");
   const linked = join(root, "linked");
-  fixtureGit(root, "worktree", "add", "--detach", linked, first);
+  fixtureGit(root, "worktree", "add", "-b", "sample", linked, first);
   const catalog = new BlueprintCatalog(join(linked, "recipes"));
+  expect(await catalog.pin("HEAD")).toBe(first);
+  fixtureGit(linked, "checkout", "--detach");
   expect(await catalog.pin("HEAD")).toBe(first);
   expect(await catalog.read(first, "sample-process", "parcel.njk")).toContain(
     "first parcel",
@@ -175,6 +180,11 @@ it("retains beside-blueprint symlinks and excludes host files", async () => {
   writeFileSync(join(root, "actual.njk"), "A linked parcel.");
   rmSync(join(root, "parcel.njk"));
   symlinkSync("actual.njk", join(root, "parcel.njk"));
+  const foreign = mkdtempSync(join(tmpdir(), "foreign-blueprint-"));
+  roots.push(foreign);
+  const foreignFile = join(foreign, "unrelated.yml");
+  writeFileSync(foreignFile, "nodes: [invalid YAML");
+  symlinkSync(foreignFile, join(root, "unrelated.yml"));
   const first = commitFixture(root);
   expect(
     await new BlueprintCatalog(root).read(
@@ -193,4 +203,25 @@ it("retains beside-blueprint symlinks and excludes host files", async () => {
   await expect(
     new BlueprintCatalog(root).resolve(outside, "sample-process"),
   ).rejects.toThrow("reference.exists");
+});
+
+it("keeps referenced and unreferenced symlinks beside their blueprint directory", async () => {
+  const root = mkdtempSync(join(tmpdir(), "artifact-boundary-"));
+  roots.push(root);
+  const nested = join(root, "recipes");
+  mkdirSync(nested);
+  writeSample(nested, "first");
+  writeFileSync(join(root, "outer.njk"), "An unrelated parcel.");
+  symlinkSync("../outer.njk", join(nested, "unreferenced.njk"));
+  const first = commitFixture(root);
+  const catalog = new BlueprintCatalog(root);
+  await expect(
+    catalog.read(first, "sample-process", "unreferenced.njk"),
+  ).rejects.toThrow("Missing blueprint artifact unreferenced.njk");
+  rmSync(join(nested, "parcel.njk"));
+  symlinkSync("../outer.njk", join(nested, "parcel.njk"));
+  const second = commitFixture(root);
+  await expect(catalog.resolve(second, "sample-process")).rejects.toThrow(
+    "reference.exists",
+  );
 });

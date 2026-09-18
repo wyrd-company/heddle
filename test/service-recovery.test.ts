@@ -173,9 +173,10 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     const paused = await first.engine?.start({
       id: "durable-run",
       blueprintId: "sample-process",
-      commit: firstCommit,
+      commit: "HEAD",
     });
     expect(paused?.status).toBe("awaiting");
+    expect(paused?.commit).toBe(firstCommit);
     await vi.waitFor(() => {
       expect(registrations).toBe(1);
     });
@@ -276,7 +277,7 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     const newRun = await latest.engine?.start({
       id: "new-run",
       blueprintId: "sample-process",
-      commit: secondCommit,
+      commit: "HEAD",
     });
     expect(newRun?.commit).toBe(secondCommit);
     await latest.close();
