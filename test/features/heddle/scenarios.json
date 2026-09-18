@@ -8,7 +8,8 @@
         "githubAppCredentialsFile": "/mnt/secrets/github-app.yml",
         "t3CodeTokenFile": "/mnt/secrets/t3-token",
         "webhookSecretFile": "/mnt/secrets/webhook-secret",
-        "serviceUser": "vscode"
+        "serviceUser": "vscode",
+        "agentToolsPort": "8631"
       }
     }
   }

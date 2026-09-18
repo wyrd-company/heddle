@@ -21,6 +21,7 @@ validate_absolute_path stateDirectory "${STATEDIRECTORY}"
 validate_absolute_path githubAppCredentialsFile "${GITHUBAPPCREDENTIALSFILE}"
 validate_absolute_path t3CodeTokenFile "${T3CODETOKENFILE}"
 validate_absolute_path webhookSecretFile "${WEBHOOKSECRETFILE}"
+validate_port agentToolsPort "${AGENTTOOLSPORT}"
 
 service_user="$(pick_service_user "${SERVICEUSER}")"
 service_group="$(id -gn "${service_user}")"
@@ -40,7 +41,9 @@ blueprints:
   repository: /usr/local/share/heddle/blueprints
 t3Code:
   endpoint: http://127.0.0.1:3773
-# Listening stays disabled; set webhook.listen.host and webhook.listen.port explicitly.
+agentTools:
+  listen: { host: 127.0.0.1, port: ${AGENTTOOLSPORT} }
+# Webhook listening stays disabled; set webhook.listen.host and webhook.listen.port explicitly.
 webhook:
   secretFile: ${WEBHOOKSECRETFILE}
 EOF

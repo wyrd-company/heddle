@@ -68,6 +68,13 @@ validate_absolute_path() {
     esac
 }
 
+validate_port() {
+    local option_name="$1"
+    local value="$2"
+    [[ "${value}" =~ ^[0-9]+$ ]] && [ "${value}" -ge 1 ] && [ "${value}" -le 65535 ] \
+        || err "${option_name} must be a TCP port from 1 through 65535."
+}
+
 find_single_package() {
     local feature_directory="$1"
     local -a package_paths

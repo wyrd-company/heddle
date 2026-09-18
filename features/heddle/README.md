@@ -14,14 +14,15 @@ Dev Container build.
 
 ## Options
 
-| Option                     | Type   | Default                              | Purpose                                  |
-| -------------------------- | ------ | ------------------------------------ | ---------------------------------------- |
-| `configFile`               | string | `/etc/heddle/config.yml`             | Bind-mounted service configuration file. |
-| `stateDirectory`           | string | `/var/lib/heddle`                    | Bind-mounted SQLite and durable state.   |
-| `githubAppCredentialsFile` | string | `/run/secrets/heddle-github-app.yml` | Bind-mounted GitHub App credential file. |
-| `t3CodeTokenFile`          | string | `/run/secrets/heddle-t3-token`       | Bind-mounted T3 Code bearer-token file.  |
-| `webhookSecretFile`        | string | `/run/secrets/heddle-webhook-secret` | Bind-mounted GitHub webhook secret file. |
-| `serviceUser`              | string | `automatic`                          | Account that runs the service.           |
+| Option                     | Type   | Default                              | Purpose                                     |
+| -------------------------- | ------ | ------------------------------------ | ------------------------------------------- |
+| `configFile`               | string | `/etc/heddle/config.yml`             | Bind-mounted service configuration file.    |
+| `stateDirectory`           | string | `/var/lib/heddle`                    | Bind-mounted SQLite and durable state.      |
+| `githubAppCredentialsFile` | string | `/run/secrets/heddle-github-app.yml` | Bind-mounted GitHub App credential file.    |
+| `t3CodeTokenFile`          | string | `/run/secrets/heddle-t3-token`       | Bind-mounted T3 Code bearer-token file.     |
+| `agentToolsPort`           | string | `8422`                               | Loopback port for the agent-tools listener. |
+| `webhookSecretFile`        | string | `/run/secrets/heddle-webhook-secret` | Bind-mounted GitHub webhook secret file.    |
+| `serviceUser`              | string | `automatic`                          | Account that runs the service.              |
 
 Every secret option is a file location. Secret values do not enter Feature
 options, generated launchers, or installation logs.
@@ -34,6 +35,15 @@ exits.
 
 See the repository [README](../../README.md#dev-container-feature) for the
 configuration schema, bind mounts, GitHub App permissions, and T3 Code pairing.
+
+## Agent-tools listener
+
+`agentToolsPort` selects the TCP port of the internal listener that serves the
+generated agent-tool endpoints. The generated configuration binds it on
+`127.0.0.1` as `agentTools.listen`. The default is `8422`; select another port
+when that one is already used in the container. The address must stay the same
+across restarts, because a provider session keeps the endpoint URL it was
+registered with. A port already in use fails service startup.
 
 ## Webhook routing
 
