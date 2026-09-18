@@ -17,6 +17,7 @@ import {
 } from "../src/index.js";
 import { T3Client } from "../src/t3code/index.js";
 import type { WorkflowBlueprint } from "flowcraft";
+import { fixtureHookEnvironment } from "./fixture-hook-environment.mjs";
 const endpointId = (path: string) =>
   createHash("sha256")
     .update(path.replace(/\/policy$/, ""))
@@ -161,7 +162,7 @@ const hooks = new HookServer(
   passes.sessions,
   `http://127.0.0.1:${config.port}`,
 );
-const socket = join(config.profile, "hooks.sock");
+const socket = fixtureHookEnvironment(config.profile).HEDDLE_HOOK_SOCKET;
 rmSync(socket, { force: true });
 const decide = hooks.decide.bind(hooks);
 hooks.decide = async (sessionId) => {

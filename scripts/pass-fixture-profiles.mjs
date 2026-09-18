@@ -16,6 +16,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { exportHookPlugins } from "../dist/index.js";
+import { fixtureHookEnvironment } from "./fixture-hook-environment.mjs";
 
 /** Fixture-only native profile isolation; credential bytes never enter this process. */
 export async function fixtureProfiles(root, { trusted = false } = {}) {
@@ -47,7 +48,7 @@ export async function fixtureProfiles(root, { trusted = false } = {}) {
     HOME: home,
     CODEX_HOME: codex,
     CLAUDE_CONFIG_DIR: claude,
-    HEDDLE_STATE_DIR: root,
+    ...fixtureHookEnvironment(root),
   };
   const source = join(root, "packages");
   await exportHookPlugins(source);

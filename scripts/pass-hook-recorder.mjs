@@ -5,6 +5,7 @@
 import { createServer } from "node:http";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fixtureHookEnvironment } from "./fixture-hook-environment.mjs";
 const root = process.argv[2];
 if (!root) throw new Error("Fixture root required");
 const server = createServer(async (request, response) => {
@@ -25,7 +26,7 @@ const server = createServer(async (request, response) => {
   );
   response.writeHead(200, { "content-type": "application/json" }).end("{}");
 });
-server.listen(join(root, "hooks.sock"), () =>
+server.listen(fixtureHookEnvironment(root).HEDDLE_HOOK_SOCKET, () =>
   console.log("fixture hook receiver ready"),
 );
 for (const signal of ["SIGTERM", "SIGINT"])

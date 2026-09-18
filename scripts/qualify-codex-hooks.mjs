@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { exportHookPlugins } from "../dist/index.js";
+import { fixtureHookEnvironment } from "./fixture-hook-environment.mjs";
 const version = execFileSync("codex", ["--version"], {
   encoding: "utf8",
 }).trim();
@@ -102,7 +103,7 @@ for (const trusted of [false, true]) {
       env: installEnvironment,
       cwd: directory,
     });
-    hookSocket.listen(join(directory, "hooks.sock"));
+    hookSocket.listen(fixtureHookEnvironment(directory).HEDDLE_HOOK_SOCKET);
     await once(hookSocket, "listening");
     // Fixture-only operator trust. Production installation never writes this.
     const identity = {
@@ -148,7 +149,7 @@ for (const trusted of [false, true]) {
           PATH: join(directory, "bin") + ":" + process.env.PATH,
           HOME: directory,
           CODEX_HOME: home,
-          HEDDLE_STATE_DIR: directory,
+          ...fixtureHookEnvironment(directory),
         },
         stdio: ["ignore", "pipe", "pipe"],
       },
