@@ -162,7 +162,12 @@ it.each(["claude", "codex"] as const)(
     const child = spawn(
       process.execPath,
       [join(process.cwd(), "dist/cli.js"), ...command.split(" ").slice(1)],
-      { env: { ...process.env, HEDDLE_STATE_DIR: f.directory } },
+      {
+        env: {
+          ...process.env,
+          HEDDLE_HOOK_SOCKET: join(f.directory, "hooks.sock"),
+        },
+      },
     );
     let out = "";
     child.stdout.on("data", (data) => {

@@ -6,7 +6,7 @@
 // ---
 import { createServer, type Server } from "node:http";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { appClients } from "../binding/config.js";
 import { GitHubBindingService } from "../binding/service.js";
 import { PushoverDelivery } from "../binding/notify.js";
@@ -19,6 +19,7 @@ import type { WorkflowEngine } from "../engine/engine.js";
 import type { ResolvedServiceConfig } from "./config.js";
 import { BlueprintCatalog } from "./blueprints.js";
 import { acquireStoreLease } from "./lease.js";
+import { serviceDatabasePath, serviceHookSocket } from "./identity.js";
 
 export interface ServiceIo {
   error(message: string): void;
@@ -67,7 +68,9 @@ export async function startService(
 ): Promise<RunningService> {
   mkdirSync(config.stateDirectory, { recursive: true, mode: 0o700 });
   mkdirSync(dirname(config.databasePath), { recursive: true, mode: 0o700 });
-  const lease = acquireStoreLease(config.databasePath);
+  const databasePath = serviceDatabasePath(config.databasePath);
+  const lease = acquireStoreLease(databasePath);
+  let ready = false;
   let store: RunStore | undefined,
     tcp: Server | undefined,
     hooks: Server | undefined,
@@ -84,7 +87,7 @@ export async function startService(
   let startupMessage: string;
   let engine: WorkflowEngine | undefined;
   try {
-    store = new RunStore(config.databasePath);
+    store = new RunStore(databasePath);
     if (config.projects.length === 0 && config.pass === undefined) {
       timer = setInterval(() => undefined, config.polling.intervalMs);
       startupMessage = `Heddle started with no bound projects; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms`;
@@ -146,6 +149,10 @@ export async function startService(
       engine = binding.engine;
       tcp = createServer((request, response) => {
         void (async () => {
+          if (!ready) {
+            response.writeHead(503).end();
+            return;
+          }
           if (
             request.url === "/webhook/github" &&
             request.method === "POST" &&
@@ -190,13 +197,14 @@ export async function startService(
       lifecycle.boundary = passes.synchronize;
       await binding.engine.recover();
       await passes.recover();
-      hookSocket = join(config.stateDirectory, "hooks.sock");
+      hookSocket = serviceHookSocket(config.stateDirectory, databasePath);
       rmSync(hookSocket, { force: true });
       const hookHandler = new HookServer(passes.sessions, origin);
       hooks = createServer((request, response) => {
         void hookHandler.handle(request, response);
       });
       await listenSocket(hooks, hookSocket);
+      ready = true;
       await binding.start();
       const poll = (): void => {
         if (polling) return;
@@ -218,6 +226,7 @@ export async function startService(
     }
     const close = async (): Promise<void> => {
       if (closing) return closing;
+      ready = false;
       closing = (async () => {
         if (timer) clearInterval(timer);
         if (hooks?.listening) await closeServer(hooks);
@@ -226,8 +235,8 @@ export async function startService(
         passes?.close();
         await t3?.close();
         store?.close();
-        lease.release();
         if (hookSocket) rmSync(hookSocket, { force: true });
+        lease.release();
         if (signalHandler) {
           process.off("SIGINT", signalHandler);
           process.off("SIGTERM", signalHandler);
@@ -248,6 +257,7 @@ export async function startService(
     io.output(startupMessage);
     return { close, done, ...(engine === undefined ? {} : { engine }) };
   } catch (error) {
+    ready = false;
     if (timer) clearInterval(timer);
     passes?.close();
     if (hooks?.listening) await closeServer(hooks);
@@ -255,8 +265,8 @@ export async function startService(
     await polling;
     await t3?.close();
     store?.close();
-    lease.release();
     if (hookSocket) rmSync(hookSocket, { force: true });
+    lease.release();
     finish();
     throw error;
   }

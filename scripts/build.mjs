@@ -17,6 +17,7 @@ await build({
     "@modelcontextprotocol/sdk",
     "smol-toml",
     "flowcraft",
+    "fs-native-extensions",
     "graphql",
     "jsonata",
     "nunjucks",

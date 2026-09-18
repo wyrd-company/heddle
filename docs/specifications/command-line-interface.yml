@@ -56,8 +56,24 @@ diagnostics:
 signals:
   SIGINT: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
   SIGTERM: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
+ownership: >-
+  Writer ownership uses an operating-system descriptor lock on
+  <canonical-database-path>.writer before opening SQLite. The anchor remains
+  on disk; closing the descriptor or process death releases ownership.
+  Database symlinks resolve to the same owner. State-directory and database
+  overrides are independent; different databases can share one state directory.
+hook-transport: >-
+  Each database has a hook socket under the state directory named
+  hooks-<identity>.sock, where identity is the first 24 hexadecimal characters
+  of SHA-256 of the canonical database path. Startup reports the exact socket.
+  Hook commands use HEDDLE_HOOK_SOCKET when set. Otherwise they derive the
+  socket from heddle.sqlite under HEDDLE_STATE_DIR or the default state
+  directory. Set HEDDLE_HOOK_SOCKET to the reported socket for a database
+  override.
 recovery: >-
   Startup recovers durable engine runs and pass observations before accepting
-  hook traffic or new intake. A forced process death leaves the SQLite
-  checkpoint intact; the next service process removes only a stale writer
-  lease, opens the same database, and resumes the paused run.
+  webhook, generated-tool, or hook traffic or new intake. The HTTP listener
+  returns 503 without dispatching requests throughout engine and pass recovery.
+  The hook listener starts after recovery. A forced process death leaves the
+  SQLite checkpoint intact; the next service acquires ownership, opens the
+  same database, and resumes the paused run.

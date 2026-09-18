@@ -54,6 +54,7 @@
     "@octokit/core": "^7.0.8",
     "ajv": "^8.20.0",
     "flowcraft": "^2.10.1",
+    "fs-native-extensions": "^1.5.1",
     "graphql": "^16.14.2",
     "jsonata": "^2.2.2",
     "nunjucks": "^3.2.4",

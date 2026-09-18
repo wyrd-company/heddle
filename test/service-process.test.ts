@@ -10,10 +10,12 @@ import { afterEach, expect, it } from "vitest";
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];
-afterEach(() => {
-  for (const child of children.splice(0))
+afterEach(async () => {
+  for (const child of children.splice(0)) {
     if (child.exitCode === null && child.signalCode === null)
       child.kill("SIGKILL");
+    await exited(child);
+  }
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
@@ -81,7 +83,7 @@ it.each(["SIGINT", "SIGTERM"] as const)(
     await started(first);
     first.kill(signal);
     expect(await exited(first)).toEqual({ code: 0, signal: null });
-    expect(existsSync(join(f.state, "heddle.sqlite.writer"))).toBe(false);
+    expect(existsSync(join(f.state, "heddle.sqlite.writer"))).toBe(true);
     const second = launch(f.config, f.state);
     await started(second);
     second.kill("SIGTERM");
@@ -100,4 +102,64 @@ it("reclaims only a dead process lease after SIGKILL and opens the same durable 
   expect(output).toContain(join(f.state, "heddle.sqlite"));
   second.kill("SIGTERM");
   expect((await exited(second)).code).toBe(0);
+});
+
+it("two gated production starts after SIGKILL open exactly one store writer", async () => {
+  const f = fixture();
+  const crashed = launch(f.config, f.state);
+  await started(crashed);
+  crashed.kill("SIGKILL");
+  await exited(crashed);
+  const contenders = [0, 1].map(() => {
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        resolve("test/support/service-start-gate.ts"),
+        resolve("dist/cli.js"),
+        "start",
+        "--config",
+        f.config,
+        "--state",
+        f.state,
+      ],
+      {
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+        env: { ...process.env, SERVICE_TEST_ROOT: f.root },
+      },
+    );
+    children.push(child);
+    return child;
+  });
+  const results = contenders.map((child) =>
+    started(child).then(
+      (output) => ({ child, output, error: undefined }),
+      (error: unknown) => ({ child, output: undefined, error }),
+    ),
+  );
+  await Promise.all(
+    contenders.map(
+      (child) =>
+        new Promise<void>((resolveReady) =>
+          child.once("message", () => {
+            resolveReady();
+          }),
+        ),
+    ),
+  );
+  for (const child of contenders) child.send("start");
+  const finished = await Promise.all(results);
+  const winner = finished.find((item) => item.output !== undefined);
+  const loser = finished.find((item) => item.error !== undefined);
+  expect(finished.filter((item) => item.output !== undefined)).toHaveLength(1);
+  expect(String(loser?.error)).toContain("already owned");
+  expect(loser?.child.exitCode).toBe(1);
+  expect(existsSync(join(f.root, `${String(winner?.child.pid)}.opened`))).toBe(
+    true,
+  );
+  expect(existsSync(join(f.root, `${String(loser?.child.pid)}.opened`))).toBe(
+    false,
+  );
+  winner?.child.kill("SIGTERM");
+  if (winner) expect((await exited(winner.child)).code).toBe(0);
 });

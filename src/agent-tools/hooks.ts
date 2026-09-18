@@ -5,17 +5,25 @@
 import { request } from "node:http";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { serviceDatabasePath, serviceHookSocket } from "../service/identity.js";
 export type Harness = "claude" | "codex";
 
 export function hookSocketPath(): string {
-  return join(
+  if (process.env["HEDDLE_HOOK_SOCKET"])
+    return process.env["HEDDLE_HOOK_SOCKET"];
+  const state =
     process.env["HEDDLE_STATE_DIR"] ??
-      join(
-        process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"),
-        "heddle",
-      ),
-    "hooks.sock",
-  );
+    join(
+      process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"),
+      "heddle",
+    );
+  const database = join(state, "heddle.sqlite");
+  try {
+    return serviceHookSocket(state, serviceDatabasePath(database));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return serviceHookSocket(state, database);
+  }
 }
 
 /** Both native plugins send the harness identity unchanged to Heddle's writer. */

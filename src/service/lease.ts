@@ -2,58 +2,48 @@
 // relationships:
 //   implements: command-line-interface
 // ---
-import {
-  closeSync,
-  openSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { closeSync, fstatSync, openSync, statSync } from "node:fs";
+import { tryLock } from "fs-native-extensions";
 
 export interface StoreLease {
   path: string;
   release(): void;
 }
 
-function live(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
-
+/** The anchor stays on disk; ownership belongs to the open descriptor. */
 export function acquireStoreLease(databasePath: string): StoreLease {
   const path = `${databasePath}.writer`;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (;;) {
+    const fd = openSync(path, "a+", 0o600);
+    let retained = false;
     try {
-      const fd = openSync(path, "wx", 0o600);
-      writeFileSync(fd, `${String(process.pid)}\n`, "utf8");
-      closeSync(fd);
+      const granted = tryLock(fd);
+      const opened = fstatSync(fd);
+      let current;
+      try {
+        current = statSync(path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      // A removed or replaced anchor is not the current ownership identity.
+      if (opened.dev !== current.dev || opened.ino !== current.ino) continue;
+      if (!granted)
+        throw new Error(
+          `Heddle store is already owned by another service: ${databasePath}`,
+        );
+      retained = true;
       let released = false;
       return {
         path,
         release() {
           if (released) return;
           released = true;
-          try {
-            unlinkSync(path);
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-          }
+          closeSync(fd);
         },
       };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const owner = Number(readFileSync(path, "utf8").trim());
-      if (Number.isSafeInteger(owner) && owner > 0 && live(owner))
-        throw new Error(
-          `Heddle store is already owned by service process ${String(owner)}: ${databasePath}`,
-          { cause: error },
-        );
-      unlinkSync(path);
+    } finally {
+      if (!retained) closeSync(fd);
     }
   }
-  throw new Error(`Cannot acquire Heddle store writer: ${databasePath}`);
 }

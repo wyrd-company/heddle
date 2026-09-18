@@ -150,7 +150,10 @@ proposed-design:
     `output.payload`; they never share the result-flag namespace. Parent
     context references therefore use `<child-node>.payload.<output-key>`.
   arbitration: >
-    One Heddle service owns the SQLite file and every engine write. Store
+    One Heddle service owns the SQLite file and every engine write. An
+    operating-system descriptor lock on a persistent anchor beside the canonical
+    database path grants ownership before SQLite opens. Descriptor close or
+    process death releases the lock; service code never unlinks the anchor. Store
     handles in that process share one synchronous writer connection and
     traversal ownership map. External processes submit requests to that
     service; they do not open competing writer connections. No SQLite busy
@@ -259,7 +262,10 @@ proposed-design:
     configuration is `~/.config/heddle/config.yml`; its default SQLite file is
     `~/.local/state/heddle/heddle.sqlite`. SIGINT and SIGTERM close the one
     service-owned writer. Restart after abrupt process death recovers durable
-    runs before new intake.
+    runs before external requests or new intake. HTTP requests receive 503
+    until engine and pass recovery finish. Hook sockets derive their identity
+    from the same canonical database path and start after recovery; different
+    databases retain independent sockets under a shared state directory.
   what-the-engine-never-knows: >
     The engine has no notion of a stage name, a status name, a review, or an
     epic. Those exist only as node ids and blueprint ids, which are user

@@ -75,7 +75,7 @@ version follows the Heddle package version.
 
 Each plugin runs `heddle hook stop claude` or `heddle hook stop codex`.
 `heddle` must be on the harness PATH. Both commands read the real Stop JSON
-and send only its exact `session_id` to Heddle's local `hooks.sock`. The socket
+and send only its exact `session_id` to Heddle's local database-specific hook socket. The socket
 is in `HEDDLE_STATE_DIR`, defaulting to `$XDG_STATE_HOME/heddle` or
 `~/.local/state/heddle`. Hook input cannot select a thread, pass, endpoint, or
 token. Cwd has no role in correlation. No request timeout is added by Heddle.
