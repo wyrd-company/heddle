@@ -152,7 +152,7 @@ The complete authored document shape is below. Node-type inputs follow in the ca
   "bag": { "type": "object", "additionalProperties": true },
   "expression":
     {
-      "description": "A JSONata expression evaluated over `result` and the run context. Node ids with hyphens are quoted in paths, as in stages.`taste-test`.visits.\n",
+      "description": "A JSONata expression evaluated over `result` and the run context. Node ids are hyphenated slugs, and JSONata reads a bare hyphen as subtraction, so every hyphenated node, input, or output name is written in backticks wherever an expression names it, as in `taste-test`.payload and stages.`taste-test`.visits. In YAML the whole expression is then quoted.\n",
       "type": "string",
       "minLength": 1,
     },
@@ -420,7 +420,7 @@ Start a child blueprint and pause until it completes.
         {
           "description": "Keys under this node's output.payload mapped to JSONata expressions over child final context. Omitted mappings export all declared outputs by literal key; an explicit empty object exports no values.\n",
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": { "$ref": "#/$defs/expression" },
         },
     },
 }
@@ -681,7 +681,7 @@ Pause until the bound issue changes and its authored condition matches.
         {
           "type": "object",
           "propertyNames": { "$ref": "#/$defs/slug" },
-          "additionalProperties": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/expression" },
         },
       "deadline": { "$ref": "#/$defs/deadline" },
     },

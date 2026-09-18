@@ -108,8 +108,11 @@ $defs:
   expression:
     description: >
       A JSONata expression evaluated over `result` and the run context.
-      Node ids with hyphens are quoted in paths, as in
-      stages.`taste-test`.visits.
+      Node ids are hyphenated slugs, and JSONata reads a bare hyphen as
+      subtraction, so every hyphenated node, input, or output name is written
+      in backticks wherever an expression names it, as in `taste-test`.payload
+      and stages.`taste-test`.visits. In YAML the whole expression is then
+      quoted.
     type: string
     minLength: 1
   jsonSchema:
@@ -307,7 +310,7 @@ $defs:
           child final context. Omitted mappings export all declared outputs by
           literal key; an explicit empty object exports no values.
         type: object
-        additionalProperties: { type: string }
+        additionalProperties: { $ref: "#/$defs/expression" }
   lifecycleStartParams:
     type: object
     additionalProperties: false
@@ -427,8 +430,7 @@ $defs:
         type: object
         propertyNames: { $ref: "#/$defs/slug" }
         additionalProperties:
-          type: string
-          minLength: 1
+          $ref: "#/$defs/expression"
       deadline:
         $ref: "#/$defs/deadline"
   githubParams:

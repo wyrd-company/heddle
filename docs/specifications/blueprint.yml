@@ -14,6 +14,13 @@ description: >-
   The blueprint's own metadata bag is readable in every edge condition,
   `{ from: <expression> }` reference, and template as `blueprint.metadata`,
   beside `blueprint.id`; a run reads its own blueprint, never its parent's.
+  Every expression position - an edge `when`, a `{ from: <expression> }`
+  reference, a child-run output mapping, an issue-change condition or binding,
+  an aggregate binding path, and a policy rule condition or input binding -
+  is JSONata over that same context. Node ids are hyphenated slugs and JSONata
+  reads a bare hyphen as subtraction, so a hyphenated node, input, or output
+  name is written in backticks, as in `` `taste-test`.payload ``, and the
+  whole expression is quoted in YAML.
   Every `templateRef` is a Nunjucks template and behaves the same way: a
   string is a path from the blueprint root, `{ inline }` is template
   text, and both render with the task context, the running blueprint, and the
@@ -62,7 +69,9 @@ validation-criteria: >-
   JSON Schema Draft 2020-12. Node ids are the keys of `nodes` and are
   slugs. `entry`, when present, names an existing node; it is required when
   the graph has no natural entry node. Every edge names two existing node ids.
-  Every `when` expression is a syntactically valid JSONata expression. Every path in a
+  Every `when` expression is a syntactically valid JSONata expression. No
+  expression subtracts a hyphenated node, input, or output name that the
+  blueprint declares; such a name is read in backticks. Every path in a
   `templateRef`, `schemaRef`, or `policy.rules` resolves to a file inside the
   blueprint root. Every literal `include`, `import`, or `extends` target in a
   template resolves to a file inside the blueprint root, checked when a
