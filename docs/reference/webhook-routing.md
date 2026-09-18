@@ -47,9 +47,15 @@ Missing or malformed event names, invalid signatures, invalid JSON, and genuine
 supported-event failures retain an error response. An event name starts with a
 lowercase letter and contains only lowercase letters, digits, and underscores.
 
+Generated tools never move onto this listener. They stay on the internal
+listener that `agentTools.listen.host` and `agentTools.listen.port` configure,
+whose address is also stable so that endpoints registered before a restart stay
+reachable after it.
+
 The Feature uses these same YAML keys from its `configFile` mount.
 `webhookSecretFile` changes only the secret-file path. The generated Feature
-configuration has no `listen` block. Polling remains supported independently.
+configuration has no webhook `listen` block; it does carry an
+`agentTools.listen` block from the `agentToolsPort` option. Polling remains supported independently.
 
 ## Acceptance checks
 

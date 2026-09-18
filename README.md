@@ -110,6 +110,10 @@ blueprints:
   repository: /workspaces/blueprints
 webhook:
   secretFile: /run/secrets/heddle-webhook-secret
+agentTools:
+  listen:
+    host: 127.0.0.1
+    port: 8422
 state:
   databasePath: /var/lib/heddle/heddle.sqlite
 polling:
@@ -139,6 +143,15 @@ objects use the same contract. `webhook.secretFile` points to the secret
 used to verify GitHub deliveries. Secret values are read from these files;
 they do not belong in YAML values, Feature options, command arguments, or
 logs.
+
+`agentTools.listen` is the address of the internal listener that serves the
+generated agent-tool endpoints. `agentTools.listen.port` is explicit and has no
+default; `agentTools.listen.host` defaults to `127.0.0.1`. A service that starts
+passes - one with bound projects or `pass` defaults - is refused at
+configuration time without it, and an idle service starts without it. The
+address stays the same across restarts, so a tool endpoint a provider session
+registered before a restart is still reachable after it. A port already in use
+fails startup and names the address.
 
 Webhook listening is disabled until both `webhook.listen.host` and
 `webhook.listen.port` are configured. There is no default port. Recommend
@@ -214,6 +227,7 @@ directory, and secret-file locations. Mount each at the same path:
       "stateDirectory": "/var/lib/heddle",
       "githubAppCredentialsFile": "/run/secrets/heddle-github-app.yml",
       "t3CodeTokenFile": "/run/secrets/heddle-t3-token",
+      "agentToolsPort": "8422",
       "webhookSecretFile": "/run/secrets/heddle-webhook-secret"
     }
   },

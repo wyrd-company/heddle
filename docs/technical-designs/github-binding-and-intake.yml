@@ -143,8 +143,8 @@ proposed-design:
     no default port. The recommended host is `127.0.0.1` behind a host proxy
     or tunnel; operators may choose another interface including `0.0.0.0`.
     Only `POST /webhook/github` is served on this separate listener, which
-    opens after recovery and binding startup. Generated tools remain on an
-    ephemeral loopback listener; hook sockets, tokens, and state are not
+    opens after recovery and binding startup. Generated tools remain on the
+    separate internal listener that `agentTools.listen` configures; hook sockets, tokens, and state are not
     exposed through the webhook listener. The configured route survives
     graceful restart and forced process death. Host proxy, tunnel, TLS, and
     forwarding configuration deliver GitHub requests to that route.

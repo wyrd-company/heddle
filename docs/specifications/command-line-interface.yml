@@ -36,7 +36,8 @@ commands:
     exit-status:
       success: 0 after SIGINT or SIGTERM closes intake, listeners, the T3 Code client, and SQLite
       usage-error: 2 for an unknown option, a missing or flag-shaped value, a duplicate singleton option, or an invalid polling interval
-      configuration-error: 1 with the resolved configuration path and actionable detail
+      configuration-error: 1 with the resolved configuration path and actionable detail, including a pass-capable service that omits agentTools.listen.port
+      address-error: 1 when a configured listen address is already in use, naming that address
       ownership-error: 1 when another live Heddle service owns the configured database
 configuration:
   projects: Bound GitHub Project owner and number pairs. An empty list runs an idle service.
@@ -47,6 +48,8 @@ configuration:
   webhook.secretFile: GitHub webhook secret-file path; required when webhook configuration is present.
   webhook.listen.host: Explicit bind host; omit listen to disable webhook listening. Recommend 127.0.0.1 behind a host proxy or tunnel; other interfaces including 0.0.0.0 are supported.
   webhook.listen.port: Explicit stable TCP port from 1 through 65535; required with host, with no default port.
+  agentTools.listen.host: Optional bind host for the internal generated-tool listener; defaults to 127.0.0.1.
+  agentTools.listen.port: Explicit stable TCP port from 1 through 65535, with no default port; required whenever projects are bound or pass defaults are configured.
   state.databasePath: Optional SQLite database path override.
   polling.intervalMs: Optional positive polling interval in milliseconds; default 30000.
   intake: Optional default intake blueprint id and Git revision; each new root run resolves the revision once and stores its full commit.
@@ -79,6 +82,8 @@ recovery: >-
   listener returns 503 without dispatching requests throughout engine and pass
   recovery. The hook listener starts after recovery. The stable external webhook
   listener opens after recovery and binding startup and serves only POST
-  /webhook/github. Generated tools remain on a separate ephemeral loopback
-  listener. A forced process death leaves the SQLite checkpoint intact; the next
-  service acquires ownership, opens the same database, and resumes the paused run.
+  /webhook/github. Generated tools remain on a separate internal listener at
+  the configured agentTools.listen address, which a restart binds again so
+  endpoints registered before the restart stay reachable. A forced process
+  death leaves the SQLite checkpoint intact; the next service acquires
+  ownership, opens the same database, and resumes the paused run.

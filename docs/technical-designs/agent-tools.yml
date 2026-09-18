@@ -57,9 +57,13 @@ proposed-design:
     and bound to one run, node, and thread. Its tool list is built once at
     generation from the stage's declarations. Because identity is in the
     instance rather than in a token lookup, a leaked token from one thread
-    cannot act on another, and revocation is deleting the instance. A
+    cannot act on another, and revocation is deleting the instance. The
+    instances share one internal loopback listener whose bind host and port
+    come from `agentTools.listen` in the service configuration, so the
+    address is the operator's stable choice rather than an ephemeral port. A
     service restart regenerates instances for every paused stage from the
-    awaiting details, at the same paths, so registrations stay valid.
+    awaiting details, at the same address and the same paths, so a
+    registration a provider session already holds stays valid.
   tools: |
     - `status`: appends a progress note to the run's event log and, when the
       blueprint maps it, to the issue as a comment or field. Never resumes.
