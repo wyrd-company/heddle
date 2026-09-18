@@ -14,6 +14,11 @@ production tree `06d379013005981af41bb9c0845ed73944bee10d`. The
 ordering, public native session identities, workflow results, and request timing.
 It contains no endpoint credentials.
 
+The [guard evidence](../../test/fixtures/pass-guard-evidence.json) retains each
+compiled mutation, its named failing tests, and the paired restored build and
+full-suite result. Compiler-invalid experiments are listed separately and do not
+count as test evidence.
+
 | Scenario                              | Measured result                                                                                                                                                    |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Claude require-handoff                | Installed profile plugin blocks an early Stop with the reminder; handoff resumes once; final Stop allows.                                                          |

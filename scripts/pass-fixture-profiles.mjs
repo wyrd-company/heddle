@@ -55,7 +55,7 @@ export async function fixtureProfiles(root, { trusted = false } = {}) {
   const smoke = exec(join(bin, "heddle"), ["hook", "stop", "codex"], { env });
   smoke.child.stdin.end(
     JSON.stringify({
-      hook_event_name: "SessionStart",
+      hook_event_name: "Stop",
       session_id: "fixture-smoke",
     }),
   );
