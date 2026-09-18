@@ -4,7 +4,6 @@
 // ---
 import { createHmac } from "node:crypto";
 import { createServer } from "node:net";
-import { Server } from "node:http";
 import {
   mkdtempSync,
   mkdirSync,
@@ -28,6 +27,7 @@ import { serviceHookSocket } from "../src/service/identity.js";
 import type { ResolvedServiceConfig } from "../src/service/config.js";
 
 import { commitFixture, fixtureGit } from "./support/blueprint-repository.js";
+import { freePort } from "./support/ports.js";
 
 const roots: string[] = [];
 const services: RunningService[] = [];
@@ -38,7 +38,7 @@ afterEach(async () => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
-function fixture(): ResolvedServiceConfig {
+async function fixture(): Promise<ResolvedServiceConfig> {
   const root = mkdtempSync(join(tmpdir(), "availability-"));
   roots.push(root);
   const repository = join(root, "blueprints");
@@ -79,6 +79,7 @@ edges:
     blueprints: { repository },
     t3Code: { endpoint: "http://127.0.0.1:3000" },
     webhook: { secretFile },
+    agentTools: { listen: { host: "127.0.0.1", port: await freePort() } },
     pass: {
       defaultModel: { instanceId: "sample-provider", model: "sample-model" },
       defaultWorktree: root,
@@ -95,7 +96,7 @@ function barrier() {
 }
 
 it("gates valid mutating webhook and tool requests throughout engine and pass recovery", async () => {
-  const config = fixture();
+  const config = await fixture();
   const reserved = createServer();
   await new Promise<void>((resolve) => {
     reserved.listen(0, "127.0.0.1", resolve);
@@ -171,17 +172,9 @@ it("gates valid mutating webhook and tool requests throughout engine and pass re
       return Promise.resolve();
     },
   );
-  let origin = "";
-  // eslint-disable-next-line @typescript-eslint/unbound-method
-  const address = Server.prototype.address;
-  vi.spyOn(Server.prototype, "address").mockImplementation(function (
-    this: Server,
-  ) {
-    const value = address.call(this);
-    if (value && typeof value !== "string")
-      origin = `http://127.0.0.1:${String(value.port)}`;
-    return value;
-  });
+  const toolListen = config.agentTools?.listen;
+  if (!toolListen) throw new Error("Fixture needs an agent-tools address");
+  const origin = `http://${toolListen.host}:${String(toolListen.port)}`;
   const body = JSON.stringify({
     issue: { node_id: "sample-issue", updated_at: "2030-01-02T03:04:05Z" },
   });
@@ -259,7 +252,7 @@ it("gates valid mutating webhook and tool requests throughout engine and pass re
 });
 
 it("keeps different databases' hook endpoints live and independent in one state directory", async () => {
-  const firstConfig = fixture();
+  const firstConfig = await fixture();
   const first = await startService(firstConfig, io);
   services.push(first);
   const firstSocket = serviceHookSocket(
@@ -270,6 +263,7 @@ it("keeps different databases' hook endpoints live and independent in one state 
   const secondConfig = {
     ...firstConfig,
     databasePath: join(firstConfig.stateDirectory, "other.sqlite"),
+    agentTools: { listen: { host: "127.0.0.1", port: await freePort() } },
   };
   const second = await startService(secondConfig, io);
   services.push(second);
@@ -298,7 +292,7 @@ it("keeps different databases' hook endpoints live and independent in one state 
 it.each(["existing", "missing"] as const)(
   "uses the database identity across state overrides and symlink aliases when target is %s",
   async (target) => {
-    const config = fixture();
+    const config = await fixture();
     const alias = join(config.stateDirectory, "alias.sqlite");
     if (target === "missing") symlinkSync(basename(config.databasePath), alias);
     const first = await startService(
@@ -330,7 +324,7 @@ it.each(["existing", "missing"] as const)(
 );
 
 it("keeps the default hook inert before its state directory exists", async () => {
-  const config = fixture();
+  const config = await fixture();
   vi.stubEnv("HEDDLE_STATE_DIR", join(config.stateDirectory, "absent"));
   vi.stubEnv("HEDDLE_HOOK_SOCKET", "");
   expect(
@@ -342,7 +336,7 @@ it("keeps the default hook inert before its state directory exists", async () =>
 });
 
 it("serves hooks under a deep state directory with a compact database identity", async () => {
-  const config = fixture();
+  const config = await fixture();
   const stateDirectory = join(
     config.stateDirectory,
     "s".repeat(83 - config.stateDirectory.length - 1),
@@ -360,4 +354,25 @@ it("serves hooks under a deep state directory with a compact database identity",
       JSON.stringify({ hook_event_name: "Stop", session_id: "sample-session" }),
     ),
   ).toEqual({});
+});
+
+it("fails startup when the configured agent-tools address is already bound", async () => {
+  const config = await fixture();
+  const listen = config.agentTools?.listen;
+  if (!listen) throw new Error("Fixture needs an agent-tools address");
+  const blocker = createServer();
+  await new Promise<void>((resolve) => {
+    blocker.listen(listen.port, listen.host, resolve);
+  });
+  try {
+    await expect(startService(config, io)).rejects.toThrow(
+      `${listen.host}:${String(listen.port)}`,
+    );
+  } finally {
+    await new Promise<void>((resolve) => {
+      blocker.close(() => {
+        resolve();
+      });
+    });
+  }
 });

@@ -23,6 +23,7 @@ import type { ResolvedServiceConfig } from "../src/service/config.js";
 import { startService } from "../src/service/service.js";
 import { serviceHookSocket } from "../src/service/identity.js";
 import { commitFixture, writeSample } from "./support/blueprint-repository.js";
+import { freePort } from "./support/ports.js";
 import type { PassInvocation } from "../src/pass/types.js";
 import type { RunningService } from "../src/service/service.js";
 
@@ -105,6 +106,7 @@ it("keeps the stable webhook route isolated across recovery, graceful restart, a
       resolve();
     }),
   );
+  const toolsPort = await freePort();
   const webhookOrigin = `http://127.0.0.1:${String(port)}`;
   const webhookUrl = `${webhookOrigin}/webhook/github`;
   const webhookSecret = join(root, "webhook-secret");
@@ -198,7 +200,7 @@ it("keeps the stable webhook route isolated across recovery, graceful restart, a
   const configPath = join(root, "config.yml");
   writeFileSync(
     configPath,
-    `projects: []\nwebhook:\n  secretFile: ${webhookSecret}\n  listen: { host: 127.0.0.1, port: ${String(port)} }\ngithub:\n  credentialFile: /unused/app.yml\nblueprints:\n  repository: ${blueprints}\nt3Code:\n  endpoint: ${server.httpUrl}\n  tokenFile: ${token}\nstate:\n  databasePath: ${join(root, "state", "heddle.sqlite")}\npolling:\n  intervalMs: 30000\npass:\n  defaultModel:\n    instanceId: sample-provider\n    model: sample-model\n  defaultWorktree: ${root}\n`,
+    `projects: []\nwebhook:\n  secretFile: ${webhookSecret}\n  listen: { host: 127.0.0.1, port: ${String(port)} }\ngithub:\n  credentialFile: /unused/app.yml\nblueprints:\n  repository: ${blueprints}\nt3Code:\n  endpoint: ${server.httpUrl}\n  tokenFile: ${token}\nstate:\n  databasePath: ${join(root, "state", "heddle.sqlite")}\npolling:\n  intervalMs: 30000\nagentTools:\n  listen: { host: 127.0.0.1, port: ${String(toolsPort)} }\npass:\n  defaultModel:\n    instanceId: sample-provider\n    model: sample-model\n  defaultWorktree: ${root}\n`,
   );
   const config: ResolvedServiceConfig = {
     configPath,
@@ -210,6 +212,7 @@ it("keeps the stable webhook route isolated across recovery, graceful restart, a
     github: { credentialFile: "/unused/app.yml" },
     blueprints: { repository: blueprints },
     t3Code: { endpoint: server.httpUrl, tokenFile: token },
+    agentTools: { listen: { host: "127.0.0.1", port: toolsPort } },
     state: {},
     pass: {
       defaultModel: { instanceId: "sample-provider", model: "sample-model" },

@@ -115,3 +115,68 @@ it.each([
     "webhook.listen",
   );
 });
+
+const PASS_DEFAULTS =
+  "pass:\n  defaultModel:\n    instanceId: sample-provider\n    model: sample-model\n  defaultWorktree: /workspace\n";
+
+function boundFixture(extra = ""): { root: string; path: string } {
+  const root = mkdtempSync(join(tmpdir(), "service-config-"));
+  roots.push(root);
+  const path = join(root, "config.yml");
+  writeFileSync(
+    path,
+    `projects:\n  - owner: sample-owner\n    number: 12\ngithub:\n  credentialFile: /secrets/app.yml\nblueprints:\n  repository: /workspace/blueprints\nt3Code:\n  endpoint: http://127.0.0.1:3000\n${extra}`,
+  );
+  return { root, path };
+}
+
+it("starts an idle service without an agent-tools listen address", () => {
+  const f = fixture();
+  expect(
+    resolveServiceConfig({ configPath: f.path }).agentTools,
+  ).toBeUndefined();
+});
+
+it("refuses bound projects without an agent-tools port", () => {
+  expect(() =>
+    resolveServiceConfig({ configPath: boundFixture().path }),
+  ).toThrow("agentTools.listen.port");
+});
+
+it("refuses a pass-capable service without an agent-tools port", () => {
+  expect(() =>
+    resolveServiceConfig({ configPath: fixture(PASS_DEFAULTS).path }),
+  ).toThrow("agentTools.listen.port");
+});
+
+it("defaults the agent-tools bind host to loopback and preserves an explicit host", () => {
+  expect(
+    resolveServiceConfig({
+      configPath: boundFixture("agentTools:\n  listen:\n    port: 8422\n").path,
+    }).agentTools,
+  ).toEqual({ listen: { host: "127.0.0.1", port: 8422 } });
+  expect(
+    resolveServiceConfig({
+      configPath: boundFixture(
+        "agentTools:\n  listen:\n    host: '::1'\n    port: 8423\n",
+      ).path,
+    }).agentTools,
+  ).toEqual({ listen: { host: "::1", port: 8423 } });
+});
+
+it.each([
+  "listen: {}",
+  "listen: { host: 127.0.0.1 }",
+  "listen: { host: '', port: 8421 }",
+  "listen: { host: 127.0.0.1, port: 0 }",
+  "listen: { host: 127.0.0.1, port: 65536 }",
+  "listen: { host: 127.0.0.1, port: 1.5 }",
+])(
+  "rejects incomplete or non-stable agent-tools configuration: %s",
+  (listen) => {
+    const f = boundFixture(`agentTools:\n  ${listen}\n`);
+    expect(() => resolveServiceConfig({ configPath: f.path })).toThrow(
+      "agentTools.listen",
+    );
+  },
+);
