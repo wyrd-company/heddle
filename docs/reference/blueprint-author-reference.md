@@ -15,6 +15,104 @@ Heddle dispatches Flowcraft nodes sequentially with engine concurrency 1. Durabl
 
 Every completed node writes its output below its authored node id. A pausing result is also exposed during edge routing as `result.output.<result>`; its wake payload is `result.output.payload`.
 
+## Blueprint document
+
+The complete authored document shape is below. Definitions referenced from this shape appear in each node type input contract.
+
+```yaml
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://heddle.wyrd.company/schemas/blueprint",
+  "title": "Heddle blueprint",
+  "description": "A workflow blueprint authored as YAML. Nodes are keyed by id. Edges route on expressions over the run context. Node-type inputs live under `params` and are checked against the node type's own contract in addition to this schema. Comments in the source file are not part of the data model and are preserved by every conforming writer.\n",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "nodes"],
+  "properties":
+    {
+      "id":
+        {
+          "description": "Blueprint id. Also the file's basename without extension.",
+          "$ref": "#/$defs/slug",
+        },
+      "entry":
+        {
+          "description": "The node where execution begins when every node has an incoming edge, such as a process with a retry cycle. It must name a key in `nodes`. A blueprint with a natural entry node must omit it.\n",
+          "$ref": "#/$defs/slug",
+        },
+      "kind":
+        {
+          "description": "`process` blueprints belong to the user and route on stage outcomes. `stage` blueprints are run by `child-run` nodes and end on the stage result contract. `helper` blueprints are small plumbing runs such as intake, answer-question, and hold-then-attention.\n",
+          "type": "string",
+          "enum": ["process", "stage", "helper"],
+        },
+      "description": { "type": "string" },
+      "metadata":
+        {
+          "description": "A bag available to every node in the run as `blueprint.metadata` and to templates. Authors put process-level configuration here, such as thresholds guards read.\n",
+          "$ref": "#/$defs/bag",
+        },
+      "requires":
+        {
+          "description": "What this blueprint needs from the issue and the project.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties":
+            {
+              "issue":
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties":
+                    {
+                      "type":
+                        {
+                          "description": "Organization issue types this blueprint accepts.",
+                          "type": "array",
+                          "items": { "type": "string" },
+                        },
+                      "fields":
+                        {
+                          "description": "Project or organization fields the blueprint reads.",
+                          "type": "array",
+                          "items": { "type": "string" },
+                        },
+                      "labels":
+                        { "type": "array", "items": { "type": "string" } },
+                      "frontMatter":
+                        {
+                          "description": "Keys the blueprint reads from YAML front matter carried in a Markdown comment block in the issue description.\n",
+                          "type": "array",
+                          "items": { "type": "string" },
+                        },
+                    },
+                },
+            },
+        },
+      "inputs":
+        {
+          "description": "For `stage` and `helper` blueprints: the initial context keys a parent must supply, each with a JSON Schema. Process blueprints receive the issue automatically and may declare additional lifecycle-start inputs.\n",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonSchema" },
+        },
+      "outputs":
+        {
+          "description": "For `stage` and `helper` blueprints: the final context keys returned to the parent, each with a JSON Schema. A stage blueprint's outputs always include `result`.\n",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonSchema" },
+        },
+      "nodes":
+        {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/slug" },
+          "additionalProperties": { "$ref": "#/$defs/node" },
+        },
+      "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    },
+}
+```
+
 ## Node types
 
 ### `child-run`
