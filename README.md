@@ -137,24 +137,31 @@ do not treat that set as accepted until the webhook integration proves it.
 Agents use their own narrower credentials and never receive this App credential.
 
 For T3 Code, issue a dedicated bearer session on the machine that owns the T3
-state, write it directly to the mounted token file, and restrict the file to
-the service user:
+state. Run the issuance command as the T3 Code service account, write its
+output directly to the mounted token file, and restrict that file to the
+separate Heddle service account:
 
 ```sh
-heddle_service_user=vscode
+t3_service_user=service-a
+t3_base_dir=/var/lib/service-a
+heddle_service_user=service-b
 install -m 0600 -o "${heddle_service_user}" \
   -g "$(id -gn "${heddle_service_user}")" \
   /dev/null /path/to/secrets/heddle-t3-token
-sudo -u "${heddle_service_user}" \
-  t3 auth session issue --base-dir /home/vscode/.t3 \
+sudo -u "${t3_service_user}" \
+  t3 auth session issue --base-dir "${t3_base_dir}" \
   --label heddle --token-only \
   > /path/to/secrets/heddle-t3-token
 ```
 
-Replace `vscode` and its home directory with the T3 service account and base
-directory, then set `t3Code.endpoint` to that server. A one-time token from
-`t3 pair` or `t3 auth pairing create` must be exchanged for a bearer session
-before it can be stored; one-time pairing tokens are not restart credentials.
+Set `t3_service_user` and `t3_base_dir` to the account and state directory used
+by the T3 Code server. Set `heddle_service_user` to the account that runs
+Heddle, then set `t3Code.endpoint` to that server. Run the sequence from a root
+shell so it can create the destination with Heddle ownership and redirect the
+T3 Code command's output without granting the T3 Code account access to the
+token file. A one-time token from `t3 pair` or `t3 auth pairing create` must be
+exchanged for a bearer session before it can be stored; one-time pairing tokens
+are not restart credentials.
 
 ## Dev Container Feature
 
