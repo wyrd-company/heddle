@@ -18,7 +18,10 @@ import { PassService } from "../pass/service.js";
 import { T3Client, schemas } from "../t3code/index.js";
 import type { EngineNode, Run } from "../engine/types.js";
 import type { WorkflowEngine } from "../engine/engine.js";
-import type { ResolvedServiceConfig } from "./config.js";
+import {
+  AGENT_TOOLS_LISTEN_REQUIRED,
+  type ResolvedServiceConfig,
+} from "./config.js";
 import { BlueprintCatalog } from "./blueprints.js";
 import { acquireStoreLease } from "./lease.js";
 import { serviceDatabasePath, serviceHookSocket } from "./identity.js";
@@ -106,6 +109,8 @@ export async function startService(
         throw new Error(
           "pass configuration is required when projects are bound",
         );
+      const listen = config.agentTools?.listen;
+      if (!listen) throw new Error(AGENT_TOOLS_LISTEN_REQUIRED);
       const client = T3Client.create({
         baseUrl: config.t3Code.endpoint,
         ...(config.t3Code.tokenFile === undefined
@@ -174,11 +179,11 @@ export async function startService(
           if (!response.headersSent) response.writeHead(500).end();
         });
       });
-      await listenTcp(tcp);
-      const address = tcp.address();
-      if (!address || typeof address === "string")
-        throw new Error("Cannot resolve Heddle tool listener");
-      const origin = `http://127.0.0.1:${String(address.port)}`;
+      await listenTcp(tcp, listen.port, listen.host);
+      const toolHost = listen.host.includes(":")
+        ? `[${listen.host}]`
+        : listen.host;
+      const origin = `http://${toolHost}:${String(listen.port)}`;
       passes = new PassService(binding.engine, {
         client,
         toolOrigin: origin,

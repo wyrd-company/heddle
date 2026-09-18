@@ -9,6 +9,9 @@ import { parse } from "yaml";
 import { z } from "zod";
 import { bindingConfigSchema } from "../binding/config.js";
 
+export const AGENT_TOOLS_LISTEN_REQUIRED =
+  "agentTools.listen.port is required when the service starts passes";
+
 export const DEFAULT_POLL_INTERVAL_MS = 30_000;
 export const DEFAULT_DATABASE_NAME = "heddle.sqlite";
 
@@ -31,6 +34,14 @@ const serviceConfigSchema = bindingConfigSchema.extend({
     .object({
       defaultModel: model,
       defaultWorktree: z.string().min(1),
+    })
+    .optional(),
+  agentTools: z
+    .object({
+      listen: z.object({
+        host: z.string().trim().min(1).default("127.0.0.1"),
+        port: z.number().int().min(1).max(65535),
+      }),
     })
     .optional(),
   notifications: z
@@ -93,6 +104,13 @@ export function resolveServiceConfig(
   if (!parsed.success)
     throw new Error(
       `Invalid Heddle configuration ${configPath}: ${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`,
+    );
+  if (
+    (parsed.data.projects.length > 0 || parsed.data.pass !== undefined) &&
+    parsed.data.agentTools === undefined
+  )
+    throw new Error(
+      `Invalid Heddle configuration ${configPath}: ${AGENT_TOOLS_LISTEN_REQUIRED}`,
     );
   const stateDirectory = resolve(
     overrides.stateDirectory ?? defaultStateDirectory(),
