@@ -6,6 +6,7 @@
 // ---
 import { readFileSync, appendFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { join } from "node:path";
 import {
@@ -16,6 +17,10 @@ import {
 } from "../src/index.js";
 import { T3Client } from "../src/t3code/index.js";
 import type { WorkflowBlueprint } from "flowcraft";
+const endpointId = (path: string) =>
+  createHash("sha256")
+    .update(path.replace(/\/policy$/, ""))
+    .digest("hex");
 const config = JSON.parse(readFileSync(process.argv[2]!, "utf8"));
 const log = (kind: string, data: unknown = {}) =>
   appendFileSync(
@@ -33,7 +38,17 @@ const releases: (() => void)[] = [];
 const blueprint = config.blueprint as WorkflowBlueprint;
 const engine = new WorkflowEngine(store, {
   resolveBlueprint: () => Promise.resolve(blueprint),
-  nodes: { pass: (context) => passes.node(context), finish: async () => null },
+  nodes: {
+    pass: async (context) => {
+      try {
+        return await passes.node(context);
+      } catch (error) {
+        log("node-error", { message: String(error) });
+        throw error;
+      }
+    },
+    finish: async () => null,
+  },
   onBoundary: async (run) => {
     log("boundary", {
       status: run.status,
@@ -47,7 +62,18 @@ const engine = new WorkflowEngine(store, {
           "SELECT data FROM pass_invocations WHERE run_id=? ORDER BY rowid DESC LIMIT 1",
         )
         .get(run.id);
-      if (raw) bindings.set(run.id, JSON.parse(String(raw["data"])).binding);
+      if (raw) {
+        const item = JSON.parse(String(raw["data"]));
+        bindings.set(run.id, item.binding);
+        if (item.binding)
+          log("pass-endpoint", {
+            runId: item.runId,
+            nodeId: item.nodeId,
+            visit: item.visit,
+            threadId: item.threadId,
+            endpointId: endpointId(item.binding.path),
+          });
+      }
     }
     const priorBinding = bindings.get(run.id);
     if (run.status === "resuming" && priorBinding) {
@@ -112,6 +138,7 @@ const tools = createServer((request, response) => {
   response.once("finish", () => {
     log("tool-response", {
       status: response.statusCode,
+      endpointId: endpointId(request.url ?? ""),
       path: request.url?.endsWith("/policy") ? "policy" : "mcp",
       method: request.method,
       authorizationPresent: request.headers.authorization !== undefined,

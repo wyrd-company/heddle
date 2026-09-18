@@ -56,6 +56,8 @@ const log = await open(join(root, "server.log"), "a");
 const server = spawn(
   process.execPath,
   [
+    "--import",
+    resolve("scripts/pass-server-readiness.mjs"),
     "apps/server/src/bin.ts",
     "serve",
     "--port",
@@ -68,11 +70,29 @@ const server = spawn(
     "warn",
     workspace,
   ],
-  { cwd: source, env, detached: true, stdio: ["ignore", log.fd, log.fd] },
+  {
+    cwd: source,
+    env,
+    detached: true,
+    stdio: ["ignore", log.fd, log.fd, "ipc"],
+  },
 );
+await writeFile(join(root, "server.pid"), String(server.pid));
+await new Promise((resolve, reject) => {
+  const failed = (code) =>
+    reject(new Error(`Fixture server exited before HTTP listening: ${code}`));
+  server.once("exit", failed);
+  server.once("error", reject);
+  server.on("message", (message) => {
+    if (message.fixtureHttpPort === Number(port)) {
+      server.off("exit", failed);
+      server.disconnect();
+      resolve();
+    }
+  });
+});
 server.unref();
 await log.close();
-await writeFile(join(root, "server.pid"), String(server.pid));
 await writeFile(
   join(root, "connection.json"),
   JSON.stringify({
