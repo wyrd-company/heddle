@@ -4,6 +4,7 @@
 // ---
 import type { NodeDefinition, NodeFunction } from "flowcraft";
 import type { RunStore } from "./store.js";
+import { blueprintContext } from "../blueprints/flowcraft.js";
 import { DurableRuntime, DispatchHeld, resolveValues } from "./runtime.js";
 import type {
   AwaitingDetails,
@@ -39,10 +40,12 @@ export function bindNode(
       };
       context["stages"] = stages;
     }
-    const params = (await resolveValues(
-      definition.params ?? {},
-      context,
-    )) as Data;
+    // References read the pinned blueprint beside the context; the context object
+    // itself stays unchanged, so nothing durable gains a blueprint key.
+    const params = (await resolveValues(definition.params ?? {}, {
+      ...context,
+      blueprint: blueprintContext(run.blueprint),
+    })) as Data;
     const deadline = duration(params["deadline"]);
     const inactivity = duration(params["inactivity"]);
     let awaiting: AwaitingDetails | undefined;

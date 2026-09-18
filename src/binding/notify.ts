@@ -2,6 +2,7 @@
 // relationships:
 //   implements: github-binding-and-intake
 // ---
+import { blueprintContext } from "../blueprints/flowcraft.js";
 import type { Data, EngineNode } from "../engine/types.js";
 
 export interface Notification {
@@ -64,10 +65,14 @@ function template(value: unknown, context: Data, name: string): string {
 
 export function notifyNode(delivery: NotificationDelivery): EngineNode {
   return async (context) => {
-    const title = template(context.params["title"], context.context, "title");
+    const values = {
+      ...context.context,
+      blueprint: blueprintContext(context.run.blueprint),
+    };
+    const title = template(context.params["title"], values, "title");
     const message = template(
       context.params["message"] ?? { inline: "" },
-      context.context,
+      values,
       "message",
     );
     const url = context.params["url"];

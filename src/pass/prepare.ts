@@ -9,7 +9,10 @@ import { parse } from "yaml";
 import { prepareAgentTools } from "../agent-tools/index.js";
 import { schemas } from "../t3code/index.js";
 import type { Data, EngineNodeContext } from "../engine/index.js";
-import type { HeddleFlowcraftNode } from "../blueprints/flowcraft.js";
+import {
+  blueprintContext,
+  type HeddleFlowcraftNode,
+} from "../blueprints/flowcraft.js";
 import type { PassInvocation, PassOptions } from "./types.js";
 
 export async function preparePass(
@@ -94,6 +97,7 @@ export async function preparePass(
   });
   const rendered = environment.renderString(template, {
     ...context.context,
+    blueprint: blueprintContext(run.blueprint),
     metadata: definition.metadata ?? {},
     node: definition,
     input: context.input,

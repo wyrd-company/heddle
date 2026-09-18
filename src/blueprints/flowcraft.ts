@@ -33,6 +33,27 @@ export interface HeddleFlowcraftBlueprint extends WorkflowBlueprint {
   readonly nodes: HeddleFlowcraftNode[];
 }
 
+/** Metadata Heddle derives for the engine; it is never the author's own bag. */
+const DERIVED_METADATA_KEYS = new Set(["cycleEntryPoints"]);
+
+/**
+ * The running blueprint as conditions, references, and templates read it.
+ * It is supplied at evaluation time from the run's pinned blueprint, so it
+ * cannot go stale and no node output can overwrite it.
+ */
+export function blueprintContext(blueprint: {
+  readonly id: string;
+  readonly metadata?: Record<string, unknown>;
+}): { id: string; metadata: JsonObject } {
+  const authored = Object.entries(blueprint.metadata ?? {}).filter(
+    ([key]) => !DERIVED_METADATA_KEYS.has(key),
+  );
+  return {
+    id: blueprint.id,
+    metadata: structuredClone(Object.fromEntries(authored)),
+  };
+}
+
 function deriveNode(id: string, node: BlueprintNode): HeddleFlowcraftNode {
   return {
     id,

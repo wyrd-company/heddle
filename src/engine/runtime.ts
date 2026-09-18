@@ -10,6 +10,7 @@ import {
   type WorkflowBlueprint,
 } from "flowcraft";
 import jsonata from "jsonata";
+import { blueprintContext } from "../blueprints/flowcraft.js";
 import type { Data } from "./types.js";
 
 export class Attention extends Error {}
@@ -33,7 +34,10 @@ export class DurableRuntime extends FlowRuntime<Data, Data> {
     context: ContextImplementation<Data>,
     executionId?: string,
   ) {
-    const data = await context.toJSON();
+    const data = {
+      ...(await context.toJSON()),
+      blueprint: blueprintContext(blueprint),
+    };
     const edges = [];
     const outgoing = blueprint.edges.filter((edge) => edge.source === nodeId);
     for (const edge of outgoing) {

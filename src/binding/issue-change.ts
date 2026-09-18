@@ -3,6 +3,7 @@
 //   implements: github-binding-and-intake
 // ---
 import jsonata from "jsonata";
+import { blueprintContext } from "../blueprints/flowcraft.js";
 import type { EngineNode } from "../engine/types.js";
 import type { IssueSnapshot } from "./snapshot.js";
 
@@ -22,9 +23,10 @@ export const onIssueChange: EngineNode = async (context) => {
   )) {
     if (typeof path !== "string")
       throw new Error(`on-issue-change binding ${name} must be a path`);
-    const value = await (jsonata(path).evaluate(
-      context.run.initialContext,
-    ) as Promise<unknown>);
+    const value = await (jsonata(path).evaluate({
+      ...context.run.initialContext,
+      blueprint: blueprintContext(context.run.blueprint),
+    }) as Promise<unknown>);
     if (value === undefined)
       throw new Error(`Unknown on-issue-change bound value: ${name}`);
     bindings[name] = structuredClone(value);
