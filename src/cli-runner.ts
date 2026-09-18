@@ -101,9 +101,7 @@ export function runCli(
   }
 
   if (commandName === "start") {
-    io.error(
-      "The start command must be run through the executable service boundary.",
-    );
+    io.error(command.usage);
     return 2;
   }
 
