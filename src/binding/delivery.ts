@@ -99,6 +99,9 @@ export class GitHubEventHandler {
     } catch {
       throw new Error("GitHub webhook body is invalid JSON");
     }
+    if (!/^[a-z][a-z0-9_]*$/u.test(event))
+      throw new Error("GitHub webhook event name is invalid");
+    if (!supported(event)) return false;
     return this.deliver(event, payload);
   }
 }

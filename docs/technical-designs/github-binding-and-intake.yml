@@ -148,6 +148,20 @@ proposed-design:
     exposed through the webhook listener. The configured route survives
     graceful restart and forced process death. Host proxy, tunnel, TLS, and
     forwarding configuration deliver GitHub requests to that route.
+    The external endpoint has a fixed 25 MiB (26,214,400-byte) request-body
+    ceiling. A declared Content-Length above it returns HTTP 413 before
+    accumulation. Independent streamed-byte counting rejects overflow before
+    retaining the overflowing chunk, including chunked bodies without a
+    Content-Length. Exactly-at-limit bodies reach normal authentication and
+    dispatch. Overflow closes the connection. The bound is per request; it
+    does not bound concurrent request memory or connection duration.
+    Signature verification over the original bytes precedes JSON validation.
+    Authenticated valid-JSON named unsupported events, including ping, return
+    HTTP 202 without invoking binding mutation. Event names start with a
+    lowercase letter and contain only lowercase letters, digits, and
+    underscores. Missing or malformed names, invalid signatures, invalid JSON,
+    and supported-event payload or dispatch failures remain errors. Direct
+    delivery and polling retain their existing supported-event contract.
     The handler has two producers. GitHub calls it over HTTP. The poller,
     which runs as a safety net at a low rate or as the only producer where
     no webhook is configured, polls the bound projects, diffs, and on a

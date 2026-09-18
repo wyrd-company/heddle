@@ -32,6 +32,21 @@ Heddle does not configure TLS, proxies, tunnels, or container port forwarding.
 Only `POST /webhook/github` is served. Keep the public target on this listener;
 generated tools, hook sockets, tokens, and SQLite state have no external route.
 
+The external webhook body ceiling is 25 MiB (26,214,400 bytes). A declared
+`Content-Length` above that ceiling returns 413 before body accumulation.
+Streamed bytes are counted independently, so chunked transfer without
+`Content-Length` cannot bypass the ceiling. Overflow returns 413 and closes the
+connection before retaining the overflowing chunk. Exactly-at-limit bodies
+continue through signature verification and dispatch. This per-request ceiling
+does not bound aggregate concurrent memory or connection duration.
+
+Signature verification uses the original body bytes and precedes JSON parsing.
+Authenticated valid-JSON deliveries for named unsupported events, including
+GitHub's creation `ping`, return 202 without invoking binding mutation.
+Missing or malformed event names, invalid signatures, invalid JSON, and genuine
+supported-event failures retain an error response. An event name starts with a
+lowercase letter and contains only lowercase letters, digits, and underscores.
+
 The Feature uses these same YAML keys from its `configFile` mount.
 `webhookSecretFile` changes only the secret-file path. The generated Feature
 configuration has no `listen` block. Polling remains supported independently.
@@ -43,8 +58,10 @@ Keep the configured target unchanged throughout these checks.
 
 1. Start Heddle with the selected host and port. Confirm startup reports
    `webhook=http://<host>:<port>/webhook/github` without tool endpoints or tokens.
-2. Send a signed supported GitHub delivery through the host route and confirm
-   HTTP 202. Confirm invalid signatures fail and a request to another path,
+2. Confirm GitHub's creation `ping` receives HTTP 202 without an instance change.
+   Send a signed supported GitHub delivery through the host route and confirm
+   HTTP 202 and the expected instance change. Confirm invalid signatures fail
+   and a request to another path,
    including `/hook/stop`, returns 404 with no internal data.
 3. Send SIGTERM, wait for process exit, and restart with the same configuration
    and state. Deliver to the unchanged public URL after startup completes.
