@@ -188,6 +188,192 @@ The complete authored document shape is below. Node-type inputs follow in the ca
           { "not": { "type": "object", "required": ["from"] } },
         ],
     },
+  "node":
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uses"],
+      "properties":
+        {
+          "uses":
+            {
+              "description": "The node type. Shipped node types are listed in `$defs`.",
+              "type": "string",
+            },
+          "description": { "type": "string" },
+          "stage":
+            {
+              "description": "Marks a node whose entry is projected to the bound project's Status field. Defaults to true for `child-run` of a `stage` blueprint.\n",
+              "type": "boolean",
+            },
+          "metadata":
+            {
+              "description": "A bag merged into the node's context as `node.metadata`. Keys with the same name on the issue take precedence unless listed in `fixed`.\n",
+              "$ref": "#/$defs/bag",
+            },
+          "fixed":
+            {
+              "description": "Metadata keys the issue may not override.",
+              "type": "array",
+              "items": { "type": "string" },
+            },
+          "params":
+            {
+              "description": "Node-type inputs. Checked against the node type's contract.",
+              "type": "object",
+              "additionalProperties": true,
+            },
+          "inputs":
+            {
+              "description": "Flowcraft input mapping: a context key, or a map of input names to context keys, populated into the node's `input`.\n",
+              "oneOf":
+                [
+                  { "type": "string" },
+                  {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                  },
+                ],
+            },
+          "config":
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties":
+                {
+                  "joinStrategy": { "type": "string", "enum": ["all", "any"] },
+                  "maxRetries": { "type": "integer", "minimum": 0 },
+                  "retryDelay": { "type": "integer", "minimum": 0 },
+                },
+            },
+        },
+      "allOf":
+        [
+          {
+            "if": { "properties": { "uses": { "const": "child-run" } } },
+            "then":
+              {
+                "properties":
+                  { "params": { "$ref": "#/$defs/childRunParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "lifecycle-start" } } },
+            "then":
+              {
+                "properties":
+                  { "params": { "$ref": "#/$defs/lifecycleStartParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "pass" } } },
+            "then":
+              {
+                "properties": { "params": { "$ref": "#/$defs/passParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "question" } } },
+            "then":
+              {
+                "properties":
+                  { "params": { "$ref": "#/$defs/questionParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "on-issue-change" } } },
+            "then":
+              {
+                "properties":
+                  { "params": { "$ref": "#/$defs/onIssueChangeParams" } },
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "github" } } },
+            "then":
+              {
+                "properties": { "params": { "$ref": "#/$defs/githubParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "git" } } },
+            "then":
+              {
+                "properties": { "params": { "$ref": "#/$defs/gitParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "terminal-result" } } },
+            "then":
+              {
+                "properties":
+                  { "params": { "$ref": "#/$defs/terminalResultParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "aggregate" } } },
+            "then":
+              {
+                "properties":
+                  { "params": { "$ref": "#/$defs/aggregateParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "notify" } } },
+            "then":
+              {
+                "properties": { "params": { "$ref": "#/$defs/notifyParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "policy" } } },
+            "then":
+              {
+                "properties": { "params": { "$ref": "#/$defs/policyParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "sleep" } } },
+            "then":
+              {
+                "properties": { "params": { "$ref": "#/$defs/sleepParams" } },
+                "required": ["params"],
+              },
+          },
+          {
+            "if": { "properties": { "uses": { "const": "wait" } } },
+            "then":
+              { "properties": { "params": { "$ref": "#/$defs/waitParams" } } },
+          },
+        ],
+    },
+  "edge":
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties":
+        {
+          "from": { "$ref": "#/$defs/slug" },
+          "to": { "$ref": "#/$defs/slug" },
+          "when":
+            {
+              "description": "Condition. A pausing node's results appear as booleans under `result.output`, so the common form is `result.output.<result>`. Absent means unconditional. Edges never carry an `action`.\n",
+              "$ref": "#/$defs/expression",
+            },
+          "description": { "type": "string" },
+        },
+    },
   "deadline":
     {
       "description": "An ISO 8601 duration after which the node wakes with result `timeout`.\n",
