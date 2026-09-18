@@ -7,8 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import {
-  DEFAULT_DATABASE_NAME,
-  DEFAULT_POLL_INTERVAL_MS,
   defaultConfigPath,
   defaultStateDirectory,
   resolveServiceConfig,
@@ -43,10 +41,8 @@ it("resolves the user-profile configuration, state, database, and polling defaul
     configPath: f.path,
     stateDirectory: join(f.root, "state"),
   });
-  expect(config.databasePath).toBe(
-    join(f.root, "state", DEFAULT_DATABASE_NAME),
-  );
-  expect(config.polling.intervalMs).toBe(DEFAULT_POLL_INTERVAL_MS);
+  expect(config.databasePath).toBe(join(f.root, "state", "heddle.sqlite"));
+  expect(config.polling.intervalMs).toBe(30_000);
 });
 
 it("resolves configured and command-line database and polling overrides", () => {
