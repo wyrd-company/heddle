@@ -28,6 +28,7 @@ import {
   type ToolBinding,
 } from "../src/index.js";
 import { runStopHook } from "../src/agent-tools/hooks.js";
+import pluginContracts from "../src/agent-tools/plugin-contracts.json" with { type: "json" };
 const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -134,6 +135,8 @@ it.each(["claude", "codex"] as const)(
     const f = await fixture();
     const packages = join(f.directory, "packages");
     await exportHookPlugins(packages);
+    for (const path of pluginContracts[harness])
+      expect(statSync(join(packages, harness, path)).isFile()).toBe(true);
     const hookFile = join(packages, harness, "plugins/heddle/hooks/hooks.json");
     const original = readFileSync(hookFile, "utf8");
     await exportHookPlugins(packages);

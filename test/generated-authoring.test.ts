@@ -7,6 +7,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { NODE_TYPE_REGISTRY, VALIDATION_RULES } from "../src/index.js";
+import pluginContracts from "../src/agent-tools/plugin-contracts.json" with { type: "json" };
 
 const generated = [
   "docs/reference/blueprint-author-reference.md",
@@ -27,5 +29,25 @@ describe("generated blueprint authoring surfaces", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("covers every registered contract and the sequential dispatch agreement", () => {
+    const reference = readFileSync(
+      "docs/reference/blueprint-author-reference.md",
+      "utf8",
+    );
+    for (const name of Object.keys(NODE_TYPE_REGISTRY))
+      expect(reference).toContain(`### \`${name}\``);
+    for (const rule of VALIDATION_RULES)
+      expect(reference).toContain(`\`${rule.name}\`: ${rule.description}`);
+    for (const files of Object.values(pluginContracts))
+      for (const file of files) expect(reference).toContain(`\`${file}\``);
+    expect(reference).toContain("engine concurrency 1");
+    expect(readFileSync("src/engine/engine.ts", "utf8")).toContain(
+      "{ concurrency: 1 }",
+    );
+    expect(
+      readFileSync("docs/technical-designs/engine-and-run-model.yml", "utf8"),
+    ).toContain("concurrency 1");
   });
 });
