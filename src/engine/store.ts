@@ -45,8 +45,8 @@ export class RunStore {
       this.db
         .prepare(
           `INSERT OR IGNORE INTO runs
-      (id,root_id,parent_id,parent_node_id,blueprint_id,blueprint_commit,blueprint,status,paused,initial_context,context,checkpoint)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      (id,root_id,parent_id,parent_node_id,blueprint_id,blueprint_commit,blueprint,status,paused,initial_context,context,checkpoint,requested_revision)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         )
         .run(
           run.id,
@@ -61,6 +61,7 @@ export class RunStore {
           JSON.stringify(run.initialContext),
           JSON.stringify(run.context),
           JSON.stringify(run.checkpoint),
+          run.requestedRevision ?? null,
         ).changes === 1
     );
   }
@@ -75,6 +76,9 @@ export class RunStore {
         row["parent_node_id"] === null ? null : String(row["parent_node_id"]),
       blueprintId: String(row["blueprint_id"]),
       commit: String(row["blueprint_commit"]),
+      ...(row["requested_revision"] === null
+        ? {}
+        : { requestedRevision: String(row["requested_revision"]) }),
       blueprint: JSON.parse(String(row["blueprint"])) as Run["blueprint"],
       status: row["status"] as RunStatus,
       paused: row["paused"] === 1,

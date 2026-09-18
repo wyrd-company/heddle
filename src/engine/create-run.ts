@@ -19,11 +19,40 @@ export interface NewRun {
   id: string;
   blueprintId: string;
   commit: string;
+  requestedRevision?: string;
   context?: Data;
   rootId: string;
   parentId: string | null;
   parentNodeId: string | null;
   lifecycleOrigin?: LifecycleOrigin;
+}
+/** A retry of a recorded selector uses its original immutable snapshot. */
+export async function createRootRun(
+  store: RunStore,
+  options: Pick<EngineOptions, "pinCommit" | "resolveBlueprint">,
+  input: Pick<NewRun, "id" | "blueprintId" | "commit" | "context">,
+): Promise<Run> {
+  const existing = store.db
+    .prepare("SELECT 1 FROM runs WHERE id=?")
+    .get(input.id)
+    ? store.get(input.id)
+    : undefined;
+  const commit =
+    existing &&
+    (input.commit === existing.commit ||
+      input.commit === existing.requestedRevision)
+      ? existing.commit
+      : options.pinCommit
+        ? await options.pinCommit(input.commit)
+        : input.commit;
+  return createRun(store, options.resolveBlueprint, {
+    ...input,
+    commit,
+    ...(options.pinCommit ? { requestedRevision: input.commit } : {}),
+    rootId: input.id,
+    parentId: null,
+    parentNodeId: null,
+  });
 }
 export function createRelatedRun(
   store: RunStore,

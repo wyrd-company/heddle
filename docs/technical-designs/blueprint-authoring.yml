@@ -101,6 +101,8 @@ proposed-design:
     commit changes what new instances get; running instances keep their
     commit until they finish. Moving a running instance to a newer commit
     is not supported in this version.
+    Root creation stores the requested revision with the resolved commit so
+    a repeated start can reuse its original selection after a named ref moves.
     The production catalog materializes the configured directory from Git
     objects in a temporary snapshot and applies the same discovery,
     repository validation, YAML byte round-trip checks, and graph derivation

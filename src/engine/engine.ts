@@ -11,7 +11,12 @@ import { Attention, DurableRuntime, isDispatchHeld } from "./runtime.js";
 import { RunStore } from "./store.js";
 import type { Data, EngineOptions, ResumeInput, Run } from "./types.js";
 import { Wakeups } from "./wakeups.js";
-import { createRun, createRelatedRun, type RelatedRun } from "./create-run.js";
+import {
+  createRun,
+  createRootRun,
+  createRelatedRun,
+  type RelatedRun,
+} from "./create-run.js";
 import { DurableTraversal } from "./traversal.js";
 import { childOutputs } from "./child-outputs.js";
 import { reconcileBoundary, recordFailure } from "./boundary.js";
@@ -36,16 +41,7 @@ export class WorkflowEngine {
     id?: string;
   }): Promise<Run> {
     const id = input.id ?? randomUUID();
-    const run = await createRun(this.store, this.options.resolveBlueprint, {
-      ...input,
-      commit: this.options.pinCommit
-        ? await this.options.pinCommit(input.commit)
-        : input.commit,
-      id,
-      rootId: id,
-      parentId: null,
-      parentNodeId: null,
-    });
+    const run = await createRootRun(this.store, this.options, { ...input, id });
     return run.status === "awaiting" ? run : this.execute(run.id);
   }
   /** A side run shares lineage without installing a parent completion wait. */

@@ -34,6 +34,7 @@ export interface Run {
   blueprintId: string;
   blueprint: WorkflowBlueprint;
   commit: string;
+  requestedRevision?: string;
   rootId: string;
   parentId: string | null;
   parentNodeId: string | null;

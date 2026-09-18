@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY, root_id TEXT NOT NULL, parent_id TEXT, parent_node_id TEXT,
   blueprint_id TEXT NOT NULL, blueprint_commit TEXT NOT NULL, blueprint TEXT NOT NULL,
   status TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0,
-  initial_context TEXT NOT NULL, context TEXT NOT NULL, checkpoint TEXT NOT NULL
+  initial_context TEXT NOT NULL, context TEXT NOT NULL, checkpoint TEXT NOT NULL,
+  requested_revision TEXT
 );
 CREATE INDEX IF NOT EXISTS runs_root ON runs(root_id);
 CREATE TABLE IF NOT EXISTS lifecycle_starts (

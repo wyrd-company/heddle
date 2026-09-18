@@ -241,6 +241,11 @@ proposed-design:
     catalog resolves a requested revision to its full commit before root-run
     creation. The stored commit is the identity shared by graph resolution,
     pass prompt and handoff-schema loading, policy evaluation, and restart.
+    A root also records its requested revision beside the canonical commit.
+    A start retry with that same request or the stored commit reuses the
+    existing snapshot; a different request still passes the invocation
+    identity checks. Records without a requested revision compare retries
+    against their stored commit.
     The catalog reads Git tree and blob objects through isomorphic-git.
     Recovery reads referenced artifacts from the stored commit even when the
     repository working tree or branch has moved. The local object database

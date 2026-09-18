@@ -32,6 +32,13 @@ export function acquireWriter(path: string): Writer & { release: () => void } {
   if (!writer) {
     const db = new DatabaseSync(path);
     db.exec(schema);
+    if (
+      !db
+        .prepare("PRAGMA table_info(runs)")
+        .all()
+        .some((column) => column["name"] === "requested_revision")
+    )
+      db.exec("ALTER TABLE runs ADD COLUMN requested_revision TEXT");
     writer = { db, users: 0, active: new Map() };
     if (key !== undefined) writers.set(key, writer);
   }
