@@ -31,7 +31,8 @@
     "docs/specifications/policy-rule.schema.yml"
   ],
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && npm run codegen && npm run build:types && node scripts/build.mjs",
+    "build": "node scripts/clean-dist.mjs && npm run generate:authoring && npm run codegen && npm run build:types && node scripts/build.mjs",
+    "generate:authoring": "node scripts/generate-authoring.mjs",
     "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly",
     "codegen": "npm run codegen:guard && graphql-codegen --config src/github/codegen.ts",
     "codegen:guard": "node src/github/scripts/check-codegen-hooks.mjs",

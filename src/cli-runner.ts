@@ -7,6 +7,7 @@
 import type { ValidationOptions } from "./blueprints/types.js";
 import { VALIDATION_RULES } from "./blueprints/rules.js";
 import { validateBlueprintPath } from "./blueprints/validate.js";
+import { exportEmbeddedSkill, listEmbeddedSkills } from "./skills.js";
 
 export interface CliIo {
   error(message: string): void;
@@ -89,12 +90,43 @@ export function runCli(
     return runValidate(commandArguments, io, command.usage, options);
   }
 
+  if (commandName === "skill") {
+    return runSkill(commandArguments, io, command.usage);
+  }
+
   if (commandArguments.length === 0 || commandName === "start") {
     io.error(command.usage);
     return 2;
   }
 
   io.error(`${command.usage}\n\nThis command is not implemented yet.`);
+  return 2;
+}
+
+function runSkill(
+  arguments_: readonly string[],
+  io: CliIo,
+  usage: string,
+): number {
+  if (arguments_.length === 1 && arguments_[0] === "list") {
+    io.output(listEmbeddedSkills().join("\n"));
+    return 0;
+  }
+  if (
+    arguments_.length === 3 &&
+    arguments_[0] === "export" &&
+    arguments_[1] !== undefined &&
+    arguments_[2] !== undefined
+  ) {
+    try {
+      exportEmbeddedSkill(arguments_[1], arguments_[2]);
+      return 0;
+    } catch (error) {
+      io.error(error instanceof Error ? error.message : String(error));
+      return 2;
+    }
+  }
+  io.error(usage);
   return 2;
 }
 

@@ -1,0 +1,182 @@
+{
+  "child-run": {
+    "description": "Start a child blueprint and pause until it completes.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/childRunParams"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": { "type": "object" },
+        "completed": { "type": "boolean" },
+        "failed": { "type": "boolean" }
+      }
+    },
+    "contextWrites": ["<node-id>"],
+    "pausing": true,
+    "results": ["completed", "failed"]
+  },
+  "lifecycle-start": {
+    "description": "Start the selected lifecycle as an independent top-level run.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/lifecycleStartParams"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "started": { "const": true },
+        "payload": {
+          "type": "object",
+          "properties": { "runId": { "type": "string" } },
+          "required": ["runId"]
+        }
+      },
+      "required": ["started", "payload"]
+    },
+    "contextWrites": ["<node-id>"],
+    "pausing": false,
+    "results": ["started"]
+  },
+  "pass": {
+    "description": "Run one agent pass in one T3 Code thread and pause for its outcome.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/passParams"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {},
+        "handoff": { "type": "boolean" },
+        "escalate": { "type": "boolean" },
+        "timeout": { "type": "boolean" },
+        "idle": { "type": "boolean" },
+        "turnEnded": { "type": "boolean" },
+        "overridden": { "type": "boolean" }
+      }
+    },
+    "contextWrites": ["<node-id>", "stages.<node-id>"],
+    "pausing": true,
+    "results": [
+      "handoff",
+      "escalate",
+      "timeout",
+      "idle",
+      "turnEnded",
+      "overridden"
+    ]
+  },
+  "question": {
+    "description": "Ask a configured role one or more questions and pause for its answer.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/questionParams"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {},
+        "answered": { "type": "boolean" },
+        "timeout": { "type": "boolean" }
+      }
+    },
+    "contextWrites": ["<node-id>"],
+    "pausing": true,
+    "results": ["answered", "timeout"]
+  },
+  "on-issue-change": {
+    "description": "Pause until the bound issue changes and its authored condition matches.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/onIssueChangeParams"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {},
+        "changed": { "type": "boolean" },
+        "timeout": { "type": "boolean" }
+      }
+    },
+    "contextWrites": ["<node-id>"],
+    "pausing": true,
+    "results": ["changed", "timeout"]
+  },
+  "github": {
+    "description": "Apply one GitHub operation to the bound issue or repository.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/githubParams"
+    },
+    "outputSchema": {},
+    "contextWrites": ["<node-id>", "issue"],
+    "pausing": false,
+    "results": []
+  },
+  "git": {
+    "description": "Apply one Git worktree, branch, merge, or push operation.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/gitParams"
+    },
+    "outputSchema": {},
+    "contextWrites": ["<node-id>"],
+    "pausing": false,
+    "results": []
+  },
+  "terminal-result": {
+    "description": "Set the run's final result.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/terminalResultParams"
+    },
+    "outputSchema": {},
+    "contextWrites": ["<node-id>", "result"],
+    "pausing": false,
+    "results": []
+  },
+  "aggregate": {
+    "description": "Collect named predecessor outputs into one object.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/aggregateParams"
+    },
+    "outputSchema": { "type": "object" },
+    "contextWrites": ["<node-id>"],
+    "pausing": false,
+    "results": []
+  },
+  "notify": {
+    "description": "Send a notification through a configured channel.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/notifyParams"
+    },
+    "outputSchema": {},
+    "contextWrites": ["<node-id>"],
+    "pausing": false,
+    "results": []
+  },
+  "policy": {
+    "description": "Evaluate an ordered policy-rule artifact against an input.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/policyParams"
+    },
+    "outputSchema": {},
+    "contextWrites": ["<node-id>"],
+    "pausing": false,
+    "results": []
+  },
+  "sleep": {
+    "description": "Pause for an authored duration.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/sleepParams"
+    },
+    "outputSchema": { "type": "object", "properties": { "payload": {} } },
+    "contextWrites": ["<node-id>"],
+    "pausing": true,
+    "results": []
+  },
+  "wait": {
+    "description": "Pause for an external resume, with an optional authored deadline.",
+    "paramsSchema": {
+      "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/waitParams"
+    },
+    "outputSchema": { "type": "object", "properties": { "payload": {} } },
+    "contextWrites": ["<node-id>"],
+    "pausing": true,
+    "results": []
+  }
+}

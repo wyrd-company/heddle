@@ -3,7 +3,9 @@
 //   verifies: blueprint-authoring
 // ---
 import { describe, expect, it } from "vitest";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { runCli, type CliIo } from "../src/cli-runner.js";
 import { validateBlueprintPath } from "../src/blueprints/validate.js";
@@ -88,14 +90,44 @@ describe("command arguments", () => {
     expect(result.errors.join("\n")).toContain("Unknown command: toString");
   });
 
-  it.each([
-    ["skill", "list"],
-    ["hook", "stop"],
-  ])("keeps %s as a non-operational skeleton", (...arguments_) => {
+  it("keeps hook as a non-operational skeleton", () => {
+    const arguments_ = ["hook", "stop"];
     const result = capture(arguments_);
 
     expect(result.exitCode).not.toBe(0);
     expect(result.errors.join("\n")).toContain("not implemented yet");
+  });
+
+  it("lists and exports the embedded blueprint authoring skill", () => {
+    const root = mkdtempSync(join(tmpdir(), "heddle-skill-"));
+    try {
+      expect(capture(["skill", "list"])).toEqual({
+        exitCode: 0,
+        errors: [],
+        output: ["blueprint-authoring"],
+      });
+      const result = capture(["skill", "export", "blueprint-authoring", root]);
+      expect(result).toEqual({ exitCode: 0, errors: [], output: [] });
+      const skill = readFileSync(
+        join(root, "blueprint-authoring", "SKILL.md"),
+        "utf8",
+      );
+      expect(skill).toContain("name: blueprint-authoring");
+      expect(skill).toContain("heddle validate --json");
+      expect(
+        readFileSync(
+          join(
+            root,
+            "blueprint-authoring",
+            "references",
+            "blueprint-author-reference.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("## Node types");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("validates a blueprint file offline", () => {

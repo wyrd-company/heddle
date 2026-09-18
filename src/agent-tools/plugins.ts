@@ -5,6 +5,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import packageMetadata from "../../package.json" with { type: "json" };
+import pluginContracts from "./plugin-contracts.json" with { type: "json" };
+
+export const HOOK_PLUGIN_FILES = pluginContracts;
 
 /** Export reusable native packages. Native harness installers own profile edits. */
 export async function exportHookPlugins(

@@ -1,0 +1,12 @@
+{
+  "claude": [
+    ".claude-plugin/marketplace.json",
+    "plugins/heddle/.claude-plugin/plugin.json",
+    "plugins/heddle/hooks/hooks.json"
+  ],
+  "codex": [
+    ".agents/plugins/marketplace.json",
+    "plugins/heddle/.codex-plugin/plugin.json",
+    "plugins/heddle/hooks/hooks.json"
+  ]
+}

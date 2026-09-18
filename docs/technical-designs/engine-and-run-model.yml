@@ -110,6 +110,13 @@ proposed-design:
     execution. Completed branch data survives restart while sibling branches
     remain paused. Notification is a separate external effect and is not
     required to complete or combine results.
+  sequential-dispatch: >
+    The Flowcraft orchestrator dispatches one ready node at a time with engine
+    concurrency 1. Snapshot checkpointing records one completed node against
+    the remaining frontier, and the one-terminal-result guard observes that
+    ordered context. Increasing dispatch concurrency requires replacement
+    checkpoint and terminal-result agreements; it is not a scheduler tuning
+    change.
   lifecycle-start: >
     Intake starts a lifecycle through `lifecycle-start`. The target is an
     independent top-level run with its own root id and no parent. A durable

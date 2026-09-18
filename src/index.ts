@@ -22,6 +22,11 @@ export {
 } from "./blueprints/node-types.js";
 export { VALIDATION_RULES } from "./blueprints/rules.js";
 export {
+  exportEmbeddedSkill,
+  listEmbeddedSkills,
+  type EmbeddedSkillName,
+} from "./skills.js";
+export {
   BlueprintValidationError,
   checkBlueprintFile,
   loadValidatedBlueprint,

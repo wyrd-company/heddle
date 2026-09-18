@@ -11,6 +11,9 @@ tasks:
   build:
     desc: Compile the package and executable
     cmds: [npm run build]
+  generate:authoring:
+    desc: Regenerate the blueprint author reference and embedded skill
+    cmds: [npm run generate:authoring]
   codegen:
     desc: Regenerate the internal GitHub document lookup
     cmds: [npm run codegen]
