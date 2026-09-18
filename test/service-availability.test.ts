@@ -308,3 +308,15 @@ it.each(["existing", "missing"] as const)(
     ).rejects.toThrow("already owned");
   },
 );
+
+it("keeps the default hook inert before its state directory exists", async () => {
+  const config = fixture();
+  vi.stubEnv("HEDDLE_STATE_DIR", join(config.stateDirectory, "absent"));
+  vi.stubEnv("HEDDLE_HOOK_SOCKET", "");
+  expect(
+    await runStopHook(
+      "codex",
+      JSON.stringify({ hook_event_name: "Stop", session_id: "sample-session" }),
+    ),
+  ).toEqual({});
+});

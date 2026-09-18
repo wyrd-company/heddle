@@ -166,6 +166,7 @@ it.each(["claude", "codex"] as const)(
         env: {
           ...process.env,
           HEDDLE_HOOK_SOCKET: join(f.directory, "hooks.sock"),
+          HEDDLE_STATE_DIR: f.directory,
         },
       },
     );
