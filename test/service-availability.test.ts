@@ -3,6 +3,7 @@
 //   verifies: command-line-interface
 // ---
 import { createHmac } from "node:crypto";
+import { createServer } from "node:net";
 import { Server } from "node:http";
 import {
   mkdtempSync,
@@ -95,6 +96,22 @@ function barrier() {
 
 it("gates valid mutating webhook and tool requests throughout engine and pass recovery", async () => {
   const config = fixture();
+  const reserved = createServer();
+  await new Promise<void>((resolve) => {
+    reserved.listen(0, "127.0.0.1", resolve);
+  });
+  const reservedAddress = reserved.address();
+  if (!reservedAddress || typeof reservedAddress === "string")
+    throw new Error("Missing reserved port");
+  const port = reservedAddress.port;
+  await new Promise<void>((resolve) => {
+    reserved.close(() => {
+      resolve();
+    });
+  });
+  if (!config.webhook) throw new Error("Missing webhook fixture");
+  config.webhook.listen = { host: "127.0.0.1", port };
+  const webhookOrigin = `http://127.0.0.1:${String(port)}`;
   const seeded = new RunStore(config.databasePath);
   const prepared = prepareAgentTools({
     threadId: "sample-thread",
@@ -169,7 +186,7 @@ it("gates valid mutating webhook and tool requests throughout engine and pass re
     issue: { node_id: "sample-issue", updated_at: "2030-01-02T03:04:05Z" },
   });
   const webhook = () =>
-    fetch(`${origin}/webhook/github`, {
+    fetch(`${webhookOrigin}/webhook/github`, {
       method: "POST",
       headers: {
         "x-github-event": "issues",
@@ -207,7 +224,7 @@ it("gates valid mutating webhook and tool requests throughout engine and pass re
         phase,
       ).toBe(false);
       const changes = store.db.prepare("SELECT total_changes() AS count").get();
-      expect((await webhook()).status, phase).toBe(503);
+      await expect(webhook(), phase).rejects.toThrow();
       expect((await handoff()).status, phase).toBe(503);
       expect(
         store.db.prepare("SELECT total_changes() AS count").get(),

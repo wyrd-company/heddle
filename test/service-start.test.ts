@@ -2,8 +2,9 @@
 // relationships:
 //   verifies: command-line-interface
 // ---
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { createServer } from "node:net";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import type { ResolvedServiceConfig } from "../src/service/config.js";
@@ -45,3 +46,69 @@ it("keeps one service alive, rejects a second writer, and releases the store on 
   const second = await start(root);
   await second.close();
 });
+
+it.each(["127.0.0.1", "0.0.0.0"])(
+  "binds the explicitly configured %s interface for an idle service and releases the port",
+  async (host) => {
+    const root = mkdtempSync(join(tmpdir(), "service-listener-"));
+    roots.push(root);
+    const reservation = createServer();
+    await new Promise<void>((resolve) => {
+      reservation.listen(0, host, resolve);
+    });
+    const address = reservation.address();
+    if (!address || typeof address === "string")
+      throw new Error("Missing fixture address");
+    const port = address.port;
+    const secretFile = join(root, "secret");
+    writeFileSync(secretFile, "sample-secret");
+    const configured = {
+      ...config(root),
+      webhook: { secretFile, listen: { host, port } },
+    };
+    try {
+      await expect(startService(configured, io)).rejects.toThrow("EADDRINUSE");
+    } finally {
+      await new Promise<void>((resolve) => {
+        reservation.close(() => {
+          resolve();
+        });
+      });
+    }
+    const messages: string[] = [];
+    const running = await startService(configured, {
+      ...io,
+      output: (message) => {
+        messages.push(message);
+      },
+    });
+    try {
+      expect(messages.join("\n")).toContain(
+        `webhook=http://${host}:${String(port)}/webhook/github`,
+      );
+      if (host === "0.0.0.0") {
+        const external = Object.values(networkInterfaces())
+          .flat()
+          .find((entry) => entry?.family === "IPv4" && !entry.internal);
+        expect(
+          external,
+          "wildcard fixture requires a local non-loopback interface",
+        ).toBeDefined();
+        const response = await fetch(
+          `http://${String(external?.address)}:${String(port)}/hook/stop`,
+          { method: "POST" },
+        );
+        expect(response.status).toBe(404);
+      }
+      const response = await fetch(
+        `http://127.0.0.1:${String(port)}/hook/stop`,
+        { method: "POST" },
+      );
+      expect(response.status).toBe(404);
+    } finally {
+      await running.close();
+    }
+    const restarted = await startService(configured, io);
+    await restarted.close();
+  },
+);

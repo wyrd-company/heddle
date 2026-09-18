@@ -8,7 +8,7 @@
     "configFile": {
       "type": "string",
       "default": "/etc/heddle/config.yml",
-      "description": "Absolute path to the bind-mounted Heddle configuration file."
+      "description": "Absolute path to the bind-mounted Heddle configuration file. Optional webhook.listen.host and webhook.listen.port enable webhook listening; both must be explicit and there is no default port."
     },
     "stateDirectory": {
       "type": "string",
@@ -28,7 +28,7 @@
     "webhookSecretFile": {
       "type": "string",
       "default": "/run/secrets/heddle-webhook-secret",
-      "description": "Absolute path to the bind-mounted GitHub webhook secret file."
+      "description": "Absolute path to the bind-mounted GitHub webhook secret file. Does not enable listening; configure webhook.listen.host and webhook.listen.port in configFile."
     },
     "serviceUser": {
       "type": "string",

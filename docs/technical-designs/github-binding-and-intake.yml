@@ -138,7 +138,16 @@ proposed-design:
   event-delivery: >
     The service exposes one webhook handler for GitHub `issues`,
     `projects_v2_item`, `issue_comment`, and `pull_request` events, verified
-    by the webhook secret. How deliveries reach it is the host's concern.
+    by the webhook secret. Listening is disabled unless both
+    `webhook.listen.host` and `webhook.listen.port` are configured. There is
+    no default port. The recommended host is `127.0.0.1` behind a host proxy
+    or tunnel; operators may choose another interface including `0.0.0.0`.
+    Only `POST /webhook/github` is served on this separate listener, which
+    opens after recovery and binding startup. Generated tools remain on an
+    ephemeral loopback listener; hook sockets, tokens, and state are not
+    exposed through the webhook listener. The configured route survives
+    graceful restart and forced process death. Host proxy, tunnel, TLS, and
+    forwarding configuration deliver GitHub requests to that route.
     The handler has two producers. GitHub calls it over HTTP. The poller,
     which runs as a safety net at a low rate or as the only producer where
     no webhook is configured, polls the bound projects, diffs, and on a

@@ -101,3 +101,19 @@ new PushoverDelivery({
 
 The delivery sends `title`, `message`, and optional `url` as a Pushover form.
 Tests inject a fetch implementation and generic test-channel values.
+
+Webhook listening is disabled by default. To enable it, configure both
+`webhook.listen.host` and `webhook.listen.port`; there is no default port.
+Use `127.0.0.1` behind a host proxy or tunnel when that proxy can reach the
+service's loopback interface. Operators may select another interface, including
+`0.0.0.0`. `webhook.secretFile` supplies the signature secret; the CLI
+`--webhook-secret` and Feature `webhookSecretFile` override only its file path.
+Polling remains available with or without webhook listening.
+
+The external listener serves only `POST /webhook/github` after recovery and
+binding startup. Other paths and methods return 404. Invalid signatures retain
+the existing error response and never reach binding delivery. Generated tools
+use a separate ephemeral loopback listener. Hook transport, bearer tokens, and
+SQLite state are not served by the external listener. Startup output names the
+configured webhook route, or `webhook=disabled`, without generated-tool endpoints.
+See [host routing and acceptance checks](webhook-routing.md).

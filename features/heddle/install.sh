@@ -40,6 +40,7 @@ blueprints:
   repository: /usr/local/share/heddle/blueprints
 t3Code:
   endpoint: http://127.0.0.1:3773
+# Listening stays disabled; set webhook.listen.host and webhook.listen.port explicitly.
 webhook:
   secretFile: ${WEBHOOKSECRETFILE}
 EOF

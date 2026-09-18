@@ -136,6 +136,13 @@ used to verify GitHub deliveries. Secret values are read from these files;
 they do not belong in YAML values, Feature options, command arguments, or
 logs.
 
+Webhook listening is disabled until both `webhook.listen.host` and
+`webhook.listen.port` are configured. There is no default port. Recommend
+`127.0.0.1` behind a host proxy or tunnel; operators may explicitly select
+another interface, including `0.0.0.0`. The stable external listener serves
+only `POST /webhook/github` after recovery. Polling remains available.
+See [host routing and acceptance checks](docs/reference/webhook-routing.md).
+
 `state.databasePath` overrides the SQLite path. Otherwise Heddle uses
 `heddle.sqlite` below the selected state directory. `polling.intervalMs`
 defaults to 30000. One service owns the database writer. A second service exits

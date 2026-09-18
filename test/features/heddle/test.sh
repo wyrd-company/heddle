@@ -18,6 +18,7 @@ check "launcher carries GitHub credential path" grep -q -- '--github-app-credent
 check "launcher carries T3 token path" grep -q -- '--t3-token /run/secrets/heddle-t3-token' /usr/local/bin/heddle-service
 check "launcher carries webhook secret path" grep -q -- '--webhook-secret /run/secrets/heddle-webhook-secret' /usr/local/bin/heddle-service
 check "default service configuration exists" test -r /etc/heddle/config.yml
+check "default webhook listening is disabled" bash -c '! grep -q "^  listen:" /etc/heddle/config.yml'
 check "s6 longrun stays up, stops cleanly, and restarts" ./check-longrun.sh
 
 reportResults

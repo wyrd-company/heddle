@@ -8,6 +8,8 @@ import { createServer, type Server } from "node:http";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { appClients } from "../binding/config.js";
+import { GitHubEventHandler } from "../binding/delivery.js";
+import { webhookServer } from "./webhook.js";
 import { GitHubBindingService } from "../binding/service.js";
 import { PushoverDelivery } from "../binding/notify.js";
 import { HookServer } from "../agent-tools/hook-server.js";
@@ -32,10 +34,14 @@ export interface RunningService {
   engine?: WorkflowEngine;
 }
 
-function listenTcp(server: Server): Promise<void> {
+function listenTcp(
+  server: Server,
+  port = 0,
+  host = "127.0.0.1",
+): Promise<void> {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(port, host, () => {
       server.off("error", reject);
       resolve();
     });
@@ -73,6 +79,7 @@ export async function startService(
   let ready = false;
   let store: RunStore | undefined,
     tcp: Server | undefined,
+    webhook: Server | undefined,
     hooks: Server | undefined,
     passes: PassService | undefined,
     t3: T3Client | undefined,
@@ -86,6 +93,8 @@ export async function startService(
   let signalHandler: (() => void) | undefined;
   let startupMessage: string;
   let engine: WorkflowEngine | undefined;
+  // An idle service has no bound instance to update from a signed delivery.
+  let events = new GitHubEventHandler(() => Promise.resolve(false));
   try {
     store = new RunStore(databasePath);
     if (config.projects.length === 0 && config.pass === undefined) {
@@ -148,26 +157,11 @@ export async function startService(
         },
       );
       engine = binding.engine;
+      events = binding.events;
       tcp = createServer((request, response) => {
         void (async () => {
           if (!ready) {
             response.writeHead(503).end();
-            return;
-          }
-          if (
-            request.url === "/webhook/github" &&
-            request.method === "POST" &&
-            config.webhook
-          ) {
-            const chunks: Uint8Array[] = [];
-            for await (const chunk of request) chunks.push(Buffer.from(chunk));
-            await binding.events.webhook(
-              String(request.headers["x-github-event"] ?? ""),
-              String(request.headers["x-hub-signature-256"] ?? ""),
-              Buffer.concat(chunks),
-              secret(config.webhook.secretFile),
-            );
-            response.writeHead(202).end();
             return;
           }
           if (!passes) {
@@ -223,13 +217,24 @@ export async function startService(
           });
       };
       timer = setInterval(poll, config.polling.intervalMs);
-      startupMessage = `Heddle started; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms; tools=${origin}; hooks=${hookSocket}`;
+      startupMessage = `Heddle started; store=${config.databasePath}; poll=${String(config.polling.intervalMs)}ms; hooks=${hookSocket}`;
+    }
+    if (config.webhook?.listen) {
+      const { secretFile } = config.webhook;
+      webhook = webhookServer(events, () => secret(secretFile), io);
+      const { host, port } = config.webhook.listen;
+      await listenTcp(webhook, port, host);
+      const urlHost = host.includes(":") ? `[${host}]` : host;
+      startupMessage += `; webhook=http://${urlHost}:${String(port)}/webhook/github`;
+    } else {
+      startupMessage += "; webhook=disabled";
     }
     const close = async (): Promise<void> => {
       if (closing) return closing;
       ready = false;
       closing = (async () => {
         if (timer) clearInterval(timer);
+        if (webhook?.listening) await closeServer(webhook);
         if (hooks?.listening) await closeServer(hooks);
         if (tcp?.listening) await closeServer(tcp);
         await polling;
@@ -261,6 +266,7 @@ export async function startService(
     ready = false;
     if (timer) clearInterval(timer);
     passes?.close();
+    if (webhook?.listening) await closeServer(webhook);
     if (hooks?.listening) await closeServer(hooks);
     if (tcp?.listening) await closeServer(tcp);
     await polling;

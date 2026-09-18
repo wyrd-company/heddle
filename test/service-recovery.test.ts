@@ -4,6 +4,9 @@
 // ---
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
+import { GitHubBindingService } from "../src/binding/service.js";
+import { createHmac } from "node:crypto";
+import { createServer } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -86,9 +89,41 @@ async function processExit(child: ChildProcess): Promise<void> {
   );
 }
 
-it("recovers pinned graph prompt schema and policy after packaged process death and repository change", async () => {
+it("keeps the stable webhook route isolated across recovery, graceful restart, and SIGKILL while preserving pinned artifacts", async () => {
   const root = mkdtempSync(join(tmpdir(), "service-recovery-"));
   roots.push(root);
+  const reservation = createServer();
+  await new Promise<void>((resolve) =>
+    reservation.listen(0, "127.0.0.1", resolve),
+  );
+  const address = reservation.address();
+  if (!address || typeof address === "string")
+    throw new Error("Missing fixture port");
+  const port = address.port;
+  await new Promise<void>((resolve) =>
+    reservation.close(() => {
+      resolve();
+    }),
+  );
+  const webhookOrigin = `http://127.0.0.1:${String(port)}`;
+  const webhookUrl = `${webhookOrigin}/webhook/github`;
+  const webhookSecret = join(root, "webhook-secret");
+  writeFileSync(webhookSecret, "fixture-secret");
+  const body = JSON.stringify({
+    issue: { node_id: "sample-issue", updated_at: "2030-01-02T03:04:05Z" },
+  });
+  const signature = `sha256=${createHmac("sha256", "fixture-secret").update(body).digest("hex")}`;
+  const deliver = (signed = true) =>
+    fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "x-github-event": "issues",
+        "x-hub-signature-256": signed ? signature : "invalid",
+      },
+      body,
+    });
+  const running: RunningService[] = [];
+  const starting: Promise<RunningService>[] = [];
   const blueprints = join(root, "blueprints");
   mkdirSync(blueprints);
   writeSample(blueprints, "first");
@@ -109,8 +144,13 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     status: 200,
     body: makeShellSnapshot({ projects, threads, snapshotSequence: sequence }),
   }));
-  server.routes.route("PUT /api/mcp/provider-session", () => {
+  let releaseRecovery = (): void => undefined;
+  const recoveryGate = new Promise<void>((resolve) => {
+    releaseRecovery = resolve;
+  });
+  server.routes.route("PUT /api/mcp/provider-session", async () => {
     registrations++;
+    if (registrations === 2) await recoveryGate;
     return { status: 204 };
   });
   server.routes.route("DELETE /api/mcp/provider-session", () => ({
@@ -158,7 +198,7 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
   const configPath = join(root, "config.yml");
   writeFileSync(
     configPath,
-    `projects: []\ngithub:\n  credentialFile: /unused/app.yml\nblueprints:\n  repository: ${blueprints}\nt3Code:\n  endpoint: ${server.httpUrl}\n  tokenFile: ${token}\nstate:\n  databasePath: ${join(root, "state", "heddle.sqlite")}\npolling:\n  intervalMs: 30000\npass:\n  defaultModel:\n    instanceId: sample-provider\n    model: sample-model\n  defaultWorktree: ${root}\n`,
+    `projects: []\nwebhook:\n  secretFile: ${webhookSecret}\n  listen: { host: 127.0.0.1, port: ${String(port)} }\ngithub:\n  credentialFile: /unused/app.yml\nblueprints:\n  repository: ${blueprints}\nt3Code:\n  endpoint: ${server.httpUrl}\n  tokenFile: ${token}\nstate:\n  databasePath: ${join(root, "state", "heddle.sqlite")}\npolling:\n  intervalMs: 30000\npass:\n  defaultModel:\n    instanceId: sample-provider\n    model: sample-model\n  defaultWorktree: ${root}\n`,
   );
   const config: ResolvedServiceConfig = {
     configPath,
@@ -166,6 +206,7 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     databasePath: join(root, "state", "heddle.sqlite"),
     polling: { intervalMs: 30000 },
     projects: [],
+    webhook: { secretFile: webhookSecret, listen: { host: "127.0.0.1", port } },
     github: { credentialFile: "/unused/app.yml" },
     blueprints: { repository: blueprints },
     t3Code: { endpoint: server.httpUrl, tokenFile: token },
@@ -175,10 +216,14 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
       defaultWorktree: root,
     },
   };
+  const discovered = vi.spyOn(GitHubBindingService.prototype, "discover");
   const io = { output: () => undefined, error: () => undefined };
   let active: RunningService | undefined;
   try {
     const first = (active = await startService(config, io));
+    const beforeDelivery = discovered.mock.calls.length;
+    expect((await deliver()).status).toBe(202);
+    expect(discovered.mock.calls.length).toBeGreaterThan(beforeDelivery);
     const paused = await first.engine?.start({
       id: "durable-run",
       blueprintId: "sample-process",
@@ -190,7 +235,22 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
       expect(registrations).toBe(1);
     });
     await first.close();
-    const second = (active = await startService(config, io));
+    const restarting = startService(config, io).then((service) => {
+      running.push(service);
+      return service;
+    });
+    starting.push(restarting);
+    await vi.waitFor(() => {
+      expect(registrations).toBe(2);
+    });
+    try {
+      await expect(deliver()).rejects.toThrow();
+    } finally {
+      releaseRecovery();
+    }
+    const second = await restarting;
+    expect((await deliver()).status).toBe(202);
+    active = second;
     expect(second.engine?.store.get("durable-run").status).toBe("awaiting");
     await vi.waitFor(() => {
       expect(registrations).toBe(2);
@@ -200,7 +260,9 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     const packagedBefore = launch(configPath);
     const beforeOutput = await packagedStarted(packagedBefore);
     const beforePid = packagedBefore.pid;
-    expect(beforeOutput).toContain("tools=http://127.0.0.1:");
+    expect(beforeOutput).toContain(`webhook=${webhookUrl}`);
+    expect(beforeOutput).not.toMatch(/tools=|fixture-secret|fixture-token/u);
+    expect((await deliver()).status).toBe(202);
     expect(beforeOutput).toContain(
       `hooks=${serviceHookSocket(config.stateDirectory, config.databasePath)}`,
     );
@@ -214,8 +276,17 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     const packagedAfter = launch(configPath);
     const afterOutput = await packagedStarted(packagedAfter);
     const afterPid = packagedAfter.pid;
-    let origin = /tools=(http:\/\/127\.0\.0\.1:\d+)/u.exec(afterOutput)?.[1];
-    expect(origin).toBeDefined();
+    const toolOrigin = () => {
+      const registration = server.routes.requests
+        .filter(
+          (request) =>
+            request.method === "PUT" &&
+            request.path === "/api/mcp/provider-session",
+        )
+        .at(-1)?.body as { endpoint: string };
+      return new URL(registration.endpoint).origin;
+    };
+    let origin = toolOrigin();
     const readPass = (runId: string, nodeId: string): PassInvocation => {
       const db = new DatabaseSync(config.databasePath, { readOnly: true });
       try {
@@ -237,7 +308,7 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
       const item = readPass(runId, nodeId);
       expect(item.binding).not.toBeNull();
       if (!item.binding) throw new Error("Pass binding is missing");
-      const response = await fetch(String(origin) + item.binding.path, {
+      const response = await fetch(origin + item.binding.path, {
         method: "POST",
         headers: {
           authorization: `Bearer ${item.binding.token}`,
@@ -255,6 +326,34 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
       const body = await response.text();
       expect(body).not.toContain('"isError":true');
     };
+    const invocation = readPass("durable-run", "inspect");
+    if (!invocation.binding) throw new Error("Missing pass binding");
+    expect(afterOutput).toContain(`webhook=${webhookUrl}`);
+    expect(afterOutput).not.toMatch(/tools=|fixture-secret|fixture-token/u);
+    expect((await deliver()).status).toBe(202);
+    expect((await deliver(false)).status).toBe(500);
+    expect(origin).not.toBe(webhookOrigin);
+    for (const path of [
+      invocation.binding.path,
+      invocation.binding.path + "/policy",
+      "/hook/stop",
+      "/heddle.sqlite",
+      "/hooks.sock",
+      "/",
+      "/webhook/github?extra=true",
+    ]) {
+      const denied = await fetch(webhookOrigin + path, {
+        method: "POST",
+        headers: { authorization: `Bearer ${invocation.binding.token}` },
+        body: "{}",
+      });
+      expect(denied.status, path).toBe(404);
+      expect(await denied.text()).toBe("");
+    }
+    expect((await fetch(webhookUrl)).status).toBe(404);
+    expect(
+      (await fetch(origin + "/webhook/github", { method: "POST" })).status,
+    ).toBe(401);
     await handoff("durable-run", "inspect", { accepted: true });
     await vi.waitFor(() => {
       expect(readPass("durable-run", "measure").phase).toBe("active");
@@ -296,7 +395,8 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     await latest.close();
     const packagedNew = launch(configPath);
     const newOutput = await packagedStarted(packagedNew);
-    origin = /tools=(http:\/\/127\.0\.0\.1:\d+)/u.exec(newOutput)?.[1];
+    origin = toolOrigin();
+    expect(newOutput).toContain(`webhook=${webhookUrl}`);
     await handoff("new-run", "inspect", { accepted: true });
     await vi.waitFor(() => {
       expect(readPass("new-run", "measure").phase).toBe("active");
@@ -326,9 +426,10 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
       newer.close();
     }
     writeFileSync(
-      "/tmp/task997-live-proof.json",
+      "/tmp/task998-live-proof.json",
       JSON.stringify(
         {
+          webhookUrl,
           firstCommit,
           secondCommit,
           liveContent: "uncommitted",
@@ -361,7 +462,11 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
       if (child.exitCode === null && child.signalCode === null)
         child.kill("SIGKILL");
     await Promise.all(children.map(processExit));
+    releaseRecovery();
+    await Promise.allSettled(starting);
+    for (const service of running) await service.close();
     await active?.close();
     await server.close();
+    discovered.mockRestore();
   }
 }, 15_000);

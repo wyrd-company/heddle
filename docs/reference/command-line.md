@@ -33,8 +33,9 @@ successfully. The operating system releases ownership after `kill -9`; the next
 process acquires ownership and recovers runs from the same database. The
 `<database>.writer` file remains on disk as the lock anchor.
 
-Webhook and generated-tool requests receive HTTP 503 until engine and pass
-recovery finish. Hook traffic and intake start after recovery.
+Generated-tool requests receive HTTP 503 until engine and pass recovery
+finish. The external webhook listener remains closed during recovery. Hook
+traffic and intake start after recovery.
 
 Each database has its own `<identity>` socket under the state directory.
 The filename is the first 16 base64url characters of the canonical database
@@ -54,3 +55,19 @@ execution and restart. Working-tree edits do not affect existing runs. Keep
 the pinned Git objects available while their runs need them; the working tree
 can move to another commit. `heddle validate` checks authored working-tree
 files with the same validation contracts used for committed runtime snapshots.
+
+Webhook listening is disabled by default. To enable it, configure both
+`webhook.listen.host` and `webhook.listen.port`; there is no default port.
+Use `127.0.0.1` behind a host proxy or tunnel when that proxy can reach the
+service's loopback interface. Operators may select another interface, including
+`0.0.0.0`. `webhook.secretFile` supplies the signature secret; the CLI
+`--webhook-secret` and Feature `webhookSecretFile` override only its file path.
+Polling remains available with or without webhook listening.
+
+The external listener serves only `POST /webhook/github` after recovery and
+binding startup. Other paths and methods return 404. Invalid signatures retain
+the existing error response and never reach binding delivery. Generated tools
+use a separate ephemeral loopback listener. Hook transport, bearer tokens, and
+SQLite state are not served by the external listener. Startup output names the
+configured webhook route, or `webhook=disabled`, without generated-tool endpoints.
+See [host routing and acceptance checks](webhook-routing.md).

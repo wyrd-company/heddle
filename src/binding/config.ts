@@ -33,7 +33,17 @@ export const bindingConfigSchema = z.object({
     endpoint: z.string().min(1),
     tokenFile: z.string().optional(),
   }),
-  webhook: z.object({ secretFile: z.string() }).optional(),
+  webhook: z
+    .object({
+      secretFile: z.string(),
+      listen: z
+        .object({
+          host: z.string().trim().min(1),
+          port: z.number().int().min(1).max(65535),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 export type BindingConfig = z.infer<typeof bindingConfigSchema>;
 export type ProjectBinding = BindingConfig["projects"][number];

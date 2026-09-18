@@ -125,6 +125,7 @@ export function resolveServiceConfig(
       ? {}
       : {
           webhook: {
+            ...parsed.data.webhook,
             secretFile:
               overrides.webhookSecretFile ??
               parsed.data.webhook?.secretFile ??

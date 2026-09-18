@@ -75,3 +75,43 @@ it("names the resolved configuration path in load errors", () => {
   const path = "/missing/profile/config.yml";
   expect(() => resolveServiceConfig({ configPath: path })).toThrow(path);
 });
+
+it("keeps webhook listening disabled without explicit host and port", () => {
+  const f = fixture("webhook:\n  secretFile: /secrets/webhook\n");
+  expect(
+    resolveServiceConfig({ configPath: f.path }).webhook?.listen,
+  ).toBeUndefined();
+});
+
+it.each(["127.0.0.1", "0.0.0.0", "::1"])(
+  "preserves explicit webhook routing on %s with a secret override",
+  (host) => {
+    const f = fixture(
+      `webhook:\n  secretFile: /secrets/webhook\n  listen:\n    host: '${host}'\n    port: 8421\n`,
+    );
+    expect(
+      resolveServiceConfig({
+        configPath: f.path,
+        webhookSecretFile: "/secrets/replacement",
+      }).webhook,
+    ).toEqual({
+      secretFile: "/secrets/replacement",
+      listen: { host, port: 8421 },
+    });
+  },
+);
+
+it.each([
+  "listen: {}",
+  "listen: { host: 127.0.0.1 }",
+  "listen: { port: 8421 }",
+  "listen: { host: '', port: 8421 }",
+  "listen: { host: 127.0.0.1, port: 0 }",
+  "listen: { host: 127.0.0.1, port: 65536 }",
+  "listen: { host: 127.0.0.1, port: 1.5 }",
+])("rejects incomplete or non-stable webhook configuration: %s", (listen) => {
+  const f = fixture(`webhook:\n  secretFile: /secrets/webhook\n  ${listen}\n`);
+  expect(() => resolveServiceConfig({ configPath: f.path })).toThrow(
+    "webhook.listen",
+  );
+});

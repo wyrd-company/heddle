@@ -34,3 +34,16 @@ exits.
 
 See the repository [README](../../README.md#dev-container-feature) for the
 configuration schema, bind mounts, GitHub App permissions, and T3 Code pairing.
+
+## Webhook routing
+
+The `configFile` mount carries the service keys `webhook.listen.host` and
+`webhook.listen.port`. Both are explicit; no Feature option supplies a bind host
+or default port. The generated idle configuration leaves listening disabled.
+`webhookSecretFile` selects only the secret file and does not enable listening.
+For loopback routing, configure `127.0.0.1` and a chosen port behind a proxy or
+tunnel that can reach the container loopback interface. Operators may configure
+another interface, including `0.0.0.0`, with suitable container port forwarding.
+Only the signed `POST /webhook/github` route is served externally; generated
+tools, hooks, tokens, and state are not exposed there. Polling remains available.
+See [host routing and acceptance checks](../../docs/reference/webhook-routing.md).
