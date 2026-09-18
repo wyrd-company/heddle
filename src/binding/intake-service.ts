@@ -5,13 +5,17 @@
 import type { WorkflowEngine } from "../engine/engine.js";
 import type { RunStore } from "../engine/store.js";
 import type { Data, Run } from "../engine/types.js";
+import { failureMessage } from "../engine/boundary.js";
 import { setCard } from "./effects.js";
+import { attemptDue, nextAttempt } from "./intake-attempts.js";
 import type { EventBoundProject } from "./event-service.js";
 import type {
   Instance,
   InstanceStore,
+  IntakeAttempt,
   ProjectChoiceQuestion,
 } from "./store.js";
+import type { IssueSnapshot } from "./snapshot.js";
 
 function issueId(context: Data): string | undefined {
   const issue = context["issue"];
@@ -46,18 +50,66 @@ export class BindingIntakeService {
     return candidates[0];
   }
 
+  /** One instance's disagreement is its own; it never stops the others. */
   recoverAttachments(): void {
     for (const instance of this.instances.list()) {
       if (instance.runId || this.instances.ambiguous(instance.id)) continue;
-      const lifecycle = this.lifecycleFor(instance);
-      if (lifecycle) this.instances.attach(instance.id, lifecycle.id);
+      try {
+        const lifecycle = this.lifecycleFor(instance);
+        if (lifecycle) this.instances.attach(instance.id, lifecycle.id);
+      } catch (error) {
+        this.attention(instance.id, undefined, error);
+      }
     }
   }
 
+  /** A failure is recorded against the instance and its attempt run, not thrown. */
+  attention(id: string, runId: string | undefined, error: unknown): void {
+    const message = failureMessage(error);
+    this.instances.attention(id, message);
+    if (
+      runId !== undefined &&
+      this.store.db.prepare("SELECT 1 FROM runs WHERE id=?").get(runId)
+    )
+      this.store.event(runId, "attention", { message });
+  }
+
+  /** The attempt this issue is on, starting a new one when something changed. */
+  private attempt(
+    id: string,
+    issue: IssueSnapshot,
+    commit: string,
+    restarted: boolean,
+  ): IntakeAttempt {
+    const recorded = this.instances.intakeAttempt(id);
+    const inputs = { issue, commit, restarted };
+    if (recorded !== undefined && !attemptDue(this.store, recorded, inputs))
+      return recorded;
+    const attempt = nextAttempt(id, recorded, inputs);
+    this.instances.recordIntakeAttempt(attempt);
+    return attempt;
+  }
+
+  /** Whether calling start would begin a new attempt rather than replay one. */
+  due(id: string, commit: string, restarted: boolean): boolean {
+    const instance = this.instances.get(id);
+    return attemptDue(this.store, this.instances.intakeAttempt(id), {
+      issue: instance.issue,
+      commit,
+      restarted,
+    });
+  }
+
+  /**
+   * The current attempt is replayed with the commit and issue snapshot it was
+   * created with, so an identical re-invocation is idempotent however the
+   * configured revision or the live issue has moved on since.
+   */
   async start(
     id: string,
     blueprintId: string,
     commit: string,
+    restarted = false,
   ): Promise<IntakeResult> {
     await this.reconcileProjects();
     this.recoverAttachments();
@@ -65,11 +117,12 @@ export class BindingIntakeService {
     if (instance.runId) return this.store.get(instance.runId);
     const question = this.instances.projectChoice(id);
     if (question?.answer === null) return question;
+    const attempt = this.attempt(id, instance.issue, commit, restarted);
     const intake = await this.engine.start({
-      id: `intake:${id}`,
+      id: attempt.runId,
       blueprintId,
-      commit,
-      context: { issue: structuredClone(this.instances.get(id).issue) },
+      commit: attempt.commit,
+      context: { issue: JSON.parse(attempt.snapshot) as Data },
     });
     const lifecycle = this.lifecycleFor(this.instances.get(id));
     if (!lifecycle) return intake;

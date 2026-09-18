@@ -7,13 +7,13 @@ import { resolve } from "node:path";
 import jsonata from "jsonata";
 import { parse } from "yaml";
 import { afterEach, expect, it } from "vitest";
-import { deriveFlowcraftBlueprint } from "../src/blueprints/flowcraft.js";
 import { lintHeddle } from "../src/blueprints/heddle-lint.js";
 import type { Blueprint, BlueprintNode } from "../src/blueprints/types.js";
 import {
   loadValidatedBlueprint,
   validateBlueprintPath,
 } from "../src/blueprints/validate.js";
+import { deriveFlowcraftBlueprint } from "../src/blueprints/flowcraft.js";
 import {
   PushoverDelivery,
   type NotificationDelivery,
@@ -60,12 +60,13 @@ function policyNode() {
         Boolean(await jsonata(rule.when).evaluate(input))
       )
         return {
+          matched: true,
           id: rule.id,
           blueprint: rule.blueprint,
           inputs: await resolveValues(rule.inputs ?? {}, input),
         };
     }
-    throw new Error("No intake policy matched");
+    return { matched: false };
   };
 }
 
@@ -74,7 +75,6 @@ function setup(
     now?: () => number;
     notification?: NotificationDelivery | null;
     type?: string;
-    holdFailure?: string;
   } = {},
 ) {
   const github = fixture();
@@ -83,11 +83,7 @@ function setup(
   if (options.type !== undefined) issue.issueType = { name: options.type };
   const store = new RunStore(":memory:");
   stores.push(store);
-  const blueprints = [
-    shipped("default-intake"),
-    shipped("hold-then-attention"),
-    lifecycle,
-  ];
+  const blueprints = [shipped("default-intake"), lifecycle];
   const service = new GitHubBindingService(
     store,
     [{ owner: "sample-owner", number: 1 }],
@@ -95,8 +91,6 @@ function setup(
     () => Promise.resolve(blueprints),
     {
       resolveBlueprint: (_commit, id) => {
-        if (id === "hold-then-attention" && options.holdFailure !== undefined)
-          throw new Error(options.holdFailure);
         const blueprint = blueprints.find((candidate) => candidate.id === id);
         if (!blueprint) throw new Error(`Unknown blueprint: ${id}`);
         return Promise.resolve(deriveFlowcraftBlueprint(blueprint));
@@ -105,7 +99,7 @@ function setup(
       ...(options.now === undefined ? {} : { clock: options.now }),
     },
     {
-      intake: { blueprintId: "default-intake", commit: "revision" },
+      intake: { blueprintId: "default-intake", revision: "revision" },
       ...(options.notification === null
         ? {}
         : {
@@ -120,52 +114,41 @@ function setup(
   return { github, service, store };
 }
 
-it("ships valid replaceable intake and hold blueprints", () => {
+it("ships a valid replaceable intake blueprint", () => {
   expect(validateBlueprintPath(directory)).toEqual([]);
+});
+
+it("ships one intake blueprint whose only terminal starts a lifecycle", () => {
+  const blueprint = shipped("default-intake");
+  const sources = new Set((blueprint.edges ?? []).map((edge) => edge.from));
+  expect(
+    Object.entries(blueprint.nodes)
+      .filter(([id]) => !sources.has(id))
+      .map(([id, node]) => [id, node.uses]),
+  ).toEqual([["start-lifecycle", "lifecycle-start"]]);
 });
 
 it("rejects the shipped notify node before startup effects when notification delivery is absent", async () => {
   const { github, service, store } = setup({ notification: null });
 
   await expect(service.start()).rejects.toThrow(
-    'Blueprint runtime capability check failed:\n- blueprint "hold-then-attention", node "notify-attention": node type "notify" is unavailable; configure options.notifications to enable notification delivery',
+    'Blueprint runtime capability check failed:\n- blueprint "default-intake", node "notify-attention": node type "notify" is unavailable; configure options.notifications to enable notification delivery',
   );
   expect(github.transport.calls).toHaveLength(0);
   expect(store.list()).toHaveLength(0);
 });
 
-it("binds the hold condition and prompt to its one expected type input", () => {
-  const blueprint = structuredClone(shipped("hold-then-attention"));
+it("keeps the shipped attention message on context the intake run provides", () => {
+  const blueprint = structuredClone(shipped("default-intake"));
   const nodes = blueprint.nodes as Record<string, BlueprintNode>;
-  const wait = nodes["wait-for-type"];
   const notify = nodes["notify-attention"];
-  if (!wait || !notify) throw new Error("Shipped hold nodes are missing");
-  nodes["wait-for-type"] = {
-    ...wait,
-    params: {
-      ...wait.params,
-      bindings: { expectedtype: "missing" },
-    },
-  };
-  expect(lintHeddle("hold.yml", blueprint, {})).toContainEqual(
-    expect.objectContaining({
-      node: "wait-for-type",
-      rule: "heddle.context-key",
-      message: "Bound value expectedtype cannot be provided: missing",
-    }),
-  );
-
-  const restored = shipped("hold-then-attention").nodes["wait-for-type"];
-  if (!restored) throw new Error("Shipped wait node is missing");
-  nodes["wait-for-type"] = restored;
+  if (!notify) throw new Error("Shipped notify node is missing");
   nodes["notify-attention"] = {
     ...notify,
-    params: {
-      ...notify.params,
-      message: { inline: "Issue type {{ missing }} is still required." },
-    },
+    params: { ...notify.params, message: { inline: "Fix {{ missing }}." } },
   };
-  expect(lintHeddle("hold.yml", blueprint, {})).toContainEqual(
+
+  expect(lintHeddle("intake.yml", blueprint, {})).toContainEqual(
     expect.objectContaining({
       node: "notify-attention",
       rule: "heddle.context-key",
@@ -222,13 +205,15 @@ it("polling discovers and starts intake without a webhook", async () => {
   });
 });
 
-it("wakes unmatched intake and attaches the selected lifecycle", async () => {
+it("holds an unmatched issue in one run and re-classifies the changed snapshot", async () => {
   const { github, service, store } = setup({ type: "Recipe" });
   await service.start();
   expect(service.instances.get("I_1").runId).toBeNull();
-  expect(
-    store.list().some((run) => run.blueprintId === "hold-then-attention"),
-  ).toBe(true);
+  const intake = store.get("intake:I_1");
+  expect(intake.status).toBe("awaiting");
+  expect(store.awaiting(intake.id).map((item) => item.nodeId)).toEqual([
+    "hold-for-fix",
+  ]);
 
   const issue = github.issues[0];
   if (!issue) throw new Error("Fixture issue missing");
@@ -242,6 +227,13 @@ it("wakes unmatched intake and attaches the selected lifecycle", async () => {
     initialContext: { issue: { id: "I_1", type: "Work item" } },
   });
   expect(store.lifecycleStarts()).toHaveLength(1);
+  // One attempt served the whole episode.
+  expect(
+    store
+      .list()
+      .filter((run) => run.blueprintId === "default-intake")
+      .map((run) => [run.id, run.status]),
+  ).toEqual([["intake:I_1", "completed"]]);
 });
 
 it("notifies the configured Pushover channel after the authored deadline", async () => {
@@ -277,67 +269,43 @@ it("notifies the configured Pushover channel after the authored deadline", async
   expect(call.input).toBe("https://example.invalid/messages");
   const { init } = call;
   expect(init?.method).toBe("POST");
-  expect(init?.body).toBeInstanceOf(URLSearchParams);
   const body = init?.body as URLSearchParams;
   expect(Object.fromEntries(body)).toEqual({
     token: "test-application-token",
     user: "test-channel-key",
     title: "Issue intake needs attention",
-    message: "Issue type Work item is still required.",
+    message:
+      "No rule in rules/default-intake.yml matches sample-owner/recipes#1. Set the issue fields those rules select on.",
   });
 });
 
-function intakeRun(store: RunStore) {
-  const run = store
-    .list()
-    .find((candidate) => candidate.blueprintId === "default-intake");
-  if (!run) throw new Error("Intake run missing");
-  return run;
-}
-
-it("completes the intake run with the hold result after the notification", async () => {
+it("notifies once per episode and keeps waiting without a second deadline", async () => {
   let now = 0;
-  const { service, store } = setup({ type: "Recipe", now: () => now });
+  const sent: string[] = [];
+  const { service, store } = setup({
+    type: "Recipe",
+    now: () => now,
+    notification: {
+      send: (item) => {
+        sent.push(item.title);
+        return Promise.resolve();
+      },
+    },
+  });
   await service.start();
   now = 24 * 60 * 60 * 1000;
   await service.engine.tick();
+  expect(sent).toHaveLength(1);
 
-  const run = intakeRun(store);
-  expect(run.status).toBe("completed");
-  expect(run.context["result"]).toEqual({ result: { status: "attention" } });
-  expect(store.events(run.id).some((event) => event.type === "attention")).toBe(
-    false,
-  );
-});
+  now = 10 * 24 * 60 * 60 * 1000;
+  await service.engine.tick();
+  await service.poll();
+  await service.engine.tick();
 
-it("completes the intake run with the retry result when the issue type arrives", async () => {
-  const { github, service, store } = setup({ type: "Recipe" });
-  await service.start();
-  const issue = github.issues[0];
-  if (!issue) throw new Error("Fixture issue missing");
-  issue.issueType = { name: "Work item" };
-  issue.updatedAt = "2026-01-02T00:00:00Z";
-  expect(await service.poll()).toBe(1);
-
-  const run = intakeRun(store);
-  expect(run.status).toBe("completed");
-  expect(run.context["result"]).toEqual({ result: { status: "retried" } });
-  expect(store.events(run.id).some((event) => event.type === "attention")).toBe(
-    false,
-  );
-});
-
-it("completes the intake run with the hold failure details when the hold cannot start", async () => {
-  const { service, store } = setup({
-    type: "Recipe",
-    holdFailure: "Hold is unavailable",
-  });
-  await service.start();
-
-  const run = intakeRun(store);
-  expect(run.status).toBe("completed");
-  expect(run.context["result"]).toEqual({
-    status: "failed",
-    details: { message: "Hold is unavailable" },
-  });
+  expect(sent).toHaveLength(1);
+  const intake = store.get("intake:I_1");
+  expect(intake.status).toBe("awaiting");
+  expect(store.awaiting(intake.id).map((item) => item.nodeId)).toEqual([
+    "wait-for-fix",
+  ]);
 });

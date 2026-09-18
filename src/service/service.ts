@@ -145,7 +145,7 @@ export async function startService(
         store,
         config.projects,
         clients,
-        () => catalog.list(config.intake?.commit),
+        () => catalog.list(config.intake?.revision),
         {
           pinCommit: (revision) => catalog.pin(revision),
           resolveBlueprint: (commit, id) => catalog.resolve(commit, id),

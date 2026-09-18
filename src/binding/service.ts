@@ -7,17 +7,13 @@ import { WorkflowEngine } from "../engine/engine.js";
 import type { RunStore } from "../engine/store.js";
 import type { EngineOptions, EngineNodeContext } from "../engine/types.js";
 import type { GitHub } from "../github/src/github.js";
-import type { IssueFieldSchema } from "../github/src/schema/types.js";
-import { parseIssueRef } from "../github/src/refs.js";
 import { GitHubError } from "../github/src/transport/errors.js";
+import { failureMessage } from "../engine/boundary.js";
 import type { ClientFactory, ProjectBinding } from "./config.js";
 import { githubEffect, permissionAttention, setCard } from "./effects.js";
 import { reconcileProject, type BoundProject } from "./reconcile.js";
-import {
-  snapshot,
-  IssueFrontMatterError,
-  type IssueSnapshot,
-} from "./snapshot.js";
+import { discoverBoundIssues } from "./discover.js";
+import { type IssueSnapshot } from "./snapshot.js";
 import { startBoundInstance } from "./start-instance.js";
 import { InstanceStore } from "./store.js";
 import { GitHubEventHandler, type GitHubEvent } from "./delivery.js";
@@ -29,7 +25,7 @@ import type { TemplateSource } from "../templates/index.js";
 import { assertRuntimeCapabilities } from "./runtime-capabilities.js";
 
 export interface BindingServiceOptions {
-  intake?: { blueprintId: string; commit: string };
+  intake?: { blueprintId: string; revision: string };
   notifications?: NotificationDelivery;
   /** Reads templates and their includes at each run's pinned commit. */
   templates?: TemplateSource;
@@ -43,6 +39,9 @@ export class GitHubBindingService {
   private readonly intakeService: BindingIntakeService;
   /** Every node type this binding dispatches, the engine built-ins aside. */
   readonly runtimeNodes: NonNullable<EngineOptions["nodes"]>;
+  private readonly pinCommit: EngineOptions["pinCommit"];
+  /** The process has started; every issue without a lifecycle gets one attempt. */
+  private restarted = true;
   private projects = new Map<
     string,
     { project: BoundProject; client: GitHub; binding: ProjectBinding }
@@ -56,6 +55,7 @@ export class GitHubBindingService {
     private readonly options: BindingServiceOptions = {},
   ) {
     this.instances = new InstanceStore(store.db);
+    this.pinCommit = engineOptions.pinCommit;
     this.runtimeNodes = {
       ...engineOptions.nodes,
       "on-issue-change": onIssueChange,
@@ -148,84 +148,58 @@ export class GitHubBindingService {
     this.projects = projects;
   }
   async start(): Promise<void> {
+    this.restarted = true;
     await this.reconcile();
     await this.discover();
     await this.startPendingIntakes();
   }
+  /** One issue's intake can fail without touching another issue, a poll, or a
+   * delivery; its reason is recorded against that instance and its own run. */
   private async startPendingIntakes(): Promise<void> {
     this.intakeService.recoverAttachments();
-    if (!this.options.intake) return;
-    for (const instance of this.instances.list())
-      if (!instance.runId)
+    const intake = this.options.intake;
+    if (!intake) return;
+    const restarted = this.restarted;
+    this.restarted = false;
+    let commit: string;
+    try {
+      commit = (await this.pinCommit?.(intake.revision)) ?? intake.revision;
+    } catch (error) {
+      this.instances.attention(intake.revision, failureMessage(error));
+      return;
+    }
+    for (const instance of this.instances.list()) {
+      if (instance.runId) continue;
+      try {
+        if (!this.intakeService.due(instance.id, commit, restarted)) continue;
         await this.intakeService.start(
           instance.id,
-          this.options.intake.blueprintId,
-          this.options.intake.commit,
+          intake.blueprintId,
+          commit,
+          restarted,
         );
+      } catch (error) {
+        this.intakeService.attention(
+          instance.id,
+          this.instances.intakeAttempt(instance.id)?.runId,
+          error,
+        );
+      }
+    }
   }
   async discover(): Promise<void> {
-    for (const binding of this.bindings) {
+    const sources = this.bindings.flatMap((binding) => {
+      // Resolve by owner and number; project numbers are owner-local.
       const bound = [...this.projects.values()].find(
         (x) =>
           x.binding.number === binding.number &&
           x.binding.owner === binding.owner,
       );
-      // Resolve by owner and number; project numbers are owner-local.
-      if (!bound) continue;
-      try {
-        const project = await bound.client
-          .owner<IssueFieldSchema>(binding.owner)
-          .project(binding.number)
-          .open();
-        for await (const card of project.items({ archived: false })) {
-          if (card.type !== "issue" || !card.contentRef) continue;
-          const coords = parseIssueRef(card.contentRef);
-          const existing = this.instances.find(card.contentId);
-          if (existing) {
-            this.instances.membership({
-              ...existing.issue,
-              project: {
-                id: project.id,
-                owner: binding.owner,
-                number: binding.number,
-                itemId: card.id,
-                fields: card.values,
-              },
-            });
-            if (existing.issue.project.id !== project.id)
-              this.instances.projectChoice(existing.id);
-            continue;
-          }
-          const issue = await bound.client
-            .owner<IssueFieldSchema>(coords.owner)
-            .repo(coords.repo)
-            .issue(coords.number)
-            .load();
-          if (issue.state !== "open") continue;
-          try {
-            this.instances.discover(
-              snapshot(issue, {
-                id: project.id,
-                owner: binding.owner,
-                number: binding.number,
-                itemId: card.id,
-                fields: card.values,
-              }),
-            );
-          } catch (error) {
-            if (!(error instanceof IssueFrontMatterError)) throw error;
-            this.instances.attention(project.id, error.message);
-          }
-        }
-      } catch (error) {
-        if (!(error instanceof GitHubError) || error.code !== "FORBIDDEN")
-          throw error;
-        this.instances.attention(
-          `${binding.owner}/${String(binding.number)}`,
-          error.message,
-        );
-      }
-    }
+      return bound === undefined
+        ? []
+        : [{ binding, client: bound.client, project: bound.project }];
+    });
+    await discoverBoundIssues(this.instances, sources);
   }
   async poll(): Promise<number> {
     await this.reconcile();
@@ -245,9 +219,9 @@ export class GitHubBindingService {
   startIntake(
     id: string,
     blueprintId: string,
-    commit: string,
+    revision: string,
   ): Promise<IntakeResult> {
-    return this.intakeService.start(id, blueprintId, commit);
+    return this.intakeService.start(id, blueprintId, revision);
   }
   answerProjectChoice(
     id: string,

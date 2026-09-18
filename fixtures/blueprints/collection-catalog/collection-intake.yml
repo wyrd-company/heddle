@@ -1,11 +1,16 @@
-# Intake selects a lifecycle without waiting for it to complete.
+# Intake selects a lifecycle without waiting for it to complete, and keeps an
+# unmatched issue in hand until one of the rules matches it.
 id: collection-intake
 kind: helper
-description: Choose a collection process or hold an unmatched issue.
+description: Choose a collection process, holding an unmatched issue until it matches.
+entry: classify
 nodes:
   # Policy provides a synchronous node from which JSONata can route on the issue.
   classify:
     uses: policy
+    # Either wait routes back here, and whichever one wakes first decides.
+    config:
+      joinStrategy: any
     params:
       rules: rules/intake.yml
       input: { from: issue }
@@ -15,34 +20,36 @@ nodes:
     params:
       blueprint: { from: classify.blueprint }
       inputs: { from: classify.inputs }
-  # An unmatched issue starts the helper that waits for a relevant change.
-  start-hold:
-    uses: child-run
+  # An unmatched issue waits for a relevant change before anyone is disturbed.
+  hold-for-match:
+    uses: on-issue-change
     params:
-      blueprint: hold-then-attention
-      inputs:
-        issue: { from: issue }
-        expectedType: Collection request
-  # Durable start of the selected collection process is made visible.
-  catalog-finished:
+      deadline: PT5M
+  # An expired hold raises attention through the available notification brick.
+  notify-attention:
     uses: notify
     params:
       channel: pushover
-      title: { inline: "Collection lifecycle started" }
-  # Completion of the hold helper is made visible.
-  hold-finished:
-    uses: notify
-    params:
-      channel: pushover
-      title: { inline: "Collection intake held" }
+      title: { inline: "Collection request still unmatched" }
+      message: prompts/hold-expired.md
+  # Attention has been raised, so the remaining wait is untimed.
+  wait-for-match:
+    uses: on-issue-change
 edges:
   - from: classify
     to: start-catalog
-    when: issue.type = 'Collection request'
+    when: result.output.matched
   - from: classify
-    to: start-hold
-    when: issue.type != 'Collection request'
-  - from: start-catalog
-    to: catalog-finished
-  - from: start-hold
-    to: hold-finished
+    to: hold-for-match
+    when: "result.output.matched = false"
+  - from: hold-for-match
+    to: classify
+    when: result.output.changed
+  - from: hold-for-match
+    to: notify-attention
+    when: result.output.timeout
+  - from: notify-attention
+    to: wait-for-match
+  - from: wait-for-match
+    to: classify
+    when: result.output.changed

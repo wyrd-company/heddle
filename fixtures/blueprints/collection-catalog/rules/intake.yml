@@ -4,8 +4,3 @@ rules:
     when: type = 'Collection request'
     blueprint: collection-catalog
     inputs: {}
-  - id: hold
-    blueprint: hold-then-attention
-    inputs:
-      issue: { from: "$" }
-      expectedType: Collection request

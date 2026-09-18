@@ -1,1 +1,1 @@
-The issue still does not have the expected type {{ expectedType }}.
+The issue {{ issue.id }} still matches no rule in rules/intake.yml.

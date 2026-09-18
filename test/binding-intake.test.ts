@@ -133,10 +133,14 @@ it("refuses attachment when persisted lifecycle identity disagrees", async () =>
     .prepare("UPDATE runs SET initial_context=? WHERE id=?")
     .run(JSON.stringify(altered), lifecycleId);
   const restarted = service(store, undefined, github.clients);
-  await expect(restarted.start()).rejects.toThrow(
-    "Lifecycle attachment issue identity does not agree",
-  );
+  await expect(restarted.start()).resolves.toBeUndefined();
   expect(restarted.instances.get("I_1").runId).toBeNull();
+  expect(
+    store.db.prepare("SELECT project,message FROM github_attention").all(),
+  ).toContainEqual({
+    project: "I_1",
+    message: "Lifecycle attachment issue identity does not agree",
+  });
 });
 
 it("asks one durable project question and projects the selected answer", async () => {

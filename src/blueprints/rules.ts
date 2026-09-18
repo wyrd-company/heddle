@@ -115,6 +115,11 @@ export const VALIDATION_RULES: readonly ValidationRuleDescription[] = [
     description: "Every named result of a pausing node has an outgoing edge.",
   },
   {
+    name: "heddle.intake-terminal",
+    description:
+      "In a blueprint that starts a lifecycle, every path ends at a lifecycle-start.",
+  },
+  {
     name: "heddle.question-role",
     description: "Every question role has a configured channel.",
   },

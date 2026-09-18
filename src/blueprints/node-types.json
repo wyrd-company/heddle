@@ -205,12 +205,29 @@
     "results": []
   },
   "policy": {
-    "description": "Evaluate an ordered policy-rule artifact against an input.",
+    "description": "Evaluate an ordered policy-rule artifact against an input, reporting whether a rule matched.",
     "available": true,
     "paramsSchema": {
       "$ref": "https://heddle.wyrd.company/schemas/blueprint#/$defs/policyParams"
     },
-    "outputSchema": {},
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "matched": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "blueprint": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "object"
+        }
+      },
+      "required": ["matched"]
+    },
     "contextWrites": ["<node-id>"],
     "pausing": false,
     "results": []

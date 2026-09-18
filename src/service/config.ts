@@ -28,7 +28,7 @@ const serviceConfigSchema = bindingConfigSchema.extend({
     })
     .default({ intervalMs: DEFAULT_POLL_INTERVAL_MS }),
   intake: z
-    .object({ blueprintId: z.string().min(1), commit: z.string().min(1) })
+    .object({ blueprintId: z.string().min(1), revision: z.string().min(1) })
     .optional(),
   pass: z
     .object({

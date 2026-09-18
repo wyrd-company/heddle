@@ -63,12 +63,13 @@ function createHarness() {
             (await jsonata(rule.when).evaluate(input))
           )
             return {
+              matched: true,
               id: rule.id,
               blueprint: rule.blueprint,
               inputs: await resolveValues(rule.inputs ?? {}, input),
             };
         }
-        throw new Error("No fixture policy matched");
+        return { matched: false };
       },
       notify: ({ run, nodeId }) => {
         notifications.push({ blueprintId: run.blueprintId, nodeId });
@@ -79,43 +80,39 @@ function createHarness() {
   return { engine, notifications, store };
 }
 
-it("retries intake with the changed issue snapshot", async () => {
+it("re-classifies the changed issue snapshot in the same intake run", async () => {
   const { engine, store } = createHarness();
   try {
-    const blueprint = loadValidatedBlueprint(
-      join(fixtureDirectory, "hold-then-attention.yml"),
-    ).blueprint;
-    const condition = blueprint.nodes["wait-for-type"]?.params?.["when"];
-    expect(typeof condition).toBe("string");
-    await expect(
-      jsonata(String(condition)).evaluate({ type: "Collection request" }),
-    ).resolves.toBe(true);
-
     const run = await engine.start({
-      id: "hold-1",
-      blueprintId: "hold-then-attention",
+      id: "intake-hold",
+      blueprintId: "collection-intake",
       commit: "commit-a",
-      context: {
-        expectedType: "Collection request",
-        issue: { id: "item-1", type: "Unsorted" },
-      },
+      context: { issue: { id: "item-1", type: "Unsorted" } },
     });
+    expect(store.awaiting(run.id).map((item) => item.nodeId)).toEqual([
+      "hold-for-match",
+    ]);
+
+    // The binding refreshes the run's issue before it resumes the wait.
     const changed = { id: "item-1", type: "Collection request" };
+    const context = { ...store.get(run.id).context, issue: changed };
+    store.save(run.id, context, {
+      ...store.get(run.id).checkpoint,
+      context,
+    });
     await engine.resume({
       runId: run.id,
-      nodeId: "wait-for-type",
+      nodeId: "hold-for-match",
       result: "changed",
       payload: changed,
     });
 
-    const retry = store
-      .list()
-      .find(
-        (candidate) =>
-          candidate.parentId === run.id &&
-          candidate.blueprintId === "collection-intake",
-      );
-    expect(retry?.initialContext).toEqual({ issue: changed });
+    const links = store.lifecycleStarts(run.id);
+    expect(links).toHaveLength(1);
+    expect(
+      store.get(links[0]?.lifecycleRunId ?? "missing").initialContext,
+    ).toEqual({ issue: changed });
+    expect(store.get(run.id).status).toBe("completed");
   } finally {
     store.close();
   }
@@ -215,33 +212,31 @@ it("starts the fixture policy-selected lifecycle without awaiting its completion
       initialContext: { issue },
     });
     expect(store.awaiting(intake.id)).toEqual([]);
-    expect(notifications).toContainEqual({
-      blueprintId: "collection-intake",
-      nodeId: "catalog-finished",
-    });
+    expect(notifications).toEqual([]);
   } finally {
     store.close();
   }
 });
 
-it("holds until expiry, sends intended attention, and returns terminal data", async () => {
+it("holds until expiry, sends intended attention, and waits untimed", async () => {
   const { engine, store, notifications } = createHarness();
   try {
     const run = await engine.start({
-      blueprintId: "hold-then-attention",
+      blueprintId: "collection-intake",
       commit: "commit-a",
+      context: { issue: { id: "item-1", type: "Unsorted" } },
     });
     await engine.resume({
       runId: run.id,
-      nodeId: "wait-for-type",
+      nodeId: "hold-for-match",
       result: "timeout",
     });
-    expect(store.get(run.id)).toMatchObject({
-      status: "completed",
-      context: { result: { status: "attention" } },
-    });
+    expect(store.get(run.id).status).toBe("awaiting");
+    expect(store.awaiting(run.id).map((item) => item.nodeId)).toEqual([
+      "wait-for-match",
+    ]);
     expect(notifications).toEqual([
-      { blueprintId: "hold-then-attention", nodeId: "notify-attention" },
+      { blueprintId: "collection-intake", nodeId: "notify-attention" },
     ]);
   } finally {
     store.close();

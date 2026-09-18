@@ -9,6 +9,14 @@ export interface Instance {
   issue: IssueSnapshot;
   runId: string | null;
 }
+/** What one intake attempt ran with, so the next one knows what changed. */
+export interface IntakeAttempt {
+  issueId: string;
+  attempt: number;
+  runId: string;
+  commit: string;
+  snapshot: string;
+}
 export interface ProjectChoiceQuestion {
   id: string;
   issueId: string;
@@ -24,6 +32,7 @@ export class InstanceStore {
       CREATE TABLE IF NOT EXISTS project_choices (issue_id TEXT PRIMARY KEY, project_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS project_choice_questions (issue_id TEXT PRIMARY KEY, occurrence_id TEXT NOT NULL UNIQUE);
       CREATE TABLE IF NOT EXISTS issue_deliveries (issue_id TEXT NOT NULL, updated_at TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(issue_id,updated_at,snapshot));
+      CREATE TABLE IF NOT EXISTS intake_attempts (issue_id TEXT PRIMARY KEY, attempt INTEGER NOT NULL, run_id TEXT NOT NULL, commit_id TEXT NOT NULL, snapshot TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS github_attention (id INTEGER PRIMARY KEY, project TEXT NOT NULL, message TEXT NOT NULL);
       DELETE FROM github_attention WHERE id NOT IN (SELECT min(id) FROM github_attention GROUP BY project,message);
       CREATE UNIQUE INDEX IF NOT EXISTS github_attention_identity ON github_attention(project,message);`);
@@ -160,6 +169,31 @@ export class InstanceStore {
     this.db
       .prepare("INSERT INTO github_effects VALUES (?,?,?)")
       .run(key, payload, JSON.stringify(issue));
+  }
+  intakeAttempt(issueId: string): IntakeAttempt | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM intake_attempts WHERE issue_id=?")
+      .get(issueId);
+    return row === undefined
+      ? undefined
+      : {
+          issueId,
+          attempt: Number(row["attempt"]),
+          runId: String(row["run_id"]),
+          commit: String(row["commit_id"]),
+          snapshot: String(row["snapshot"]),
+        };
+  }
+  recordIntakeAttempt(attempt: IntakeAttempt): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO intake_attempts VALUES (?,?,?,?,?)")
+      .run(
+        attempt.issueId,
+        attempt.attempt,
+        attempt.runId,
+        attempt.commit,
+        attempt.snapshot,
+      );
   }
   attention(project: string, message: string): void {
     this.db

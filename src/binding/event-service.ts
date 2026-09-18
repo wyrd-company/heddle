@@ -132,6 +132,7 @@ export class BindingEventService {
           ) as Promise<unknown>),
         );
       if (!matches) continue;
+      this.refreshRunIssue(awaiting.runId, issue);
       await this.engine.resume({
         runId: awaiting.runId,
         nodeId: awaiting.nodeId,
@@ -140,6 +141,15 @@ export class BindingEventService {
         payload: issue,
       });
     }
+  }
+
+  /** The issue is the input: a run woken by a change reads the changed issue. */
+  private refreshRunIssue(runId: string, issue: IssueSnapshot): void {
+    const run = this.store.get(runId);
+    const current = run.context["issue"];
+    if (current === null || typeof current !== "object") return;
+    const context = { ...run.context, issue: structuredClone(issue) };
+    this.store.save(runId, context, { ...run.checkpoint, context });
   }
 
   async poll(): Promise<number> {

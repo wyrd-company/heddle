@@ -12,6 +12,7 @@ import {
   schemaAtPath,
   schemaErrors,
 } from "./output-schemas.js";
+import { isNodeTypeName, NODE_TYPE_REGISTRY } from "./node-types.js";
 import { isObject } from "./schema-validation.js";
 import type {
   Blueprint,
@@ -135,7 +136,13 @@ function nodeSchema(
     ].includes(node.uses)
   )
     return { type: "object", properties: { payload: {} } };
-  return undefined;
+  // Any other registered node type declares its own completed output shape.
+  const declared = isNodeTypeName(node.uses)
+    ? NODE_TYPE_REGISTRY[node.uses].outputSchema
+    : undefined;
+  return declared !== undefined && Object.keys(declared).length > 0
+    ? declared
+    : undefined;
 }
 
 function valueSchema(

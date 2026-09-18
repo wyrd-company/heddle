@@ -962,7 +962,7 @@ Send a notification through a configured channel.
 
 ### `policy`
 
-Evaluate an ordered policy-rule artifact against an input.
+Evaluate an ordered policy-rule artifact against an input, reporting whether a rule matched.
 
 - Available: yes
 - Pausing: no
@@ -990,7 +990,17 @@ Evaluate an ordered policy-rule artifact against an input.
 - Output:
 
 ```yaml
-{}
+{
+  "type": "object",
+  "properties":
+    {
+      "matched": { "type": "boolean" },
+      "id": { "type": "string" },
+      "blueprint": { "type": "string" },
+      "inputs": { "type": "object" },
+    },
+  "required": ["matched"],
+}
 ```
 
 ### `sleep`
@@ -1069,6 +1079,7 @@ Pause for an external resume, with an optional authored deadline.
 - `heddle.entry`: Entry is declared only when every node has an incoming edge, and names an authored node.
 - `heddle.no-action-edge`: Blueprint edges do not declare Flowcraft actions.
 - `heddle.unhandled-result`: Every named result of a pausing node has an outgoing edge.
+- `heddle.intake-terminal`: In a blueprint that starts a lifecycle, every path ends at a lifecycle-start.
 - `heddle.question-role`: Every question role has a configured channel.
 - `heddle.context-key`: Statically identifiable context roots have a possible provider.
 - `heddle.issue-change-binding`: Every issue-change variable names an explicit immutable binding.
@@ -1080,7 +1091,6 @@ Pause for an external resume, with an optional authored deadline.
 ## Shipped blueprints
 
 - `blueprints/default-intake.yml`
-- `blueprints/hold-then-attention.yml`
 
 ## Harness hook files
 

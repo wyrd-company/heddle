@@ -4,7 +4,9 @@ title: Heddle policy rules
 description: >
   An ordered set of data-driven rules that selects a blueprint and binds its
   initial inputs. The first rule whose JSONata condition is true is selected.
-  Rule ids are unique. A rule without a condition is the final fallback.
+  Rule ids are unique. A rule without a condition matches every input and is
+  the last rule in the set. A fallback rule is optional: an input that matches
+  no rule is reported as unmatched, and the blueprint decides what follows.
 type: object
 additionalProperties: false
 required: [rules]
@@ -48,7 +50,9 @@ $defs:
         description: Stable identity for the rule.
         $ref: "#/$defs/slug"
       when:
-        description: Condition for selecting this rule. Omit it for a fallback.
+        description: >
+          Condition for selecting this rule. Omit it for an optional final
+          fallback that matches every input.
         $ref: "#/$defs/expression"
       blueprint:
         description: Id of the blueprint selected by this rule.

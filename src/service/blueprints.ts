@@ -135,11 +135,13 @@ export class BlueprintCatalog {
         Boolean(await jsonata(rule.when).evaluate(input))
       )
         return {
+          matched: true,
           id: rule.id,
           blueprint: rule.blueprint,
           inputs: await resolveValues(rule.inputs ?? {}, input),
         };
     }
-    throw new Error("No intake policy matched");
+    // No rule matched. The blueprint decides what an unmatched input means.
+    return { matched: false };
   };
 }

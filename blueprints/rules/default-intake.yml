@@ -1,10 +1,7 @@
 # Replace this ordinary policy artifact to map the project's issue types.
+# An issue that matches no rule is held by the intake blueprint until it does.
 rules:
   - id: work-item
     when: type = 'Work item'
     blueprint: standard-lifecycle
     inputs: {}
-  - id: wait-for-type
-    blueprint: hold-then-attention
-    inputs:
-      expectedType: Work item
