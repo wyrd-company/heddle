@@ -15,9 +15,26 @@ Heddle dispatches Flowcraft nodes sequentially with engine concurrency 1. Durabl
 
 Every completed node writes its output below its authored node id. A pausing result is also exposed during edge routing as `result.output.<result>`; its wake payload is `result.output.payload`.
 
+## Minimal blueprint
+
+```yaml
+id: sample-process
+kind: helper
+nodes:
+  hold:
+    uses: wait
+  finish:
+    uses: terminal-result
+    params:
+      value: done
+edges:
+  - from: hold
+    to: finish
+```
+
 ## Blueprint document
 
-The complete authored document shape is below. Definitions referenced from this shape appear in each node type input contract.
+The complete authored document shape is below. Node-type inputs follow in the catalog.
 
 ```yaml
 {
@@ -109,6 +126,73 @@ The complete authored document shape is below. Definitions referenced from this 
           "additionalProperties": { "$ref": "#/$defs/node" },
         },
       "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    },
+}
+```
+
+### Shared schema definitions
+
+```yaml
+{
+  "slug": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+  "path":
+    {
+      "description": "A path relative to the blueprint file.",
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\./).+$",
+    },
+  "bag": { "type": "object", "additionalProperties": true },
+  "expression":
+    {
+      "description": "A JSONata expression evaluated over `result` and the run context. Node ids with hyphens are quoted in paths, as in stages.`taste-test`.visits.\n",
+      "type": "string",
+      "minLength": 1,
+    },
+  "jsonSchema":
+    {
+      "description": "A JSON Schema Draft 2020-12 object, written in YAML.",
+      "type": "object",
+    },
+  "templateRef":
+    {
+      "description": "A Nunjucks template, given as a path to a file beside the blueprint or inline. Rendered with the task context.\n",
+      "oneOf":
+        [
+          { "$ref": "#/$defs/path" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["inline"],
+            "properties": { "inline": { "type": "string" } },
+          },
+        ],
+    },
+  "schemaRef":
+    {
+      "description": "A JSON Schema written in YAML, given as a path to a file beside the blueprint or inline.\n",
+      "oneOf": [{ "$ref": "#/$defs/path" }, { "$ref": "#/$defs/jsonSchema" }],
+    },
+  "contextRef":
+    {
+      "description": "A value taken from the run context at execution time, written as `{ from: <expression> }`.\n",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from"],
+      "properties": { "from": { "$ref": "#/$defs/expression" } },
+    },
+  "valueOrRef":
+    {
+      "anyOf":
+        [
+          { "$ref": "#/$defs/contextRef" },
+          { "not": { "type": "object", "required": ["from"] } },
+        ],
+    },
+  "deadline":
+    {
+      "description": "An ISO 8601 duration after which the node wakes with result `timeout`.\n",
+      "type": "string",
+      "pattern": "^P(?!$)(\\d+Y)?(\\d+M)?(\\d+W)?(\\d+D)?(T(?=\\d)(\\d+H)?(\\d+M)?(\\d+S)?)?$",
     },
 }
 ```
