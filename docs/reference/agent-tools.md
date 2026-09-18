@@ -75,10 +75,12 @@ version follows the Heddle package version.
 
 Each plugin runs `heddle hook stop claude` or `heddle hook stop codex`.
 `heddle` must be on the harness PATH. Both commands read the real Stop JSON
-and send only its exact `session_id` to Heddle's local database-specific hook socket. The socket
-is in `HEDDLE_STATE_DIR`, defaulting to `$XDG_STATE_HOME/heddle` or
-`~/.local/state/heddle`. Hook input cannot select a thread, pass, endpoint, or
-token. Cwd has no role in correlation. No request timeout is added by Heddle.
+and send only its exact `session_id` to Heddle's local database-specific hook
+socket. Set `HEDDLE_HOOK_SOCKET` to the socket reported at service startup for
+a database override. Otherwise the command derives the socket from the default
+`heddle.sqlite` under `HEDDLE_STATE_DIR`, defaulting to `$XDG_STATE_HOME/heddle`
+or `~/.local/state/heddle`. Hook input cannot select a thread, pass, endpoint,
+or token. Cwd has no role in correlation. No request timeout is added by Heddle.
 
 Heddle correlates authoritative T3 session events with the active run, node
 visit, thread, and generated endpoint. An unmapped session returns allow with
