@@ -45,7 +45,13 @@ function launch(config: string): ChildProcess {
       "--state",
       join(dirname(config), "state"),
     ],
-    { stdio: ["ignore", "pipe", "pipe"] },
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        XDG_STATE_HOME: join(dirname(config), "alternate-state"),
+      },
+    },
   );
   children.push(child);
   return child;
