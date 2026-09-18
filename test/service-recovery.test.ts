@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { FakeT3Server } from "../src/t3code/test/support/fake-server.js";
 import {
@@ -42,6 +42,8 @@ function launch(config: string): ChildProcess {
       "start",
       "--config",
       config,
+      "--state",
+      join(dirname(config), "state"),
     ],
     { stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -192,11 +194,15 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
     const beforeOutput = await packagedStarted(packagedBefore);
     const beforePid = packagedBefore.pid;
     expect(beforeOutput).toContain("tools=http://127.0.0.1:");
+    expect(beforeOutput).toContain(
+      `hooks=${join(root, "state", "hooks.sock")}`,
+    );
     writeSample(blueprints, "second");
     const secondCommit = commitFixture(blueprints);
     writeSample(blueprints, "uncommitted");
     packagedBefore.kill("SIGKILL");
     await processExit(packagedBefore);
+    expect(packagedBefore.signalCode).toBe("SIGKILL");
 
     const packagedAfter = launch(configPath);
     const afterOutput = await packagedStarted(packagedAfter);
@@ -329,13 +335,13 @@ it("recovers pinned graph prompt schema and policy after packaged process death 
           before: {
             pid: beforePid,
             state: "awaiting",
-            command: `node dist/cli.js start --config ${configPath}`,
+            command: packagedBefore.spawnargs,
           },
           crash: `kill -9 ${String(beforePid)}`,
           after: {
             pid: afterPid,
             state: "completed",
-            command: `node dist/cli.js start --config ${configPath}`,
+            command: packagedAfter.spawnargs,
           },
           advance: "generated handoff tool returned HTTP 200",
         },
