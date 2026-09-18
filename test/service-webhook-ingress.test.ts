@@ -8,6 +8,7 @@ import {
   type IncomingHttpHeaders,
   type OutgoingHttpHeaders,
 } from "node:http";
+import { connect } from "node:net";
 import { afterEach, expect, it, vi } from "vitest";
 import { GitHubEventHandler } from "../src/binding/delivery.js";
 import { webhookServer } from "../src/service/webhook.js";
@@ -291,3 +292,89 @@ it.each(["ping", "release"])(
     expect(apply).not.toHaveBeenCalled();
   },
 );
+
+it("flushes pipelined responses before closing an overflowing request socket", async () => {
+  const { url, server, apply } = await listener();
+  let release: (value: boolean) => void = () => undefined;
+  let started!: () => void;
+  const firstStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  apply.mockImplementation(
+    () =>
+      new Promise<boolean>((resolve) => {
+        release = resolve;
+        started();
+      }),
+  );
+  const address = new URL(url);
+  const socket = connect(Number(address.port), address.hostname);
+  const responses: Buffer[] = [];
+  const ended = new Promise<void>((resolve, reject) => {
+    socket.on("data", (chunk: Buffer) => {
+      responses.push(chunk);
+    });
+    socket.once("end", resolve);
+    socket.once("error", reject);
+  });
+  void ended.catch(() => undefined);
+  cleanups.push(() => {
+    release(true);
+    socket.destroy();
+    return Promise.resolve();
+  });
+  const body = delivery();
+  const signature = signed(body)["x-hub-signature-256"];
+  socket.write(
+    [
+      "POST /webhook/github HTTP/1.1",
+      "Host: localhost",
+      "Connection: keep-alive",
+      `Content-Length: ${String(body.length)}`,
+      "X-GitHub-Event: issues",
+      `X-Hub-Signature-256: ${String(signature)}`,
+      "",
+      "",
+    ].join("\r\n"),
+  );
+  socket.write(body);
+  await firstStarted;
+  const overflowRead = new Promise<void>((resolve) => {
+    server.once("request", (incoming) => {
+      let received = 0;
+      incoming.on("data", (chunk: Buffer) => {
+        received += chunk.length;
+        if (received > limit) setImmediate(resolve);
+      });
+    });
+  });
+  const overflow = delivery(limit + 1);
+  socket.write(
+    [
+      "POST /webhook/github HTTP/1.1",
+      "Host: localhost",
+      "Transfer-Encoding: chunked",
+      "",
+      "",
+    ].join("\r\n"),
+  );
+  socket.write(`${overflow.length.toString(16)}\r\n`);
+  socket.write(overflow);
+  socket.write("\r\n0\r\n\r\n");
+  await overflowRead;
+  release(true);
+  const closedWithError = await ended.then(
+    () => false,
+    () => true,
+  );
+  const statuses = [
+    ...Buffer.concat(responses)
+      .toString()
+      .matchAll(/HTTP\/1\.1 (\d+)/gu),
+  ].map((match) => Number(match[1]));
+  expect({ statuses, closedWithError }).toEqual({
+    statuses: [202, 413],
+    closedWithError: false,
+  });
+  expect(apply).toHaveBeenCalledOnce();
+});
