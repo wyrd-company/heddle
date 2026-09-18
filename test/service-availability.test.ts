@@ -275,23 +275,36 @@ it("keeps different databases' hook endpoints live and independent in one state 
   expect(hookSocketPath()).toBe(secondSocket);
 });
 
-it("uses the database identity across state overrides and symlink aliases", async () => {
-  const config = fixture();
-  const first = await startService(config, io);
-  services.push(first);
-  const alias = join(config.stateDirectory, "alias.sqlite");
-  symlinkSync(config.databasePath, alias);
-  await expect(
-    startService(
+it.each(["existing", "missing"] as const)(
+  "uses the database identity across state overrides and symlink aliases when target is %s",
+  async (target) => {
+    const config = fixture();
+    const alias = join(config.stateDirectory, "alias.sqlite");
+    if (target === "missing") symlinkSync(config.databasePath, alias);
+    const first = await startService(
       {
         ...config,
-        stateDirectory: join(config.stateDirectory, "other"),
-        databasePath: alias,
+        databasePath: target === "missing" ? alias : config.databasePath,
       },
       io,
-    ).then((service) => {
-      services.push(service);
-      return service;
-    }),
-  ).rejects.toThrow("already owned");
-});
+    );
+    services.push(first);
+    if (target === "existing") symlinkSync(config.databasePath, alias);
+    expect(
+      existsSync(serviceHookSocket(config.stateDirectory, config.databasePath)),
+    ).toBe(true);
+    await expect(
+      startService(
+        {
+          ...config,
+          stateDirectory: join(config.stateDirectory, "other"),
+          databasePath: alias,
+        },
+        io,
+      ).then((service) => {
+        services.push(service);
+        return service;
+      }),
+    ).rejects.toThrow("already owned");
+  },
+);
