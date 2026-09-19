@@ -74,8 +74,9 @@ The complete authored document shape is below. Node-type inputs follow in the ca
       "description": { "type": "string" },
       "metadata":
         {
-          "description": "A bag available to every node in the run as `blueprint.metadata` and to templates. Authors put process-level configuration here, such as thresholds guards read.\n",
+          "description": "A bag available to every node in the run as `blueprint.metadata` and to templates. Authors put process-level configuration here, such as thresholds guards read. The key `cycleEntryPoints` is reserved: Heddle derives it for the engine and never exposes it as `blueprint.metadata`.\n",
           "$ref": "#/$defs/bag",
+          "not": { "required": ["cycleEntryPoints"] },
         },
       "requires":
         {

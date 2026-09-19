@@ -14,6 +14,8 @@ description: >-
   The blueprint's own metadata bag is readable in every edge condition,
   `{ from: <expression> }` reference, and template as `blueprint.metadata`,
   beside `blueprint.id`; a run reads its own blueprint, never its parent's.
+  The key `cycleEntryPoints` is reserved in that bag: Heddle derives it for
+  the engine and never exposes it to authors as `blueprint.metadata`.
   Every expression position - an edge `when`, a `{ from: <expression> }`
   reference, a child-run output mapping, an issue-change condition or binding,
   an aggregate binding path, and a policy rule condition or input binding -

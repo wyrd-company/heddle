@@ -478,6 +478,20 @@ describe("validation chain", () => {
     expect(findings.map((item) => item.rule)).not.toContain("input.path");
   });
 
+  it("refuses a blueprint metadata bag that uses the reserved derived key", () => {
+    const file = temporaryFile(
+      "sample-a.yml",
+      "id: sample-a\nkind: helper\nmetadata:\n  cycleEntryPoints: [probe]\nnodes:\n  probe:\n    uses: wait\n",
+    );
+
+    expect(validateBlueprintFile(file)).toContainEqual(
+      expect.objectContaining({
+        node: "$blueprint",
+        rule: "blueprint.schema",
+      }),
+    );
+  });
+
   it("reports a non-string edge condition without throwing", () => {
     const source = `id: sample-a
 kind: helper

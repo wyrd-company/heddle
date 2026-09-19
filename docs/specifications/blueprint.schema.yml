@@ -37,8 +37,11 @@ properties:
     description: >
       A bag available to every node in the run as `blueprint.metadata` and to
       templates. Authors put process-level configuration here, such as
-      thresholds guards read.
+      thresholds guards read. The key `cycleEntryPoints` is reserved: Heddle
+      derives it for the engine and never exposes it as `blueprint.metadata`.
     $ref: "#/$defs/bag"
+    not:
+      required: [cycleEntryPoints]
   requires:
     description: What this blueprint needs from the issue and the project.
     type: object
