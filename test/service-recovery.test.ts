@@ -429,7 +429,7 @@ it("keeps the stable webhook route isolated across recovery, graceful restart, a
       newer.close();
     }
     writeFileSync(
-      "/tmp/task998-live-proof.json",
+      join(root, "recovery-proof.json"),
       JSON.stringify(
         {
           webhookUrl,
