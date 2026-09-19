@@ -181,7 +181,7 @@ it.each(["ping", "release", "issues"])(
           "x-github-event": event,
           "x-hub-signature-256": signature,
         }),
-      ).toBe(500);
+      ).toBe(401);
     }
     expect(apply).not.toHaveBeenCalled();
     expect(errors).toEqual(
@@ -195,7 +195,7 @@ it.each(["ping", "release", "issues"])(
   async (event) => {
     const { url, apply, errors } = await listener();
     const body = Buffer.from("not JSON");
-    expect(await send(url, body, signed(body, event))).toBe(500);
+    expect(await send(url, body, signed(body, event))).toBe(400);
     expect(errors).toEqual(["GitHub webhook body is invalid JSON"]);
     expect(apply).not.toHaveBeenCalled();
   },
@@ -209,7 +209,7 @@ it.each([undefined, "", "   ", "ping, issues", "ping/other", "Ping"])(
     const headers = signed(body);
     if (event === undefined) delete headers["x-github-event"];
     else headers["x-github-event"] = event;
-    expect(await send(url, body, headers)).toBe(500);
+    expect(await send(url, body, headers)).toBe(400);
     expect(errors).toEqual(["GitHub webhook event name is invalid"]);
     expect(apply).not.toHaveBeenCalled();
   },
@@ -272,7 +272,7 @@ it("treats an HTTP request without either length framing header as an empty body
   const { client, status } = open(url, signed(body));
   client.useChunkedEncodingByDefault = false;
   client.end();
-  expect(await status).toBe(500);
+  expect(await status).toBe(400);
   expect(errors).toEqual(["GitHub webhook body is invalid JSON"]);
   expect(apply).not.toHaveBeenCalled();
 });
@@ -287,7 +287,7 @@ it.each(["ping", "release"])(
         "x-github-event": event,
         "x-hub-signature-256": `sha256=${"0".repeat(64)}`,
       }),
-    ).toBe(500);
+    ).toBe(401);
     expect(errors).toEqual(["GitHub webhook signature is invalid"]);
     expect(apply).not.toHaveBeenCalled();
   },

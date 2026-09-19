@@ -4,6 +4,21 @@
 // ---
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+/**
+ * A delivery the listener refuses before it becomes Heddle's problem. It
+ * carries the response status so the listener never reads a message to
+ * decide one.
+ */
+export class GitHubDeliveryRejected extends Error {
+  constructor(
+    readonly status: 400 | 401,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GitHubDeliveryRejected";
+  }
+}
+
 export const githubEvents = [
   "issues",
   "projects_v2_item",
@@ -92,15 +107,24 @@ export class GitHubEventHandler {
       actualBytes.length !== expectedBytes.length ||
       !timingSafeEqual(actualBytes, expectedBytes)
     )
-      throw new Error("GitHub webhook signature is invalid");
+      throw new GitHubDeliveryRejected(
+        401,
+        "GitHub webhook signature is invalid",
+      );
     let payload: unknown;
     try {
       payload = JSON.parse(Buffer.from(body).toString("utf8")) as unknown;
     } catch {
-      throw new Error("GitHub webhook body is invalid JSON");
+      throw new GitHubDeliveryRejected(
+        400,
+        "GitHub webhook body is invalid JSON",
+      );
     }
     if (!/^[a-z][a-z0-9_]*$/u.test(event))
-      throw new Error("GitHub webhook event name is invalid");
+      throw new GitHubDeliveryRejected(
+        400,
+        "GitHub webhook event name is invalid",
+      );
     if (!supported(event)) return false;
     return this.deliver(event, payload);
   }

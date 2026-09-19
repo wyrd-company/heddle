@@ -51,7 +51,7 @@ it("applies signed HTTP delivery through the existing binding handler and contai
         headers: { "x-github-event": "issues", "x-hub-signature-256": invalid },
         body,
       });
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(401);
       expect(await response.text()).toBe("");
       expect(binding.instances.get(issue.id).issue.title).toBe("Garden soup");
     }

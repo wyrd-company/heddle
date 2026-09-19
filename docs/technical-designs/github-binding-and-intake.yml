@@ -177,8 +177,9 @@ proposed-design:
     Authenticated valid-JSON named unsupported events, including ping, return
     HTTP 202 without invoking binding mutation. Event names start with a
     lowercase letter and contain only lowercase letters, digits, and
-    underscores. Missing or malformed names, invalid signatures, invalid JSON,
-    and supported-event payload or dispatch failures remain errors. Direct
+    underscores. A missing or invalid signature returns HTTP 401. A missing
+    or malformed name and invalid JSON return HTTP 400. Supported-event
+    payload or dispatch failures return HTTP 500. Direct
     delivery and polling retain their existing supported-event contract.
     The handler has two producers. GitHub calls it over HTTP. The poller,
     which runs as a safety net at a low rate or as the only producer where

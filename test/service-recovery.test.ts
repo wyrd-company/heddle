@@ -334,7 +334,7 @@ it("keeps the stable webhook route isolated across recovery, graceful restart, a
     expect(afterOutput).toContain(`webhook=${webhookUrl}`);
     expect(afterOutput).not.toMatch(/tools=|fixture-secret|fixture-token/u);
     expect((await deliver()).status).toBe(202);
-    expect((await deliver(false)).status).toBe(500);
+    expect((await deliver(false)).status).toBe(401);
     expect(origin).not.toBe(webhookOrigin);
     for (const path of [
       invocation.binding.path,

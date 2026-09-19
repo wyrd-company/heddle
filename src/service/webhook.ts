@@ -3,7 +3,10 @@
 //   implements: github-binding-and-intake
 // ---
 import { createServer, type Server } from "node:http";
-import type { GitHubEventHandler } from "../binding/delivery.js";
+import {
+  GitHubDeliveryRejected,
+  type GitHubEventHandler,
+} from "../binding/delivery.js";
 import type { ServiceIo } from "./service.js";
 
 const bodyLimit = 26_214_400;
@@ -49,7 +52,9 @@ export function webhookServer(
       response.writeHead(202).end();
     })().catch((error: unknown) => {
       io.error(error instanceof Error ? error.message : String(error));
-      if (!response.headersSent) response.writeHead(500).end();
+      const status =
+        error instanceof GitHubDeliveryRejected ? error.status : 500;
+      if (!response.headersSent) response.writeHead(status).end();
     });
   });
 }

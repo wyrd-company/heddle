@@ -43,9 +43,10 @@ does not bound aggregate concurrent memory or connection duration.
 Signature verification uses the original body bytes and precedes JSON parsing.
 Authenticated valid-JSON deliveries for named unsupported events, including
 GitHub's creation `ping`, return 202 without invoking binding mutation.
-Missing or malformed event names, invalid signatures, invalid JSON, and genuine
-supported-event failures retain an error response. An event name starts with a
-lowercase letter and contains only lowercase letters, digits, and underscores.
+A missing or invalid signature returns 401. A missing or malformed event name
+and invalid JSON return 400. Genuine supported-event payload and dispatch
+failures return 500. An event name starts with a lowercase letter and contains
+only lowercase letters, digits, and underscores.
 
 Generated tools never move onto this listener. They stay on the internal
 listener that `agentTools.listen.host` and `agentTools.listen.port` configure,
@@ -66,8 +67,8 @@ Keep the configured target unchanged throughout these checks.
    `webhook=http://<host>:<port>/webhook/github` without tool endpoints or tokens.
 2. Confirm GitHub's creation `ping` receives HTTP 202 without an instance change.
    Send a signed supported GitHub delivery through the host route and confirm
-   HTTP 202 and the expected instance change. Confirm invalid signatures fail
-   and a request to another path,
+   HTTP 202 and the expected instance change. Confirm an invalid signature
+   returns 401 and a request to another path,
    including `/hook/stop`, returns 404 with no internal data.
 3. Send SIGTERM, wait for process exit, and restart with the same configuration
    and state. Deliver to the unchanged public URL after startup completes.
