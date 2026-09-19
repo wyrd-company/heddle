@@ -1,0 +1,123 @@
+$schema: https://refinery.systems/ontology/specification
+relationships:
+  realizes:
+    - blueprint-authoring
+    - node-types
+description: >-
+  Defines the blueprint file: the YAML document a person or agent authors to
+  describe how work moves through a process, and which Heddle loads, lints,
+  and runs on the Flowcraft engine. A blueprint has an id, a kind (process,
+  stage, or helper), a metadata bag, what it requires from the issue and
+  the project, nodes keyed by id, and edges that route on expressions. Each
+  node names a node type, carries a metadata bag that becomes part of that
+  node's context, and gives the node type its inputs under `params`.
+  The blueprint's own metadata bag is readable in every edge condition,
+  `{ from: <expression> }` reference, and template as `blueprint.metadata`,
+  beside `blueprint.id`; a run reads its own blueprint, never its parent's.
+  The key `cycleEntryPoints` is reserved in that bag: Heddle derives it for
+  the engine and never exposes it to authors as `blueprint.metadata`.
+  Every expression position - an edge `when`, a `{ from: <expression> }`
+  reference, a child-run output mapping, an issue-change condition or binding,
+  an aggregate binding path, and a policy rule condition or input binding -
+  is JSONata over that same context. Node ids are hyphenated slugs and JSONata
+  reads a bare hyphen as subtraction, so a hyphenated node, input, or output
+  name is written in backticks, as in `` `taste-test`.payload ``, and the
+  whole expression is quoted in YAML.
+  Every `templateRef` is a Nunjucks template and behaves the same way: a
+  string is a path from the blueprint root, `{ inline }` is template
+  text, and both render with the task context, the running blueprint, and the
+  node's own metadata, definition, and input. A path is read from the run's
+  pinned commit. A template may load another with `include`, `import`, or
+  `extends`; those targets are paths from the blueprint root at the same
+  pinned commit, on the one base every blueprint path shares. A target
+  outside the blueprint root is refused. Handoff
+  schemas are JSON Schema written in YAML and are exposed verbatim as the
+  handoff tool's input schema, so they must satisfy the MCP tool input
+  schema constraints. Blueprints never carry action edges and never use
+  the Flowcraft subflow node type; composition is through `child-run`. Intake uses `lifecycle-start` to create
+  an independent process run with the same issue snapshot and pinned commit.
+  Its blueprint id and additional input mapping may reference policy output;
+  the issue is transferred automatically and cannot be replaced by inputs.
+  The synchronous started result carries payload.runId without waiting for
+  lifecycle completion.
+  `terminal-result` writes params.value to the final context.result and
+  returns it as node output. It has no outgoing edges and does not cancel
+  sibling branches. A second reached terminal fails the run. Declaring
+  outputs.result delivers the value through the child completion payload.
+  `aggregate` binds authored names to every direct predecessor exactly once
+  using params.bindings entries with node and optional path. The path is
+  JSONata relative to that predecessor output. It uses an all join and
+  returns an object in authored binding order; missing values fail.
+  A graph in which every node has an incoming edge declares the node where
+  execution begins with `entry`. `docs/specifications/blueprint.schema.yml`
+  is the machine-readable blueprint definition.
+  The blueprint root is the directory a Heddle service or `heddle validate`
+  is pointed at. Heddle finds every blueprint inside it, in that directory or
+  any subdirectory, and reaches nothing above it. It is not necessarily the
+  top of the git checkout; a blueprint directory within a larger checkout is
+  a blueprint root. Every path a blueprint writes - a template, a handoff
+  contract, a policy rule artifact - is relative to the blueprint root, never
+  to the directory of the blueprint file that wrote it. A path that would
+  leave the root is refused, and execution reads it from the run's pinned
+  commit. Policy nodes reference an
+  ordered policy rule artifact. Each rule has a stable
+  id, an optional JSONata condition, a selected blueprint, and optional input
+  bindings. Rule ids are unique, and a rule without a condition is the final
+  fallback.
+format: json-schema
+validation-criteria: >-
+  A conforming blueprint file parses as YAML 1.2 into a document that
+  validates against `docs/specifications/blueprint.schema.yml` interpreted as
+  JSON Schema Draft 2020-12. Node ids are the keys of `nodes` and are
+  slugs. `entry`, when present, names an existing node; it is required when
+  the graph has no natural entry node. Every edge names two existing node ids.
+  Every `when` expression is a syntactically valid JSONata expression. No
+  expression subtracts a hyphenated node, input, or output name that the
+  blueprint declares; such a name is read in backticks. Every path in a
+  `templateRef`, `schemaRef`, or `policy.rules` resolves to a file inside the
+  blueprint root. Every literal `include`, `import`, or `extends` target in a
+  template resolves to a file inside the blueprint root, checked when a
+  blueprint root is validated. A referenced policy rules file validates against
+  `docs/specifications/policy-rule.schema.yml` interpreted as JSON Schema
+  Draft 2020-12. Input bindings are literal values or `{ from: <expression> }`
+  references evaluated over the policy input. Rule ids are unique within the
+  artifact, and no rule follows a condition-less fallback. Every `handoff`
+  schema is itself a valid JSON Schema Draft
+  2020-12 object whose root is `type: object` with `properties` and a
+  non-empty `description`, since it is exposed verbatim as the MCP tool. Node
+  `params` additionally validate against the named node type's published
+  contract, which is generated from code and is authoritative for keys this
+  schema leaves open. Derived Flowcraft blueprints pass Flowcraft's linter
+  and Heddle's lint rules: no `subflow`, no edge `action`, every result of a
+  pausing node handled by an outgoing edge, every `question` role served by
+  a configured channel, every stage name a valid single-select option, every
+  node type and node operation marked available in the published catalog, and
+  `requires.issue` satisfiable against the bound project at reconciliation.
+  Stage-name and `requires.issue` project checks run only when live validation
+  is requested; without a live implementation they return named `not checked`
+  findings rather than silently passing.
+  Directory validation adds repository agreements after file-local checks.
+  Every child-run target resolves uniquely in the complete recursive inventory.
+  A stage-marked child-run targets a stage. Unmarked child runs can target
+  any blueprint kind. An omitted child-run outputs mapping exports each declared
+  output by its literal name from child context, including punctuation and escaped
+  characters. Its inferred payload property keeps that output declaration. An
+  explicit empty mapping exports nothing. Authored mapping values are JSONata
+  expressions over child context. Parent output mappings use the child's
+  declared output schemas, including nested properties,
+  local schema references, array projections, and union members. A direct path
+  to an undeclared member is invalid even when a fixture happens to produce it.
+  Explicit additionalProperties: true and additionalProperties: {} both permit
+  an additional member without asserting its shape; additionalProperties: false
+  does not declare additional members. Optional and union members may be absent
+  on outcomes routed elsewhere.
+  Every terminal-result value is checked against outputs.result where a literal
+  or a declared source shape establishes a contradiction. Literal values use
+  JSON Schema validation; references use known input and node output shapes.
+  These checks do not execute blueprints or evaluate JSONata. General expressions
+  remain supported; static validation does not claim to prove their values or
+  conditional reachability. File validation remains file-local; validate the
+  repository directory to establish cross-blueprint agreements.
+  Loading a file and saving it unchanged produces byte-identical output,
+  comments included. Fixture blueprints under `fixtures/blueprints/` are the
+  conformance corpus and each must pass every check above.

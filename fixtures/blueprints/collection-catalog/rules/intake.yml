@@ -1,0 +1,6 @@
+# Intake selection remains replaceable policy data.
+rules:
+  - id: catalog
+    when: type = 'Collection request'
+    blueprint: collection-catalog
+    inputs: {}

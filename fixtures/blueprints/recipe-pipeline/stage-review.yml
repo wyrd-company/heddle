@@ -1,0 +1,36 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+# Stage contract used by the recipe process.
+id: stage-review
+kind: stage
+outputs:
+  result:
+    type: object
+    properties:
+      overridden: { type: boolean }
+      turnEnded: { type: boolean }
+      verdict: { type: string, enum: [approved, rejected] }
+      notes: { type: string }
+nodes:
+  prepare:
+    uses: pass
+    params:
+      prompt: prompts/taste-test.md
+      handoff: contracts/taste-test.yml
+  complete:
+    uses: terminal-result
+    params:
+      value: { from: prepare.payload }
+  interrupted:
+    uses: terminal-result
+    params:
+      value: { from: prepare }
+edges:
+  - from: prepare
+    to: complete
+    when: result.output.handoff
+  - from: prepare
+    to: interrupted
+    when: result.output.overridden or result.output.turnEnded

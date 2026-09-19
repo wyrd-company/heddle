@@ -1,0 +1,58 @@
+# The replaceable default intake maps an issue to a lifecycle, and keeps the
+# issue in hand until one of the rules matches it.
+id: default-intake
+kind: helper
+description: Select a lifecycle for an issue, holding it until a rule matches.
+entry: classify
+nodes:
+  # Policy is the one place the project's own issue types are named.
+  classify:
+    uses: policy
+    # Either wait routes back here, and whichever one wakes first decides.
+    config:
+      joinStrategy: any
+    params:
+      rules: rules/default-intake.yml
+      input: { from: issue }
+  # The only way out of this blueprint: the issue gains a lifecycle run.
+  start-lifecycle:
+    uses: lifecycle-start
+    params:
+      blueprint: { from: classify.blueprint }
+      inputs: { from: classify.inputs }
+  # No rule matched yet. Give the person the grace period to fix the issue
+  # before anyone is disturbed; any edit sends it back through the rules.
+  hold-for-fix:
+    uses: on-issue-change
+    params:
+      deadline: PT24H
+  notify-attention:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Issue intake needs attention" }
+      message:
+        inline: >-
+          No rule in rules/default-intake.yml matches {{ issue.ref }}. Set the
+          issue fields those rules select on.
+  # The person has been told, so nothing here is timed: the issue owns the wait.
+  wait-for-fix:
+    uses: on-issue-change
+edges:
+  - from: classify
+    to: start-lifecycle
+    when: result.output.matched
+  - from: classify
+    to: hold-for-fix
+    when: "result.output.matched = false"
+  - from: hold-for-fix
+    to: classify
+    when: result.output.changed
+  - from: hold-for-fix
+    to: notify-attention
+    when: result.output.timeout
+  - from: notify-attention
+    to: wait-for-fix
+  - from: wait-for-fix
+    to: classify
+    when: result.output.changed

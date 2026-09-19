@@ -1,0 +1,222 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - engine-and-run-model
+    - node-types
+    - blueprint-authoring
+objective: >
+  Make a GitHub Project the place where work exists, keep it in step with
+  every run, and choose each issue's lifecycle blueprint without configuring
+  anything a blueprint or the issue itself can say. Require only GitHub
+  Projects and T3 Code of a user; infer the rest with guard rails.
+background:
+  current-design: >
+    Work lives on a local kanban board that a service reads and writes. The
+    board's statuses and the service's stages are configured separately and
+    drift. Cross-repository epics and shared boards are awkward.
+  problems:
+    - Two definitions of a stage, one in the process and one on the board, with no single source of truth.
+    - Configuration that names repositories, projects, and blueprint choices per task, when the issue already carries that information.
+    - Preferences such as one project per repository or labels versus fields baked into code.
+design-challenges:
+  single-source-of-truth-for-stages: >
+    A blueprint's stages and the project's Status options must agree, and
+    only one of them may be authoritative.
+  choosing-a-blueprint-per-issue: >
+    Different issues follow different processes. The rule that chooses must
+    be the user's, must be able to read anything on the issue, and must not
+    be a configuration file.
+  inference-without-guessing: >
+    Project, repositories, workspace roots, and blueprint can all be inferred
+    from an issue. Each inference needs a guard rail that asks or refuses
+    instead of guessing when the answer is ambiguous.
+  shared-projects: >
+    Two epics with different blueprints may share one project. Reconciliation
+    must handle the union without one blueprint deleting another's stages.
+  event-delivery: >
+    Webhooks are the supported path. Not every host can receive them, so
+    polling must produce the same events.
+proposed-design:
+  high-level-overview: >
+    A service instance binds one or more GitHub Projects. Every issue in a
+    bound project is a workflow instance from the moment it is discovered.
+    A shipped, replaceable intake blueprint reads the issue and starts its
+    lifecycle run. Stages declared by bound blueprints are reconciled into
+    each project's Status field through Heddle's internal GitHub client, with
+    the blueprint as the source of truth. Issue and card changes arrive as
+    webhook deliveries or poll diffs and become resumes on waiting runs.
+  binding: >
+    Service configuration names the bound projects, Heddle's GitHub App
+    credential, the T3 Code endpoint, and the blueprint repository
+    location. Nothing else. Repositories are not configured; they are
+    discovered from issues. No one user's preferences are encoded in the
+    service.
+  credentials: >
+    Two tiers. Heddle is an algorithmic system and holds its own GitHub App
+    with the write permissions reconciliation and the `github` brick need:
+    projects, issues, organization fields and types. Agents hold narrower
+    credentials of their own and never Heddle's; an agent that wants a
+    GitHub effect either has it in its own narrower App or asks Heddle
+    through a tool that decides whether to perform it. A permission refusal
+    is raised as attention, not retried.
+  the-issue-as-input: |
+    Every run's initial context includes `issue`:
+
+    - identity: repository, number, node id, url
+    - content: title, body, type, labels, assignees, milestone, state
+    - organization fields and their values
+    - project card fields and their values for the bound project
+    - relationships: parent, sub-issues, blocked-by, blocking, duplicates,
+      linked pull requests
+    - front matter: a YAML block carried in a Markdown comment at the top of
+      the issue description, parsed into `issue.frontMatter`, so an issue can
+      carry configuration and data that has no field
+
+    Attached labels and collection relationships are complete at capture:
+    discovery waits for every GitHub page before persisting the issue
+    snapshot. The lifecycle run receives a copy of that persisted snapshot.
+    Recovery reads the saved instance and run input and does not resolve those
+    issue collections from GitHub again.
+
+    Conditions, prompt templates, `policy` rules, the epic task-graph
+    builder, and reconciliation read this one shape. The `github` brick
+    writes back to it. Blueprints declare the fields they need under
+    `requires.issue`, and reconciliation conforms the project so those fields
+    exist; lint refuses a blueprint whose needs cannot be met.
+  discovery-and-intake: >
+    A new item in a bound project creates an instance whose first run is the
+    intake blueprint. Intake reads `issue` and routes on whatever the author
+    chose: issue type, an organization field, a project field, the parent
+    epic's blueprint, or a mix. Its terminal nodes are `lifecycle-start`
+    nodes naming a blueprint id. The shipped default routes on issue type.
+    Whether the lifecycle blueprint can also be pinned by a person through a
+    project field is a choice the intake author makes by reading that field
+    first.
+    The selected lifecycle is the instance root; the intake run is not. The
+    service attaches it from lifecycle-start's durable origin and initial
+    issue identity. Startup repairs a committed lifecycle whose instance
+    attachment was interrupted without resolving live issue data again.
+  unmatched-intake: >
+    An issue that matches no rule stays in its intake run. `policy` reports
+    `matched: false`, and the blueprint waits on `on-issue-change` for the
+    author's grace period, classifies the changed snapshot again on every
+    edit, and raises attention through `notify` or `question` when the grace
+    period passes, then waits again untimed. Lint refuses an intake whose
+    paths do not all end at a `lifecycle-start`, so no path leaves the issue
+    unowned. Users replace the blueprint like any other.
+  intake-attempts: >
+    An instance records the attempt its intake is on: the run id, the commit
+    it resolved, and the issue snapshot it started with. Replaying the current
+    attempt is idempotent because it is replayed with those recorded values. A
+    new attempt runs under a new run id only when something changed since the
+    last one ended: the stored issue snapshot, the resolved intake revision,
+    or the life of the process. A run that has not ended owns its issue, and
+    changes reach it through the issue-change wake-up rather than a new
+    attempt. There is no clock, retry interval, or backoff. A failed attempt
+    and its events are kept.
+  intake-isolation: >
+    One issue's intake failure is recorded as attention on that instance and
+    on its own attempt run, and the loop continues. It never fails another
+    issue's delivery, a poll, or service start. A delivery whose own issue
+    applied returns success even when another instance's attempt failed.
+  inference-guard-rails: |
+    - Project: from the issue's project memberships. If it is in more than
+      one bound project, ask once through `question` and record the answer
+      on the card.
+    - Repositories: the issue's repository, its sub-issues' repositories, and
+      linked pull requests' repositories.
+    - Workspace roots: local clones whose remote matches, found by scanning
+      configured workspace directories. A stage for a repository with no
+      clone refuses to start and raises attention.
+    - Blueprint: intake, as above.
+  reconciliation: >
+    Each bound blueprint declares its stages: the nodes an author marks with
+    `stage: true`, or every `child-run` of a stage blueprint by default. For
+    each project, the union of stages across the blueprints intake can route
+    to becomes the Status field's options, in blueprint order, appended
+    never deleted. Reconciliation runs at service start, on blueprint
+    repository change, and before an instance starts. It uses the package's
+    `ensure` with a project schema derived from the blueprints and the
+    `requires.issue` declarations. Drift the package reports but will not fix
+    is raised as attention.
+  status-projection: >
+    When a run enters a node marked `stage: true`, the engine sets the card's Status to that
+    stage's option. The blueprint author does not write this; it is an
+    invariant. A blueprint may additionally map other node results to other
+    fields through the `github` brick.
+  epics: >
+    An epic is any issue whose intake chose an epic blueprint. The shipped
+    epic blueprint builds a task graph from the epic's sub-issues and their
+    blocked-by links: one `child-run` of the task lifecycle per sub-issue,
+    edges from blocked-by, fan-out for independent tasks, `all` joins where
+    they converge. The graph is regenerated from the issues each time the
+    graph node runs, so re-planning is editing issues. The epic blueprint's
+    other nodes, planning, UAT pull requests, retrospective, are ordinary
+    authored nodes.
+  event-delivery: >
+    The service exposes one webhook handler for GitHub `issues`,
+    `projects_v2_item`, `issue_comment`, and `pull_request` events, verified
+    by the webhook secret. Listening is disabled unless both
+    `webhook.listen.host` and `webhook.listen.port` are configured. There is
+    no default port. The recommended host is `127.0.0.1` behind a host proxy
+    or tunnel; operators may choose another interface including `0.0.0.0`.
+    Only `POST /webhook/github` is served on this separate listener, which
+    opens after recovery and binding startup. Generated tools remain on the
+    separate internal listener that `agentTools.listen` configures; hook sockets, tokens, and state are not
+    exposed through the webhook listener. The configured route survives
+    graceful restart and forced process death. Host proxy, tunnel, TLS, and
+    forwarding configuration deliver GitHub requests to that route.
+    The external endpoint has a fixed 25 MiB (26,214,400-byte) request-body
+    ceiling. A declared Content-Length above it returns HTTP 413 before
+    accumulation. Independent streamed-byte counting rejects overflow before
+    retaining the overflowing chunk, including chunked bodies without a
+    Content-Length. Exactly-at-limit bodies reach normal authentication and
+    dispatch. Overflow closes the connection. The bound is per request; it
+    does not bound concurrent request memory or connection duration.
+    Signature verification over the original bytes precedes JSON validation.
+    Authenticated valid-JSON named unsupported events, including ping, return
+    HTTP 202 without invoking binding mutation. Event names start with a
+    lowercase letter and contain only lowercase letters, digits, and
+    underscores. A missing or invalid signature returns HTTP 401. A missing
+    or malformed name and invalid JSON return HTTP 400. Supported-event
+    payload or dispatch failures return HTTP 500. Every refused or rejected
+    external request is logged as its method, its path without any query
+    string, and its status; an accepted delivery is not logged. Direct
+    delivery and polling retain their existing supported-event contract.
+    The handler has two producers. GitHub calls it over HTTP. The poller,
+    which runs as a safety net at a low rate or as the only producer where
+    no webhook is configured, polls the bound projects, diffs, and on a
+    detected change emits a synthesized delivery in the same webhook payload
+    shape to the handler in-process. The handler does not know which
+    producer called it. It diffs the issue snapshot, updates the stored
+    copy, dedupes on the issue's updated time so a change seen by both
+    producers is applied once, and resumes runs waiting on
+    `on-issue-change` whose condition matches.
+    Immutable values used by a condition are captured as named bindings from
+    the waiting run's initial context. The changed issue remains the JSONata
+    root. Snapshot refresh changes the instance's current view and never a
+    run's saved initial context.
+  service-as-single-writer: >
+    The service owns Status projection. Agents do not write it. A person
+    moving Status by hand is an event, and the shipped lifecycle blueprint
+    treats it as an operator override that resumes the current stage with
+    result `overridden`. Changes to other fields are events the blueprint can
+    route on.
+  pause: >
+    Pausing an instance or an epic is an operator operation on the service,
+    projected to the card as a `Paused` field Heddle owns alongside Status,
+    so the state is visible on the board. Setting that field by hand is an
+    issue change the service treats as the same operation.
+    A manually moved Status resumes the current pass as `overridden`. Delivery
+    deduplication prevents service projections from becoming feedback loops.
+  project-choice: >
+    More than one bound-project membership creates one durable question. A
+    valid occurrence answer selects one membership, writes Heddle Project to
+    that card, and allows intake to start. Restart and repeated delivery retain
+    the answer and do not create another unresolved question.
+  permission-attention: >
+    A GitHub permission refusal leaves the node awaiting and records its run,
+    node, and visit. Operator continuation applies only to that occurrence and
+    never retries the refused effect. Immediate replay, recovery replay, and an
+    old action after a later refusal are inert. Attention reopening is not
+    supported.

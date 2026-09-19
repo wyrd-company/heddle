@@ -1,0 +1,8 @@
+{
+  "overrides": [
+    {
+      "files": ["src/github/**/*", "src/t3code/**/*"],
+      "options": { "objectWrap": "collapse", "printWidth": 100 }
+    }
+  ]
+}

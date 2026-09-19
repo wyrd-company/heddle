@@ -1,0 +1,284 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - node-types
+    - agent-tools
+    - github-binding-and-intake
+    - blueprint-authoring
+    - usage-budgeting
+objective: >
+  Run user-authored blueprints as durable, pausable workflow runs on the
+  Flowcraft engine so that every algorithmic part of moving work through a
+  process happens in code, and an agent is started only where judgment is
+  needed. The engine must survive process death, must never depend on a
+  long-lived agent, and must not know the names of any stage.
+background:
+  current-design: >
+    An orchestrating agent reads a board, dispatches an executor, writes a
+    monitor for handoff detection, dispatches a reviewer, writes another
+    monitor, and watches for questions. Every one of those steps is
+    algorithmic and every one of them costs the orchestrator context. A prior
+    service moved that work into code, but the code switched on stage names
+    and encoded the review loop, so a process change was a code change.
+  problems:
+    - An agent as scheduler forgets in-flight work, compacts under long epics, and burns context on mechanical moves.
+    - Code that names stages cannot serve a second user, and cannot serve the first user once the process changes.
+    - Flowcraft's nested subflow cannot be resumed from outside after a child pauses; resuming the parent skips the child and drops its outputs.
+    - Flowcraft's action edges drop the action on resume; with action-only edges no branch runs, and with a default edge every branch runs.
+    - A wait node and a sleep node fanned out into an `any` join do not race; the join re-fires on every wake-up and sleep timers live only in process memory.
+design-challenges:
+  pausing-without-a-process: >
+    A stage may sit for hours or days while an agent works or a person is
+    away. Nothing may hold a socket, a promise, or a thread open for that
+    time. The paused run must be a row in a database and nothing else.
+  composing-runs-without-nested-subflows: >
+    Stages are reusable blueprints, and process blueprints must compose them
+    as single nodes. Flowcraft's subflow node cannot be resumed through its
+    parent, so composition must be built on a different mechanism that
+    survives pauses.
+  routing-on-wake-up: >
+    A paused stage wakes for one of several reasons: handoff, escalate,
+    timeout, idle, turn ended, overridden. Each reason must select exactly
+    one outgoing edge,
+    and Flowcraft's action edges cannot be relied on for that.
+  timeouts-beside-a-wait: >
+    A stage that waits for an agent may also need a deadline. Flowcraft
+    cannot race a wait against a sleep inside one run, so the deadline must
+    come from outside the run and must lose cleanly when the agent wins.
+  arbitrating-competing-wake-ups: >
+    A handoff and a timeout can arrive within the same second from different
+    sources. Both submit requests to the Heddle service that owns the SQLite
+    writer. Exactly one request may resume a given awaited visit; a later
+    request for that visit is recorded and ignored.
+  at-least-once-node-execution: >
+    Flowcraft executes nodes at least once. Every node effect that touches
+    the world must be idempotent under replay.
+proposed-design:
+  high-level-overview: >
+    Heddle is one long-lived mechanical service hosting the in-memory
+    Flowcraft runtime. Every blueprint executes as its own top-level run.
+    A run's serialized context is a row in SQLite, written after every node
+    and read back on resume. The service does four things: execute nodes,
+    accept resumes, tick a scheduler for deadlines, and serve the agent tool
+    surface described in `agent-tools`. It is idle whenever every run is
+    paused, which is nearly always. No queue adapter is used; Flowcraft's
+    adapter seam remains available if a second worker is ever needed, and
+    swapping one in does not touch blueprints.
+  run: >
+    A run is one execution of one blueprint. It has an id, the blueprint
+    repository commit it is pinned to, an initial context, a serialized
+    context, a status (`running`, `resuming`, `awaiting`, `completed`,
+    `failed`), a pause flag independent of status, a parent run
+    id when started by another run, and an append-only event log. Each issue
+    in a bound project has exactly one lifecycle run at a time. Stage runs and
+    helper runs (answer-question) are children of that
+    lifecycle run or of each other.
+  pausing: >
+    A node pauses a run by calling Flowcraft's `markAsAwaiting` with a details
+    object. The details always carry a `kind` naming what the node waits for,
+    and the identifiers a resumer needs to find the run: a thread id for a
+    pass, a child run id for a child-run node, an issue id for an issue-change
+    wait, a deadline for a sleep. The serialized context, including the
+    awaiting details, is written to SQLite before the service does anything
+    else. The awaiting details are indexed so a resumer can find a run by
+    thread id, child run id, or issue id without scanning contexts.
+  composition: >
+    A process blueprint composes a stage as a `child-run` node. That node
+    starts a new top-level run of the child blueprint with an initial context
+    mapped from the parent's context, records the child run id in its
+    awaiting details, and pauses. When the child run completes, the engine
+    resumes the parent's `child-run` node with the child's declared outputs.
+    A stage blueprint therefore knows nothing about its parent, and a parent
+    knows nothing about threads. Flowcraft's `subflow` node type is excluded
+    from the registry so it cannot be used by mistake.
+  terminal-results-and-aggregation: >
+    A terminal-result node writes its resolved value to context.result. Its
+    reached-node marker carries the value; it and the completed-node checkpoint commit
+    together. Recovery retains the result and detects a second reached
+    terminal rather than replacing it. Settlement restores this value to
+    context.result even if a node with that id produced another output.
+    The node has no outgoing edges and
+    does not cancel siblings. Completion still waits for every paused node.
+    Child completion uses the existing output projection: outputs.result
+    returns context.result under the parent's child-node payload.result;
+    explicit mappings to other child context paths remain valid. A missing
+    terminal value fails execution before completion is delivered.
+    Aggregate nodes use all joins and bind every direct predecessor once.
+    They read persisted completed outputs, select each binding's optional
+    JSONata path relative to that output, and build a named object in
+    authored binding order. Missing values and incomplete predecessors fail
+    execution. Completed branch data survives restart while sibling branches
+    remain paused. Notification is a separate external effect and is not
+    required to complete or combine results.
+  sequential-dispatch: >
+    The Flowcraft orchestrator dispatches one ready node at a time with engine
+    concurrency 1. Snapshot checkpointing records one completed node against
+    the remaining frontier, and the one-terminal-result guard observes that
+    ordered context. Increasing dispatch concurrency requires replacement
+    checkpoint and terminal-result agreements; it is not a scheduler tuning
+    change.
+  lifecycle-start: >
+    Intake starts a lifecycle through `lifecycle-start`. The target is an
+    independent top-level run with its own root id and no parent. A durable
+    lifecycle-start relationship records the source run id, node id, visit,
+    and lifecycle run id atomically with target creation. This provenance
+    relationship is distinct from child-run completion routing. The node
+    returns started with the lifecycle run id immediately after creation;
+    it does not await completion. Dispatch follows intake traversal and
+    recovery dispatches durable starts even after intake has completed.
+    The target blueprint must have kind process. The node captures the
+    current issue snapshot and mapped additional inputs before asynchronous
+    target resolution, preserving the initial issue identity. The target
+    stores these immutable values in initialContext and pins the intake
+    commit. Replay consumes the same invocation, and execution/recovery read
+    the stored target blueprint. Instance binding attaches the created run
+    rather than creating a second lifecycle or refreshing its inputs.
+    Lifecycle pause/resume controls its own root and descendants independently
+    of the intake run. Invalid targets fail intake before lifecycle effects.
+  resume: >
+    A resume is the single entry point for waking a paused run. Its input is
+    a run id, the id of the node to wake, a result name, and a payload. The
+    engine loads the serialized context, verifies the node is awaiting,
+    writes the payload into the node's output under `output.<result name>`
+    as `true` plus the payload under `output.payload`, clears the awaiting
+    state, and continues traversal. Outgoing edges from a pausing node are
+    condition edges of the form `result.output.<result name>`. Action edges
+    are rejected by lint. After traversal the engine asserts the run landed
+    in an expected state (awaiting again, or completed) and raises attention
+    if it did not, because Flowcraft reports a dead end as success. Edge
+    conditions are JSONata expressions. Child outputs live only under
+    `output.payload`; they never share the result-flag namespace. Parent
+    context references therefore use `<child-node>.payload.<output-key>`.
+  arbitration: >
+    One Heddle service owns the SQLite file and every engine write. An
+    operating-system descriptor lock on a persistent anchor beside the canonical
+    database path grants ownership before SQLite opens. Descriptor close or
+    process death releases the lock; service code never unlinks the anchor. Store
+    handles in that process share one synchronous writer connection and
+    traversal ownership map. External processes submit requests to that
+    service; they do not open competing writer connections. No SQLite busy
+    timeout is used. Transactions run synchronously through the owner.
+    Resume requests bind to the node visit observed at receipt. An atomic
+    claim moves an awaiting run to resuming and persists the result before
+    traversal. A request for a visit that has left awaiting state or whose
+    run has failed is logged as late-wakeup. A request for a still-awaiting
+    sibling while the run is busy, or while the instance is paused, is queued
+    durably. Settle drains queued
+    requests in arrival order. Wake-up row identities are never reused. Repeated
+    scheduler ticks reuse the current row identity and enqueue that identity
+    once. While an earlier attempt for that identity remains queued, a later
+    due-time attempt is not enqueued. After the obsolete attempt drains, the
+    current row delivers once on the first subsequent tick. Separate external
+    requests remain distinct.
+    Scheduler idle requests carry the due time for which they were raised.
+    Claim compares that due time with the current wake-up row inside its
+    transaction. An obsolete attempt with a different due time is logged as
+    late-wakeup and discarded; the current row retains its identity and due
+    time for delivery. All these discarded requests use the same late-wakeup
+    event type. The log records the original request payload, including the scheduler identity
+    and due time when present, without a separate reason discriminator.
+    Dequeue and claim commit together with any wake-up row retirement. A
+    matching row is retired when its request applies, its visit has left
+    awaiting state, or its run has failed; an obsolete attempt for a visit
+    that still awaits does not retire the postponed row.
+  deadlines: >
+    Deadlines are rows, not timers, and they exist only where a blueprint
+    author wrote a duration. Two kinds. An elapsed deadline: when a node
+    pauses with `deadline` in its awaiting details, the service inserts a
+    `wakeup` row with the run id, node id, result name `timeout`, and the
+    due time. An inactivity deadline: a `pass` node with `inactivity` gets a
+    `wakeup` row with result name `idle` whose due time is the last observed
+    thread activity plus the duration, and the row's due time is pushed
+    forward every time the pass's read model records activity, including
+    helper activity. A scheduler tick reads due rows, rechecks each row's
+    current due time and the run's pause state before dispatch, and calls
+    resume with that current due time when the row is still due. If the run
+    has already moved on, the resume is a recorded late wake-up and the row
+    is deleted. A wake-up selects an edge and does
+    nothing else. The Flowcraft `sleep` node is wrapped so it uses the same
+    row instead of an in-process timer, which makes it durable across
+    restarts. Authored ISO 8601 durations use UTC calendar arithmetic;
+    inactivity durations are applied to each latest observed activity time.
+    Wake-up rows carry the node visit so a deadline from an earlier visit
+    cannot wake a later visit to the same node.
+  recovery: >
+    On start, the service reads every run whose status is `running` or
+    `resuming` and replays it from its last serialized context, then resumes
+    the scheduler. Node effects are idempotent, keyed by run id plus node id
+    plus visit count, so a replayed node that already created a thread or
+    posted a comment finds its prior effect and continues.
+    A checkpoint records the exact unfinished node frontier and its context,
+    or a completed node whose result still needs routing, together with the
+    remaining frontier. Flowcraft supplies graph traversal, node execution
+    and result routing through its orchestrator extension seam. The engine
+    persists before dispatch and at node completion. The completed visit
+    and its output checkpoint commit together, so replay keeps the effect
+    identity and cannot skip an unfinished sibling beside a persisted pause.
+    A claimed resume records its result and payload before traversal.
+    Child dispatch follows the parent's persisted pause; recovery delivers
+    completed children whose parents still await them. A child creation
+    failure or child-output projection failure raises attention and selects the
+    parent's failed result. Paused nodes do not count as completed predecessors
+    for an all join; only their resumed result can satisfy the join. Recovery
+    isolates failures per run and continues with other runs. Paused instances
+    remain untouched; instance resume recovers only that instance's subtree.
+  event-log: >
+    Every node start, node end, pause, resume, late wake-up, and failure is a
+    row with the run id, a sequence number, and a JSON payload. The log is
+    the source for the console, for Flowcraft's replay, and for retention
+    decisions. Retention rules are configuration, not code.
+  blueprint-pinning: >
+    A run pins the blueprint root commit it started from, which covers
+    the blueprint and every prompt, handoff schema, and rules file it
+    references. Child runs pin the same commit as their parent. Lifecycle starts pin the
+    same commit as their intake source. A new
+    commit changes what new instances get; running instances keep their
+    commit until they finish. Moving a running instance to a newer commit
+    is not supported in this version.
+    Each run stores the resolved Flowcraft blueprint beside its commit.
+    Traversal and recovery consume that stored snapshot; the resolver is
+    called with the pinned commit only when creating a run. The production
+    catalog resolves a requested revision to its full commit before root-run
+    creation. The stored commit is the identity shared by graph resolution,
+    pass prompt and handoff-schema loading, policy evaluation, and restart.
+    A root also records its requested revision beside the canonical commit.
+    A start retry with that same request or the stored commit reuses the
+    existing snapshot; a different request still passes the invocation
+    identity checks. Records without a requested revision compare retries
+    against their stored commit.
+    The catalog reads Git tree and blob objects through isomorphic-git.
+    Recovery reads referenced artifacts from the stored commit even when the
+    repository working tree or branch has moved. The local object database
+    supplies the pinned commits for the lifetime of their runs.
+  pause-and-resume: >
+    An operator can pause an instance or an epic. A paused instance keeps
+    its live thread untouched and its paused nodes paused; what it loses is
+    dispatch: no new stage starts, no continuation turn is sent, and
+    deadline wake-ups are held and re-queued on resume rather than applied.
+    Pausing an epic pauses its task-graph run and every child. Pause and
+    resume are event-log rows and are visible on the project as a field the
+    reconciliation design names.
+  read-models: >
+    Every altitude the service tracks is a read model built from what it
+    observed, in T3 Code's sense of the term: the run's state from its own
+    event log, and a pass from the thread's event stream. The
+    service never records what it commanded as if it had happened; a
+    command is a request, and the event that follows is the fact.
+  command-line: >
+    The service is one binary. `heddle start` runs the service: the engine,
+    generated tool servers, the webhook handler, and the scheduler. Other
+    commands work without the service: `validate` and `skill` are described
+    in the blueprint-authoring design, and `hook stop <harness>` is the
+    turn-end hook the agent-tools design describes. The command surface is
+    specified by `docs/specifications/command-line-interface.yml`. Its default
+    configuration is `~/.config/heddle/config.yml`; its default SQLite file is
+    `~/.local/state/heddle/heddle.sqlite`. SIGINT and SIGTERM close the one
+    service-owned writer. Restart after abrupt process death recovers durable
+    runs before external requests or new intake. HTTP requests receive 503
+    until engine and pass recovery finish. Hook sockets derive their identity
+    from the same canonical database path and start after recovery; different
+    databases retain independent sockets under a shared state directory.
+  what-the-engine-never-knows: >
+    The engine has no notion of a stage name, a status name, a review, or an
+    epic. Those exist only as node ids and blueprint ids, which are user
+    data. Any switch on such a name in engine code is a defect.

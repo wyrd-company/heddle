@@ -1,0 +1,1349 @@
+{
+  "relationships": {
+    "verifies": [
+      "node-types",
+      "agent-tools",
+      "engine-and-run-model"
+    ]
+  },
+  "method": "Each single compiled mutation ran the full offline suite, then restored source built and passed the full offline suite. Each sourceHead identifies the actual committed mutation input, before later fixture instrumentation and evidence-only commits. Each sourceContentSha256 is independently verified against the final restored guarded file; later commits do not alter those files.",
+  "guards": [
+    {
+      "name": "session-lookup",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "WHERE session_id=?",
+      "new": "WHERE session_id=? OR 1=1",
+      "expected": "allows an ordinary session",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > exported claude plugin invokes the actual CLI with unchanged session_id",
+        "test/agent-hooks.test.ts > exported codex plugin invokes the actual CLI with unchanged session_id",
+        "test/agent-hooks.test.ts > allows an ordinary session beside active sessions without endpoint calls or state change",
+        "test/agent-hooks.test.ts > keeps hook bindings out of ordinary and linked worktrees and Git metadata",
+        "test/agent-hooks.test.ts > does not guess an ambiguous identity or disturb unrelated sessions",
+        "test/agent-hooks.test.ts > replaces native identities and ignores retired occurrence updates",
+        "test/agent-hooks.test.ts > rejects altered endpoint/token/visit/thread agreements",
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched visit",
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched thread_id",
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched path",
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched token",
+        "test/agent-hooks.test.ts > does not route an ended failed pass even if its awaiting row remains",
+        "test/agent-hooks.test.ts > does not route an ended completed pass even if its awaiting row remains",
+        "test/agent-hooks.test.ts > does not route a revoked instance",
+        "test/agent-hooks.test.ts > does not keep blocking after handoff retires an in-flight policy request",
+        "test/pass.test.ts > counts observed native and operator turns, refreshes inactivity, and keeps session replacement exact",
+        "test/pass.test.ts > retires credentials and registration before rendering the next pass from the handoff",
+        "test/pass.test.ts > waits for the prior turn to settle before replacing a reused provider session"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "ambiguity",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "if (matches.length > 1)",
+      "new": "if (matches.length > 100)",
+      "expected": "does not guess an ambiguous",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > does not guess an ambiguous identity or disturb unrelated sessions"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "visit",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "AND a.visit=?",
+      "new": "AND (? IS NOT NULL)",
+      "expected": "persisted mapping with a mismatched visit",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > rejects registration with a binding outside the durable awaiting occurrence",
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched visit"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "thread",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "AND a.thread_id=?",
+      "new": "AND (? IS NOT NULL)",
+      "expected": "persisted mapping with a mismatched thread_id",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched thread_id"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "path",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "state?.path === binding.path",
+      "new": "state !== undefined",
+      "expected": "persisted mapping with a mismatched path",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched path"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "token",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "state.tokenHash === hashToken(binding.token)",
+      "new": "state.tokenHash.length === hashToken(binding.token).length",
+      "expected": "persisted mapping with a mismatched token",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > rejects registration with a binding outside the durable awaiting occurrence",
+        "test/agent-hooks.test.ts > rejects altered endpoint/token/visit/thread agreements",
+        "test/agent-hooks.test.ts > does not resolve a persisted mapping with a mismatched token"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "terminal",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "r.status NOT IN ('failed','completed')",
+      "new": "r.status NOT IN ('unknown-a','unknown-b')",
+      "expected": "does not route an ended",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > does not route an ended failed pass even if its awaiting row remains",
+        "test/agent-hooks.test.ts > does not route an ended completed pass even if its awaiting row remains",
+        "test/pass-cleanup.test.ts > retires an orphaned registration and its raw credential through the lifecycle adapter"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "revoked",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "!state.revoked",
+      "new": "true",
+      "expected": "does not route a revoked",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > does not route a revoked instance"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "observe-occurrence",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "if (!this.current(binding)) return;",
+      "new": "if (false) return;",
+      "expected": "ignores retired occurrence",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > replaces native identities and ignores retired occurrence updates",
+        "test/agent-hooks.test.ts > rejects altered endpoint/token/visit/thread agreements"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "reconcile",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "if (this.current(binding)) continue;",
+      "new": "if (false) continue;",
+      "expected": "ignores retired occurrence",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > replaces native identities and ignores retired occurrence updates"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "policy-race",
+      "file": "src/agent-tools/hook-server.ts",
+      "old": "if (current?.path !== binding.path) return {};",
+      "new": "if (current?.path === \"impossible\") return {};",
+      "expected": "after handoff retires an in-flight",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "49acc5c07ecc40d0a3adf57300e321d30d9229471f8f5863293fa30ce006d704",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > does not keep blocking after handoff retires an in-flight policy request"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "native-property",
+      "file": "src/agent-tools/hooks.ts",
+      "old": "req.end(JSON.stringify({ session_id: event[\"session_id\"] }));",
+      "new": "req.end(JSON.stringify({ session_id: event[\"cwd\"] }));",
+      "expected": "exported .* plugin invokes",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "69d36d873acff6f844d536d2443e0ff70b1e38ceb4deb144881c7c02f85b0844",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > exported claude plugin invokes the actual CLI with unchanged session_id",
+        "test/agent-hooks.test.ts > exported codex plugin invokes the actual CLI with unchanged session_id",
+        "test/agent-hooks.test.ts > allows an ordinary session beside active sessions without endpoint calls or state change",
+        "test/agent-hooks.test.ts > keeps hook bindings out of ordinary and linked worktrees and Git metadata"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "native-exact",
+      "file": "src/t3code/src/schemas/orchestration/read-model.ts",
+      "old": "providerThreadId: z.string().nullable().default(null)",
+      "new": "providerThreadId: z.string().trim().nullable().default(null)",
+      "expected": "retains exact native session identity",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "71884d89d3773a6e7f674b8ad06a6cfcd49c40293820f395a729fe433a0332ba",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "src/t3code/src/schemas/orchestration/schemas.test.ts > retains exact native session identity and decodes legacy omission as null"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "native-legacy",
+      "file": "src/t3code/src/schemas/orchestration/read-model.ts",
+      "old": "providerThreadId: z.string().nullable().default(null)",
+      "new": "providerThreadId: z.string().nullable()",
+      "expected": "retains exact native session identity",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "71884d89d3773a6e7f674b8ad06a6cfcd49c40293820f395a729fe433a0332ba",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "src/t3code/src/schemas/orchestration/schemas.test.ts > retains exact native session identity and decodes legacy omission as null"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "prepared-recovery",
+      "file": "src/pass/service.ts",
+      "old": "if (this.store.pending(item)) continue;",
+      "new": "if (false) continue;",
+      "expected": "keeps a prepared invocation",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "1b12bccbee079fd5e8917011432cade70b21fe62453ce8833b8cbaa3eeca9617",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > keeps a prepared invocation and its credential when recovering before the awaiting commit"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "tail-observer",
+      "file": "src/pass/service.ts",
+      "old": "if (!observingTail(item)) {",
+      "new": "if (true) {",
+      "expected": "keeps final usage with the retired pass",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "1b12bccbee079fd5e8917011432cade70b21fe62453ce8833b8cbaa3eeca9617",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline",
+        "test/pass-observation.test.ts > preserves newer observations while remote retirement acknowledgement is pending"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "observation-save",
+      "file": "src/pass/store.ts",
+      "old": "if (stored && (stored.sequence ?? -1) > (item.sequence ?? -1)) {",
+      "new": "if (stored && (stored.sequence ?? -1) < -100) {",
+      "expected": "preserves newer observations",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "d92497e107caad0c9c0601e75efaa2e29eaf00f4377f79f2245796a8a092b914",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > preserves newer observations while remote retirement acknowledgement is pending"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "prior-baseline",
+      "file": "src/pass/observe.ts",
+      "old": "if (!view.started) {",
+      "new": "if (!view.started && item.key.length < 0) {",
+      "expected": "keeps final usage with the retired pass",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "13abb0fe725e6f6e03c8dd323052446a8f5bbc137d4aef6ba226a769362b2372",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "same-native-baseline",
+      "file": "src/pass/observe.ts",
+      "old": "if (view.usageSessionId !== session.providerThreadId)",
+      "new": "if (true)",
+      "expected": "keeps final usage with the retired pass",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "13abb0fe725e6f6e03c8dd323052446a8f5bbc137d4aef6ba226a769362b2372",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "usage-delta",
+      "file": "src/pass/observe.ts",
+      "old": "Math.max(0, next.total - prior)",
+      "new": "Math.max(0, next.total)",
+      "expected": "attributes cumulative usage deltas",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "13abb0fe725e6f6e03c8dd323052446a8f5bbc137d4aef6ba226a769362b2372",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > attributes cumulative usage deltas and helper snapshots without counting replay twice",
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "helper-snapshot",
+      "file": "src/pass/observe.ts",
+      "old": "Math.max(number(usage[key]), value)",
+      "new": "number(usage[key]) + value",
+      "expected": "attributes cumulative usage deltas",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "13abb0fe725e6f6e03c8dd323052446a8f5bbc137d4aef6ba226a769362b2372",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > attributes cumulative usage deltas and helper snapshots without counting replay twice"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "own-message",
+      "file": "src/pass/observe.ts",
+      "old": "event.payload.role === \"user\"",
+      "new": "event.payload.role === \"assistant\"",
+      "expected": "keeps final usage with the retired pass",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "13abb0fe725e6f6e03c8dd323052446a8f5bbc137d4aef6ba226a769362b2372",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > attributes cumulative usage deltas and helper snapshots without counting replay twice",
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline",
+        "test/pass-observation.test.ts > preserves newer observations while remote retirement acknowledgement is pending"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "source-classification",
+      "file": "src/pass/observe.ts",
+      "old": "view.pendingMessageId === item.messageId ? \"heddle\" : \"operator\"",
+      "new": "view.pendingMessageId !== item.messageId ? \"heddle\" : \"operator\"",
+      "expected": "counts observed native and operator turns",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "13abb0fe725e6f6e03c8dd323052446a8f5bbc137d4aef6ba226a769362b2372",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline",
+        "test/pass.test.ts > counts observed native and operator turns, refreshes inactivity, and keeps session replacement exact"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "turn-identity",
+      "file": "src/pass/observe.ts",
+      "old": "session.activeTurnId && !view.turns[session.activeTurnId]",
+      "new": "session.activeTurnId",
+      "expected": "counts observed native and operator turns",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "13abb0fe725e6f6e03c8dd323052446a8f5bbc137d4aef6ba226a769362b2372",
+      "appliedCount": 2,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > counts observed native and operator turns, refreshes inactivity, and keeps session replacement exact"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "dispatch-once",
+      "file": "src/pass/lifecycle.ts",
+      "old": "item.dispatched ||",
+      "new": "item.dispatched && false ||",
+      "expected": "recovers a committed active pass",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline",
+        "test/pass.test.ts > retires credentials and registration before rendering the next pass from the handoff",
+        "test/pass.test.ts > recovers a committed active pass without sending its initial turn twice",
+        "test/pass.test.ts > waits for the prior turn to settle before replacing a reused provider session"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "stable-command",
+      "file": "src/pass/lifecycle.ts",
+      "old": "commandId: commandId(item.commandId),",
+      "new": "commandId: commandId(item.commandId + String(Date.now())),",
+      "expected": "retains a single initial command identity",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > retains a single initial command identity if dispatch committed before its acknowledgement was lost"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "prior-settlement",
+      "file": "src/pass/service.ts",
+      "old": "item.projection?.latestTurn?.state === \"running\" ||\n      session?.activeTurnId",
+      "new": "false",
+      "expected": "waits for the prior turn to settle",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "1b12bccbee079fd5e8917011432cade70b21fe62453ce8833b8cbaa3eeca9617",
+      "appliedCount": 5,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > waits for the prior turn to settle before replacing a reused provider session"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "session-stop",
+      "file": "src/pass/service.ts",
+      "old": "if (item.reused && session && session.status !== \"stopped\") {",
+      "new": "if (item.reused && session && session.status === \"starting\") {",
+      "expected": "waits for the prior turn to settle",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "1b12bccbee079fd5e8917011432cade70b21fe62453ce8833b8cbaa3eeca9617",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline",
+        "test/pass.test.ts > waits for the prior turn to settle before replacing a reused provider session"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "retire-token",
+      "file": "src/pass/lifecycle.ts",
+      "old": "item.binding = null;",
+      "new": "item.binding = item.binding;",
+      "expected": "retires an orphaned registration",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-cleanup.test.ts > retires an orphaned registration and its raw credential through the lifecycle adapter"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "handoff-context",
+      "file": "src/pass/lifecycle.ts",
+      "old": "handoff: payload[\"payload\"],",
+      "new": "handoff: null,",
+      "expected": "retires credentials and registration",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > retires credentials and registration before rendering the next pass from the handoff"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "settlement-replay",
+      "file": "src/pass/watch-state.ts",
+      "old": "watch.announced.add(turn.turnId);",
+      "new": "if (watch.item.key.length >= 0) return;\n  watch.announced.add(turn.turnId);",
+      "expected": "delivers a turn settlement replayed before synchronization",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "cdd2e42c2df8238986da8835590805040a74b29e36d61e75a1cae597ba1ab4d4",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-observation.test.ts > delivers a turn settlement replayed before synchronization after restart"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "stop-ui-flag",
+      "file": "src/pass/lifecycle.ts",
+      "old": "type: \"thread.session.stop\",",
+      "new": "type: \"thread.session.stop\",\n    onlyIfSettled: true,",
+      "expected": "waits for the prior turn to settle",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > waits for the prior turn to settle before replacing a reused provider session"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "worktree-empty",
+      "file": "src/pass/prepare.ts",
+      "old": "typeof worktree !== \"string\" || !worktree",
+      "new": "typeof worktree !== \"string\"",
+      "expected": "rejects invalid worktree",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "2ba4123d9c118b054f446e87e96642efc40ecb5a97b833dd35977e2edad37f18",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-inputs.test.ts > rejects invalid worktree input \"\" before T3 effects"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "resume-missing",
+      "file": "src/pass/prepare.ts",
+      "old": "if (resume !== undefined && (typeof target !== \"string\" || !target))",
+      "new": "if (false)",
+      "expected": "rejects invalid resumeThread",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "2ba4123d9c118b054f446e87e96642efc40ecb5a97b833dd35977e2edad37f18",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-inputs.test.ts > rejects invalid resumeThread input \"missing\" before T3 effects"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "reserved-tool",
+      "file": "src/pass/prepare.ts",
+      "old": "if (tool[\"name\"] === \"heddle\")",
+      "new": "if (tool[\"name\"] === \"other\")",
+      "expected": "rejects invalid tools",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "2ba4123d9c118b054f446e87e96642efc40ecb5a97b833dd35977e2edad37f18",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-inputs.test.ts > rejects invalid tools input [{\"name\":\"heddle\",\"endpoint\":\"https://tools.example.test\"}] before T3 effects"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "duplicate-tool",
+      "file": "src/pass/prepare.ts",
+      "old": "if (new Set(extra.map((tool) => tool.name)).size !== extra.length)",
+      "new": "if (new Set(extra.map((tool) => tool.name)).size > extra.length)",
+      "expected": "rejects invalid tools",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "2ba4123d9c118b054f446e87e96642efc40ecb5a97b833dd35977e2edad37f18",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-inputs.test.ts > rejects invalid tools input [{\"name\":\"catalog\",\"endpoint\":\"https://tools.example.test\"},{\"name\":\"catalog\",\"endpoint\":\"https://tools.example.test/other\"}] before T3 effects"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "template-undefined",
+      "file": "src/pass/prepare.ts",
+      "old": "throwOnUndefined: true",
+      "new": "throwOnUndefined: false",
+      "expected": "rejects invalid prompt",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "2ba4123d9c118b054f446e87e96642efc40ecb5a97b833dd35977e2edad37f18",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-inputs.test.ts > rejects invalid prompt input {\"inline\":\"Inspect {{ missing }}\"} before T3 effects"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "extra-auth",
+      "file": "src/pass/lifecycle.ts",
+      "old": "const authorizationHeader = await options.extraToolAuthorization?.(tool);",
+      "new": "const authorizationHeader = `Bearer ${item.binding.token}`;",
+      "expected": "uses service-owned extra tool authorization",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > renders pinned inputs, activates after commit, and uses service-owned extra tool authorization"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "handoff-result-match",
+      "file": "src/pass/lifecycle.ts",
+      "old": "if (payload[\"result\"] === \"handoff\")",
+      "new": "if (payload[\"result\"] === \"turnEnded\")",
+      "expected": "retires credentials and registration",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > retires credentials and registration before rendering the next pass from the handoff"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "pause-recheck",
+      "file": "src/pass/lifecycle.ts",
+      "old": "store.runs.get(item.runId).paused",
+      "new": "false",
+      "expected": "holds an initial turn when pause arrives",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-cleanup.test.ts > holds an initial turn when pause arrives during registration and starts it once after resume"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "retirement-terminal",
+      "file": "src/pass/store.ts",
+      "old": "stored?.phase === \"retired\"",
+      "new": "stored?.phase === \"prepared\"",
+      "expected": "keeps persisted retirement terminal",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "d92497e107caad0c9c0601e75efaa2e29eaf00f4377f79f2245796a8a092b914",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-cleanup.test.ts > retires an orphaned registration and its raw credential through the lifecycle adapter",
+        "test/pass-cleanup.test.ts > keeps persisted retirement terminal even when an older active writer finishes",
+        "test/pass-cleanup.test.ts > clears a committed remote registration when its acknowledgement is lost",
+        "test/pass-cleanup.test.ts > contains a background subscription failure and retires active registration",
+        "test/pass-observation.test.ts > attributes cumulative usage deltas and helper snapshots without counting replay twice",
+        "test/pass-observation.test.ts > reconciles failed runs and keeps late registration acknowledgements retired",
+        "test/pass-observation.test.ts > delivers a turn settlement replayed before synchronization after restart",
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline",
+        "test/pass-observation.test.ts > preserves newer observations while remote retirement acknowledgement is pending",
+        "test/pass.test.ts > counts observed native and operator turns, refreshes inactivity, and keeps session replacement exact",
+        "test/pass.test.ts > retires credentials and registration before rendering the next pass from the handoff",
+        "test/pass.test.ts > recovers a committed active pass without sending its initial turn twice",
+        "test/pass.test.ts > waits for the prior turn to settle before replacing a reused provider session"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "pinned-artifact",
+      "file": "src/pass/prepare.ts",
+      "old": "options.readArtifact(run.commit, run.blueprintId, path)",
+      "new": "options.readArtifact(\"latest\", run.blueprintId, path)",
+      "expected": "renders pinned inputs",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "2ba4123d9c118b054f446e87e96642efc40ecb5a97b833dd35977e2edad37f18",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > renders pinned inputs, activates after commit, and uses service-owned extra tool authorization"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "scheduler-pause",
+      "file": "src/engine/wakeups.ts",
+      "old": "WHERE w.id=? AND w.due<=? AND r.paused=0",
+      "new": "WHERE w.id=? AND w.due<=?",
+      "expected": "pause",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "c5ede268e6a4c0f907469a91511d87d6e40d506d9618db2b012709b676beb29f",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/engine.test.ts > does not dispatch a due row paused during the same scheduler tick"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "metadata-authority",
+      "file": "src/pass/prepare.ts",
+      "old": "const prompt = params[\"prompt\"];",
+      "new": "const prompt = definition.metadata?.[\"prompt\"] ?? params[\"prompt\"];",
+      "expected": "renders pinned inputs",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "2ba4123d9c118b054f446e87e96642efc40ecb5a97b833dd35977e2edad37f18",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass.test.ts > renders pinned inputs, activates after commit, and uses service-owned extra tool authorization"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "registration-intent",
+      "file": "src/pass/lifecycle.ts",
+      "old": "    if (!item.registrationNames.includes(registration.name))\n      item.registrationNames.push(registration.name);\n    store.save(item);\n    await options.client.mcp.ensureRegistration(registration);",
+      "new": "    await options.client.mcp.ensureRegistration(registration);\n    if (!item.registrationNames.includes(registration.name))\n      item.registrationNames.push(registration.name);\n    store.save(item);",
+      "expected": "clears a committed remote registration",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "30193f6009da52d82b9d0146178193afde4a11dca223cc197bd977095dcbb4cf",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-cleanup.test.ts > clears a committed remote registration when its acknowledgement is lost",
+        "test/pass-observation.test.ts > reconciles failed runs and keeps late registration acknowledgements retired"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "background-failure",
+      "file": "src/pass/service.ts",
+      "old": "recordFailure(this.engine.store, item.runId, error);",
+      "new": "if (item.runId.length < 0) recordFailure(this.engine.store, item.runId, error);",
+      "expected": "contains a background subscription failure",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "1b12bccbee079fd5e8917011432cade70b21fe62453ce8833b8cbaa3eeca9617",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-cleanup.test.ts > clears a committed remote registration when its acknowledgement is lost",
+        "test/pass-cleanup.test.ts > contains a background subscription failure and retires active registration"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "release-before-effects",
+      "file": "src/engine/engine.ts",
+      "old": "release();\n    await reconcileBoundary(this.store, this.options.onBoundary, runId);",
+      "new": "await reconcileBoundary(this.store, this.options.onBoundary, runId);\n    release();",
+      "expected": "activates only after the awaiting commit",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "becef0dc36ef0241b60a63e0c5b1b6f1d214a389b4537f8c154ea185eec1cd97",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-engine-boundary.test.ts > activates only after the awaiting commit and releases traversal before immediate handoff"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "fresh-checkpoint",
+      "file": "src/engine/engine.ts",
+      "old": "await reconcileBoundary(this.store, this.options.onBoundary, runId);\n    const run = this.store.get(runId);",
+      "new": "const run = this.store.get(runId);\n    await reconcileBoundary(this.store, this.options.onBoundary, runId);",
+      "expected": "retires credentials and registration",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "becef0dc36ef0241b60a63e0c5b1b6f1d214a389b4537f8c154ea185eec1cd97",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-engine-boundary.test.ts > does not execute nodes after retirement fails at a claimed boundary",
+        "test/pass.test.ts > retires credentials and registration before rendering the next pass from the handoff"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "failed-boundary-halt",
+      "file": "src/engine/engine.ts",
+      "old": "run.paused || run.status === \"completed\" || run.status === \"failed\"",
+      "new": "run.paused || run.status === \"completed\"",
+      "expected": "does not execute nodes after retirement fails",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "becef0dc36ef0241b60a63e0c5b1b6f1d214a389b4537f8c154ea185eec1cd97",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-engine-boundary.test.ts > does not execute nodes after retirement fails at a claimed boundary"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "boundary-failure",
+      "file": "src/engine/boundary.ts",
+      "old": "recordFailure(store, runId, error);",
+      "new": "if (runId.length < 0) recordFailure(store, runId, error);",
+      "expected": "fails an adapter start",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "697bb3b062b0db819386b9ddaf810c445abb881b348b084db99a13c62fd6ceea",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-engine-boundary.test.ts > fails an adapter start and retries cleanup in the failed state",
+        "test/pass-engine-boundary.test.ts > does not execute nodes after retirement fails at a claimed boundary"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "failed-cleanup",
+      "file": "src/engine/boundary.ts",
+      "old": "try {\n      await onBoundary?.(store.get(runId));",
+      "new": "try {\n      if (store.get(runId).status !== \"failed\") await onBoundary?.(store.get(runId));",
+      "expected": "fails an adapter start",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "697bb3b062b0db819386b9ddaf810c445abb881b348b084db99a13c62fd6ceea",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-engine-boundary.test.ts > fails an adapter start and retries cleanup in the failed state"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "paused-recovery",
+      "file": "src/engine/engine.ts",
+      "old": "if (run.paused) {\n        await reconcileBoundary(this.store, this.options.onBoundary, run.id);",
+      "new": "if (run.paused) {\n        await reconcileBoundary(this.store, undefined, run.id);",
+      "expected": "reconciles paused and terminal runs",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "becef0dc36ef0241b60a63e0c5b1b6f1d214a389b4537f8c154ea185eec1cd97",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-engine-boundary.test.ts > reconciles paused and terminal runs on repeated restart recovery"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "activity-transaction",
+      "file": "src/pass/service.ts",
+      "old": "item.view.lastActivity,\n              false,",
+      "new": "item.view.lastActivity,\n              true,",
+      "expected": "counts observed native and operator turns",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "1b12bccbee079fd5e8917011432cade70b21fe62453ce8833b8cbaa3eeca9617",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-cleanup.test.ts > retires an orphaned registration and its raw credential through the lifecycle adapter",
+        "test/pass-observation.test.ts > attributes cumulative usage deltas and helper snapshots without counting replay twice",
+        "test/pass-observation.test.ts > delivers a turn settlement replayed before synchronization after restart",
+        "test/pass-observation.test.ts > keeps final usage with the retired pass and starts reused-pass totals at the prior baseline",
+        "test/pass-observation.test.ts > preserves newer observations while remote retirement acknowledgement is pending",
+        "test/pass.test.ts > counts observed native and operator turns, refreshes inactivity, and keeps session replacement exact",
+        "test/pass.test.ts > retires credentials and registration before rendering the next pass from the handoff",
+        "test/pass.test.ts > recovers a committed active pass without sending its initial turn twice",
+        "test/pass.test.ts > waits for the prior turn to settle before replacing a reused provider session",
+        "test/pass.test.ts > retains a single initial command identity if dispatch committed before its acknowledgement was lost"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "thread-owner",
+      "file": "src/agent-tools/sessions.ts",
+      "old": "conflicting.some(",
+      "new": "conflicting.length < 0 && conflicting.some(",
+      "expected": "rejects registration for a thread already owned",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "3f51ae7e28041b42b4f66d58773a2652eabc9ceeb53c6c8d9c7f6bf5e24fe10c",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/agent-hooks.test.ts > rejects registration for a thread already owned by a different active pass"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "evidence-foreign",
+      "file": "scripts/retain-pass-evidence.mjs",
+      "old": "ids.has(event.data.session_id),",
+      "new": "true,",
+      "expected": "rejects a delayed callback",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "0cab8c6ae616dc13b213b8c3dee207ea9d85b18047ceaab6a303810d78f166cd",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-evidence.test.ts > rejects a delayed callback belonging to a different scenario"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "evidence-cross-scenario",
+      "file": "scripts/retain-pass-evidence.mjs",
+      "old": "assert.ok(!owners.has(id), \"native identity belongs to only one scenario\");",
+      "new": "assert.ok(true, \"native identity belongs to only one scenario\");",
+      "expected": "rejects reusing a native identity",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "0cab8c6ae616dc13b213b8c3dee207ea9d85b18047ceaab6a303810d78f166cd",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-evidence.test.ts > rejects reusing a native identity in two independently qualified scenarios"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "evidence-untrusted",
+      "file": "scripts/retain-pass-evidence.mjs",
+      "old": "events.filter((event) => event.kind === \"native-stop\").length,",
+      "new": "0,",
+      "expected": "rejects claiming no untrusted callback",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "0cab8c6ae616dc13b213b8c3dee207ea9d85b18047ceaab6a303810d78f166cd",
+      "appliedCount": 3,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-evidence.test.ts > rejects claiming no untrusted callback when the scenario records one"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    },
+    {
+      "name": "fixture-root-owner",
+      "file": "scripts/qualify-pass-live.mjs",
+      "old": "{ flag: \"wx\" },",
+      "new": "{ flag: \"w\" },",
+      "expected": "rejects running a second native scenario",
+      "sourceHead": "9c39988f511bad126ca1c35a3677ffdb37e0bc47",
+      "sourceContentSha256": "711ce5c703340c2e4baefb064042556715c2814200c822ef6a86496c903c4ead",
+      "appliedCount": 1,
+      "build": 0,
+      "exit": 1,
+      "failures": [
+        "test/pass-evidence.test.ts > rejects running a second native scenario in a shared fixture root"
+      ],
+      "killed": true,
+      "restoredBuild": 0,
+      "restoredSuite": 0,
+      "restoredSummary": [
+        "Test Files  103 passed (103)",
+        "Tests  1166 passed (1166)"
+      ]
+    }
+  ],
+  "excludedCompilerInvalidExperiments": []
+}

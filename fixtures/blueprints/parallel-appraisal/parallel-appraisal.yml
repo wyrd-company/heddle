@@ -1,0 +1,34 @@
+# This unanticipated helper asks two roles at once before joining their answers.
+id: parallel-appraisal
+kind: helper
+description: Collect independent appraisals of a museum object in parallel.
+outputs:
+  result:
+    type: object
+nodes:
+  # The operator records the object's visible condition out of band.
+  inspect-condition:
+    uses: wait
+  # The adjudicator separately assesses the documented history out of band.
+  inspect-history:
+    uses: wait
+  # Named branch results are combined after both answers arrive.
+  combine-panel:
+    uses: aggregate
+    config:
+      joinStrategy: all
+    params:
+      bindings:
+        condition: { node: inspect-condition, path: payload }
+        history: { node: inspect-history, path: payload }
+  complete:
+    uses: terminal-result
+    params:
+      value: { from: "`combine-panel`" }
+edges:
+  - from: inspect-condition
+    to: combine-panel
+  - from: inspect-history
+    to: combine-panel
+  - from: combine-panel
+    to: complete

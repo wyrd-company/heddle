@@ -1,0 +1,191 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - engine-and-run-model
+    - node-types
+objective: >
+  Give an agent working a stage exactly the tools it needs to report status,
+  escalate, and hand off, so that the stage ends by a tool call the engine
+  can verify rather than by prose the engine must interpret. Keep a turn
+  from ending before its requirements are met when the stage's policy says
+  so, let that policy change while the thread is live, and give the
+  operator the same set of operations on a live thread that T3 Code offers.
+background:
+  current-design: >
+    Agents follow written instructions to hand off, and perform the handoff
+    through shell commands or prose. Under long contexts they get it wrong.
+    Detecting that a handoff happened means watching the thread from
+    outside.
+  problems:
+    - A prose handoff cannot be validated, and a missing one is only discovered by a monitor.
+    - Questions from an agent travel through an orchestrator's context before reaching anyone who can answer.
+    - A turn that ends without a handoff looks the same as a turn that ended on purpose to wait for a person.
+design-challenges:
+  binding-a-tool-call-to-a-run: >
+    A tool call must resolve to exactly one run, `pass` node, and thread
+    without the agent naming any of them, and without a shared registry a
+    wrong token could reach into.
+  handoff-as-a-typed-tool: >
+    The handoff tool's definition is declared by the stage, so it differs
+    per stage and per blueprint. Each thread must see its own tool.
+  turn-end-enforcement: >
+    T3 Code exposes no hook system, so keeping a turn from ending must be
+    done at the harness level, and each harness does it differently.
+  policy-that-changes-mid-thread: >
+    A thread that started with the operator collaborating in it may become
+    autonomous once the operator hands the rest off. The turn-end policy
+    must be data on the stage that changes without a blueprint edit, and
+    an agent must be able to ask for the change without being able to grant
+    it.
+  operator-turns: >
+    The operator can open any thread in T3 Code and act. Turns Heddle did
+    not send, approvals it did not answer, and stops it did not command all
+    exist, and the stage must stay correct through them.
+proposed-design:
+  high-level-overview: >
+    When a `pass` node starts a thread it generates a tool server for that
+    thread. The run id, `pass` node id, and thread id are baked into the
+    server instance, its endpoint, and its tool definitions, so a tool call
+    carries no identifier and needs none. The server is registered for the
+    thread through the T3 Code client's external MCP registration with a
+    bearer token minted for that instance. Tool calls become resumes or
+    event-log rows. The instance, its token, and its registration are torn
+    down when the `pass` node reaches a terminal state.
+  generated-tool-server: >
+    A tool server instance is a lightweight streamable-HTTP MCP endpoint
+    under the service, addressed by an opaque path minted at stage start
+    and bound to one run, node, and thread. Its tool list is built once at
+    generation from the stage's declarations. Because identity is in the
+    instance rather than in a token lookup, a leaked token from one thread
+    cannot act on another, and revocation is deleting the instance. The
+    instances share one internal loopback listener whose bind host and port
+    come from `agentTools.listen` in the service configuration, so the
+    address is the operator's stable choice rather than an ephemeral port. A
+    service restart regenerates instances for every paused stage from the
+    awaiting details, at the same address and the same paths, so a
+    registration a provider session already holds stays valid.
+  tools: |
+    - `status`: appends a progress note to the run's event log and, when the
+      blueprint maps it, to the issue as a comment or field. Never resumes.
+    - `escalate`: takes a question or request in the shared question shape
+      (id, header, text, options, multi-select). Under `escalation:
+      answer-in-place` (the default) it starts an answer-question child run
+      that answers the thread directly. Under `ends-stage` it resumes the
+      `pass` node with result `escalate`.
+    - `handoff`: the tool definition is the stage's `handoff` declaration
+      verbatim: its root `description` is the tool description and the
+      schema is the input schema. The server validates the input and
+      rejects it with the validation errors, so the agent can correct it.
+      A valid call resumes the `pass` node with result `handoff` and the
+      validated payload.
+    - `propose-policy`: asks for the stage's turn-end policy to change, with
+      a reason. It does not change anything. It raises a question to the
+      operator role; an approving answer sets the policy. The agent learns
+      the outcome as a turn message.
+    - `context`: returns the rendered task context for the stage: the issue,
+      prior stage handoffs, the node's metadata, and anything the blueprint
+      chose to expose. Read only. Lets a compacted session recover what it
+      was doing.
+  turn-end-policy: |
+    A stage's turn-end policy has two values:
+
+    - `require-handoff`: the turn may not end until `handoff` has been called
+      for this stage. The harness-side hook blocks the end of the turn and
+      returns a message naming the missing requirement.
+    - `allow`: the turn may end. The stage resumes with result `turnEnded`
+      and the blueprint decides what happens: wait for a person, start a
+      continuation turn, or time out.
+
+    The blueprint gives the starting value. The policy is mutable data in
+    the pass's awaiting details. The hook reads it from the generated
+    server at turn end, so a change takes effect on the next turn end
+    without restarting anything. The collaborative pattern is: start
+    `allow`, the operator and the agent work in the thread, the operator
+    sets `require-handoff` or approves the agent's proposal, the agent
+    finishes by handoff.
+  changing-policy: >
+    Two paths, both recorded as event-log rows on the run. The operator sets
+    the policy directly through the console or the operator tool surface.
+    The agent calls `propose-policy`, which raises a question the operator
+    answers; approval applies the change.
+  harness-hooks: >
+    Each supported harness loads a reusable plugin installed once in its user
+    profile through its native plugin installer. Each Stop hook invokes
+    `heddle hook stop claude` or `heddle hook stop codex`; both consume the
+    exact shared `session_id` property from native hook JSON. The command
+    sends only that identity to Heddle's local socket. Heddle owns durable
+    native-session to T3-thread to active-pass correlation and calls that
+    pass's generated policy endpoint with its own credential. Cwd and
+    hook-supplied thread, pass, endpoint, or token overrides provide no
+    authority. Tokens and endpoint bindings remain in Heddle-owned state
+    outside all worktrees and Git metadata. Profile configuration changes
+    belong to the native installer; Heddle writes no separate hook trust.
+    A session with no active Heddle-instigated mapping returns inert allow:
+    no generated-endpoint call, attention, or state change. Ambiguous owned
+    mappings are invariant errors and never affect unrelated sessions.
+    Recovery reconciles stale and terminal mappings before hook decisions.
+    Terminal awaiting-row removal immediately rejects the original endpoint
+    token. Mapping and credential cleanup follows that transition; subsequent
+    Stop events allow without calling the ended endpoint. The plugin remains
+    installed. In-flight policy reads recheck their occurrence before returning
+    a block. For active mapped Codex sessions, independently trusted hooks
+    block before completion; unavailable or untrusted blocking is observed as
+    turnEnded with the missing-handoff reminder. The blueprint owns any
+    continuation and its bound. Installation has no hook-trust prerequisite.
+  native-session-correlation: >
+    A Stop hook carries the harness's own session identity, and Heddle
+    resolves it only from its own table. The table is filled from the thread
+    watch: when an observed session event shows a watched pass thread's
+    provider session is live and its identity is unknown, or belongs to a
+    provider session that has been replaced, Heddle reads that identity once
+    from the T3 Code client and records it against the pass. A read that
+    answers "not known" is asked again on that thread's next session event,
+    a stopped session clears the recorded identity, and re-establishing
+    observation after a restart or a lost subscription re-asserts the
+    recorded identity and reads again when it is unknown. Nothing here runs
+    on a clock, and a failed read is recorded as attention on the run and
+    leaves the pass running. An identity with no row is allowed inertly, and
+    a turn that ends because of it is observed as `turnEnded`.
+  operator-operations: |
+    The operator, through the console or an operator tool surface, can take
+    any of the live-thread operations T3 Code offers, plus Heddle's own.
+    Each is recorded on the run and reflected in the stage's read model.
+
+    T3 Code operations: answer an approval or question; dismiss a question
+    where T3 allows it; steer by sending a turn; set runtime mode or
+    interaction mode; interrupt the running turn; end the session; snooze
+    the thread; rewind to a checkpoint; consume a provider reset credit.
+
+    Heddle operations: set the turn-end policy; escalate on the agent's
+    behalf; pause and resume the instance or its epic, which holds the
+    next dispatch without touching the live thread; hold and release
+    dispatch for a provider window, as the usage-budgeting design
+    describes.
+
+    Rewind and consuming a reset credit are operator-only; no blueprint
+    node or agent tool can invoke them, because one destroys work and the
+    other spends a banked credit.
+  operator-turns: >
+    An operator acting in T3 Code produces turns, approvals, and stops that
+    Heddle did not command. The stage's read model is built from observed
+    thread events, so these appear like any other. Heddle does not steer
+    against the operator: while operator turns are arriving, Heddle sends
+    no continuation turns of its own. Deadlines and inactivity detection
+    keep running, so a pass the operator abandoned mid-stage still
+    wakes the stage. A rewind discards turns; the read model drops its
+    per-turn state for the discarded turns and re-reads the thread.
+  answer-question-run: >
+    When an escalation does not end the stage, the server starts a child run
+    of the `answer-question` blueprint with the question and the run
+    context. That blueprint is shipped and replaceable. Its default routes
+    the question to an adjudicator thread with the run's context, then to
+    the operator through `question` if the adjudicator declines, and posts
+    the answer back into the original thread as a new turn. The stage run
+    never wakes for any of this. Questions from helper sessions arrive
+    attributed by T3 and follow the same path.
+  token-lifecycle: >
+    Tokens are random, stored hashed, bound to one generated instance, and
+    carry no other claims. They are revoked, the instance deleted, and the
+    thread's external MCP registration cleared when the `pass` node
+    completes, fails, or is cancelled. A call to a deleted instance is
+    rejected and logged.

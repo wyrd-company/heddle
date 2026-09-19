@@ -1,0 +1,8 @@
+type: object
+description: Report the taste-test verdict for the recipe.
+required: [verdict]
+properties:
+  verdict:
+    type: string
+    enum: [approved, rejected]
+  notes: { type: string }

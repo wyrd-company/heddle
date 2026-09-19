@@ -1,0 +1,297 @@
+// ---
+// relationships:
+//   implements: engine-and-run-model
+// ---
+import { terminalResult, aggregate, terminalContext } from "./result-nodes.js";
+import { randomUUID } from "node:crypto";
+import type { WorkflowResult } from "flowcraft";
+import { claimResume, drainQueued } from "./claims.js";
+import { bindNode } from "./nodes.js";
+import { Attention, DurableRuntime, isDispatchHeld } from "./runtime.js";
+import { RunStore } from "./store.js";
+import type { Data, EngineOptions, ResumeInput, Run } from "./types.js";
+import { Wakeups } from "./wakeups.js";
+import {
+  createRun,
+  createRootRun,
+  createRelatedRun,
+  type RelatedRun,
+} from "./create-run.js";
+import { DurableTraversal } from "./traversal.js";
+import { childOutputs } from "./child-outputs.js";
+import {
+  failureMessage,
+  reconcileBoundary,
+  recordFailure,
+} from "./boundary.js";
+import { lifecycleStart } from "./lifecycle-start.js";
+
+export class WorkflowEngine {
+  readonly wakeups: Wakeups;
+  private readonly clock: () => number;
+  private readonly active: Map<string, Promise<Run>>;
+  constructor(
+    readonly store: RunStore,
+    private readonly options: EngineOptions,
+  ) {
+    this.active = store.active;
+    this.clock = options.clock ?? Date.now;
+    this.wakeups = new Wakeups(store);
+  }
+  async start(input: {
+    blueprintId: string;
+    commit: string;
+    context?: Data;
+    id?: string;
+  }): Promise<Run> {
+    const id = input.id ?? randomUUID();
+    const run = await createRootRun(this.store, this.options, { ...input, id });
+    return run.status === "awaiting" ? run : this.execute(run.id);
+  }
+  /** A side run shares lineage without installing a parent completion wait. */
+  async startRelated(input: RelatedRun): Promise<Run> {
+    const run = await createRelatedRun(
+      this.store,
+      this.options.resolveBlueprint,
+      input,
+    );
+    return run.status === "awaiting" ? run : this.execute(run.id);
+  }
+  async resume(
+    request: ResumeInput,
+  ): Promise<"applied" | "late-wakeup" | "held"> {
+    const outcome = claimResume(this.store, request);
+    if (outcome === "applied") await this.execute(request.runId);
+    return outcome;
+  }
+  private execute(runId: string): Promise<Run> {
+    const current = this.active.get(runId);
+    if (current) return current;
+    const work = this.traverse(runId, () => {
+      if (this.active.get(runId) === work) this.active.delete(runId);
+    }).finally(() => {
+      if (this.active.get(runId) === work) this.active.delete(runId);
+    });
+    this.active.set(runId, work);
+    return work;
+  }
+  private async traverse(runId: string, release: () => void): Promise<Run> {
+    await reconcileBoundary(this.store, this.options.onBoundary, runId);
+    const run = this.store.get(runId);
+    if (run.paused || run.status === "completed" || run.status === "failed")
+      return run;
+    const runtime = new DurableRuntime();
+    runtime.registry.clear();
+    const blueprint = structuredClone(run.blueprint);
+    for (const definition of blueprint.nodes) {
+      const alias = `node:${definition.id}`;
+      runtime.registry.set(
+        alias,
+        bindNode(
+          this.store,
+          runtime,
+          run,
+          { ...definition },
+          definition.uses === "lifecycle-start"
+            ? (context) =>
+                lifecycleStart(
+                  this.store,
+                  this.options.resolveBlueprint,
+                  context,
+                )
+            : definition.uses === "terminal-result"
+              ? terminalResult
+              : definition.uses === "aggregate"
+                ? aggregate
+                : this.options.nodes?.[definition.uses],
+          this.clock,
+          this.options.beforeNode,
+        ),
+      );
+      definition.uses = alias;
+    }
+    // Bind closures before replacing names in the execution blueprint.
+    const checkpoint = run.checkpoint;
+    const details = checkpoint.context["_awaitingDetails"] as
+      Record<string, Data> | undefined;
+    if (
+      checkpoint.nodeId &&
+      details?.[checkpoint.nodeId]?.["kind"] !== "checkpoint"
+    )
+      runtime.resumedNodeId = checkpoint.nodeId;
+    try {
+      runtime.orchestrator = new DurableTraversal(
+        this.store,
+        runId,
+        runtime,
+        checkpoint,
+      );
+      const result = await runtime.run(
+        blueprint,
+        JSON.stringify(checkpoint.context),
+        { concurrency: 1 },
+      );
+      this.settle(runId, result);
+    } catch (error) {
+      recordFailure(this.store, runId, error);
+    }
+    // Release the traversal claim before child completion enters resume.
+    release();
+    await reconcileBoundary(this.store, this.options.onBoundary, runId);
+    await this.drainHeld(runId);
+    await this.dispatchChildren(runId);
+    await this.dispatchLifecycles(runId);
+    await this.deliverCompletion(runId);
+    return this.store.get(runId);
+  }
+  private settle(runId: string, result: WorkflowResult<Data>): void {
+    if (
+      this.store.get(runId).paused &&
+      result.status === "failed" &&
+      result.errors?.every((error) => isDispatchHeld(error.originalError))
+    )
+      return;
+    if (
+      (result.errors?.length ?? 0) > 0 ||
+      (result.status !== "awaiting" && result.status !== "completed")
+    )
+      throw new Attention(
+        `Run landed in ${result.status}: ${result.errors?.map(failureMessage).join("; ") ?? ""}`,
+      );
+    this.store.transaction(() => {
+      const context = terminalContext(result.context);
+      const status =
+        this.store.awaiting(runId).length > 0 ? "awaiting" : result.status;
+      this.store.save(
+        runId,
+        context,
+        { context, frontier: [] },
+        status === "awaiting" ? "awaiting" : "completed",
+      );
+      if (status === "completed") this.store.event(runId, "completed", {});
+    });
+  }
+  private async dispatchChildren(runId: string): Promise<void> {
+    const parent = this.store.get(runId);
+    if (parent.paused || parent.status !== "awaiting") return;
+    for (const item of this.store.awaiting(runId)) {
+      if (item.details.kind !== "child-run" || !item.details.childRunId)
+        continue;
+      try {
+        const child = await createRun(
+          this.store,
+          this.options.resolveBlueprint,
+          {
+            id: item.details.childRunId,
+            blueprintId: String(item.details["blueprint"]),
+            commit: parent.commit,
+            context: item.details["inputs"] as Data,
+            rootId: parent.rootId,
+            parentId: runId,
+            parentNodeId: item.nodeId,
+          },
+        );
+        if (child.status === "running" || child.status === "resuming")
+          await this.execute(child.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.store.event(runId, "attention", { nodeId: item.nodeId, message });
+        await this.resume({
+          runId,
+          nodeId: item.nodeId,
+          visit: item.visit,
+          result: "failed",
+          payload: { message },
+        });
+      }
+    }
+  }
+  private async deliverCompletion(runId: string): Promise<void> {
+    const child = this.store.get(runId);
+    if (
+      !child.parentId ||
+      (child.status !== "completed" && child.status !== "failed")
+    )
+      return;
+    const awaiting = this.store.findAwaiting("childRunId", child.id)[0];
+    if (!awaiting) return;
+    let result = child.status === "completed" ? "completed" : "failed";
+    let payload: Data;
+    try {
+      payload =
+        child.status === "failed"
+          ? { runId: child.id, events: this.store.events(child.id) }
+          : await childOutputs(child, awaiting);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.store.event(child.parentId, "attention", {
+        nodeId: awaiting.nodeId,
+        message,
+      });
+      result = "failed";
+      payload = { runId: child.id, message };
+    }
+    await this.resume({
+      runId: child.parentId,
+      nodeId: awaiting.nodeId,
+      visit: awaiting.visit,
+      result,
+      payload,
+    });
+  }
+  private async dispatchLifecycles(runId: string): Promise<void> {
+    for (const started of this.store.lifecycleStarts(runId)) {
+      const run = this.store.get(started.lifecycleRunId);
+      if (run.status === "running" || run.status === "resuming")
+        await this.execute(run.id);
+    }
+  }
+  async recover(rootId?: string): Promise<void> {
+    for (const listed of this.store.list()) {
+      const run = this.store.get(listed.id);
+      if (rootId !== undefined && run.rootId !== rootId) continue;
+      if (this.active.has(run.id)) continue;
+      if (run.paused) {
+        await reconcileBoundary(this.store, this.options.onBoundary, run.id);
+        continue;
+      }
+      try {
+        if (run.status === "running" || run.status === "resuming")
+          await this.execute(run.id);
+        await this.drainHeld(run.id);
+        await this.dispatchChildren(run.id);
+        await this.deliverCompletion(run.id);
+        await reconcileBoundary(this.store, this.options.onBoundary, run.id);
+      } catch (error) {
+        recordFailure(this.store, run.id, error);
+        await reconcileBoundary(this.store, this.options.onBoundary, run.id);
+      }
+    }
+  }
+  private drainHeld(runId: string): Promise<void> {
+    return drainQueued(this.store, runId, (id) => this.execute(id));
+  }
+  pauseInstance(runId: string): void {
+    const root = this.store.get(runId).rootId;
+    this.store.transaction(() => {
+      this.store.db
+        .prepare("UPDATE runs SET paused=1 WHERE root_id=?")
+        .run(root);
+      this.store.event(root, "instance-paused", {});
+    });
+  }
+  async resumeInstance(runId: string): Promise<void> {
+    const root = this.store.get(runId).rootId;
+    this.store.transaction(() => {
+      this.store.db
+        .prepare("UPDATE runs SET paused=0 WHERE root_id=?")
+        .run(root);
+      this.store.event(root, "instance-resumed", {});
+    });
+    await this.recover(root);
+    await this.tick();
+  }
+  async tick(): Promise<void> {
+    await this.wakeups.tick(this.clock(), (request) => this.resume(request));
+  }
+}

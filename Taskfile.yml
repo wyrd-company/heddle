@@ -1,0 +1,56 @@
+# ---
+# relationships:
+#   verifies: AGENTS.md
+# ---
+version: "3"
+
+tasks:
+  install:
+    desc: Install the locked dependency graph
+    cmds: [npm ci]
+  build:
+    desc: Compile the package and executable
+    cmds: [npm run build]
+  generate:authoring:
+    desc: Regenerate the blueprint author reference and embedded skill
+    cmds: [npm run generate:authoring]
+  codegen:
+    desc: Regenerate the internal GitHub document lookup
+    cmds: [npm run codegen]
+  typecheck:
+    desc: Check all TypeScript without emitting files
+    cmds: [npm run typecheck]
+  prettier-check:
+    desc: Check repository formatting
+    cmds: [npm run prettier:check]
+  lint:
+    desc: Check source conventions and static correctness
+    cmds: [npm run lint]
+  test:
+    desc: Run offline unit tests
+    cmds: [npm test]
+  test:t3code-live:
+    desc: Run the opt-in T3 Code integration suite against an isolated server
+    cmds: [npm run test:t3code-live]
+  test:github-live:
+    desc: Run the opt-in GitHub integration suite
+    cmds: [npm run test:github-live]
+  github-schema-refresh:
+    desc: Refresh the vendored GitHub GraphQL schema snapshot
+    cmds: [node --env-file-if-exists=.env src/github/scripts/refresh-schema.mjs]
+  package-check:
+    desc: Pack, install, and exercise the distributable npm package
+    cmds: [scripts/test-package.sh]
+  feature-check:
+    desc: Build and test the Feature in isolated Dev Containers
+    cmds: [scripts/test-feature.sh]
+  check:
+    desc: Run every gate required before handoff
+    cmds:
+      - task: build
+      - task: typecheck
+      - task: prettier-check
+      - task: lint
+      - task: test
+      - task: package-check
+      - task: feature-check

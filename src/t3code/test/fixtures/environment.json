@@ -1,0 +1,39 @@
+{
+  "environmentId": "33333333-3333-4333-8333-333333333333",
+  "label": "Example",
+  "platform": {
+    "os": "linux",
+    "arch": "x64",
+    "machine": "desktop"
+  },
+  "serverVersion": "0.0.40",
+  "capabilities": {
+    "repositoryIdentity": true,
+    "connectionProbe": true,
+    "attachmentUploads": true,
+    "questionAttachments": true,
+    "fileAttachments": {
+      "maxUploadBytes": 52428800
+    },
+    "pullRequests": true,
+    "inlineMessageContext": true,
+    "threadSettlement": true,
+    "threadAutoSettlement": true,
+    "threadRestartContinuation": true,
+    "projectSettingsOverrides": true,
+    "threadSnooze": true,
+    "environmentThemes": true,
+    "usageLimitSources": true,
+    "usagePriceOverrides": true,
+    "threadPinning": true,
+    "threadPinReorder": true,
+    "threadActiveReorder": true,
+    "threadTitleRegeneration": true,
+    "threadPullRequestLinking": true,
+    "threadPullRequests": true,
+    "pullRequestStackActions": true,
+    "agentActivityPublishing": false,
+    "projectCloneTracking": true,
+    "environmentIcon": true
+  }
+}

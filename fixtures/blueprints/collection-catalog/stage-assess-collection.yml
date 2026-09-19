@@ -1,0 +1,51 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+# This stage contains the real T3 Code pass for the first executable slice.
+id: stage-assess-collection
+kind: stage
+description: Assess whether a captured collection has enough information.
+metadata:
+  execution: real-t3-code-pass
+  firstSlice: true
+inputs:
+  summary:
+    type: object
+outputs:
+  result:
+    type: object
+    properties:
+      payload:
+        type: [object, "null"]
+        required: [decision, reason]
+        properties:
+          decision: { type: string, enum: [accepted, declined] }
+          reason: { type: string }
+      handoff: { type: boolean }
+      overridden: { type: boolean }
+      turnEnded: { type: boolean }
+nodes:
+  # The real pass asks an agent to assess the captured summary and hand off a decision.
+  assess:
+    uses: pass
+    params:
+      prompt: prompts/assess.md
+      handoff: contracts/assess.yml
+      turnEndPolicy: require-handoff
+  # Return the handoff or interruption through the same stage result contract.
+  complete:
+    uses: terminal-result
+    params:
+      value: { from: assess }
+  incomplete:
+    uses: terminal-result
+    params:
+      value: { from: assess }
+edges:
+  - from: assess
+    to: complete
+    when: result.output.handoff
+  - from: assess
+    to: incomplete
+    when: result.output.turnEnded or result.output.overridden

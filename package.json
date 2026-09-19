@@ -1,0 +1,82 @@
+{
+  "name": "@wyrd-company/heddle",
+  "version": "0.0.0",
+  "description": "Workflow orchestration for T3 Code agents",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wyrd-company/heddle.git"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "heddle": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "blueprints",
+    "docs/specifications/blueprint.schema.yml",
+    "docs/specifications/policy-rule.schema.yml",
+    "docs/specifications/command-line-interface.yml"
+  ],
+  "scripts": {
+    "build": "node scripts/clean-dist.mjs && npm run generate:authoring && npm run codegen && npm run build:types && node scripts/build.mjs",
+    "generate:authoring": "node scripts/generate-authoring.mjs",
+    "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly",
+    "codegen": "npm run codegen:guard && graphql-codegen --config src/github/codegen.ts",
+    "codegen:guard": "node src/github/scripts/check-codegen-hooks.mjs",
+    "prepack": "npm run build",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "prettier:check": "prettier --check .",
+    "lint": "eslint src test",
+    "test": "npm run build && vitest run",
+    "test:github-live": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --config vitest.github-live.config.ts",
+    "test:t3code-live": "T3_LIVE=1 vitest run --config vitest.t3code-live.config.ts"
+  },
+  "dependencies": {
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "@js-temporal/polyfill": "^0.5.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@octokit/auth-app": "^8.3.1",
+    "@octokit/core": "^7.0.8",
+    "ajv": "^8.20.0",
+    "flowcraft": "^2.10.1",
+    "fs-native-extensions": "^1.5.1",
+    "graphql": "^16.14.2",
+    "isomorphic-git": "^1.42.2",
+    "jsonata": "^2.2.2",
+    "nunjucks": "^3.2.4",
+    "smol-toml": "^1.8.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@graphql-codegen/cli": "^7.4.1",
+    "@graphql-codegen/client-preset": "^6.2.0",
+    "@types/node": "^24.10.0",
+    "@types/nunjucks": "^3.2.6",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.7",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.1",
+    "ws": "^8.21.3"
+  }
+}

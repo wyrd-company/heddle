@@ -1,0 +1,29 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+# The parcel waits on a shelf. Both the routing guard and the stored value read
+# the blueprint metadata bag after the pause, so a resume must still see it.
+id: parcel-hold
+kind: process
+description: Hold a parcel on a shelf until an external resume arrives.
+metadata:
+  shelf: cold-store
+nodes:
+  hold:
+    uses: wait
+  store:
+    uses: terminal-result
+    params:
+      value: { from: blueprint.metadata.shelf }
+  discard:
+    uses: terminal-result
+    params:
+      value: discarded
+edges:
+  - from: hold
+    to: store
+    when: blueprint.metadata.shelf = 'cold-store'
+  - from: hold
+    to: discard
+    when: blueprint.metadata.shelf != 'cold-store'

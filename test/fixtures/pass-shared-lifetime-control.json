@@ -1,0 +1,99 @@
+{
+  "relationships": {
+    "verifies": [
+      "node-types",
+      "agent-tools"
+    ]
+  },
+  "method": "Controlled shared-lifetime diagnostic, separate from acceptance qualification. Run Claude block then Codex block against one fixture server/profile/socket. A temporary copy of qualify-pass-live.mjs changes only scenario.json write flag wx to w; this intentionally removes the exclusive scenario-root guard. Server cleanup still runs unconditionally. The acceptance suite retains wx and fresh server/profile/socket lifetimes.",
+  "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+  "t3ProductionHead": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+  "redaction": "Endpoint identity is SHA-256 of the endpoint path; raw paths and authorization values are omitted. Header presence does not establish credential validity. Thread and native session identities are unchanged.",
+  "interpretation": "GET requests carrying an Authorization header reached the completed prior pass endpoint while the successor fixture listened. Their endpoint hashes equal the prior Claude endpoint and differ from the active Codex endpoint. All reject with 401 and have no current endpoint owner. These are not the explicit terminal policy probes.",
+  "runs": [
+    {
+      "provenance": {
+        "provider": "claudeAgent",
+        "scenario": "block",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "9d57e605-6ee7-4d49-a780-54563efab8cf",
+            "nativeSessionId": "24217713-d28c-4a51-a550-f12d39b53ee3"
+          }
+        ]
+      },
+      "rawOrderingSha256": "54bdee48d2549b4549270ab9d60336b95af528b853a973e9ce9a2dbdf25656f8"
+    },
+    {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "block",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "28d08395-6627-41be-8fe2-41658d6cdd9c",
+            "nativeSessionId": "01a0b21b-9b65-77a0-98ee-4942893fd57b"
+          }
+        ]
+      },
+      "rawOrderingSha256": "f9bd6a6f732a1783ff20cf66b8fc056add3d73e8f2de74903bc516380e17f7d5"
+    }
+  ],
+  "priorEndpoint": {
+    "at": 1789694540209,
+    "kind": "pass-endpoint",
+    "data": {
+      "runId": "fixture",
+      "nodeId": "inspect",
+      "visit": 1,
+      "threadId": "9d57e605-6ee7-4d49-a780-54563efab8cf",
+      "endpointId": "30a71ec9baf1ecd4894ad4d0ac70672e9e378c6d6cb00e03c9d031ea3836fc20"
+    }
+  },
+  "activeEndpoint": {
+    "at": 1789694548637,
+    "kind": "pass-endpoint",
+    "data": {
+      "runId": "fixture",
+      "nodeId": "inspect",
+      "visit": 1,
+      "threadId": "28d08395-6627-41be-8fe2-41658d6cdd9c",
+      "endpointId": "12471e4ca3fbfd162ddc2a6c91bd2783173356c35547ec678fd0255cd013d511"
+    }
+  },
+  "priorEndpointResponsesDuringSuccessor": [
+    {
+      "at": 1789694549209,
+      "kind": "tool-response",
+      "data": {
+        "status": 401,
+        "endpointId": "30a71ec9baf1ecd4894ad4d0ac70672e9e378c6d6cb00e03c9d031ea3836fc20",
+        "path": "mcp",
+        "method": "GET",
+        "authorizationPresent": true,
+        "endpointOwner": null
+      }
+    },
+    {
+      "at": 1789694550711,
+      "kind": "tool-response",
+      "data": {
+        "status": 401,
+        "endpointId": "30a71ec9baf1ecd4894ad4d0ac70672e9e378c6d6cb00e03c9d031ea3836fc20",
+        "path": "mcp",
+        "method": "GET",
+        "authorizationPresent": true,
+        "endpointOwner": null
+      }
+    }
+  ]
+}

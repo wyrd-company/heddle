@@ -1,0 +1,25 @@
+id: intake-dead-end
+kind: helper
+nodes:
+  classify:
+    uses: policy
+    params:
+      rules: rules.yml
+      input: { from: issue }
+  start-lifecycle:
+    uses: lifecycle-start
+    params:
+      blueprint: { from: classify.blueprint }
+      inputs: { from: classify.inputs }
+  # This terminal leaves an unmatched issue with no run that owns it.
+  give-up:
+    uses: terminal-result
+    params:
+      value: { status: unmatched }
+edges:
+  - from: classify
+    to: start-lifecycle
+    when: result.output.matched
+  - from: classify
+    to: give-up
+    when: result.output.matched = false

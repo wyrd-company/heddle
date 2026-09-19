@@ -1,0 +1,166 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - agent-tools
+    - node-types
+objective: >
+  Give Heddle a typed, internal TypeScript client for the T3 Code HTTP,
+  WebSocket RPC, authentication, project, thread, turn, shell, MCP, version
+  control, and terminal surfaces used by its node types and agent tools.
+background:
+  current-design: >
+    Heddle drives a T3 Code server while a person can inspect and operate the
+    same projects, threads, and turns through an ordinary T3 Code client. The
+    server contracts package is private to the T3 Code repository and uses a
+    different runtime stack, so Heddle owns compatible schemas at its boundary.
+  problems:
+    - Server contracts evolve and can add object keys, literal values, tagged-union members, and stream events.
+    - HTTP control-plane operations and WebSocket RPC operations share credentials but have different connection lifecycles.
+    - A dropped socket must resume observation without turning one malformed event into a dead stream.
+    - External MCP registration must be applied before the provider session starts and removed when its stage ends.
+design-challenges:
+  forward-compatible-wire-contracts: >
+    Known values stay strongly typed while payload additions from a newer
+    server remain observable instead of failing an entire response or stream.
+  one-credential-model: >
+    Pairing credentials are single-use bootstrap material. Steady-state HTTP
+    and socket access uses a bearer session whose scopes can change or be
+    revoked while Heddle is running.
+  resumable-observation: >
+    Thread projection combines snapshot state and ordered events. Reconnects
+    resume after the last accepted sequence and expose decode failures as
+    items without hiding later valid events.
+  idempotent-control: >
+    Heddle retries project, thread, credential, and MCP operations across run
+    recovery. Each facade needs a stable identity and an idempotent operation
+    where the server supports one.
+proposed-design:
+  high-level-overview: >
+    The internal `src/t3code` module owns loose Zod schemas for the T3 Code
+    wire, HTTP and WebSocket transports, a typed RPC registry, an
+    authentication client, and narrow facades composed by `T3Client`. Public
+    operations return Promises or AsyncIterables. The module never invokes a
+    T3 Code executable.
+  module-boundary: >
+    `src/t3code/index.ts` is the internal public boundary. It preserves the
+    client module's exported constructors, errors, schemas, branded ids,
+    facade types, RPC types, and projection helpers. Files below
+    `src/t3code/src` remain implementation details unless that boundary
+    exports them.
+  schema-policy: >
+    Object payloads use `z.looseObject` so additive keys survive decoding.
+    Growing literal sets accept unknown strings while retaining known literal
+    types. Growing tagged unions decode an unknown discriminator to
+    `{ unknown: true, raw }`; a malformed known member remains a decode error.
+    Entity ids are branded strings after decoding and are created explicitly
+    at trusted call sites.
+  transports: >
+    `HttpTransport` resolves the current access token for each request, sends
+    the client user agent, maps non-success responses into typed errors, and
+    decodes at the facade boundary. `SocketTransport` opens `/ws` lazily by a
+    short-lived ticket or a bearer upgrade header. `RpcConnection` correlates
+    requests, streams ordered items, reconnects after transport loss, and
+    closes every pending operation when the client closes.
+  wire-protocol: >
+    WebSocket requests always carry `headers: []`; the server closes a socket
+    without a reason when that field is absent. The client acknowledges every
+    `Chunk`, because the server does not send the next stream chunk until its
+    `Ack` arrives. An `Interrupt` cancels an in-flight call or stream, and every
+    stream terminates with an `Exit`. Unknown envelope tags are ignored for
+    forward compatibility. Invalid JSON or a malformed known envelope fails
+    every request in flight with a protocol error.
+  http-routes-and-scopes: |
+    The typed HTTP surface is:
+
+    | Method and path | Authorization | Result or purpose |
+    | --- | --- | --- |
+    | `GET /.well-known/t3/environment` | none | environment descriptor |
+    | `GET /api/auth/session` | optional bearer | current session state |
+    | `POST /oauth/token` | none | single-use pairing-token exchange |
+    | `POST /api/auth/websocket-ticket` | bearer | short-lived socket ticket |
+    | `POST /api/auth/pairing-token` | `access:write` | new pairing credential |
+    | `GET /api/auth/pairing-links` | `access:read` | pairing links |
+    | `POST /api/auth/pairing-links/revoke` | `access:write` | revoke one link |
+    | `GET /api/auth/clients` | `access:read` | connected client sessions |
+    | `POST /api/auth/clients/revoke` | `access:write` | revoke one session |
+    | `POST /api/auth/clients/revoke-others` | `access:write` | revoke other sessions |
+    | `GET /api/orchestration/snapshot` | `orchestration:read` | full read model |
+    | `GET /api/orchestration/shell` | `orchestration:read` | lightweight read model |
+    | `GET /api/orchestration/threads/:threadId` | `orchestration:read` | paged thread detail |
+    | `POST /api/orchestration/dispatch` | `orchestration:operate` | dispatch command |
+    | `POST /api/pull-requests/diff` | bearer | outside the typed facade |
+    | `GET /api/mcp/provider-session` | `orchestration:operate` | native session identity |
+    | `PUT /api/mcp/provider-session` | `orchestration:operate` | replace MCP registration |
+    | `DELETE /api/mcp/provider-session` | `orchestration:operate` | clear MCP registration |
+
+    Standard HTTP failures carry `code`, `reason`, and `traceId`. The MCP
+    routes instead return `{ error: "invalid_external_mcp_registration" }`,
+    plus `requiredScope` for a forbidden request.
+  transport-decisions: >
+    The client implements the small JSON wire directly with Zod rather than
+    depending on the server's private Effect contracts package. Dispatch
+    prefers RPC because it preserves the typed
+    `OrchestrationDispatchCommandError`; the HTTP dispatch route collapses
+    that failure to status 500 and remains a fallback. Socket authentication
+    uses a short-lived ticket by default because it works with every WebSocket
+    implementation; a bearer upgrade header remains available for callers
+    whose WebSocket implementation supports it.
+  authentication: >
+    A `CredentialStore` holds bearer-session state in memory or in a file.
+    `AuthClient` exchanges a pairing token, validates and stores access tokens,
+    issues and revokes credentials when authorized, exposes current scopes,
+    and notifies the socket transport when credentials change. RPC methods
+    check their declared scope before sending when current scope state is
+    available.
+  rpc-registry: >
+    Each RPC method declaration binds one payload schema, one success schema,
+    unary or streaming behavior, and its required authorization scope. Typed
+    calls derive their input and output from that table. Raw calls remain an
+    escape hatch for a server method not yet represented in the registry.
+  raw-reachability: >
+    Pull requests, previews, devices, cloud relay, DPoP, desktop bootstrap,
+    attachment upload signing, source-control clone flows, and settings
+    mutation are outside the typed facade. They remain reachable through
+    `rpc.callRaw` and `rpc.streamRaw` until a typed registry entry and facade
+    operation are added.
+  facades: >
+    `T3Client` composes `auth`, `server`, `projects`, `threads`, `shell`, `mcp`,
+    `vcs`, `terminal`, and `rpc`. Project ensure keys on normalized workspace
+    root. Thread ensure keys on caller-supplied thread id. Deletes and MCP clear
+    accept absence. MCP ensure keys on thread id and registration name.
+  thread-projection: >
+    A thread watch starts from a detail snapshot, applies ordered
+    orchestration events, and emits both source items and derived items for
+    assistant text, approval requests, user-input requests, request
+    settlement, and turn settlement. Projection helpers are pure and share
+    the same event schemas as the live watch.
+  turn-handle: >
+    Starting a turn returns a handle with one event AsyncIterable and one
+    completion Promise. The handle adopts a server turn that supersedes or
+    continues the requested turn, preserves already observed activity, and
+    settles as completed, interrupted, or error from the projected state.
+  external-mcp: >
+    The MCP facade registers one Streamable HTTP endpoint and optional
+    authorization header for a thread, clears the registration idempotently,
+    and provides a scoped helper that clears in `finally`. Registration
+    changes affect the next provider session, so callers register before the
+    first turn that needs the tools.
+  native-session-identity: >
+    The orchestration session carries no native harness identity, so the MCP
+    facade reads it from the provider-session route by thread id, under the
+    same scope as registration. The value is returned exactly as the harness
+    reports it, with no trimming or normalization. A thread that is unknown,
+    has no provider session, or whose identity is not known yet reads as not
+    known rather than as a failure; a refused read names the route and the
+    scope it needs. Session decoding ignores unknown fields, so a server that
+    sends more than the stock contract still decodes.
+  failures: >
+    Every module failure is a `T3Error` with a stable code. Authentication,
+    missing resources, HTTP failures, RPC failures, RPC defects, connection
+    failures, decode failures, failed preconditions, interruptions, and
+    protocol timeouts have distinct subclasses and retain structured detail.
+  verification: >
+    Offline tests use an in-process fake HTTP and WebSocket server at the
+    public seams. Opt-in live tests use a separately started T3 Code server,
+    its bearer session, and an isolated workspace. The repository context
+    defines their environment variables and commands.

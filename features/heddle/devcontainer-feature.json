@@ -1,0 +1,50 @@
+{
+  "id": "heddle",
+  "version": "0.1.0",
+  "name": "Heddle",
+  "description": "Installs Heddle and registers it as an s6-overlay service.",
+  "documentationURL": "https://github.com/wyrd-company/heddle/tree/main/features/heddle",
+  "options": {
+    "configFile": {
+      "type": "string",
+      "default": "/etc/heddle/config.yml",
+      "description": "Absolute path to the bind-mounted Heddle configuration file. Optional webhook.listen.host and webhook.listen.port enable webhook listening; both must be explicit and there is no default port."
+    },
+    "stateDirectory": {
+      "type": "string",
+      "default": "/var/lib/heddle",
+      "description": "Absolute path to the bind-mounted Heddle state directory."
+    },
+    "githubAppCredentialsFile": {
+      "type": "string",
+      "default": "/run/secrets/heddle-github-app.yml",
+      "description": "Absolute path to the bind-mounted GitHub App credential file."
+    },
+    "t3CodeTokenFile": {
+      "type": "string",
+      "default": "/run/secrets/heddle-t3-token",
+      "description": "Absolute path to the bind-mounted T3 Code bearer-token file."
+    },
+    "agentToolsPort": {
+      "type": "string",
+      "default": "8422",
+      "description": "TCP port for the internal agent-tools listener on 127.0.0.1. The address must stay the same across restarts so registered tool endpoints remain reachable. Change it when 8422 is already used in the container."
+    },
+    "webhookSecretFile": {
+      "type": "string",
+      "default": "/run/secrets/heddle-webhook-secret",
+      "description": "Absolute path to the bind-mounted GitHub webhook secret file. Does not enable listening; configure webhook.listen.host and webhook.listen.port in configFile."
+    },
+    "serviceUser": {
+      "type": "string",
+      "default": "automatic",
+      "description": "User that runs Heddle. Automatic selection prefers the remote user, container user, vscode, then root."
+    }
+  },
+  "dependsOn": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24"
+    }
+  },
+  "installsAfter": ["ghcr.io/devcontainers/features/common-utils"]
+}

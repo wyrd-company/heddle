@@ -1,0 +1,3316 @@
+{
+  "relationships": {
+    "verifies": [
+      "node-types",
+      "agent-tools"
+    ]
+  },
+  "redaction": "Native session, thread, and request identities are exact and unchanged. Endpoint paths, authorization values, and approval command text are omitted. Each scenario owns a fresh server, profile, socket, and state directory; foreign or cross-scenario session identities reject retention.",
+  "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+  "t3ProductionHead": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+  "harnesses": {
+    "claude": "2.1.275 (Claude Code)",
+    "codex": "codex-cli 0.154.0"
+  },
+  "scenarios": {
+    "claudeAgent-block": {
+      "provenance": {
+        "provider": "claudeAgent",
+        "scenario": "block",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516",
+            "nativeSessionId": "803085bd-d1e6-4c55-8494-3ff1e7ede4bf"
+          }
+        ],
+        "rawOrderingSha256": "068df0c6e4a9e17bb376a88e65dd1134eaecae19f0859136fb321e5464c844e6"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 111,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 112,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 711,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "endpointId": "d59d1ddb970b120775ef1f5f1ade137b7e674fa18e9b946bfde7c288dd69822d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            }
+          }
+        },
+        {
+          "elapsedMs": 719,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d59d1ddb970b120775ef1f5f1ade137b7e674fa18e9b946bfde7c288dd69822d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            }
+          }
+        },
+        {
+          "elapsedMs": 724,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "d59d1ddb970b120775ef1f5f1ade137b7e674fa18e9b946bfde7c288dd69822d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            }
+          }
+        },
+        {
+          "elapsedMs": 733,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d59d1ddb970b120775ef1f5f1ade137b7e674fa18e9b946bfde7c288dd69822d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            }
+          }
+        },
+        {
+          "elapsedMs": 2262,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "803085bd-d1e6-4c55-8494-3ff1e7ede4bf"
+          }
+        },
+        {
+          "elapsedMs": 2263,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 2263,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d59d1ddb970b120775ef1f5f1ade137b7e674fa18e9b946bfde7c288dd69822d",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            }
+          }
+        },
+        {
+          "elapsedMs": 2264,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "803085bd-d1e6-4c55-8494-3ff1e7ede4bf",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 2264,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 5402,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 5405,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 5405,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "d59d1ddb970b120775ef1f5f1ade137b7e674fa18e9b946bfde7c288dd69822d",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            }
+          }
+        },
+        {
+          "elapsedMs": 5405,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 5409,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 5411,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 5411,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 5412,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d59d1ddb970b120775ef1f5f1ade137b7e674fa18e9b946bfde7c288dd69822d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "fffc5069-61fa-4699-add1-b91cebd7d516"
+            }
+          }
+        },
+        {
+          "elapsedMs": 6337,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "803085bd-d1e6-4c55-8494-3ff1e7ede4bf"
+          }
+        },
+        {
+          "elapsedMs": 6338,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "803085bd-d1e6-4c55-8494-3ff1e7ede4bf",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 6338,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "codex-block": {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "block",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b",
+            "nativeSessionId": "01a0b218-80fa-75c2-a9e6-2a8081ea1f6d"
+          }
+        ],
+        "rawOrderingSha256": "4dd2bc3e1e288b0c6abd649f459cd0fd94647793f01d793ad73345a42dbd7ada"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 1,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 118,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 119,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 444,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "ba5c5f0ee5ffbf389f6f8d735b7de3be0889e4cb1b3f2a0e5cc7976518305b68",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b"
+            }
+          }
+        },
+        {
+          "elapsedMs": 446,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "ba5c5f0ee5ffbf389f6f8d735b7de3be0889e4cb1b3f2a0e5cc7976518305b68",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b"
+            }
+          }
+        },
+        {
+          "elapsedMs": 448,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "ba5c5f0ee5ffbf389f6f8d735b7de3be0889e4cb1b3f2a0e5cc7976518305b68",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b"
+            }
+          }
+        },
+        {
+          "elapsedMs": 5334,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b218-80fa-75c2-a9e6-2a8081ea1f6d"
+          }
+        },
+        {
+          "elapsedMs": 5335,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 5335,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "ba5c5f0ee5ffbf389f6f8d735b7de3be0889e4cb1b3f2a0e5cc7976518305b68",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b"
+            }
+          }
+        },
+        {
+          "elapsedMs": 5336,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b218-80fa-75c2-a9e6-2a8081ea1f6d",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 5336,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 11078,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 11079,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 11079,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "ba5c5f0ee5ffbf389f6f8d735b7de3be0889e4cb1b3f2a0e5cc7976518305b68",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b"
+            }
+          }
+        },
+        {
+          "elapsedMs": 11080,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 11083,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 11086,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 11086,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 11087,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "ba5c5f0ee5ffbf389f6f8d735b7de3be0889e4cb1b3f2a0e5cc7976518305b68",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "b0d5a76f-917e-4b45-b4fd-eefa764a2f3b"
+            }
+          }
+        },
+        {
+          "elapsedMs": 12813,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b218-80fa-75c2-a9e6-2a8081ea1f6d"
+          }
+        },
+        {
+          "elapsedMs": 12813,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b218-80fa-75c2-a9e6-2a8081ea1f6d",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 12813,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "codex-allow": {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "allow",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "91ec4f0d-b69d-456c-814f-d46209fe5cbc",
+            "nativeSessionId": "01a0b218-cd41-76e0-acbf-2d441b40c331"
+          }
+        ],
+        "rawOrderingSha256": "8fda23ab8ba9fc997c7bdc36224050577229cac1129a590bbf3a71a86714345b"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "turnEnded"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 1,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 104,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 106,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 990,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "abea01f9d460f3b733d9a48153ee63fbf81c39bf2f732d78b1a117981e85f676",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "91ec4f0d-b69d-456c-814f-d46209fe5cbc"
+            }
+          }
+        },
+        {
+          "elapsedMs": 996,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "abea01f9d460f3b733d9a48153ee63fbf81c39bf2f732d78b1a117981e85f676",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "91ec4f0d-b69d-456c-814f-d46209fe5cbc"
+            }
+          }
+        },
+        {
+          "elapsedMs": 1005,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "abea01f9d460f3b733d9a48153ee63fbf81c39bf2f732d78b1a117981e85f676",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "91ec4f0d-b69d-456c-814f-d46209fe5cbc"
+            }
+          }
+        },
+        {
+          "elapsedMs": 3707,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b218-cd41-76e0-acbf-2d441b40c331"
+          }
+        },
+        {
+          "elapsedMs": 3708,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 3709,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "abea01f9d460f3b733d9a48153ee63fbf81c39bf2f732d78b1a117981e85f676",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "91ec4f0d-b69d-456c-814f-d46209fe5cbc"
+            }
+          }
+        },
+        {
+          "elapsedMs": 3709,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b218-cd41-76e0-acbf-2d441b40c331",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "91ec4f0d-b69d-456c-814f-d46209fe5cbc"
+            },
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 3709,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 3731,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 3732,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 3733,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "abea01f9d460f3b733d9a48153ee63fbf81c39bf2f732d78b1a117981e85f676",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "91ec4f0d-b69d-456c-814f-d46209fe5cbc"
+            }
+          }
+        },
+        {
+          "elapsedMs": 3733,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 3739,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 3741,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 3741,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        }
+      ]
+    },
+    "codex-reuse": {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "reuse",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a",
+            "nativeSessionId": "01a0b218-f124-7273-9a3f-a14110ca1f9b"
+          },
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a",
+            "nativeSessionId": "01a0b218-f124-7273-9a3f-a14110ca1f9b"
+          }
+        ],
+        "rawOrderingSha256": "b43dcd51c6e71074b134a981ae95d47ce35ff83e9801c97620fa2dae96d5686b"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff",
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 115,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 116,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 436,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "b79aea5ec51c9ca786faa4f5a6520d045a6cb93a65c000f6f1e51116b54de1f1",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 438,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "b79aea5ec51c9ca786faa4f5a6520d045a6cb93a65c000f6f1e51116b54de1f1",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 440,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "b79aea5ec51c9ca786faa4f5a6520d045a6cb93a65c000f6f1e51116b54de1f1",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 7975,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 7976,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 7976,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "b79aea5ec51c9ca786faa4f5a6520d045a6cb93a65c000f6f1e51116b54de1f1",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 7977,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 7981,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 7997,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "review",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 7997,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 7998,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "b79aea5ec51c9ca786faa4f5a6520d045a6cb93a65c000f6f1e51116b54de1f1",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 9144,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b218-f124-7273-9a3f-a14110ca1f9b"
+          }
+        },
+        {
+          "elapsedMs": 9145,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b218-f124-7273-9a3f-a14110ca1f9b",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 9145,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 9463,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "133a0a0439933002f175164ef2e67dcb32b6738a09190ef9a430e9968d7b9209",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 9465,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "133a0a0439933002f175164ef2e67dcb32b6738a09190ef9a430e9968d7b9209",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 9466,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "133a0a0439933002f175164ef2e67dcb32b6738a09190ef9a430e9968d7b9209",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 13646,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 13647,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 13647,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "133a0a0439933002f175164ef2e67dcb32b6738a09190ef9a430e9968d7b9209",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 13647,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 13651,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 13652,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 13652,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 13653,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "133a0a0439933002f175164ef2e67dcb32b6738a09190ef9a430e9968d7b9209",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "f9df453e-b8b8-4bce-a85b-6d260b5aa94a"
+            }
+          }
+        },
+        {
+          "elapsedMs": 15741,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b218-f124-7273-9a3f-a14110ca1f9b"
+          }
+        },
+        {
+          "elapsedMs": 15741,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b218-f124-7273-9a3f-a14110ca1f9b",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 15741,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "claudeAgent-reuse": {
+      "provenance": {
+        "provider": "claudeAgent",
+        "scenario": "reuse",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf",
+            "nativeSessionId": "31e6b69f-4073-4542-9351-eea7f5928c75"
+          },
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf",
+            "nativeSessionId": "31e6b69f-4073-4542-9351-eea7f5928c75"
+          }
+        ],
+        "rawOrderingSha256": "e7a50a8c36d9ff3ca0c427b72691f53f8dc7f7f1c39a5e0bb0642eef06fdb37f"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff",
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 116,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 117,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 475,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "endpointId": "d165372429de0dce4c3b615c0e4aa255fd55a8b492d825558b1b646e935c412d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 499,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d165372429de0dce4c3b615c0e4aa255fd55a8b492d825558b1b646e935c412d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 507,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "d165372429de0dce4c3b615c0e4aa255fd55a8b492d825558b1b646e935c412d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 511,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d165372429de0dce4c3b615c0e4aa255fd55a8b492d825558b1b646e935c412d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 10242,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 10243,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 10244,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "d165372429de0dce4c3b615c0e4aa255fd55a8b492d825558b1b646e935c412d",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 10244,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 10248,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 10265,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "review",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 10266,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 10267,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d165372429de0dce4c3b615c0e4aa255fd55a8b492d825558b1b646e935c412d",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 11966,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "31e6b69f-4073-4542-9351-eea7f5928c75"
+          }
+        },
+        {
+          "elapsedMs": 11966,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "31e6b69f-4073-4542-9351-eea7f5928c75",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 11966,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 12673,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "endpointId": "99d56da117f287fe91afcdb063c23f86604bacf204d5242400e789c9f2fbaf9b",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 12682,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "99d56da117f287fe91afcdb063c23f86604bacf204d5242400e789c9f2fbaf9b",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 12695,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "99d56da117f287fe91afcdb063c23f86604bacf204d5242400e789c9f2fbaf9b",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 12701,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "99d56da117f287fe91afcdb063c23f86604bacf204d5242400e789c9f2fbaf9b",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 16277,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 16278,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 16278,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "99d56da117f287fe91afcdb063c23f86604bacf204d5242400e789c9f2fbaf9b",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 16278,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 16283,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 16284,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 16284,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 16285,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "99d56da117f287fe91afcdb063c23f86604bacf204d5242400e789c9f2fbaf9b",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "review",
+              "visit": 1,
+              "threadId": "6606f034-1f71-4fba-8f7e-9f3828aa0fdf"
+            }
+          }
+        },
+        {
+          "elapsedMs": 17705,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "31e6b69f-4073-4542-9351-eea7f5928c75"
+          }
+        },
+        {
+          "elapsedMs": 17705,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "31e6b69f-4073-4542-9351-eea7f5928c75",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 17705,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "codex-kill-mid": {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "kill-mid",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "ffb1f695-4579-49c0-8371-775d14d5a9b7",
+            "nativeSessionId": "01a0b219-a3bc-7cc3-a485-242c165454b3"
+          }
+        ],
+        "rawOrderingSha256": "adb47578551c45e48452c5f39407a6a273980d5ba1f371fe763407d2a02f8a32"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 110,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 112,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 432,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "78b1202ee373866624354511d6b3092bc247f940b49daa77d643a367a24ab606",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "ffb1f695-4579-49c0-8371-775d14d5a9b7"
+            }
+          }
+        },
+        {
+          "elapsedMs": 435,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "78b1202ee373866624354511d6b3092bc247f940b49daa77d643a367a24ab606",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "ffb1f695-4579-49c0-8371-775d14d5a9b7"
+            }
+          }
+        },
+        {
+          "elapsedMs": 437,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "78b1202ee373866624354511d6b3092bc247f940b49daa77d643a367a24ab606",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "ffb1f695-4579-49c0-8371-775d14d5a9b7"
+            }
+          }
+        },
+        {
+          "elapsedMs": 13635,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 13635,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 1
+          }
+        },
+        {
+          "elapsedMs": 16018,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 16019,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 16020,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "78b1202ee373866624354511d6b3092bc247f940b49daa77d643a367a24ab606",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "ffb1f695-4579-49c0-8371-775d14d5a9b7"
+            }
+          }
+        },
+        {
+          "elapsedMs": 16021,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 16026,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 16030,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 16030,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 16032,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "78b1202ee373866624354511d6b3092bc247f940b49daa77d643a367a24ab606",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "ffb1f695-4579-49c0-8371-775d14d5a9b7"
+            }
+          }
+        },
+        {
+          "elapsedMs": 17443,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b219-a3bc-7cc3-a485-242c165454b3"
+          }
+        },
+        {
+          "elapsedMs": 17443,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b219-a3bc-7cc3-a485-242c165454b3",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 17443,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "codex-kill-terminal": {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "kill-terminal",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "e77c4634-a2f0-4a22-975c-3d0f54778dbb",
+            "nativeSessionId": "01a0b219-ffce-7cd0-8111-5877893834f6"
+          }
+        ],
+        "rawOrderingSha256": "7aa83dcb7cce125aa9fee24534314b2685b12fd96d0f4ddeab54998746cbf282"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 109,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 111,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 424,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "8a6ddd1658f493e31b36c7f390acc84f2d66013bbffeb2dc0e6be7ec7d400b6c",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e77c4634-a2f0-4a22-975c-3d0f54778dbb"
+            }
+          }
+        },
+        {
+          "elapsedMs": 427,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "8a6ddd1658f493e31b36c7f390acc84f2d66013bbffeb2dc0e6be7ec7d400b6c",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e77c4634-a2f0-4a22-975c-3d0f54778dbb"
+            }
+          }
+        },
+        {
+          "elapsedMs": 430,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "8a6ddd1658f493e31b36c7f390acc84f2d66013bbffeb2dc0e6be7ec7d400b6c",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e77c4634-a2f0-4a22-975c-3d0f54778dbb"
+            }
+          }
+        },
+        {
+          "elapsedMs": 5920,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b219-ffce-7cd0-8111-5877893834f6"
+          }
+        },
+        {
+          "elapsedMs": 5922,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 5923,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "8a6ddd1658f493e31b36c7f390acc84f2d66013bbffeb2dc0e6be7ec7d400b6c",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e77c4634-a2f0-4a22-975c-3d0f54778dbb"
+            }
+          }
+        },
+        {
+          "elapsedMs": 5923,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b219-ffce-7cd0-8111-5877893834f6",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e77c4634-a2f0-4a22-975c-3d0f54778dbb"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 5924,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 10455,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 10456,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 10456,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "8a6ddd1658f493e31b36c7f390acc84f2d66013bbffeb2dc0e6be7ec7d400b6c",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e77c4634-a2f0-4a22-975c-3d0f54778dbb"
+            }
+          }
+        },
+        {
+          "elapsedMs": 10456,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 10768,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 10769,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 10772,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 10773,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 10773,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 10773,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 12256,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "8a6ddd1658f493e31b36c7f390acc84f2d66013bbffeb2dc0e6be7ec7d400b6c",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": null
+          }
+        },
+        {
+          "elapsedMs": 14230,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b219-ffce-7cd0-8111-5877893834f6"
+          }
+        },
+        {
+          "elapsedMs": 14230,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b219-ffce-7cd0-8111-5877893834f6",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 14230,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "claudeAgent-approval": {
+      "provenance": {
+        "provider": "claudeAgent",
+        "scenario": "approval",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "aa1b3f67-7c68-4df7-a98f-6a7840cb3850",
+            "nativeSessionId": "49026753-3a4b-4211-818a-5c1854862d72"
+          }
+        ],
+        "rawOrderingSha256": "8672fca4a0fbf480bb5d3f7604b21ccfb5fdb1612e5b7545c721c8051460a2fa"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 105,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 106,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 611,
+          "kind": "tool-response",
+          "data": {
+            "status": 400,
+            "endpointId": "d7070440b8cd5fa54e1953eb9f36335926c648c03aa64e88a7c4fa981e35a199",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "aa1b3f67-7c68-4df7-a98f-6a7840cb3850"
+            }
+          }
+        },
+        {
+          "elapsedMs": 622,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d7070440b8cd5fa54e1953eb9f36335926c648c03aa64e88a7c4fa981e35a199",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "aa1b3f67-7c68-4df7-a98f-6a7840cb3850"
+            }
+          }
+        },
+        {
+          "elapsedMs": 654,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "d7070440b8cd5fa54e1953eb9f36335926c648c03aa64e88a7c4fa981e35a199",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "aa1b3f67-7c68-4df7-a98f-6a7840cb3850"
+            }
+          }
+        },
+        {
+          "elapsedMs": 660,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d7070440b8cd5fa54e1953eb9f36335926c648c03aa64e88a7c4fa981e35a199",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "aa1b3f67-7c68-4df7-a98f-6a7840cb3850"
+            }
+          }
+        },
+        {
+          "elapsedMs": 7289,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.requested",
+            "sequence": 15
+          }
+        },
+        {
+          "elapsedMs": 7289,
+          "kind": "approval-before-response",
+          "data": {
+            "requestId": "397c0b75-9126-4e5b-b008-e91bc183450a",
+            "requestType": "command_execution_approval",
+            "observedRequestIds": [
+              "397c0b75-9126-4e5b-b008-e91bc183450a"
+            ]
+          }
+        },
+        {
+          "elapsedMs": 7297,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.resolved",
+            "sequence": 18
+          }
+        },
+        {
+          "elapsedMs": 9032,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.requested",
+            "sequence": 28
+          }
+        },
+        {
+          "elapsedMs": 9033,
+          "kind": "approval-before-response",
+          "data": {
+            "requestId": "2644f015-d814-4bc7-b3b2-8099f9ee979d",
+            "requestType": "dynamic_tool_call",
+            "observedRequestIds": [
+              "2644f015-d814-4bc7-b3b2-8099f9ee979d"
+            ]
+          }
+        },
+        {
+          "elapsedMs": 9050,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 9051,
+          "kind": "public-activity",
+          "data": {
+            "kind": "approval.resolved",
+            "sequence": 30
+          }
+        },
+        {
+          "elapsedMs": 9052,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 9052,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "d7070440b8cd5fa54e1953eb9f36335926c648c03aa64e88a7c4fa981e35a199",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "aa1b3f67-7c68-4df7-a98f-6a7840cb3850"
+            }
+          }
+        },
+        {
+          "elapsedMs": 9052,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 9056,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 9058,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 9058,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 9059,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "d7070440b8cd5fa54e1953eb9f36335926c648c03aa64e88a7c4fa981e35a199",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "aa1b3f67-7c68-4df7-a98f-6a7840cb3850"
+            }
+          }
+        },
+        {
+          "elapsedMs": 10444,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "49026753-3a4b-4211-818a-5c1854862d72"
+          }
+        },
+        {
+          "elapsedMs": 10444,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "49026753-3a4b-4211-818a-5c1854862d72",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 10444,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 10488,
+          "kind": "public-turn-settled",
+          "data": {
+            "state": "completed",
+            "turnId": "95465c19-33c6-4321-b18d-952041cbde93"
+          }
+        }
+      ]
+    },
+    "codex-isolation": {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "isolation",
+        "hookMode": "trusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419",
+            "nativeSessionId": "01a0b21a-8f36-7d42-be9c-fe1da417afce"
+          },
+          {
+            "role": "pass",
+            "runId": "second-fixture",
+            "threadId": "7044210b-b43a-4978-bd84-5665da983913",
+            "nativeSessionId": "01a0b21a-9018-7151-b656-c206a65e6f7e"
+          },
+          {
+            "role": "ordinary",
+            "threadId": "5192fdf6-5a7b-410e-9d51-eea8fe2b6400",
+            "nativeSessionId": "01a0b21a-b02b-7cf0-86bc-595db25e967a"
+          }
+        ],
+        "rawOrderingSha256": "8f4d3c8c1310c3e37681b339a1e35bfc0c2dd9802ca39f23eba560791e733970"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        },
+        {
+          "id": "second-fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "handoff",
+        "handoff"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 0,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 110,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 111,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 112,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 112,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 217,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 218,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 1
+          }
+        },
+        {
+          "elapsedMs": 422,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "a1fc7c82fe09bee8b806a2bca7a76fdd68d63df51294d920f70db7ff2e259bd7",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            }
+          }
+        },
+        {
+          "elapsedMs": 424,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "a1fc7c82fe09bee8b806a2bca7a76fdd68d63df51294d920f70db7ff2e259bd7",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            }
+          }
+        },
+        {
+          "elapsedMs": 427,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "a1fc7c82fe09bee8b806a2bca7a76fdd68d63df51294d920f70db7ff2e259bd7",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            }
+          }
+        },
+        {
+          "elapsedMs": 660,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "df65479e5d100039bda9994164270fdb9984eb0a07ded6f5f25936de377f8714",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            }
+          }
+        },
+        {
+          "elapsedMs": 661,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "df65479e5d100039bda9994164270fdb9984eb0a07ded6f5f25936de377f8714",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            }
+          }
+        },
+        {
+          "elapsedMs": 663,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "df65479e5d100039bda9994164270fdb9984eb0a07ded6f5f25936de377f8714",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            }
+          }
+        },
+        {
+          "elapsedMs": 11309,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b21a-b02b-7cf0-86bc-595db25e967a"
+          }
+        },
+        {
+          "elapsedMs": 11309,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b21a-b02b-7cf0-86bc-595db25e967a",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 11310,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 11554,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b21a-8f36-7d42-be9c-fe1da417afce"
+          }
+        },
+        {
+          "elapsedMs": 11556,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 11556,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "a1fc7c82fe09bee8b806a2bca7a76fdd68d63df51294d920f70db7ff2e259bd7",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            }
+          }
+        },
+        {
+          "elapsedMs": 11557,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b21a-8f36-7d42-be9c-fe1da417afce",
+            "mapped": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 11557,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 11788,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b21a-9018-7151-b656-c206a65e6f7e"
+          }
+        },
+        {
+          "elapsedMs": 11790,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 11790,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "df65479e5d100039bda9994164270fdb9984eb0a07ded6f5f25936de377f8714",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            }
+          }
+        },
+        {
+          "elapsedMs": 11791,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b21a-9018-7151-b656-c206a65e6f7e",
+            "mapped": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            },
+            "result": {
+              "decision": "block",
+              "reason": "Call the handoff tool for this stage before ending the turn."
+            }
+          }
+        },
+        {
+          "elapsedMs": 11791,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 11804,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "df65479e5d100039bda9994164270fdb9984eb0a07ded6f5f25936de377f8714",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            }
+          }
+        },
+        {
+          "elapsedMs": 11804,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "a1fc7c82fe09bee8b806a2bca7a76fdd68d63df51294d920f70db7ff2e259bd7",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            }
+          }
+        },
+        {
+          "elapsedMs": 12997,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 12999,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 12999,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "df65479e5d100039bda9994164270fdb9984eb0a07ded6f5f25936de377f8714",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            }
+          }
+        },
+        {
+          "elapsedMs": 12999,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 13002,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 1
+          }
+        },
+        {
+          "elapsedMs": 13004,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 13004,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 1
+          }
+        },
+        {
+          "elapsedMs": 13005,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "df65479e5d100039bda9994164270fdb9984eb0a07ded6f5f25936de377f8714",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "second-fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "7044210b-b43a-4978-bd84-5665da983913"
+            }
+          }
+        },
+        {
+          "elapsedMs": 14385,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b21a-9018-7151-b656-c206a65e6f7e"
+          }
+        },
+        {
+          "elapsedMs": 14385,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b21a-9018-7151-b656-c206a65e6f7e",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 14385,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        },
+        {
+          "elapsedMs": 14526,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 14527,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 14527,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "a1fc7c82fe09bee8b806a2bca7a76fdd68d63df51294d920f70db7ff2e259bd7",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            }
+          }
+        },
+        {
+          "elapsedMs": 14528,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 14530,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 14531,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 14531,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 14532,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "a1fc7c82fe09bee8b806a2bca7a76fdd68d63df51294d920f70db7ff2e259bd7",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "e3cf0eab-d872-46c3-9252-d45f8206b419"
+            }
+          }
+        },
+        {
+          "elapsedMs": 16652,
+          "kind": "native-stop",
+          "data": {
+            "session_id": "01a0b21a-8f36-7d42-be9c-fe1da417afce"
+          }
+        },
+        {
+          "elapsedMs": 16652,
+          "kind": "hook-decision",
+          "data": {
+            "session_id": "01a0b21a-8f36-7d42-be9c-fe1da417afce",
+            "mapped": null,
+            "result": {}
+          }
+        },
+        {
+          "elapsedMs": 16652,
+          "kind": "hook-response",
+          "data": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    "codex-observe": {
+      "provenance": {
+        "provider": "codex",
+        "scenario": "observe",
+        "hookMode": "untrusted",
+        "t3Head": "3dc21446cfaeb20bec8953916f53d8aeb1357465",
+        "sourceHead": "770e04205156d7a139e307c90552a14d6b7e9160",
+        "participants": [
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "3498527f-3a34-4844-8996-0769a8f30f5f",
+            "nativeSessionId": "01a0b21a-e78d-78d1-ad57-40528bf9789f"
+          },
+          {
+            "role": "pass",
+            "runId": "fixture",
+            "threadId": "7d5c4554-634a-4d46-b1ea-42da124fbcb9",
+            "nativeSessionId": "01a0b21a-f52b-7b81-94fa-df08bf57bec3"
+          }
+        ],
+        "rawOrderingSha256": "7ce368cb22f65e106d04b17cdf218bdf0f97462fc22da616e07ea5f02bbdb9d7"
+      },
+      "runs": [
+        {
+          "id": "fixture",
+          "status": "completed"
+        }
+      ],
+      "results": [
+        "turnEnded",
+        "turnEnded"
+      ],
+      "ordering": [
+        {
+          "elapsedMs": 0,
+          "kind": "boundary",
+          "data": {
+            "status": "running",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 1,
+          "kind": "reconciled",
+          "data": {
+            "status": "running",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 106,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 1
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 108,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 409,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "39dfae22be3a7d35ccc74cc32e078fe379384b4df173090cc739d572d6fc6437",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "3498527f-3a34-4844-8996-0769a8f30f5f"
+            }
+          }
+        },
+        {
+          "elapsedMs": 411,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "39dfae22be3a7d35ccc74cc32e078fe379384b4df173090cc739d572d6fc6437",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "3498527f-3a34-4844-8996-0769a8f30f5f"
+            }
+          }
+        },
+        {
+          "elapsedMs": 415,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "39dfae22be3a7d35ccc74cc32e078fe379384b4df173090cc739d572d6fc6437",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "3498527f-3a34-4844-8996-0769a8f30f5f"
+            }
+          }
+        },
+        {
+          "elapsedMs": 3453,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 3454,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 3455,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "39dfae22be3a7d35ccc74cc32e078fe379384b4df173090cc739d572d6fc6437",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 1,
+              "threadId": "3498527f-3a34-4844-8996-0769a8f30f5f"
+            }
+          }
+        },
+        {
+          "elapsedMs": 3455,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 3463,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 3574,
+          "kind": "boundary",
+          "data": {
+            "status": "awaiting",
+            "awaiting": [
+              {
+                "nodeId": "inspect",
+                "visit": 2
+              }
+            ]
+          }
+        },
+        {
+          "elapsedMs": 3575,
+          "kind": "reconciled",
+          "data": {
+            "status": "awaiting",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 3918,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "8d071a7ea1d90386065615f5c5a73f0344f3e5b0d66012b12b2e77c46ba54eef",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 2,
+              "threadId": "7d5c4554-634a-4d46-b1ea-42da124fbcb9"
+            }
+          }
+        },
+        {
+          "elapsedMs": 3919,
+          "kind": "tool-response",
+          "data": {
+            "status": 202,
+            "endpointId": "8d071a7ea1d90386065615f5c5a73f0344f3e5b0d66012b12b2e77c46ba54eef",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 2,
+              "threadId": "7d5c4554-634a-4d46-b1ea-42da124fbcb9"
+            }
+          }
+        },
+        {
+          "elapsedMs": 3920,
+          "kind": "tool-response",
+          "data": {
+            "status": 200,
+            "endpointId": "8d071a7ea1d90386065615f5c5a73f0344f3e5b0d66012b12b2e77c46ba54eef",
+            "path": "mcp",
+            "method": "POST",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 2,
+              "threadId": "7d5c4554-634a-4d46-b1ea-42da124fbcb9"
+            }
+          }
+        },
+        {
+          "elapsedMs": 5778,
+          "kind": "boundary",
+          "data": {
+            "status": "resuming",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 5779,
+          "kind": "policy-request",
+          "data": {}
+        },
+        {
+          "elapsedMs": 5780,
+          "kind": "tool-response",
+          "data": {
+            "status": 401,
+            "endpointId": "8d071a7ea1d90386065615f5c5a73f0344f3e5b0d66012b12b2e77c46ba54eef",
+            "path": "policy",
+            "method": "GET",
+            "authorizationPresent": true,
+            "endpointOwner": {
+              "runId": "fixture",
+              "nodeId": "inspect",
+              "visit": 2,
+              "threadId": "7d5c4554-634a-4d46-b1ea-42da124fbcb9"
+            }
+          }
+        },
+        {
+          "elapsedMs": 5780,
+          "kind": "terminal-token-rejection",
+          "data": {
+            "status": 401
+          }
+        },
+        {
+          "elapsedMs": 5784,
+          "kind": "reconciled",
+          "data": {
+            "status": "resuming",
+            "mappings": 0
+          }
+        },
+        {
+          "elapsedMs": 5786,
+          "kind": "boundary",
+          "data": {
+            "status": "completed",
+            "awaiting": []
+          }
+        },
+        {
+          "elapsedMs": 5786,
+          "kind": "reconciled",
+          "data": {
+            "status": "completed",
+            "mappings": 0
+          }
+        }
+      ]
+    }
+  }
+}

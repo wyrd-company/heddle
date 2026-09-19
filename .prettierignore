@@ -1,0 +1,11 @@
+.rumdl_cache/
+coverage/
+dist/
+node_modules/
+src/github/schema/
+src/github/src/generated/
+src/t3code/.t3-live/
+
+# Preserved research captures and externally formatted fixture files.
+fixtures/
+spikes/

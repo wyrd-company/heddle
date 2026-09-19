@@ -1,0 +1,11 @@
+# Handoff schema for the real assessment pass.
+type: object
+description: Hand off the assessment decision for the collection.
+required: [decision, reason]
+properties:
+  decision:
+    type: string
+    enum: [accepted, declined]
+  reason:
+    type: string
+additionalProperties: false

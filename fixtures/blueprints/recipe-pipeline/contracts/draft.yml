@@ -1,0 +1,12 @@
+# Handoff schema for the draft stage.
+type: object
+description: Hand off the finished recipe draft.
+required: [title, ingredients, steps]
+properties:
+  title: { type: string }
+  ingredients:
+    type: array
+    items: { type: string }
+  steps:
+    type: array
+    items: { type: string }

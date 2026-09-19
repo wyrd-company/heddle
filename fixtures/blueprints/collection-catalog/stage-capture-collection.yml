@@ -1,0 +1,45 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+# This stage is intentionally a stub for deterministic engine tests.
+id: stage-capture-collection
+kind: stage
+description: Capture a supplied collection summary without additional judgment.
+metadata:
+  execution: stub
+inputs:
+  itemCount:
+    type: integer
+  storage:
+    type: string
+outputs:
+  result:
+    type: object
+    properties:
+      payload:
+        type: [object, "null"]
+        required: [itemCount, storage]
+        properties:
+          itemCount: { type: integer }
+          storage: { type: string }
+      handoff: { type: boolean }
+      overridden: { type: boolean }
+      turnEnded: { type: boolean }
+nodes:
+  # The stub pass immediately returns the supplied details through its handoff.
+  capture:
+    uses: pass
+    params:
+      prompt: prompts/capture.md
+      handoff: contracts/capture.yml
+      turnEndPolicy: require-handoff
+  # Return the pass result without a delivery side effect.
+  complete:
+    uses: terminal-result
+    params:
+      value: { from: capture }
+edges:
+  - from: capture
+    to: complete
+    when: result.output.handoff or result.output.turnEnded or result.output.overridden

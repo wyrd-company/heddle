@@ -1,0 +1,327 @@
+$schema: https://refinery.systems/ontology/technical-design
+relationships:
+  related-to:
+    - engine-and-run-model
+    - agent-tools
+    - github-binding-and-intake
+    - blueprint-authoring
+    - usage-budgeting
+objective: >
+  Provide the node types a blueprint author composes: the bricks. Each node
+  type has a well-known input and output contract, sensible defaults for the
+  common case, and a full contract for bespoke use. Node types are the only
+  place code touches the world. The catalog is provisional and grows only
+  when a blueprint needs a brick.
+background:
+  current-design: >
+    Blueprint authors compose whatever node types the registry exposes.
+    Without a contract convention, every node type invents its own inputs
+    and outputs, and process blueprints end up wiring low-level detail that
+    should have had a default.
+  problems:
+    - A node type per external operation multiplies the catalog and hides which system is being touched.
+    - Node types that know the user's stage names or statuses cannot be reused.
+    - A stage that reaches into T3 Code directly cannot be swapped for one that reaches somewhere else.
+design-challenges:
+  contract-convention: >
+    Authors must be able to write the common case in a few lines and the
+    unusual case in full, with the same node type.
+  earning-a-place: >
+    The catalog must stay small enough to learn. A brick must be justified by
+    a blueprint that needs it, not by anticipation.
+  operation-parameters: >
+    External systems expose many operations. Adding one must be a change
+    inside a brick, not a new brick.
+  what-a-graph-cannot-hold: >
+    Inside one pass at a stage, things happen that a graph of nodes and
+    edges cannot express: a context-fill ratio crossing a limit needs
+    the previous ratio; three consecutive failed test runs is a count over a
+    sequence; inactivity is the absence of an event. These live in code
+    behind the `pass` node, and only their outcomes reach the graph.
+proposed-design:
+  availability: >
+    The catalog publishes every designed node type and, for a node type that
+    takes an operation, every designed operation. Each carries an availability
+    marker that says whether Heddle has a run-time implementation for it. The
+    marker is the single source of truth: an agreement test fails when a node
+    type marked available is not dispatchable by the composed service, or when
+    a `github` operation marked available has no handler. `heddle validate`
+    rejects a blueprint that uses a node type or an operation that is not
+    available, naming the file and the node, so an author learns at authoring
+    time instead of at run time.
+  high-level-overview: >
+    Every node type declares an input schema and an output schema in JSON
+    Schema, published in the blueprint author reference and embedded in the
+    authoring skill. Inputs are read from the node's `params`, with JSONata
+    references into the run context. Outputs land in the context under the
+    node id, so any later node or edge can read them. Pausing node types
+    record what they wait for in awaiting details, as the engine design
+    describes. The file format is the blueprint specification. The catalog
+    below is the starting set.
+  contract-convention: |
+    The convention is illustrated with an invented node type, `kettle`,
+    which does not exist. It is chosen so that nothing about it can be
+    mistaken for a real contract.
+
+    - Well-known inputs with defaults: the common case needs only the inputs
+      that vary. Suppose `kettle` takes `volume`, `target-temperature`, and
+      `whistle`. An author writes `volume: 1.5` and the other two default to
+      boiling and on.
+    - Sugar inputs: a short form that expands to a full-contract value.
+      Suppose `kettle` accepts `preset: tea`, which expands to a
+      `target-temperature` of 80. Heddle's real sugar of this shape is
+      `resumeThread: <pass node id>`, which expands to a context reference
+      to that stage's thread id.
+    - Full contract: every input can be given explicitly, including references
+      into any context key, so an author can do something the sugar did not
+      anticipate. `target-temperature: { from: issue.frontMatter.brew.temp }`
+      is the full form.
+    - Metadata is not an input. A node's `metadata` bag is arbitrary data the
+      author attaches for templates, guards, and downstream nodes to read.
+      Node types do not read their inputs from it. Keys with the same name on
+      the issue take precedence unless the node lists them in `fixed`.
+    - Well-known outputs: the node writes a fixed shape under its node id. A
+      pausing node also writes `output.<result>` as `true` for the result that
+      woke it and the wake-up payload under `output.payload`, which is what
+      condition edges read.
+    - Context conventions: a node type may also write to a well-known shared
+      key. Every node marked `stage: true` writes `stages.<nodeId>` with its
+      visit count and, for a `pass`, the thread id and handoff, so later
+      nodes can find prior stages by name.
+    - The running blueprint: `blueprint` is a reserved context root that every
+      edge condition, `{ from: <expression> }` reference, and Nunjucks
+      template reads. It carries `blueprint.id` and `blueprint.metadata`, the
+      blueprint's own top-level metadata bag, which is `{}` when none is
+      authored. The engine supplies it from the run's pinned blueprint at
+      evaluation time, so it is never stored in the run context and no node
+      output can replace it. A run reads its own blueprint, never its
+      parent's, and metadata Heddle derives for the engine is not part of it.
+  flowcraft-built-ins: |
+    - `wait`: pauses until an external resume. Unchanged.
+    - `sleep`: pauses until a deadline. Wrapped so the deadline is a wake-up
+      row, per the engine design, and survives restarts.
+    - Function nodes: plain glue for computing a value from the context.
+    - Excluded: `subflow` and action edges, for the reasons in the engine
+      design. Lint rejects both.
+  pass: |
+    Starts one thread for one pass at a stage and pauses. One `pass` node
+    execution is one pass: one thread, from its start to the result the
+    engine records. A retry is a second execution of the same node, with the
+    visit count incremented; the process blueprint never learns how many
+    passes a stage took unless it reads the count.
+
+    Inputs: `prompt` (a template; see the template contract below),
+    `handoff` (the handoff tool definition: a JSON Schema in YAML whose root
+    `description` is the tool description), `turnEndPolicy` (starting value,
+    `require-handoff` or `allow`), `escalation` (`answer-in-place` or
+    `ends-stage`), `model`, `runtimeMode` (default `full-access`),
+    `worktree`, `resumeThread`, `tools`, `deadline`, `inactivity`.
+
+    Behavior: ensures the T3 Code project for the worktree, ensures the
+    thread (a new one, or the one named by `resumeThread`), generates the
+    thread's tool server as the agent-tools design describes, writes
+    `stages.<nodeId>`, and commits the pause with awaiting details
+    `{ kind: pass, threadId, runId, nodeId, turnEndPolicy }`. After that
+    commit and traversal release, it registers the tool server and starts
+    the first turn. A reused thread waits for its prior turn to settle,
+    stops the provider session, and registers the next endpoint before
+    starting its next turn with the preserved conversation. If a
+    `deadline` or `inactivity` duration is given, the engine inserts the
+    matching wake-up rows.
+
+    Read model: while the node is paused, the service subscribes to the
+    thread and maintains a read model of the pass from what it observes,
+    never from what it commanded: last activity time, turn count, turns not
+    started by Heddle, token usage by model and by helper, context ratio and
+    the previous ratio, compaction outcomes, helper sessions from T3's
+    `task.*` events with their own usage, open approvals and questions, and
+    the current turn-end policy. The read model feeds inactivity detection,
+    usage budgeting, the console, and the operator operations in the
+    agent-tools design. Operator turns sent from the T3 Code UI are ordinary
+    observed turns; the read model has no belief that a turn it did not send
+    cannot exist.
+
+    Results (each is an outgoing condition edge): `handoff` with the payload
+    that satisfied the schema; `escalate` with the agent's question when
+    `escalation` is `ends-stage`; `timeout` when the elapsed deadline
+    passed; `idle` when no activity was observed for the inactivity
+    duration; `turnEnded` when a turn ended without a handoff under the
+    `allow` policy; `overridden` when the operator moved the issue's Status
+    by hand. A wake-up selects an edge and does nothing else; stopping or
+    ending the thread is a separate node or an operator operation.
+  question: |
+    Asks a named role and pauses.
+
+    Inputs: `role` (`operator`, `adjudicator`, or a blueprint-defined role),
+    `questions` (id, header, text template, options, multi-select),
+    `deadline`.
+
+    Behavior: renders the questions, delivers them to the role's configured
+    channel (console, notify, or a fresh adjudicator thread), and pauses with
+    `{ kind: question, questionId }`.
+
+    Results: `answered` with the answers keyed by question id, plus a
+    `selected.<id>.<label>` projection so edges can route on a choice;
+    `timeout`.
+  child-run: |
+    Starts another blueprint as its own run and pauses until it finishes.
+
+    Inputs: `blueprint` (id), `inputs` (a mapping from the child's initial
+    context keys to values or context references), `outputs` (a mapping from
+    keys under this node's output.payload to JSONata expressions over the
+    child's final context). When outputs is omitted, each declared output is
+    selected by its literal key without expression evaluation. An explicit
+    empty mapping exports no values.
+
+    Behavior: starts the child at the same pinned commit with the mapped
+    initial context and the parent run id, pauses with
+    `{ kind: child-run, childRunId }`.
+
+    Results: `completed` with the mapped outputs under `output.payload`;
+    `failed` with the child's
+    failure.
+
+    A `kind: stage` blueprint is used from a process blueprint through this
+    node. Such a blueprint wraps one or more `pass` nodes with the retry and
+    retry routing the author wants, and ends on the stage result
+    contract. The author reference documents the inputs and outputs each
+    shipped stage blueprint declares.
+  lifecycle-start: |
+    Starts the process blueprint selected by intake as an independent
+    top-level run. Intake does not wait for lifecycle completion.
+
+    Inputs: `blueprint` (a process blueprint id or context reference),
+    `inputs` (optional additional initial-context values or a reference to
+    their mapping). The current `issue` snapshot is transferred automatically;
+    mapped inputs cannot replace it. Its non-empty id must match the intake
+    run's initial issue id. Other issue fields may reflect observed updates.
+
+    Behavior: captures issue and mapped inputs before resolving the target
+    at the intake run's pinned commit. Target creation and the source
+    run/node/visit relationship commit atomically. The target has no parent
+    and is its own root. Replay reuses that invocation and stored snapshot.
+    Lifecycle dispatch follows intake traversal; target completion does not
+    resume intake. The engine exposes the relationship for instance binding,
+    inspection, and recovery through `RunStore.lifecycleStarts`.
+
+    Output and results: `{ started: true, payload: { runId } }` after durable
+    creation. This synchronous node does not pause or create a completion wait.
+    Context writes: only the ordinary output under the authored node id.
+    Failure: an invalid target id, unresolved target, non-process target,
+    invalid input mapping, or changed issue identity fails intake and raises
+    attention before target execution. A later lifecycle failure belongs to
+    that independent run and does not change the started result.
+  on-issue-change: |
+    Pauses until the bound issue or its project card changes.
+
+    Inputs: `when` (an optional JSONata condition over the changed issue
+    that must be true for the node to wake; otherwise any change wakes it),
+    `bindings` (JSONata variable names mapped to immutable run-context paths),
+    `deadline`.
+
+    Behavior: captures bindings from the run's immutable initial context and
+    pauses with `{ kind: issue-change, issueId, condition, bindings }`. The
+    webhook handler keeps the changed issue as the JSONata root, supplies the
+    captured values as variables, and resumes matching runs. Validation rejects
+    unknown binding paths and condition variables without bindings.
+
+    Results: `changed` with the new issue snapshot; `timeout`.
+  github: |
+    One brick, one operation per use. Acts with Heddle's own GitHub App,
+    never an agent's credential.
+
+    Inputs: `operation` and operation-specific parameters. Operations:
+    `set-field` (project card field values), `comment`, `add-labels`,
+    `remove-labels`, `close` (an optional `reason` of `completed` or
+    `not-planned`), `reopen`, `open-pull-request`, `request-review`, `link`.
+    The schema declares each operation's own required parameters, so a
+    missing or unsupported parameter is a validation finding.
+
+    Behavior: idempotent by run id, node id, and visit count; a replayed
+    node finds its prior effect by a marker comment or by reading state
+    before writing. An operation that finds the issue already in its target
+    state writes nothing. Every operation carries the resulting issue state
+    into the run context, including the issue's update time, so Heddle's own
+    change is not delivered back as an operator action. A permission refusal
+    is raised as attention, not retried.
+
+    Output: the operation's result, such as a pull request number.
+  git: |
+    Inputs: `operation` (`worktree-add`, `worktree-remove`, `branch`,
+    `merge`, `push`) and parameters. Runs through a git library, never a
+    shell. Idempotent: an existing worktree at the expected path and branch
+    is success.
+  terminal-result: |
+    Completes a branch with final run data. Params: `value`, a literal or
+    context reference. The value is written to `result` in the run context
+    and returned as the node output. Missing resolved values fail the run;
+    null, false, zero, empty strings, arrays, and objects are valid values.
+    The node has no outgoing edges. It does not cancel other branches or
+    complete a run while a sibling is paused. Exactly one reached terminal
+    result is allowed per run; reaching another fails the run. Alternative
+    terminal nodes may serve mutually exclusive routes. Terminal data owns
+    the final context.result even when another node uses the id result;
+    aggregation reads that node through its completed output.
+    A child blueprint declares `outputs.result` to return this value under
+    the parent's child node `output.payload.result`. Explicit child output
+    mappings can select `result` or any existing child context path.
+  aggregate: |
+    Combines completed branch outputs without effects. Params: `bindings`,
+    an ordered object whose keys name the combined results. Each binding
+    contains `node`, the id of one direct incoming predecessor, and optional
+    `path`, a JSONata expression evaluated with that predecessor's output as
+    its root. Without a path, the complete predecessor output is selected.
+    Every direct predecessor must be bound exactly once. Unknown, duplicate,
+    missing, and malformed bindings fail validation. The node uses an all
+    join; any joins are invalid. Unfinished predecessors and missing resolved
+    values fail execution. The output is an object in authored binding order,
+    independent of branch completion order. Null and other falsy values are
+    retained. A following terminal-result can use this object as final data.
+  notify: |
+    Inputs: `channel` (`pushover` at launch), `title` and `message`
+    (templates; see the template contract below), `url`. Fire and forget; the
+    output is the delivery receipt.
+  templates: |
+    One renderer serves every `templateRef`. A string is a path from the
+    blueprint root, `{ inline }` is template text, and both render as
+    Nunjucks with autoescaping off and undefined values fatal. The render
+    context is the run context, the running blueprint as `blueprint`, and the
+    node's own `metadata`, `node`, and `input`.
+
+    A `templateRef` path is read from the run's pinned commit. A template may
+    load another with `include`, `import`, or `extends`; those targets are
+    paths from the same blueprint root at that same commit, through a
+    loader over the pinned tree. A run's templates never change under it, and
+    a target that leaves the blueprint root is refused.
+  policy: |
+    Inputs: `rules` (a reference to a rules artifact in the blueprint
+    repository), `input` (defaults to the issue).
+
+    Behavior: evaluates the rules in order. Rules are data in the blueprint
+    repository; the evaluator is code.
+
+    Output: the selected rule id, blueprint id, and bound inputs.
+  resume: |
+    Not placed by authors. The engine-internal operation the generated tool
+    servers, the scheduler, the webhook handler, and child-run completion
+    call. It is listed here because its contract is what every pausing
+    node's results are defined against.
+  lint-rules: |
+    Lint runs on load, in the `validate` command, and refuses a blueprint
+    that:
+
+    - uses `subflow` or an edge `action`
+    - has a pausing node with a result that no outgoing edge handles
+    - declares a `pass` node whose `handoff` is not a valid JSON Schema with
+      an object root, `properties`, and a non-empty `description`
+    - names a role in `question` that no configured channel serves
+    - has a `when` expression that is not valid JSONata
+    - references a template, schema, or rules file that does not exist
+      inside the blueprint root
+    - names a literal `include`, `import`, or `extends` target that is absent
+      from the blueprint root or that leaves it
+    - reads a context key that no earlier node or the initial context
+      provides, when that can be determined statically
+    - declares a stage whose name is not a valid project single-select
+      option; this is a flagged live check and reports `not checked` when the
+      live project validator is unavailable

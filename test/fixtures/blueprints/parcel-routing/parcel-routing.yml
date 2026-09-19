@@ -1,0 +1,41 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+# A parcel is weighed once and then either sent on or held. The routing guard
+# and the stage input both read the process blueprint's own metadata bag.
+id: parcel-routing
+kind: process
+description: Route a parcel from a depot to delivery or to a hold shelf.
+metadata:
+  maxAttempts: 2
+  depot: north-depot
+nodes:
+  weigh:
+    uses: child-run
+    stage: true
+    params:
+      blueprint: stage-weigh-parcel
+      inputs:
+        depot: { from: blueprint.metadata.depot }
+        attempts: { from: issue.fields.Attempts }
+      outputs:
+        report: result
+  deliver:
+    uses: terminal-result
+    params:
+      value: delivered
+  hold:
+    uses: terminal-result
+    params:
+      value: held
+edges:
+  - from: weigh
+    to: deliver
+    when: result.output.completed and result.output.payload.report.attempts < blueprint.metadata.maxAttempts
+  - from: weigh
+    to: hold
+    when: result.output.completed and result.output.payload.report.attempts >= blueprint.metadata.maxAttempts
+  - from: weigh
+    to: hold
+    when: result.output.failed

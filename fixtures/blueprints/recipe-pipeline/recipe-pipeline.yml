@@ -1,0 +1,86 @@
+# A recipe moves from a draft to a taste test and, if approved, to
+# publication. Rejected drafts go back for another attempt.
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+id: recipe-pipeline
+kind: process
+entry: draft
+description: Editorial pipeline for a recipe catalog.
+metadata:
+  maxTasteTests: 3          # read by the review loop guard
+requires:
+  issue:
+    type: [Recipe]
+    fields: [Servings]
+    frontMatter: [cuisine]
+nodes:
+  draft:
+    uses: child-run
+    stage: true
+    metadata:
+      kitchen: test-kitchen-a
+    params:
+      blueprint: stage-write
+      inputs:
+        prompt: prompts/draft.md
+        handoff: contracts/draft.yml
+        servings: { from: issue.fields.Servings }
+  taste-test:
+    uses: child-run
+    stage: true
+    params:
+      blueprint: stage-review
+      outputs:
+        verdict: result.verdict
+        overridden: result.overridden
+        turnEnded: result.turnEnded
+      inputs:
+        prompt: prompts/taste-test.md
+        handoff: contracts/taste-test.yml
+  publish:
+    uses: github
+    stage: true
+    params:
+      operation: add-labels
+      labels: [published]
+  too-many-tests:
+    uses: notify
+    params:
+      channel: pushover
+      title: { inline: "Recipe needs an editor" }
+      message: prompts/too-many-tests.md
+  run-failed:
+    uses: notify
+    config:
+      joinStrategy: any
+    params:
+      channel: pushover
+      title: { inline: "Recipe step failed" }
+      message: { inline: "The recipe process needs attention." }
+edges:
+  - from: draft
+    to: taste-test
+    when: result.output.completed and $not(result.output.payload.result.overridden or result.output.payload.result.turnEnded)
+  - from: draft
+    to: run-failed
+    when: result.output.failed
+  - from: draft
+    to: run-failed
+    when: result.output.completed and (result.output.payload.result.overridden or result.output.payload.result.turnEnded)
+  - from: taste-test
+    to: publish
+    when: result.output.completed and result.output.payload.verdict = 'approved'
+  - from: taste-test
+    to: draft
+    when: result.output.completed and result.output.payload.verdict = 'rejected' and stages.`taste-test`.visits < blueprint.metadata.maxTasteTests
+  - from: taste-test
+    to: too-many-tests
+    when: result.output.completed and result.output.payload.verdict = 'rejected' and stages.`taste-test`.visits >= blueprint.metadata.maxTasteTests
+  - from: taste-test
+    to: run-failed
+    when: result.output.failed
+  - from: taste-test
+    to: run-failed
+    when: result.output.completed and (result.output.payload.overridden or result.output.payload.turnEnded)

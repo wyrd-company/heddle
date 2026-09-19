@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declarationMap": false,
+    "rootDir": "src",
+    "sourceMap": false,
+    "outDir": "dist",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.live.test.ts",
+    "src/**/test/**",
+    "src/**/codegen.ts"
+  ]
+}

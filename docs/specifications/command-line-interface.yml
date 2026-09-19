@@ -1,0 +1,90 @@
+$schema: https://refinery.systems/ontology/specification
+relationships:
+  realizes: engine-and-run-model
+description: >-
+  Defines Heddle's executable command surface and the production service
+  boundary. `heddle start` owns one durable store writer and composes the
+  engine, scheduler, GitHub intake and webhook delivery, generated tools,
+  harness hook transport, notification delivery, and T3 Code pass runtime.
+format: cli
+validation-criteria: >-
+  CLI, configuration, packaged-process, recovery, signal, exclusive-writer,
+  and Dev Container Feature tests execute the same production composition.
+commands:
+  start:
+    invocation: heddle start
+    description: Run one long-lived Heddle service until SIGINT or SIGTERM.
+    options:
+      config:
+        syntax: --config <path>
+        default: ~/.config/heddle/config.yml
+      state-directory:
+        syntax: --state <directory>
+        default: ~/.local/state/heddle/
+      database:
+        syntax: --database <path>
+        default: <state-directory>/heddle.sqlite
+      polling-interval:
+        syntax: --poll-interval <milliseconds>
+        default: 30000
+      github-app-credentials:
+        syntax: --github-app-credentials <path>
+      t3-token:
+        syntax: --t3-token <path>
+      webhook-secret:
+        syntax: --webhook-secret <path>
+    exit-status:
+      success: 0 after SIGINT or SIGTERM closes intake, listeners, the T3 Code client, and SQLite
+      usage-error: 2 for an unknown option, a missing or flag-shaped value, a duplicate singleton option, or an invalid polling interval
+      configuration-error: 1 with the resolved configuration path and actionable detail, including a pass-capable service that omits agentTools.listen.port
+      address-error: 1 when a configured listen address is already in use, naming that address
+      ownership-error: 1 when another live Heddle service owns the configured database
+configuration:
+  projects: Bound GitHub Project owner and number pairs. An empty list runs an idle service.
+  github.credentialFile: GitHub App credential-file path.
+  blueprints.repository: The blueprint root; a local Git checkout or a directory within one. Execution reads committed Git objects.
+  t3Code.endpoint: T3 Code service URL.
+  t3Code.tokenFile: Optional bearer-token file path.
+  webhook.secretFile: GitHub webhook secret-file path; required when webhook configuration is present.
+  webhook.listen.host: Explicit bind host; omit listen to disable webhook listening. Recommend 127.0.0.1 behind a host proxy or tunnel; other interfaces including 0.0.0.0 are supported.
+  webhook.listen.port: Explicit stable TCP port from 1 through 65535; required with host, with no default port.
+  agentTools.listen.host: Optional bind host for the internal generated-tool listener; defaults to 127.0.0.1.
+  agentTools.listen.port: Explicit stable TCP port from 1 through 65535, with no default port; required whenever projects are bound or pass defaults are configured.
+  state.databasePath: Optional SQLite database path override.
+  polling.intervalMs: Optional positive polling interval in milliseconds; default 30000.
+  intake.blueprintId: Optional default intake blueprint id.
+  intake.revision: Git revision for new intake attempts; each new attempt resolves it once and the run stores the full commit.
+  pass: Required for bound projects; supplies the default model and worktree.
+  notifications.pushoverCredentialFile: Optional JSON file containing Pushover token and user fields.
+diagnostics:
+  startup: Reports the resolved database path, polling interval, and configured webhook HTTP route or disabled state, without secrets or generated-tool endpoints.
+  errors: Report operational causes without credential contents. Committed-blueprint repository failures name the requested revision without raw Git errors, repository URLs, or absolute repository paths; reference findings carry an additive structured reference identity independent of human message text. A refused or rejected external webhook request is reported as its method, its path without any query string, and its status, and never as headers, bodies, signatures, query strings, or remote addresses.
+signals:
+  SIGINT: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
+  SIGTERM: Stop new intake, close resources and SQLite, release the writer, then exit successfully.
+ownership: >-
+  Writer ownership uses an operating-system descriptor lock on
+  <canonical-database-path>.writer before opening SQLite. The anchor remains
+  on disk; closing the descriptor or process death releases ownership.
+  Database symlinks resolve to the same owner. State-directory and database
+  overrides are independent; different databases can share one state directory.
+hook-transport: >-
+  Each database has a hook socket under the state directory named
+  <identity>, where identity is the first 16 base64url characters of SHA-256
+  of the canonical database path (96 bits). Startup reports the exact socket.
+  The full path remains subject to the operating system Unix socket path limit.
+  Hook commands use HEDDLE_HOOK_SOCKET when set. Otherwise they derive the
+  socket from heddle.sqlite under HEDDLE_STATE_DIR or the default state
+  directory. Set HEDDLE_HOOK_SOCKET to the reported socket for a database
+  override.
+recovery: >-
+  Startup recovers durable engine runs and pass observations before accepting
+  webhook, generated-tool, or hook traffic or new intake. The internal HTTP
+  listener returns 503 without dispatching requests throughout engine and pass
+  recovery. The hook listener starts after recovery. The stable external webhook
+  listener opens after recovery and binding startup and serves only POST
+  /webhook/github. Generated tools remain on a separate internal listener at
+  the configured agentTools.listen address, which a restart binds again so
+  endpoints registered before the restart stay reachable. A forced process
+  death leaves the SQLite checkpoint intact; the next service acquires
+  ownership, opens the same database, and resumes the paused run.

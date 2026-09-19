@@ -1,0 +1,66 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://heddle.wyrd.company/schemas/policy-rule
+title: Heddle policy rules
+description: >
+  An ordered set of data-driven rules that selects a blueprint and binds its
+  initial inputs. The first rule whose JSONata condition is true is selected.
+  Rule ids are unique. A rule without a condition matches every input and is
+  the last rule in the set. A fallback rule is optional: an input that matches
+  no rule is reported as unmatched, and the blueprint decides what follows.
+type: object
+additionalProperties: false
+required: [rules]
+properties:
+  rules:
+    type: array
+    minItems: 1
+    items:
+      $ref: "#/$defs/rule"
+$defs:
+  slug:
+    type: string
+    pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+  contextKey:
+    type: string
+    pattern: "^[A-Za-z_][A-Za-z0-9_-]*$"
+  expression:
+    description: A non-empty JSONata expression evaluated over the policy input.
+    type: string
+    minLength: 1
+  contextRef:
+    description: A value selected from the policy input with JSONata.
+    type: object
+    additionalProperties: false
+    required: [from]
+    properties:
+      from:
+        $ref: "#/$defs/expression"
+  valueOrRef:
+    anyOf:
+      - $ref: "#/$defs/contextRef"
+      - not:
+          type: object
+          required: [from]
+  rule:
+    type: object
+    additionalProperties: false
+    required: [id, blueprint]
+    properties:
+      id:
+        description: Stable identity for the rule.
+        $ref: "#/$defs/slug"
+      when:
+        description: >
+          Condition for selecting this rule. Omit it for an optional final
+          fallback that matches every input.
+        $ref: "#/$defs/expression"
+      blueprint:
+        description: Id of the blueprint selected by this rule.
+        $ref: "#/$defs/slug"
+      inputs:
+        description: Initial inputs for the selected blueprint.
+        type: object
+        propertyNames:
+          $ref: "#/$defs/contextKey"
+        additionalProperties:
+          $ref: "#/$defs/valueOrRef"

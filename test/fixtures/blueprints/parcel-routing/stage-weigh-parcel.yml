@@ -1,0 +1,32 @@
+# ---
+# relationships:
+#   verifies: blueprint-authoring
+# ---
+# The stage reports its own metadata so a parent bag is never mistaken for it.
+id: stage-weigh-parcel
+kind: stage
+description: Weigh a parcel and report the scale that measured it.
+metadata:
+  scale: platform-scale
+inputs:
+  depot:
+    type: string
+  attempts:
+    type: number
+outputs:
+  result:
+    type: object
+    properties:
+      depot: { type: string }
+      attempts: { type: number }
+      scale: { type: string }
+      maxAttempts: { type: number }
+nodes:
+  report:
+    uses: terminal-result
+    params:
+      value:
+        depot: { from: depot }
+        attempts: { from: attempts }
+        scale: { from: blueprint.metadata.scale }
+        maxAttempts: { from: blueprint.metadata.maxAttempts }

@@ -1,0 +1,5 @@
+rules:
+  - id: sample
+    when: type = 'Sample'
+    blueprint: sample-lifecycle
+    inputs: {}
