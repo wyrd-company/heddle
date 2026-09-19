@@ -48,6 +48,11 @@ and invalid JSON return 400. Genuine supported-event payload and dispatch
 failures return 500. An event name starts with a lowercase letter and contains
 only lowercase letters, digits, and underscores.
 
+Every refused or rejected external request is logged as one line,
+`webhook <method> <path> <status>`, where the path carries no query string.
+It covers 404, 401, 400, and 413. Headers, bodies, signatures, query strings,
+and remote addresses are never logged, and an accepted delivery logs nothing.
+
 Generated tools never move onto this listener. They stay on the internal
 listener that `agentTools.listen.host` and `agentTools.listen.port` configure,
 whose address is also stable so that endpoints registered before a restart stay
@@ -69,7 +74,8 @@ Keep the configured target unchanged throughout these checks.
    Send a signed supported GitHub delivery through the host route and confirm
    HTTP 202 and the expected instance change. Confirm an invalid signature
    returns 401 and a request to another path,
-   including `/hook/stop`, returns 404 with no internal data.
+   including `/hook/stop`, returns 404 with no internal data. Confirm each
+   refused request is reported as its method, path, and status.
 3. Send SIGTERM, wait for process exit, and restart with the same configuration
    and state. Deliver to the unchanged public URL after startup completes.
 4. Send SIGKILL, wait for process exit, and restart with the same configuration

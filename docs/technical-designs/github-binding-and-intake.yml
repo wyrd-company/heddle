@@ -179,7 +179,9 @@ proposed-design:
     lowercase letter and contain only lowercase letters, digits, and
     underscores. A missing or invalid signature returns HTTP 401. A missing
     or malformed name and invalid JSON return HTTP 400. Supported-event
-    payload or dispatch failures return HTTP 500. Direct
+    payload or dispatch failures return HTTP 500. Every refused or rejected
+    external request is logged as its method, its path without any query
+    string, and its status; an accepted delivery is not logged. Direct
     delivery and polling retain their existing supported-event contract.
     The handler has two producers. GitHub calls it over HTTP. The poller,
     which runs as a safety net at a low rate or as the only producer where

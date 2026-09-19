@@ -163,7 +163,8 @@ Webhook listening is disabled until both `webhook.listen.host` and
 another interface, including `0.0.0.0`. The stable external listener serves
 only `POST /webhook/github` after recovery. A missing or invalid signature
 answers 401, a malformed event name or invalid JSON 400, an oversized body
-413, and any other path or method 404. Polling remains available.
+413, and any other path or method 404; a refused request is logged as its
+method, path, and status. Polling remains available.
 See [host routing and acceptance checks](docs/reference/webhook-routing.md).
 
 `state.databasePath` overrides the SQLite path. Otherwise Heddle uses

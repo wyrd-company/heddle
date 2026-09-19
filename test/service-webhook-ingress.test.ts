@@ -60,11 +60,11 @@ function delivery(size?: number) {
   return Buffer.from(size === undefined ? json : json.padEnd(size, " "));
 }
 
-function open(url: string, headers: OutgoingHttpHeaders) {
+function open(url: string, headers: OutgoingHttpHeaders, method = "POST") {
   let client!: ReturnType<typeof request>;
   const responseHeaders: IncomingHttpHeaders = {};
   const status = new Promise<number>((resolve, reject) => {
-    client = request(url, { method: "POST", headers }, (response) => {
+    client = request(url, { method, headers }, (response) => {
       Object.assign(responseHeaders, response.headers);
       response.resume();
       response.once("end", () => {
@@ -185,7 +185,7 @@ it.each(["ping", "release", "issues"])(
     }
     expect(apply).not.toHaveBeenCalled();
     expect(errors).toEqual(
-      Array<string>(3).fill("GitHub webhook signature is invalid"),
+      Array<string>(3).fill("webhook POST /webhook/github 401"),
     );
   },
 );
@@ -196,7 +196,7 @@ it.each(["ping", "release", "issues"])(
     const { url, apply, errors } = await listener();
     const body = Buffer.from("not JSON");
     expect(await send(url, body, signed(body, event))).toBe(400);
-    expect(errors).toEqual(["GitHub webhook body is invalid JSON"]);
+    expect(errors).toEqual(["webhook POST /webhook/github 400"]);
     expect(apply).not.toHaveBeenCalled();
   },
 );
@@ -210,7 +210,7 @@ it.each([undefined, "", "   ", "ping, issues", "ping/other", "Ping"])(
     if (event === undefined) delete headers["x-github-event"];
     else headers["x-github-event"] = event;
     expect(await send(url, body, headers)).toBe(400);
-    expect(errors).toEqual(["GitHub webhook event name is invalid"]);
+    expect(errors).toEqual(["webhook POST /webhook/github 400"]);
     expect(apply).not.toHaveBeenCalled();
   },
 );
@@ -228,6 +228,37 @@ it("preserves supported payload validation failures", async () => {
   expect(await send(url, Buffer.from("{}"))).toBe(500);
   expect(apply).not.toHaveBeenCalled();
   expect(errors).toEqual(["GitHub issues delivery has no issue identity"]);
+});
+
+it.each([
+  ["POST", "/hook/stop"],
+  ["GET", "/webhook/github"],
+])(
+  "logs a refused %s to %s as method, path, and status",
+  async (method, path) => {
+    const { url, apply, errors } = await listener();
+    const origin = new URL(url).origin;
+    const { client, status } = open(
+      `${origin}${path}?token=sample-query-value`,
+      { "x-sample-probe": "sample-header-value" },
+      method,
+    );
+    client.end();
+
+    expect(await status).toBe(404);
+    expect(errors).toEqual([`webhook ${method} ${path} 404`]);
+    expect(errors.join("\n")).not.toContain("sample-query-value");
+    expect(errors.join("\n")).not.toContain("sample-header-value");
+    expect(apply).not.toHaveBeenCalled();
+  },
+);
+
+it("logs nothing for an accepted delivery", async () => {
+  const { url, apply, errors } = await listener();
+
+  expect(await send(url, delivery())).toBe(202);
+  expect(apply).toHaveBeenCalledOnce();
+  expect(errors).toEqual([]);
 });
 
 it("keeps direct delivery unsupported-event rejection", async () => {
@@ -273,7 +304,7 @@ it("treats an HTTP request without either length framing header as an empty body
   client.useChunkedEncodingByDefault = false;
   client.end();
   expect(await status).toBe(400);
-  expect(errors).toEqual(["GitHub webhook body is invalid JSON"]);
+  expect(errors).toEqual(["webhook POST /webhook/github 400"]);
   expect(apply).not.toHaveBeenCalled();
 });
 
@@ -288,7 +319,7 @@ it.each(["ping", "release"])(
         "x-hub-signature-256": `sha256=${"0".repeat(64)}`,
       }),
     ).toBe(401);
-    expect(errors).toEqual(["GitHub webhook signature is invalid"]);
+    expect(errors).toEqual(["webhook POST /webhook/github 401"]);
     expect(apply).not.toHaveBeenCalled();
   },
 );

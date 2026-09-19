@@ -56,7 +56,7 @@ it("applies signed HTTP delivery through the existing binding handler and contai
       expect(binding.instances.get(issue.id).issue.title).toBe("Garden soup");
     }
     expect(errors).toEqual(
-      Array<string>(3).fill("GitHub webhook signature is invalid"),
+      Array<string>(3).fill("webhook POST /webhook/github 401"),
     );
     const accepted = await fetch(origin + "/webhook/github", {
       method: "POST",
