@@ -264,20 +264,21 @@ describe("nested contract validation", () => {
   });
 });
 
-it("retains exact native session identity and decodes legacy omission as null", () => {
-  const legacy = {
+it("decodes a stock session and tolerates an unknown extra field", () => {
+  const stock = {
     threadId: "sample-thread",
     status: "ready",
-    providerName: "codex",
+    providerName: "sample-provider",
     activeTurnId: null,
     lastError: null,
     updatedAt: "2026-01-01T00:00:00Z",
   };
-  expect(OrchestrationSession.parse(legacy).providerThreadId).toBeNull();
-  expect(
-    OrchestrationSession.parse({ ...legacy, providerThreadId: " native-exact " }).providerThreadId,
-  ).toBe(" native-exact ");
-  expect(
-    OrchestrationSession.parse({ ...legacy, providerThreadId: null }).providerThreadId,
-  ).toBeNull();
+  expect(OrchestrationSession.parse(stock)).toMatchObject({
+    threadId: "sample-thread",
+    status: "ready",
+  });
+  expect(OrchestrationSession.parse({ ...stock, unknownField: "sample-value" })).toMatchObject({
+    status: "ready",
+    unknownField: "sample-value",
+  });
 });

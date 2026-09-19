@@ -21,3 +21,10 @@ export const ExternalMcpClear = z.looseObject({
   threadId: ThreadId,
 });
 export type ExternalMcpClear = z.infer<typeof ExternalMcpClear>;
+
+export const ExternalMcpProviderSessionQuery = z.looseObject({ threadId: ThreadId });
+export type ExternalMcpProviderSessionQuery = z.infer<typeof ExternalMcpProviderSessionQuery>;
+
+/** The native harness session identity, returned exactly as the harness reports it. */
+export const ExternalMcpProviderSession = z.looseObject({ nativeSessionId: z.string() });
+export type ExternalMcpProviderSession = z.infer<typeof ExternalMcpProviderSession>;

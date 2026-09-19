@@ -146,4 +146,8 @@ export type {
   UserInputRequestedPayload,
   UserInputQuestion,
 } from "./schemas/orchestration/activities.js";
-export type { ExternalMcpRegistration, ExternalMcpClear } from "./schemas/mcp.js";
+export type {
+  ExternalMcpRegistration,
+  ExternalMcpClear,
+  ExternalMcpProviderSessionQuery,
+} from "./schemas/mcp.js";

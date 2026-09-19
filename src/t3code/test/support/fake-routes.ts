@@ -77,3 +77,25 @@ export function toResponse(response: FakeHttpResponse): Response {
     headers: { ...(hasBody ? { "content-type": "application/json" } : {}), ...response.headers },
   });
 }
+
+export const PROVIDER_SESSION_ROUTE = "GET /api/mcp/provider-session" as const;
+
+/**
+ * Answers the fork's provider-session read from a map of thread id to native
+ * harness session id: 200 with the exact value, 404 when the thread has no
+ * known identity, 400 when the query is malformed.
+ */
+export function routeProviderSession(
+  table: FakeRouteTable,
+  sessions: ReadonlyMap<string, string>,
+): FakeRouteTable {
+  return table.route(PROVIDER_SESSION_ROUTE, (request) => {
+    const thread = request.query.get("threadId");
+    if (thread === null || thread.length === 0) {
+      return { status: 400, body: { error: "invalid_external_mcp_registration" } };
+    }
+    const nativeSessionId = sessions.get(thread);
+    if (nativeSessionId === undefined) return { status: 404, body: { reason: "thread_not_found" } };
+    return { status: 200, body: { nativeSessionId } };
+  });
+}

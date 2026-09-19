@@ -156,7 +156,6 @@ export const OrchestrationSession = z.looseObject({
   threadId: ThreadId,
   status: OrchestrationSessionStatus,
   providerName: TrimmedNonEmptyString.nullable(),
-  providerThreadId: z.string().nullable().default(null),
   providerInstanceId: ProviderInstanceId.optional(),
   runtimeMode: RuntimeMode.default(DEFAULT_RUNTIME_MODE),
   activeTurnId: TurnId.nullable(),
