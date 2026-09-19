@@ -92,9 +92,12 @@ root.
 ## Development cycle
 
 Blueprint, then node types, then learn, then revise both. Neither layer leads.
-The first blueprint is the user's real workflow, authored before most node
-types exist, with nodes stubbed. Fixtures include workflows the user does not
-anticipate, to prove the flexibility claim.
+The first blueprint is the user's real workflow. A blueprint uses only the
+node types and operations Heddle can run; `heddle validate` rejects the rest
+by the availability rule, naming the file and the node. So the workflow the
+user wants and the node types that carry it grow together, and each revision
+of one is a finding for the other. Fixtures include workflows the user does
+not anticipate, to prove the flexibility claim.
 
 The ready-to-ship test: Heddle can be used to revise itself.
 
