@@ -132,6 +132,20 @@ proposed-design:
     block before completion; unavailable or untrusted blocking is observed as
     turnEnded with the missing-handoff reminder. The blueprint owns any
     continuation and its bound. Installation has no hook-trust prerequisite.
+  native-session-correlation: >
+    A Stop hook carries the harness's own session identity, and Heddle
+    resolves it only from its own table. The table is filled from the thread
+    watch: when an observed session event shows a watched pass thread's
+    provider session is live and its identity is unknown, or belongs to a
+    provider session that has been replaced, Heddle reads that identity once
+    from the T3 Code client and records it against the pass. A read that
+    answers "not known" is asked again on that thread's next session event,
+    a stopped session clears the recorded identity, and re-establishing
+    observation after a restart or a lost subscription re-asserts the
+    recorded identity and reads again when it is unknown. Nothing here runs
+    on a clock, and a failed read is recorded as attention on the run and
+    leaves the pass running. An identity with no row is allowed inertly, and
+    a turn that ends because of it is observed as `turnEnded`.
   operator-operations: |
     The operator, through the console or an operator tool surface, can take
     any of the live-thread operations T3 Code offers, plus Heddle's own.

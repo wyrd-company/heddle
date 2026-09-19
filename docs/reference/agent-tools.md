@@ -82,9 +82,12 @@ a database override. Otherwise the command derives the socket from the default
 or `~/.local/state/heddle`. Hook input cannot select a thread, pass, endpoint,
 or token. Cwd has no role in correlation. No request timeout is added by Heddle.
 
-Heddle correlates authoritative T3 session events with the active run, node
-visit, thread, and generated endpoint. An unmapped session returns allow with
-no generated-endpoint call, attention, or state change. The plugin is also
+Heddle correlates native session identities with the active run, node visit,
+thread, and generated endpoint. It learns an identity by reading it from T3
+Code once per provider session, when an observed session event shows the
+thread's provider session is live. A Stop decision reads Heddle's own table
+and never asks T3 Code. An unmapped session returns allow with no
+generated-endpoint call, attention, or state change. The plugin is also
 inert when no Heddle runtime is listening. Active uniquely mapped sessions use
 their own generated policy endpoint. An ambiguous owned mapping is an invariant
 error; it does not change decisions for unrelated sessions.

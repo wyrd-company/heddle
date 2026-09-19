@@ -16,7 +16,9 @@ blueprint. Code changes only when a new kind of integration is needed.
 
 - Node.js 24 or newer, including its built-in SQLite API.
 - A GitHub Project and the issues in it.
-- A T3 Code server.
+- A T3 Code server running Wyrd Company's fork, which serves the external MCP
+  registration routes and the native harness session identity of a thread.
+  Stock T3 Code clients are unaffected by those routes.
 
 ## Install
 

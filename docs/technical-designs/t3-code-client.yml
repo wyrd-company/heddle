@@ -89,6 +89,7 @@ proposed-design:
     | `GET /api/orchestration/threads/:threadId` | `orchestration:read` | paged thread detail |
     | `POST /api/orchestration/dispatch` | `orchestration:operate` | dispatch command |
     | `POST /api/pull-requests/diff` | bearer | outside the typed facade |
+    | `GET /api/mcp/provider-session` | `orchestration:operate` | native session identity |
     | `PUT /api/mcp/provider-session` | `orchestration:operate` | replace MCP registration |
     | `DELETE /api/mcp/provider-session` | `orchestration:operate` | clear MCP registration |
 
@@ -144,6 +145,15 @@ proposed-design:
     and provides a scoped helper that clears in `finally`. Registration
     changes affect the next provider session, so callers register before the
     first turn that needs the tools.
+  native-session-identity: >
+    The orchestration session carries no native harness identity, so the MCP
+    facade reads it from the provider-session route by thread id, under the
+    same scope as registration. The value is returned exactly as the harness
+    reports it, with no trimming or normalization. A thread that is unknown,
+    has no provider session, or whose identity is not known yet reads as not
+    known rather than as a failure; a refused read names the route and the
+    scope it needs. Session decoding ignores unknown fields, so a server that
+    sends more than the stock contract still decodes.
   failures: >
     Every module failure is a `T3Error` with a stable code. Authentication,
     missing resources, HTTP failures, RPC failures, RPC defects, connection
