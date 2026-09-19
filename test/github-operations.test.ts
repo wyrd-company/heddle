@@ -151,6 +151,21 @@ it("reopens a closed issue and does nothing when it is already open", async () =
   expect(f.transport.callsTo("ReopenIssue")).toHaveLength(1);
 });
 
+it("does not deliver its own add-labels write back as an operator change", async () => {
+  const f = setup();
+  await f.service.start();
+
+  await apply(f, { operation: "add-labels", labels: ["vegetarian"] });
+
+  const issue = present(f.issues.at(0));
+  expect(issue.labels.nodes.map((label) => label.name)).toEqual(["vegetarian"]);
+  await expect(
+    f.service.deliver("issues", {
+      issue: { node_id: issue.id, updated_at: issue.updatedAt },
+    }),
+  ).resolves.toBe(false);
+});
+
 it("removes only the labels the issue carries", async () => {
   const f = setup();
   present(f.issues.at(0)).labels.nodes.push(vegetarian);

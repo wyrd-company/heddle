@@ -124,8 +124,12 @@ const addLabels: GitHubOperation = async ({ params, handle, issue }) => {
   const missing = labels.filter(
     (label) => !current.labels.some((existing) => existing.name === label),
   );
-  if (missing.length) await handle.set({ labels: { add: missing } });
-  issue.labels = (await handle.load()).labels;
+  if (!missing.length) {
+    observe(issue, current);
+    return;
+  }
+  await handle.set({ labels: { add: missing } });
+  observe(issue, await handle.load());
 };
 
 const removeLabels: GitHubOperation = async ({ params, handle, issue }) => {

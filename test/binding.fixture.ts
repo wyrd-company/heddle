@@ -97,6 +97,15 @@ export function fixture(projectId = "P_1") {
     wireField("F_notes", "Notes", "TEXT"),
   ];
   const issues = [recipe()];
+  // GitHub bumps an issue's updated time on every write to it.
+  let writes = 0;
+  const touch = () => {
+    const first = issues[0];
+    if (!first) throw new Error("Fixture issue missing");
+    writes += 1;
+    first.updatedAt = `2026-01-02T00:00:${String(writes).padStart(2, "0")}Z`;
+    return first;
+  };
   const itemTypes: Record<number, string> = {};
   const values: Record<string, Record<string, unknown>> = {};
   const comments: { id: string; body: string }[] = [];
@@ -250,8 +259,7 @@ export function fixture(projectId = "P_1") {
         },
       }),
       AddLabelsToLabelable: () => {
-        const first = issues[0];
-        if (!first) throw new Error("Fixture issue missing");
+        const first = touch();
         first.labels.nodes.push({
           id: "L_1",
           name: "vegetarian",
@@ -261,24 +269,21 @@ export function fixture(projectId = "P_1") {
         return {};
       },
       RemoveLabelsFromLabelable: () => {
-        const first = issues[0];
-        if (!first) throw new Error("Fixture issue missing");
+        const first = touch();
         first.labels.nodes = first.labels.nodes.filter(
           (label) => label.name !== "vegetarian",
         );
         return {};
       },
       CloseIssue: ({ input }) => {
-        const first = issues[0];
-        if (!first) throw new Error("Fixture issue missing");
+        const first = touch();
         const i = input as { stateReason: string };
         first.state = "CLOSED";
         first.stateReason = i.stateReason;
         return {};
       },
       ReopenIssue: () => {
-        const first = issues[0];
-        if (!first) throw new Error("Fixture issue missing");
+        const first = touch();
         first.state = "OPEN";
         first.stateReason = "REOPENED";
         return {};
