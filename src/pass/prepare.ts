@@ -143,6 +143,7 @@ export async function preparePass(
       openRequests: [],
       turnEndPolicy: policy,
       nativeSessionId: null,
+      nativeSessionKey: null,
       usageBaseline: null,
       usageSessionId: null,
       pendingMessageId: null,

@@ -15,10 +15,11 @@ it("retires an orphaned registration and its raw credential through the lifecycl
   const store = new PassStore(f.store);
   const item = store.all()[0];
   if (!item) throw new Error("missing invocation");
+  f.nativeSessions.set(item.threadId, "native");
   f.emit(threadId(item.threadId), "thread.session-set", {
     session: makeSession({
       threadId: threadId(item.threadId),
-      providerThreadId: "native",
+      status: "running",
     }),
   });
   await vi.waitFor(() => {

@@ -15,7 +15,7 @@ it("attributes cumulative usage deltas and helper snapshots without counting rep
   if (command?.type !== "thread.turn.start") throw new Error("missing start");
   const id = command.threadId;
   f.emit(id, "thread.session-set", {
-    session: makeSession({ threadId: id, providerThreadId: "native" }),
+    session: makeSession({ threadId: id }),
   });
   let index = 0;
   const activity = (kind: string, payload: Record<string, unknown>) => {
@@ -149,7 +149,6 @@ it("delivers a turn settlement replayed before synchronization after restart", a
       threadId: command.threadId,
       status: "running",
       activeTurnId: turnId("observed-turn"),
-      providerThreadId: "native",
     }),
   });
   await vi.waitFor(() => {
@@ -161,7 +160,6 @@ it("delivers a turn settlement replayed before synchronization after restart", a
       threadId: command.threadId,
       status: "ready",
       activeTurnId: null,
-      providerThreadId: "native",
     }),
   });
   await f.restart();
@@ -240,7 +238,6 @@ it("keeps final usage with the retired pass and starts reused-pass totals at the
       threadId: id,
       status: "running",
       activeTurnId: turnId("first-turn"),
-      providerThreadId: "native",
     }),
   });
   await vi.waitFor(() => {
@@ -274,7 +271,6 @@ it("keeps final usage with the retired pass and starts reused-pass totals at the
     session: makeSession({
       threadId: id,
       status: "ready",
-      providerThreadId: "native",
     }),
   });
   await vi.waitFor(() => {
@@ -284,7 +280,6 @@ it("keeps final usage with the retired pass and starts reused-pass totals at the
     session: makeSession({
       threadId: id,
       status: "stopped",
-      providerThreadId: null,
     }),
   });
   await vi.waitFor(() => {
@@ -297,7 +292,6 @@ it("keeps final usage with the retired pass and starts reused-pass totals at the
       threadId: id,
       status: "running",
       activeTurnId: turnId("next-turn"),
-      providerThreadId: "native",
     }),
   });
   f.emit(id, "thread.activity-appended", {
@@ -336,7 +330,6 @@ it("preserves newer observations while remote retirement acknowledgement is pend
       threadId: id,
       status: "running",
       activeTurnId: turnId("tail-turn"),
-      providerThreadId: "native",
     }),
   });
   await vi.waitFor(() => {

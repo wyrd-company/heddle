@@ -220,8 +220,9 @@ try {
         text: "Reply with exactly ready. Do not call tools.",
       });
       assert.equal((await turn.completion).state, "completed");
-      const native = (await client.threads.get(ordinary.id)).session
-        .providerThreadId;
+      const native = await client.mcp.nativeSessionId({
+        threadId: ordinary.id,
+      });
       const events = (await readFile(join(state, "ordering.jsonl"), "utf8"))
         .trim()
         .split("\n")
@@ -353,12 +354,15 @@ try {
   try {
     for (const view of result.views) {
       const thread = await auditClient.threads.get(view.threadId);
-      assert.equal(thread.session.providerThreadId, view.nativeSessionId);
+      const native = await auditClient.mcp.nativeSessionId({
+        threadId: view.threadId,
+      });
+      assert.equal(native, view.nativeSessionId);
       participants.push({
         role: "pass",
         runId: view.runId,
         threadId: thread.id,
-        nativeSessionId: thread.session.providerThreadId,
+        nativeSessionId: native,
       });
     }
     if (isolation) {

@@ -43,12 +43,6 @@ export function observePass(
   );
   if (event.type === "thread.session-set") {
     const session = event.payload.session;
-    if (session.providerThreadId !== null) {
-      if (view.usageSessionId !== session.providerThreadId)
-        view.usageBaseline = null;
-      view.usageSessionId = session.providerThreadId;
-    }
-    view.nativeSessionId = session.providerThreadId;
     if (session.activeTurnId && !view.turns[session.activeTurnId]) {
       const source =
         view.pendingMessageId === item.messageId ? "heddle" : "operator";
@@ -123,8 +117,6 @@ const number = (value: unknown): number =>
 export function seedPass(item: PassInvocation): void {
   const thread = item.projection;
   if (!thread) return;
-  item.view.nativeSessionId = thread.session?.providerThreadId ?? null;
-  item.view.usageSessionId = item.view.nativeSessionId;
   item.view.openRequests = pendingRequests(thread);
   const last = thread.activities.findLast(
     (activity) => activity.kind === "context-window.updated",

@@ -91,10 +91,10 @@ it("counts observed native and operator turns, refreshes inactivity, and keeps s
     interactionMode: "default",
     createdAt: f.at,
   });
+  f.nativeSessions.set(initial.threadId, "native-first");
   f.emit(initial.threadId, "thread.session-set", {
     session: makeSession({
       threadId: initial.threadId,
-      providerThreadId: "native-first",
       status: "running",
       activeTurnId: turnId("observed-first"),
     }),
@@ -111,11 +111,15 @@ it("counts observed native and operator turns, refreshes inactivity, and keeps s
   f.emit(initial.threadId, "thread.session-set", {
     session: makeSession({
       threadId: initial.threadId,
-      providerThreadId: "native-first",
       status: "running",
       activeTurnId: turnId("observed-first"),
     }),
   });
+  expect(f.nativeLookups).toEqual([initial.threadId]);
+  f.emit(initial.threadId, "thread.session-set", {
+    session: makeSession({ threadId: initial.threadId, status: "starting" }),
+  });
+  f.nativeSessions.set(initial.threadId, "native-next");
   f.emit(initial.threadId, "thread.turn-start-requested", {
     messageId: "operator-message",
     runtimeMode: "full-access",
@@ -125,7 +129,6 @@ it("counts observed native and operator turns, refreshes inactivity, and keeps s
   f.emit(initial.threadId, "thread.session-set", {
     session: makeSession({
       threadId: initial.threadId,
-      providerThreadId: "native-next",
       status: "running",
       activeTurnId: turnId("observed-operator"),
     }),
@@ -163,10 +166,11 @@ it("retires credentials and registration before rendering the next pass from the
   await f.start();
   const initial = f.commands[0];
   if (initial?.type !== "thread.turn.start") throw new Error("missing start");
+  f.nativeSessions.set(initial.threadId, "native-first");
   f.emit(initial.threadId, "thread.session-set", {
     session: makeSession({
       threadId: initial.threadId,
-      providerThreadId: "native-first",
+      status: "running",
     }),
   });
   await vi.waitFor(() => {
@@ -198,10 +202,11 @@ it("recovers a committed active pass without sending its initial turn twice", as
   await f.start();
   const first = f.commands[0];
   if (!first) throw new Error("missing start");
+  f.nativeSessions.set(String(first.threadId), "native-first");
   f.emit(first.threadId as string, "thread.session-set", {
     session: makeSession({
       threadId: threadId(String(first.threadId)),
-      providerThreadId: "native-first",
+      status: "running",
     }),
   });
   await vi.waitFor(() => {
@@ -234,12 +239,12 @@ it("waits for the prior turn to settle before replacing a reused provider sessio
   await f.start();
   const first = f.commands[0];
   if (first?.type !== "thread.turn.start") throw new Error("missing start");
+  f.nativeSessions.set(first.threadId, "same-native");
   f.emit(first.threadId, "thread.session-set", {
     session: makeSession({
       threadId: first.threadId,
       status: "running",
       activeTurnId: turnId("prior-turn"),
-      providerThreadId: "same-native",
     }),
   });
   await vi.waitFor(() => {
@@ -260,7 +265,6 @@ it("waits for the prior turn to settle before replacing a reused provider sessio
       threadId: first.threadId,
       status: "ready",
       activeTurnId: null,
-      providerThreadId: "same-native",
     }),
   });
   await vi.waitFor(() => {
@@ -272,7 +276,6 @@ it("waits for the prior turn to settle before replacing a reused provider sessio
     session: makeSession({
       threadId: first.threadId,
       status: "stopped",
-      providerThreadId: null,
     }),
   });
   await vi.waitFor(() => {
@@ -291,7 +294,6 @@ it("waits for the prior turn to settle before replacing a reused provider sessio
       threadId: first.threadId,
       status: "running",
       activeTurnId: turnId("next-turn"),
-      providerThreadId: "same-native",
     }),
   });
   await vi.waitFor(() => {

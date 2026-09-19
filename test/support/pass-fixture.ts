@@ -72,6 +72,8 @@ export function passFixture(
   });
   const threads = new Map<string, OrchestrationThread>();
   const registrations = new Map<string, ExternalMcpRegistration>();
+  const nativeSessions = new Map<string, string>();
+  const nativeLookups: string[] = [];
   const operations: string[] = [];
   const commands: ClientOrchestrationCommand[] = [];
   const committed = new Set<string>();
@@ -199,6 +201,12 @@ export function passFixture(
         );
         return Promise.resolve();
       }),
+      nativeSessionId: vi.fn<PassOptions["client"]["mcp"]["nativeSessionId"]>(
+        (input) => {
+          nativeLookups.push(input.threadId);
+          return Promise.resolve(nativeSessions.get(input.threadId) ?? null);
+        },
+      ),
       clear: vi.fn<PassOptions["client"]["mcp"]["clear"]>((input) => {
         operations.push(`clear:${input.name ?? "default"}`);
         registrations.delete(`${input.threadId}:${input.name ?? "default"}`);
@@ -280,6 +288,8 @@ export function passFixture(
     options,
     threads,
     registrations,
+    nativeSessions,
+    nativeLookups,
     operations,
     commands,
     committed,

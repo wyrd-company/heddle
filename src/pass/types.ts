@@ -21,7 +21,10 @@ export interface PassOptions {
   client: {
     projects: Pick<T3Client["projects"], "ensure" | "findByWorkspaceRoot">;
     threads: Pick<T3Client["threads"], "ensure" | "get" | "watch" | "dispatch">;
-    mcp: Pick<T3Client["mcp"], "ensureRegistration" | "clear">;
+    mcp: Pick<
+      T3Client["mcp"],
+      "ensureRegistration" | "clear" | "nativeSessionId"
+    >;
   };
   toolOrigin: string;
   defaultModel: ModelSelection;
@@ -74,6 +77,8 @@ export interface PassReadModel {
   openRequests: PendingRequest[];
   turnEndPolicy: TurnEndPolicy;
   nativeSessionId: string | null;
+  /** Identifies the provider session the recorded native identity belongs to. */
+  nativeSessionKey: string | null;
   usageBaseline: TokenUsage | null;
   usageSessionId: string | null;
   pendingMessageId: string | null;

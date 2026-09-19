@@ -7,7 +7,11 @@ import {
   GeneratedToolService,
   type SessionBinding,
 } from "../agent-tools/index.js";
-import { threadId, type ThreadWatchItem } from "../t3code/index.js";
+import {
+  threadId,
+  type OrchestrationSession,
+  type ThreadWatchItem,
+} from "../t3code/index.js";
 import { toolState } from "../agent-tools/state.js";
 import { recordFailure } from "../engine/boundary.js";
 import type { EngineNode, Run, WorkflowEngine } from "../engine/index.js";
@@ -19,6 +23,11 @@ import {
 } from "./watch-state.js";
 import { PassStore } from "./store.js";
 import { observePass, seedPass } from "./observe.js";
+import {
+  forgetNativeSession,
+  learnNativeSession,
+  sessionEvent,
+} from "./native-session.js";
 import {
   dispatchPass,
   registerPass,
@@ -150,6 +159,7 @@ export class PassService {
       if (update.kind === "decode-error") throw update.error;
       if (update.kind === "reconnected") {
         watching.synchronized = false;
+        forgetNativeSession(item);
         this.map(item, true);
       }
       if (update.kind === "snapshot" && !item.projection) {
@@ -170,7 +180,13 @@ export class PassService {
             );
         });
       }
-      if (update.kind === "synchronized") watching.synchronized = true;
+      const observed =
+        update.kind === "event" ? sessionEvent(update.event) : null;
+      if (observed) await this.learn(item, observed);
+      if (update.kind === "synchronized") {
+        watching.synchronized = true;
+        await this.learn(item, item.projection?.session ?? null);
+      }
       if (update.kind === "turn-settled") watching.settlements.push(update);
       queueSettlement(watching);
       if (!watching.synchronized) continue;
@@ -192,10 +208,20 @@ export class PassService {
       visit: item.visit,
       threadId: item.threadId,
     };
-    this.sessions.observe(
-      binding,
-      clear ? null : (item.projection?.session?.providerThreadId ?? null),
-    );
+    this.sessions.observe(binding, clear ? null : item.view.nativeSessionId);
+  }
+  private learn(
+    item: PassInvocation,
+    session: OrchestrationSession | null,
+  ): Promise<void> {
+    return learnNativeSession(item, session, {
+      mcp: this.options.client.mcp,
+      store: this.store,
+      runs: this.engine.store,
+      map: (value) => {
+        this.map(value);
+      },
+    });
   }
   private async advance(item: PassInvocation): Promise<void> {
     const busy = this.working.get(item.key);
