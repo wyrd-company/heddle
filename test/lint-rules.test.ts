@@ -9,6 +9,10 @@ import { join } from "node:path";
 import { ESLint } from "eslint";
 import { afterEach, describe, expect, it } from "vitest";
 
+/** Each test lints a synthetic file with a full ESLint run, so allow for a
+ * busy machine rather than the runner's default per-test budget. */
+const eslintRunTimeout = 60_000;
+
 const temporaryFiles: string[] = [];
 
 afterEach(async () => {
@@ -35,7 +39,7 @@ async function lintSource(
   return eslint.lintFiles([filePath]);
 }
 
-describe("source restrictions", () => {
+describe("source restrictions", { timeout: eslintRunTimeout }, () => {
   it("allows source files with 300 lines", async () => {
     const results = await lintSource(
       Array.from({ length: 300 }, () => "// line").join("\n"),
