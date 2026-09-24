@@ -311,14 +311,14 @@ never "Projects".
 The shell reference screen. From top to bottom:
 
 - Title row: "Overview" and a one-line description. No primary action.
-- Four stat tiles: active runs, items that need attention, spend this month
-  against the budget (with a meter), and environments connected.
+- Four stat tiles: active runs, items that need attention, the budget source
+  closest to its limit (with a meter), and environments connected.
 - Active runs table: task title with reference and blueprint, portfolio item,
   active node with its state, elapsed time, and a link to the thread.
 - Needs attention list: escalations, failed runs, and paused environments.
   Each item has an icon, a title, one line of detail, and one link.
-- Budget this month: one meter per portfolio item. At 85% or more the fill
-  changes to warning and a "Near limit" badge appears.
+- API budget this month: one meter per portfolio item. At 85% or more the
+  fill changes to warning and a "Near limit" badge appears.
 
 ### Board
 
@@ -394,17 +394,42 @@ Transitions take 150ms.
 
 ### Portfolio
 
-Portfolio items and their share of the monthly budget.
+Portfolio items and their share of the budget.
+
+**Budget sources.** Usage draws from one or more budget sources:
+
+- An API budget: dollars over a calendar month, with a reset day.
+- A subscription: usage windows set by the provider: a rolling 5-hour window,
+  a weekly window, and weekly caps on single models (for example, one model
+  may use at most 50% of the weekly window). A provider can grant a reset
+  that the operator may use before it expires.
+
+Heddle watches reported usage and detects resets, including early resets by
+the provider. Reset times are estimates from that data and read "Resets in
+about …".
+
+**One share for every source.** An item's share applies to each source: a 45%
+item may use 45% of the API budget and 45% of each subscription window. A run
+counts against the source it draws from.
+
+**Cost.** Dollars are the common unit. API usage is its billed cost.
+Subscription usage is priced at the provider's API rates from the LiteLLM
+model price table, using the input, output, and cache token counts the
+provider reports.
+
+#### Portfolio table
 
 - Title row: "Portfolio", a one-line description, "Edit budgets" (outline),
   and "Add item" (primary).
-- Summary line: monthly budget, amount used this month with its percentage,
-  and when the budget resets.
-- Columns: Name, Budget (share and amount), Current usage (amount of budget,
-  percentage, and a meter), Lifetime usage, Active tasks, Completed tasks,
-  and an Edit icon button. A total row closes the table.
-- The current usage meter uses the same rule as the Overview: at 85% or more
-  the fill is warning and a "Near limit" badge shows.
+- Budget source cards, one per source: name, kind, one meter per window with
+  its value and estimated reset, a granted-reset badge with its expiry, and a
+  note when an early reset was detected.
+- Columns: Name, Budget (share and API amount), Current usage (one meter per
+  source against the item's share of it: dollars for the API budget, the
+  weekly window for a subscription), Lifetime cost, Active tasks, Completed
+  tasks, and an Edit icon button. A total row closes the table.
+- A usage meter at 85% or more of the item's share is warning and shows
+  "Near limit".
 - An item with sub-budgets has a chevron that shows them as indented rows on
   the `lane` surface, with the same columns.
 
@@ -419,13 +444,13 @@ hide while editing.
 
 #### Edit item
 
-A 480px dialog: Name, the item's share (read-only; shares change only in Edit
-budgets), and Sub-budgets. A sub-budget is a root task with a share of the
-item's budget; "Other" takes every task outside the listed root tasks. Each
-sub-budget row has its amount, a share input, and a remove button. "Add
-sub-budget" appends the next root task. The sub-budget total shows next to
-the heading and follows the same rule: when there are sub-budgets, they add
-up to 100% or "Save" is disabled.
+A 480px dialog: Name, the item's share of every source (read-only; shares
+change only in Edit budgets), and Sub-budgets. A sub-budget is a root task
+with a share of the item's budget; "Other" takes every task outside the
+listed root tasks. Each sub-budget row has its amount, a share input, and a
+remove button. "Add sub-budget" appends the next root task. The sub-budget
+total shows next to the heading and follows the same rule: when there are
+sub-budgets, they add up to 100% or "Save" is disabled.
 
 "Add item" opens the same dialog with only a name. A new item starts at 0%.
 
