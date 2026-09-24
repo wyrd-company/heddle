@@ -28,6 +28,8 @@ colors:
     info-foreground: "#1d4ed8"
     lane: "#f4f4f5"
     tile: "#ffffff"
+    edge: "#a1a1aa"
+    grid: "#e9e9ec"
   dark:
     background: "#0a0a0a"
     sidebar: "#111111"
@@ -51,6 +53,8 @@ colors:
     info-foreground: "#60a5fa"
     lane: "#0e0e0e"
     tile: "#141414"
+    edge: "#3f3f46"
+    grid: "#1a1a1a"
 typography:
   font-sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif'
   font-mono: 'ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace'
@@ -118,6 +122,17 @@ components:
     backgroundColor: "{colors.lane}"
     width: 264px
     rounded: "{rounded.lg}"
+  task-node:
+    backgroundColor: "{colors.tile}"
+    borderColor: "{colors.border}"
+    rounded: "{rounded.control}"
+    width: 152px
+    height: 84px
+  graph-edge:
+    strokeColor: "{colors.edge}"
+    strokeWidth: 1.5px
+    criticalStrokeColor: "{colors.primary}"
+    criticalStrokeWidth: 2px
   task-card:
     backgroundColor: "{colors.tile}"
     borderColor: "{colors.border}"
@@ -339,6 +354,43 @@ A task card has, from top to bottom:
 4. Run row, only when the task has an active run: status dot, active node in
    mono, run state, and an "Escalated" (warning) or "Failed" (error) badge.
 
+### Epics
+
+A dependency graph of the tasks under one root task. It reads left to right:
+a task sits to the right of every task it waits on.
+
+- Title row: "Epics" and a one-line description.
+- Toolbar: a Root task select, a summary (tasks, done, open), and two
+  switches on the right: "Critical path" and "Fade completed". Both are on by
+  default.
+- The graph sits in a card on a dotted grid, with zoom controls at the bottom
+  left and a legend at the bottom right. Under the graph is a 56px selection
+  bar.
+
+A task node is 152×84px: a status mark and the reference, an "Escalated" or
+"Failed" badge when that applies, the title in at most two lines, and the
+lifecycle state with the active blueprint node. A done task shows a check and
+a muted title. An open task with no run shows a hollow dot.
+
+**Critical path.** Agents do the work, so durations and estimates do not
+drive the graph. The critical path is the dependency chain with the most open
+tasks; done tasks count as zero. When two chains tie, the longer chain wins.
+Critical edges are 2px primary; other edges are 1.5px `edge`.
+
+**Focus.** Everything that is not in focus fades: nodes to 30%, edges to 10%.
+Transitions take 150ms.
+
+- Hover or keyboard focus on a task: focus is the task, the tasks it waits
+  on, and the tasks that wait on it.
+- Select a task (click, or Enter on a focused node): focus is the critical
+  path through that task: the chain of most open tasks before it, the task,
+  and the chain of most open tasks after it. The selection bar shows the
+  chain, its open count, "Clear", and "Open task". Clicking the selected
+  task again clears the selection.
+- With no hover and no selection, "Critical path" highlights the root task's
+  critical path, and "Fade completed" fades edges that leave done tasks (25%)
+  and done nodes (55%).
+
 ### Environments
 
 - Title row: "Environments", description, and the primary "Add environment"
@@ -355,8 +407,10 @@ A task card has, from top to bottom:
 
 Heddle's UI is a React application built on the same stack as T3 Code's web
 client: Tailwind CSS v4, Base UI primitives, class-variance-authority for
-variants, lucide-react for icons, and dnd-kit for drag and drop (pointer,
-touch, and keyboard). T3 Code's `components/ui` primitives
+variants, lucide-react for icons, dnd-kit for drag and drop (pointer,
+touch, and keyboard), and ReactFlow (`@xyflow/react`) for graphs. The Epics
+graph and the blueprint editor share ReactFlow, one automatic layout engine,
+and one node style. T3 Code's `components/ui` primitives
 (button, badge, table, dialog, menu, select, sidebar) are the starting point
 for Heddle's own, so that both products look and behave the same.
 
@@ -365,9 +419,10 @@ with the same name as the design canvas uses:
 
 - `AppShell`: header, sidebar, and the content region. The canvas keeps it in
   `Main`.
-- `OverviewContent`, `BoardContent`, `EnvironmentsContent`: the content of
-  each sidebar screen.
+- `OverviewContent`, `BoardContent`, `EpicsContent`, `EnvironmentsContent`:
+  the content of each sidebar screen.
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
+- `TaskNode`: a ReactFlow custom node for a task in a graph.
 
 Components read colors from the token names in this document, set as CSS
 custom properties on the root element, so that a theme change is one class
