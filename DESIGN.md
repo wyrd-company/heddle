@@ -18,6 +18,7 @@ colors:
     icon-muted: "#8b8b93"
     primary: "#1b4ed8"
     primary-foreground: "#ffffff"
+    link: "#1b4ed8"
     success: "#10b981"
     success-foreground: "#047857"
     warning: "#f59e0b"
@@ -43,6 +44,7 @@ colors:
     icon-muted: "#7a7a7a"
     primary: "#346bf1"
     primary-foreground: "#ffffff"
+    link: "#7ea2ff"
     success: "#10b981"
     success-foreground: "#34d399"
     warning: "#f59e0b"
@@ -171,6 +173,10 @@ T3 Code's `index.css`; when T3 Code changes a default, change it here.
 - **Status.** Success is emerald, warning is amber, error is red, info is
   blue. A status fill (dot, solid badge) uses the base color. Status text uses
   the `-foreground` variant, so that text keeps a 4.5:1 contrast.
+- **Code.** In code editors, paths and names use `link` color, strings use
+  `success-foreground`, `true`, `false`, and `null` use
+  `warning-foreground`, and operators, punctuation, and comments use
+  `muted-foreground`.
 - **Tinted surfaces.** Badges and alerts use the status color at 8% (light) or
   16% (dark) opacity behind `-foreground` text.
 
@@ -598,6 +604,21 @@ A timeout exists only where the author sets one.
 Mappings (input, output, actions) are rows of two mono inputs joined by an
 arrow, with an "Add" button under them.
 
+Values that pass data in or build it (sub-run inputs, `finalize` outputs, the
+`emit-event` payload, the `wait` match) are JSONata expressions evaluated
+against the run context. Their labels say "JSONata", and each field has an
+expand button at its right edge.
+
+#### Expression editor
+
+The expand button opens a 920px dialog titled with the node, field, and key.
+On the left, the expression in a code editor. On the right, the result of
+the expression against a chosen source: the context of a recent run of this
+blueprint, or a sample built from the input schema. Under the editor, the
+parse state ("Valid JSONata" or the error and its position); under the
+result, whether it matches the schema the field feeds. "Apply" writes the
+expression back to the field.
+
 #### Problems
 
 The editor validates the draft as it changes. A strip under the canvas
@@ -620,8 +641,9 @@ stored as YAML in the process repository. Each has its own editor tab.
   chevron on object rows), Type (string, number, integer, boolean, object,
   array, enum), Required (checkbox), Description, and remove. "Add property"
   under the table.
-- Right (400px): the YAML file, with line numbers, keys in foreground and
-  values in link color. It follows every change in the table.
+- Right (400px): the YAML file in a code editor. Both sides edit the same
+  document: a change in either shows in the other at once. Comments written
+  in the YAML are kept when the table changes it.
 
 #### Rules editor
 
@@ -655,10 +677,11 @@ runs already started keep theirs.
 
 Heddle's UI is a React application built on the same stack as T3 Code's web
 client: Tailwind CSS v4, Base UI primitives, class-variance-authority for
-variants, lucide-react for icons, dnd-kit for drag and drop (pointer,
-touch, and keyboard), and ReactFlow (`@xyflow/react`) for graphs. The Epics
-graph and the blueprint editor share ReactFlow, one automatic layout engine,
-and one node style. T3 Code's `components/ui` primitives
+variants, and lucide-react for icons. Heddle adds dnd-kit for drag and drop
+(pointer, touch, and keyboard), ReactFlow (`@xyflow/react`) for graphs, and
+CodeMirror 6 for code: YAML with `@codemirror/lang-yaml`, and JSONata
+expressions. The Epics graph and the blueprint editor share ReactFlow, one
+automatic layout engine, and one node style. T3 Code's `components/ui` primitives
 (button, badge, table, dialog, menu, select, sidebar) are the starting point
 for Heddle's own, so that both products look and behave the same.
 
@@ -678,6 +701,8 @@ with the same name as the design canvas uses:
 - `NodeSettings`: the edit component for a blueprint node, one set of fields
   per node type.
 - The rules editor is `@gorules/jdm-editor`, themed with Heddle's tokens.
+- YAML is read and written with the `yaml` package's document model, so
+  that comments survive edits from the schema table.
 
 Components read colors from the token names in this document, set as CSS
 custom properties on the root element, so that a theme change is one class
