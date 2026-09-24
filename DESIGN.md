@@ -661,6 +661,24 @@ M warning) and path in mono, a commit message, and the target repository and
 branch. "Commit and push" commits and pushes. New runs use the new version;
 runs already started keep theirs.
 
+### Task fields
+
+The task metadata schema: the fields every task carries. It is JSON Schema,
+stored as YAML in the process repository, and it follows the same draft,
+discard, and publish path as a blueprint.
+
+- Title row: "Task fields", a "Draft · N changes" badge when there is a
+  draft, a one-line description, "Discard draft" (ghost), and "Publish"
+  (primary).
+- A line with the published version, its date, and the file path.
+- The schema editor fills the rest of the page, the same component as the
+  blueprint input and output schemas.
+- Fields that Heddle sets (`lifecycleState`, `blueprint`, `portfolioItem`)
+  show a lock badge "Heddle". Their name and Required box cannot change and
+  they cannot be removed; their description can.
+- Publish and Discard use the same dialogs as the blueprint editor. Existing
+  tasks keep their values; a new required field applies to new tasks.
+
 ### Environments
 
 - Title row: "Environments", description, and the primary "Add environment"
@@ -691,15 +709,19 @@ with the same name as the design canvas uses:
 - `AppShell`: header, sidebar, and the content region. The canvas keeps it in
   `Main`.
 - `OverviewContent`, `BoardContent`, `EpicsContent`, `RunsContent`,
-  `PortfolioContent`, `BlueprintsContent`, `EnvironmentsContent`: the content
-  of each sidebar screen. `BlueprintsContent` holds both the list and the
-  editor. `RunsContent`
+  `PortfolioContent`, `BlueprintsContent`, `TaskFieldsContent`,
+  `EnvironmentsContent`: the content of each sidebar screen.
+  `BlueprintsContent` holds both the list and the editor, and `RunsContent`
   holds both the list and the run page.
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
 - `TaskNode`: a ReactFlow custom node for a task in a graph.
 - `BlueprintNode`: a ReactFlow custom node for a blueprint node.
 - `NodeSettings`: the edit component for a blueprint node, one set of fields
   per node type.
+- `SchemaEditor`: the property table and YAML pane, used for blueprint input
+  and output schemas and for Task fields.
+- `PublishDialog` and `DiscardDialog`: the draft publish and discard dialogs,
+  used by the blueprint editor and Task fields.
 - The rules editor is `@gorules/jdm-editor`, themed with Heddle's tokens.
 - YAML is read and written with the `yaml` package's document model, so
   that comments survive edits from the schema table.
