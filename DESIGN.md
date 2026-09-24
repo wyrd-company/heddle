@@ -469,8 +469,8 @@ breadcrumb shows "Runs / #ref run", and "Runs" in it returns to the list.
 
 - Title row: "Runs" and a one-line description. No primary action.
 - Filters in one row: an Active / Completed segmented control, then
-  Portfolio item, Blueprint, and Environment selects. The run count is
-  right-aligned.
+  Portfolio item, Blueprint, Environment, and Account selects. The run count
+  is right-aligned.
 - Columns: Task (title, reference in mono), Portfolio item, Blueprint (mono),
   Active node (status dot, node in mono, state, and a thread link icon for an
   active run; "Last node" in Completed), Usage (tokens over dollars), Time,
@@ -485,7 +485,7 @@ breadcrumb shows "Runs / #ref run", and "Runs" in it returns to the list.
 
 - Header: "All runs" back link; the reference and title; a status badge
   (Running, Completed, Failed); a meta line with portfolio item, blueprint,
-  environment, and start time. On the right: a Timeline / Sequence segmented
+  environment, account, and start time. On the right: a Timeline / Sequence segmented
   control and "Open thread".
 - Four tiles: Tokens, Cost, Time, Passes.
 - **Timeline** view: one row per node visit with the node and pass on the
