@@ -392,6 +392,43 @@ Transitions take 150ms.
   critical path, and "Fade completed" fades edges that leave done tasks (25%)
   and done nodes (55%).
 
+### Portfolio
+
+Portfolio items and their share of the monthly budget.
+
+- Title row: "Portfolio", a one-line description, "Edit budgets" (outline),
+  and "Add item" (primary).
+- Summary line: monthly budget, amount used this month with its percentage,
+  and when the budget resets.
+- Columns: Name, Budget (share and amount), Current usage (amount of budget,
+  percentage, and a meter), Lifetime usage, Active tasks, Completed tasks,
+  and an Edit icon button. A total row closes the table.
+- The current usage meter uses the same rule as the Overview: at 85% or more
+  the fill is warning and a "Near limit" badge shows.
+- An item with sub-budgets has a chevron that shows them as indented rows on
+  the `lane` surface, with the same columns.
+
+#### Edit budgets
+
+"Edit budgets" turns every share into a number input and swaps the title-row
+buttons for "Cancel" and "Save budgets". A status bar above the table shows
+the sum: success when it is 100%, error when it is not, with the sum in the
+message. While the sum is not 100%, the share inputs have error borders, the
+total share is error-colored, and "Save budgets" is disabled. Sub-budget rows
+hide while editing.
+
+#### Edit item
+
+A 480px dialog: Name, the item's share (read-only; shares change only in Edit
+budgets), and Sub-budgets. A sub-budget is a root task with a share of the
+item's budget; "Other" takes every task outside the listed root tasks. Each
+sub-budget row has its amount, a share input, and a remove button. "Add
+sub-budget" appends the next root task. The sub-budget total shows next to
+the heading and follows the same rule: when there are sub-budgets, they add
+up to 100% or "Save" is disabled.
+
+"Add item" opens the same dialog with only a name. A new item starts at 0%.
+
 ### Runs
 
 A list of blueprint runs. A run opens as its own page under Runs; the header
@@ -462,7 +499,8 @@ with the same name as the design canvas uses:
 - `AppShell`: header, sidebar, and the content region. The canvas keeps it in
   `Main`.
 - `OverviewContent`, `BoardContent`, `EpicsContent`, `RunsContent`,
-  `EnvironmentsContent`: the content of each sidebar screen. `RunsContent`
+  `PortfolioContent`, `EnvironmentsContent`: the content of each sidebar
+  screen. `RunsContent`
   holds both the list and the run page.
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
 - `TaskNode`: a ReactFlow custom node for a task in a graph.
