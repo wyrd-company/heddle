@@ -111,6 +111,9 @@ one as a finding to design for, not a failure.
   artifacts live under `docs/` and follow the refinery schemas in
   `/workspaces/context`. They are clean copy: present intent only, no history
   narration.
+- `DESIGN.md` at the repository root is the design system for Heddle's UI.
+  It stays at the root, where design tools look for it, and is the one design
+  artifact outside `docs/`.
 - Worktrees live at `/workspaces/worktrees/heddle/{branch}`. Do not work on
   `main` directly.
 - Flowcraft is the engine. Known defects in its subflow resume, action edges,
