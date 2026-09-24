@@ -312,7 +312,8 @@ The shell reference screen. From top to bottom:
 
 - Title row: "Overview" and a one-line description. No primary action.
 - Four stat tiles: active runs, items that need attention, the budget source
-  closest to its limit (with a meter), and environments connected.
+  account closest to its limit (with a meter and the account count), and
+  environments connected.
 - Active runs table: task title with reference and blueprint, portfolio item,
   active node with its state, elapsed time, and a link to the thread.
 - Needs attention list: escalations, failed runs, and paused environments.
@@ -396,7 +397,9 @@ Transitions take 150ms.
 
 Portfolio items and their share of the budget.
 
-**Budget sources.** Usage draws from one or more budget sources:
+**Budget sources.** A budget source is an account. Heddle tracks usage per
+account, and one Heddle can draw on several accounts of the same kind. Usage
+draws from one or more of them:
 
 - An API budget: dollars over a calendar month, with a reset day.
 - A subscription: usage windows set by the provider: a rolling 5-hour window,
@@ -421,13 +424,16 @@ provider reports.
 
 - Title row: "Portfolio", a one-line description, "Edit budgets" (outline),
   and "Add item" (primary).
-- Budget source cards, one per source: name, kind, one meter per window with
-  its value and estimated reset, a granted-reset badge with its expiry, and a
-  note when an early reset was detected.
-- Columns: Name, Budget (share and API amount), Current usage (one meter per
-  source against the item's share of it: dollars for the API budget, the
-  weekly window for a subscription), Lifetime cost, Active tasks, Completed
-  tasks, and an Edit icon button. A total row closes the table.
+- Budget source cards, one per account: name, kind, one meter per window
+  with its value and estimated reset, a granted-reset badge with its expiry,
+  and a note when an early reset was detected.
+- Columns: Name, Budget (share and API amount), Current usage, Lifetime
+  cost, Active tasks, Completed tasks, and an Edit icon button. A total row
+  closes the table.
+- Current usage shows one meter: the account and window closest to the
+  item's share of it, named ("Subscription A · weekly"). A "+N" after it
+  lists the other accounts and their percentages on hover and to screen
+  readers.
 - A usage meter at 85% or more of the item's share is warning and shows
   "Near limit".
 - An item with sub-budgets has a chevron that shows them as indented rows on
