@@ -519,7 +519,9 @@ The processes Heddle runs, from the process repository.
 #### Blueprints list
 
 - Title row: "Blueprints", a one-line description, and "Add blueprint"
-  (primary).
+  (primary). Add blueprint opens a 440px dialog with a name (lowercase
+  letters, digits, and hyphens) and "Start from", a published blueprint to
+  copy. "Create draft" opens the editor on the new draft.
 - Columns: Name (mono, with a one-line description), Version (short SHA in
   mono and date), Active runs, and an Edit button. A blueprint with a local
   draft shows a "Draft" badge.
@@ -532,8 +534,12 @@ The editor works on a local draft. Publish commits the draft and pushes it
 to the process repository.
 
 - Header (56px): the blueprint name in mono, the version the draft is based
-  on, a "Draft · N changes" badge, then "Discard draft" (ghost), "Auto
-  layout" (outline), and "Publish" (primary).
+  on, a "Draft · N changes" badge, tabs (Graph, Input schema, Output
+  schema), then "Discard draft" (ghost), "Auto layout" (outline, Graph tab
+  only), and "Publish" (primary).
+- "Discard draft" asks first, in a 400px alert dialog that names the number
+  of changes and the published version that stays. The confirm button is
+  solid error.
 - Left: the node-type palette (208px), with a filter field and the node
   types in groups. Each entry is the type name in mono with its icon; its
   description is the tooltip. A type is dragged onto the canvas.
@@ -541,9 +547,10 @@ to the process repository.
   (Dagre or ELK), top to bottom. Edges carry the result name as a mono pill.
   Edges into and out of the selected node are primary. A node changed in
   the draft has a warning dot. Zoom controls at the bottom left.
-- Right: the edit component for the selected node (320px): node id, the
-  fields for its type, and its results with the node each one leads to
-  ("not connected" when a result has no edge).
+- Right: `NodeSettings` for the selected node (320px): node id, the fields
+  for its type, and its results with the node each one leads to ("not
+  connected", in warning text, when a result has no edge).
+- Bottom of the canvas: the Problems strip (below).
 
 `BlueprintNode` is 168×56: an icon chip, the node id in mono (weight 600),
 and the type name. Selection is a 2px primary border with a ring, as for
@@ -563,6 +570,58 @@ Node types, in palette groups:
 `turn-start` reads a thread id from the run context, so several turns can
 share a thread. Its edit component also has the prompt template and the
 handoff schema.
+
+#### Node settings
+
+Each node type declares its results; edges pick from them.
+
+| Type | Settings | Results |
+| --- | --- | --- |
+| `rules` | decision model path; "Open rules editor" | the model's output values |
+| `start-sub-run` | blueprint, Blocking / Non-blocking, input mapping | `completed`, `failed`; `started` when non-blocking |
+| `emit-event` | event name, payload | `emitted` |
+| `wait` | event name, JSONata match, optional timeout | `received`, `timeout` |
+| `finalize` | output mapping to the output schema | none; ends the run |
+| `thread-create` | environment, run-context path for the thread id | `created` |
+| `turn-start` | thread id path, prompt template, handoff schema | `handoff`, `idle` |
+| `stop-thread-session` | thread id path | `done` |
+| `thread-archive` | thread id path | `done` |
+| `update-card-status` | lifecycle state | `done` |
+| `release-card` | none | `done` |
+| `card-status-revert` | none | `done` |
+| `issue-reopen` | optional comment template | `done` |
+| `notify` | message template, up to three actions (label → result) | one per action |
+| `escalate` | brief template | `resolved`, `unresolved` |
+
+A timeout exists only where the author sets one.
+
+Mappings (input, output, actions) are rows of two mono inputs joined by an
+arrow, with an "Add" button under them.
+
+#### Problems
+
+The editor validates the draft as it changes. A strip under the canvas
+shows the count of errors (error color) and warnings (warning color) and
+lists each problem with its node id; a problem opens its node. A node with a
+problem has a 16px "!" badge on its top-right corner, error or warning
+colored. The strip collapses to its 36px header.
+
+- Error: the blueprint cannot run as drawn, such as a rules output with no
+  edge. Publish is disabled until every error is fixed.
+- Warning: a declared result with no edge. Warnings do not block Publish.
+
+#### Input and output schemas
+
+A blueprint has an input schema (what a run starts with) and an output
+schema (what a run returns; `finalize` maps into it). Both are JSON Schema,
+stored as YAML in the process repository. Each has its own editor tab.
+
+- Left: a property table: Property (mono, indented for nesting, with a
+  chevron on object rows), Type (string, number, integer, boolean, object,
+  array, enum), Required (checkbox), Description, and remove. "Add property"
+  under the table.
+- Right (400px): the YAML file, with line numbers, keys in foreground and
+  values in link color. It follows every change in the table.
 
 #### Rules editor
 
@@ -616,6 +675,8 @@ with the same name as the design canvas uses:
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
 - `TaskNode`: a ReactFlow custom node for a task in a graph.
 - `BlueprintNode`: a ReactFlow custom node for a blueprint node.
+- `NodeSettings`: the edit component for a blueprint node, one set of fields
+  per node type.
 - The rules editor is `@gorules/jdm-editor`, themed with Heddle's tokens.
 
 Components read colors from the token names in this document, set as CSS
