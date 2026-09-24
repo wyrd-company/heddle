@@ -357,7 +357,8 @@ A task card has, from top to bottom:
 ### Epics
 
 A dependency graph of the tasks under one root task. It reads left to right:
-a task sits to the right of every task it waits on.
+a task sits to the right of every task it waits on. "Waits on" is GitHub's
+issue dependency ("blocked by"); Heddle keeps no dependency data of its own.
 
 - Title row: "Epics" and a one-line description.
 - Toolbar: a Root task select, a summary (tasks, done, open), and two
