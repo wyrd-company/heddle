@@ -405,7 +405,8 @@ draws from one or more of them:
 - A subscription: usage windows set by the provider: a rolling 5-hour window,
   a weekly window, and weekly caps on single models (for example, one model
   may use at most 50% of the weekly window). A provider can grant a reset
-  that the operator may use before it expires.
+  that the operator may use before it expires. Heddle shows granted resets
+  and their expiry; it does not use them.
 
 Heddle watches reported usage and detects resets, including early resets by
 the provider. Reset times are estimates from that data and read "Resets in
@@ -438,6 +439,12 @@ provider reports.
   "Near limit".
 - An item with sub-budgets has a chevron that shows them as indented rows on
   the `lane` surface, with the same columns.
+- "Other" is always the last item. It takes every task with no portfolio
+  item. It has a share like any item, but it has no Edit button and cannot
+  be renamed or archived.
+- Under the table, "Show archived (N)" lists archived items with their
+  archive date, lifetime cost, completed tasks, and "Restore". A restored
+  item comes back with a 0% share.
 
 #### Edit budgets
 
@@ -457,6 +464,10 @@ listed root tasks. Each sub-budget row has its amount, a share input, and a
 remove button. "Add sub-budget" appends the next root task. The sub-budget
 total shows next to the heading and follows the same rule: when there are
 sub-budgets, they add up to 100% or "Save" is disabled.
+
+The footer has "Archive item" on the left (error text, outline). Items are
+archived, never deleted: an archived item keeps its history, and its share
+moves to "Other" so the shares still add up to 100%.
 
 "Add item" opens the same dialog with only a name. A new item starts at 0%.
 
