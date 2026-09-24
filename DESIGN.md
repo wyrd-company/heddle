@@ -426,7 +426,9 @@ breadcrumb shows "Runs / #ref run", and "Runs" in it returns to the list.
   primary line marks now. A pass that ends without a handoff is warning. A
   total row closes the table.
 - **Sequence** view: lifelines for Heddle, the T3 Code thread, and GitHub.
-  Heddle's messages are solid arrows; replies are dashed. An abnormal reply,
+  Heddle's messages are solid arrows; replies are dashed. A pass either
+  starts a thread ("Start thread") or continues one the run already has
+  ("Continue thread"), as the blueprint decides. An abnormal reply,
   such as "idle", is warning. The pass that is running is a note on the
   thread's lifeline. Usage sits in a right-hand column on the row of the
   reply that closed each pass.
