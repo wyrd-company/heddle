@@ -512,6 +512,74 @@ breadcrumb shows "Runs / #ref run", and "Runs" in it returns to the list.
   thread's lifeline. Usage sits in a right-hand column on the row of the
   reply that closed each pass.
 
+### Blueprints
+
+The processes Heddle runs, from the process repository.
+
+#### Blueprints list
+
+- Title row: "Blueprints", a one-line description, and "Add blueprint"
+  (primary).
+- Columns: Name (mono, with a one-line description), Version (short SHA in
+  mono and date), Active runs, and an Edit button. A blueprint with a local
+  draft shows a "Draft" badge.
+- Edit, or the name, opens the editor. The breadcrumb shows
+  "Blueprints / name".
+
+#### Blueprint editor
+
+The editor works on a local draft. Publish commits the draft and pushes it
+to the process repository.
+
+- Header (56px): the blueprint name in mono, the version the draft is based
+  on, a "Draft · N changes" badge, then "Discard draft" (ghost), "Auto
+  layout" (outline), and "Publish" (primary).
+- Left: the node-type palette (208px), with a filter field and the node
+  types in groups. Each entry is the type name in mono with its icon; its
+  description is the tooltip. A type is dragged onto the canvas.
+- Center: the ReactFlow canvas on the dotted grid. The layout is automatic
+  (Dagre or ELK), top to bottom. Edges carry the result name as a mono pill.
+  Edges into and out of the selected node are primary. A node changed in
+  the draft has a warning dot. Zoom controls at the bottom left.
+- Right: the edit component for the selected node (320px): node id, the
+  fields for its type, and its results with the node each one leads to
+  ("not connected" when a result has no edge).
+
+`BlueprintNode` is 168×56: an icon chip, the node id in mono (weight 600),
+and the type name. Selection is a 2px primary border with a ring, as for
+`TaskNode`.
+
+Node types, in palette groups:
+
+| Group | Types |
+| --- | --- |
+| Decide | `rules` |
+| Flow | `start-sub-run` (blocking or not), `emit-event`, `wait`, `finalize` |
+| Thread | `thread-create`, `turn-start`, `stop-thread-session`, `thread-archive` |
+| Card and issue | `update-card-status`, `release-card`, `card-status-revert`, `issue-reopen` |
+| People | `notify` (up to three action buttons), `escalate` |
+
+`thread-create` stores the new thread's id at a run-context path.
+`turn-start` reads a thread id from the run context, so several turns can
+share a thread. Its edit component also has the prompt template and the
+handoff schema.
+
+#### Rules editor
+
+A `rules` node evaluates a JDM decision model from the process repository.
+Its edit component summarizes the model (rule count, hit policy, inputs) and
+has "Open rules editor". That opens the JDM editor in a 920px dialog, themed
+with Heddle's tokens: inputs and outputs as mono column headers, output
+columns on the `accent` surface, one row per rule, "Add rule", "Add input",
+"Add output", and "Apply to draft".
+
+#### Publish
+
+A 480px dialog: the changed files with their git status letter (A success,
+M warning) and path in mono, a commit message, and the target repository and
+branch. "Commit and push" commits and pushes. New runs use the new version;
+runs already started keep theirs.
+
 ### Environments
 
 - Title row: "Environments", description, and the primary "Add environment"
@@ -541,11 +609,14 @@ with the same name as the design canvas uses:
 - `AppShell`: header, sidebar, and the content region. The canvas keeps it in
   `Main`.
 - `OverviewContent`, `BoardContent`, `EpicsContent`, `RunsContent`,
-  `PortfolioContent`, `EnvironmentsContent`: the content of each sidebar
-  screen. `RunsContent`
+  `PortfolioContent`, `BlueprintsContent`, `EnvironmentsContent`: the content
+  of each sidebar screen. `BlueprintsContent` holds both the list and the
+  editor. `RunsContent`
   holds both the list and the run page.
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
 - `TaskNode`: a ReactFlow custom node for a task in a graph.
+- `BlueprintNode`: a ReactFlow custom node for a blueprint node.
+- The rules editor is `@gorules/jdm-editor`, themed with Heddle's tokens.
 
 Components read colors from the token names in this document, set as CSS
 custom properties on the root element, so that a theme change is one class
