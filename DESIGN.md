@@ -392,6 +392,45 @@ Transitions take 150ms.
   critical path, and "Fade completed" fades edges that leave done tasks (25%)
   and done nodes (55%).
 
+### Runs
+
+A list of blueprint runs. A run opens as its own page under Runs; the header
+breadcrumb shows "Runs / #ref run", and "Runs" in it returns to the list.
+
+#### Runs list
+
+- Title row: "Runs" and a one-line description. No primary action.
+- Filters in one row: an Active / Completed segmented control, then
+  Portfolio item, Blueprint, and Environment selects. The run count is
+  right-aligned.
+- Columns: Task (title, reference in mono), Portfolio item, Blueprint (mono),
+  Active node (status dot, node in mono, state, and a thread link icon for an
+  active run; "Last node" in Completed), Usage (tokens over dollars), Time,
+  and Timeline.
+- The Timeline cell is a mini bar: one segment per node visit, width by time,
+  2px gaps. Completed visits use `edge`; the current visit is primary
+  (45% opacity while it waits on a turn); an escalated visit is warning and a
+  failed one is error. Each segment has a tooltip with the node and its time.
+- A row opens the run.
+
+#### Run page
+
+- Header: "All runs" back link; the reference and title; a status badge
+  (Running, Completed, Failed); a meta line with portfolio item, blueprint,
+  environment, and start time. On the right: a Timeline / Sequence segmented
+  control and "Open thread".
+- Four tiles: Tokens, Cost, Time, Passes.
+- **Timeline** view: one row per node visit with the node and pass on the
+  left, a bar on a shared time axis, the visit's result after the bar
+  ("handoff", "idle → retry", "running"), and usage on the right. A dashed
+  primary line marks now. A pass that ends without a handoff is warning. A
+  total row closes the table.
+- **Sequence** view: lifelines for Heddle, the T3 Code thread, and GitHub.
+  Heddle's messages are solid arrows; replies are dashed. An abnormal reply,
+  such as "idle", is warning. The pass that is running is a note on the
+  thread's lifeline. Usage sits in a right-hand column on the row of the
+  reply that closed each pass.
+
 ### Environments
 
 - Title row: "Environments", description, and the primary "Add environment"
@@ -401,8 +440,8 @@ Transitions take 150ms.
 - Row actions: Pause / Resume, Disconnect / Reconnect, Forget.
 - Active threads shows "—" for a disconnected environment, because the count
   is not known.
-- "Add environment" opens a dialog with Server URL and an optional access
-  token.
+- "Add environment" opens a dialog with the server URL and the credential
+  the environment requires.
 
 ## Implementation
 
@@ -420,8 +459,9 @@ with the same name as the design canvas uses:
 
 - `AppShell`: header, sidebar, and the content region. The canvas keeps it in
   `Main`.
-- `OverviewContent`, `BoardContent`, `EpicsContent`, `EnvironmentsContent`:
-  the content of each sidebar screen.
+- `OverviewContent`, `BoardContent`, `EpicsContent`, `RunsContent`,
+  `EnvironmentsContent`: the content of each sidebar screen. `RunsContent`
+  holds both the list and the run page.
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
 - `TaskNode`: a ReactFlow custom node for a task in a graph.
 
