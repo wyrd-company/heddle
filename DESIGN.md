@@ -882,6 +882,9 @@ Heddle does not guard against these; the operator decides how to handle them.
   matter does not match the task fields.
 - Changes made by hand to a bound Project's configuration show as drift, and
   Apply undoes them.
+- Heddle knows which account an environment's harness uses only from
+  Settings. If someone signs a harness in to a different account, Heddle
+  counts that usage against the old account until "Used by" changes.
 
 ## Do and don't
 
