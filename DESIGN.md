@@ -295,9 +295,10 @@ item is selected.
 
 - No label: Overview, Board, Epics, Runs.
 - **Plan**: Portfolio.
-- **Configure**: Blueprints, Task fields, GitHub Projects, Environments.
+- **Configure**: Blueprints, GitHub Projects, Environments.
 
-Settings is at the bottom of the sidebar. Overview is the default screen.
+Settings is at the bottom of the sidebar; Task fields is a Settings section.
+Overview is the default screen.
 
 These are not in the sidebar. The operator opens them from another screen, and
 the header breadcrumb shows the path:
@@ -305,7 +306,9 @@ the header breadcrumb shows the path:
 - Task: from a Board card, an Epics node, or a Runs row.
 - Run detail: from Runs.
 - Blueprint editor: from Blueprints.
-- Project template and onboarding: from GitHub Projects.
+- A Project's configuration and Apply: from GitHub Projects.
+- Task fields: from Settings, with quick links on Blueprints and GitHub
+  Projects.
 - Portfolio item edit: from Portfolio.
 
 Heddle uses T3 Code's words. A T3 Code server is an **environment**, and a T3
@@ -661,23 +664,96 @@ M warning) and path in mono, a commit message, and the target repository and
 branch. "Commit and push" commits and pushes. New runs use the new version;
 runs already started keep theirs.
 
-### Task fields
+### GitHub Projects
 
-The task metadata schema: the fields every task carries. It is JSON Schema,
-stored as YAML in the process repository, and it follows the same draft,
-discard, and publish path as a blueprint.
+To use Heddle, you give it control of each bound Project's configuration.
+The task fields decide what that configuration is; Heddle creates it and
+keeps it in step.
 
-- Title row: "Task fields", a "Draft · N changes" badge when there is a
-  draft, a one-line description, "Discard draft" (ghost), and "Publish"
-  (primary).
-- A line with the published version, its date, and the file path.
-- The schema editor fills the rest of the page, the same component as the
-  blueprint input and output schemas.
+#### Projects list
+
+- Title row: "GitHub Projects", a one-line description, "Task fields"
+  (ghost, a quick link), and "Bind a Project" (primary).
+- Columns: Project (`org/name` in mono, linking to GitHub), Active cards,
+  Completed cards, Environment (the T3 Code server for its threads, or "Any
+  connected"), Configuration, and an action.
+- Configuration is a badge: "In sync" (success), "Drift · N" (warning; the
+  configuration was changed outside Heddle), or "Not applied" (info; bound
+  but never applied). The action is "View" when in sync and "Review
+  changes" otherwise.
+
+#### Bind a Project
+
+A 480px dialog: Project, Environment, and a warning note that Heddle takes
+control of the Project's fields and status options and of the labels, issue
+types, issue fields, and milestones the task fields use. "Bind and review
+changes" is disabled until "I understand" is checked. It opens the Project's
+page with its first Apply.
+
+#### A Project's page
+
+- Header: "All Projects" back link, the Project name in mono with a GitHub
+  link and its Configuration badge; a meta line with the environment, the
+  task fields version, and when it was last applied. On the right: "Task
+  fields" (ghost) and "Apply N changes" (primary; "Nothing to apply" and
+  disabled when in sync).
+- One card, "What Apply will change", with a switch "Also remove what the
+  task fields do not define" (off by default). Groups, one per storage kind:
+  Project fields, Labels, Org issue types, Org issue fields, Milestones,
+  Front matter. Each group names where it applies and sums its changes.
+- A change row: a 18px mark (`+` create in success, `~` change in warning,
+  `−` remove in error), the target in mono, and what happens. A change that
+  undoes drift has a "Drift" badge. With the switch off, a removal row is
+  dimmed with a "Kept" badge and does not count.
+- Front matter has nothing to apply. When issues hold front matter that does
+  not match the task fields, the group says how many, with a link to them.
+- Lifecycle states are Heddle's: Apply sets the Project's Status options to
+  them.
+
+### Settings
+
+Settings has tabs under its title: Task fields, Accounts and budget sources,
+and General. Accounts and budget sources hold the accounts Portfolio reads.
+
+#### Task fields
+
+The fields every task carries and where each one lives on GitHub. The schema
+is per process repository, JSON Schema stored as YAML, with the same draft,
+discard, and publish path as a blueprint. After Publish, each bound Project
+shows the storage changes to apply.
+
+- Section header: "Task fields", a "Draft · N changes" badge, a one-line
+  description, "Discard draft" (ghost), and "Publish" (primary). A line with
+  the published version, its date, and the file path.
+- The schema editor, in storage mode: a "Stored as" column after Type, and a
+  right pane with two tabs, Storage and YAML.
 - Fields that Heddle sets (`lifecycleState`, `blueprint`, `portfolioItem`)
-  show a lock badge "Heddle". Their name and Required box cannot change and
-  they cannot be removed; their description can.
-- Publish and Discard use the same dialogs as the blueprint editor. Existing
-  tasks keep their values; a new required field applies to new tasks.
+  have a lock badge "Heddle": their name, Required box, and storage cannot
+  change, and they cannot be removed.
+
+Where a field can live, and what it can hold:
+
+| Stored as | Types | Scope |
+| --- | --- | --- |
+| Project field | string, number, integer, enum, date | each bound Project |
+| Org issue field | string, number, integer, enum, date | the whole org |
+| Org issue type | enum (one issue type per value) | the whole org |
+| Label | enum (one label per value, with a prefix), boolean | each repository |
+| Milestone | string, enum (the title is the value) | each repository |
+| Front matter | any type, including objects and lists | each issue |
+
+Front matter is a hidden YAML block in an HTML comment at the top of the
+issue description. Nested properties live inside their parent, so a nested
+row shows "in parent" in the Stored as column.
+
+- Selecting a row shows its Storage tab: "Stored as", whether that storage
+  can hold the type, the kind's settings (project or issue field name, label
+  prefix, front matter key), what exists on GitHub for it, and its scope.
+- A field whose type its storage cannot hold is an error: a red "!" on the
+  row, red borders on Type and Stored as, and a Problems box under the table.
+  Publish is disabled while there are errors.
+- The YAML records each field's storage under `x-heddle-storage` (kind, plus
+  field, prefix, or key).
 
 ### Environments
 
@@ -709,8 +785,9 @@ with the same name as the design canvas uses:
 - `AppShell`: header, sidebar, and the content region. The canvas keeps it in
   `Main`.
 - `OverviewContent`, `BoardContent`, `EpicsContent`, `RunsContent`,
-  `PortfolioContent`, `BlueprintsContent`, `TaskFieldsContent`,
-  `EnvironmentsContent`: the content of each sidebar screen.
+  `PortfolioContent`, `BlueprintsContent`, `ProjectsContent`,
+  `EnvironmentsContent`, `SettingsContent`: the content of each sidebar
+  screen. `TaskFieldsContent` is a Settings section.
   `BlueprintsContent` holds both the list and the editor, and `RunsContent`
   holds both the list and the run page.
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
@@ -719,7 +796,8 @@ with the same name as the design canvas uses:
 - `NodeSettings`: the edit component for a blueprint node, one set of fields
   per node type.
 - `SchemaEditor`: the property table and YAML pane, used for blueprint input
-  and output schemas and for Task fields.
+  and output schemas, and in storage mode (Stored as column, Storage tab,
+  Problems) for Task fields.
 - `PublishDialog` and `DiscardDialog`: the draft publish and discard dialogs,
   used by the blueprint editor and Task fields.
 - The rules editor is `@gorules/jdm-editor`, themed with Heddle's tokens.
@@ -729,6 +807,23 @@ with the same name as the design canvas uses:
 Components read colors from the token names in this document, set as CSS
 custom properties on the root element, so that a theme change is one class
 change.
+
+## Known pitfalls
+
+Heddle does not guard against these; the operator decides how to handle them.
+
+- Org issue fields and org issue types need org admin rights. Without them,
+  Apply cannot create those kinds of storage. How Heddle gets the rights
+  (asking each time, a separate GitHub App, or a personal access token) is
+  the operator's choice.
+- Org issue fields and org issue types are shared by the whole org. Two
+  Heddle installs, or two process repositories, that store different fields
+  under the same name will overwrite each other.
+- Front matter lives in the issue description. A person or an agent that
+  edits the description can break it. Heddle reports issues whose front
+  matter does not match the task fields.
+- Changes made by hand to a bound Project's configuration show as drift, and
+  Apply undoes them.
 
 ## Do and don't
 
