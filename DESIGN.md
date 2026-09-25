@@ -640,14 +640,15 @@ A blueprint has an input schema (what a run starts with) and an output
 schema (what a run returns; `finalize` maps into it). Both are JSON Schema,
 stored as YAML in the process repository. Each has its own editor tab.
 
-- Left: a toolbar with the count and "Add property" (outline), then a
-  property table: Property (mono, indented for nesting, with a chevron on
-  object rows), Type (string, number, integer, boolean, object, array, enum),
-  Required (checkbox), Description, and remove. The add button stays above
-  the table so a long table does not hide it.
-- Right (400px): the YAML file in a code editor. Both sides edit the same
-  document: a change in either shows in the other at once. Comments written
-  in the YAML are kept when the table changes it.
+- A toolbar (48px): a Visual / YAML switch, the count, and "Add property"
+  (outline, Visual only). The add button stays in the toolbar so a long
+  table does not hide it.
+- Visual: the property table: Property (mono, indented for nesting, with a
+  chevron on object rows), Type (string, number, integer, boolean, object,
+  array, enum), Required (checkbox), Description, and remove.
+- YAML: the whole file, full width, in a code editor. Both views edit the
+  same document; comments written in the YAML are kept when the table
+  changes it.
 
 #### Rules editor
 
@@ -736,8 +737,9 @@ header also says how many Projects the draft changes, with "Review impact".
   the published version, its date, the file path, and the draft's impact on
   bound Projects.
 - The schema editor, in storage mode: rows are called fields, a "Stored as"
-  column follows Type, and the right pane has two tabs, Storage and YAML.
-  "Add field" adds a front-matter string field and opens its Storage tab.
+  column follows Type, and Visual has a field panel (360px) on the right for
+  the selected field. "Add field" adds a front-matter string field and
+  selects it.
 - Fields that Heddle sets (`lifecycleState`, `blueprint`, `portfolioItem`)
   have a lock badge "Heddle": their name, Required box, and storage cannot
   change, and they cannot be removed.
@@ -757,7 +759,7 @@ Front matter is a hidden YAML block in an HTML comment at the top of the
 issue description. Nested properties live inside their parent, so a nested
 row shows "in parent" in the Stored as column.
 
-- Selecting a row shows its Storage tab: "Stored as", whether that storage
+- Selecting a row shows it in the field panel: "Stored as", whether that storage
   can hold the type, the kind's settings (project or issue field name, label
   prefix, front matter key), what exists on GitHub for it, and its scope.
 - A field whose type its storage cannot hold is an error: a red "!" on the
@@ -806,9 +808,9 @@ with the same name as the design canvas uses:
 - `BlueprintNode`: a ReactFlow custom node for a blueprint node.
 - `NodeSettings`: the edit component for a blueprint node, one set of fields
   per node type.
-- `SchemaEditor`: the property table and YAML pane, used for blueprint input
-  and output schemas, and in storage mode (Stored as column, Storage tab,
-  Problems) for Task fields.
+- `SchemaEditor`: a Visual / YAML editor for a JSON Schema, used for
+  blueprint input and output schemas, and in storage mode (Stored as column,
+  field panel, Problems) for Task fields.
 - `PublishDialog` and `DiscardDialog`: the draft publish and discard dialogs,
   used by the blueprint editor and Task fields.
 - The rules editor is `@gorules/jdm-editor`, themed with Heddle's tokens.
