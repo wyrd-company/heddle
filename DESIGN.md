@@ -435,16 +435,17 @@ provider reports.
 
 - Title row: "Portfolio", a one-line description, "Edit budgets" (outline),
   and "Add item" (primary).
-- Budget source cards, one per account: name, kind, one meter per window
-  with its value and estimated reset, a granted-reset badge with its expiry,
-  and a note when an early reset was detected.
+- Budget source cards, one per account: name and kind on one line, a
+  granted-reset badge with its expiry under it, one meter per window with
+  its value and estimated reset (the reset text truncates, never wraps), and
+  a note when an early reset was detected.
 - Columns: Name, Budget (share and API amount), Current usage, Lifetime
   cost, Active tasks, Completed tasks, and an Edit icon button. A total row
   closes the table.
-- Current usage shows one meter: the account and window closest to the
-  item's share of it, named ("Subscription A · weekly"). A "+N" after it
-  lists the other accounts and their percentages on hover and to screen
-  readers.
+- Current usage shows the account and window closest to the item's share of
+  it on one line ("Subscription A · weekly", the amount, the percentage),
+  then the meter with "Near limit" and a "+N" after it. "+N" lists the other
+  accounts and their percentages on hover and to screen readers.
 - A usage meter at 85% or more of the item's share is warning and shows
   "Near limit".
 - An item with sub-budgets has a chevron that shows them as indented rows on
@@ -562,7 +563,7 @@ to the process repository.
   connected", in warning text, when a result has no edge).
 - Bottom of the canvas: the Problems strip (below).
 
-`BlueprintNode` is 168×56: an icon chip, the node id in mono (weight 600),
+`BlueprintNode` is 200×56: an icon chip, the node id in mono (weight 600),
 and the type name. Selection is a 2px primary border with a ring, as for
 `TaskNode`.
 
@@ -734,7 +735,7 @@ The fields every task carries and where each one lives on GitHub. The schema
 is per process repository, JSON Schema stored as YAML, with the same draft,
 discard, and publish path as a blueprint.
 
-Publishing scans the bound Projects first. The Publish dialog (600px when
+Publishing scans the bound Projects first. The Publish dialog (660px when
 there are Projects) lists each one with its counts of creates, changes, and
 removes, and what happens after Publish: a Project that is in sync updates
 automatically; a Project with drift, or never applied, waits for review on
@@ -746,12 +747,13 @@ header also says how many Projects the draft changes, with "Review impact".
   the published version, its date, the file path, and the draft's impact on
   bound Projects.
 - The schema editor, in storage mode: rows are called fields, a "Stored as"
-  column follows Type, and Visual has a field panel (360px) on the right for
+  column follows Type, and Visual has a field panel (320px) on the right for
   the selected field. "Add field" adds a front-matter string field and
   selects it.
 - Fields that Heddle sets (`lifecycleState`, `blueprint`, `portfolioItem`)
-  have a lock badge "Heddle": their name, Required box, and storage cannot
-  change, and they cannot be removed.
+  have a 20px lock icon after the name (tooltip and label "Set by Heddle").
+  Their name, Required box, and storage cannot change, and they cannot be
+  removed.
 
 Where a field can live, and what it can hold:
 
@@ -784,13 +786,12 @@ holds what the operator sets; Heddle learns the rest from reported usage.
 
 - Section header: "Accounts and budget sources", a one-line description, and
   "Add account" (primary).
-- Columns: Account (name, provider, and the environments that use it, in
-  mono), Kind (API
-  or Subscription, with the plan), Budget (an API account's monthly amount
-  and reset day; a subscription's windows), Current use (the window closest
-  to its limit, named, with a meter; a granted-reset badge when there is
-  one), Last report (a success dot when recent, an idle dot when not), and
-  an Edit icon button.
+- Columns: Account (name and provider), Used by (the environments, one per
+  line in mono), Budget (an API account's monthly amount and reset day; a
+  subscription's plan and window count), Current use (the window closest to
+  its limit, named, with its percentage, a meter, and a granted-reset badge
+  under it when there is one), Last report (a success dot when recent, an
+  idle dot when not), and an Edit icon button.
 - A Pricing card: how subscription cost is estimated, when the price table
   was updated, how many models it has, a warning count of models in use
   with no price, and "Refresh".
@@ -865,6 +866,14 @@ with the same name as the design canvas uses:
 Components read colors from the token names in this document, set as CSS
 custom properties on the root element, so that a theme change is one class
 change.
+
+## Tables
+
+Tables use fixed layout with every column width in percent, set on the
+header cells, so that long values truncate with an ellipsis instead of
+pushing into the next column. Cells that hold two lines (a name over a
+detail) truncate each line on its own. A cell's badge or extra control goes
+on its own line or after its meter, never on the line with the value.
 
 ## Known pitfalls
 
