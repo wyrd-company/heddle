@@ -543,8 +543,8 @@ The editor works on a local draft. Publish commits the draft and pushes it
 to the process repository.
 
 - Header (56px): the blueprint name in mono, the version the draft is based
-  on, a "Draft · N changes" badge, tabs (Graph, Input schema, Output
-  schema), then "Discard draft" (ghost), "Auto layout" (outline, Graph tab
+  on, a "Draft · N changes" badge, tabs (Graph, Source, Input schema,
+  Output schema), then "Discard draft" (ghost), "Auto layout" (outline, Graph tab
   only), and "Publish" (primary).
 - "Discard draft" asks first, in a 400px alert dialog that names the number
   of changes and the published version that stays. The confirm button is
@@ -579,6 +579,14 @@ Node types, in palette groups:
 `turn-start` reads a thread id from the run context, so several turns can
 share a thread. Its edit component also has the prompt template and the
 handoff schema.
+
+#### Source
+
+The Source tab shows the blueprint YAML the draft generates, read only, full
+width, in the code editor with line numbers. Lines that differ from the
+published version have a 3px warning bar in the gutter and a faint warning
+background. A toolbar (48px) shows the file path, "Generated from the graph
+· read only", the legend for changed lines, and "Copy".
 
 #### Node settings
 
