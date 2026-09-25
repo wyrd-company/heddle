@@ -509,8 +509,8 @@ link returns to it.
     result, when, and usage.
   - Activity: newest first, a status dot and one line per event.
 - Right column (320px):
-  - Fields: every task field with its value; fields Heddle sets carry a lock
-    icon; hovering a name says where the field is stored. A "Task fields"
+  - Fields: every task field with its value, read only; fields Heddle sets
+    carry a lock icon; hovering a name says where the field is stored. A "Task fields"
     link opens Settings.
   - Dependencies: "Waits on" and "Blocks", each task with its status dot,
     reference, and title, from the issue's "blocked by" relationships; "View
