@@ -640,10 +640,11 @@ A blueprint has an input schema (what a run starts with) and an output
 schema (what a run returns; `finalize` maps into it). Both are JSON Schema,
 stored as YAML in the process repository. Each has its own editor tab.
 
-- Left: a property table: Property (mono, indented for nesting, with a
-  chevron on object rows), Type (string, number, integer, boolean, object,
-  array, enum), Required (checkbox), Description, and remove. "Add property"
-  under the table.
+- Left: a toolbar with the count and "Add property" (outline), then a
+  property table: Property (mono, indented for nesting, with a chevron on
+  object rows), Type (string, number, integer, boolean, object, array, enum),
+  Required (checkbox), Description, and remove. The add button stays above
+  the table so a long table does not hide it.
 - Right (400px): the YAML file in a code editor. Both sides edit the same
   document: a change in either shows in the other at once. Comments written
   in the YAML are kept when the table changes it.
@@ -697,6 +698,8 @@ page with its first Apply.
   task fields version, and when it was last applied. On the right: "Task
   fields" (ghost) and "Apply N changes" (primary; "Nothing to apply" and
   disabled when in sync).
+- Apply on this page is for Projects with drift or never applied. A Project
+  in sync takes task field changes automatically when they are published.
 - One card, "What Apply will change", with a switch "Also remove what the
   task fields do not define" (off by default). Groups, one per storage kind:
   Project fields, Labels, Org issue types, Org issue fields, Milestones,
@@ -719,14 +722,22 @@ and General. Accounts and budget sources hold the accounts Portfolio reads.
 
 The fields every task carries and where each one lives on GitHub. The schema
 is per process repository, JSON Schema stored as YAML, with the same draft,
-discard, and publish path as a blueprint. After Publish, each bound Project
-shows the storage changes to apply.
+discard, and publish path as a blueprint.
+
+Publishing scans the bound Projects first. The Publish dialog (600px when
+there are Projects) lists each one with its counts of creates, changes, and
+removes, and what happens after Publish: a Project that is in sync updates
+automatically; a Project with drift, or never applied, waits for review on
+its own page. Removes follow each Project's removal switch. The section
+header also says how many Projects the draft changes, with "Review impact".
 
 - Section header: "Task fields", a "Draft · N changes" badge, a one-line
   description, "Discard draft" (ghost), and "Publish" (primary). A line with
-  the published version, its date, and the file path.
-- The schema editor, in storage mode: a "Stored as" column after Type, and a
-  right pane with two tabs, Storage and YAML.
+  the published version, its date, the file path, and the draft's impact on
+  bound Projects.
+- The schema editor, in storage mode: rows are called fields, a "Stored as"
+  column follows Type, and the right pane has two tabs, Storage and YAML.
+  "Add field" adds a front-matter string field and opens its Storage tab.
 - Fields that Heddle sets (`lifecycleState`, `blueprint`, `portfolioItem`)
   have a lock badge "Heddle": their name, Required box, and storage cannot
   change, and they cannot be removed.
