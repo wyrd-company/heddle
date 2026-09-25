@@ -303,7 +303,7 @@ Overview is the default screen.
 These are not in the sidebar. The operator opens them from another screen, and
 the header breadcrumb shows the path:
 
-- Task: from a Board card, an Epics node, or a Runs row.
+- Task page: from a Board card or an Epics node.
 - Run detail: from Runs.
 - Blueprint editor: from Blueprints.
 - A Project's configuration and Apply: from GitHub Projects.
@@ -483,6 +483,39 @@ archived, never deleted: an archived item keeps its history, and its share
 moves to "Other" so the shares still add up to 100%.
 
 "Add item" opens the same dialog with only a name. A new item starts at 0%.
+
+### Task page
+
+One task: a GitHub issue and everything Heddle knows about it. It opens from
+a Board card or an Epics node ("Open task"), over whichever screen it came
+from; the breadcrumb shows that screen and the task reference, and the back
+link returns to it.
+
+- Header: the reference (mono, muted) and title, a lifecycle badge (dot and
+  label in the lane's status color), a priority badge, and a meta line with
+  portfolio item, root task, and when the issue was opened. On the right:
+  "Open on GitHub" (outline) and one primary action for the task's state:
+  "Open thread" while a run is going, "Move to Ready" in Backlog.
+- Main column:
+  - An escalation note when the run is escalated (warning surface, the
+    agent's question, "Answer in the T3 Code thread", and "Open thread").
+  - Current run: the active node and its state, blueprint, environment,
+    account, usage and time, the run's timeline bar with each visit's node
+    and duration under it, and "Open run". With no run: "No run yet. Heddle
+    starts the lifecycle run when the task moves to Ready."
+  - Description: the issue text and the acceptance list as read-only
+    checkboxes.
+  - Runs: every run for this task (the intake run included), with its
+    result, when, and usage.
+  - Activity: newest first, a status dot and one line per event.
+- Right column (320px):
+  - Fields: every task field with its value; fields Heddle sets carry a lock
+    icon; hovering a name says where the field is stored. A "Task fields"
+    link opens Settings.
+  - Dependencies: "Waits on" and "Blocks", each task with its status dot,
+    reference, and title, from the issue's "blocked by" relationships; "View
+    in Epics".
+  - Usage: the task's total tokens and cost.
 
 ### Runs
 
@@ -851,6 +884,7 @@ with the same name as the design canvas uses:
   `BlueprintsContent` holds both the list and the editor, and `RunsContent`
   holds both the list and the run page.
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
+- `TaskContent`: the Task page, shown over the screen it was opened from.
 - `TaskNode`: a ReactFlow custom node for a task in a graph.
 - `BlueprintNode`: a ReactFlow custom node for a blueprint node.
 - `AccountsContent`: the Accounts and budget sources section of Settings.
