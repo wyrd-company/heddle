@@ -407,7 +407,8 @@ Transitions take 150ms.
 Portfolio items and their share of the budget.
 
 **Budget sources.** A budget source is an account. Heddle tracks usage per
-account, and one Heddle can draw on several accounts of the same kind. Usage
+account, and one Heddle can draw on several accounts of the same kind. An
+account is known by the environments whose harness is signed in to it. Usage
 draws from one or more of them:
 
 - An API budget: dollars over a calendar month, with a reset day.
@@ -725,7 +726,7 @@ page with its first Apply.
 ### Settings
 
 Settings has tabs under its title: Task fields, Accounts and budget sources,
-and General. Accounts and budget sources hold the accounts Portfolio reads.
+and General.
 
 #### Task fields
 
@@ -776,6 +777,41 @@ row shows "in parent" in the Stored as column.
 - The YAML records each field's storage under `x-heddle-storage` (kind, plus
   field, prefix, or key).
 
+#### Accounts and budget sources
+
+Each account is a budget source (see Portfolio). The section lists them and
+holds what the operator sets; Heddle learns the rest from reported usage.
+
+- Section header: "Accounts and budget sources", a one-line description, and
+  "Add account" (primary).
+- Columns: Account (name, provider, and the environments that use it, in
+  mono), Kind (API
+  or Subscription, with the plan), Budget (an API account's monthly amount
+  and reset day; a subscription's windows), Current use (the window closest
+  to its limit, named, with a meter; a granted-reset badge when there is
+  one), Last report (a success dot when recent, an idle dot when not), and
+  an Edit icon button.
+- A Pricing card: how subscription cost is estimated, when the price table
+  was updated, how many models it has, a warning count of models in use
+  with no price, and "Refresh".
+
+Add account and Edit account are one 520px dialog:
+
+- Kind: API budget or Subscription (fixed once the account exists).
+- Name and Provider.
+- Used by: the environments whose harness for that provider is signed in to
+  this account, as checkboxes. T3 Code does not know accounts; the harness
+  on each environment is signed in to one. Heddle counts an environment's
+  usage for that provider against the account that lists it. An environment
+  and provider pair belongs to one account, so a pair another account uses
+  is disabled with "Used by" and that account's name.
+- API budget: Monthly budget and "Resets on".
+- Subscription: Plan, the usage windows and model caps as detected (read
+  only), and granted resets with their expiry (shown, never used). A new
+  subscription says its windows appear after the first usage report.
+- Edit has "Archive account" at the bottom left (error text, outline).
+  Accounts are archived, never deleted, so past usage keeps its source.
+
 ### Environments
 
 - Title row: "Environments", description, and the primary "Add environment"
@@ -814,6 +850,7 @@ with the same name as the design canvas uses:
 - `TaskCard`: one card on the Board, used wherever a task shows as a card.
 - `TaskNode`: a ReactFlow custom node for a task in a graph.
 - `BlueprintNode`: a ReactFlow custom node for a blueprint node.
+- `AccountsContent`: the Accounts and budget sources section of Settings.
 - `NodeSettings`: the edit component for a blueprint node, one set of fields
   per node type.
 - `SchemaEditor`: a Visual / YAML editor for a JSON Schema, used for
