@@ -429,7 +429,9 @@ counts against the source it draws from.
 **Cost.** Dollars are the common unit. API usage is its billed cost.
 Subscription usage is priced at the provider's API rates from the LiteLLM
 model price table, using the input, output, and cache token counts the
-provider reports.
+provider reports. A run that used a model with no price in the table is
+flagged, never priced at $0: its cost shows a "No price" warning badge (in
+the Runs list) or "No price" with the model named (on the run page).
 
 #### Portfolio table
 
@@ -794,7 +796,7 @@ holds what the operator sets; Heddle learns the rest from reported usage.
   idle dot when not), and an Edit icon button.
 - A Pricing card: how subscription cost is estimated, when the price table
   was updated, how many models it has, a warning count of models in use
-  with no price, and "Refresh".
+  with no price ("their runs are flagged") with "View runs", and "Refresh".
 
 Add account and Edit account are one 520px dialog:
 
